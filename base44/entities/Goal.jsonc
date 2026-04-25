@@ -1,0 +1,256 @@
+{
+  "name": "Goal",
+  "type": "object",
+  "properties": {
+    "title": {
+      "type": "string",
+      "description": "Goal title"
+    },
+    "description": {
+      "type": "string",
+      "description": "Detailed description of the goal"
+    },
+    "target_date": {
+      "type": "string",
+      "format": "date",
+      "description": "Target completion date"
+    },
+    "category": {
+      "type": "string",
+      "enum": [
+        "academic",
+        "personal",
+        "career",
+        "health",
+        "skill",
+        "atar_milestone",
+        "subject_milestone",
+        "course_milestone"
+      ],
+      "default": "academic",
+      "description": "Goal category"
+    },
+    "priority": {
+      "type": "string",
+      "enum": [
+        "high",
+        "medium",
+        "low"
+      ],
+      "default": "medium",
+      "description": "Goal priority"
+    },
+    "progress": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 100,
+      "default": 0,
+      "description": "Progress percentage (calculated from sub-goals if present)"
+    },
+    "motivation": {
+      "type": "string",
+      "description": "What motivates you to achieve this goal"
+    },
+    "is_completed": {
+      "type": "boolean",
+      "default": false,
+      "description": "Whether the goal is completed"
+    },
+    "outcome": {
+      "type": "string",
+      "enum": [
+        "achieved",
+        "failed"
+      ],
+      "description": "Whether the goal was achieved or failed when marked as done"
+    },
+    "sub_goals": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "completed": {
+            "type": "boolean",
+            "default": false
+          },
+          "xp_reward": {
+            "type": "number",
+            "default": 0
+          },
+          "steps": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "study_hours",
+              "quiz_score",
+              "quiz_count",
+              "flashcard_reviews",
+              "study_sessions",
+              "manual"
+            ]
+          },
+          "target": {
+            "type": "number"
+          },
+          "current_progress": {
+            "type": "number",
+            "default": 0
+          },
+          "subject_filter": {
+            "type": "string"
+          },
+          "navigation": {
+            "type": "string"
+          },
+          "sub_sub_goals": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "title": {
+                  "type": "string"
+                },
+                "completed": {
+                  "type": "boolean",
+                  "default": false
+                },
+                "xp_reward": {
+                  "type": "number",
+                  "default": 0
+                },
+                "steps": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "type": {
+                  "type": "string",
+                  "enum": [
+                    "study_hours",
+                    "quiz_score",
+                    "quiz_count",
+                    "flashcard_reviews",
+                    "study_sessions"
+                  ]
+                },
+                "target": {
+                  "type": "number"
+                },
+                "current_progress": {
+                  "type": "number",
+                  "default": 0
+                },
+                "subject_filter": {
+                  "type": "string"
+                },
+                "navigation": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "action_items": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "task": {
+            "type": "string"
+          },
+          "completed": {
+            "type": "boolean",
+            "default": false
+          }
+        }
+      }
+    },
+    "subject_code": {
+      "type": "string"
+    },
+    "milestone_type": {
+      "type": "string",
+      "enum": [
+        "content",
+        "assessment",
+        "exam_prep",
+        "skills",
+        "academic",
+        "application",
+        "experience",
+        "research",
+        "testing"
+      ]
+    },
+    "success_criteria": {
+      "type": "string"
+    },
+    "tips": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "total_xp_reward": {
+      "type": "number",
+      "default": 0
+    },
+    "difficulty_level": {
+      "type": "string",
+      "enum": [
+        "easy",
+        "medium",
+        "hard",
+        "very_hard"
+      ],
+      "default": "medium"
+    },
+    "is_ai_generated": {
+      "type": "boolean",
+      "default": false
+    }
+  },
+  "required": [
+    "title"
+  ],
+  "rls": {
+    "create": {
+      "created_by": "{{user.email}}"
+    },
+    "read": {
+      "created_by": "{{user.email}}"
+    },
+    "update": {
+      "$or": [
+        {
+          "created_by": "{{user.email}}"
+        },
+        {
+          "user_condition": {
+            "role": "admin"
+          }
+        }
+      ]
+    },
+    "delete": {
+      "created_by": "{{user.email}}"
+    }
+  }
+}

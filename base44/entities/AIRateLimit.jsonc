@@ -1,0 +1,89 @@
+{
+  "name": "AIRateLimit",
+  "type": "object",
+  "properties": {
+    "user_email": {
+      "type": "string",
+      "description": "User email for lookup"
+    },
+    "request_timestamps": {
+      "type": "array",
+      "items": {
+        "type": "number"
+      },
+      "default": [],
+      "description": "Unix ms timestamps of recent AI requests (rolling window)"
+    },
+    "consecutive_flags": {
+      "type": "number",
+      "default": 0,
+      "description": "Number of consecutive flagged/rejected prompts"
+    },
+    "session_request_count": {
+      "type": "number",
+      "default": 0,
+      "description": "Total requests this session"
+    },
+    "recent_prompts": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "default": [],
+      "description": "Last 5 prompt hashes for duplicate detection"
+    },
+    "is_frozen": {
+      "type": "boolean",
+      "default": false,
+      "description": "Whether account is frozen due to abuse"
+    },
+    "frozen_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "When the account was frozen"
+    },
+    "freeze_reason": {
+      "type": "string",
+      "description": "Reason for account freeze"
+    },
+    "last_request_at": {
+      "type": "string",
+      "format": "date-time"
+    }
+  },
+  "required": [
+    "user_email"
+  ],
+  "rls": {
+    "create": {},
+    "read": {
+      "$or": [
+        {
+          "created_by": "{{user.email}}"
+        },
+        {
+          "user_condition": {
+            "role": "admin"
+          }
+        }
+      ]
+    },
+    "update": {
+      "$or": [
+        {
+          "created_by": "{{user.email}}"
+        },
+        {
+          "user_condition": {
+            "role": "admin"
+          }
+        }
+      ]
+    },
+    "delete": {
+      "user_condition": {
+        "role": "admin"
+      }
+    }
+  }
+}

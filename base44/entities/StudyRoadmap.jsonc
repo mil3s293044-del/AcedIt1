@@ -1,0 +1,173 @@
+{
+  "name": "StudyRoadmap",
+  "type": "object",
+  "properties": {
+    "subject": {
+      "type": "string"
+    },
+    "topic": {
+      "type": "string"
+    },
+    "assessment_type": {
+      "type": "string"
+    },
+    "days_until": {
+      "type": "number"
+    },
+    "knowledge_level": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 100
+    },
+    "weak_areas": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "default": []
+    },
+    "has_prior_data": {
+      "type": "boolean",
+      "default": false
+    },
+    "intro": {
+      "type": "string"
+    },
+    "readiness_score": {
+      "type": "number",
+      "default": 0
+    },
+    "key_topics": {
+      "type": "array",
+      "default": [],
+      "description": "Student-defined key topics with priority tags, used as the backbone of the roadmap",
+      "items": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "priority": {
+            "type": "string"
+          },
+          "has_prior_data": {
+            "type": "boolean"
+          }
+        }
+      }
+    },
+    "journey_map": {
+      "type": "array",
+      "default": [],
+      "items": {
+        "type": "object",
+        "properties": {
+          "day_number": {
+            "type": "number"
+          },
+          "topic_label": {
+            "type": "string"
+          },
+          "component_focus": {
+            "type": "string"
+          },
+          "key_topic_name": {
+            "type": "string",
+            "description": "Which key topic this day maps to"
+          }
+        }
+      }
+    },
+    "days": {
+      "type": "array",
+      "default": [],
+      "items": {
+        "type": "object",
+        "properties": {
+          "day_number": {
+            "type": "number"
+          },
+          "title": {
+            "type": "string"
+          },
+          "focus": {
+            "type": "string"
+          },
+          "total_time": {
+            "type": "string"
+          },
+          "generated_based_on_day": {
+            "type": "number"
+          },
+          "tools": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "name": {
+                  "type": "string"
+                },
+                "route": {
+                  "type": "string"
+                },
+                "reason": {
+                  "type": "string"
+                },
+                "duration": {
+                  "type": "string"
+                },
+                "component": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "confidence_ratings": {
+      "type": "array",
+      "default": [],
+      "items": {
+        "type": "object",
+        "properties": {
+          "day": {
+            "type": "number"
+          },
+          "rating": {
+            "type": "number"
+          },
+          "rated_at": {
+            "type": "string"
+          },
+          "topic_covered": {
+            "type": "string"
+          },
+          "key_topic_name": {
+            "type": "string"
+          }
+        }
+      }
+    }
+  },
+  "required": [
+    "subject",
+    "assessment_type",
+    "days_until",
+    "knowledge_level"
+  ],
+  "rls": {
+    "create": {
+      "created_by": "{{user.email}}"
+    },
+    "read": {
+      "created_by": "{{user.email}}"
+    },
+    "update": {
+      "created_by": "{{user.email}}"
+    },
+    "delete": {
+      "created_by": "{{user.email}}"
+    }
+  }
+}

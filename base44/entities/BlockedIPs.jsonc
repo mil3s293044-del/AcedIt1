@@ -1,0 +1,50 @@
+{
+  "name": "BlockedIPs",
+  "type": "object",
+  "properties": {
+    "ip_address": {
+      "type": "string",
+      "description": "The blocked IP address"
+    },
+    "is_blocked_ip": {
+      "type": "boolean",
+      "default": true,
+      "description": "Whether this IP is currently blocked"
+    },
+    "blocked_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "When the IP was blocked"
+    },
+    "block_reason": {
+      "type": "string",
+      "description": "Reason for blocking (e.g. rate_limit_exceeded, manual)"
+    },
+    "is_permanent": {
+      "type": "boolean",
+      "default": false,
+      "description": "If true, block never expires"
+    }
+  },
+  "required": [
+    "ip_address"
+  ],
+  "rls": {
+    "create": {},
+    "read": {
+      "user_condition": {
+        "role": "admin"
+      }
+    },
+    "update": {
+      "user_condition": {
+        "role": "admin"
+      }
+    },
+    "delete": {
+      "user_condition": {
+        "role": "admin"
+      }
+    }
+  }
+}

@@ -1,0 +1,46 @@
+{
+  "name": "IPCallLog",
+  "type": "object",
+  "properties": {
+    "ip_address": {
+      "type": "string",
+      "description": "IP address of the caller"
+    },
+    "timestamp": {
+      "type": "number",
+      "description": "Unix ms timestamp of the call"
+    },
+    "user_id": {
+      "type": "string",
+      "description": "User email/id"
+    },
+    "function_name": {
+      "type": "string",
+      "description": "Which function was called"
+    }
+  },
+  "required": [
+    "ip_address",
+    "timestamp",
+    "user_id",
+    "function_name"
+  ],
+  "rls": {
+    "create": {},
+    "read": {
+      "user_condition": {
+        "role": "admin"
+      }
+    },
+    "update": {
+      "user_condition": {
+        "role": "admin"
+      }
+    },
+    "delete": {
+      "user_condition": {
+        "role": "admin"
+      }
+    }
+  }
+}

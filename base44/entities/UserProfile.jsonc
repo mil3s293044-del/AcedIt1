@@ -1,0 +1,248 @@
+{
+  "name": "UserProfile",
+  "type": "object",
+  "properties": {
+    "username": {
+      "type": "string",
+      "description": "Unique username",
+      "pattern": "^[a-zA-Z0-9_]{3,20}$"
+    },
+    "display_name": {
+      "type": "string",
+      "description": "Display name chosen during onboarding"
+    },
+    "user_role": {
+      "type": "string",
+      "enum": [
+        "free_user",
+        "premium_user"
+      ],
+      "default": "free_user"
+    },
+    "subscription_tier": {
+      "type": "string",
+      "enum": [
+        "free",
+        "premium"
+      ],
+      "default": "free"
+    },
+    "subscription_expires_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "subscription_active": {
+      "type": "boolean",
+      "default": false,
+      "description": "True only if user has an active paid subscription or active trial"
+    },
+    "subscription_started_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "trial_active": {
+      "type": "boolean",
+      "default": false
+    },
+    "trial_ends_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "trial_used": {
+      "type": "boolean",
+      "default": false
+    },
+    "ai_credits": {
+      "type": "number",
+      "default": 500
+    },
+    "credits_reset_date": {
+      "type": "string",
+      "format": "date"
+    },
+    "streak_days": {
+      "type": "number",
+      "default": 0
+    },
+    "peak_streak": {
+      "type": "number",
+      "default": 0
+    },
+    "last_streak_date": {
+      "type": "string",
+      "format": "date"
+    },
+    "total_xp": {
+      "type": "number",
+      "default": 0
+    },
+    "season_xp": {
+      "type": "number",
+      "default": 0
+    },
+    "current_level": {
+      "type": "number",
+      "default": 1
+    },
+    "school_name": {
+      "type": "string"
+    },
+    "school_code": {
+      "type": "string"
+    },
+    "achievements": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "unlocked_date": {
+            "type": "string",
+            "format": "date"
+          }
+        }
+      },
+      "default": []
+    },
+    "favorite_study_technique": {
+      "type": "string",
+      "enum": [
+        "pomodoro",
+        "spaced_repetition",
+        "active_recall",
+        "blurting"
+      ]
+    },
+    "goal_atar": {
+      "type": "number"
+    },
+    "goal_course_name": {
+      "type": "string"
+    },
+    "goal_university": {
+      "type": "string"
+    },
+    "required_atar": {
+      "type": "number"
+    },
+    "year_level": {
+      "type": "string",
+      "enum": [
+        "Year 10",
+        "Year 11",
+        "Year 12"
+      ],
+      "default": "Year 12"
+    },
+    "is_anonymous_on_leaderboard": {
+      "type": "boolean",
+      "default": false
+    },
+    "course_analysis": {
+      "type": "object"
+    },
+    "roadmap_setup": {
+      "type": "object"
+    },
+    "onboarding_completed": {
+      "type": "boolean",
+      "default": false
+    },
+    "onboarding_completed_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "onboarding_tasks": {
+      "type": "object",
+      "properties": {
+        "username_set": {
+          "type": "boolean",
+          "default": false
+        },
+        "subjects_selected": {
+          "type": "boolean",
+          "default": false
+        },
+        "goals_set": {
+          "type": "boolean",
+          "default": false
+        }
+      },
+      "default": {
+        "username_set": false,
+        "subjects_selected": false,
+        "goals_set": false
+      }
+    },
+    "navigation_order": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "weekly_study_goal_hours": {
+      "type": "number",
+      "default": 20
+    },
+    "stripe_subscription_id": {
+      "type": "string"
+    },
+    "stripe_customer_id": {
+      "type": "string"
+    },
+    "enrolled_subjects": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "default": [],
+      "description": "Subjects selected during onboarding"
+    },
+    "primary_challenge": {
+      "type": "string",
+      "description": "Biggest study challenge, set during onboarding"
+    },
+    "qualitative_goal": {
+      "type": "string",
+      "description": "Personal goal text set during onboarding"
+    },
+    "dream_course": {
+      "type": "string",
+      "description": "Dream course or career"
+    }
+  },
+  "required": [],
+  "rls": {
+    "create": {
+      "created_by": "{{user.email}}"
+    },
+    "read": {
+      "created_by": "{{user.email}}"
+    },
+    "update": {
+      "$or": [
+        {
+          "created_by": "{{user.email}}"
+        },
+        {
+          "user_condition": {
+            "role": "admin"
+          }
+        }
+      ]
+    },
+    "delete": {
+      "user_condition": {
+        "role": "admin"
+      }
+    }
+  }
+}
