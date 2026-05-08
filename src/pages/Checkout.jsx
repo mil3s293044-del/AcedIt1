@@ -39,7 +39,7 @@ export default function Checkout() {
         setIsProcessing(true);
         try {
             const response = await base44.functions.invoke('stripeCheckout', {
-                priceId: "price_1Sy5JDDB9myR4xodaXQtQHdH",
+                priceId: import.meta.env.VITE_STRIPE_PRICE_PREMIUM,
                 successUrl: `${window.location.origin}${createPageUrl("PaymentSuccess")}?session_id={CHECKOUT_SESSION_ID}`,
                 cancelUrl: `${window.location.origin}${createPageUrl("Checkout")}`
             });

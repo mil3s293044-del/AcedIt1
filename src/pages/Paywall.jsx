@@ -2,7 +2,7 @@ import React, { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Check, Loader2, GraduationCap } from "lucide-react";
 import { base44 } from "@/api/base44Client";
-import { stripeCheckout } from "@/functions/stripeCheckout";
+import { stripeCheckout } from "@/api/functionsShim";
 
 const FEATURES = [
     "Unlimited AI practice questions generated from your own notes",
@@ -36,8 +36,15 @@ export default function Paywall() {
     const handleCheckout = async () => {
         setLoading(true);
         try {
-            const res = await stripeCheckout({ trial_days: 7 });
-            if (res?.data?.url) window.location.href = res.data.url;
+            const res = await stripeCheckout({
+                priceId: import.meta.env.VITE_STRIPE_PRICE_PREMIUM,
+                successUrl: `${window.location.origin}/PaymentSuccess?session_id={CHECKOUT_SESSION_ID}`,
+                cancelUrl: `${window.location.origin}/Paywall`,
+                trial_days: 7,
+            });
+            const url = res?.data?.checkoutUrl || res?.data?.url || res?.checkoutUrl;
+            if (url) window.location.href = url;
+            else throw new Error("No checkout URL returned");
         } catch (e) {
             console.error(e);
             setLoading(false);
@@ -55,7 +62,7 @@ export default function Paywall() {
             </div>
 
             <h1 className="text-3xl font-extrabold text-gray-900 text-center mb-2">{heading}</h1>
-            <p className="text-gray-500 text-sm text-center mb-8">7 days completely free. Then $9.99/month. Cancel anytime before the trial ends and you won't be charged.</p>
+            <p className="text-gray-500 text-sm text-center mb-8">7 days completely free. Then $5/week. Cancel anytime before the trial ends and you won't be charged.</p>
 
             {/* Plan card */}
             <div className="w-full max-w-md border-2 rounded-2xl p-6 mb-6" style={{ borderColor: "#534AB7" }}>
@@ -64,12 +71,12 @@ export default function Paywall() {
                 </div>
                 <p className="font-bold text-xl text-gray-900 mb-1">Acedit Premium</p>
                 <p className="text-3xl font-extrabold text-gray-900 mb-0.5">Free for 7 days</p>
-                <p className="text-sm text-gray-500 mb-1">then $9.99/month</p>
+                <p className="text-sm text-gray-500 mb-1">then $5/week</p>
                 <p className="text-xs text-gray-400 mb-4">Cancel before day 7 and pay nothing.</p>
 
                 <div className="rounded-xl p-3 mb-5" style={{ backgroundColor: "#F0EEFF" }}>
                     <p className="text-xs text-purple-800 leading-relaxed">
-                        Melbourne private tutors charge <strong>$60–$120 per hour</strong> (Learnmate Australia, 2025). Acedit gives you unlimited AI-powered study support for <strong>$9.99/month</strong> — available at 2am the night before your SAC.
+                        Melbourne private tutors charge <strong>$60–$120 per hour</strong> (Learnmate Australia, 2025). Acedit gives you AI-powered study support for <strong>$5/week</strong> — available at 2am the night before your SAC.
                     </p>
                 </div>
 

@@ -5,7 +5,6 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { Brain, Play, Clock, CheckCircle, Upload, Wand2, Maximize, ArrowRight, ArrowLeft, RotateCcw, X, FolderOpen, Trash2, Sparkles, Loader2, ChevronDown, ChevronUp, FileText, Zap } from "lucide-react";
 import { format } from "date-fns";
@@ -15,10 +14,29 @@ import { base44 } from "@/api/base44Client";
 import { enhancePromptWithVCEExpert } from "@/components/shared/vceExpertPrompt";
 import { recordStudyAndGetStreak } from "@/components/shared/streakHelpers";
 
+// Static class lookups so Tailwind JIT can see every utility.
 const verdictConfig = {
-    "Correct": { color: "bg-emerald-500", text: "text-emerald-700", bg: "bg-emerald-50", border: "border-emerald-200", label: "Correct ✓" },
-    "Partially Correct": { color: "bg-amber-500", text: "text-amber-700", bg: "bg-amber-50", border: "border-amber-200", label: "Partial ◐" },
-    "Incorrect": { color: "bg-red-500", text: "text-red-700", bg: "bg-red-50", border: "border-red-200", label: "Incorrect ✗" },
+    "Correct": {
+        dot: "bg-primary",
+        text: "text-primary",
+        bg: "bg-primary/10",
+        border: "border-primary/30",
+        label: "Correct ✓",
+    },
+    "Partially Correct": {
+        dot: "bg-xp",
+        text: "text-xp",
+        bg: "bg-xp/10",
+        border: "border-xp/30",
+        label: "Partial ◐",
+    },
+    "Incorrect": {
+        dot: "bg-streak",
+        text: "text-streak",
+        bg: "bg-streak/10",
+        border: "border-streak/30",
+        label: "Incorrect ✗",
+    },
 };
 
 function QuestionCard({ question, index, total, answer, onAnswerChange, onNext, onPrev, isLast }) {
@@ -30,12 +48,12 @@ function QuestionCard({ question, index, total, answer, onAnswerChange, onNext, 
             {/* Progress bar */}
             <div className="mb-6">
                 <div className="flex items-center justify-between mb-2">
-                    <span className="text-sm font-medium text-slate-500">Question {index + 1} of {total}</span>
-                    <span className="text-sm font-medium text-violet-600">{Math.round(progress)}% complete</span>
+                    <span className="text-sm font-medium text-muted-foreground">Question {index + 1} of {total}</span>
+                    <span className="text-sm font-medium text-chart-4">{Math.round(progress)}% complete</span>
                 </div>
-                <div className="h-1.5 bg-slate-100 rounded-full overflow-hidden">
+                <div className="h-1.5 bg-secondary rounded-full overflow-hidden">
                     <motion.div
-                        className="h-full bg-gradient-to-r from-violet-500 to-indigo-500 rounded-full"
+                        className="h-full bg-chart-4 rounded-full"
                         initial={{ width: 0 }}
                         animate={{ width: `${progress}%` }}
                         transition={{ duration: 0.4 }}
@@ -47,8 +65,8 @@ function QuestionCard({ question, index, total, answer, onAnswerChange, onNext, 
                         <div
                             key={i}
                             className={`h-1.5 rounded-full transition-all duration-300 ${
-                                i === index ? 'w-6 bg-violet-500' :
-                                i < index ? 'w-3 bg-violet-300' : 'w-3 bg-slate-200'
+                                i === index ? 'w-6 bg-chart-4' :
+                                i < index ? 'w-3 bg-chart-4/50' : 'w-3 bg-secondary'
                             }`}
                         />
                     ))}
@@ -60,13 +78,13 @@ function QuestionCard({ question, index, total, answer, onAnswerChange, onNext, 
                 key={index}
                 initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
-                className="bg-gradient-to-br from-violet-50 via-indigo-50 to-purple-50 rounded-2xl p-6 border border-violet-100 mb-5"
+                className="bg-chart-4/10 rounded-2xl p-6 border border-chart-4/20 mb-5"
             >
                 <div className="flex items-start gap-3">
-                    <div className="w-8 h-8 rounded-xl bg-violet-500 text-white flex items-center justify-center text-sm font-bold flex-shrink-0 mt-0.5">
+                    <div className="w-8 h-8 rounded-xl bg-chart-4 text-white flex items-center justify-center text-sm font-bold flex-shrink-0 mt-0.5">
                         {index + 1}
                     </div>
-                    <p className="text-lg font-medium text-slate-800 leading-relaxed">{question}</p>
+                    <p className="text-lg font-medium text-foreground leading-relaxed">{question}</p>
                 </div>
             </motion.div>
 
@@ -76,27 +94,27 @@ function QuestionCard({ question, index, total, answer, onAnswerChange, onNext, 
                     placeholder="Write everything you can recall — don't hold back. No peeking at notes!"
                     value={answer}
                     onChange={(e) => onAnswerChange(e.target.value)}
-                    className="w-full h-48 resize-none border-2 border-slate-200 focus:border-violet-400 rounded-2xl p-4 text-base bg-white placeholder:text-slate-400 transition-colors"
+                    className="w-full h-48 resize-none border-2 border-border focus:border-chart-4 rounded-2xl p-4 text-base bg-surface placeholder:text-muted-foreground/60 transition-colors"
                     autoFocus
                 />
-                <div className="absolute bottom-3 right-4 text-xs text-slate-400">
+                <div className="absolute bottom-3 right-4 text-xs text-muted-foreground/60">
                     {wordCount} {wordCount === 1 ? 'word' : 'words'}
                 </div>
             </div>
 
             {/* Navigation */}
-            <div className="flex items-center justify-between mt-5 pt-5 border-t border-slate-100">
+            <div className="flex items-center justify-between mt-5 pt-5 border-t border-border">
                 <Button
                     onClick={onPrev}
                     disabled={index === 0}
                     variant="outline"
-                    className="gap-2 border-2 border-slate-200 hover:border-violet-300 hover:bg-violet-50 disabled:opacity-30"
+                    className="gap-2 border-2 border-border hover:border-chart-4/40 hover:bg-chart-4/10 disabled:opacity-30"
                 >
                     <ArrowLeft className="w-4 h-4" /> Previous
                 </Button>
                 <Button
                     onClick={onNext}
-                    className={`gap-2 px-6 ${isLast ? 'bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-600 hover:to-teal-600' : 'bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-700 hover:to-indigo-700'} text-white shadow-lg`}
+                    className={`gap-2 px-6 ${isLast ? 'bg-primary hover:bg-primary/90' : 'bg-chart-4 hover:bg-chart-4/90'} text-white shadow-soft`}
                 >
                     {isLast ? (
                         <><CheckCircle className="w-4 h-4" /> Finish Session</>
@@ -118,28 +136,28 @@ function ReviewItem({ question, answer, result, index }) {
             initial={{ opacity: 0, y: 12 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: index * 0.05 }}
-            className="border border-slate-200 rounded-2xl overflow-hidden bg-white"
+            className="card-soft overflow-hidden"
         >
             <button
                 onClick={() => setExpanded(!expanded)}
-                className="w-full flex items-start gap-4 p-5 hover:bg-slate-50 transition-colors text-left"
+                className="w-full flex items-start gap-4 p-5 hover:bg-secondary/50 transition-colors text-left"
             >
-                <div className="w-8 h-8 rounded-xl bg-violet-100 text-violet-700 flex items-center justify-center text-sm font-bold flex-shrink-0 mt-0.5">
+                <div className="w-8 h-8 rounded-xl bg-chart-4/15 text-chart-4 flex items-center justify-center text-sm font-bold flex-shrink-0 mt-0.5">
                     {index + 1}
                 </div>
                 <div className="flex-1 min-w-0">
-                    <p className="font-medium text-slate-800 leading-snug">{question}</p>
-                    <p className="text-sm text-slate-500 mt-1 line-clamp-1">
+                    <p className="font-medium text-foreground leading-snug">{question}</p>
+                    <p className="text-sm text-muted-foreground mt-1 line-clamp-1">
                         {answer || <em>No answer provided</em>}
                     </p>
                 </div>
                 <div className="flex items-center gap-2 flex-shrink-0">
                     {cfg && (
-                        <span className={`text-xs font-semibold px-2.5 py-1 rounded-full ${cfg.bg} ${cfg.text} border ${cfg.border}`}>
+                        <span className={`pill ${cfg.bg} ${cfg.text} border ${cfg.border}`}>
                             {cfg.label}
                         </span>
                     )}
-                    {expanded ? <ChevronUp className="w-4 h-4 text-slate-400" /> : <ChevronDown className="w-4 h-4 text-slate-400" />}
+                    {expanded ? <ChevronUp className="w-4 h-4 text-muted-foreground/60" /> : <ChevronDown className="w-4 h-4 text-muted-foreground/60" />}
                 </div>
             </button>
 
@@ -149,14 +167,14 @@ function ReviewItem({ question, answer, result, index }) {
                         initial={{ height: 0, opacity: 0 }}
                         animate={{ height: "auto", opacity: 1 }}
                         exit={{ height: 0, opacity: 0 }}
-                        className="border-t border-slate-100 overflow-hidden"
+                        className="border-t border-border overflow-hidden"
                     >
                         <div className="p-5 space-y-4">
                             {/* Your answer */}
                             <div>
-                                <p className="text-xs font-semibold uppercase tracking-wide text-slate-500 mb-2">Your Answer</p>
-                                <div className="bg-slate-50 rounded-xl p-4 text-sm text-slate-700 border border-slate-200">
-                                    {answer || <em className="text-slate-400">No answer provided</em>}
+                                <p className="stat-label mb-2">Your Answer</p>
+                                <div className="bg-secondary/50 rounded-xl p-4 text-sm text-foreground border border-border">
+                                    {answer || <em className="text-muted-foreground/60">No answer provided</em>}
                                 </div>
                             </div>
                             {/* AI feedback */}
@@ -166,11 +184,11 @@ function ReviewItem({ question, answer, result, index }) {
                                         <Sparkles className={`w-4 h-4 ${cfg.text}`} />
                                         <span className={`text-sm font-semibold ${cfg.text}`}>AI Feedback</span>
                                     </div>
-                                    <p className="text-sm text-slate-700">{result.feedback}</p>
+                                    <p className="text-sm text-foreground">{result.feedback}</p>
                                     {result.model_answer && (
-                                        <div className="bg-white/70 rounded-lg p-3 border border-white">
-                                            <p className="text-xs font-semibold text-slate-600 mb-1.5">Model Answer</p>
-                                            <ReactMarkdown className="text-sm text-slate-700 prose prose-sm max-w-none">
+                                        <div className="bg-surface rounded-lg p-3 border border-border">
+                                            <p className="text-xs font-semibold text-muted-foreground mb-1.5">Model Answer</p>
+                                            <ReactMarkdown className="text-sm text-foreground prose prose-sm max-w-none">
                                                 {result.model_answer}
                                             </ReactMarkdown>
                                         </div>
@@ -487,12 +505,12 @@ For each answer:
         <motion.div key="setup" initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -16 }} className="space-y-5">
             <div className="grid grid-cols-1 lg:grid-cols-5 gap-5">
                 {/* Left: Setup */}
-                <div className="lg:col-span-3 bg-white rounded-3xl border border-slate-200 shadow-sm p-6 space-y-5">
+                <div className="lg:col-span-3 card-soft p-6 space-y-5">
                     <div className="flex items-center justify-between">
-                        <h3 className="font-semibold text-slate-800 text-lg">Session Setup</h3>
+                        <h3 className="font-semibold text-foreground text-lg">Session Setup</h3>
                         <button
                             onClick={() => { loadSessionHistory(); setShowSessionHistory(!showSessionHistory); }}
-                            className="flex items-center gap-1.5 text-sm text-violet-600 hover:text-violet-800 font-medium"
+                            className="flex items-center gap-1.5 text-sm text-chart-4 hover:text-chart-4/80 font-medium"
                         >
                             <FolderOpen className="w-4 h-4" /> History
                         </button>
@@ -500,9 +518,9 @@ For each answer:
 
                     <div className="space-y-4">
                         <div className="space-y-1.5">
-                            <Label className="text-sm font-medium text-slate-600">Subject</Label>
+                            <Label className="text-sm font-medium text-muted-foreground">Subject</Label>
                             <Select value={selectedSubject} onValueChange={setSelectedSubject}>
-                                <SelectTrigger className="h-11 border-2 border-slate-200 focus:border-violet-400 rounded-xl">
+                                <SelectTrigger className="h-11 border-2 border-border focus:border-chart-4 rounded-xl">
                                     <SelectValue placeholder="Choose a subject..." />
                                 </SelectTrigger>
                                 <SelectContent>
@@ -519,27 +537,27 @@ For each answer:
                         </div>
 
                         <div className="space-y-1.5">
-                            <Label className="text-sm font-medium text-slate-600">Topic <span className="text-slate-400 font-normal">(optional)</span></Label>
+                            <Label className="text-sm font-medium text-muted-foreground">Topic <span className="text-muted-foreground/60 font-normal">(optional)</span></Label>
                             <Input
                                 placeholder="e.g. Causes of World War II"
                                 value={topic}
                                 onChange={e => setTopic(e.target.value)}
-                                className="h-11 border-2 border-slate-200 focus:border-violet-400 rounded-xl"
+                                className="h-11 border-2 border-border focus:border-chart-4 rounded-xl"
                             />
                         </div>
                     </div>
 
                     {questions.length > 0 && (
-                        <div className="bg-violet-50 border border-violet-100 rounded-xl p-3.5">
+                        <div className="bg-chart-4/10 border border-chart-4/20 rounded-xl p-3.5">
                             <div className="flex items-center gap-2 mb-2">
-                                <CheckCircle className="w-4 h-4 text-violet-600" />
-                                <span className="text-sm font-semibold text-violet-700">{questions.length} questions ready</span>
+                                <CheckCircle className="w-4 h-4 text-chart-4" />
+                                <span className="text-sm font-semibold text-chart-4">{questions.length} questions ready</span>
                             </div>
                             <div className="space-y-1">
                                 {questions.slice(0, 3).map((q, i) => (
-                                    <p key={i} className="text-xs text-violet-600 truncate">• {q}</p>
+                                    <p key={i} className="text-xs text-chart-4 truncate">• {q}</p>
                                 ))}
-                                {questions.length > 3 && <p className="text-xs text-violet-400">+ {questions.length - 3} more...</p>}
+                                {questions.length > 3 && <p className="text-xs text-chart-4/60">+ {questions.length - 3} more...</p>}
                             </div>
                         </div>
                     )}
@@ -547,38 +565,38 @@ For each answer:
                     <Button
                         onClick={startSession}
                         disabled={!!sourceFiles.length && questions.length === 0}
-                        className="w-full h-12 bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-700 hover:to-indigo-700 text-white font-semibold rounded-xl shadow-lg shadow-violet-200 gap-2"
+                        className="w-full h-12 bg-chart-4 hover:bg-chart-4/90 text-white font-semibold rounded-xl shadow-soft gap-2"
                     >
                         <Play className="w-5 h-5" />
                         {questions.length > 0 ? `Start Session (${questions.length} questions)` : 'Start with Default Questions'}
                     </Button>
                     {!!sourceFiles.length && questions.length === 0 && (
-                        <p className="text-xs text-center text-amber-600">Generate questions from your uploaded notes first.</p>
+                        <p className="text-xs text-center text-xp">Generate questions from your uploaded notes first.</p>
                     )}
                 </div>
 
                 {/* Right: AI Questions */}
-                <div className="lg:col-span-2 bg-gradient-to-br from-violet-50 to-indigo-50 rounded-3xl border border-violet-100 p-6 space-y-4">
+                <div className="lg:col-span-2 card-soft bg-chart-4/5 p-6 space-y-4">
                     <div className="flex items-center gap-2">
-                        <div className="w-8 h-8 bg-violet-600 rounded-xl flex items-center justify-center">
+                        <div className="w-8 h-8 bg-chart-4 rounded-xl flex items-center justify-center">
                             <Sparkles className="w-4 h-4 text-white" />
                         </div>
                         <div>
-                            <h3 className="font-semibold text-slate-800 text-sm">AI Question Generator</h3>
-                            <p className="text-xs text-slate-500">Upload notes → get smart questions</p>
+                            <h3 className="font-semibold text-foreground text-sm">AI Question Generator</h3>
+                            <p className="text-xs text-muted-foreground">Upload notes → get smart questions</p>
                         </div>
                     </div>
 
-                    <div className={`rounded-2xl border-2 border-dashed transition-all ${sourceFiles.length ? 'border-violet-400 bg-violet-50' : 'border-slate-300 bg-white'}`}>
-                        <label className="flex items-center gap-3 p-4 cursor-pointer hover:bg-violet-50/50 transition-colors rounded-2xl">
-                            <div className={`w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 ${sourceFiles.length ? 'bg-violet-100' : 'bg-slate-100'}`}>
-                                <FileText className={`w-4 h-4 ${sourceFiles.length ? 'text-violet-600' : 'text-slate-500'}`} />
+                    <div className={`rounded-2xl border-2 border-dashed transition-all ${sourceFiles.length ? 'border-chart-4/40 bg-chart-4/10' : 'border-border bg-surface'}`}>
+                        <label className="flex items-center gap-3 p-4 cursor-pointer hover:bg-chart-4/5 transition-colors rounded-2xl">
+                            <div className={`w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 ${sourceFiles.length ? 'bg-chart-4/15' : 'bg-secondary'}`}>
+                                <FileText className={`w-4 h-4 ${sourceFiles.length ? 'text-chart-4' : 'text-muted-foreground'}`} />
                             </div>
                             <div className="flex-1 min-w-0">
-                                <p className={`text-sm font-medium ${sourceFiles.length ? 'text-violet-700' : 'text-slate-600'}`}>
+                                <p className={`text-sm font-medium ${sourceFiles.length ? 'text-chart-4' : 'text-muted-foreground'}`}>
                                     {sourceFiles.length ? `${sourceFiles.length} file${sourceFiles.length > 1 ? 's' : ''} selected` : 'Upload PDF / DOCX / PPTX'}
                                 </p>
-                                <p className="text-xs text-slate-400">Multiple files supported</p>
+                                <p className="text-xs text-muted-foreground/60">Multiple files supported</p>
                             </div>
                             <input type="file" className="hidden" multiple onChange={e => {
                                 const files = Array.from(e.target.files || []);
@@ -588,9 +606,9 @@ For each answer:
                         {sourceFiles.length > 0 && (
                             <div className="px-4 pb-3 space-y-1" onClick={e => e.stopPropagation()}>
                                 {sourceFiles.map((f, i) => (
-                                    <div key={i} className="flex items-center gap-2 bg-white rounded-lg px-2 py-1 border border-violet-100">
-                                        <span className="flex-1 text-xs text-slate-700 truncate">{f.name}</span>
-                                        <button type="button" onClick={() => setSourceFiles(prev => prev.filter((_, idx) => idx !== i))} className="text-slate-400 hover:text-red-500 flex-shrink-0">
+                                    <div key={i} className="flex items-center gap-2 bg-surface rounded-lg px-2 py-1 border border-chart-4/20">
+                                        <span className="flex-1 text-xs text-foreground truncate">{f.name}</span>
+                                        <button type="button" onClick={() => setSourceFiles(prev => prev.filter((_, idx) => idx !== i))} className="text-muted-foreground/60 hover:text-streak flex-shrink-0">
                                             <X className="w-3 h-3" />
                                         </button>
                                     </div>
@@ -602,7 +620,7 @@ For each answer:
                     <Button
                         onClick={handleGenerateQuestions}
                         disabled={isGeneratingQuestions || !sourceFiles.length || !selectedSubject}
-                        className="w-full h-11 bg-violet-600 hover:bg-violet-700 text-white rounded-xl font-medium gap-2"
+                        className="w-full h-11 bg-chart-4 hover:bg-chart-4/90 text-white rounded-xl font-medium gap-2"
                     >
                         {isGeneratingQuestions ? (
                             <><Loader2 className="w-4 h-4 animate-spin" /> Generating...</>
@@ -611,8 +629,8 @@ For each answer:
                         )}
                     </Button>
 
-                    <div className="bg-white/70 rounded-xl p-3 border border-violet-100">
-                        <p className="text-xs text-violet-800 leading-relaxed">
+                    <div className="bg-surface rounded-xl p-3 border border-chart-4/20">
+                        <p className="text-xs text-chart-4 leading-relaxed">
                             <span className="font-semibold">💡 Tip:</span> AI generates VCE-aligned questions using command terms like <em>Explain</em>, <em>Evaluate</em> and <em>Compare</em> — matching real VCAA criteria.
                         </p>
                     </div>
@@ -623,21 +641,21 @@ For each answer:
             <AnimatePresence>
                 {showSessionHistory && (
                     <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }}
-                        className="bg-white rounded-3xl border border-slate-200 shadow-sm p-6"
+                        className="card-soft p-6"
                     >
                         <div className="flex items-center justify-between mb-4">
-                            <h3 className="font-semibold text-slate-800 flex items-center gap-2">
-                                <FolderOpen className="w-4 h-4 text-violet-600" /> Previous Sessions
+                            <h3 className="font-semibold text-foreground flex items-center gap-2">
+                                <FolderOpen className="w-4 h-4 text-chart-4" /> Previous Sessions
                             </h3>
-                            <button onClick={() => setShowSessionHistory(false)} className="text-slate-400 hover:text-slate-600">
+                            <button onClick={() => setShowSessionHistory(false)} className="text-muted-foreground/60 hover:text-muted-foreground">
                                 <X className="w-4 h-4" />
                             </button>
                         </div>
                         {sessionHistory.length === 0 ? (
                             <div className="text-center py-10">
-                                <Brain className="w-12 h-12 mx-auto mb-3 text-violet-200" />
-                                <p className="text-slate-500 font-medium">No sessions yet</p>
-                                <p className="text-sm text-slate-400 mt-1">Complete your first Active Recall session!</p>
+                                <Brain className="w-12 h-12 mx-auto mb-3 text-chart-4/30" />
+                                <p className="text-muted-foreground font-medium">No sessions yet</p>
+                                <p className="text-sm text-muted-foreground/60 mt-1">Complete your first Active Recall session!</p>
                             </div>
                         ) : (
                             <div className="grid gap-2.5 sm:grid-cols-2 lg:grid-cols-3">
@@ -645,19 +663,19 @@ For each answer:
                                     <div
                                         key={session.id}
                                         onClick={() => setSelectedHistorySession(session)}
-                                        className="group flex items-start justify-between p-4 bg-slate-50 hover:bg-violet-50 rounded-2xl border border-slate-200 hover:border-violet-200 cursor-pointer transition-all"
+                                        className="group flex items-start justify-between p-4 bg-secondary/50 hover:bg-chart-4/10 rounded-2xl border border-border hover:border-chart-4/30 cursor-pointer transition-all"
                                     >
                                         <div className="flex-1 min-w-0">
-                                            <p className="font-semibold text-slate-800 text-sm truncate">{session.subject_name}</p>
-                                            <p className="text-xs text-slate-500 truncate mt-0.5">{session.topic || "General Review"}</p>
+                                            <p className="font-semibold text-foreground text-sm truncate">{session.subject_name}</p>
+                                            <p className="text-xs text-muted-foreground truncate mt-0.5">{session.topic || "General Review"}</p>
                                             <div className="flex items-center gap-2 mt-2">
-                                                <span className="text-xs bg-violet-100 text-violet-700 px-2 py-0.5 rounded-full">{session.questions?.length || 0}q</span>
-                                                <span className="text-xs text-slate-400">{format(new Date(session.date), "MMM d")}</span>
+                                                <span className="pill bg-chart-4/15 text-chart-4 py-0.5">{session.questions?.length || 0}q</span>
+                                                <span className="text-xs text-muted-foreground/60">{format(new Date(session.date), "MMM d")}</span>
                                             </div>
                                         </div>
                                         <button
                                             onClick={e => { e.stopPropagation(); deleteHistorySession(session.id); }}
-                                            className="opacity-0 group-hover:opacity-100 text-red-400 hover:text-red-600 ml-2 flex-shrink-0 transition-opacity"
+                                            className="opacity-0 group-hover:opacity-100 text-streak/60 hover:text-streak ml-2 flex-shrink-0 transition-opacity"
                                         >
                                             <Trash2 className="w-3.5 h-3.5" />
                                         </button>
@@ -673,25 +691,25 @@ For each answer:
 
     const renderActive = () => (
         <motion.div key="active" initial={{ opacity: 0, x: 30 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -30 }}>
-            <div className="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden">
+            <div className="card-soft overflow-hidden">
                 {/* Header */}
-                <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 bg-gradient-to-r from-violet-50 to-indigo-50">
+                <div className="flex items-center justify-between px-6 py-4 border-b border-border bg-chart-4/10">
                     <div className="flex items-center gap-3">
-                        <div className="w-8 h-8 bg-violet-600 rounded-xl flex items-center justify-center">
+                        <div className="w-8 h-8 bg-chart-4 rounded-xl flex items-center justify-center">
                             <Brain className="w-4 h-4 text-white" />
                         </div>
                         <div>
-                            <p className="font-semibold text-slate-800 text-sm">{selectedSubject}</p>
-                            {topic && <p className="text-xs text-slate-500">{topic}</p>}
+                            <p className="font-semibold text-foreground text-sm">{selectedSubject}</p>
+                            {topic && <p className="text-xs text-muted-foreground">{topic}</p>}
                         </div>
                     </div>
                     <div className="flex items-center gap-3">
-                        <div className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-sm font-mono font-bold ${timeLeft < 60 ? 'bg-red-100 text-red-600' : 'bg-violet-100 text-violet-700'}`}>
+                        <div className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-sm font-mono font-bold ${timeLeft < 60 ? 'bg-streak/15 text-streak' : 'bg-chart-4/15 text-chart-4'}`}>
                             <Clock className="w-3.5 h-3.5" />
                             {formatTime(timeLeft)}
                         </div>
                         {!isFocusMode && (
-                            <Button variant="outline" size="sm" onClick={() => { setIsFocusMode(true); enterFullscreen(); }} className="gap-1.5 text-xs border-slate-200 hover:border-violet-300">
+                            <Button variant="outline" size="sm" onClick={() => { setIsFocusMode(true); enterFullscreen(); }} className="gap-1.5 text-xs border-border hover:border-chart-4/40">
                                 <Maximize className="w-3.5 h-3.5" /> Focus
                             </Button>
                         )}
@@ -721,29 +739,29 @@ For each answer:
     const renderReview = () => (
         <motion.div key="review" initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} className="space-y-5">
             {/* Summary bar */}
-            <div className="bg-gradient-to-r from-emerald-500 to-teal-500 rounded-3xl p-6 text-white">
+            <div className="bg-primary rounded-3xl p-6 text-white">
                 <div className="flex items-center gap-3 mb-4">
                     <div className="w-10 h-10 bg-white/20 rounded-2xl flex items-center justify-center">
                         <CheckCircle className="w-5 h-5 text-white" />
                     </div>
                     <div>
                         <h3 className="font-bold text-xl">Session Complete!</h3>
-                        <p className="text-emerald-100 text-sm">{questions.length} questions answered</p>
+                        <p className="text-white/80 text-sm">{questions.length} questions answered</p>
                     </div>
                 </div>
                 {scoreStats && (
                     <div className="grid grid-cols-3 gap-3">
                         <div className="bg-white/15 rounded-xl p-3 text-center">
                             <p className="text-2xl font-bold">{scoreStats.correct}</p>
-                            <p className="text-xs text-emerald-100">Correct</p>
+                            <p className="text-xs text-white/80">Correct</p>
                         </div>
                         <div className="bg-white/15 rounded-xl p-3 text-center">
                             <p className="text-2xl font-bold">{scoreStats.partial}</p>
-                            <p className="text-xs text-emerald-100">Partial</p>
+                            <p className="text-xs text-white/80">Partial</p>
                         </div>
                         <div className="bg-white/15 rounded-xl p-3 text-center">
                             <p className="text-2xl font-bold">{scoreStats.incorrect}</p>
-                            <p className="text-xs text-emerald-100">Incorrect</p>
+                            <p className="text-xs text-white/80">Incorrect</p>
                         </div>
                     </div>
                 )}
@@ -751,21 +769,21 @@ For each answer:
 
             {/* AI Feedback CTA */}
             {!markingResults.length && (
-                <div className="bg-white rounded-3xl border border-slate-200 shadow-sm p-6">
+                <div className="card-soft p-6">
                     <div className="flex items-start gap-4">
-                        <div className="w-10 h-10 bg-violet-100 rounded-2xl flex items-center justify-center flex-shrink-0">
-                            <Sparkles className="w-5 h-5 text-violet-600" />
+                        <div className="w-10 h-10 bg-chart-4/15 rounded-2xl flex items-center justify-center flex-shrink-0">
+                            <Sparkles className="w-5 h-5 text-chart-4" />
                         </div>
                         <div className="flex-1">
-                            <h3 className="font-semibold text-slate-800 mb-1">Get AI Feedback</h3>
-                            <p className="text-sm text-slate-500 mb-4">
+                            <h3 className="font-semibold text-foreground mb-1">Get AI Feedback</h3>
+                            <p className="text-sm text-muted-foreground mb-4">
                                 {sourceFiles.length ? "AI will mark each answer against your notes using VCAA criteria." : "Upload your notes to unlock AI marking."}
                             </p>
                             {!sourceFiles.length ? (
                                 <label className="flex items-center gap-2 cursor-pointer">
-                                    <div className="flex-1 flex items-center gap-3 p-3 bg-slate-50 border-2 border-dashed border-slate-300 hover:border-violet-300 rounded-xl transition-all">
-                                        <Upload className="w-4 h-4 text-slate-400" />
-                                        <span className="text-sm text-slate-500">Upload notes (PDF/DOCX/PPTX, multiple allowed)</span>
+                                    <div className="flex-1 flex items-center gap-3 p-3 bg-secondary/50 border-2 border-dashed border-border hover:border-chart-4/40 rounded-xl transition-all">
+                                        <Upload className="w-4 h-4 text-muted-foreground/60" />
+                                        <span className="text-sm text-muted-foreground">Upload notes (PDF/DOCX/PPTX, multiple allowed)</span>
                                     </div>
                                     <input type="file" className="hidden" multiple onChange={e => {
                                         const files = Array.from(e.target.files || []);
@@ -776,7 +794,7 @@ For each answer:
                                 <Button
                                     onClick={handleGenerateMarking}
                                     disabled={isGeneratingMarking}
-                                    className="h-11 bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-700 hover:to-indigo-700 text-white font-medium rounded-xl gap-2"
+                                    className="h-11 bg-chart-4 hover:bg-chart-4/90 text-white font-medium rounded-xl gap-2"
                                 >
                                     {isGeneratingMarking ? (
                                         <><Loader2 className="w-4 h-4 animate-spin" /> Analysing answers...</>
@@ -792,7 +810,7 @@ For each answer:
 
             {/* Q&A Review */}
             <div className="space-y-2.5">
-                <h3 className="font-semibold text-slate-700 text-sm px-1">Your Answers</h3>
+                <h3 className="font-semibold text-muted-foreground text-sm px-1">Your Answers</h3>
                 {questions.map((q, i) => (
                     <ReviewItem
                         key={i}
@@ -809,13 +827,13 @@ For each answer:
                 <Button
                     onClick={() => { setPhase('setup'); if (isFocusMode) { exitFullscreen(); setIsFocusMode(false); } }}
                     variant="outline"
-                    className="flex-1 h-12 border-2 border-slate-200 hover:border-violet-300 hover:bg-violet-50 rounded-xl font-medium gap-2"
+                    className="flex-1 h-12 border-2 border-border hover:border-chart-4/40 hover:bg-chart-4/10 rounded-xl font-medium gap-2"
                 >
                     <RotateCcw className="w-4 h-4" /> New Session
                 </Button>
                 <Button
                     onClick={() => { completeSession(4); if (isFocusMode) { exitFullscreen(); setIsFocusMode(false); } }}
-                    className="flex-1 h-12 bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-600 hover:to-teal-600 text-white rounded-xl font-medium gap-2 shadow-lg shadow-emerald-200"
+                    className="flex-1 h-12 bg-primary hover:bg-primary/90 text-white rounded-xl font-medium gap-2 shadow-soft"
                 >
                     <CheckCircle className="w-4 h-4" /> Save & Finish
                 </Button>
@@ -833,8 +851,8 @@ For each answer:
 
     if (isFocusMode) {
         return (
-            <div ref={focusModeRef} className="fixed inset-0 z-[10000] bg-slate-950">
-                <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-violet-900/40 via-slate-950 to-slate-950" />
+            <div ref={focusModeRef} className="fixed inset-0 z-[10000] bg-foreground">
+                <div className="absolute inset-0 bg-chart-4/20" />
                 <div className="relative z-10 flex flex-col h-full">
                     <div className="flex items-center justify-between px-6 py-4">
                         <div className="flex items-center gap-2 text-white/60 text-sm">
@@ -846,7 +864,7 @@ For each answer:
                         </Button>
                     </div>
                     <div className="flex-1 overflow-auto px-6 pb-6">
-                        <div className="max-w-3xl mx-auto bg-white rounded-3xl shadow-2xl p-8">
+                        <div className="max-w-3xl mx-auto card-soft p-8">
                             {renderContent()}
                         </div>
                     </div>
@@ -859,12 +877,12 @@ For each answer:
         <div className="space-y-5">
             {/* Header */}
             <div className="flex items-center gap-4 px-1">
-                <div className="w-12 h-12 bg-gradient-to-br from-violet-500 to-indigo-600 rounded-2xl flex items-center justify-center shadow-lg shadow-violet-200">
+                <div className="w-12 h-12 bg-chart-4 rounded-2xl flex items-center justify-center shadow-soft">
                     <Brain className="w-6 h-6 text-white" />
                 </div>
                 <div>
-                    <h2 className="text-xl font-bold text-slate-900">Active Recall</h2>
-                    <p className="text-sm text-slate-500">Test yourself without notes to strengthen memory</p>
+                    <h2 className="text-xl font-bold text-foreground">Active Recall</h2>
+                    <p className="text-sm text-muted-foreground">Test yourself without notes to strengthen memory</p>
                 </div>
             </div>
 
@@ -883,7 +901,7 @@ For each answer:
                         <Button variant="outline" onClick={() => handleStartConfirmed(false)} className="h-11 rounded-xl border-2">
                             Normal Mode
                         </Button>
-                        <Button onClick={() => handleStartConfirmed(true)} className="h-11 bg-gradient-to-r from-violet-600 to-indigo-600 text-white rounded-xl gap-2">
+                        <Button onClick={() => handleStartConfirmed(true)} className="h-11 bg-chart-4 hover:bg-chart-4/90 text-white rounded-xl gap-2">
                             <Maximize className="w-4 h-4" /> Focus Mode
                         </Button>
                     </div>
@@ -902,13 +920,13 @@ For each answer:
                     {selectedHistorySession && (
                         <div className="space-y-3">
                             {selectedHistorySession.questions?.map((question, index) => (
-                                <div key={index} className="border border-slate-200 rounded-2xl p-4 space-y-3">
+                                <div key={index} className="border border-border rounded-2xl p-4 space-y-3">
                                     <div className="flex items-start gap-3">
-                                        <span className="w-6 h-6 rounded-lg bg-violet-100 text-violet-700 text-xs font-bold flex items-center justify-center flex-shrink-0 mt-0.5">{index + 1}</span>
-                                        <p className="font-medium text-slate-800 text-sm">{question}</p>
+                                        <span className="w-6 h-6 rounded-lg bg-chart-4/15 text-chart-4 text-xs font-bold flex items-center justify-center flex-shrink-0 mt-0.5">{index + 1}</span>
+                                        <p className="font-medium text-foreground text-sm">{question}</p>
                                     </div>
-                                    <div className="bg-slate-50 rounded-xl p-3 text-sm text-slate-700 border border-slate-200 ml-9">
-                                        {selectedHistorySession.answers?.[index] || <em className="text-slate-400">No answer provided</em>}
+                                    <div className="bg-secondary/50 rounded-xl p-3 text-sm text-foreground border border-border ml-9">
+                                        {selectedHistorySession.answers?.[index] || <em className="text-muted-foreground/60">No answer provided</em>}
                                     </div>
                                     {selectedHistorySession.ai_feedback && (() => {
                                         try {
@@ -918,8 +936,8 @@ For each answer:
                                             const cfg = verdictConfig[f.verdict];
                                             return (
                                                 <div className={`ml-9 rounded-xl p-3 border ${cfg.border} ${cfg.bg}`}>
-                                                    <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${cfg.bg} ${cfg.text} border ${cfg.border}`}>{f.verdict}</span>
-                                                    <p className="text-sm text-slate-700 mt-2">{f.feedback}</p>
+                                                    <span className={`pill ${cfg.bg} ${cfg.text} border ${cfg.border}`}>{f.verdict}</span>
+                                                    <p className="text-sm text-foreground mt-2">{f.feedback}</p>
                                                 </div>
                                             );
                                         } catch { return null; }
@@ -929,7 +947,7 @@ For each answer:
                         </div>
                     )}
                     <DialogFooter>
-                        <Button onClick={() => setSelectedHistorySession(null)} className="bg-violet-600 hover:bg-violet-700 rounded-xl">Close</Button>
+                        <Button onClick={() => setSelectedHistorySession(null)} className="bg-chart-4 hover:bg-chart-4/90 rounded-xl">Close</Button>
                     </DialogFooter>
                 </DialogContent>
             </Dialog>

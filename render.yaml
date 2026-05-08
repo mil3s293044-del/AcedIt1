@@ -1,0 +1,45 @@
+# Render blueprint — one-shot setup for the AcedIt production deploy.
+# Used by Render to create the service from a GitHub repo.
+#
+# After connecting the repo in Render, the service is created automatically.
+# Environment variables marked `sync: false` must be set in the Render dashboard
+# (they're secrets — not committed).
+services:
+  - type: web
+    name: acedit
+    runtime: node
+    plan: starter
+    region: oregon
+    branch: main
+    buildCommand: npm install && npm run build
+    startCommand: node server.mjs
+    healthCheckPath: /
+    autoDeploy: true
+    envVars:
+      - key: NODE_VERSION
+        value: 20
+      - key: PORT
+        value: 3001
+      - key: VITE_USE_SUPABASE
+        value: "true"
+      - key: VITE_TIER_BYPASS
+        value: "false"
+      # Set these in the Render dashboard (secrets — never commit):
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      - key: VITE_SUPABASE_URL
+        sync: false
+      - key: VITE_SUPABASE_ANON_KEY
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+      - key: STRIPE_SECRET_KEY
+        sync: false
+      - key: STRIPE_WEBHOOK_SECRET
+        sync: false
+      - key: VITE_STRIPE_PRICE_PREMIUM
+        sync: false
+      - key: VITE_BASE44_APP_ID
+        sync: false
+      - key: VITE_BASE44_APP_BASE_URL
+        sync: false

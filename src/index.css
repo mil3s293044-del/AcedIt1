@@ -2,87 +2,185 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ─────────────────────────────────────────────────────────────────────────────
+   AcedIt design tokens — Duolingo/Cal AI aesthetic, light mode.
+   All colors are HSL channels (no `hsl(...)`) so Tailwind can wrap with opacity.
+   ────────────────────────────────────────────────────────────────────────── */
 @layer base {
   :root {
-    --background: 0 0% 100%;
-    --foreground: 0 0% 3.9%;
+    /* surfaces */
+    --background: 38 60% 96%;        /* #FBF7F0 warm cream */
+    --foreground: 218 50% 11%;       /* #0D1626 near-black */
+    --surface: 0 0% 100%;            /* white card */
     --card: 0 0% 100%;
-    --card-foreground: 0 0% 3.9%;
+    --card-foreground: 218 50% 11%;
     --popover: 0 0% 100%;
-    --popover-foreground: 0 0% 3.9%;
-    --primary: 0 0% 9%;
-    --primary-foreground: 0 0% 98%;
-    --secondary: 0 0% 96.1%;
-    --secondary-foreground: 0 0% 9%;
-    --muted: 0 0% 96.1%;
-    --muted-foreground: 0 0% 45.1%;
-    --accent: 0 0% 96.1%;
-    --accent-foreground: 0 0% 9%;
-    --destructive: 0 84.2% 60.2%;
-    --destructive-foreground: 0 0% 98%;
-    --border: 0 0% 89.8%;
-    --input: 0 0% 89.8%;
-    --ring: 0 0% 3.9%;
-    --chart-1: 12 76% 61%;
-    --chart-2: 173 58% 39%;
-    --chart-3: 197 37% 24%;
-    --chart-4: 43 74% 66%;
-    --chart-5: 27 87% 67%;
-    --radius: 0.5rem;
-    --sidebar-background: 0 0% 98%;
-    --sidebar-foreground: 240 5.3% 26.1%;
-    --sidebar-primary: 240 5.9% 10%;
-    --sidebar-primary-foreground: 0 0% 98%;
-    --sidebar-accent: 240 4.8% 95.9%;
-    --sidebar-accent-foreground: 240 5.9% 10%;
+    --popover-foreground: 218 50% 11%;
+
+    /* brand: Duolingo green */
+    --primary: 89 97% 40%;           /* #58CC02 */
+    --primary-foreground: 0 0% 100%;
+    --primary-dark: 89 97% 32%;      /* 3D button bottom border */
+
+    /* secondary surfaces */
+    --secondary: 220 14% 96%;        /* light gray-blue */
+    --secondary-foreground: 218 50% 11%;
+    --muted: 220 14% 96%;
+    --muted-foreground: 220 9% 46%;  /* #6B7280 */
+
+    /* accents */
+    --accent: 35 100% 50%;           /* #FF9600 XP orange */
+    --accent-foreground: 0 0% 100%;
+    --xp: 35 100% 50%;
+    --streak: 0 100% 65%;            /* #FF4B4B fire red */
+    --success: 89 97% 40%;           /* same as primary */
+
+    /* feedback */
+    --destructive: 0 78% 56%;        /* #E53935 */
+    --destructive-foreground: 0 0% 100%;
+
+    /* lines */
+    --border: 220 13% 91%;
+    --input: 220 13% 91%;
+    --ring: 89 97% 40%;              /* focus ring = brand green */
+
+    /* charts */
+    --chart-1: 89 97% 40%;           /* green */
+    --chart-2: 35 100% 50%;          /* orange */
+    --chart-3: 217 91% 60%;          /* blue */
+    --chart-4: 280 65% 60%;          /* purple */
+    --chart-5: 0 100% 65%;           /* red */
+
+    /* radius — bigger than shadcn default for the friendly Duolingo feel */
+    --radius: 1rem;                  /* 16px base */
+
+    /* sidebar (kept compatible with existing components) */
+    --sidebar-background: 0 0% 100%;
+    --sidebar-foreground: 218 50% 11%;
+    --sidebar-primary: 89 97% 40%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 220 14% 96%;
+    --sidebar-accent-foreground: 218 50% 11%;
     --sidebar-border: 220 13% 91%;
-    --sidebar-ring: 217.2 91.2% 59.8%;
+    --sidebar-ring: 89 97% 40%;
   }
 
+  /* Dark mode tokens kept for future; not active yet. */
   .dark {
-    --background: 0 0% 3.9%;
+    --background: 218 50% 8%;
     --foreground: 0 0% 98%;
-    --card: 0 0% 3.9%;
+    --surface: 218 30% 14%;
+    --card: 218 30% 14%;
     --card-foreground: 0 0% 98%;
-    --popover: 0 0% 3.9%;
+    --popover: 218 30% 14%;
     --popover-foreground: 0 0% 98%;
-    --primary: 0 0% 98%;
-    --primary-foreground: 0 0% 9%;
-    --secondary: 0 0% 14.9%;
+    --primary: 89 97% 45%;
+    --primary-foreground: 218 50% 8%;
+    --primary-dark: 89 97% 35%;
+    --secondary: 218 25% 20%;
     --secondary-foreground: 0 0% 98%;
-    --muted: 0 0% 14.9%;
-    --muted-foreground: 0 0% 63.9%;
-    --accent: 0 0% 14.9%;
-    --accent-foreground: 0 0% 98%;
-    --destructive: 0 62.8% 30.6%;
+    --muted: 218 25% 20%;
+    --muted-foreground: 220 9% 65%;
+    --accent: 35 100% 55%;
+    --accent-foreground: 218 50% 8%;
+    --xp: 35 100% 55%;
+    --streak: 0 100% 65%;
+    --success: 89 97% 45%;
+    --destructive: 0 78% 56%;
     --destructive-foreground: 0 0% 98%;
-    --border: 0 0% 14.9%;
-    --input: 0 0% 14.9%;
-    --ring: 0 0% 83.1%;
-    --chart-1: 220 70% 50%;
-    --chart-2: 160 60% 45%;
-    --chart-3: 30 80% 55%;
-    --chart-4: 280 65% 60%;
-    --chart-5: 340 75% 55%;
-    --sidebar-background: 240 5.9% 10%;
-    --sidebar-foreground: 240 4.8% 95.9%;
-    --sidebar-primary: 224.3 76.3% 48%;
-    --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 240 3.7% 15.9%;
-    --sidebar-accent-foreground: 240 4.8% 95.9%;
-    --sidebar-border: 240 3.7% 15.9%;
-    --sidebar-ring: 217.2 91.2% 59.8%;
+    --border: 218 25% 20%;
+    --input: 218 25% 20%;
+    --ring: 89 97% 45%;
   }
 }
-
-
 
 @layer base {
   * {
     @apply border-border outline-ring/50;
   }
-
+  html {
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+  }
   body {
     @apply bg-background text-foreground;
+    font-family: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    font-feature-settings: "ss01", "cv11";
   }
+  h1, h2, h3, h4, h5, h6 {
+    font-family: "Nunito", "Inter", system-ui, sans-serif;
+    font-weight: 800;
+    letter-spacing: -0.02em;
+  }
+}
+
+/* ─────────────────────────────────────────────────────────────────────────────
+   Component utilities — tactile "Duolingo-style" buttons & cards.
+   ────────────────────────────────────────────────────────────────────────── */
+@layer components {
+  /* 3D primary button: visible bottom border that depresses on press.
+     Apply `.btn-3d` to any button alongside its color classes. */
+  .btn-3d {
+    position: relative;
+    border-bottom: 4px solid hsl(var(--primary-dark));
+    transition: transform 80ms ease-out, border-bottom-width 80ms ease-out, filter 120ms;
+    will-change: transform;
+  }
+  .btn-3d:hover {
+    filter: brightness(1.05);
+  }
+  .btn-3d:active {
+    transform: translateY(2px);
+    border-bottom-width: 2px;
+  }
+  .btn-3d:disabled {
+    border-bottom-width: 4px;
+    transform: none;
+    filter: grayscale(0.3);
+    opacity: 0.6;
+  }
+
+  /* Soft card: rounded, layered shadow, subtle border. Use as a default. */
+  .card-soft {
+    @apply bg-surface rounded-2xl border border-border;
+    box-shadow:
+      0 1px 2px rgba(13, 22, 38, 0.04),
+      0 4px 12px rgba(13, 22, 38, 0.04);
+  }
+  .card-soft-hover {
+    transition: transform 200ms ease-out, box-shadow 200ms ease-out;
+  }
+  .card-soft-hover:hover {
+    transform: translateY(-2px);
+    box-shadow:
+      0 4px 8px rgba(13, 22, 38, 0.06),
+      0 12px 24px rgba(13, 22, 38, 0.08);
+  }
+
+  /* Stat block: oversized number + small label, used for XP/streak/level. */
+  .stat-num {
+    font-family: "Nunito", sans-serif;
+    font-weight: 900;
+    font-size: clamp(2rem, 4vw, 3rem);
+    line-height: 1;
+    letter-spacing: -0.03em;
+  }
+  .stat-label {
+    @apply text-xs font-semibold uppercase tracking-wider text-muted-foreground;
+  }
+
+  /* Pill — fully-rounded label for tags, categories, statuses. */
+  .pill {
+    @apply inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-semibold;
+  }
+}
+
+/* Subtle pulse used for active streak indicators / live elements. */
+@keyframes acedit-pulse {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.05); }
+}
+.animate-soft-pulse {
+  animation: acedit-pulse 2.4s ease-in-out infinite;
 }

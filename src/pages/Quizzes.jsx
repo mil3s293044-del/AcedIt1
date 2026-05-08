@@ -1,10 +1,8 @@
 import React, { useState, useEffect, useMemo } from "react";
 import { base44 } from "@/api/base44Client";
 import { motion } from "framer-motion";
-import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -25,17 +23,68 @@ import {
     Sparkles,
     PlusCircle,
     CheckCircle2,
-    GraduationCap
+    GraduationCap,
+    Trophy,
+    ArrowRight,
+    Clock,
+    BarChart3,
+    Target,
+    Zap,
+    AlertTriangle
 } from "lucide-react";
+import { format, isThisWeek, parseISO } from "date-fns";
 import { useToast } from "@/components/ui/use-toast";
 import { moderationPresets } from "@/components/shared/contentModeration";
 import AILoadingProgress from "../components/shared/AILoadingProgress";
 import { isPremium } from "@/components/shared/subscriptionHelpers";
 import UpgradeModal from "@/components/shared/UpgradeModal";
 import HelpButton from "@/components/shared/HelpButton";
+import TierUsagePill from "@/components/shared/TierUsagePill";
+import { FEATURES } from "@/lib/tierAccess";
 
 import QuizCard from "../components/quizzes/QuizCard";
 import QuizPlayer from "../components/quizzes/QuizPlayer";
+
+// ─── Coach voice helpers (chill + motivational) ──────────────────────────────
+function getCoachLine({ name, hour, totalQuizzes, recentAttempts, avgScore, lowScore }) {
+    const period = hour < 12 ? "Morning" : hour < 17 ? "Afternoon" : hour < 21 ? "Evening" : "Late night";
+    if (totalQuizzes === 0) {
+        return `${period}, ${name}. No quizzes yet — let's build your first one.`;
+    }
+    if (recentAttempts === 0) {
+        return `${period}, ${name}. ${totalQuizzes} quiz${totalQuizzes === 1 ? '' : 'zes'} ready when you are.`;
+    }
+    if (avgScore != null && avgScore >= 85) {
+        return `${period}, ${name}. ${avgScore}% average — you're nailing this.`;
+    }
+    if (avgScore != null && avgScore >= 60) {
+        return `${period}, ${name}. ${avgScore}% average — keep at it, you're getting there.`;
+    }
+    if (lowScore && avgScore != null) {
+        return `${period}, ${name}. ${avgScore}% average — let's run a few more and watch it climb.`;
+    }
+    if (avgScore != null) {
+        return `${period}, ${name}. Avg score ${avgScore}% across your last 5. Solid.`;
+    }
+    return `${period}, ${name}. Let's get a quiz in.`;
+}
+
+function fmtMins(secs) {
+    if (!secs) return "0m";
+    const m = Math.round(secs / 60);
+    if (m < 60) return `${m}m`;
+    const h = Math.floor(m / 60);
+    const mm = m % 60;
+    return mm === 0 ? `${h}h` : `${h}h ${mm}m`;
+}
+
+const FOCUS_THEME = {
+    primary:   { bg: "bg-primary/10",  border: "border-primary/25",  iconBg: "bg-primary/15",  iconText: "text-primary"  },
+    xp:        { bg: "bg-xp/10",       border: "border-xp/25",       iconBg: "bg-xp/15",       iconText: "text-xp"       },
+    streak:    { bg: "bg-streak/10",   border: "border-streak/25",   iconBg: "bg-streak/15",   iconText: "text-streak"   },
+    "chart-3": { bg: "bg-chart-3/10",  border: "border-chart-3/25",  iconBg: "bg-chart-3/15",  iconText: "text-chart-3"  },
+    "chart-4": { bg: "bg-chart-4/10",  border: "border-chart-4/25",  iconBg: "bg-chart-4/15",  iconText: "text-chart-4"  },
+};
 
 export default function Quizzes() {
     const [user, setUser] = useState(null);
@@ -299,12 +348,12 @@ export default function Quizzes() {
     const handleGenerateQuiz = async () => {
         const effectiveSubject = aiSettings.customSubject || aiSettings.subject;
         const uploadedFile = uploadedFiles[0]; // kept for compat checks below
-        
+
         if (!uploadedFiles.length || !effectiveSubject) {
-            toast({ 
-                title: "Missing Information", 
-                description: "Please upload a file and select/enter a subject.", 
-                variant: "destructive" 
+            toast({
+                title: "Missing Information",
+                description: "Please upload a file and select/enter a subject.",
+                variant: "destructive"
             });
             return;
         }
@@ -316,10 +365,10 @@ export default function Quizzes() {
         if (!isPremium) {
             const currentCredits = userProfile?.ai_credits || 0;
             if (currentCredits < 100) {
-                toast({ 
-                    title: "Not enough credits", 
-                    description: "You need 100 credits to generate a quiz.", 
-                    variant: "destructive" 
+                toast({
+                    title: "Not enough credits",
+                    description: "You need 100 credits to generate a quiz.",
+                    variant: "destructive"
                 });
                 return;
             }
@@ -504,9 +553,9 @@ Base ALL questions on the provided material. If files are attached, read ALL con
                 });
             }
 
-            toast({ 
-                title: "✅ Quiz created!", 
-                description: `${formattedQuestions.length} questions generated successfully` 
+            toast({
+                title: "✅ Quiz created!",
+                description: `${formattedQuestions.length} questions generated successfully`
             });
 
             // Reset form
@@ -529,10 +578,10 @@ Base ALL questions on the provided material. If files are attached, read ALL con
         } catch (error) {
             console.error("Quiz generation error:", error);
 
-            toast({ 
-                title: "❌ Generation failed", 
+            toast({
+                title: "❌ Generation failed",
                 description: error.message || "Try a smaller file or fewer questions",
-                variant: "destructive" 
+                variant: "destructive"
             });
             setIsGenerating(false);
         }
@@ -688,18 +737,18 @@ Return valid JSON only.`,
                 source_file_url: quiz.source_file_url
             });
 
-            toast({ 
-                title: "✅ New quiz created!", 
-                description: `${formattedQuestions.length} new questions generated` 
+            toast({
+                title: "✅ New quiz created!",
+                description: `${formattedQuestions.length} new questions generated`
             });
 
             await loadData();
         } catch (error) {
             console.error("Reshuffle error:", error);
-            toast({ 
-                title: "❌ Reshuffle failed", 
+            toast({
+                title: "❌ Reshuffle failed",
                 description: error.message || "Could not generate new questions",
-                variant: "destructive" 
+                variant: "destructive"
             });
         } finally {
             setIsGenerating(false);
@@ -729,10 +778,144 @@ Return valid JSON only.`,
 
     const pendingSharedQuizzes = sharedQuizzes.filter(sq => sq.status === "pending");
 
+    // ─── Derived hero/coach stats ─────────────────────────────────────────────
+    const quizStats = useMemo(() => {
+        const totalQuizzes = quizzes.length;
+        const sortedAttempts = [...quizAttempts].sort((a, b) => {
+            const da = a.date || a.created_date || '';
+            const db = b.date || b.created_date || '';
+            return db.localeCompare(da);
+        });
+        const recent5 = sortedAttempts.slice(0, 5);
+        const avgScore = recent5.length
+            ? Math.round(recent5.reduce((sum, a) => sum + (a.score || 0), 0) / recent5.length)
+            : null;
+        const bestScore = quizAttempts.length
+            ? Math.max(...quizAttempts.map(a => a.score || 0))
+            : null;
+
+        // This week
+        const thisWeekAttempts = quizAttempts.filter(a => {
+            const d = a.date || a.created_date;
+            if (!d) return false;
+            try { return isThisWeek(parseISO(d), { weekStartsOn: 1 }); } catch { return false; }
+        });
+        const weekCount = thisWeekAttempts.length;
+        const weekTimeSecs = thisWeekAttempts.reduce((sum, a) => sum + (a.time_taken || 0), 0);
+        const weekBest = thisWeekAttempts.length
+            ? Math.max(...thisWeekAttempts.map(a => a.score || 0))
+            : null;
+
+        const lastAttempt = sortedAttempts[0] || null;
+        const lowScore = avgScore != null && avgScore < 60;
+
+        return {
+            totalQuizzes,
+            recentAttempts: sortedAttempts.length,
+            avgScore,
+            bestScore,
+            weekCount,
+            weekTimeSecs,
+            weekBest,
+            lastAttempt,
+            lowScore,
+        };
+    }, [quizzes, quizAttempts]);
+
+    const firstName = userProfile?.username || user?.full_name?.split(' ')[0] || 'friend';
+    const hour = new Date().getHours();
+    const coachLine = getCoachLine({
+        name: firstName,
+        hour,
+        totalQuizzes: quizStats.totalQuizzes,
+        recentAttempts: quizStats.recentAttempts,
+        avgScore: quizStats.avgScore,
+        lowScore: quizStats.lowScore,
+    });
+
+    // Featured "Next quiz" — state-aware suggestion
+    const nextQuiz = useMemo(() => {
+        // Low recent score on a known quiz — suggest replay
+        if (quizStats.lastAttempt && (quizStats.lastAttempt.score || 0) < 60) {
+            const target = quizzes.find(q => q.id === quizStats.lastAttempt.quiz_id);
+            if (target) {
+                return {
+                    label: "Run it back",
+                    title: `Try "${target.title}" again`,
+                    sub: `You scored ${Math.round(quizStats.lastAttempt.score || 0)}% last time — your score will climb.`,
+                    cta: "Retake quiz",
+                    accent: "streak",
+                    icon: AlertTriangle,
+                    action: () => { setSelectedQuiz(target); setIsPlaying(true); },
+                };
+            }
+        }
+        // Strong streak of scores — challenge
+        if (quizStats.avgScore != null && quizStats.avgScore >= 85 && quizzes.length > 0) {
+            return {
+                label: "Stretch goal",
+                title: "Generate a harder AI quiz",
+                sub: "You're cruising — let's see how you handle exam-level difficulty.",
+                cta: "AI Generate",
+                accent: "xp",
+                icon: Sparkles,
+                action: () => setShowAIDialog(true),
+            };
+        }
+        // Many quizzes available, no recent activity
+        if (quizzes.length >= 3 && quizStats.recentAttempts === 0) {
+            const random = quizzes[Math.floor(Math.random() * quizzes.length)];
+            return {
+                label: "Pick something",
+                title: `Take "${random.title}"`,
+                sub: "Pick one and see what sticks — momentum starts here.",
+                cta: "Start quiz",
+                accent: "chart-3",
+                icon: Brain,
+                action: () => { setSelectedQuiz(random); setIsPlaying(true); },
+            };
+        }
+        // Pending shared quizzes
+        if (pendingSharedQuizzes.length > 0) {
+            return {
+                label: "Shared with you",
+                title: `${pendingSharedQuizzes.length} quiz${pendingSharedQuizzes.length === 1 ? '' : 'zes'} waiting from friends`,
+                sub: "Accept and add them to your library.",
+                cta: "Review now",
+                accent: "primary",
+                icon: Sparkles,
+                action: null, // No direct action — just informational
+            };
+        }
+        // Has quizzes — quick suggestion
+        if (quizzes.length > 0) {
+            const target = quizzes[0];
+            return {
+                label: "Quick win",
+                title: `Take "${target.title}"`,
+                sub: "Active recall locks in what passive reading misses.",
+                cta: "Start quiz",
+                accent: "chart-3",
+                icon: Brain,
+                action: () => { setSelectedQuiz(target); setIsPlaying(true); },
+            };
+        }
+        // Empty state default
+        return {
+            label: "Get started",
+            title: "Generate your first AI quiz",
+            sub: "Upload notes and we'll build a quiz tailored to your material.",
+            cta: "AI Generate",
+            accent: "chart-4",
+            icon: Wand2,
+            action: () => setShowAIDialog(true),
+        };
+    }, [quizzes, quizStats, pendingSharedQuizzes]);
+
     if (isPlaying && selectedQuiz) {
         return (
-            <div className="min-h-screen px-4 lg:px-8 py-6 bg-gradient-to-br from-slate-50 via-blue-50/20 to-indigo-50/30">
-                <div className="w-full max-w-5xl mx-auto">
+            <div className="min-h-screen bg-background">
+                <div className="max-w-6xl mx-auto px-4 lg:px-8 py-6 lg:py-8">
                     <Button
                         variant="outline"
                         onClick={() => {
@@ -791,34 +974,175 @@ Return valid JSON only.`,
     return (
         <>
             {isGenerating && (
-                <AILoadingProgress 
+                <AILoadingProgress
                     stage="generating"
                     message="AI is creating your quiz..."
                     estimatedTime={60}
                 />
             )}
-            
-            <div className="min-h-screen px-4 lg:px-8 py-6 bg-gradient-to-br from-slate-50 via-blue-50/20 to-indigo-50/30">
-                <div className="w-full max-w-[1800px] mx-auto">
-                <motion.div initial={{ opacity: 0, y: -16 }} animate={{ opacity: 1, y: 0 }} className="mb-5">
-                    <div className="flex items-center gap-3">
-                        <div className="w-11 h-11 bg-gradient-to-br from-purple-500 to-indigo-600 rounded-2xl flex items-center justify-center shadow-lg shadow-purple-200/50 flex-shrink-0">
-                            <Brain className="w-6 h-6 text-white" />
-                        </div>
-                        <div>
-                            <h1 className="text-2xl font-bold text-gray-900">Study Quizzes</h1>
-                            <p className="text-sm text-gray-500">AI-generated, marked and reviewed</p>
-                        </div>
-                        <HelpButton page="Quizzes" className="ml-1" />
-                    </div>
-                </motion.div>
 
-                <Tabs defaultValue="my-quizzes" className="space-y-4 lg:space-y-6">
-                    <TabsList className="bg-white/70 backdrop-blur-sm border border-white/50 shadow-sm p-1 rounded-xl">
-                        <TabsTrigger value="my-quizzes" className="flex items-center gap-2 rounded-lg text-sm font-semibold data-[state=active]:bg-white data-[state=active]:shadow-sm">
+            <div className="min-h-screen bg-background">
+                <div className="max-w-6xl mx-auto px-4 lg:px-8 py-6 lg:py-10 space-y-6 lg:space-y-8">
+
+                {/* ── COACH STRIP ─────────────────────────────────────── */}
+                <motion.section initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.35 }}>
+                    <div className="flex items-center justify-between mb-3">
+                        <div className="flex items-center gap-2 text-xs">
+                            <span className="font-bold text-muted-foreground uppercase tracking-wider">{format(new Date(), 'EEE · MMM d')}</span>
+                            {quizStats.totalQuizzes > 0 && (
+                                <>
+                                    <span className="text-muted-foreground/40">·</span>
+                                    <span className="inline-flex items-center gap-1 font-extrabold text-chart-3">
+                                        <Brain className="w-3.5 h-3.5" /> {quizStats.totalQuizzes} quiz{quizStats.totalQuizzes === 1 ? '' : 'zes'}
+                                    </span>
+                                </>
+                            )}
+                            {quizStats.avgScore != null && (
+                                <>
+                                    <span className="text-muted-foreground/40">·</span>
+                                    <span className={`inline-flex items-center gap-1 font-extrabold ${quizStats.avgScore >= 85 ? 'text-primary' : quizStats.avgScore >= 60 ? 'text-xp' : 'text-streak'}`}>
+                                        <Trophy className="w-3.5 h-3.5" /> {quizStats.avgScore}% avg
+                                    </span>
+                                </>
+                            )}
+                        </div>
+                        <HelpButton page="Quizzes" />
+                    </div>
+                    <h1 className="font-display text-2xl sm:text-3xl lg:text-4xl font-extrabold tracking-tight text-foreground leading-[1.1]">
+                        {coachLine}
+                    </h1>
+                </motion.section>
+
+                {/* ── HERO ROW: Your quizzing (3/5) + This week (2/5) ── */}
+                <motion.section
+                    initial={{ opacity: 0, y: 12 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: 0.05 }}
+                    className="grid grid-cols-1 md:grid-cols-5 gap-5 lg:gap-6"
+                >
+                    {/* LEFT: Your quizzing — total + avg score, big numbers */}
+                    <div className="md:col-span-3">
+                        <div className="relative overflow-hidden rounded-3xl bg-chart-3/10 border-2 border-chart-3/25 p-6 lg:p-8 h-full">
+                            <Brain className="absolute -top-6 -right-6 w-32 h-32 text-chart-3/10 pointer-events-none" />
+                            <div className="relative grid grid-cols-1 sm:grid-cols-5 gap-5 items-center">
+                                <div className="sm:col-span-3">
+                                    <p className="stat-label text-chart-3/80 mb-1">Your quizzing</p>
+                                    <div className="flex items-baseline gap-3">
+                                        <span
+                                            className="font-display font-extrabold text-chart-3 leading-none"
+                                            style={{ fontSize: 'clamp(3.5rem, 10vw, 6rem)' }}
+                                        >
+                                            {quizStats.totalQuizzes}
+                                        </span>
+                                        <span className="font-display font-extrabold text-chart-3/50 text-2xl lg:text-3xl">
+                                            {quizStats.totalQuizzes === 1 ? 'quiz' : 'quizzes'}
+                                        </span>
+                                    </div>
+                                    <p className="text-foreground text-sm lg:text-base mt-2 max-w-md font-medium leading-snug">
+                                        {quizStats.totalQuizzes === 0
+                                            ? "Build your first quiz and start locking knowledge in."
+                                            : quizStats.recentAttempts === 0
+                                                ? "Take one to see how it sticks."
+                                                : `${quizStats.recentAttempts} attempt${quizStats.recentAttempts === 1 ? '' : 's'} logged. Keep building.`}
+                                    </p>
+                                </div>
+                                <div className="sm:col-span-2 grid grid-cols-2 sm:grid-cols-1 gap-3">
+                                    <div className="bg-surface rounded-xl p-3 border-2 border-chart-3/15">
+                                        <p className="stat-label">Avg score</p>
+                                        <p className={`font-display font-extrabold text-2xl mt-0.5 leading-none ${
+                                            quizStats.avgScore == null ? 'text-muted-foreground/60'
+                                                : quizStats.avgScore >= 85 ? 'text-primary'
+                                                    : quizStats.avgScore >= 60 ? 'text-xp'
+                                                        : 'text-streak'
+                                        }`}>
+                                            {quizStats.avgScore != null ? `${quizStats.avgScore}%` : '—'}
+                                        </p>
+                                        <p className="text-[11px] text-muted-foreground mt-0.5">last 5</p>
+                                    </div>
+                                    <div className="bg-surface rounded-xl p-3 border-2 border-border">
+                                        <p className="stat-label">Best score</p>
+                                        <p className="font-display font-extrabold text-foreground text-2xl mt-0.5 leading-none">
+                                            {quizStats.bestScore != null ? `${Math.round(quizStats.bestScore)}%` : '—'}
+                                        </p>
+                                        <p className="text-[11px] text-muted-foreground mt-0.5">all time</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* RIGHT: This week */}
+                    <div className="md:col-span-2">
+                        <div className="rounded-3xl bg-xp/10 border-2 border-xp/25 p-6 h-full flex flex-col">
+                            <div className="flex items-center gap-2 mb-2">
+                                <Zap className="w-4 h-4 text-xp" />
+                                <p className="stat-label text-xp/80">This week</p>
+                            </div>
+                            <p className="font-display font-extrabold text-foreground leading-none" style={{ fontSize: 'clamp(2.25rem, 5.5vw, 3rem)' }}>
+                                {quizStats.weekCount}
+                            </p>
+                            <p className="text-xs text-muted-foreground mt-2 leading-snug">
+                                {quizStats.weekCount === 0
+                                    ? "Nothing logged this week yet — let's change that."
+                                    : quizStats.weekCount === 1
+                                        ? "Nice — one quiz down this week."
+                                        : `${quizStats.weekCount} quizzes taken. Keep stacking.`}
+                            </p>
+                            <div className="space-y-2.5 mt-4 pt-4 border-t-2 border-xp/15">
+                                <div className="flex items-baseline justify-between">
+                                    <p className="text-xs font-bold text-muted-foreground inline-flex items-center gap-1"><Clock className="w-3 h-3" /> Time</p>
+                                    <p className="text-xs font-bold text-foreground">{fmtMins(quizStats.weekTimeSecs)}</p>
+                                </div>
+                                <div className="flex items-baseline justify-between">
+                                    <p className="text-xs font-bold text-muted-foreground inline-flex items-center gap-1"><Trophy className="w-3 h-3" /> Best</p>
+                                    <p className="text-xs font-bold text-foreground">{quizStats.weekBest != null ? `${Math.round(quizStats.weekBest)}%` : '—'}</p>
+                                </div>
+                            </div>
+                            <Button size="sm" onClick={() => setShowAIDialog(true)} className="w-full mt-4 bg-chart-3 hover:bg-chart-3/90 text-white">
+                                <Wand2 className="w-3.5 h-3.5" /> AI Generate
+                            </Button>
+                        </div>
+                    </div>
+                </motion.section>
+
+                {/* ── FEATURED "Next quiz" PANEL ──────────────────────── */}
+                {nextQuiz && (
+                    <motion.section
+                        initial={{ opacity: 0, y: 12 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ delay: 0.1 }}
+                    >
+                        <div className={`rounded-2xl ${FOCUS_THEME[nextQuiz.accent].bg} border-2 ${FOCUS_THEME[nextQuiz.accent].border} p-5 lg:p-6`}>
+                            <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
+                                <div className={`w-12 h-12 rounded-xl ${FOCUS_THEME[nextQuiz.accent].iconBg} flex items-center justify-center flex-shrink-0`}>
+                                    <nextQuiz.icon className={`w-6 h-6 ${FOCUS_THEME[nextQuiz.accent].iconText}`} />
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                    <p className="stat-label mb-1">Next quiz · {nextQuiz.label}</p>
+                                    <h2 className="font-display font-extrabold text-foreground text-base lg:text-lg leading-snug">
+                                        {nextQuiz.title}
+                                    </h2>
+                                    <p className="text-muted-foreground text-sm mt-0.5">{nextQuiz.sub}</p>
+                                </div>
+                                {nextQuiz.action && (
+                                    <Button
+                                        onClick={nextQuiz.action}
+                                        className="w-full sm:w-auto flex-shrink-0"
+                                    >
+                                        {nextQuiz.cta} <ArrowRight className="w-4 h-4" />
+                                    </Button>
+                                )}
+                            </div>
+                        </div>
+                    </motion.section>
+                )}
+
+                <Tabs defaultValue="my-quizzes" className="space-y-5">
+                    <TabsList className="grid w-full grid-cols-1 h-auto p-1.5 rounded-2xl bg-surface border-2 border-border shadow-soft">
+                        <TabsTrigger value="my-quizzes" className="flex items-center justify-center gap-1.5 py-2.5 rounded-xl text-sm font-bold text-muted-foreground data-[state=active]:bg-foreground data-[state=active]:text-background data-[state=active]:shadow-soft transition-all">
                             <Brain className="w-4 h-4" />
                             My Quizzes
-                            <span className="bg-gray-100 text-gray-600 text-xs px-1.5 py-0.5 rounded-md font-bold">{quizzes.length}</span>
+                            <span className="pill bg-secondary text-muted-foreground text-[11px] py-0.5 data-[state=active]:bg-background/20">{quizzes.length}</span>
                         </TabsTrigger>
 
                     </TabsList>
@@ -827,18 +1151,18 @@ Return valid JSON only.`,
                         {/* Toolbar */}
                         <div className="flex items-center gap-2 flex-wrap">
                             <div className="relative flex-1 min-w-[180px]">
-                                <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 w-4 h-4" />
-                                <Input placeholder="Search quizzes..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="pl-9 h-9 rounded-xl bg-white/80 border-gray-200 text-sm" />
+                                <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground/60 w-4 h-4" />
+                                <Input placeholder="Search quizzes..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="pl-9 h-9 rounded-xl bg-surface border-border text-sm" />
                             </div>
                             {userSubjects.length > 1 && (
                                 <div className="flex items-center gap-1.5 flex-wrap">
                                     <button onClick={() => setFilterCategory("all")}
-                                        className={`px-2.5 py-1 rounded-lg text-xs font-semibold transition-all ${filterCategory === "all" ? "bg-gray-900 text-white" : "bg-white text-gray-600 border border-gray-200 hover:border-gray-300"}`}>
+                                        className={`px-2.5 py-1 rounded-lg text-xs font-semibold transition-all ${filterCategory === "all" ? "bg-chart-3 text-white" : "bg-surface text-muted-foreground border border-border hover:border-chart-3/40"}`}>
                                         All
                                     </button>
                                     {userSubjects.filter(s => s.is_active !== false).map(s => (
                                         <button key={s.id} onClick={() => setFilterCategory(filterCategory === s.subject_name ? "all" : s.subject_name)}
-                                            className={`px-2.5 py-1 rounded-lg text-xs font-semibold transition-all ${filterCategory === s.subject_name ? "text-white shadow-sm" : "bg-white text-gray-600 border border-gray-200 hover:border-gray-300"}`}
+                                            className={`px-2.5 py-1 rounded-lg text-xs font-semibold transition-all ${filterCategory === s.subject_name ? "text-white shadow-soft" : "bg-surface text-muted-foreground border border-border hover:border-chart-3/40"}`}
                                             style={filterCategory === s.subject_name ? { backgroundColor: s.color } : {}}>
                                             {s.subject_name}
                                         </button>
@@ -846,10 +1170,10 @@ Return valid JSON only.`,
                                 </div>
                             )}
                             <div className="flex items-center gap-2 ml-auto">
-                                <Button onClick={() => setIsManualCreate(true)} variant="outline" size="sm" className="rounded-xl border-gray-200 gap-1.5 text-xs font-semibold">
+                                <Button onClick={() => setIsManualCreate(true)} variant="outline" size="sm" className="rounded-xl border-border gap-1.5 text-xs font-semibold">
                                     <PlusCircle className="w-3.5 h-3.5" /> Create
                                 </Button>
-                                <Button onClick={() => setShowAIDialog(true)} size="sm" className="bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 rounded-xl gap-1.5 text-xs font-semibold shadow-md shadow-purple-200/50">
+                                <Button onClick={() => setShowAIDialog(true)} size="sm" className="bg-chart-3 hover:bg-chart-3/90 text-white rounded-xl gap-1.5 text-xs font-semibold shadow-soft">
                                     <Wand2 className="w-3.5 h-3.5" /> AI Generate
                                 </Button>
                             </div>
@@ -858,10 +1182,10 @@ Return valid JSON only.`,
                         {isLoading ? (
                             <div className="flex justify-center items-center h-64">
                                 <div className="flex flex-col items-center gap-3">
-                                    <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-purple-500 to-indigo-600 flex items-center justify-center shadow-lg animate-pulse">
-                                        <Brain className="w-5 h-5 text-white" />
+                                    <div className="w-10 h-10 rounded-xl bg-chart-3/10 flex items-center justify-center animate-pulse">
+                                        <Brain className="w-5 h-5 text-chart-3" />
                                     </div>
-                                    <p className="text-sm text-gray-500">Loading your quizzes...</p>
+                                    <p className="text-sm text-muted-foreground">Loading your quizzes...</p>
                                 </div>
                             </div>
                         ) : filteredQuizzes.length > 0 ? (
@@ -873,8 +1197,8 @@ Return valid JSON only.`,
                                         <div key={subjectName}>
                                             <div className="flex items-center gap-2.5 mb-3">
                                                 <div className="w-3 h-3 rounded-full flex-shrink-0" style={{ backgroundColor: subjectColor }} />
-                                                <h3 className="font-bold text-gray-900">{subjectName}</h3>
-                                                <span className="text-xs text-gray-400">{subjectQuizzes.length} quiz{subjectQuizzes.length !== 1 ? 'zes' : ''}</span>
+                                                <h3 className="font-bold text-foreground">{subjectName}</h3>
+                                                <span className="text-xs text-muted-foreground/60">{subjectQuizzes.length} quiz{subjectQuizzes.length !== 1 ? 'zes' : ''}</span>
                                             </div>
                                             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                                                 {subjectQuizzes.map((quiz, index) => (
@@ -891,23 +1215,23 @@ Return valid JSON only.`,
                             </div>
                         ) : (
                             <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
-                                <div className="relative overflow-hidden rounded-2xl border-2 border-dashed border-gray-200 bg-gradient-to-br from-gray-50 to-indigo-50/30 px-6 py-14 text-center">
-                                    <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-purple-500 to-indigo-600 flex items-center justify-center mx-auto mb-4 shadow-xl shadow-purple-200/50">
-                                        <Brain className="w-8 h-8 text-white" />
+                                <div className="card-soft border-2 border-dashed border-border bg-chart-3/5 px-6 py-14 text-center">
+                                    <div className="w-16 h-16 rounded-2xl bg-chart-3/10 flex items-center justify-center mx-auto mb-4">
+                                        <Brain className="w-8 h-8 text-chart-3" />
                                     </div>
-                                    <h3 className="text-lg font-bold text-gray-900 mb-1">No quizzes yet</h3>
-                                    <p className="text-sm text-gray-500 mb-6 max-w-sm mx-auto">Create your first quiz manually or upload your notes and let AI generate one for you</p>
+                                    <h3 className="text-lg font-bold text-foreground mb-1">No quizzes yet</h3>
+                                    <p className="text-sm text-muted-foreground mb-6 max-w-sm mx-auto">Create your first quiz manually or upload your notes and let AI generate one for you</p>
                                     <div className="flex gap-2.5 justify-center flex-wrap">
                                         <Button onClick={() => setIsManualCreate(true)} variant="outline" className="rounded-xl gap-2">
                                             <PlusCircle className="w-4 h-4" /> Create Quiz
                                         </Button>
-                                        <Button onClick={() => setShowAIDialog(true)} className="bg-gradient-to-r from-purple-600 to-indigo-600 rounded-xl gap-2 shadow-md">
+                                        <Button onClick={() => setShowAIDialog(true)} className="bg-chart-3 hover:bg-chart-3/90 text-white rounded-xl gap-2 shadow-soft">
                                             <Wand2 className="w-4 h-4" /> AI Generate
                                         </Button>
                                     </div>
                                     <div className="flex flex-wrap justify-center gap-2 mt-6">
                                         {['MCQ + Short answer', 'AI Marking', 'Adaptive Review', 'Reshuffle'].map(f => (
-                                            <span key={f} className="text-xs text-indigo-700 bg-indigo-100 px-2.5 py-1 rounded-full font-medium">{f}</span>
+                                            <span key={f} className="pill bg-chart-3/10 text-chart-3">{f}</span>
                                         ))}
                                     </div>
                                 </div>
@@ -922,7 +1246,7 @@ Return valid JSON only.`,
                 {/* Manual Create Dialog */}
                 <Dialog open={isManualCreate} onOpenChange={setIsManualCreate}>
                     <DialogContent className="max-w-full sm:max-w-3xl h-[95vh] flex flex-col p-0">
-                        <DialogHeader className="flex-shrink-0 p-6 pb-4 border-b">
+                        <DialogHeader className="flex-shrink-0 p-6 pb-4 border-b border-border">
                             <DialogTitle className="text-2xl">Create Quiz</DialogTitle>
                         </DialogHeader>
 
@@ -945,34 +1269,34 @@ Return valid JSON only.`,
                                         placeholder="Type subject name (e.g., Biology, Chemistry)"
                                         className="h-11"
                                     />
-                                    
+
                                     {userSubjects.filter(s => s.is_active !== false).length > 0 && (
                                         <div className="pt-2">
-                                            <p className="text-xs text-gray-500 mb-2">Or select from your subjects:</p>
+                                            <p className="text-xs text-muted-foreground mb-2">Or select from your subjects:</p>
                                             <div className="flex flex-wrap gap-2">
                                                 {userSubjects.filter(s => s.is_active !== false).map(subject => (
                                                     <button
                                                         key={subject.id}
                                                         type="button"
                                                         onClick={() => setManualQuiz({
-                                                            ...manualQuiz, 
+                                                            ...manualQuiz,
                                                             subject: subject.subject_name
                                                         })}
                                                         className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${
                                                             manualQuiz.subject === subject.subject_name
                                                                 ? 'ring-2 ring-offset-1'
-                                                                : 'hover:bg-gray-100'
+                                                                : 'hover:bg-secondary'
                                                         }`}
                                                         style={{
-                                                            backgroundColor: manualQuiz.subject === subject.subject_name 
-                                                                ? `${subject.color}20` 
+                                                            backgroundColor: manualQuiz.subject === subject.subject_name
+                                                                ? `${subject.color}20`
                                                                 : `${subject.color}10`,
                                                             color: subject.color,
                                                             borderColor: subject.color,
                                                             ringColor: subject.color
                                                         }}
                                                     >
-                                                        <div 
+                                                        <div
                                                             className="w-2.5 h-2.5 rounded-full"
                                                             style={{ backgroundColor: subject.color }}
                                                         />
@@ -999,10 +1323,10 @@ Return valid JSON only.`,
                                     </Select>
                                 </div>
 
-                                <div className="border-t pt-6">
+                                <div className="border-t border-border pt-6">
                                     <h3 className="font-bold text-lg mb-4">Add Questions ({manualQuiz.questions.length})</h3>
 
-                                    <div className="space-y-4 bg-gray-50 rounded-lg p-4">
+                                    <div className="space-y-4 bg-secondary/50 rounded-lg p-4">
                                         <div>
                                             <Label>Question Type</Label>
                                             <Select value={currentQuestion.type} onValueChange={(value) => setCurrentQuestion({...currentQuestion, type: value})}>
@@ -1050,7 +1374,7 @@ Return valid JSON only.`,
                                                         </div>
                                                     ))}
                                                 </div>
-                                                <p className="text-xs text-gray-500 mt-2">Check the correct answer</p>
+                                                <p className="text-xs text-muted-foreground mt-2">Check the correct answer</p>
                                             </div>
                                         ) : (
                                             <div>
@@ -1063,7 +1387,7 @@ Return valid JSON only.`,
                                                     onChange={(e) => setCurrentQuestion({...currentQuestion, marks: parseInt(e.target.value) || 5})}
                                                     placeholder="e.g., 3, 5, 8"
                                                 />
-                                                <p className="text-xs text-gray-500 mt-1">How many marks is this question worth?</p>
+                                                <p className="text-xs text-muted-foreground mt-1">How many marks is this question worth?</p>
                                             </div>
                                         )}
 
@@ -1087,11 +1411,11 @@ Return valid JSON only.`,
                                         <div className="mt-4 space-y-2">
                                             <h4 className="font-semibold">Questions Added:</h4>
                                             {manualQuiz.questions.map((q, idx) => (
-                                                <Card key={idx} className="p-3">
+                                                <div key={idx} className="card-soft p-3">
                                                     <div className="flex items-start justify-between">
                                                         <div className="flex-1">
-                                                            <Badge className="mb-2">{q.type === "mcq" ? "Multiple Choice" : "Short Answer"}</Badge>
-                                                            <p className="text-sm font-medium">{idx + 1}. {q.question}</p>
+                                                            <span className="pill bg-chart-3/10 text-chart-3 mb-2">{q.type === "mcq" ? "Multiple Choice" : "Short Answer"}</span>
+                                                            <p className="text-sm font-medium mt-2">{idx + 1}. {q.question}</p>
                                                         </div>
                                                         <Button
                                                             variant="ghost"
@@ -1106,7 +1430,7 @@ Return valid JSON only.`,
                                                             <X className="w-4 h-4" />
                                                         </Button>
                                                     </div>
-                                                </Card>
+                                                </div>
                                             ))}
                                         </div>
                                     )}
@@ -1114,12 +1438,12 @@ Return valid JSON only.`,
                             </div>
                         </ScrollArea>
 
-                        <DialogFooter className="flex-shrink-0 border-t p-6">
+                        <DialogFooter className="flex-shrink-0 border-t border-border p-6">
                             <Button variant="outline" onClick={() => setIsManualCreate(false)}>Cancel</Button>
                             <Button
                                 onClick={handleCreateManualQuiz}
                                 disabled={!manualQuiz.title || !manualQuiz.subject || manualQuiz.questions.length === 0}
-                                className="bg-gradient-to-r from-purple-600 to-blue-600"
+                                className="bg-chart-3 hover:bg-chart-3/90 text-white"
                             >
                                 Create Quiz ({manualQuiz.questions.length} questions)
                             </Button>
@@ -1148,14 +1472,15 @@ Return valid JSON only.`,
                     }
                 }}>
                     <DialogContent className="max-w-2xl max-h-[90vh] overflow-hidden flex flex-col p-0">
-                        <DialogHeader className="p-6 pb-4 border-b bg-gradient-to-r from-purple-50 to-blue-50">
+                        <DialogHeader className="p-6 pb-4 border-b border-border bg-chart-4/5">
                             <DialogTitle className="flex items-center gap-3 text-2xl">
-                                <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-purple-500 to-blue-500 flex items-center justify-center">
-                                    <Wand2 className="w-5 h-5 text-white" />
+                                <div className="w-10 h-10 rounded-xl bg-chart-4/10 flex items-center justify-center">
+                                    <Wand2 className="w-5 h-5 text-chart-4" />
                                 </div>
-                                AI Quiz Generator
+                                <span className="flex-1">AI Quiz Generator</span>
+                                <TierUsagePill feature={FEATURES.QUIZ_AI_GEN} userProfile={userProfile} />
                             </DialogTitle>
-                            <p className="text-sm text-gray-600 mt-2">Upload your notes and let AI create a personalized quiz</p>
+                            <p className="text-sm text-muted-foreground mt-2">Upload your notes and let AI create a personalized quiz</p>
                         </DialogHeader>
 
                         <div className="flex-1 overflow-y-auto px-6">
@@ -1181,31 +1506,31 @@ Return valid JSON only.`,
                                             <label
                                                htmlFor="pdf-upload"
                                                className={`flex flex-col items-center justify-center border-2 border-dashed rounded-xl p-6 cursor-pointer transition-all ${
-                                                   uploadedFiles.length 
-                                                       ? 'border-green-300 bg-green-50' 
-                                                       : 'border-gray-300 hover:border-purple-400 hover:bg-purple-50/50'
+                                                   uploadedFiles.length
+                                                       ? 'border-primary/40 bg-primary/5'
+                                                       : 'border-border hover:border-chart-4/40 hover:bg-chart-4/5'
                                                }`}
                                            >
                                                {uploadedFiles.length > 0 ? (
                                                    <div className="w-full space-y-2" onClick={e => e.preventDefault()}>
                                                        {uploadedFiles.map((f, i) => (
-                                                           <div key={i} className="flex items-center gap-2 bg-white rounded-lg px-3 py-2 shadow-sm border border-green-100">
-                                                               <FileText className="w-4 h-4 text-green-600 flex-shrink-0" />
-                                                               <span className="flex-1 text-sm font-medium text-gray-800 truncate">{f.name}</span>
-                                                               <span className="text-xs text-gray-400 shrink-0">{(f.size / 1024 / 1024).toFixed(1)}MB</span>
-                                                               <button type="button" className="text-gray-400 hover:text-red-500 shrink-0"
+                                                           <div key={i} className="flex items-center gap-2 bg-surface rounded-lg px-3 py-2 shadow-soft border border-primary/20">
+                                                               <FileText className="w-4 h-4 text-primary flex-shrink-0" />
+                                                               <span className="flex-1 text-sm font-medium text-foreground truncate">{f.name}</span>
+                                                               <span className="text-xs text-muted-foreground/60 shrink-0">{(f.size / 1024 / 1024).toFixed(1)}MB</span>
+                                                               <button type="button" className="text-muted-foreground/60 hover:text-streak shrink-0"
                                                                    onClick={() => setUploadedFiles(prev => prev.filter((_, idx) => idx !== i))}>
                                                                    <X className="w-3.5 h-3.5" />
                                                                </button>
                                                            </div>
                                                        ))}
-                                                       <p className="text-xs text-center text-purple-600 font-medium pt-1">+ Click to add more files</p>
+                                                       <p className="text-xs text-center text-chart-4 font-medium pt-1">+ Click to add more files</p>
                                                    </div>
                                                ) : (
                                                    <>
-                                                       <Upload className="w-12 h-12 text-gray-400 mb-3" />
-                                                       <p className="font-medium text-gray-900">Click to upload documents</p>
-                                                       <p className="text-sm text-gray-500 mt-1">PDF, TXT, DOCX, PPTX — multiple files supported</p>
+                                                       <Upload className="w-12 h-12 text-muted-foreground/60 mb-3" />
+                                                       <p className="font-medium text-foreground">Click to upload documents</p>
+                                                       <p className="text-sm text-muted-foreground mt-1">PDF, TXT, DOCX, PPTX — multiple files supported</p>
                                                    </>
                                                )}
                                            </label>
@@ -1224,35 +1549,35 @@ Return valid JSON only.`,
                                             placeholder="Type subject name (e.g., Biology, Chemistry)"
                                             className="h-11"
                                         />
-                                        
+
                                         {userSubjects.filter(s => s.is_active !== false).length > 0 && (
                                             <div className="pt-2">
-                                                <p className="text-xs text-gray-500 mb-2">Or select from your subjects:</p>
+                                                <p className="text-xs text-muted-foreground mb-2">Or select from your subjects:</p>
                                                 <div className="flex flex-wrap gap-2">
                                                     {userSubjects.filter(s => s.is_active !== false).map(subject => (
                                                         <button
                                                             key={subject.id}
                                                             type="button"
                                                             onClick={() => setAiSettings({
-                                                                ...aiSettings, 
+                                                                ...aiSettings,
                                                                 subject: subject.subject_name,
                                                                 customSubject: subject.subject_name
                                                             })}
                                                             className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${
                                                                 aiSettings.customSubject === subject.subject_name
                                                                     ? 'ring-2 ring-offset-1'
-                                                                    : 'hover:bg-gray-100'
+                                                                    : 'hover:bg-secondary'
                                                             }`}
                                                             style={{
-                                                                backgroundColor: aiSettings.customSubject === subject.subject_name 
-                                                                    ? `${subject.color}20` 
+                                                                backgroundColor: aiSettings.customSubject === subject.subject_name
+                                                                    ? `${subject.color}20`
                                                                     : `${subject.color}10`,
                                                                 color: subject.color,
                                                                 borderColor: subject.color,
                                                                 ringColor: subject.color
                                                             }}
                                                         >
-                                                            <div 
+                                                            <div
                                                                 className="w-2.5 h-2.5 rounded-full"
                                                                 style={{ backgroundColor: subject.color }}
                                                             />
@@ -1276,8 +1601,8 @@ Return valid JSON only.`,
                                     <div className="grid grid-cols-2 gap-4">
                                         <div className="space-y-2">
                                             <Label>Number of Questions</Label>
-                                            <Select 
-                                                value={aiSettings.num_questions.toString()} 
+                                            <Select
+                                                value={aiSettings.num_questions.toString()}
                                                 onValueChange={(val) => setAiSettings({...aiSettings, num_questions: parseInt(val)})}
                                             >
                                                 <SelectTrigger>
@@ -1293,8 +1618,8 @@ Return valid JSON only.`,
 
                                         <div className="space-y-2">
                                             <Label>Question Types</Label>
-                                            <Select 
-                                                value={aiSettings.question_types} 
+                                            <Select
+                                                value={aiSettings.question_types}
                                                 onValueChange={(val) => setAiSettings({...aiSettings, question_types: val})}
                                             >
                                                 <SelectTrigger>
@@ -1310,8 +1635,8 @@ Return valid JSON only.`,
 
                                         <div className="space-y-2">
                                             <Label>Difficulty</Label>
-                                            <Select 
-                                                value={aiSettings.difficulty} 
+                                            <Select
+                                                value={aiSettings.difficulty}
                                                 onValueChange={(val) => setAiSettings({...aiSettings, difficulty: val})}
                                             >
                                                 <SelectTrigger>
@@ -1327,8 +1652,8 @@ Return valid JSON only.`,
 
                                         <div className="space-y-2">
                                             <Label>Quiz Style</Label>
-                                            <Select 
-                                                value={aiSettings.quiz_style} 
+                                            <Select
+                                                value={aiSettings.quiz_style}
                                                 onValueChange={(val) => setAiSettings({...aiSettings, quiz_style: val})}
                                             >
                                                 <SelectTrigger>
@@ -1346,8 +1671,8 @@ Return valid JSON only.`,
                                         {(aiSettings.question_types === "short_only" || aiSettings.question_types === "mixed") && (
                                             <div className="space-y-2">
                                                 <Label>Marks per Short Answer</Label>
-                                                <Select 
-                                                    value={aiSettings.marks_per_short} 
+                                                <Select
+                                                    value={aiSettings.marks_per_short}
                                                     onValueChange={(val) => setAiSettings({...aiSettings, marks_per_short: val})}
                                                 >
                                                     <SelectTrigger>
@@ -1363,7 +1688,7 @@ Return valid JSON only.`,
                                         )}
 
                                         <div className="space-y-2 flex items-center gap-3 pt-6">
-                                            <Checkbox 
+                                            <Checkbox
                                                 id="include_exp"
                                                 checked={aiSettings.include_explanations}
                                                 onCheckedChange={(v) => setAiSettings({...aiSettings, include_explanations: !!v})}
@@ -1379,7 +1704,7 @@ Return valid JSON only.`,
                                             onChange={(e) => setAiSettings({...aiSettings, focus_areas: e.target.value})}
                                             placeholder="e.g., mitosis, genetics, cell division — separate with commas"
                                         />
-                                        <p className="text-xs text-gray-400">Tell the AI which specific areas of the document to focus on</p>
+                                        <p className="text-xs text-muted-foreground/60">Tell the AI which specific areas of the document to focus on</p>
                                     </div>
 
                                     <div className="space-y-2">
@@ -1390,36 +1715,34 @@ Return valid JSON only.`,
                                             placeholder="e.g., 'Make the MCQ options tricky', 'Include diagram-based questions', 'Focus on definitions and formulas', 'Use the same style as my teacher's tests'"
                                             rows={3}
                                         />
-                                        <p className="text-xs text-gray-400">Any specific requests for how you want the quiz made</p>
+                                        <p className="text-xs text-muted-foreground/60">Any specific requests for how you want the quiz made</p>
                                     </div>
                                 </div>
 
                                 {/* Preview */}
                                 {uploadedFiles.length > 0 && aiSettings.customSubject && (
-                                    <Card className="bg-gradient-to-br from-purple-50 to-blue-50 border-purple-200">
-                                        <CardContent className="p-4">
-                                            <div className="flex items-start gap-3">
-                                                <Sparkles className="w-5 h-5 text-purple-600 mt-0.5" />
-                                                <div className="flex-1">
-                                                    <h4 className="font-semibold text-purple-900 mb-2">Ready to Generate</h4>
-                                                    <div className="text-sm text-purple-800 space-y-1">
-                                                        <p>• {aiSettings.num_questions} questions ({aiSettings.difficulty})</p>
-                                                        <p>• {aiSettings.question_types === "mcq_only" ? "Multiple choice only" : aiSettings.question_types === "short_only" ? `Short answer only (${aiSettings.marks_per_short} marks each)` : `Mixed: ${Math.ceil(aiSettings.num_questions * 0.6)} MCQ + ${aiSettings.num_questions - Math.ceil(aiSettings.num_questions * 0.6)} short answer`}</p>
-                                                        <p>• Style: {aiSettings.quiz_style.replace('_', ' ')}</p>
-                                                        {aiSettings.focus_areas && <p>• Focus: {aiSettings.focus_areas}</p>}
-                                                        {aiSettings.ai_instructions && <p>• Custom: {aiSettings.ai_instructions.slice(0, 60)}{aiSettings.ai_instructions.length > 60 ? '…' : ''}</p>}
-                                                    </div>
+                                    <div className="card-soft bg-chart-4/5 border-chart-4/20 p-4">
+                                        <div className="flex items-start gap-3">
+                                            <Sparkles className="w-5 h-5 text-chart-4 mt-0.5" />
+                                            <div className="flex-1">
+                                                <h4 className="font-semibold text-foreground mb-2">Ready to Generate</h4>
+                                                <div className="text-sm text-muted-foreground space-y-1">
+                                                    <p>• {aiSettings.num_questions} questions ({aiSettings.difficulty})</p>
+                                                    <p>• {aiSettings.question_types === "mcq_only" ? "Multiple choice only" : aiSettings.question_types === "short_only" ? `Short answer only (${aiSettings.marks_per_short} marks each)` : `Mixed: ${Math.ceil(aiSettings.num_questions * 0.6)} MCQ + ${aiSettings.num_questions - Math.ceil(aiSettings.num_questions * 0.6)} short answer`}</p>
+                                                    <p>• Style: {aiSettings.quiz_style.replace('_', ' ')}</p>
+                                                    {aiSettings.focus_areas && <p>• Focus: {aiSettings.focus_areas}</p>}
+                                                    {aiSettings.ai_instructions && <p>• Custom: {aiSettings.ai_instructions.slice(0, 60)}{aiSettings.ai_instructions.length > 60 ? '…' : ''}</p>}
                                                 </div>
                                             </div>
-                                        </CardContent>
-                                    </Card>
+                                        </div>
+                                    </div>
                                 )}
                                 </div>
                                 </div>
 
-                        <DialogFooter className="flex-shrink-0 border-t p-6 bg-gray-50">
-                            <Button 
-                                variant="outline" 
+                        <DialogFooter className="flex-shrink-0 border-t border-border p-6 bg-secondary/50">
+                            <Button
+                                variant="outline"
                                 onClick={() => {
                                     if (!isGenerating) {
                                         setShowAIDialog(false);
@@ -1433,7 +1756,7 @@ Return valid JSON only.`,
                             <Button
                                 onClick={handleGenerateQuiz}
                                 disabled={!uploadedFiles.length || !aiSettings.customSubject || isGenerating}
-                                className="bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700"
+                                className="bg-chart-4 hover:bg-chart-4/90 text-white"
                             >
                                 {isGenerating ? (
                                     <>

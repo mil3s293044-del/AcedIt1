@@ -1,6 +1,5 @@
 import React, { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import {
     Lock, CheckCircle2, Check, Zap, ChevronDown, ChevronRight,
@@ -9,12 +8,13 @@ import {
 } from "lucide-react";
 import { createPageUrl } from "@/utils";
 
+// All class strings are pre-computed full static strings so Tailwind JIT can see them.
 const TYPE_CONFIG = {
     study_hours: {
         icon: Clock,
-        color: "text-emerald-600",
-        bg: "bg-emerald-50",
-        border: "border-emerald-200",
+        color: "text-primary",
+        bg: "bg-primary/10",
+        border: "border-primary/20",
         label: "Study Hours",
         unit: "hrs",
         navPage: "Study",
@@ -22,9 +22,9 @@ const TYPE_CONFIG = {
     },
     quiz_score: {
         icon: Star,
-        color: "text-purple-600",
-        bg: "bg-purple-50",
-        border: "border-purple-200",
+        color: "text-chart-4",
+        bg: "bg-chart-4/10",
+        border: "border-chart-4/20",
         label: "Quiz Score",
         unit: "%",
         navPage: "Quizzes",
@@ -32,9 +32,9 @@ const TYPE_CONFIG = {
     },
     quiz_count: {
         icon: FileQuestion,
-        color: "text-indigo-600",
-        bg: "bg-indigo-50",
-        border: "border-indigo-200",
+        color: "text-chart-4",
+        bg: "bg-chart-4/10",
+        border: "border-chart-4/20",
         label: "Quizzes Done",
         unit: "quizzes",
         navPage: "Quizzes",
@@ -42,9 +42,9 @@ const TYPE_CONFIG = {
     },
     flashcard_reviews: {
         icon: Brain,
-        color: "text-blue-600",
-        bg: "bg-blue-50",
-        border: "border-blue-200",
+        color: "text-chart-3",
+        bg: "bg-chart-3/10",
+        border: "border-chart-3/20",
         label: "Flashcard Reviews",
         unit: "reviews",
         navPage: "Study",
@@ -52,9 +52,9 @@ const TYPE_CONFIG = {
     },
     study_sessions: {
         icon: BookOpen,
-        color: "text-orange-600",
-        bg: "bg-orange-50",
-        border: "border-orange-200",
+        color: "text-xp",
+        bg: "bg-xp/10",
+        border: "border-xp/20",
         label: "Study Sessions",
         unit: "sessions",
         navPage: "Study",
@@ -62,9 +62,9 @@ const TYPE_CONFIG = {
     },
     manual: {
         icon: CheckCircle2,
-        color: "text-slate-600",
-        bg: "bg-slate-50",
-        border: "border-slate-200",
+        color: "text-muted-foreground",
+        bg: "bg-secondary",
+        border: "border-border",
         label: "Task",
         unit: "",
         navPage: "Study",
@@ -72,16 +72,34 @@ const TYPE_CONFIG = {
     },
 };
 
-function ProgressRing({ value, size = 40, strokeWidth = 4, color = "#7c3aed" }) {
+// Shell classes for the sub-goal card itself, indexed by state. Pre-computed for JIT.
+const SHELL_CLASSES = {
+    completed: "border-primary/30 bg-primary/5",
+    active:    "border-chart-3/40 bg-surface shadow-soft",
+    locked:    "border-border bg-secondary/50",
+};
+
+const NUMBER_BADGE_CLASSES = {
+    completed: "bg-primary text-white",
+    active:    "bg-chart-3 text-white ring-4 ring-chart-3/20",
+    locked:    "bg-secondary text-muted-foreground/60",
+};
+
+function ProgressRing({ value, size = 40, strokeWidth = 4 }) {
     const r = (size - strokeWidth) / 2;
     const circ = 2 * Math.PI * r;
     const offset = circ - (Math.min(value, 100) / 100) * circ;
+    // Use design tokens via HSL CSS variables for stroke colors.
+    const trackStroke = "hsl(var(--border))";
+    const activeStroke = "hsl(var(--chart-3))";
+    const doneStroke = "hsl(var(--primary))";
+    const stroke = value >= 100 ? doneStroke : activeStroke;
     return (
         <svg width={size} height={size} className="flex-shrink-0">
-            <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="#e5e7eb" strokeWidth={strokeWidth} />
+            <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke={trackStroke} strokeWidth={strokeWidth} />
             <circle
                 cx={size / 2} cy={size / 2} r={r} fill="none"
-                stroke={value >= 100 ? "#16a34a" : color}
+                stroke={stroke}
                 strokeWidth={strokeWidth}
                 strokeDasharray={circ}
                 strokeDashoffset={offset}
@@ -90,7 +108,7 @@ function ProgressRing({ value, size = 40, strokeWidth = 4, color = "#7c3aed" }) 
                 style={{ transition: "stroke-dashoffset 0.6s ease" }}
             />
             <text x={size / 2} y={size / 2 + 4} textAnchor="middle" fontSize={size * 0.22} fontWeight="bold"
-                fill={value >= 100 ? "#16a34a" : color}>
+                fill={stroke}>
                 {Math.round(Math.min(value, 100))}%
             </text>
         </svg>
@@ -111,19 +129,19 @@ function ActionItemRow({ item, isUnlocked }) {
         : `${Math.round(item.current_progress || 0)} / ${item.target} ${config.unit}`;
 
     return (
-        <div className={`flex items-center gap-3 px-4 py-3 border-b last:border-0 ${isUnlocked ? "bg-white" : "bg-gray-50 opacity-50"}`}>
-            <div className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 ${item.completed ? "bg-green-50" : config.bg}`}>
+        <div className={`flex items-center gap-3 px-4 py-3 border-b border-border last:border-0 ${isUnlocked ? "bg-surface" : "bg-secondary/50 opacity-50"}`}>
+            <div className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 ${item.completed ? "bg-primary/10" : config.bg}`}>
                 {item.completed
-                    ? <CheckCircle2 className="w-4 h-4 text-green-500" />
+                    ? <CheckCircle2 className="w-4 h-4 text-primary" />
                     : <Icon className={`w-4 h-4 ${config.color}`} />
                 }
             </div>
             <div className="flex-1 min-w-0">
-                <p className={`text-sm font-medium ${item.completed ? "line-through text-gray-400" : "text-gray-800"}`}>{item.title}</p>
+                <p className={`text-sm font-medium ${item.completed ? "line-through text-muted-foreground/60" : "text-foreground"}`}>{item.title}</p>
                 {isUnlocked && (
                     <div className="mt-1 space-y-1">
-                        <div className="flex items-center justify-between text-xs text-gray-500">
-                            <span className={`${item.completed ? "text-green-600" : config.color} font-semibold`}>{displayProgress}</span>
+                        <div className="flex items-center justify-between text-xs text-muted-foreground">
+                            <span className={`${item.completed ? "text-primary" : config.color} font-semibold`}>{displayProgress}</span>
                             {!item.completed && !isManual && (
                                 <a href={createPageUrl(item.navigation || config.navPage)}
                                     className={`flex items-center gap-1 text-xs ${config.color} hover:underline`}>
@@ -138,11 +156,11 @@ function ActionItemRow({ item, isUnlocked }) {
             <div className="flex items-center gap-2 flex-shrink-0">
                 {!isManual && <ProgressRing value={isUnlocked ? Math.min(progress, 100) : 0} size={36} strokeWidth={3} />}
                 {isManual && isUnlocked && (
-                    <div className={`w-9 h-9 rounded-full border-2 flex items-center justify-center ${item.completed ? "bg-green-500 border-green-500" : "border-gray-300"}`}>
+                    <div className={`w-9 h-9 rounded-full border-2 flex items-center justify-center ${item.completed ? "bg-primary border-primary" : "border-border"}`}>
                         {item.completed && <Check className="w-4 h-4 text-white" />}
                     </div>
                 )}
-                <span className="text-xs text-amber-600 font-semibold flex items-center gap-1">
+                <span className="text-xs text-xp font-semibold flex items-center gap-1">
                     <Zap className="w-3 h-3" />{item.xp_reward}
                 </span>
             </div>
@@ -172,17 +190,17 @@ export default function SubGoalCard({ subGoal, index, activeIndex, goal }) {
         ? `${completedCount}/${totalCount} objectives met — auto-tracked from your AcedIt activity`
         : null;
 
+    const stateKey = isCompleted ? "completed" : isActive ? "active" : "locked";
+    const shellClass = SHELL_CLASSES[stateKey];
+    const numberBadgeClass = NUMBER_BADGE_CLASSES[stateKey];
+
     return (
         <motion.div
             layout
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: index * 0.06 }}
-            className={`rounded-2xl border-2 overflow-hidden transition-all ${
-                isCompleted ? "border-green-300 bg-green-50/30" :
-                isActive ? "border-purple-400 bg-white shadow-lg shadow-purple-100" :
-                "border-gray-200 bg-gray-50/50"
-            }`}
+            className={`rounded-2xl border-2 overflow-hidden transition-all ${shellClass}`}
         >
             {/* Header */}
             <button
@@ -190,36 +208,37 @@ export default function SubGoalCard({ subGoal, index, activeIndex, goal }) {
                 disabled={isLocked}
                 className="w-full flex items-center gap-4 p-4 text-left"
             >
-                <div className={`w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 font-bold text-sm transition-all ${
-                    isCompleted ? "bg-green-500 text-white" :
-                    isActive ? "bg-purple-600 text-white ring-4 ring-purple-200" :
-                    "bg-gray-200 text-gray-400"
-                }`}>
+                <div className={`w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 font-bold text-sm transition-all ${numberBadgeClass}`}>
                     {isCompleted ? <CheckCircle2 className="w-5 h-5" /> : isLocked ? <Lock className="w-4 h-4" /> : index + 1}
                 </div>
 
                 <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 mb-1">
-                        <p className={`font-semibold text-sm truncate ${isLocked ? "text-gray-400" : "text-gray-900"}`}>{subGoal.title}</p>
-                        {isActive && <Badge className="bg-purple-100 text-purple-700 text-xs border-0 flex-shrink-0">Active</Badge>}
-                        {isCompleted && <Badge className="bg-green-100 text-green-700 text-xs border-0 flex-shrink-0">Done ✓</Badge>}
+                        <p className={`font-semibold text-sm truncate ${isLocked ? "text-muted-foreground/60" : "text-foreground"}`}>{subGoal.title}</p>
+                        {isActive && <span className="pill bg-chart-3/15 text-chart-3 flex-shrink-0">Active</span>}
+                        {isCompleted && (
+                            <span className="pill bg-primary/15 text-primary gap-1 flex-shrink-0">
+                                <CheckCircle2 className="w-3 h-3" />
+                                Done
+                            </span>
+                        )}
                     </div>
                     {!isLocked && totalCount > 0 && (
                         <div className="flex items-center gap-3">
                             <Progress value={progressPct} className="h-1.5 flex-1" />
-                            <span className="text-xs text-gray-500 flex-shrink-0">{completedCount}/{totalCount}</span>
+                            <span className="text-xs text-muted-foreground flex-shrink-0">{completedCount}/{totalCount}</span>
                         </div>
                     )}
                     {isActive && !isCompleted && (
-                        <p className="text-xs text-purple-500 mt-0.5 flex items-center gap-1">
+                        <p className="text-xs text-chart-3 mt-0.5 flex items-center gap-1">
                             <TrendingUp className="w-3 h-3" /> Auto-tracked from your AcedIt usage
                         </p>
                     )}
                 </div>
 
                 <div className="flex items-center gap-2 flex-shrink-0">
-                    <span className="text-xs text-amber-600 font-bold flex items-center gap-1"><Zap className="w-3 h-3" />{xpTotal}</span>
-                    {!isLocked && (isExpanded ? <ChevronDown className="w-4 h-4 text-gray-400" /> : <ChevronRight className="w-4 h-4 text-gray-400" />)}
+                    <span className="text-xs text-xp font-bold flex items-center gap-1"><Zap className="w-3 h-3" />{xpTotal}</span>
+                    {!isLocked && (isExpanded ? <ChevronDown className="w-4 h-4 text-muted-foreground/60" /> : <ChevronRight className="w-4 h-4 text-muted-foreground/60" />)}
                 </div>
             </button>
 
@@ -232,20 +251,20 @@ export default function SubGoalCard({ subGoal, index, activeIndex, goal }) {
                         exit={{ height: 0 }}
                         className="overflow-hidden"
                     >
-                        <div className="border-t border-gray-100">
+                        <div className="border-t border-border">
                             {/* Auto-track notice */}
                             {isActive && (() => {
                                 const hasTracked = actionItems.some(i => i.type && i.type !== 'manual');
                                 const hasManual = actionItems.some(i => i.type === 'manual');
                                 if (!hasTracked && !hasManual) return null;
                                 return (
-                                    <div className="mx-4 mt-3 mb-1 flex items-start gap-2 bg-purple-50 border border-purple-200 rounded-xl p-3">
-                                        <TrendingUp className="w-4 h-4 text-purple-600 flex-shrink-0 mt-0.5" />
+                                    <div className="mx-4 mt-3 mb-1 flex items-start gap-2 bg-chart-3/5 border border-chart-3/20 rounded-xl p-3">
+                                        <TrendingUp className="w-4 h-4 text-chart-3 flex-shrink-0 mt-0.5" />
                                         <div>
-                                            <p className="text-xs font-semibold text-purple-800">
+                                            <p className="text-xs font-semibold text-foreground">
                                                 {hasManual && hasTracked ? "Mixed objectives" : hasManual ? "Manual tasks" : "Auto-tracked objectives"}
                                             </p>
-                                            <p className="text-xs text-purple-600">
+                                            <p className="text-xs text-muted-foreground">
                                                 {hasManual && hasTracked
                                                     ? "Some objectives are manually ticked off; others auto-complete when you hit targets in AcedIt."
                                                     : hasManual
@@ -267,17 +286,17 @@ export default function SubGoalCard({ subGoal, index, activeIndex, goal }) {
 
                             {/* Completed state */}
                             {isCompleted && (
-                                <div className="p-4 bg-green-50 border-t border-green-200 text-center">
-                                    <CheckCircle2 className="w-6 h-6 text-green-500 mx-auto mb-1" />
-                                    <p className="text-sm font-bold text-green-800">Sub-goal completed!</p>
-                                    <p className="text-xs text-green-600">All AcedIt objectives were verified automatically.</p>
+                                <div className="p-4 bg-primary/5 border-t border-primary/20 text-center">
+                                    <CheckCircle2 className="w-6 h-6 text-primary mx-auto mb-1" />
+                                    <p className="text-sm font-bold text-foreground">Sub-goal completed!</p>
+                                    <p className="text-xs text-muted-foreground">All AcedIt objectives were verified automatically.</p>
                                 </div>
                             )}
 
                             {/* Active but not done — motivational nudge */}
                             {isActive && !isCompleted && totalCount > 0 && (
-                                <div className="p-3 bg-gray-50 border-t border-gray-100 text-center">
-                                    <p className="text-xs text-gray-500">
+                                <div className="p-3 bg-secondary/50 border-t border-border text-center">
+                                    <p className="text-xs text-muted-foreground">
                                         Complete your objectives in AcedIt — this sub-goal will unlock the next one automatically when all are met.
                                     </p>
                                 </div>

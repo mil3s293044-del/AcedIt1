@@ -1,25 +1,25 @@
 import React, { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { base44 } from "@/api/base44Client";
 import { useToast } from "@/components/ui/use-toast";
 import GoalExpiredReview from "./GoalExpiredReview";
 import {
     Plus, Target, Calendar, Zap, ChevronRight,
-    Trash2, CheckCircle2, Lock, Loader2, ChevronDown, BookOpen, Star, Trophy, XCircle, Clock
+    Trash2, CheckCircle2, Lock, Loader2, ChevronDown, Star, Trophy, XCircle, Clock
 } from "lucide-react";
 
+// Static class lookup so Tailwind JIT can see every variant.
 const CATEGORY_COLORS = {
-    academic: { bg: "bg-blue-100", text: "text-blue-700", border: "border-blue-200", dot: "bg-blue-500" },
-    personal: { bg: "bg-purple-100", text: "text-purple-700", border: "border-purple-200", dot: "bg-purple-500" },
-    career: { bg: "bg-emerald-100", text: "text-emerald-700", border: "border-emerald-200", dot: "bg-emerald-500" },
-    atar_milestone: { bg: "bg-amber-100", text: "text-amber-700", border: "border-amber-200", dot: "bg-amber-500" },
-    subject_milestone: { bg: "bg-indigo-100", text: "text-indigo-700", border: "border-indigo-200", dot: "bg-indigo-500" },
-    course_milestone: { bg: "bg-pink-100", text: "text-pink-700", border: "border-pink-200", dot: "bg-pink-500" },
+    academic:          { bg: "bg-chart-3/10",  text: "text-chart-3",          border: "border-chart-3/20",          dot: "bg-chart-3" },
+    personal:          { bg: "bg-chart-4/10",  text: "text-chart-4",          border: "border-chart-4/20",          dot: "bg-chart-4" },
+    career:            { bg: "bg-primary/10",  text: "text-primary",          border: "border-primary/20",          dot: "bg-primary" },
+    atar_milestone:    { bg: "bg-xp/10",       text: "text-xp",               border: "border-xp/20",               dot: "bg-xp" },
+    subject_milestone: { bg: "bg-chart-3/10",  text: "text-chart-3",          border: "border-chart-3/20",          dot: "bg-chart-3" },
+    course_milestone:  { bg: "bg-chart-4/10",  text: "text-chart-4",          border: "border-chart-4/20",          dot: "bg-chart-4" },
 };
 
-const PRIORITY_DOT = { high: "bg-red-500", medium: "bg-yellow-500", low: "bg-gray-400" };
+const PRIORITY_DOT = { high: "bg-streak", medium: "bg-xp", low: "bg-muted-foreground/40" };
 
 function isExpired(targetDate) {
     if (!targetDate) return false;
@@ -31,12 +31,12 @@ function getDaysText(targetDate, isCompleted) {
     const days = Math.ceil((new Date(targetDate) - new Date()) / 86400000);
     if (days < 0) {
         if (isCompleted) return null;
-        return { text: "Time's up", color: "text-amber-600", isExpired: true };
+        return { text: "Time's up", color: "text-streak", isExpired: true };
     }
-    if (days === 0) return { text: "Due today", color: "text-orange-600" };
-    if (days === 1) return { text: "Due tomorrow", color: "text-orange-500" };
-    if (days <= 7) return { text: `${days} days left`, color: "text-yellow-600" };
-    return { text: `${days} days left`, color: "text-gray-400" };
+    if (days === 0) return { text: "Due today", color: "text-streak" };
+    if (days === 1) return { text: "Due tomorrow", color: "text-xp" };
+    if (days <= 7) return { text: `${days} days left`, color: "text-xp" };
+    return { text: `${days} days left`, color: "text-muted-foreground/60" };
 }
 
 function GoalCard({ goal, onSelect, onDelete }) {
@@ -51,9 +51,9 @@ function GoalCard({ goal, onSelect, onDelete }) {
     }, 0) + (goal.total_xp_reward || 0);
 
     const urgencyBorder = goal.is_completed
-        ? (goal.outcome === 'failed' ? 'border-red-200' : 'border-green-200')
-        : daysInfo?.isExpired ? 'border-amber-200'
-        : daysInfo?.color === "text-orange-600" ? "border-orange-200" : "border-gray-200";
+        ? (goal.outcome === 'failed' ? 'border-streak/30' : 'border-primary/30')
+        : daysInfo?.isExpired ? 'border-streak/30'
+        : daysInfo?.color === "text-streak" ? "border-streak/30" : "border-border";
 
     return (
         <motion.div
@@ -62,36 +62,36 @@ function GoalCard({ goal, onSelect, onDelete }) {
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.97 }}
             onClick={() => onSelect(goal)}
-            className={`group cursor-pointer bg-white rounded-2xl border-2 ${urgencyBorder} p-4 hover:shadow-md hover:border-indigo-200 transition-all`}
+            className={`group cursor-pointer card-soft border-2 ${urgencyBorder} p-4 hover:shadow-soft hover:border-chart-3/40 transition-all`}
         >
             <div className="flex items-start gap-3">
                 <div className="flex-shrink-0 mt-0.5">
                     {goal.is_completed
                         ? goal.outcome === 'failed'
-                            ? <XCircle className="w-5 h-5 text-red-500" />
-                            : <CheckCircle2 className="w-5 h-5 text-green-500" />
+                            ? <XCircle className="w-5 h-5 text-streak" />
+                            : <CheckCircle2 className="w-5 h-5 text-primary" />
                         : daysInfo?.isExpired
-                            ? <Clock className="w-4 h-4 text-amber-500 mt-0.5" />
-                            : <div className={`w-3 h-3 rounded-full mt-1 ${PRIORITY_DOT[goal.priority] || "bg-gray-400"}`} />
+                            ? <Clock className="w-4 h-4 text-streak mt-0.5" />
+                            : <div className={`w-3 h-3 rounded-full mt-1 ${PRIORITY_DOT[goal.priority] || "bg-muted-foreground/40"}`} />
                     }
                 </div>
 
                 <div className="flex-1 min-w-0">
                     <div className="flex items-start justify-between gap-2 mb-2">
-                        <h3 className="font-bold text-gray-900 text-sm leading-tight group-hover:text-indigo-700 transition-colors">{goal.title}</h3>
+                        <h3 className="font-bold text-foreground text-sm leading-tight group-hover:text-chart-3 transition-colors">{goal.title}</h3>
                         <div className="flex items-center gap-1 flex-shrink-0">
                             <button onClick={e => { e.stopPropagation(); onDelete(goal.id); }}
-                                className="opacity-0 group-hover:opacity-100 transition-opacity p-1 hover:text-red-500 text-gray-300 rounded">
+                                className="opacity-0 group-hover:opacity-100 transition-opacity p-1 hover:text-streak text-muted-foreground/60 rounded">
                                 <Trash2 className="w-3.5 h-3.5" />
                             </button>
-                            <ChevronRight className="w-4 h-4 text-gray-300 group-hover:text-indigo-500 transition-colors" />
+                            <ChevronRight className="w-4 h-4 text-muted-foreground/60 group-hover:text-chart-3 transition-colors" />
                         </div>
                     </div>
 
                     <div className="flex flex-wrap items-center gap-2 mb-3">
                         {goal.is_completed && goal.outcome && (
                             <span className={`text-xs font-bold flex items-center gap-1 ${
-                                goal.outcome === 'achieved' ? 'text-green-600' : 'text-red-500'
+                                goal.outcome === 'achieved' ? 'text-primary' : 'text-streak'
                             }`}>
                                 {goal.outcome === 'achieved' ? <Trophy className="w-3 h-3" /> : <XCircle className="w-3 h-3" />}
                                 {goal.outcome === 'achieved' ? 'Achieved' : 'Not met'}
@@ -103,12 +103,12 @@ function GoalCard({ goal, onSelect, onDelete }) {
                             </span>
                         )}
                         {xpTotal > 0 && (
-                            <span className="text-xs text-amber-600 font-semibold flex items-center gap-1">
+                            <span className="text-xs text-xp font-semibold flex items-center gap-1">
                                 <Zap className="w-3 h-3" />{xpTotal} XP
                             </span>
                         )}
                         {goal.is_ai_generated && (
-                            <span className="text-xs text-purple-600 font-semibold flex items-center gap-1">
+                            <span className="text-xs text-chart-4 font-semibold flex items-center gap-1">
                                 <Star className="w-3 h-3" />AI
                             </span>
                         )}
@@ -116,13 +116,13 @@ function GoalCard({ goal, onSelect, onDelete }) {
 
                     {subGoals.length > 0 && (
                         <div className="space-y-1.5">
-                            <div className="flex justify-between text-xs text-gray-400">
+                            <div className="flex justify-between text-xs text-muted-foreground/60">
                                 <span>{completedSubs}/{subGoals.length} milestones</span>
-                                <span className="font-bold text-indigo-600">{progress}%</span>
+                                <span className="font-bold text-chart-3">{progress}%</span>
                             </div>
-                            <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden">
+                            <div className="h-1.5 bg-secondary rounded-full overflow-hidden">
                                 <div
-                                    className={`h-full rounded-full transition-all ${goal.is_completed ? 'bg-green-400' : 'bg-gradient-to-r from-indigo-400 to-purple-500'}`}
+                                    className={`h-full rounded-full transition-all ${goal.is_completed ? 'bg-primary' : 'bg-chart-3'}`}
                                     style={{ width: `${progress}%` }}
                                 />
                             </div>
@@ -130,9 +130,9 @@ function GoalCard({ goal, onSelect, onDelete }) {
                     )}
 
                     {activeSubGoal && !goal.is_completed && (
-                        <div className="mt-2 flex items-center gap-1.5 text-xs text-gray-500 bg-gray-50 rounded-lg px-2 py-1.5">
-                            <Lock className="w-3 h-3 text-indigo-400 flex-shrink-0" />
-                            <span className="font-medium text-indigo-600">Next:</span>
+                        <div className="mt-2 flex items-center gap-1.5 text-xs text-muted-foreground bg-secondary/50 rounded-lg px-2 py-1.5">
+                            <Lock className="w-3 h-3 text-chart-3 flex-shrink-0" />
+                            <span className="font-medium text-chart-3">Next:</span>
                             <span className="truncate">{activeSubGoal.title}</span>
                         </div>
                     )}
@@ -150,14 +150,14 @@ function SubjectGroup({ groupName, goals, color, onSelectGoal, onDelete, default
         <div className="space-y-2">
             <button onClick={() => setOpen(o => !o)}
                 className="w-full flex items-center gap-2.5 py-2 group">
-                <div className={`w-2.5 h-2.5 rounded-full flex-shrink-0 ${color?.dot || 'bg-gray-400'}`} />
-                <span className="font-bold text-gray-800 text-sm flex-1 text-left">{groupName}</span>
+                <div className={`w-2.5 h-2.5 rounded-full flex-shrink-0 ${color?.dot || 'bg-muted-foreground/40'}`} />
+                <span className="font-bold text-foreground text-sm flex-1 text-left">{groupName}</span>
                 {active > 0 && (
-                    <span className={`text-xs px-2 py-0.5 rounded-full font-bold ${color?.bg || 'bg-gray-100'} ${color?.text || 'text-gray-600'}`}>
+                    <span className={`pill ${color?.bg || 'bg-secondary'} ${color?.text || 'text-muted-foreground'} text-xs font-bold py-0.5`}>
                         {active} active
                     </span>
                 )}
-                <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform ${open ? 'rotate-180' : ''}`} />
+                <ChevronDown className={`w-4 h-4 text-muted-foreground/60 transition-transform ${open ? 'rotate-180' : ''}`} />
             </button>
             <AnimatePresence>
                 {open && (
@@ -281,7 +281,7 @@ export default function GoalsList({ userSubjects, onSelectGoal, onCreateGoal }) 
     if (isLoading) {
         return (
             <div className="flex items-center justify-center py-16">
-                <Loader2 className="w-8 h-8 animate-spin text-indigo-500" />
+                <Loader2 className="w-8 h-8 animate-spin text-chart-3" />
             </div>
         );
     }
@@ -295,10 +295,10 @@ export default function GoalsList({ userSubjects, onSelectGoal, onCreateGoal }) 
             {/* Header */}
             <div className="flex items-center justify-between">
                 <div>
-                    <h2 className="text-lg font-bold text-gray-900">My Goals</h2>
-                    <p className="text-xs text-gray-400">{activeCount} active · {completedCount} completed</p>
+                    <h2 className="text-lg font-bold text-foreground">My Goals</h2>
+                    <p className="text-xs text-muted-foreground">{activeCount} active · {completedCount} completed</p>
                 </div>
-                <Button onClick={onCreateGoal} className="bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl">
+                <Button onClick={onCreateGoal} className="bg-chart-3 hover:bg-chart-3/90 text-white rounded-xl">
                     <Plus className="w-4 h-4 mr-1.5" /> New Goal
                 </Button>
             </div>
@@ -312,10 +312,10 @@ export default function GoalsList({ userSubjects, onSelectGoal, onCreateGoal }) 
                 ].map(f => (
                     <button key={f.id} onClick={() => setFilter(f.id)}
                         className={`px-3.5 py-1.5 rounded-full text-xs font-bold transition-all flex items-center gap-1.5 ${
-                            filter === f.id ? "bg-indigo-600 text-white shadow-sm shadow-indigo-200" : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+                            filter === f.id ? "bg-chart-3 text-white shadow-soft" : "bg-secondary text-muted-foreground hover:bg-secondary/80"
                         }`}>
                         {f.label}
-                        <span className={`text-xs ${filter === f.id ? 'bg-white/20 text-white' : 'bg-gray-200 text-gray-500'} px-1.5 py-0.5 rounded-full font-black`}>
+                        <span className={`text-xs ${filter === f.id ? 'bg-white/20 text-white' : 'bg-secondary text-muted-foreground'} px-1.5 py-0.5 rounded-full font-black`}>
                             {f.count}
                         </span>
                     </button>
@@ -324,14 +324,14 @@ export default function GoalsList({ userSubjects, onSelectGoal, onCreateGoal }) 
 
             {/* Goals grouped */}
             {filtered.length === 0 ? (
-                <div className="text-center py-16 border-2 border-dashed border-gray-200 rounded-2xl">
-                    <div className="w-14 h-14 bg-indigo-50 rounded-full flex items-center justify-center mx-auto mb-3">
-                        <Target className="w-7 h-7 text-indigo-400" />
+                <div className="text-center py-16 border-2 border-dashed border-border rounded-2xl">
+                    <div className="w-14 h-14 bg-chart-3/10 rounded-full flex items-center justify-center mx-auto mb-3">
+                        <Target className="w-7 h-7 text-chart-3" />
                     </div>
-                    <h3 className="font-bold text-gray-700 mb-1">{filter === "completed" ? "No completed goals yet" : "No active goals"}</h3>
-                    <p className="text-gray-400 text-sm mb-4">{filter !== "completed" && "Create your first goal to get started."}</p>
+                    <h3 className="font-bold text-foreground mb-1">{filter === "completed" ? "No completed goals yet" : "No active goals"}</h3>
+                    <p className="text-muted-foreground text-sm mb-4">{filter !== "completed" && "Create your first goal to get started."}</p>
                     {filter !== "completed" && (
-                        <Button onClick={onCreateGoal} className="bg-indigo-600 hover:bg-indigo-700">
+                        <Button onClick={onCreateGoal} className="bg-chart-3 hover:bg-chart-3/90 text-white">
                             <Plus className="w-4 h-4 mr-2" /> Create Goal
                         </Button>
                     )}

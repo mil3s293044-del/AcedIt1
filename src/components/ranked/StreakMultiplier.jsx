@@ -1,17 +1,47 @@
 import React from "react";
 import { motion } from "framer-motion";
-import { Progress } from "@/components/ui/progress";
-import { Badge } from "@/components/ui/badge";
-import { Flame, Zap, TrendingUp, Lock } from "lucide-react";
+import { Flame, Zap, TrendingUp, Lock, Check, Crown } from "lucide-react";
+
+// Pre-resolved Tailwind class strings — required so the JIT can detect them at build time.
+const ACCENT_CLASSES = {
+    "muted-foreground": {
+        bg10:  "bg-secondary",
+        bg15:  "bg-secondary",
+        text:  "text-muted-foreground",
+        border:"border-border",
+        pillSolid: "bg-secondary text-muted-foreground",
+    },
+    xp: {
+        bg10:  "bg-xp/10",
+        bg15:  "bg-xp/15",
+        text:  "text-xp",
+        border:"border-xp/30",
+        pillSolid: "bg-xp text-white",
+    },
+    streak: {
+        bg10:  "bg-streak/10",
+        bg15:  "bg-streak/15",
+        text:  "text-streak",
+        border:"border-streak/30",
+        pillSolid: "bg-streak text-white",
+    },
+    "chart-4": {
+        bg10:  "bg-chart-4/10",
+        bg15:  "bg-chart-4/15",
+        text:  "text-chart-4",
+        border:"border-chart-4/30",
+        pillSolid: "bg-chart-4 text-white",
+    },
+};
 
 const STREAK_TIERS = [
-    { days: 0,  multiplier: 1.0,  label: "No Streak",    color: "text-gray-400",   bg: "bg-gray-100",  emoji: "💤" },
-    { days: 3,  multiplier: 1.2,  label: "Warming Up",   color: "text-orange-400", bg: "bg-orange-50", emoji: "🌱" },
-    { days: 7,  multiplier: 1.5,  label: "On Fire",      color: "text-orange-500", bg: "bg-orange-100", emoji: "🔥" },
-    { days: 14, multiplier: 1.75, label: "Blazing",      color: "text-red-500",    bg: "bg-red-100",   emoji: "💥" },
-    { days: 21, multiplier: 2.0,  label: "Unstoppable",  color: "text-rose-600",   bg: "bg-rose-100",  emoji: "⚡" },
-    { days: 30, multiplier: 2.5,  label: "Legendary",    color: "text-purple-600", bg: "bg-purple-100", emoji: "👑" },
-    { days: 60, multiplier: 3.0,  label: "God Mode",     color: "text-amber-500",  bg: "bg-amber-50",  emoji: "🌟" },
+    { days: 0,  multiplier: 1.0,  label: "No Streak",    icon: Flame,  accent: "muted-foreground" },
+    { days: 3,  multiplier: 1.2,  label: "Warming Up",   icon: Flame,  accent: "xp" },
+    { days: 7,  multiplier: 1.5,  label: "On Fire",      icon: Flame,  accent: "xp" },
+    { days: 14, multiplier: 1.75, label: "Blazing",      icon: Flame,  accent: "streak" },
+    { days: 21, multiplier: 2.0,  label: "Unstoppable",  icon: Zap,    accent: "streak" },
+    { days: 30, multiplier: 2.5,  label: "Legendary",    icon: Crown,  accent: "chart-4" },
+    { days: 60, multiplier: 3.0,  label: "God Mode",     icon: Crown,  accent: "chart-4" },
 ];
 
 function getCurrentTier(days) {
@@ -34,107 +64,124 @@ export default function StreakMultiplier({ streakDays = 0, compact = false }) {
 
     if (compact) {
         return (
-            <div className={`flex items-center gap-2 px-3 py-2 rounded-xl ${current.bg} border border-current/20`}>
-                <Flame className="w-4 h-4 text-orange-500" />
-                <span className={`text-sm font-black ${current.color}`}>{streakDays}d</span>
-                <span className="text-xs text-gray-500">{current.multiplier}× XP</span>
+            <div className="inline-flex items-center gap-2 px-3 py-2 rounded-xl bg-streak/10 border-2 border-streak/20">
+                <Flame className="w-4 h-4 text-streak" />
+                <span className="text-sm font-display font-extrabold text-foreground">{streakDays}d</span>
+                <span className="text-xs text-muted-foreground">{current.multiplier}× XP</span>
             </div>
         );
     }
 
+    const CurrentIcon = current.icon;
+    const currentCls = ACCENT_CLASSES[current.accent];
+
     return (
         <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="space-y-3">
             {/* Main multiplier display */}
-            <div className={`relative overflow-hidden rounded-2xl p-5 ${
-                streakDays >= 30 ? 'bg-gradient-to-br from-purple-600 via-violet-600 to-indigo-600' :
-                streakDays >= 14 ? 'bg-gradient-to-br from-red-500 via-rose-500 to-pink-600' :
-                streakDays >= 7 ? 'bg-gradient-to-br from-orange-500 via-amber-500 to-yellow-500' :
-                streakDays >= 3 ? 'bg-gradient-to-br from-orange-400 to-amber-500' :
-                'bg-gradient-to-br from-gray-400 to-slate-500'
-            } text-white shadow-xl`}>
-                {/* Animated flame effect for high streaks */}
-                {streakDays >= 7 && (
-                    <div className="absolute top-0 right-0 text-6xl opacity-20 -mr-2 -mt-2 animate-bounce">🔥</div>
-                )}
-                <div className="relative">
-                    <div className="flex items-start justify-between mb-3">
+            <div className="card-soft p-5">
+                <div className="flex items-start justify-between gap-4 mb-4">
+                    <div className="flex items-center gap-3">
+                        <div className={`w-12 h-12 rounded-xl ${currentCls.bg10} flex items-center justify-center flex-shrink-0`}>
+                            <CurrentIcon className={`w-6 h-6 ${currentCls.text}`} />
+                        </div>
                         <div>
-                            <div className="flex items-center gap-2">
-                                <Flame className="w-5 h-5" />
-                                <p className="font-black text-sm uppercase tracking-wider">Streak Multiplier</p>
-                            </div>
-                            <p className="text-white/70 text-xs mt-0.5">{current.label}</p>
-                        </div>
-                        <div className="text-right">
-                            <p className="text-5xl font-black leading-none">{current.multiplier}<span className="text-2xl">×</span></p>
-                            <p className="text-white/70 text-xs">XP Multiplier</p>
+                            <p className="stat-label">Streak Multiplier</p>
+                            <p className="font-display font-extrabold text-foreground text-base mt-0.5">{current.label}</p>
                         </div>
                     </div>
-
-                    <div className="bg-white/10 rounded-xl px-4 py-2.5 flex items-center justify-between">
-                        <div className="flex items-center gap-2">
-                            <Flame className="w-5 h-5 text-amber-300" />
-                            <span className="text-2xl font-black">{streakDays}</span>
-                            <span className="text-white/70 text-sm">day streak</span>
-                        </div>
-                        {current.multiplier > 1 && (
-                            <Badge className="bg-white/20 text-white border-0 font-bold">
-                                +{Math.round((current.multiplier - 1) * 100)}% XP bonus
-                            </Badge>
-                        )}
+                    <div className="text-right">
+                        <p className="stat-num text-foreground">
+                            {current.multiplier}<span className="text-2xl">×</span>
+                        </p>
+                        <p className="stat-label">XP Multiplier</p>
                     </div>
+                </div>
 
-                    {next && (
-                        <div className="mt-3 space-y-1.5">
-                            <div className="flex justify-between text-xs text-white/80">
-                                <span>{current.emoji} {current.multiplier}×</span>
-                                <span className="font-bold">{daysToNext} days to {next.emoji} {next.multiplier}×</span>
-                            </div>
-                            <div className="h-2 bg-white/20 rounded-full overflow-hidden">
-                                <motion.div
-                                    initial={{ width: 0 }}
-                                    animate={{ width: `${progressToNext}%` }}
-                                    transition={{ duration: 1, ease: "easeOut" }}
-                                    className="h-full bg-white/70 rounded-full"
-                                />
-                            </div>
-                        </div>
+                <div className="bg-secondary/50 rounded-xl px-4 py-3 flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                        <Flame className="w-5 h-5 text-streak" />
+                        <span className="text-2xl font-display font-extrabold text-foreground">{streakDays}</span>
+                        <span className="text-muted-foreground text-sm">day streak</span>
+                    </div>
+                    {current.multiplier > 1 && (
+                        <span className="pill bg-streak/15 text-streak">
+                            +{Math.round((current.multiplier - 1) * 100)}% XP bonus
+                        </span>
                     )}
                 </div>
+
+                {next && (
+                    <div className="mt-4 space-y-2">
+                        <div className="flex justify-between text-xs text-muted-foreground">
+                            <span className="font-bold">{current.multiplier}×</span>
+                            <span className="font-bold text-foreground">{daysToNext} days to {next.multiplier}×</span>
+                        </div>
+                        <div className="h-2 bg-secondary rounded-full overflow-hidden">
+                            <motion.div
+                                initial={{ width: 0 }}
+                                animate={{ width: `${progressToNext}%` }}
+                                transition={{ duration: 1, ease: "easeOut" }}
+                                className="h-full bg-streak rounded-full"
+                            />
+                        </div>
+                    </div>
+                )}
             </div>
 
             {/* Tier ladder */}
-            <div className="bg-white rounded-2xl border border-gray-100 p-4">
-                <div className="flex items-center gap-2 mb-3">
-                    <TrendingUp className="w-4 h-4 text-orange-500" />
-                    <h4 className="font-bold text-gray-900 text-sm">Multiplier Tiers</h4>
-                    <p className="text-xs text-gray-400 ml-auto">Higher streak = more XP per action</p>
+            <div className="card-soft p-5">
+                <div className="flex items-center gap-3 mb-4">
+                    <div className="w-10 h-10 rounded-xl bg-streak/10 flex items-center justify-center flex-shrink-0">
+                        <TrendingUp className="w-5 h-5 text-streak" />
+                    </div>
+                    <div>
+                        <h4 className="font-display font-extrabold text-foreground text-base">Multiplier Tiers</h4>
+                        <p className="text-xs text-muted-foreground mt-0.5">Higher streak = more XP per action.</p>
+                    </div>
                 </div>
                 <div className="space-y-2">
-                    {STREAK_TIERS.map((tier, i) => {
+                    {STREAK_TIERS.map((tier) => {
                         const isActive = current.days === tier.days;
                         const isPassed = streakDays >= tier.days && current.days !== tier.days;
                         const isLocked = streakDays < tier.days;
+                        const TierIcon = tier.icon;
+                        const cls = ACCENT_CLASSES[tier.accent];
                         return (
-                            <div key={tier.days} className={`flex items-center gap-3 rounded-xl px-3 py-2.5 transition-all ${
-                                isActive ? 'bg-gradient-to-r from-orange-50 to-amber-50 border-2 border-orange-300' :
-                                isPassed ? 'bg-gray-50' : 'opacity-50'
-                            }`}>
-                                <span className="text-lg w-8 text-center">{tier.emoji}</span>
-                                <div className="flex-1">
-                                    <p className={`text-sm font-bold ${isActive ? 'text-orange-700' : isPassed ? 'text-gray-700' : 'text-gray-400'}`}>{tier.label}</p>
-                                    <p className="text-xs text-gray-400">{tier.days === 0 ? 'Start today' : `${tier.days}+ day streak`}</p>
+                            <div
+                                key={tier.days}
+                                className={`flex items-center gap-3 rounded-xl px-3 py-2.5 transition-all ${
+                                    isActive
+                                        ? `${cls.bg10} border-2 ${cls.border}`
+                                        : isPassed
+                                            ? 'bg-secondary/50 border-2 border-transparent'
+                                            : 'bg-secondary/30 border-2 border-transparent opacity-50'
+                                }`}
+                            >
+                                <div className={`w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 ${
+                                    isActive ? cls.bg15 : isPassed ? 'bg-surface' : 'bg-secondary'
+                                }`}>
+                                    <TierIcon className={`w-4 h-4 ${
+                                        isActive ? cls.text : isPassed ? 'text-foreground' : 'text-muted-foreground/60'
+                                    }`} />
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                    <p className={`text-sm font-bold ${
+                                        isActive ? cls.text : isPassed ? 'text-foreground' : 'text-muted-foreground/60'
+                                    }`}>{tier.label}</p>
+                                    <p className="text-xs text-muted-foreground/60">{tier.days === 0 ? 'Start today' : `${tier.days}+ day streak`}</p>
                                 </div>
                                 <div className="flex items-center gap-2">
-                                    <Badge className={`font-black text-xs border-0 ${
-                                        isActive ? 'bg-orange-500 text-white' :
-                                        isPassed ? 'bg-green-100 text-green-700' :
-                                        'bg-gray-100 text-gray-500'
+                                    <span className={`pill ${
+                                        isActive
+                                            ? cls.pillSolid
+                                            : isPassed
+                                                ? 'bg-primary/15 text-primary'
+                                                : 'bg-secondary text-muted-foreground'
                                     }`}>
                                         {tier.multiplier}× XP
-                                    </Badge>
-                                    {isLocked && <Lock className="w-3.5 h-3.5 text-gray-300" />}
-                                    {isPassed && <span className="text-green-500 text-xs font-bold">✓</span>}
+                                    </span>
+                                    {isLocked && <Lock className="w-3.5 h-3.5 text-muted-foreground/60" />}
+                                    {isPassed && <Check className="w-3.5 h-3.5 text-primary" />}
                                 </div>
                             </div>
                         );
@@ -143,10 +190,12 @@ export default function StreakMultiplier({ streakDays = 0, compact = false }) {
             </div>
 
             {/* Tip box */}
-            <div className="bg-orange-50 border border-orange-200 rounded-2xl p-3 flex items-start gap-2">
-                <Zap className="w-4 h-4 text-orange-500 flex-shrink-0 mt-0.5" />
-                <p className="text-xs text-orange-800">
-                    <strong>Pro tip:</strong> A 30-day streak gives you 2.5× XP on everything — that's 150% more XP from quizzes, flashcards, focus sessions, and goals!
+            <div className="card-soft p-4 bg-streak/5 border-streak/30 flex items-start gap-3">
+                <div className="w-8 h-8 rounded-xl bg-streak/10 flex items-center justify-center flex-shrink-0">
+                    <Zap className="w-4 h-4 text-streak" />
+                </div>
+                <p className="text-xs text-foreground leading-relaxed">
+                    <strong className="font-bold">Pro tip:</strong> A 30-day streak gives you 2.5× XP on everything — that's 150% more XP from quizzes, flashcards, focus sessions, and goals.
                 </p>
             </div>
         </motion.div>

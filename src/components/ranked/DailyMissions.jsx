@@ -1,21 +1,29 @@
 import React, { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Progress } from "@/components/ui/progress";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Zap, Target, Flame, Brain, BookOpen, Clock, Trophy, CheckCircle2, Star, RefreshCw } from "lucide-react";
+import { Zap, Target, Flame, Brain, BookOpen, Clock, Trophy, CheckCircle2, Star, RefreshCw, Gift } from "lucide-react";
 import { base44 } from "@/api/base44Client";
 import { fireXPFeedback } from "./XPFeedback";
 
+// Pre-resolved Tailwind class strings — required so the JIT can detect them at build time.
+const ACCENT_CLASSES = {
+    primary:   { bg5: "bg-primary/5",   bg10: "bg-primary/10", border: "border-primary/30", text: "text-primary" },
+    xp:        { bg5: "bg-xp/5",        bg10: "bg-xp/10",      border: "border-xp/30",      text: "text-xp" },
+    streak:    { bg5: "bg-streak/5",    bg10: "bg-streak/10",  border: "border-streak/30",  text: "text-streak" },
+    "chart-3": { bg5: "bg-chart-3/5",   bg10: "bg-chart-3/10", border: "border-chart-3/30", text: "text-chart-3" },
+    "chart-4": { bg5: "bg-chart-4/5",   bg10: "bg-chart-4/10", border: "border-chart-4/30", text: "text-chart-4" },
+};
+
 const MISSION_TEMPLATES = [
-    { id: "study_30", icon: Clock, label: "Study Session", desc: "Study for 30 minutes", xp: 50, color: "bg-blue-500", check: (stats) => stats.todayStudyMins >= 30 },
-    { id: "study_60", icon: Clock, label: "Deep Focus", desc: "Study for 60 minutes", xp: 100, color: "bg-blue-600", check: (stats) => stats.todayStudyMins >= 60 },
-    { id: "flashcard_20", icon: BookOpen, label: "Flashcard Sprint", desc: "Review 20 flashcards", xp: 40, color: "bg-green-500", check: (stats) => stats.todayFlashcards >= 20 },
-    { id: "quiz_1", icon: Brain, label: "Quiz Warrior", desc: "Complete any quiz", xp: 45, color: "bg-purple-500", check: (stats) => stats.todayQuizzes >= 1 },
-    { id: "quiz_80", icon: Star, label: "Quiz Ace", desc: "Score 80%+ on a quiz", xp: 70, color: "bg-indigo-500", check: (stats) => stats.todayQuizScore >= 80 },
-    { id: "streak", icon: Flame, label: "Streak Keeper", desc: "Maintain your streak today", xp: 30, color: "bg-orange-500", check: (stats) => stats.streak >= 1 },
-    { id: "goal_progress", icon: Target, label: "Goal Grinder", desc: "Complete a sub-goal", xp: 60, color: "bg-emerald-500", check: (stats) => stats.todaySubGoals >= 1 },
-    { id: "study_45", icon: Clock, label: "Study Block", desc: "Study for 45 minutes", xp: 75, color: "bg-cyan-500", check: (stats) => stats.todayStudyMins >= 45 },
+    { id: "study_30",     icon: Clock,    label: "Study Session",    desc: "Study for 30 minutes",   xp: 50,  accent: "chart-3", check: (stats) => stats.todayStudyMins >= 30 },
+    { id: "study_60",     icon: Clock,    label: "Deep Focus",       desc: "Study for 60 minutes",   xp: 100, accent: "chart-3", check: (stats) => stats.todayStudyMins >= 60 },
+    { id: "flashcard_20", icon: BookOpen, label: "Flashcard Sprint", desc: "Review 20 flashcards",   xp: 40,  accent: "primary", check: (stats) => stats.todayFlashcards >= 20 },
+    { id: "quiz_1",       icon: Brain,    label: "Quiz Warrior",     desc: "Complete any quiz",      xp: 45,  accent: "chart-4", check: (stats) => stats.todayQuizzes >= 1 },
+    { id: "quiz_80",      icon: Star,     label: "Quiz Ace",         desc: "Score 80%+ on a quiz",   xp: 70,  accent: "chart-4", check: (stats) => stats.todayQuizScore >= 80 },
+    { id: "streak",       icon: Flame,    label: "Streak Keeper",    desc: "Maintain your streak today", xp: 30, accent: "streak", check: (stats) => stats.streak >= 1 },
+    { id: "goal_progress",icon: Target,   label: "Goal Grinder",     desc: "Complete a sub-goal",    xp: 60,  accent: "primary", check: (stats) => stats.todaySubGoals >= 1 },
+    { id: "study_45",     icon: Clock,    label: "Study Block",      desc: "Study for 45 minutes",   xp: 75,  accent: "chart-3", check: (stats) => stats.todayStudyMins >= 45 },
 ];
 
 function getDailyMissions() {
@@ -147,22 +155,26 @@ export default function DailyMissions({ streakDays = 0, userProfile }) {
     return (
         <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="space-y-3">
             {/* Header */}
-            <div className="bg-gradient-to-r from-violet-600 to-indigo-600 rounded-2xl p-4 text-white">
-                <div className="flex items-center justify-between mb-3">
-                    <div>
-                        <div className="flex items-center gap-2">
-                            <Target className="w-5 h-5" />
-                            <h3 className="font-black text-base">Daily Missions</h3>
-                            <Badge className="bg-white/20 text-white border-0 text-xs">{completedCount}/3</Badge>
+            <div className="card-soft p-5">
+                <div className="flex items-center justify-between mb-4">
+                    <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-xl bg-chart-4/10 flex items-center justify-center flex-shrink-0">
+                            <Target className="w-5 h-5 text-chart-4" />
                         </div>
-                        <p className="text-white/70 text-xs mt-0.5">Resets in {getTimeUntilReset()}</p>
+                        <div>
+                            <div className="flex items-center gap-2">
+                                <h3 className="font-display font-extrabold text-foreground text-base">Daily Missions</h3>
+                                <span className="pill bg-chart-4/15 text-chart-4">{completedCount}/3</span>
+                            </div>
+                            <p className="text-xs text-muted-foreground mt-0.5">Resets in {getTimeUntilReset()}.</p>
+                        </div>
                     </div>
                     <div className="text-right">
-                        <p className="text-2xl font-black">{totalXP}</p>
-                        <p className="text-white/70 text-xs">XP available</p>
+                        <p className="text-2xl font-display font-extrabold text-foreground">{totalXP}</p>
+                        <p className="stat-label">XP available</p>
                     </div>
                 </div>
-                <Progress value={(completedCount / 3) * 100} className="h-2 bg-white/20" />
+                <Progress value={(completedCount / 3) * 100} className="h-2" />
             </div>
 
             {/* Missions */}
@@ -171,6 +183,7 @@ export default function DailyMissions({ streakDays = 0, userProfile }) {
                     const isComplete = mission.check(stats);
                     const isClaimed = mission.claimedXP;
                     const Icon = mission.icon;
+                    const accent = mission.accent;
                     const progress = Math.min(100, (() => {
                         if (mission.id === 'study_30') return Math.min(100, (stats.todayStudyMins || 0) / 30 * 100);
                         if (mission.id === 'study_45') return Math.min(100, (stats.todayStudyMins || 0) / 45 * 100);
@@ -182,32 +195,49 @@ export default function DailyMissions({ streakDays = 0, userProfile }) {
                         return 0;
                     })());
 
+                    const cls = ACCENT_CLASSES[accent] || ACCENT_CLASSES.primary;
                     return (
                         <motion.div key={mission.id}
                             initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: i * 0.05 }}
-                            className={`bg-white rounded-2xl border-2 p-4 flex items-center gap-3 transition-all ${
-                                isClaimed ? 'border-green-200 bg-green-50' : isComplete ? 'border-violet-300 bg-violet-50 shadow-md' : 'border-gray-100'
+                            className={`card-soft p-4 flex items-center gap-3 transition-all ${
+                                isClaimed
+                                    ? 'bg-primary/5 border-primary/30'
+                                    : isComplete
+                                        ? `${cls.bg5} ${cls.border}`
+                                        : ''
                             }`}>
-                            <div className={`w-11 h-11 rounded-xl flex items-center justify-center flex-shrink-0 ${isClaimed ? 'bg-green-500' : mission.color}`}>
-                                {isClaimed ? <CheckCircle2 className="w-6 h-6 text-white" /> : <Icon className="w-5 h-5 text-white" />}
+                            <div className={`w-11 h-11 rounded-xl flex items-center justify-center flex-shrink-0 ${
+                                isClaimed ? 'bg-primary/15' : cls.bg10
+                            }`}>
+                                {isClaimed
+                                    ? <CheckCircle2 className="w-5 h-5 text-primary" />
+                                    : <Icon className={`w-5 h-5 ${cls.text}`} />
+                                }
                             </div>
                             <div className="flex-1 min-w-0">
                                 <div className="flex items-center gap-2">
-                                    <p className={`text-sm font-bold ${isClaimed ? 'text-green-700 line-through opacity-60' : 'text-gray-900'}`}>{mission.label}</p>
-                                    <Badge className={`text-xs border-0 ${isClaimed ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'}`}>+{mission.xp} XP</Badge>
+                                    <p className={`text-sm font-bold ${isClaimed ? 'text-muted-foreground line-through' : 'text-foreground'}`}>{mission.label}</p>
+                                    <span className={`pill ${isClaimed ? 'bg-primary/15 text-primary' : 'bg-xp/15 text-xp'}`}>+{mission.xp} XP</span>
                                 </div>
-                                <p className="text-xs text-gray-500 mt-0.5">{mission.desc}</p>
+                                <p className="text-xs text-muted-foreground mt-0.5">{mission.desc}</p>
                                 {!isClaimed && (
-                                    <div className="mt-1.5">
+                                    <div className="mt-2">
                                         <Progress value={progress} className="h-1.5" />
                                     </div>
                                 )}
                             </div>
                             {!isClaimed && (
-                                <Button size="sm" onClick={() => handleClaim(mission, i)}
+                                <Button
+                                    size="sm"
+                                    onClick={() => handleClaim(mission, i)}
                                     disabled={!isComplete || claimingId === mission.id}
-                                    className={`h-8 text-xs flex-shrink-0 ${isComplete ? 'bg-violet-600 hover:bg-violet-700 shadow-lg shadow-violet-200' : 'bg-gray-100 text-gray-400 cursor-not-allowed'}`}>
-                                    {claimingId === mission.id ? <RefreshCw className="w-3 h-3 animate-spin" /> : isComplete ? 'Claim!' : 'Locked'}
+                                    variant={isComplete ? 'default' : 'outline'}
+                                    className="flex-shrink-0"
+                                >
+                                    {claimingId === mission.id
+                                        ? <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                                        : isComplete ? 'Claim' : 'Locked'
+                                    }
                                 </Button>
                             )}
                         </motion.div>
@@ -218,18 +248,32 @@ export default function DailyMissions({ streakDays = 0, userProfile }) {
             {/* Bonus Chest */}
             <AnimatePresence>
                 {allComplete && (
-                    <motion.div initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }}
-                        className={`rounded-2xl p-4 text-center border-2 ${missionData.bonusClaimed ? 'bg-gray-50 border-gray-200' : 'bg-gradient-to-r from-amber-400 to-orange-500 border-amber-300'}`}>
+                    <motion.div
+                        initial={{ opacity: 0, scale: 0.95 }}
+                        animate={{ opacity: 1, scale: 1 }}
+                        className={`card-soft p-5 ${missionData.bonusClaimed ? '' : 'bg-xp/5 border-xp/30'}`}
+                    >
                         {missionData.bonusClaimed ? (
-                            <p className="text-sm text-gray-500 font-semibold">🎁 Daily bonus claimed! Come back tomorrow.</p>
+                            <div className="flex items-center justify-center gap-2">
+                                <Gift className="w-4 h-4 text-muted-foreground" />
+                                <p className="text-sm text-muted-foreground font-semibold">Daily bonus claimed. Come back tomorrow.</p>
+                            </div>
                         ) : (
-                            <>
-                                <p className="text-white font-black text-base mb-1">🎁 All Missions Complete!</p>
-                                <p className="text-white/80 text-xs mb-3">Claim your completion bonus</p>
-                                <Button onClick={handleBonusClaim} className="bg-white text-amber-700 hover:bg-amber-50 font-black text-sm shadow-lg">
-                                    <Trophy className="w-4 h-4 mr-1.5" />Claim +150 XP Bonus
+                            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                                <div className="flex items-center gap-3">
+                                    <div className="w-10 h-10 rounded-xl bg-xp/15 flex items-center justify-center flex-shrink-0">
+                                        <Gift className="w-5 h-5 text-xp" />
+                                    </div>
+                                    <div>
+                                        <p className="font-display font-extrabold text-foreground text-base">All missions complete</p>
+                                        <p className="text-xs text-muted-foreground mt-0.5">Claim your completion bonus.</p>
+                                    </div>
+                                </div>
+                                <Button onClick={handleBonusClaim} className="flex-shrink-0">
+                                    <Trophy className="w-4 h-4" />
+                                    Claim +150 XP
                                 </Button>
-                            </>
+                            </div>
                         )}
                     </motion.div>
                 )}

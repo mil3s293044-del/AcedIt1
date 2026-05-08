@@ -10,7 +10,7 @@ import {
     TrendingUp, TrendingDown, Minus, ArrowUpRight, ArrowDownRight,
     BarChart2, Activity
 } from "lucide-react";
-import { resolveScoreWager } from "@/functions/resolveScoreWager";
+import { resolveScoreWager } from "@/api/functionsShim";
 import { useToast } from "@/components/ui/use-toast";
 import { isPast, parseISO, format, differenceInDays } from "date-fns";
 

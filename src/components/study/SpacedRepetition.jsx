@@ -3,7 +3,6 @@ import { Flashcard, UserSubject } from "@/entities/all";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
@@ -12,10 +11,12 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useToast } from "@/components/ui/use-toast";
 import { motion, AnimatePresence } from "framer-motion";
+import { Link } from "react-router-dom";
+import { createPageUrl } from "@/utils";
 import AILoadingProgress from "../shared/AILoadingProgress";
 import {
     Plus, Play, Edit, Trash2, Share2, Check, X, Sparkles, Upload,
-    Loader2, Brain, Target, AlertCircle, Search, Clock, BarChart3,
+    Loader2, Brain, Target, AlertTriangle, Search, Clock, BarChart3,
     Users, UserPlus, ChevronLeft, FileText, Zap, RotateCcw, Eye
 } from "lucide-react";
 import { base44 } from "@/api/base44Client";
@@ -23,6 +24,9 @@ import { format } from "date-fns";
 import { moderationPresets } from "@/components/shared/contentModeration";
 import { fireXPFeedback } from "@/components/ranked/XPFeedback";
 import { recordStudyAndGetStreak } from "@/components/shared/streakHelpers";
+
+// Lucide alias — design system maps "alert" semantics to AlertTriangle.
+const AlertCircle = AlertTriangle;
 
 // ─── SM-2 based mastery algorithm ───────────────────────────────────────────
 // Mastery score (0–100) is a weighted composite:
@@ -154,11 +158,13 @@ const calculateNextReview = (quality, card) => {
 };
 
 // ─── Rating button config ────────────────────────────────────────────────────
+// Static class strings (Tailwind JIT-safe) — overdue/hard → streak,
+// hard/energy → xp, good (default recall) → chart-3 (blue), easy (mastered) → primary.
 const ratingConfig = [
-    { quality: 1, label: "Again", sublabel: "Didn't recall", color: "bg-red-50 hover:bg-red-100 text-red-700 border-red-200 hover:border-red-400" },
-    { quality: 2, label: "Hard", sublabel: "Almost", color: "bg-orange-50 hover:bg-orange-100 text-orange-700 border-orange-200 hover:border-orange-400" },
-    { quality: 3, label: "Good", sublabel: "Recalled", color: "bg-blue-50 hover:bg-blue-100 text-blue-700 border-blue-200 hover:border-blue-400" },
-    { quality: 4, label: "Easy", sublabel: "Perfect", color: "bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border-emerald-200 hover:border-emerald-400" },
+    { quality: 1, label: "Again", sublabel: "Didn't recall", color: "bg-streak/10 hover:bg-streak/20 text-streak border-streak/30 hover:border-streak/50" },
+    { quality: 2, label: "Hard", sublabel: "Almost", color: "bg-xp/10 hover:bg-xp/20 text-xp border-xp/30 hover:border-xp/50" },
+    { quality: 3, label: "Good", sublabel: "Recalled", color: "bg-chart-3/10 hover:bg-chart-3/20 text-chart-3 border-chart-3/30 hover:border-chart-3/50" },
+    { quality: 4, label: "Easy", sublabel: "Perfect", color: "bg-primary/10 hover:bg-primary/20 text-primary border-primary/30 hover:border-primary/50" },
 ];
 
 // ─── Deck card component ─────────────────────────────────────────────────────
@@ -175,7 +181,7 @@ function DeckCard({ deck, subjectColor, onSelect, onDelete, onStats }) {
             initial={{ opacity: 0, y: 16 }}
             animate={{ opacity: 1, y: 0 }}
             whileHover={{ y: -2 }}
-            className="group relative bg-white rounded-3xl border border-slate-200 shadow-sm hover:shadow-lg transition-all duration-300 overflow-hidden cursor-pointer"
+            className="group relative card-soft card-soft-hover overflow-hidden cursor-pointer"
             onClick={() => onSelect(deck)}
         >
             {/* Colour accent top bar */}
@@ -185,19 +191,19 @@ function DeckCard({ deck, subjectColor, onSelect, onDelete, onStats }) {
                 {/* Header */}
                 <div className="flex items-start justify-between mb-4">
                     <div className="flex-1 min-w-0">
-                        <h3 className="font-bold text-slate-900 text-base leading-tight truncate">{deck.topic}</h3>
+                        <h3 className="font-bold text-foreground text-base leading-tight truncate">{deck.topic}</h3>
                         <div className="flex items-center gap-1.5 mt-1">
                             <div className="w-2 h-2 rounded-full" style={{ backgroundColor: subjectColor }} />
-                            <span className="text-xs text-slate-500">{deck.unit}</span>
+                            <span className="text-xs text-muted-foreground">{deck.unit}</span>
                         </div>
                     </div>
                     <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                         <button onClick={e => { e.stopPropagation(); onStats(deck); }}
-                            className="w-7 h-7 flex items-center justify-center rounded-xl hover:bg-slate-100 text-slate-500">
+                            className="w-7 h-7 flex items-center justify-center rounded-xl hover:bg-secondary text-muted-foreground">
                             <BarChart3 className="w-3.5 h-3.5" />
                         </button>
                         <button onClick={e => { e.stopPropagation(); onDelete(deck.id); }}
-                            className="w-7 h-7 flex items-center justify-center rounded-xl hover:bg-red-50 text-red-400">
+                            className="w-7 h-7 flex items-center justify-center rounded-xl hover:bg-streak/10 text-streak">
                             <Trash2 className="w-3.5 h-3.5" />
                         </button>
                     </div>
@@ -205,27 +211,27 @@ function DeckCard({ deck, subjectColor, onSelect, onDelete, onStats }) {
 
                 {/* Stats row */}
                 <div className="grid grid-cols-3 gap-2 mb-4">
-                    <div className="text-center bg-slate-50 rounded-xl p-2">
-                        <p className="text-lg font-bold text-slate-800">{total}</p>
-                        <p className="text-xs text-slate-500">Total</p>
+                    <div className="text-center bg-secondary/50 rounded-xl p-2">
+                        <p className="text-lg font-bold text-foreground">{total}</p>
+                        <p className="text-xs text-muted-foreground">Total</p>
                     </div>
-                    <div className="text-center bg-blue-50 rounded-xl p-2">
-                        <p className="text-lg font-bold text-blue-600">{due}</p>
-                        <p className="text-xs text-blue-600">Due</p>
+                    <div className="text-center bg-chart-3/10 rounded-xl p-2">
+                        <p className="text-lg font-bold text-chart-3">{due}</p>
+                        <p className="text-xs text-chart-3">Due</p>
                     </div>
-                    <div className={`text-center rounded-xl p-2 ${weak > 0 ? 'bg-orange-50' : 'bg-emerald-50'}`}>
-                        <p className={`text-lg font-bold ${weak > 0 ? 'text-orange-600' : 'text-emerald-600'}`}>{weak > 0 ? weak : mastered}</p>
-                        <p className={`text-xs ${weak > 0 ? 'text-orange-600' : 'text-emerald-600'}`}>{weak > 0 ? 'Weak' : 'Done'}</p>
+                    <div className={`text-center rounded-xl p-2 ${weak > 0 ? 'bg-streak/10' : 'bg-primary/10'}`}>
+                        <p className={`text-lg font-bold ${weak > 0 ? 'text-streak' : 'text-primary'}`}>{weak > 0 ? weak : mastered}</p>
+                        <p className={`text-xs ${weak > 0 ? 'text-streak' : 'text-primary'}`}>{weak > 0 ? 'Weak' : 'Done'}</p>
                     </div>
                 </div>
 
                 {/* Mastery bar */}
                 <div>
                     <div className="flex items-center justify-between mb-1">
-                        <span className="text-xs text-slate-500">Mastery</span>
-                        <span className="text-xs font-semibold text-slate-700">{masteryPct}%</span>
+                        <span className="text-xs text-muted-foreground">Mastery</span>
+                        <span className="text-xs font-semibold text-foreground">{masteryPct}%</span>
                     </div>
-                    <div className="h-1.5 bg-slate-100 rounded-full overflow-hidden">
+                    <div className="h-1.5 bg-secondary rounded-full overflow-hidden">
                         <motion.div
                             className="h-full rounded-full"
                             style={{ backgroundColor: subjectColor }}
@@ -610,8 +616,8 @@ The documents provided may be PowerPoint slides, Word documents, or text files. 
     if (isLoading) return (
         <div className="flex items-center justify-center min-h-64">
             <div className="flex flex-col items-center gap-3">
-                <Loader2 className="w-8 h-8 animate-spin text-blue-500" />
-                <p className="text-sm text-slate-500">Loading your decks...</p>
+                <Loader2 className="w-8 h-8 animate-spin text-chart-3" />
+                <p className="text-sm text-muted-foreground">Loading your decks...</p>
             </div>
         </div>
     );
@@ -627,34 +633,34 @@ The documents provided may be PowerPoint slides, Word documents, or text files. 
             <div className="max-w-2xl mx-auto space-y-5">
                 {/* Top bar */}
                 <div className="flex items-center justify-between">
-                    <Button variant="ghost" onClick={handleExitReview} className="gap-2 text-slate-600 hover:text-slate-900">
+                    <Button variant="ghost" onClick={handleExitReview} className="gap-2 text-muted-foreground hover:text-foreground">
                         <ChevronLeft className="w-4 h-4" /> Exit
                     </Button>
                     <div className="flex items-center gap-3">
                         {currentCard.is_weak_spot && (
-                            <span className="flex items-center gap-1 text-xs font-medium text-orange-600 bg-orange-50 border border-orange-200 px-2.5 py-1 rounded-full">
+                            <span className="pill bg-streak/10 text-streak border border-streak/20">
                                 <AlertCircle className="w-3 h-3" /> Weak Spot
                             </span>
                         )}
-                        <span className="text-sm font-semibold text-slate-600">{currentCardIndex + 1} / {reviewCards.length}</span>
+                        <span className="text-sm font-semibold text-muted-foreground">{currentCardIndex + 1} / {reviewCards.length}</span>
                     </div>
                 </div>
 
                 {/* Progress bar */}
-                <div className="h-1.5 bg-slate-100 rounded-full overflow-hidden">
-                    <motion.div className="h-full bg-gradient-to-r from-blue-500 to-indigo-500 rounded-full" animate={{ width: `${progress}%` }} transition={{ duration: 0.3 }} />
+                <div className="h-1.5 bg-secondary rounded-full overflow-hidden">
+                    <motion.div className="h-full bg-chart-3 rounded-full" animate={{ width: `${progress}%` }} transition={{ duration: 0.3 }} />
                 </div>
 
                 {/* Session mini stats */}
                 {total > 0 && (
-                    <div className="flex items-center gap-3 bg-white rounded-2xl border border-slate-200 px-4 py-2.5">
-                        <span className="text-xs text-slate-500">{total} reviewed</span>
+                    <div className="flex items-center gap-3 card-soft px-4 py-2.5">
+                        <span className="text-xs text-muted-foreground">{total} reviewed</span>
                         <div className="flex items-center gap-2 ml-auto">
-                            <span className="text-xs text-red-500">{sessionStats.againCount} again</span>
-                            <span className="text-xs text-orange-500">{sessionStats.hardCount} hard</span>
-                            <span className="text-xs text-blue-500">{sessionStats.goodCount} good</span>
-                            <span className="text-xs text-emerald-500">{sessionStats.easyCount} easy</span>
-                            <span className="text-xs font-semibold text-slate-700 border-l border-slate-200 pl-2">{accuracy}% accurate</span>
+                            <span className="text-xs text-streak">{sessionStats.againCount} again</span>
+                            <span className="text-xs text-xp">{sessionStats.hardCount} hard</span>
+                            <span className="text-xs text-chart-3">{sessionStats.goodCount} good</span>
+                            <span className="text-xs text-primary">{sessionStats.easyCount} easy</span>
+                            <span className="text-xs font-semibold text-foreground border-l border-border pl-2">{accuracy}% accurate</span>
                         </div>
                     </div>
                 )}
@@ -668,47 +674,47 @@ The documents provided may be PowerPoint slides, Word documents, or text files. 
                         exit={{ opacity: 0, x: -30 }}
                         transition={{ duration: 0.2 }}
                     >
-                        <div className="bg-white rounded-3xl border border-slate-200 shadow-lg overflow-hidden">
+                        <div className="card-soft overflow-hidden">
                             {/* Accent */}
-                            <div className="h-1 bg-gradient-to-r from-blue-500 via-indigo-500 to-violet-500" />
+                            <div className="h-1 bg-chart-3" />
 
                             <div className="p-8 min-h-72 flex flex-col">
                                 <AnimatePresence mode="wait">
                                     {!showAnswer ? (
                                         <motion.div key="question" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="flex-1 flex flex-col items-center justify-center text-center gap-6">
-                                            <span className="text-xs font-semibold uppercase tracking-widest text-blue-500 bg-blue-50 px-3 py-1 rounded-full">Question</span>
-                                            <p className="text-2xl font-semibold text-slate-900 leading-relaxed max-w-lg">
+                                            <span className="pill bg-chart-3/10 text-chart-3 uppercase tracking-widest">Question</span>
+                                            <p className="text-2xl font-semibold text-foreground leading-relaxed max-w-lg">
                                                 {currentCard.question}
                                             </p>
                                             {currentCard.question_image && (
-                                                <img src={currentCard.question_image} alt="Question" className="max-w-sm rounded-2xl shadow-md border border-slate-200" />
+                                                <img src={currentCard.question_image} alt="Question" className="max-w-sm rounded-2xl shadow-soft border border-border" />
                                             )}
                                             <Button
                                                 onClick={() => { setShowAnswer(true); setIsFlipped(true); }}
-                                                className="mt-4 h-12 px-8 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white rounded-2xl font-medium gap-2 shadow-lg shadow-blue-200"
+                                                className="btn-3d mt-4 h-12 px-8 bg-chart-3 hover:bg-chart-3 text-white rounded-2xl font-medium gap-2"
                                             >
                                                 <Eye className="w-4 h-4" /> Reveal Answer
                                             </Button>
-                                            <p className="text-xs text-slate-400">Press Space or Enter to reveal</p>
+                                            <p className="text-xs text-muted-foreground/60">Press Space or Enter to reveal</p>
                                         </motion.div>
                                     ) : (
                                         <motion.div key="answer" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="flex-1 flex flex-col gap-5">
                                             {/* Q above */}
-                                            <div className="bg-slate-50 rounded-2xl p-4 border border-slate-100">
-                                                <p className="text-xs font-semibold text-slate-400 mb-1.5">Question</p>
-                                                <p className="text-sm text-slate-700 font-medium">{currentCard.question}</p>
+                                            <div className="bg-secondary/50 rounded-2xl p-4 border border-border">
+                                                <p className="text-xs font-semibold text-muted-foreground/60 mb-1.5">Question</p>
+                                                <p className="text-sm text-muted-foreground font-medium">{currentCard.question}</p>
                                             </div>
                                             {/* Answer */}
-                                            <div className="bg-emerald-50 rounded-2xl p-4 border border-emerald-100 flex-1">
-                                                <p className="text-xs font-semibold text-emerald-600 mb-1.5">Answer</p>
-                                                <p className="text-base text-slate-800 leading-relaxed">{currentCard.answer}</p>
+                                            <div className="bg-primary/10 rounded-2xl p-4 border border-primary/20 flex-1">
+                                                <p className="text-xs font-semibold text-primary mb-1.5">Answer</p>
+                                                <p className="text-base text-foreground leading-relaxed">{currentCard.answer}</p>
                                                 {currentCard.answer_image && (
-                                                    <img src={currentCard.answer_image} alt="Answer" className="max-w-sm rounded-xl mt-3 border border-emerald-200" />
+                                                    <img src={currentCard.answer_image} alt="Answer" className="max-w-sm rounded-xl mt-3 border border-primary/20" />
                                                 )}
                                             </div>
                                             {/* Rating */}
                                             <div>
-                                                <p className="text-xs text-center text-slate-400 mb-3">How well did you recall this? (1–4)</p>
+                                                <p className="text-xs text-center text-muted-foreground/60 mb-3">How well did you recall this? (1–4)</p>
                                                 <div className="grid grid-cols-4 gap-2">
                                                     {ratingConfig.map(r => (
                                                         <button
@@ -743,55 +749,55 @@ The documents provided may be PowerPoint slides, Word documents, or text files. 
             <div className="space-y-5">
                 {/* Header */}
                 <div className="flex items-center justify-between">
-                    <button onClick={() => setSelectedDeck(null)} className="flex items-center gap-2 text-sm text-slate-600 hover:text-slate-900 font-medium">
+                    <button onClick={() => setSelectedDeck(null)} className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground font-medium">
                         <ChevronLeft className="w-4 h-4" /> All Decks
                     </button>
                     <div className="flex gap-2">
-                        <Button size="sm" variant="outline" onClick={() => setSharingDeck(selectedDeck)} className="gap-1.5 border-slate-200 text-xs">
+                        <Button size="sm" variant="outline" onClick={() => setSharingDeck(selectedDeck)} className="gap-1.5 border-border text-xs">
                             <Share2 className="w-3.5 h-3.5" /> Share
                         </Button>
-                        <Button size="sm" onClick={() => setIsAddingCard(true)} className="gap-1.5 bg-slate-800 hover:bg-slate-900 text-xs">
+                        <Button size="sm" onClick={() => setIsAddingCard(true)} className="btn-3d gap-1.5 bg-chart-3 hover:bg-chart-3 text-white text-xs">
                             <Plus className="w-3.5 h-3.5" /> Add Card
                         </Button>
                     </div>
                 </div>
 
                 {/* Deck info + review buttons */}
-                <div className="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden">
+                <div className="card-soft overflow-hidden">
                     <div className="h-1.5" style={{ backgroundColor: subjectColor }} />
                     <div className="p-6">
                         <div className="flex items-start justify-between gap-4">
                             <div>
-                                <h2 className="text-xl font-bold text-slate-900">{selectedDeck.topic}</h2>
+                                <h2 className="text-xl font-bold text-foreground">{selectedDeck.topic}</h2>
                                 <div className="flex items-center gap-2 mt-1">
                                     <div className="w-2 h-2 rounded-full" style={{ backgroundColor: subjectColor }} />
-                                    <span className="text-sm text-slate-500">{selectedDeck.subject_name} · {selectedDeck.unit}</span>
+                                    <span className="text-sm text-muted-foreground">{selectedDeck.subject_name} · {selectedDeck.unit}</span>
                                 </div>
                             </div>
                             <div className="flex gap-2">
-                                <div className="text-center px-4 py-2 bg-slate-50 rounded-2xl">
-                                    <p className="text-xl font-bold text-slate-800">{stats.total}</p>
-                                    <p className="text-xs text-slate-500">Total</p>
+                                <div className="text-center px-4 py-2 bg-secondary/50 rounded-2xl">
+                                    <p className="text-xl font-bold text-foreground">{stats.total}</p>
+                                    <p className="text-xs text-muted-foreground">Total</p>
                                 </div>
-                                <div className="text-center px-4 py-2 bg-blue-50 rounded-2xl">
-                                    <p className="text-xl font-bold text-blue-600">{stats.due}</p>
-                                    <p className="text-xs text-blue-600">Due</p>
+                                <div className="text-center px-4 py-2 bg-chart-3/10 rounded-2xl">
+                                    <p className="text-xl font-bold text-chart-3">{stats.due}</p>
+                                    <p className="text-xs text-chart-3">Due</p>
                                 </div>
-                                <div className="text-center px-4 py-2 bg-orange-50 rounded-2xl">
-                                    <p className="text-xl font-bold text-orange-600">{stats.weak}</p>
-                                    <p className="text-xs text-orange-600">Weak</p>
+                                <div className="text-center px-4 py-2 bg-streak/10 rounded-2xl">
+                                    <p className="text-xl font-bold text-streak">{stats.weak}</p>
+                                    <p className="text-xs text-streak">Weak</p>
                                 </div>
                             </div>
                         </div>
                         <div className="flex gap-2 mt-5">
-                            <Button onClick={() => handleStartReview(selectedDeck, 'all')} className="flex-1 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white rounded-xl gap-2">
+                            <Button onClick={() => handleStartReview(selectedDeck, 'all')} className="btn-3d flex-1 bg-chart-3 hover:bg-chart-3 text-white rounded-xl gap-2">
                                 <Play className="w-4 h-4" /> Review All
                             </Button>
-                            <Button onClick={() => handleStartReview(selectedDeck, 'due')} variant="outline" className="flex-1 border-2 border-blue-200 text-blue-700 hover:bg-blue-50 rounded-xl gap-2">
+                            <Button onClick={() => handleStartReview(selectedDeck, 'due')} variant="outline" className="flex-1 border-2 border-chart-3/30 text-chart-3 hover:bg-chart-3/10 rounded-xl gap-2">
                                 <Clock className="w-4 h-4" /> Due Only ({stats.due})
                             </Button>
                             {stats.weak > 0 && (
-                                <Button onClick={() => handleStartReview(selectedDeck, 'weak')} variant="outline" className="flex-1 border-2 border-orange-200 text-orange-700 hover:bg-orange-50 rounded-xl gap-2">
+                                <Button onClick={() => handleStartReview(selectedDeck, 'weak')} variant="outline" className="flex-1 border-2 border-streak/30 text-streak hover:bg-streak/10 rounded-xl gap-2">
                                     <AlertCircle className="w-4 h-4" /> Weak ({stats.weak})
                                 </Button>
                             )}
@@ -803,33 +809,33 @@ The documents provided may be PowerPoint slides, Word documents, or text files. 
                 <div className="space-y-2">
                     {selectedDeck.cards.map((card, index) => (
                         <motion.div key={card.id} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: index * 0.03 }}
-                            className="group bg-white rounded-2xl border border-slate-200 hover:border-slate-300 shadow-sm p-4 transition-all"
+                            className="group card-soft p-4 transition-all"
                         >
                             {editingCard?.id === card.id ? (
                                 <div className="space-y-3">
-                                    <Textarea value={editingCard.question} onChange={e => setEditingCard({ ...editingCard, question: e.target.value })} placeholder="Question" rows={2} className="border-2 border-blue-200 focus:border-blue-400 rounded-xl" />
-                                    <Textarea value={editingCard.answer} onChange={e => setEditingCard({ ...editingCard, answer: e.target.value })} placeholder="Answer" rows={2} className="border-2 border-emerald-200 focus:border-emerald-400 rounded-xl" />
+                                    <Textarea value={editingCard.question} onChange={e => setEditingCard({ ...editingCard, question: e.target.value })} placeholder="Question" rows={2} className="border-2 border-chart-3/30 focus:border-chart-3 rounded-xl" />
+                                    <Textarea value={editingCard.answer} onChange={e => setEditingCard({ ...editingCard, answer: e.target.value })} placeholder="Answer" rows={2} className="border-2 border-primary/30 focus:border-primary rounded-xl" />
                                     <div className="flex gap-2">
-                                        <Button onClick={handleSaveCard} size="sm" className="bg-emerald-600 hover:bg-emerald-700 rounded-xl gap-1.5"><Check className="w-3.5 h-3.5" /> Save</Button>
+                                        <Button onClick={handleSaveCard} size="sm" className="btn-3d bg-primary hover:bg-primary text-primary-foreground rounded-xl gap-1.5"><Check className="w-3.5 h-3.5" /> Save</Button>
                                         <Button onClick={() => setEditingCard(null)} variant="outline" size="sm" className="rounded-xl"><X className="w-3.5 h-3.5" /></Button>
                                     </div>
                                 </div>
                             ) : (
                                 <div className="flex items-start justify-between gap-3">
                                     <div className="flex-1 min-w-0">
-                                        <p className="font-medium text-slate-900 text-sm">{card.question}</p>
-                                        <p className="text-sm text-slate-500 mt-1 line-clamp-2">{card.answer}</p>
+                                        <p className="font-medium text-foreground text-sm">{card.question}</p>
+                                        <p className="text-sm text-muted-foreground mt-1 line-clamp-2">{card.answer}</p>
                                         <div className="flex gap-1.5 mt-2 flex-wrap">
-                                            <span className="text-xs bg-slate-100 text-slate-600 px-2 py-0.5 rounded-full">{card.totalReviews || 0} reviews</span>
-                                            {card.is_weak_spot && <span className="text-xs bg-orange-100 text-orange-700 px-2 py-0.5 rounded-full">Weak Spot</span>}
-                                            {card.session_skip_count === 0 && <span className="text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full">Due</span>}
+                                            <span className="pill bg-secondary text-muted-foreground">{card.totalReviews || 0} reviews</span>
+                                            {card.is_weak_spot && <span className="pill bg-streak/15 text-streak">Weak Spot</span>}
+                                            {card.session_skip_count === 0 && <span className="pill bg-chart-3/15 text-chart-3">Due</span>}
                                         </div>
                                     </div>
                                     <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0">
-                                        <button onClick={() => setEditingCard({ ...card })} className="w-7 h-7 flex items-center justify-center rounded-xl hover:bg-slate-100 text-slate-500">
+                                        <button onClick={() => setEditingCard({ ...card })} className="w-7 h-7 flex items-center justify-center rounded-xl hover:bg-secondary text-muted-foreground">
                                             <Edit className="w-3.5 h-3.5" />
                                         </button>
-                                        <button onClick={() => handleDeleteCard(card.id)} className="w-7 h-7 flex items-center justify-center rounded-xl hover:bg-red-50 text-red-400">
+                                        <button onClick={() => handleDeleteCard(card.id)} className="w-7 h-7 flex items-center justify-center rounded-xl hover:bg-streak/10 text-streak">
                                             <Trash2 className="w-3.5 h-3.5" />
                                         </button>
                                     </div>
@@ -851,11 +857,11 @@ The documents provided may be PowerPoint slides, Word documents, or text files. 
                 {/* Search + filters + actions */}
                 <div className="flex flex-col sm:flex-row gap-3">
                     <div className="relative flex-1">
-                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-                        <Input placeholder="Search decks..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} className="pl-10 border-2 border-slate-200 focus:border-blue-400 rounded-xl h-11" />
+                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground/60" />
+                        <Input placeholder="Search decks..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} className="pl-10 border-2 border-border focus:border-chart-3 rounded-xl h-11" />
                     </div>
                     <Select value={filterSubject} onValueChange={setFilterSubject}>
-                        <SelectTrigger className="w-full sm:w-44 border-2 border-slate-200 rounded-xl h-11">
+                        <SelectTrigger className="w-full sm:w-44 border-2 border-border rounded-xl h-11">
                             <SelectValue placeholder="All Subjects" />
                         </SelectTrigger>
                         <SelectContent>
@@ -864,23 +870,23 @@ The documents provided may be PowerPoint slides, Word documents, or text files. 
                         </SelectContent>
                     </Select>
                     <div className="flex gap-2">
-                        <Button onClick={() => setIsCreatingDeck(true)} variant="outline" className="gap-2 border-2 border-slate-200 rounded-xl h-11 text-slate-700">
+                        <Button onClick={() => setIsCreatingDeck(true)} variant="outline" className="gap-2 border-2 border-border rounded-xl h-11 text-foreground">
                             <Plus className="w-4 h-4" /> New Deck
                         </Button>
-                        <Button onClick={() => setIsShowingGenerated(true)} className="gap-2 bg-gradient-to-r from-violet-600 to-blue-600 hover:from-violet-700 hover:to-blue-700 rounded-xl h-11">
+                        <Button onClick={() => setIsShowingGenerated(true)} className="btn-3d gap-2 bg-chart-4 hover:bg-chart-4 text-white rounded-xl h-11">
                             <Sparkles className="w-4 h-4" /> AI Generate
                         </Button>
                     </div>
                 </div>
 
                 {Object.keys(decksBySubject).length === 0 ? (
-                    <div className="text-center py-20 bg-white rounded-3xl border border-slate-200">
-                        <Brain className="w-14 h-14 text-slate-200 mx-auto mb-4" />
-                        <h3 className="text-lg font-bold text-slate-700 mb-2">No decks yet</h3>
-                        <p className="text-sm text-slate-500 mb-6">Create your first deck manually or let AI generate one from your notes.</p>
+                    <div className="text-center py-20 card-soft">
+                        <Brain className="w-14 h-14 text-muted-foreground/60 mx-auto mb-4" />
+                        <h3 className="text-lg font-bold text-foreground mb-2">No decks yet</h3>
+                        <p className="text-sm text-muted-foreground mb-6">Create your first deck manually or let AI generate one from your notes.</p>
                         <div className="flex gap-3 justify-center">
                             <Button onClick={() => setIsCreatingDeck(true)} variant="outline" className="gap-2 rounded-xl border-2"><Plus className="w-4 h-4" /> Create Deck</Button>
-                            <Button onClick={() => setIsShowingGenerated(true)} className="gap-2 bg-gradient-to-r from-violet-600 to-blue-600 rounded-xl"><Sparkles className="w-4 h-4" /> AI Generate</Button>
+                            <Button onClick={() => setIsShowingGenerated(true)} className="btn-3d gap-2 bg-chart-4 hover:bg-chart-4 text-white rounded-xl"><Sparkles className="w-4 h-4" /> AI Generate</Button>
                         </div>
                     </div>
                 ) : (
@@ -891,9 +897,9 @@ The documents provided may be PowerPoint slides, Word documents, or text files. 
                             <div key={subjectName} className="space-y-3">
                                 <div className="flex items-center gap-3">
                                     <div className="w-3 h-3 rounded-full" style={{ backgroundColor: subjectColor }} />
-                                    <h3 className="font-bold text-slate-800">{subjectName}</h3>
-                                    <span className="text-xs text-slate-400">{subjectDecks.length} decks</span>
-                                    {totalDue > 0 && <span className="text-xs font-medium text-blue-600 bg-blue-50 px-2 py-0.5 rounded-full">{totalDue} due</span>}
+                                    <h3 className="font-bold text-foreground">{subjectName}</h3>
+                                    <span className="text-xs text-muted-foreground/60">{subjectDecks.length} decks</span>
+                                    {totalDue > 0 && <span className="pill bg-chart-3/10 text-chart-3">{totalDue} due</span>}
                                 </div>
                                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
                                     {subjectDecks.map(deck => (
@@ -940,7 +946,7 @@ The documents provided may be PowerPoint slides, Word documents, or text files. 
                     </div>
                     <DialogFooter>
                         <Button variant="outline" onClick={() => setIsCreatingDeck(false)} className="rounded-xl">Cancel</Button>
-                        <Button onClick={handleCreateDeck} className="bg-blue-600 hover:bg-blue-700 rounded-xl">Next: Add Cards</Button>
+                        <Button onClick={handleCreateDeck} className="btn-3d bg-chart-3 hover:bg-chart-3 text-white rounded-xl">Next: Add Cards</Button>
                     </DialogFooter>
                 </DialogContent>
             </Dialog>
@@ -952,16 +958,16 @@ The documents provided may be PowerPoint slides, Word documents, or text files. 
                     <div className="space-y-4">
                         <div className="space-y-1.5">
                             <Label>Question / Front</Label>
-                            <Textarea value={newCard.question} onChange={e => setNewCard({ ...newCard, question: e.target.value })} placeholder="What is...?" rows={3} className="border-2 border-slate-200 focus:border-blue-400 rounded-xl resize-none" />
+                            <Textarea value={newCard.question} onChange={e => setNewCard({ ...newCard, question: e.target.value })} placeholder="What is...?" rows={3} className="border-2 border-border focus:border-chart-3 rounded-xl resize-none" />
                         </div>
                         <div className="space-y-1.5">
                             <Label>Answer / Back</Label>
-                            <Textarea value={newCard.answer} onChange={e => setNewCard({ ...newCard, answer: e.target.value })} placeholder="The answer is..." rows={3} className="border-2 border-slate-200 focus:border-emerald-400 rounded-xl resize-none" />
+                            <Textarea value={newCard.answer} onChange={e => setNewCard({ ...newCard, answer: e.target.value })} placeholder="The answer is..." rows={3} className="border-2 border-border focus:border-primary rounded-xl resize-none" />
                         </div>
                     </div>
                     <DialogFooter>
                         <Button variant="outline" onClick={() => setIsAddingCard(false)} className="rounded-xl">Done</Button>
-                        <Button onClick={handleAddCard} className="bg-emerald-600 hover:bg-emerald-700 rounded-xl gap-2"><Plus className="w-4 h-4" /> Add Card</Button>
+                        <Button onClick={handleAddCard} className="btn-3d bg-primary hover:bg-primary text-primary-foreground rounded-xl gap-2"><Plus className="w-4 h-4" /> Add Card</Button>
                     </DialogFooter>
                 </DialogContent>
             </Dialog>
@@ -977,22 +983,38 @@ The documents provided may be PowerPoint slides, Word documents, or text files. 
                         </TabsList>
                         <TabsContent value="friends" className="flex-1 overflow-hidden">
                             <ScrollArea className="h-56">
-                                {friends.length === 0 ? <p className="text-center text-slate-500 text-sm py-8">No friends yet.</p> :
+                                {friends.length === 0 ? (
+                                    <div className="flex flex-col items-center text-center gap-2 py-8">
+                                        <UserPlus className="w-8 h-8 text-muted-foreground/60" />
+                                        <p className="text-sm text-muted-foreground">No friends yet to share with.</p>
+                                        <Link to={createPageUrl("Friends")} className="text-xs font-bold text-primary hover:underline">
+                                            Add friends →
+                                        </Link>
+                                    </div>
+                                ) :
                                     friends.map(f => (
-                                        <div key={f.email} className="flex items-center gap-3 p-3 hover:bg-slate-50 rounded-xl">
+                                        <div key={f.email} className="flex items-center gap-3 p-3 hover:bg-secondary/50 rounded-xl">
                                             <Checkbox checked={selectedFriends.includes(f.email)} onCheckedChange={c => setSelectedFriends(c ? [...selectedFriends, f.email] : selectedFriends.filter(e => e !== f.email))} />
-                                            <div><p className="font-medium text-sm">{f.full_name}</p><p className="text-xs text-slate-500">{f.email}</p></div>
+                                            <div><p className="font-medium text-sm">{f.full_name}</p><p className="text-xs text-muted-foreground">{f.email}</p></div>
                                         </div>
                                     ))}
                             </ScrollArea>
                         </TabsContent>
                         <TabsContent value="groups" className="flex-1 overflow-hidden">
                             <ScrollArea className="h-56">
-                                {groups.length === 0 ? <p className="text-center text-slate-500 text-sm py-8">No groups yet.</p> :
+                                {groups.length === 0 ? (
+                                    <div className="flex flex-col items-center text-center gap-2 py-8">
+                                        <Users className="w-8 h-8 text-muted-foreground/60" />
+                                        <p className="text-sm text-muted-foreground">Not in any study groups yet.</p>
+                                        <Link to={createPageUrl("StudyGroups")} className="text-xs font-bold text-primary hover:underline">
+                                            Find a group →
+                                        </Link>
+                                    </div>
+                                ) :
                                     groups.map(g => (
-                                        <div key={g.id} className="flex items-center gap-3 p-3 hover:bg-slate-50 rounded-xl border border-slate-100 mb-2">
+                                        <div key={g.id} className="flex items-center gap-3 p-3 hover:bg-secondary/50 rounded-xl border border-border mb-2">
                                             <Checkbox checked={selectedGroups.includes(g.id)} onCheckedChange={c => setSelectedGroups(c ? [...selectedGroups, g.id] : selectedGroups.filter(id => id !== g.id))} />
-                                            <div><p className="font-medium text-sm">{g.name}</p><p className="text-xs text-slate-500">{g.subject} · {g.member_emails?.length || 0} members</p></div>
+                                            <div><p className="font-medium text-sm">{g.name}</p><p className="text-xs text-muted-foreground">{g.subject} · {g.member_emails?.length || 0} members</p></div>
                                         </div>
                                     ))}
                             </ScrollArea>
@@ -1012,23 +1034,23 @@ The documents provided may be PowerPoint slides, Word documents, or text files. 
                 <DialogContent className="max-w-2xl rounded-3xl max-h-[90vh] flex flex-col overflow-hidden">
                     <DialogHeader>
                         <DialogTitle className="flex items-center gap-2">
-                            <Sparkles className="w-5 h-5 text-violet-600" /> AI Flashcard Generator
+                            <Sparkles className="w-5 h-5 text-chart-4" /> AI Flashcard Generator
                         </DialogTitle>
                     </DialogHeader>
 
                     {!generatedFlashcards ? (
                         <div className="flex-1 overflow-y-auto space-y-5 pr-1">
                             {/* Upload */}
-                            <div className={`rounded-2xl border-2 border-dashed transition-all ${uploadedFiles.length ? 'border-violet-400 bg-violet-50' : 'border-slate-300 bg-slate-50'}`}>
-                                <label className="flex items-center gap-4 p-4 cursor-pointer hover:bg-violet-50/50 transition-colors rounded-2xl">
-                                    <div className={`w-10 h-10 rounded-2xl flex items-center justify-center flex-shrink-0 ${uploadedFiles.length ? 'bg-violet-100' : 'bg-white'}`}>
-                                        <FileText className={`w-5 h-5 ${uploadedFiles.length ? 'text-violet-600' : 'text-slate-400'}`} />
+                            <div className={`rounded-2xl border-2 border-dashed transition-all ${uploadedFiles.length ? 'border-chart-4 bg-chart-4/10' : 'border-border bg-secondary/50'}`}>
+                                <label className="flex items-center gap-4 p-4 cursor-pointer hover:bg-chart-4/5 transition-colors rounded-2xl">
+                                    <div className={`w-10 h-10 rounded-2xl flex items-center justify-center flex-shrink-0 ${uploadedFiles.length ? 'bg-chart-4/20' : 'bg-surface'}`}>
+                                        <FileText className={`w-5 h-5 ${uploadedFiles.length ? 'text-chart-4' : 'text-muted-foreground/60'}`} />
                                     </div>
                                     <div className="flex-1 min-w-0">
-                                        <p className={`font-semibold ${uploadedFiles.length ? 'text-violet-700' : 'text-slate-700'}`}>
+                                        <p className={`font-semibold ${uploadedFiles.length ? 'text-chart-4' : 'text-foreground'}`}>
                                             {uploadedFiles.length ? `${uploadedFiles.length} file${uploadedFiles.length > 1 ? 's' : ''} selected` : 'Upload Study Material'}
                                         </p>
-                                        <p className="text-xs text-slate-500">PDF, DOCX, PPTX, or TXT — multiple files supported</p>
+                                        <p className="text-xs text-muted-foreground">PDF, DOCX, PPTX, or TXT — multiple files supported</p>
                                     </div>
                                     <input type="file" className="hidden" accept=".pdf,.txt,.docx,.pptx" multiple onChange={e => {
                                         const files = Array.from(e.target.files || []);
@@ -1038,11 +1060,11 @@ The documents provided may be PowerPoint slides, Word documents, or text files. 
                                 {uploadedFiles.length > 0 && (
                                     <div className="px-4 pb-3 space-y-1.5" onClick={e => e.stopPropagation()}>
                                         {uploadedFiles.map((f, i) => (
-                                            <div key={i} className="flex items-center gap-2 bg-white rounded-lg px-3 py-1.5 border border-violet-100">
-                                                <FileText className="w-3.5 h-3.5 text-violet-500 flex-shrink-0" />
-                                                <span className="flex-1 text-xs font-medium text-slate-700 truncate">{f.name}</span>
-                                                <span className="text-xs text-slate-400">{(f.size / 1024 / 1024).toFixed(1)}MB</span>
-                                                <button type="button" onClick={() => setUploadedFiles(prev => prev.filter((_, idx) => idx !== i))} className="text-slate-400 hover:text-red-500">
+                                            <div key={i} className="flex items-center gap-2 bg-surface rounded-lg px-3 py-1.5 border border-chart-4/20">
+                                                <FileText className="w-3.5 h-3.5 text-chart-4 flex-shrink-0" />
+                                                <span className="flex-1 text-xs font-medium text-foreground truncate">{f.name}</span>
+                                                <span className="text-xs text-muted-foreground/60">{(f.size / 1024 / 1024).toFixed(1)}MB</span>
+                                                <button type="button" onClick={() => setUploadedFiles(prev => prev.filter((_, idx) => idx !== i))} className="text-muted-foreground/60 hover:text-streak">
                                                     <X className="w-3 h-3" />
                                                 </button>
                                             </div>
@@ -1055,7 +1077,7 @@ The documents provided may be PowerPoint slides, Word documents, or text files. 
                             <div className="space-y-4">
                                 <div className="grid grid-cols-2 gap-3">
                                     <div className="space-y-1.5">
-                                        <Label className="text-xs font-medium text-slate-600">Difficulty</Label>
+                                        <Label className="text-xs font-medium text-muted-foreground">Difficulty</Label>
                                         <Select value={aiSettings.difficulty} onValueChange={v => setAiSettings({ ...aiSettings, difficulty: v })}>
                                             <SelectTrigger className="border-2 rounded-xl h-10"><SelectValue /></SelectTrigger>
                                             <SelectContent>
@@ -1066,7 +1088,7 @@ The documents provided may be PowerPoint slides, Word documents, or text files. 
                                         </Select>
                                     </div>
                                     <div className="space-y-1.5">
-                                        <Label className="text-xs font-medium text-slate-600">Question Style</Label>
+                                        <Label className="text-xs font-medium text-muted-foreground">Question Style</Label>
                                         <Select value={aiSettings.cardStyle} onValueChange={v => setAiSettings({ ...aiSettings, cardStyle: v })}>
                                             <SelectTrigger className="border-2 rounded-xl h-10"><SelectValue /></SelectTrigger>
                                             <SelectContent>
@@ -1078,7 +1100,7 @@ The documents provided may be PowerPoint slides, Word documents, or text files. 
                                         </Select>
                                     </div>
                                     <div className="space-y-1.5">
-                                        <Label className="text-xs font-medium text-slate-600">Focus Area</Label>
+                                        <Label className="text-xs font-medium text-muted-foreground">Focus Area</Label>
                                         <Select value={aiSettings.focusArea} onValueChange={v => setAiSettings({ ...aiSettings, focusArea: v })}>
                                             <SelectTrigger className="border-2 rounded-xl h-10"><SelectValue /></SelectTrigger>
                                             <SelectContent>
@@ -1091,7 +1113,7 @@ The documents provided may be PowerPoint slides, Word documents, or text files. 
                                         </Select>
                                     </div>
                                     <div className="space-y-1.5">
-                                        <Label className="text-xs font-medium text-slate-600">Answer Detail</Label>
+                                        <Label className="text-xs font-medium text-muted-foreground">Answer Detail</Label>
                                         <Select value={aiSettings.language} onValueChange={v => setAiSettings({ ...aiSettings, language: v })}>
                                             <SelectTrigger className="border-2 rounded-xl h-10"><SelectValue /></SelectTrigger>
                                             <SelectContent>
@@ -1103,9 +1125,9 @@ The documents provided may be PowerPoint slides, Word documents, or text files. 
                                     </div>
                                 </div>
 
-                                <div className="flex items-center gap-3 bg-slate-50 rounded-2xl p-3.5 border border-slate-200">
+                                <div className="flex items-center gap-3 bg-secondary/50 rounded-2xl p-3.5 border border-border">
                                     <Checkbox id="includeExamples" checked={aiSettings.includeExamples} onCheckedChange={c => setAiSettings({ ...aiSettings, includeExamples: c })} />
-                                    <label htmlFor="includeExamples" className="text-sm font-medium text-slate-700 cursor-pointer">Include examples in answers</label>
+                                    <label htmlFor="includeExamples" className="text-sm font-medium text-foreground cursor-pointer">Include examples in answers</label>
                                 </div>
                             </div>
                         </div>
@@ -1133,12 +1155,12 @@ The documents provided may be PowerPoint slides, Word documents, or text files. 
                                     </Select>
                                 </div>
                             </div>
-                            <div className="flex-1 overflow-y-auto bg-slate-50 rounded-2xl border border-slate-200 p-3 space-y-2">
-                                <p className="text-sm font-semibold text-slate-600 mb-1">{generatedFlashcards.length} generated cards</p>
+                            <div className="flex-1 overflow-y-auto bg-secondary/50 rounded-2xl border border-border p-3 space-y-2">
+                                <p className="text-sm font-semibold text-muted-foreground mb-1">{generatedFlashcards.length} generated cards</p>
                                 {generatedFlashcards.map((card, i) => (
-                                    <div key={i} className="bg-white rounded-xl p-3.5 border border-slate-200">
-                                        <p className="font-medium text-sm text-slate-900 mb-1">{card.question}</p>
-                                        <p className="text-xs text-slate-500">{card.answer}</p>
+                                    <div key={i} className="bg-surface rounded-xl p-3.5 border border-border">
+                                        <p className="font-medium text-sm text-foreground mb-1">{card.question}</p>
+                                        <p className="text-xs text-muted-foreground">{card.answer}</p>
                                     </div>
                                 ))}
                             </div>
@@ -1148,11 +1170,11 @@ The documents provided may be PowerPoint slides, Word documents, or text files. 
                     <DialogFooter className="pt-4">
                         <Button variant="outline" onClick={() => { setIsShowingGenerated(false); setGeneratedFlashcards(null); setUploadedFiles([]); }} className="rounded-xl">Cancel</Button>
                         {!generatedFlashcards ? (
-                            <Button onClick={handleGenerateFlashcardsFromFile} disabled={!uploadedFiles.length || isGenerating} className="bg-gradient-to-r from-violet-600 to-blue-600 hover:from-violet-700 hover:to-blue-700 rounded-xl gap-2">
+                            <Button onClick={handleGenerateFlashcardsFromFile} disabled={!uploadedFiles.length || isGenerating} className="btn-3d bg-chart-4 hover:bg-chart-4 text-white rounded-xl gap-2">
                                 {isGenerating ? <><Loader2 className="w-4 h-4 animate-spin" /> Generating...</> : <><Sparkles className="w-4 h-4" /> Generate All Cards</>}
                             </Button>
                         ) : (
-                            <Button onClick={() => handleSaveGeneratedFlashcards(newDeck)} disabled={!newDeck.subject_name || !newDeck.topic || isSavingDeck} className="bg-emerald-600 hover:bg-emerald-700 rounded-xl gap-2">
+                            <Button onClick={() => handleSaveGeneratedFlashcards(newDeck)} disabled={!newDeck.subject_name || !newDeck.topic || isSavingDeck} className="btn-3d bg-primary hover:bg-primary text-primary-foreground rounded-xl gap-2">
                                 {isSavingDeck ? <><Loader2 className="w-4 h-4 animate-spin" /> Saving...</> : <><Check className="w-4 h-4" /> Save Deck</>}
                             </Button>
                         )}
@@ -1169,31 +1191,37 @@ The documents provided may be PowerPoint slides, Word documents, or text files. 
                             <div className="space-y-4 pr-2">
                                 <div className="grid grid-cols-4 gap-3">
                                     {[
-                                        { label: "Total", val: viewingStats.cards.length, color: "text-slate-800", bg: "bg-slate-50" },
-                                        { label: "Due", val: viewingStats.cards.filter(c => c.session_skip_count === 0).length, color: "text-blue-600", bg: "bg-blue-50" },
-                                        { label: "Weak", val: viewingStats.cards.filter(c => c.is_weak_spot).length, color: "text-orange-600", bg: "bg-orange-50" },
-                                        { label: "Mastered", val: viewingStats.cards.filter(c => (c.mastery_score || 0) >= 80 && !c.is_weak_spot).length, color: "text-emerald-600", bg: "bg-emerald-50" },
+                                        { label: "Total", val: viewingStats.cards.length, color: "text-foreground", bg: "bg-secondary/50" },
+                                        { label: "Due", val: viewingStats.cards.filter(c => c.session_skip_count === 0).length, color: "text-chart-3", bg: "bg-chart-3/10" },
+                                        { label: "Weak", val: viewingStats.cards.filter(c => c.is_weak_spot).length, color: "text-streak", bg: "bg-streak/10" },
+                                        { label: "Mastered", val: viewingStats.cards.filter(c => (c.mastery_score || 0) >= 80 && !c.is_weak_spot).length, color: "text-primary", bg: "bg-primary/10" },
                                     ].map(s => (
                                         <div key={s.label} className={`${s.bg} rounded-2xl p-3 text-center`}>
                                             <p className={`text-2xl font-bold ${s.color}`}>{s.val}</p>
-                                            <p className="text-xs text-slate-500 mt-0.5">{s.label}</p>
+                                            <p className="text-xs text-muted-foreground mt-0.5">{s.label}</p>
                                         </div>
                                     ))}
                                 </div>
-                                <div className="bg-white rounded-2xl border border-slate-200 p-4 space-y-3">
-                                    <p className="text-sm font-semibold text-slate-700">Rating Distribution</p>
+                                <div className="card-soft p-4 space-y-3">
+                                    <p className="text-sm font-semibold text-foreground">Rating Distribution</p>
                                     {['again', 'hard', 'good', 'easy'].map(rating => {
                                         const count = viewingStats.cards.reduce((s, c) => s + (c[`review_count_${rating}`] || 0), 0);
                                         const allCount = viewingStats.cards.reduce((s, c) => s + (c.review_count_again || 0) + (c.review_count_hard || 0) + (c.review_count_good || 0) + (c.review_count_easy || 0), 0);
                                         const pct = allCount > 0 ? Math.round((count / allCount) * 100) : 0;
-                                        const colors = { again: { bar: 'bg-red-400', text: 'text-red-600' }, hard: { bar: 'bg-orange-400', text: 'text-orange-600' }, good: { bar: 'bg-blue-400', text: 'text-blue-600' }, easy: { bar: 'bg-emerald-400', text: 'text-emerald-600' } };
+                                        // Static class strings — JIT-safe lookup table.
+                                        const colors = {
+                                            again: { bar: 'bg-streak', text: 'text-streak' },
+                                            hard:  { bar: 'bg-xp',     text: 'text-xp' },
+                                            good:  { bar: 'bg-chart-3', text: 'text-chart-3' },
+                                            easy:  { bar: 'bg-primary', text: 'text-primary' },
+                                        };
                                         return (
                                             <div key={rating}>
                                                 <div className="flex justify-between items-center mb-1">
                                                     <span className={`text-xs font-semibold capitalize ${colors[rating].text}`}>{rating}</span>
-                                                    <span className="text-xs text-slate-500">{count} ({pct}%)</span>
+                                                    <span className="text-xs text-muted-foreground">{count} ({pct}%)</span>
                                                 </div>
-                                                <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
+                                                <div className="h-2 bg-secondary rounded-full overflow-hidden">
                                                     <div className={`${colors[rating].bar} h-full rounded-full`} style={{ width: `${pct}%` }} />
                                                 </div>
                                             </div>
@@ -1201,13 +1229,13 @@ The documents provided may be PowerPoint slides, Word documents, or text files. 
                                     })}
                                 </div>
                                 <div className="grid grid-cols-2 gap-3">
-                                    <div className="bg-slate-50 rounded-2xl p-4">
-                                        <p className="text-xl font-bold text-slate-800">{viewingStats.cards.reduce((s, c) => s + (c.totalReviews || 0), 0)}</p>
-                                        <p className="text-xs text-slate-500">Total Reviews</p>
+                                    <div className="bg-secondary/50 rounded-2xl p-4">
+                                        <p className="text-xl font-bold text-foreground">{viewingStats.cards.reduce((s, c) => s + (c.totalReviews || 0), 0)}</p>
+                                        <p className="text-xs text-muted-foreground">Total Reviews</p>
                                     </div>
-                                    <div className="bg-slate-50 rounded-2xl p-4">
-                                        <p className="text-xl font-bold text-slate-800">{Math.round(viewingStats.cards.reduce((s, c) => s + (c.totalReviews || 0), 0) / (viewingStats.cards.length || 1))}</p>
-                                        <p className="text-xs text-slate-500">Avg per Card</p>
+                                    <div className="bg-secondary/50 rounded-2xl p-4">
+                                        <p className="text-xl font-bold text-foreground">{Math.round(viewingStats.cards.reduce((s, c) => s + (c.totalReviews || 0), 0) / (viewingStats.cards.length || 1))}</p>
+                                        <p className="text-xs text-muted-foreground">Avg per Card</p>
                                     </div>
                                 </div>
                             </div>

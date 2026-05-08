@@ -83,7 +83,8 @@ export default function Support() {
                 screenshotUrl = file_url;
             }
 
-            await base44.functions.invoke('sendSupportTicket', {
+            const { sendSupportTicket } = await import('@/api/functionsShim');
+            await sendSupportTicket({
                 issueType: supportForm.issueType,
                 location: supportForm.location,
                 description: supportForm.description,

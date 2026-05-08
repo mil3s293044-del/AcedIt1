@@ -1,10 +1,19 @@
 import React, { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Shield, Zap, Star, Clock, Brain, Flame, Lock, CheckCircle2, Crown, Sparkles, BookOpen } from "lucide-react";
 import { levelFromXP } from "@/components/shared/xpSystem";
+
+// Static class lookup — Tailwind JIT can't see interpolated strings
+// like `bg-${accent}/10`, so each token's classes must appear verbatim.
+const ACCENT = {
+    primary:   { tile10: 'bg-primary/10',   tile15: 'bg-primary/15',   text: 'text-primary',   border40: 'border-primary/40',   border20: 'border-primary/20',   ring20: 'ring-primary/20',   solid: 'bg-primary' },
+    xp:        { tile10: 'bg-xp/10',        tile15: 'bg-xp/15',        text: 'text-xp',        border40: 'border-xp/40',        border20: 'border-xp/20',        ring20: 'ring-xp/20',        solid: 'bg-xp' },
+    streak:    { tile10: 'bg-streak/10',    tile15: 'bg-streak/15',    text: 'text-streak',    border40: 'border-streak/40',    border20: 'border-streak/20',    ring20: 'ring-streak/20',    solid: 'bg-streak' },
+    'chart-3': { tile10: 'bg-chart-3/10',   tile15: 'bg-chart-3/15',   text: 'text-chart-3',   border40: 'border-chart-3/40',   border20: 'border-chart-3/20',   ring20: 'ring-chart-3/20',   solid: 'bg-chart-3' },
+    'chart-4': { tile10: 'bg-chart-4/10',   tile15: 'bg-chart-4/15',   text: 'text-chart-4',   border40: 'border-chart-4/40',   border20: 'border-chart-4/20',   ring20: 'ring-chart-4/20',   solid: 'bg-chart-4' },
+};
 
 const PERKS = [
     {
@@ -13,12 +22,10 @@ const PERKS = [
         desc: "Protect your streak — miss a day without losing it",
         longDesc: "Automatically activates when you miss a day. Your streak is saved! Can be used once per week.",
         icon: Shield,
-        color: "from-blue-500 to-cyan-500",
-        bg: "bg-blue-50 border-blue-200",
+        accent: "chart-3",
         unlockLevel: 5,
         maxCharges: 2,
         cooldownDays: 7,
-        emoji: "🛡️",
     },
     {
         id: "xp_booster",
@@ -26,12 +33,10 @@ const PERKS = [
         desc: "2× XP for your next 30-minute study session",
         longDesc: "Activate before a study session to double all XP earned for 30 minutes. Show up and stack those gains.",
         icon: Zap,
-        color: "from-amber-500 to-orange-500",
-        bg: "bg-amber-50 border-amber-200",
+        accent: "xp",
         unlockLevel: 10,
         maxCharges: 1,
         cooldownDays: 3,
-        emoji: "⚡",
     },
     {
         id: "flashcard_frenzy",
@@ -39,12 +44,10 @@ const PERKS = [
         desc: "+75% XP from flashcards for 24 hours",
         longDesc: "Supercharge your spaced repetition sessions. Earn 75% more XP from every flashcard reviewed for the next 24 hours.",
         icon: BookOpen,
-        color: "from-green-500 to-emerald-500",
-        bg: "bg-green-50 border-green-200",
+        accent: "primary",
         unlockLevel: 8,
         maxCharges: 1,
         cooldownDays: 4,
-        emoji: "🃏",
     },
     {
         id: "quiz_retry",
@@ -52,12 +55,10 @@ const PERKS = [
         desc: "Retry any quiz and keep the higher score",
         longDesc: "Bombed a quiz? Activate this perk, retry it, and the higher of your two scores counts for XP. No penalty.",
         icon: Brain,
-        color: "from-purple-500 to-violet-500",
-        bg: "bg-purple-50 border-purple-200",
+        accent: "chart-4",
         unlockLevel: 15,
         maxCharges: 1,
         cooldownDays: 5,
-        emoji: "🧠",
     },
     {
         id: "double_mission",
@@ -65,12 +66,10 @@ const PERKS = [
         desc: "Double XP rewards from today's daily missions",
         longDesc: "Activate this perk before completing your daily missions to earn double XP from all mission rewards.",
         icon: Star,
-        color: "from-pink-500 to-rose-500",
-        bg: "bg-pink-50 border-pink-200",
+        accent: "chart-4",
         unlockLevel: 20,
         maxCharges: 1,
         cooldownDays: 7,
-        emoji: "⭐",
     },
     {
         id: "study_surge",
@@ -78,12 +77,10 @@ const PERKS = [
         desc: "+50% XP from focus sessions for 2 hours",
         longDesc: "All study session XP is boosted by 50% for the next 2 hours. Stack it with your peak study time.",
         icon: Clock,
-        color: "from-cyan-500 to-teal-500",
-        bg: "bg-cyan-50 border-cyan-200",
+        accent: "chart-3",
         unlockLevel: 25,
         maxCharges: 1,
         cooldownDays: 4,
-        emoji: "⏱️",
     },
     {
         id: "streak_legend",
@@ -91,12 +88,10 @@ const PERKS = [
         desc: "Streak multiplier permanently +0.5×",
         longDesc: "Your streak XP multiplier gets a permanent +0.5× boost on top of your normal multiplier. Stackable.",
         icon: Flame,
-        color: "from-orange-500 to-red-500",
-        bg: "bg-orange-50 border-orange-200",
+        accent: "streak",
         unlockLevel: 35,
         maxCharges: null,
         cooldownDays: null,
-        emoji: "🔥",
         isPermanent: true,
     },
     {
@@ -105,12 +100,10 @@ const PERKS = [
         desc: "Special golden badge on the leaderboard",
         longDesc: "A glowing golden aura appears next to your name on all leaderboards, showing your elite status to everyone.",
         icon: Crown,
-        color: "from-yellow-400 to-amber-500",
-        bg: "bg-yellow-50 border-yellow-200",
+        accent: "xp",
         unlockLevel: 50,
         maxCharges: null,
         cooldownDays: null,
-        emoji: "👑",
         isPermanent: true,
     },
 ];
@@ -175,35 +168,47 @@ export default function PerksSystem({ totalXP = 0 }) {
     const activeCount = PERKS.filter(p => getActiveStatus(p).active).length;
 
     return (
-        <div className="space-y-4">
+        <div className="space-y-5">
             {/* Header */}
-            <div className="bg-gradient-to-r from-purple-600 to-fuchsia-600 rounded-2xl p-4 text-white">
-                <div className="flex items-center justify-between">
-                    <div>
-                        <div className="flex items-center gap-2">
-                            <Sparkles className="w-5 h-5" />
-                            <h3 className="font-black text-base">Perk System</h3>
+            <motion.div
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.35 }}
+                className="card-soft p-5"
+            >
+                <div className="flex items-center justify-between gap-4">
+                    <div className="flex items-center gap-3 min-w-0">
+                        <div className="w-10 h-10 rounded-xl bg-chart-4/10 flex items-center justify-center flex-shrink-0">
+                            <Sparkles className="w-5 h-5 text-chart-4" />
                         </div>
-                        <p className="text-white/70 text-xs mt-0.5">Unlock powerful study boosts as you level up</p>
+                        <div className="min-w-0">
+                            <h2 className="font-display font-extrabold text-foreground text-base">Perk System</h2>
+                            <p className="text-xs text-muted-foreground mt-0.5">Unlock powerful study boosts as you level up.</p>
+                        </div>
                     </div>
-                    <div className="text-right">
-                        <p className="text-2xl font-black">{unlockedCount}/{PERKS.length}</p>
-                        <p className="text-white/70 text-xs">Unlocked</p>
+                    <div className="text-right flex-shrink-0">
+                        <p className="stat-num text-foreground">{unlockedCount}<span className="text-muted-foreground/60 text-2xl">/{PERKS.length}</span></p>
+                        <p className="stat-label">Unlocked</p>
                     </div>
                 </div>
                 {activeCount > 0 && (
-                    <div className="mt-3 bg-white/10 rounded-xl px-3 py-2">
-                        <p className="text-xs font-bold text-white">⚡ {activeCount} perk{activeCount > 1 ? 's' : ''} active right now!</p>
+                    <div className="mt-4 inline-flex items-center gap-2.5 bg-primary/10 border-2 border-primary/20 rounded-xl px-4 py-2.5">
+                        <Zap className="w-4 h-4 text-primary" />
+                        <span className="text-sm font-bold text-foreground">
+                            {activeCount} perk{activeCount > 1 ? 's' : ''} active right now
+                        </span>
                     </div>
                 )}
-            </div>
+            </motion.div>
 
             {/* Perks Grid */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 {PERKS.map((perk, i) => {
                     const unlocked = isUnlocked(perk);
                     const status = getActiveStatus(perk);
                     const Icon = perk.icon;
+                    const accent = perk.accent;
+                    const cls = ACCENT[accent] || ACCENT.primary;
 
                     return (
                         <motion.button
@@ -212,35 +217,63 @@ export default function PerksSystem({ totalXP = 0 }) {
                             animate={{ opacity: 1, y: 0 }}
                             transition={{ delay: i * 0.04 }}
                             onClick={() => unlocked && setSelectedPerk(perk)}
-                            className={`text-left p-4 rounded-2xl border-2 transition-all ${
-                                !unlocked ? 'opacity-50 cursor-not-allowed border-gray-200 bg-gray-50' :
-                                status.active ? `${perk.bg} border-2 shadow-lg ring-2 ring-offset-1 ${perk.bg.includes('blue') ? 'ring-blue-300' : perk.bg.includes('amber') ? 'ring-amber-300' : 'ring-purple-300'}` :
-                                perk.isPermanent && level >= perk.unlockLevel ? `${perk.bg} border-2` :
-                                `${perk.bg} hover:shadow-md`
+                            disabled={!unlocked}
+                            className={`card-soft p-5 text-left transition-all ${
+                                !unlocked
+                                    ? 'opacity-60 cursor-not-allowed'
+                                    : status.active
+                                        ? `${cls.border40} ring-2 ${cls.ring20} cursor-pointer`
+                                        : 'card-soft-hover cursor-pointer'
                             }`}
                         >
                             <div className="flex items-start gap-3">
-                                <div className={`w-11 h-11 bg-gradient-to-br ${perk.color} rounded-xl flex items-center justify-center flex-shrink-0 shadow-md`}>
-                                    {!unlocked ? <Lock className="w-5 h-5 text-white" /> : <Icon className="w-5 h-5 text-white" />}
+                                <div className={`relative w-11 h-11 rounded-xl ${cls.tile10} flex items-center justify-center flex-shrink-0`}>
+                                    <Icon className={`w-5 h-5 ${cls.text}`} />
+                                    {!unlocked && (
+                                        <div className="absolute -top-1 -right-1 w-5 h-5 rounded-full bg-secondary border border-border flex items-center justify-center">
+                                            <Lock className="w-3 h-3 text-muted-foreground" />
+                                        </div>
+                                    )}
                                 </div>
                                 <div className="flex-1 min-w-0">
                                     <div className="flex items-center gap-2 flex-wrap">
-                                        <p className="text-sm font-bold text-gray-900">{perk.name}</p>
-                                        {status.active && <Badge className="bg-green-500 text-white border-0 text-xs animate-pulse">ACTIVE</Badge>}
-                                        {perk.isPermanent && unlocked && <Badge className="bg-gradient-to-r from-yellow-400 to-amber-500 text-white border-0 text-xs">PERMANENT</Badge>}
-                                        {!unlocked && <Badge className="bg-gray-200 text-gray-600 border-0 text-xs">Lv.{perk.unlockLevel}</Badge>}
+                                        <p className="font-display font-extrabold text-foreground text-sm">{perk.name}</p>
+                                        {status.active && (
+                                            <span className="pill bg-primary/15 text-primary animate-soft-pulse">
+                                                <CheckCircle2 className="w-3 h-3" />
+                                                Active
+                                            </span>
+                                        )}
+                                        {perk.isPermanent && unlocked && (
+                                            <span className={`pill ${cls.tile15} ${cls.text}`}>
+                                                <Sparkles className="w-3 h-3" />
+                                                Permanent
+                                            </span>
+                                        )}
+                                        {!unlocked && (
+                                            <span className="pill bg-secondary text-muted-foreground">
+                                                Lv.{perk.unlockLevel}
+                                            </span>
+                                        )}
                                     </div>
-                                    <p className="text-xs text-gray-500 mt-0.5 leading-relaxed">{perk.desc}</p>
+                                    <p className="text-sm text-muted-foreground mt-1 leading-relaxed">{perk.desc}</p>
                                     {unlocked && !perk.isPermanent && (
-                                        <div className="flex items-center gap-2 mt-1.5">
-                                            {!perk.isPermanent && (
-                                                <div className="flex gap-0.5">
-                                                    {Array.from({ length: perk.maxCharges || 1 }).map((_, ci) => (
-                                                        <div key={ci} className={`w-2.5 h-2.5 rounded-full ${ci < (status.charges || 0) ? `bg-gradient-to-br ${perk.color}` : 'bg-gray-200'}`} />
-                                                    ))}
-                                                </div>
-                                            )}
-                                            <span className="text-xs text-gray-400">{status.charges || 0}/{perk.maxCharges} charges</span>
+                                        <div className="flex items-center gap-2 mt-2">
+                                            <div className="flex gap-1">
+                                                {Array.from({ length: perk.maxCharges || 1 }).map((_, ci) => (
+                                                    <div
+                                                        key={ci}
+                                                        className={`w-2.5 h-2.5 rounded-full ${
+                                                            ci < (status.charges || 0)
+                                                                ? cls.solid
+                                                                : 'bg-secondary border border-border'
+                                                        }`}
+                                                    />
+                                                ))}
+                                            </div>
+                                            <span className="text-xs text-muted-foreground/80 font-medium">
+                                                {status.charges || 0}/{perk.maxCharges} charges
+                                            </span>
                                         </div>
                                     )}
                                 </div>
@@ -256,6 +289,8 @@ export default function PerksSystem({ totalXP = 0 }) {
                     {selectedPerk && (() => {
                         const status = getActiveStatus(selectedPerk);
                         const Icon = selectedPerk.icon;
+                        const accent = selectedPerk.accent;
+                        const cls = ACCENT[accent] || ACCENT.primary;
                         const now = Date.now();
                         const timeLeft = status.activeUntil > now ? Math.ceil((status.activeUntil - now) / 60000) : 0;
                         const cooldownLeft = status.cooldownUntil > now ? Math.ceil((status.cooldownUntil - now) / 3600000) : 0;
@@ -264,48 +299,74 @@ export default function PerksSystem({ totalXP = 0 }) {
                         return (
                             <>
                                 <DialogHeader>
-                                    <div className={`w-16 h-16 bg-gradient-to-br ${selectedPerk.color} rounded-2xl flex items-center justify-center mb-3 shadow-xl mx-auto`}>
-                                        <Icon className="w-8 h-8 text-white" />
+                                    <div className={`w-16 h-16 rounded-2xl ${cls.tile10} flex items-center justify-center mb-3 mx-auto`}>
+                                        <Icon className={`w-8 h-8 ${cls.text}`} />
                                     </div>
-                                    <DialogTitle className="text-center text-xl">{selectedPerk.name}</DialogTitle>
-                                    <DialogDescription className="text-center">{selectedPerk.longDesc}</DialogDescription>
+                                    <DialogTitle className="text-center font-display font-extrabold text-foreground text-xl">
+                                        {selectedPerk.name}
+                                    </DialogTitle>
+                                    <DialogDescription className="text-center text-muted-foreground">
+                                        {selectedPerk.longDesc}
+                                    </DialogDescription>
                                 </DialogHeader>
 
                                 <div className="space-y-3 mt-2">
                                     {status.active && (
-                                        <div className="bg-green-50 border border-green-200 rounded-xl p-3 text-center">
-                                            <p className="text-green-700 font-bold text-sm">✅ Currently Active!</p>
-                                            <p className="text-green-600 text-xs">{timeLeft} minutes remaining</p>
+                                        <div className="rounded-xl bg-primary/10 border-2 border-primary/20 p-3 text-center">
+                                            <p className="font-display font-extrabold text-primary text-sm flex items-center justify-center gap-1.5">
+                                                <CheckCircle2 className="w-4 h-4" />
+                                                Currently Active
+                                            </p>
+                                            <p className="text-xs text-muted-foreground mt-0.5">{timeLeft} minutes remaining</p>
                                         </div>
                                     )}
                                     {status.onCooldown && !status.active && (
-                                        <div className="bg-gray-50 border border-gray-200 rounded-xl p-3 text-center">
-                                            <p className="text-gray-600 font-bold text-sm">⏳ On Cooldown</p>
-                                            <p className="text-gray-400 text-xs">{cooldownLeft}h remaining</p>
+                                        <div className="rounded-xl bg-secondary border-2 border-border p-3 text-center">
+                                            <p className="font-display font-extrabold text-foreground text-sm flex items-center justify-center gap-1.5">
+                                                <Clock className="w-4 h-4 text-muted-foreground" />
+                                                On Cooldown
+                                            </p>
+                                            <p className="text-xs text-muted-foreground mt-0.5">{cooldownLeft}h remaining</p>
                                         </div>
                                     )}
                                     {selectedPerk.isPermanent && (
-                                        <div className={`${selectedPerk.bg} border rounded-xl p-3 text-center`}>
-                                            <p className="font-bold text-sm text-gray-800">✨ Permanently Active</p>
-                                            <p className="text-xs text-gray-500">This perk is always on at your level</p>
+                                        <div className={`rounded-xl ${cls.tile10} border-2 ${cls.border20} p-3 text-center`}>
+                                            <p className={`font-display font-extrabold ${cls.text} text-sm flex items-center justify-center gap-1.5`}>
+                                                <Sparkles className="w-4 h-4" />
+                                                Permanently Active
+                                            </p>
+                                            <p className="text-xs text-muted-foreground mt-0.5">This perk is always on at your level</p>
                                         </div>
                                     )}
                                     {!selectedPerk.isPermanent && (
                                         <div className="grid grid-cols-2 gap-3 text-center">
-                                            <div className="bg-gray-50 rounded-xl p-3 border border-gray-200">
-                                                <p className="text-2xl font-black text-gray-900">{status.charges}/{selectedPerk.maxCharges}</p>
-                                                <p className="text-xs text-gray-500">Charges left</p>
+                                            <div className="card-soft p-3">
+                                                <p className="stat-num text-foreground">{status.charges}<span className="text-muted-foreground/60 text-xl">/{selectedPerk.maxCharges}</span></p>
+                                                <p className="stat-label">Charges left</p>
                                             </div>
-                                            <div className="bg-gray-50 rounded-xl p-3 border border-gray-200">
-                                                <p className="text-2xl font-black text-gray-900">{selectedPerk.cooldownDays}d</p>
-                                                <p className="text-xs text-gray-500">Cooldown</p>
+                                            <div className="card-soft p-3">
+                                                <p className="stat-num text-foreground">{selectedPerk.cooldownDays}<span className="text-muted-foreground/60 text-xl">d</span></p>
+                                                <p className="stat-label">Cooldown</p>
                                             </div>
                                         </div>
                                     )}
                                     {canActivate && (
-                                        <Button onClick={() => activatePerk(selectedPerk)} disabled={activating === selectedPerk.id}
-                                            className={`w-full h-12 font-black text-base bg-gradient-to-r ${selectedPerk.color} hover:opacity-90 shadow-lg`}>
-                                            {activating === selectedPerk.id ? '⚡ Activating...' : `⚡ Activate ${selectedPerk.name}`}
+                                        <Button
+                                            onClick={() => activatePerk(selectedPerk)}
+                                            disabled={activating === selectedPerk.id}
+                                            className="w-full"
+                                        >
+                                            {activating === selectedPerk.id ? (
+                                                <>
+                                                    <Zap className="w-4 h-4 animate-pulse" />
+                                                    Activating…
+                                                </>
+                                            ) : (
+                                                <>
+                                                    <Zap className="w-4 h-4" />
+                                                    Activate {selectedPerk.name}
+                                                </>
+                                            )}
                                         </Button>
                                     )}
                                 </div>

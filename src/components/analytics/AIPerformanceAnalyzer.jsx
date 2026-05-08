@@ -1,18 +1,16 @@
 import React, { useState, useEffect } from "react";
 import { motion } from "framer-motion";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { 
-    Sparkles, 
-    Target, 
-    Clock, 
-    Brain, 
-    TrendingUp, 
-    CheckCircle,
-    AlertCircle,
+import {
+    Sparkles,
+    Target,
+    Clock,
+    Brain,
+    TrendingUp,
+    CheckCircle2,
+    AlertTriangle,
     Loader2,
     BookOpen,
     Calendar,
@@ -24,40 +22,50 @@ import {
 } from "lucide-react";
 import { base44 } from "@/api/base44Client";
 
-const gradeColors = {
-    'A+': { bg: 'bg-emerald-500', light: 'bg-emerald-50', text: 'text-emerald-700', border: 'border-emerald-200' },
-    'A': { bg: 'bg-emerald-500', light: 'bg-emerald-50', text: 'text-emerald-700', border: 'border-emerald-200' },
-    'B+': { bg: 'bg-green-500', light: 'bg-green-50', text: 'text-green-700', border: 'border-green-200' },
-    'B': { bg: 'bg-green-500', light: 'bg-green-50', text: 'text-green-700', border: 'border-green-200' },
-    'C+': { bg: 'bg-yellow-500', light: 'bg-yellow-50', text: 'text-yellow-700', border: 'border-yellow-200' },
-    'C': { bg: 'bg-yellow-500', light: 'bg-yellow-50', text: 'text-yellow-700', border: 'border-yellow-200' },
-    'D': { bg: 'bg-orange-500', light: 'bg-orange-50', text: 'text-orange-700', border: 'border-orange-200' },
-    'F': { bg: 'bg-red-500', light: 'bg-red-50', text: 'text-red-700', border: 'border-red-200' },
+// Static token lookup tables (avoid Tailwind JIT dynamic interpolation gotchas).
+const gradeStyles = {
+    'A+': { tile: 'bg-primary',   tint: 'bg-primary/10',   border: 'border-primary/30',   text: 'text-primary'   },
+    'A':  { tile: 'bg-primary',   tint: 'bg-primary/10',   border: 'border-primary/30',   text: 'text-primary'   },
+    'B+': { tile: 'bg-primary',   tint: 'bg-primary/10',   border: 'border-primary/30',   text: 'text-primary'   },
+    'B':  { tile: 'bg-primary',   tint: 'bg-primary/10',   border: 'border-primary/30',   text: 'text-primary'   },
+    'C+': { tile: 'bg-xp',        tint: 'bg-xp/10',        border: 'border-xp/30',        text: 'text-xp'        },
+    'C':  { tile: 'bg-xp',        tint: 'bg-xp/10',        border: 'border-xp/30',        text: 'text-xp'        },
+    'D':  { tile: 'bg-streak',    tint: 'bg-streak/10',    border: 'border-streak/30',    text: 'text-streak'    },
+    'F':  { tile: 'bg-streak',    tint: 'bg-streak/10',    border: 'border-streak/30',    text: 'text-streak'    },
+};
+
+const fallbackGrade = { tile: 'bg-secondary', tint: 'bg-secondary/50', border: 'border-border', text: 'text-muted-foreground' };
+
+const metricBarTokens = {
+    high:    { tile: 'bg-primary',  bar: '[&>div]:bg-primary'  },
+    good:    { tile: 'bg-primary',  bar: '[&>div]:bg-primary'  },
+    mid:     { tile: 'bg-xp',       bar: '[&>div]:bg-xp'       },
+    low:     { tile: 'bg-streak',   bar: '[&>div]:bg-streak'   },
+    crit:    { tile: 'bg-streak',   bar: '[&>div]:bg-streak'   },
 };
 
 const MetricCard = ({ label, score, maxScore, icon: Icon, description }) => {
     const percentage = Math.round((score / maxScore) * 100);
-    const getColor = () => {
-        if (percentage >= 80) return 'bg-emerald-500';
-        if (percentage >= 60) return 'bg-green-500';
-        if (percentage >= 40) return 'bg-yellow-500';
-        if (percentage >= 20) return 'bg-orange-500';
-        return 'bg-red-500';
-    };
+    const tokenKey =
+        percentage >= 80 ? 'high' :
+        percentage >= 60 ? 'good' :
+        percentage >= 40 ? 'mid'  :
+        percentage >= 20 ? 'low'  : 'crit';
+    const t = metricBarTokens[tokenKey];
 
     return (
-        <div className="bg-gray-50 rounded-xl p-4">
+        <div className="bg-secondary/50 rounded-xl p-4">
             <div className="flex items-center gap-3 mb-3">
-                <div className={`w-10 h-10 rounded-lg ${getColor()} flex items-center justify-center`}>
+                <div className={`w-10 h-10 rounded-lg ${t.tile} flex items-center justify-center`}>
                     <Icon className="w-5 h-5 text-white" />
                 </div>
                 <div className="flex-1">
-                    <p className="font-medium text-gray-900">{label}</p>
-                    <p className="text-xs text-gray-500">{description}</p>
+                    <p className="font-medium text-foreground">{label}</p>
+                    <p className="text-xs text-muted-foreground">{description}</p>
                 </div>
-                <span className="text-lg font-bold text-gray-900">{score}/{maxScore}</span>
+                <span className="text-lg font-bold text-foreground">{score}/{maxScore}</span>
             </div>
-            <Progress value={percentage} className={`h-2 [&>div]:${getColor()}`} />
+            <Progress value={percentage} className={`h-2 ${t.bar}`} />
         </div>
     );
 };
@@ -86,7 +94,7 @@ export default function AIPerformanceAnalyzer({ data, userProfile }) {
         const blurtingSessions = (data.blurting || []).filter(s => s.subject_name === subjectName);
 
         // Total study time
-        const totalStudyMinutes = 
+        const totalStudyMinutes =
             studySessions.reduce((sum, s) => sum + (s.session_duration || 0), 0) +
             activeRecallSessions.reduce((sum, s) => sum + (s.session_duration || 0), 0) +
             blurtingSessions.reduce((sum, s) => sum + (s.session_duration || 0), 0);
@@ -110,10 +118,10 @@ export default function AIPerformanceAnalyzer({ data, userProfile }) {
         const masteredFlashcards = flashcards.filter(f => (f.successfulReviews || 0) >= 3);
 
         // Quiz performance
-        const quizzes = (data.quizzes || []).filter(q => 
+        const quizzes = (data.quizzes || []).filter(q =>
             q.quiz_title?.toLowerCase().includes(subjectName.toLowerCase())
         );
-        const avgQuizScore = quizzes.length > 0 
+        const avgQuizScore = quizzes.length > 0
             ? Math.round(quizzes.reduce((sum, q) => sum + (q.score || 0), 0) / quizzes.length)
             : null;
 
@@ -160,7 +168,7 @@ export default function AIPerformanceAnalyzer({ data, userProfile }) {
             }));
 
             const totalStudyAcrossSubjects = allSubjectsData.reduce((sum, s) => sum + s.studyMinutes, 0);
-            const subjectPercentage = totalStudyAcrossSubjects > 0 
+            const subjectPercentage = totalStudyAcrossSubjects > 0
                 ? Math.round((subjectData.totalStudyMinutes / totalStudyAcrossSubjects) * 100)
                 : 0;
 
@@ -313,34 +321,36 @@ Provide analysis in the following format - be specific and mention actual number
 
     if (subjects.length === 0) {
         return (
-            <Card className="bg-white">
-                <CardContent className="p-12 text-center">
-                    <Sparkles className="w-16 h-16 text-gray-300 mx-auto mb-4" />
-                    <h3 className="text-xl font-semibold text-gray-900 mb-2">No Subjects Added</h3>
-                    <p className="text-gray-600">Add subjects in the Subjects page to get AI performance analysis</p>
-                </CardContent>
-            </Card>
+            <div className="card-soft">
+                <div className="p-12 text-center">
+                    <Sparkles className="w-16 h-16 text-muted-foreground/60 mx-auto mb-4" />
+                    <h3 className="text-xl font-semibold text-foreground mb-2">No Subjects Added</h3>
+                    <p className="text-muted-foreground">Add subjects in the Subjects page to get AI performance analysis</p>
+                </div>
+            </div>
         );
     }
+
+    const gradeStyle = gradeStyles[analysis?.overall_grade] || fallbackGrade;
 
     return (
         <div className="space-y-6">
             {/* Header */}
-            <Card className="bg-gradient-to-r from-purple-500 to-indigo-600 border-0">
-                <CardContent className="p-6">
+            <div className="card-soft bg-chart-4/10 border-chart-4/20">
+                <div className="p-6">
                     <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                         <div className="flex items-center gap-4">
-                            <div className="w-14 h-14 bg-white/20 rounded-xl flex items-center justify-center">
-                                <Sparkles className="w-7 h-7 text-white" />
+                            <div className="w-14 h-14 bg-chart-4/20 rounded-xl flex items-center justify-center">
+                                <Brain className="w-7 h-7 text-chart-4" />
                             </div>
                             <div>
-                                <h2 className="text-2xl font-bold text-white">AI Performance Analyzer</h2>
-                                <p className="text-white/80">Get personalized insights and actionable feedback</p>
+                                <h2 className="text-2xl font-bold text-foreground">AI Performance Analyzer</h2>
+                                <p className="text-muted-foreground">Get personalized insights and actionable feedback</p>
                             </div>
                         </div>
                         <div className="flex items-center gap-3">
                             <Select value={selectedSubject || ''} onValueChange={setSelectedSubject}>
-                                <SelectTrigger className="w-48 bg-white/20 border-white/30 text-white">
+                                <SelectTrigger className="w-48 bg-surface border-border text-foreground">
                                     <SelectValue placeholder="Select subject" />
                                 </SelectTrigger>
                                 <SelectContent>
@@ -351,10 +361,10 @@ Provide analysis in the following format - be specific and mention actual number
                                     ))}
                                 </SelectContent>
                             </Select>
-                            <Button 
+                            <Button
                                 onClick={analyzePerformance}
                                 disabled={isAnalyzing || !selectedSubject}
-                                className="bg-white text-purple-600 hover:bg-white/90"
+                                className="bg-chart-4 text-white hover:bg-chart-4/90"
                             >
                                 {isAnalyzing ? (
                                     <>
@@ -370,8 +380,8 @@ Provide analysis in the following format - be specific and mention actual number
                             </Button>
                         </div>
                     </div>
-                </CardContent>
-            </Card>
+                </div>
+            </div>
 
             {/* Analysis Results */}
             {analysis && (
@@ -381,34 +391,34 @@ Provide analysis in the following format - be specific and mention actual number
                     className="space-y-6"
                 >
                     {/* Overall Grade Card */}
-                    <Card className={`${gradeColors[analysis.overall_grade]?.light || 'bg-gray-50'} ${gradeColors[analysis.overall_grade]?.border || 'border-gray-200'} border-2`}>
-                        <CardContent className="p-6">
+                    <div className={`card-soft ${gradeStyle.tint} ${gradeStyle.border}`}>
+                        <div className="p-6">
                             <div className="flex items-center justify-between">
                                 <div>
-                                    <p className="text-sm font-medium text-gray-600 mb-1">Overall Performance Grade</p>
-                                    <h3 className="text-xl font-semibold text-gray-900">{selectedSubject}</h3>
+                                    <p className="text-sm font-medium text-muted-foreground mb-1">Overall Performance Grade</p>
+                                    <h3 className="text-xl font-semibold text-foreground">{selectedSubject}</h3>
                                     {analysis.subjectData.goalStudyScore && (
-                                        <p className="text-sm text-gray-500 mt-1">
+                                        <p className="text-sm text-muted-foreground mt-1">
                                             Target: {analysis.subjectData.goalStudyScore}/50 Study Score
                                         </p>
                                     )}
                                 </div>
-                                <div className={`w-20 h-20 ${gradeColors[analysis.overall_grade]?.bg || 'bg-gray-500'} rounded-2xl flex items-center justify-center shadow-lg`}>
+                                <div className={`w-20 h-20 ${gradeStyle.tile} rounded-2xl flex items-center justify-center shadow-soft`}>
                                     <span className="text-3xl font-black text-white">{analysis.overall_grade}</span>
                                 </div>
                             </div>
-                        </CardContent>
-                    </Card>
+                        </div>
+                    </div>
 
                     {/* Metrics Grid */}
-                    <Card>
-                        <CardHeader>
-                            <CardTitle className="flex items-center gap-2">
-                                <TrendingUp className="w-5 h-5 text-indigo-600" />
+                    <div className="card-soft">
+                        <div className="p-6 pb-3">
+                            <div className="flex items-center gap-2 font-semibold text-foreground">
+                                <TrendingUp className="w-5 h-5 text-chart-4" />
                                 Performance Metrics
-                            </CardTitle>
-                        </CardHeader>
-                        <CardContent className="space-y-3">
+                            </div>
+                        </div>
+                        <div className="px-6 pb-6 space-y-3">
                             {Object.entries(analysis.metrics).map(([key, score]) => (
                                 <MetricCard
                                     key={key}
@@ -419,104 +429,104 @@ Provide analysis in the following format - be specific and mention actual number
                                     description={metricLabels[key]?.desc || ''}
                                 />
                             ))}
-                        </CardContent>
-                    </Card>
+                        </div>
+                    </div>
 
                     {/* Priority Actions */}
-                    <Card className="border-2 border-purple-200 bg-purple-50/50">
-                        <CardHeader>
-                            <CardTitle className="flex items-center gap-2 text-purple-900">
-                                <Lightbulb className="w-5 h-5 text-purple-600" />
+                    <div className="card-soft bg-xp/10 border-xp/30">
+                        <div className="p-6 pb-3">
+                            <div className="flex items-center gap-2 font-semibold text-foreground">
+                                <Lightbulb className="w-5 h-5 text-xp" />
                                 Priority Actions
-                            </CardTitle>
-                        </CardHeader>
-                        <CardContent>
+                            </div>
+                        </div>
+                        <div className="px-6 pb-6">
                             <div className="space-y-3">
                                 {analysis.priority_actions.map((action, idx) => (
-                                    <div key={idx} className="flex items-start gap-3 p-3 bg-white rounded-lg border border-purple-100">
-                                        <div className="w-7 h-7 rounded-full bg-purple-500 text-white flex items-center justify-center flex-shrink-0 text-sm font-bold">
+                                    <div key={idx} className="flex items-start gap-3 p-3 bg-surface rounded-lg border border-xp/20">
+                                        <div className="w-7 h-7 rounded-full bg-xp text-white flex items-center justify-center flex-shrink-0 text-sm font-bold">
                                             {idx + 1}
                                         </div>
-                                        <p className="text-gray-800 text-sm">{action}</p>
+                                        <p className="text-foreground text-sm">{action}</p>
                                     </div>
                                 ))}
                             </div>
-                        </CardContent>
-                    </Card>
+                        </div>
+                    </div>
 
                     {/* Detailed Feedback */}
-                    <Card>
-                        <CardHeader>
-                            <CardTitle className="flex items-center gap-2">
-                                <CheckCircle className="w-5 h-5 text-green-600" />
+                    <div className="card-soft">
+                        <div className="p-6 pb-3">
+                            <div className="flex items-center gap-2 font-semibold text-foreground">
+                                <CheckCircle2 className="w-5 h-5 text-primary" />
                                 Detailed Feedback
-                            </CardTitle>
-                        </CardHeader>
-                        <CardContent className="space-y-3">
+                            </div>
+                        </div>
+                        <div className="px-6 pb-6 space-y-3">
                             {Object.entries(analysis.feedback).map(([key, fb]) => (
-                                <div key={key} className="border rounded-xl overflow-hidden">
+                                <div key={key} className="border border-border rounded-xl overflow-hidden">
                                     <button
                                         onClick={() => toggleFeedback(key)}
-                                        className="w-full flex items-center justify-between p-4 bg-gray-50 hover:bg-gray-100 transition-colors"
+                                        className="w-full flex items-center justify-between p-4 bg-secondary/50 hover:bg-secondary transition-colors"
                                     >
                                         <div className="flex items-center gap-3">
-                                            {React.createElement(metricLabels[key]?.icon || Target, { className: "w-5 h-5 text-indigo-600" })}
-                                            <span className="font-medium text-gray-900">{metricLabels[key]?.label || key}</span>
-                                            <Badge variant="outline" className="text-xs">
+                                            {React.createElement(metricLabels[key]?.icon || Target, { className: "w-5 h-5 text-chart-4" })}
+                                            <span className="font-medium text-foreground">{metricLabels[key]?.label || key}</span>
+                                            <span className="pill bg-chart-4/10 text-chart-4 text-[11px] py-0.5">
                                                 {analysis.metrics[key]}/10
-                                            </Badge>
+                                            </span>
                                         </div>
                                         {expandedFeedback[key] ? (
-                                            <ChevronUp className="w-5 h-5 text-gray-400" />
+                                            <ChevronUp className="w-5 h-5 text-muted-foreground/60" />
                                         ) : (
-                                            <ChevronDown className="w-5 h-5 text-gray-400" />
+                                            <ChevronDown className="w-5 h-5 text-muted-foreground/60" />
                                         )}
                                     </button>
                                     {expandedFeedback[key] && (
-                                        <div className="p-4 space-y-4 bg-white">
+                                        <div className="p-4 space-y-4 bg-surface">
                                             <div className="flex items-start gap-3">
-                                                <div className="w-6 h-6 rounded-full bg-green-100 flex items-center justify-center flex-shrink-0">
-                                                    <CheckCircle className="w-4 h-4 text-green-600" />
+                                                <div className="w-6 h-6 rounded-full bg-primary/15 flex items-center justify-center flex-shrink-0">
+                                                    <CheckCircle2 className="w-4 h-4 text-primary" />
                                                 </div>
                                                 <div>
-                                                    <p className="text-sm font-medium text-green-700 mb-1">Strengths</p>
-                                                    <p className="text-sm text-gray-600">{fb.strengths}</p>
+                                                    <p className="text-sm font-medium text-primary mb-1">Strengths</p>
+                                                    <p className="text-sm text-muted-foreground">{fb.strengths}</p>
                                                 </div>
                                             </div>
                                             <div className="flex items-start gap-3">
-                                                <div className="w-6 h-6 rounded-full bg-orange-100 flex items-center justify-center flex-shrink-0">
-                                                    <AlertCircle className="w-4 h-4 text-orange-600" />
+                                                <div className="w-6 h-6 rounded-full bg-streak/15 flex items-center justify-center flex-shrink-0">
+                                                    <AlertTriangle className="w-4 h-4 text-streak" />
                                                 </div>
                                                 <div>
-                                                    <p className="text-sm font-medium text-orange-700 mb-1">Areas to Improve</p>
-                                                    <p className="text-sm text-gray-600">{fb.improvements}</p>
+                                                    <p className="text-sm font-medium text-streak mb-1">Areas to Improve</p>
+                                                    <p className="text-sm text-muted-foreground">{fb.improvements}</p>
                                                 </div>
                                             </div>
-                                            <div className="flex items-start gap-3 p-3 bg-indigo-50 rounded-lg">
-                                                <ArrowRight className="w-5 h-5 text-indigo-600 flex-shrink-0 mt-0.5" />
+                                            <div className="flex items-start gap-3 p-3 bg-chart-4/10 rounded-lg">
+                                                <ArrowRight className="w-5 h-5 text-chart-4 flex-shrink-0 mt-0.5" />
                                                 <div>
-                                                    <p className="text-sm font-medium text-indigo-700 mb-1">Action Step</p>
-                                                    <p className="text-sm text-indigo-900">{fb.action}</p>
+                                                    <p className="text-sm font-medium text-chart-4 mb-1">Action Step</p>
+                                                    <p className="text-sm text-foreground">{fb.action}</p>
                                                 </div>
                                             </div>
                                         </div>
                                     )}
                                 </div>
                             ))}
-                        </CardContent>
-                    </Card>
+                        </div>
+                    </div>
                 </motion.div>
             )}
 
             {/* Empty state when no analysis */}
             {!analysis && !isAnalyzing && (
-                <Card className="bg-gray-50 border-dashed border-2 border-gray-200">
-                    <CardContent className="p-12 text-center">
-                        <Sparkles className="w-12 h-12 text-gray-300 mx-auto mb-4" />
-                        <h3 className="text-lg font-semibold text-gray-700 mb-2">Ready to Analyze</h3>
-                        <p className="text-gray-500 mb-4">Select a subject and click "Analyze" to get AI-powered performance insights</p>
-                    </CardContent>
-                </Card>
+                <div className="card-soft bg-secondary/50 border-dashed border-2 border-border">
+                    <div className="p-12 text-center">
+                        <Sparkles className="w-12 h-12 text-muted-foreground/60 mx-auto mb-4" />
+                        <h3 className="text-lg font-semibold text-foreground mb-2">Ready to Analyze</h3>
+                        <p className="text-muted-foreground mb-4">Select a subject and click "Analyze" to get AI-powered performance insights</p>
+                    </div>
+                </div>
             )}
         </div>
     );

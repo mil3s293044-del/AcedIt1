@@ -1,13 +1,14 @@
 import React, { useState, useEffect, useMemo } from "react";
+import { Link } from "react-router-dom";
+import { createPageUrl } from "@/utils";
 import { motion } from "framer-motion";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
     BarChart3, TrendingUp, Clock, Brain, Target, Calendar, Award,
     Zap, BookOpen, Activity, Flame, ChevronRight, ArrowUpRight,
     ArrowDownRight, Minus, Layers, CheckCircle2, AlertTriangle,
-    Sparkles, RotateCcw, Star
+    Sparkles, RotateCcw, Star, FileQuestion
 } from "lucide-react";
 import { base44 } from "@/api/base44Client";
 import {
@@ -34,20 +35,175 @@ const fmt = (mins) => {
     return `${h}h ${m}m`;
 };
 
-const TECHNIQUE_META = {
-    pomodoro:          { label: "Pomodoro",         color: "#10B981", bg: "bg-emerald-500" },
-    spaced_repetition: { label: "Spaced Rep.",       color: "#6366F1", bg: "bg-indigo-500" },
-    active_recall:     { label: "Active Recall",     color: "#8B5CF6", bg: "bg-violet-500" },
-    blurting:          { label: "Blurting",          color: "#F59E0B", bg: "bg-amber-500" },
-    quizzes:           { label: "Quizzes",           color: "#EC4899", bg: "bg-pink-500" },
+// Design-system token HSL values used as literal Recharts color props.
+const TOKEN_HSL = {
+    primary: "hsl(95, 90%, 40%)",  // #58CC02
+    xp:      "hsl(36, 100%, 50%)", // #FF9600
+    streak:  "hsl(0, 100%, 65%)",  // #FF4B4B
+    chart3:  "hsl(213, 76%, 51%)", // #217BE0
+    chart4:  "hsl(282, 100%, 74%)",// #C77DFF
 };
+
+const TECHNIQUE_META = {
+    pomodoro:          { label: "Pomodoro",      color: TOKEN_HSL.primary, bg: "bg-primary" },
+    spaced_repetition: { label: "Spaced Rep.",   color: TOKEN_HSL.chart3,  bg: "bg-chart-3" },
+    active_recall:     { label: "Active Recall", color: TOKEN_HSL.chart4,  bg: "bg-chart-4" },
+    blurting:          { label: "Blurting",      color: TOKEN_HSL.xp,      bg: "bg-xp" },
+    quizzes:           { label: "Quizzes",       color: TOKEN_HSL.streak,  bg: "bg-streak" },
+};
+
+// Pre-computed static lookup tables (avoid Tailwind JIT-killing dynamic interpolation).
+const PRIORITY_PILL = {
+    high:   "bg-streak/10 text-streak",
+    medium: "bg-xp/10 text-xp",
+    low:    "bg-secondary text-muted-foreground",
+};
+
+const INSIGHT_CARD = {
+    good: { box: "bg-primary/10 border-primary/20",  iconBox: "bg-primary/15", iconColor: "text-primary",  Icon: CheckCircle2 },
+    warn: { box: "bg-xp/10 border-xp/20",            iconBox: "bg-xp/15",      iconColor: "text-xp",       Icon: AlertTriangle },
+    info: { box: "bg-chart-3/10 border-chart-3/20",  iconBox: "bg-chart-3/15", iconColor: "text-chart-3",  Icon: Zap },
+};
+
+const FC_KPI_THEME = {
+    total:      "bg-secondary text-foreground",
+    mastered:   "bg-primary/10 text-primary",
+    due:        "bg-chart-3/10 text-chart-3",
+    weak:       "bg-xp/10 text-xp",
+    unreviewed: "bg-streak/10 text-streak",
+};
+
+// Featured insight panel theme tokens
+const FEATURED_THEME = {
+    primary:   { bg: "bg-primary/10",  border: "border-primary/25",  iconBg: "bg-primary/15",  iconText: "text-primary"  },
+    xp:        { bg: "bg-xp/10",       border: "border-xp/25",       iconBg: "bg-xp/15",       iconText: "text-xp"       },
+    "chart-3": { bg: "bg-chart-3/10",  border: "border-chart-3/25",  iconBg: "bg-chart-3/15",  iconText: "text-chart-3"  },
+    "chart-4": { bg: "bg-chart-4/10",  border: "border-chart-4/25",  iconBg: "bg-chart-4/15",  iconText: "text-chart-4"  },
+    streak:    { bg: "bg-streak/10",   border: "border-streak/25",   iconBg: "bg-streak/15",   iconText: "text-streak"   },
+};
+
+// ─── Coach voice (chill + motivational, trend-aware) ─────────────────────────
+function getCoachLine({ name, hour, totalMins, totalSess, weekDelta, quizAvg, quizDelta, streakDays, bestSubject }) {
+    const period = hour < 12 ? "Morning" : hour < 17 ? "Afternoon" : hour < 21 ? "Evening" : "Late night";
+
+    if (totalMins === 0 && totalSess === 0) {
+        return `${period}, ${name}. Get studying — your insights show up here.`;
+    }
+    if (quizDelta != null && quizDelta >= 5) {
+        return `${period}, ${name}. Your avg quiz score climbed from ${quizAvg - quizDelta}% to ${quizAvg}%.`;
+    }
+    if (streakDays >= 7) {
+        return `${period}, ${name}. ${streakDays}-day streak shows up in every chart below.`;
+    }
+    if (weekDelta != null && weekDelta > 10) {
+        return `${period}, ${name}. You're studying ${weekDelta}% more than last week.`;
+    }
+    if (weekDelta != null && weekDelta < -15) {
+        return `${period}, ${name}. Last week eased off — let's pick the pace back up.`;
+    }
+    if (bestSubject) {
+        return `${period}, ${name}. ${bestSubject} is leading the pack in your data.`;
+    }
+    if (totalSess >= 10) {
+        return `${period}, ${name}. ${totalSess} sessions logged — patterns are forming.`;
+    }
+    return `${period}, ${name}. Steady habits. Insights below.`;
+}
+
+// ─── Featured insight detection ──────────────────────────────────────────────
+function getFeaturedInsight({ metrics, fcHealth, techBreakdown, subjectData, quizDelta, weekDelta, streakDays }) {
+    // Priority order: biggest signal first
+    if (metrics.totalMins === 0) {
+        return {
+            label: "Get going",
+            title: "Keep logging sessions — patterns will emerge.",
+            sub: "Once you've logged a few sessions, your strongest subject and best technique surface here.",
+            accent: "chart-3",
+            icon: Sparkles,
+        };
+    }
+    if (quizDelta != null && quizDelta >= 5) {
+        return {
+            label: "Quiz scores climbing",
+            title: `Your quiz scores are up ${quizDelta}% this fortnight. Keep doing what you're doing.`,
+            sub: `Avg sits at ${metrics.quizAvg}% — the gains are real.`,
+            accent: "primary",
+            icon: TrendingUp,
+        };
+    }
+    const best = subjectData.find(s => s.quizAvg !== null && s.quizAvg >= 80);
+    if (best) {
+        return {
+            label: "Strongest subject",
+            title: `${best.name} is your strongest — ${best.quizAvg}% avg. Lean into it.`,
+            sub: `${fmt(best.totalMins)} logged across ${best.uniqueDays} days.`,
+            accent: "primary",
+            icon: Award,
+        };
+    }
+    const lagging = subjectData.find(s => s.quizAvg !== null && s.quizAvg < 60);
+    if (lagging) {
+        return {
+            label: "Needs more time",
+            title: `${lagging.name} is at ${lagging.quizAvg}% — needs more time.`,
+            sub: `Only ${fmt(lagging.totalMins)} logged this period. A focused session moves the needle.`,
+            accent: "xp",
+            icon: AlertTriangle,
+        };
+    }
+    if (streakDays >= 7) {
+        const topTech = techBreakdown.slice().sort((a, b) => b.mins - a.mins)[0];
+        return {
+            label: `${streakDays}-day streak`,
+            title: `${streakDays}-day streak — your most-used technique is ${topTech?.label || 'study'}.`,
+            sub: `${fmt(topTech?.mins || 0)} on ${topTech?.label || 'sessions'} this period.`,
+            accent: "primary",
+            icon: Flame,
+        };
+    }
+    const dominant = techBreakdown.find(t => metrics.totalMins > 0 && (t.mins / metrics.totalMins) > 0.6);
+    if (dominant && techBreakdown.length > 1) {
+        return {
+            label: "Technique mix",
+            title: `You've leaned hard on ${dominant.label} this month.`,
+            sub: `${Math.round((dominant.mins / metrics.totalMins) * 100)}% of your study time. Mix in another technique for retention.`,
+            accent: "chart-4",
+            icon: Layers,
+        };
+    }
+    if (weekDelta != null && weekDelta > 15) {
+        return {
+            label: "Trending up",
+            title: `You're studying ${weekDelta}% more than last week.`,
+            sub: "Momentum like this is when habits stick.",
+            accent: "primary",
+            icon: TrendingUp,
+        };
+    }
+    if (metrics.consistency >= 70) {
+        return {
+            label: "Consistent",
+            title: `${metrics.uniqueDays} of ${metrics.rangedays} days studied. That's the work.`,
+            sub: "Consistency outranks any single big session.",
+            accent: "chart-3",
+            icon: CheckCircle2,
+        };
+    }
+    return {
+        label: "Building",
+        title: "Keep logging sessions — patterns will emerge.",
+        sub: "A few more sessions and your strongest signals will surface here.",
+        accent: "chart-3",
+        icon: Sparkles,
+    };
+}
 
 const StatPill = ({ value, prev }) => {
     if (prev === null || prev === undefined) return null;
     const diff = value - prev;
-    if (diff === 0) return <span className="flex items-center gap-0.5 text-xs text-slate-400"><Minus className="w-3 h-3" /> same</span>;
-    if (diff > 0) return <span className="flex items-center gap-0.5 text-xs text-emerald-500"><ArrowUpRight className="w-3 h-3" /> {diff > 0 ? "+" : ""}{typeof diff === "number" && diff % 1 !== 0 ? diff.toFixed(1) : diff}</span>;
-    return <span className="flex items-center gap-0.5 text-xs text-rose-500"><ArrowDownRight className="w-3 h-3" /> {typeof diff === "number" && diff % 1 !== 0 ? diff.toFixed(1) : diff}</span>;
+    if (diff === 0) return <span className="flex items-center gap-0.5 text-xs text-muted-foreground"><Minus className="w-3 h-3" /> same</span>;
+    if (diff > 0) return <span className="flex items-center gap-0.5 text-xs text-primary"><ArrowUpRight className="w-3 h-3" /> {diff > 0 ? "+" : ""}{typeof diff === "number" && diff % 1 !== 0 ? diff.toFixed(1) : diff}</span>;
+    return <span className="flex items-center gap-0.5 text-xs text-streak"><ArrowDownRight className="w-3 h-3" /> {typeof diff === "number" && diff % 1 !== 0 ? diff.toFixed(1) : diff}</span>;
 };
 
 export default function Analytics() {
@@ -182,7 +338,7 @@ export default function Analytics() {
                 ...data.activeRecall.filter(t=>t.subject_name===sub.subject_name).map(t=>t.date),
             ].filter(Boolean)).size;
             return {
-                name: sub.subject_name, code: sub.subject_code, color: sub.color || '#6366F1',
+                name: sub.subject_name, code: sub.subject_code, color: sub.color || TOKEN_HSL.chart3,
                 target: sub.goal_study_score, priority: sub.priority,
                 totalMins, quizAvg, cards: cards.length, mastered, weak,
                 sessions: data.techniques.filter(t=>t.subject===sub.subject_name).length + data.activeRecall.filter(t=>t.subject_name===sub.subject_name).length,
@@ -218,6 +374,64 @@ export default function Analytics() {
         return list.slice(0, 5);
     }, [metrics, fcHealth, techBreakdown, subjectData]);
 
+    // ── Week-over-week derived stats (for hero + coach) ───────────────────────
+    const weekStats = useMemo(() => {
+        const today = new Date();
+        const weekStart = startOfWeek(today);
+        const lastWeekStart = subDays(weekStart, 7);
+        const lastWeekEnd = subDays(weekStart, 1);
+
+        const inRange = (s, start, end) => {
+            if (!s.date) return false;
+            const d = new Date(s.date);
+            return d >= start && d <= end;
+        };
+        const sumMins = (arr, key, start, end) =>
+            arr.filter(s => inRange(s, start, end)).reduce((a, s) => a + (s[key] || 0), 0);
+
+        const thisWeekMins =
+            sumMins(data.techniques, 'session_duration', weekStart, today) +
+            sumMins(data.activeRecall, 'session_duration', weekStart, today) +
+            sumMins(data.blurting, 'session_duration', weekStart, today) +
+            sumMins(data.studySessions, 'duration_minutes', weekStart, today);
+
+        const lastWeekMins =
+            sumMins(data.techniques, 'session_duration', lastWeekStart, lastWeekEnd) +
+            sumMins(data.activeRecall, 'session_duration', lastWeekStart, lastWeekEnd) +
+            sumMins(data.blurting, 'session_duration', lastWeekStart, lastWeekEnd) +
+            sumMins(data.studySessions, 'duration_minutes', lastWeekStart, lastWeekEnd);
+
+        const thisWeekSess =
+            data.techniques.filter(s => inRange(s, weekStart, today)).length +
+            data.activeRecall.filter(s => inRange(s, weekStart, today)).length +
+            data.blurting.filter(s => inRange(s, weekStart, today)).length +
+            data.quizzes.filter(s => inRange(s, weekStart, today)).length;
+
+        const weekDelta = lastWeekMins > 0
+            ? Math.round(((thisWeekMins - lastWeekMins) / lastWeekMins) * 100)
+            : (thisWeekMins > 0 ? null : null);
+
+        return { thisWeekMins, lastWeekMins, thisWeekSess, weekDelta };
+    }, [data]);
+
+    // ── Quiz delta (recent half vs older half) ────────────────────────────────
+    const quizDelta = useMemo(() => {
+        if (data.quizzes.length < 4) return null;
+        const sorted = data.quizzes.slice().sort((a, b) => (a.date || '').localeCompare(b.date || ''));
+        const mid = Math.floor(sorted.length / 2);
+        const older = sorted.slice(0, mid);
+        const newer = sorted.slice(mid);
+        const olderAvg = Math.round(older.reduce((s, q) => s + q.score, 0) / older.length);
+        const newerAvg = Math.round(newer.reduce((s, q) => s + q.score, 0) / newer.length);
+        return newerAvg - olderAvg;
+    }, [data.quizzes]);
+
+    // ── Best subject (highest quiz avg with study time) ───────────────────────
+    const bestSubjectName = useMemo(() => {
+        const candidate = subjectData.find(s => s.quizAvg !== null && s.quizAvg >= 75 && s.totalMins > 0);
+        return candidate?.name || null;
+    }, [subjectData]);
+
     const tabs = [
         { id: "overview",  label: "Overview",   icon: BarChart3 },
         { id: "subjects",  label: "Subjects",   icon: BookOpen },
@@ -225,33 +439,241 @@ export default function Analytics() {
         { id: "ai",        label: "AI Coach",   icon: Sparkles },
     ];
 
+    // KPI tile static lookup — avoids dynamic Tailwind class strings.
+    const KPI_TILES = [
+        { label: "Study Time",   val: fmt(metrics.totalMins),   icon: Clock,    iconBg: "bg-chart-3/10",  iconColor: "text-chart-3" },
+        { label: "Sessions",     val: metrics.totalSess,         icon: Activity, iconBg: "bg-chart-4/10",  iconColor: "text-chart-4" },
+        { label: "Consistency",  val: `${metrics.consistency}%`, icon: Flame,    iconBg: metrics.consistency>=60 ? "bg-primary/10" : "bg-streak/10", iconColor: metrics.consistency>=60 ? "text-primary" : "text-streak" },
+        { label: "Quiz Avg",     val: `${metrics.quizAvg}%`,     icon: Award,    iconBg: metrics.quizAvg>=70    ? "bg-primary/10" : "bg-xp/10",     iconColor: metrics.quizAvg>=70    ? "text-primary" : "text-xp" },
+        { label: "FC Mastery",   val: `${metrics.fcMastery}%`,   icon: Brain,    iconBg: "bg-chart-4/10",  iconColor: "text-chart-4" },
+        { label: "Days Studied", val: metrics.uniqueDays,         icon: Calendar, iconBg: "bg-xp/10",       iconColor: "text-xp" },
+    ];
+
+    // ── Coach line + featured insight ─────────────────────────────────────────
+    const firstName = userProfile?.username || user?.full_name?.split(' ')[0] || 'friend';
+    const streakDays = userProfile?.streak_days || 0;
+    const hour = new Date().getHours();
+    const coachLine = getCoachLine({
+        name: firstName,
+        hour,
+        totalMins: metrics.totalMins,
+        totalSess: metrics.totalSess,
+        weekDelta: weekStats.weekDelta,
+        quizAvg: metrics.quizAvg,
+        quizDelta,
+        streakDays,
+        bestSubject: bestSubjectName,
+    });
+
+    const featured = useMemo(() => getFeaturedInsight({
+        metrics, fcHealth, techBreakdown, subjectData, quizDelta, weekDelta: weekStats.weekDelta, streakDays,
+    }), [metrics, fcHealth, techBreakdown, subjectData, quizDelta, weekStats.weekDelta, streakDays]);
+    const FeaturedIcon = featured.icon;
+    const featuredTheme = FEATURED_THEME[featured.accent] || FEATURED_THEME["chart-3"];
+
     if (isLoading) return (
-        <div className="min-h-screen flex items-center justify-center bg-slate-50">
+        <div className="min-h-screen flex items-center justify-center bg-background">
             <div className="flex flex-col items-center gap-4">
-                <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-violet-500 to-indigo-600 flex items-center justify-center shadow-lg animate-pulse">
-                    <BarChart3 className="w-6 h-6 text-white" />
+                <div className="w-12 h-12 rounded-2xl bg-chart-3/10 flex items-center justify-center shadow-soft animate-pulse">
+                    <BarChart3 className="w-6 h-6 text-chart-3" />
                 </div>
-                <p className="text-sm text-slate-500">Loading your analytics...</p>
+                <p className="text-sm text-muted-foreground">Loading your analytics...</p>
             </div>
         </div>
     );
 
     return (
-        <div className="min-h-screen">
-            <div className="px-4 lg:px-8 py-6 w-full max-w-[1800px] mx-auto space-y-6">
+        <div className="min-h-screen bg-background">
+            <div className="max-w-6xl mx-auto px-4 lg:px-8 py-6 lg:py-10 space-y-6 lg:space-y-8">
 
-                {/* ── Header ── */}
-                <motion.div initial={{ opacity:0, y:-16 }} animate={{ opacity:1, y:0 }} className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                    <div className="flex items-center gap-3">
-                        <div>
-                            <h1 className="text-2xl font-bold text-slate-900">Study Analytics</h1>
-                            <p className="text-sm text-slate-500 mt-0.5">Your complete performance picture</p>
+                {/* ── COACH STRIP ─────────────────────────────────────── */}
+                <motion.section initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.35 }}>
+                    <div className="flex items-center justify-between mb-3">
+                        <div className="flex items-center gap-2 text-xs">
+                            <span className="font-bold text-muted-foreground uppercase tracking-wider">Insights</span>
+                            {metrics.totalSess > 0 && (
+                                <>
+                                    <span className="text-muted-foreground/40">·</span>
+                                    <span className="inline-flex items-center gap-1 font-extrabold text-chart-3">
+                                        <Activity className="w-3.5 h-3.5" /> {metrics.totalSess} sessions
+                                    </span>
+                                </>
+                            )}
+                            {streakDays > 0 && (
+                                <>
+                                    <span className="text-muted-foreground/40">·</span>
+                                    <span className="inline-flex items-center gap-1 font-extrabold text-streak">
+                                        <Flame className="w-3.5 h-3.5" /> {streakDays}d
+                                    </span>
+                                </>
+                            )}
+                            {metrics.quizAvg > 0 && (
+                                <>
+                                    <span className="text-muted-foreground/40">·</span>
+                                    <span className="inline-flex items-center gap-1 font-extrabold text-primary">
+                                        <Award className="w-3.5 h-3.5" /> {metrics.quizAvg}% avg
+                                    </span>
+                                </>
+                            )}
                         </div>
                         <HelpButton page="Analytics" />
                     </div>
+                    <h1 className="font-display text-2xl sm:text-3xl lg:text-4xl font-extrabold tracking-tight text-foreground leading-[1.1]">
+                        {coachLine}
+                    </h1>
+                </motion.section>
+
+                {/* ── HERO ROW: Biggest insight (3/5) + This week stats (2/5) ── */}
+                <motion.section
+                    initial={{ opacity: 0, y: 12 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: 0.05 }}
+                    className="grid grid-cols-1 md:grid-cols-5 gap-5 lg:gap-6"
+                >
+                    {/* Biggest insight */}
+                    <div className="md:col-span-3">
+                        <div className="relative overflow-hidden rounded-3xl bg-chart-3/10 border-2 border-chart-3/25 p-6 lg:p-8 h-full">
+                            <BarChart3 className="absolute -top-4 -right-4 w-32 h-32 text-chart-3/10 pointer-events-none" />
+                            <div className="relative">
+                                <div className="flex items-center gap-2 mb-3">
+                                    <div className="w-9 h-9 rounded-xl bg-chart-3/15 flex items-center justify-center">
+                                        <Sparkles className="w-5 h-5 text-chart-3" />
+                                    </div>
+                                    <p className="stat-label text-chart-3/80">Biggest insight</p>
+                                </div>
+                                {bestSubjectName ? (
+                                    <>
+                                        <h2
+                                            className="font-display font-extrabold text-foreground leading-[1.05] mb-3"
+                                            style={{ fontSize: 'clamp(1.75rem, 4.5vw, 2.75rem)' }}
+                                        >
+                                            {bestSubjectName} is leading the pack
+                                        </h2>
+                                        <p className="text-foreground/80 text-sm lg:text-base font-medium leading-snug max-w-md">
+                                            Your strongest subject by quiz score this period. Keep building on what's working.
+                                        </p>
+                                    </>
+                                ) : metrics.totalSess === 0 ? (
+                                    <>
+                                        <h2
+                                            className="font-display font-extrabold text-foreground leading-[1.05] mb-3"
+                                            style={{ fontSize: 'clamp(1.75rem, 4.5vw, 2.75rem)' }}
+                                        >
+                                            No data yet — log a session to begin
+                                        </h2>
+                                        <p className="text-foreground/80 text-sm lg:text-base font-medium leading-snug max-w-md">
+                                            Your strongest subject, top technique, and trend lines will surface here once you have a few sessions logged.
+                                        </p>
+                                    </>
+                                ) : (
+                                    <>
+                                        <h2
+                                            className="font-display font-extrabold text-foreground leading-[1.05] mb-3"
+                                            style={{ fontSize: 'clamp(1.75rem, 4.5vw, 2.75rem)' }}
+                                        >
+                                            {metrics.uniqueDays} of {metrics.rangedays} days studied
+                                        </h2>
+                                        <p className="text-foreground/80 text-sm lg:text-base font-medium leading-snug max-w-md">
+                                            {metrics.consistency >= 70
+                                                ? "Consistency is your edge — keep showing up."
+                                                : metrics.consistency >= 40
+                                                    ? "Solid base — small steps compound."
+                                                    : "More days, more signal. Even 20 minutes counts."}
+                                        </p>
+                                    </>
+                                )}
+                                <div className="flex flex-wrap gap-2 mt-5">
+                                    <span className="pill bg-chart-3/15 text-chart-3">
+                                        <Activity className="w-3 h-3" /> {metrics.totalSess} sessions
+                                    </span>
+                                    <span className="pill bg-chart-3/15 text-chart-3">
+                                        <Clock className="w-3 h-3" /> {fmt(metrics.totalMins)}
+                                    </span>
+                                    {metrics.quizAvg > 0 && (
+                                        <span className="pill bg-chart-3/15 text-chart-3">
+                                            <Award className="w-3 h-3" /> {metrics.quizAvg}% avg
+                                        </span>
+                                    )}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* This week stats */}
+                    <div className="md:col-span-2">
+                        <div className="rounded-3xl bg-primary/10 border-2 border-primary/25 p-6 h-full flex flex-col">
+                            <div className="flex items-center gap-2 mb-2">
+                                <Clock className="w-4 h-4 text-primary" />
+                                <p className="stat-label text-primary/80">This week</p>
+                            </div>
+                            <p className="font-display font-extrabold text-foreground leading-none" style={{ fontSize: 'clamp(2.25rem, 5.5vw, 3rem)' }}>
+                                {fmt(weekStats.thisWeekMins)}
+                            </p>
+                            <p className="text-xs text-muted-foreground mt-2 leading-snug">
+                                {weekStats.thisWeekMins === 0
+                                    ? "Nothing logged this week yet."
+                                    : weekStats.weekDelta == null
+                                        ? "First week of data — keep it going."
+                                        : weekStats.weekDelta > 0
+                                            ? `Up ${weekStats.weekDelta}% vs last week.`
+                                            : weekStats.weekDelta === 0
+                                                ? "Same pace as last week."
+                                                : `${Math.abs(weekStats.weekDelta)}% lighter than last week.`}
+                            </p>
+                            <div className="space-y-2.5 mt-4 pt-4 border-t-2 border-primary/15">
+                                <div className="flex items-baseline justify-between">
+                                    <p className="text-xs font-bold text-muted-foreground">Sessions</p>
+                                    <p className="text-xs font-bold text-foreground">{weekStats.thisWeekSess}</p>
+                                </div>
+                                <div className="flex items-baseline justify-between">
+                                    <p className="text-xs font-bold text-muted-foreground">Last week</p>
+                                    <p className="text-xs font-bold text-foreground">{fmt(weekStats.lastWeekMins)}</p>
+                                </div>
+                                <div className="flex items-baseline justify-between">
+                                    <p className="text-xs font-bold text-muted-foreground">Vs last week</p>
+                                    <p className={`text-xs font-bold ${
+                                        weekStats.weekDelta == null ? 'text-muted-foreground'
+                                            : weekStats.weekDelta > 0 ? 'text-primary'
+                                                : weekStats.weekDelta < 0 ? 'text-streak'
+                                                    : 'text-foreground'
+                                    }`}>
+                                        {weekStats.weekDelta == null ? '—'
+                                            : weekStats.weekDelta > 0 ? `+${weekStats.weekDelta}%`
+                                                : `${weekStats.weekDelta}%`}
+                                    </p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </motion.section>
+
+                {/* ── FEATURED INSIGHT PANEL ──────────────────────────── */}
+                <motion.section
+                    initial={{ opacity: 0, y: 12 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: 0.1 }}
+                >
+                    <div className={`rounded-2xl ${featuredTheme.bg} border-2 ${featuredTheme.border} p-5 lg:p-6`}>
+                        <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
+                            <div className={`w-12 h-12 rounded-xl ${featuredTheme.iconBg} flex items-center justify-center flex-shrink-0`}>
+                                <FeaturedIcon className={`w-6 h-6 ${featuredTheme.iconText}`} />
+                            </div>
+                            <div className="flex-1 min-w-0">
+                                <p className="stat-label mb-1">Today's signal · {featured.label}</p>
+                                <h2 className="font-display font-extrabold text-foreground text-base lg:text-lg leading-snug">
+                                    {featured.title}
+                                </h2>
+                                <p className="text-muted-foreground text-sm mt-0.5">{featured.sub}</p>
+                            </div>
+                        </div>
+                    </div>
+                </motion.section>
+
+                {/* ── Time range selector ── */}
+                <motion.div initial={{ opacity:0, y:-8 }} animate={{ opacity:1, y:0 }} className="flex justify-end">
                     <Select value={timeRange} onValueChange={setTimeRange}>
-                        <SelectTrigger className="w-44 bg-white border-slate-200 shadow-sm rounded-xl">
-                            <Calendar className="w-4 h-4 mr-2 text-slate-400" />
+                        <SelectTrigger className="w-44 bg-surface border-border rounded-xl">
+                            <Calendar className="w-4 h-4 mr-2 text-muted-foreground" />
                             <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
@@ -265,21 +687,14 @@ export default function Analytics() {
 
                 {/* ── KPI Strip ── */}
                 <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
-                    {[
-                        { label: "Study Time",    val: fmt(metrics.totalMins),     icon: Clock,       accent: "from-blue-500 to-cyan-500" },
-                        { label: "Sessions",      val: metrics.totalSess,           icon: Activity,    accent: "from-violet-500 to-purple-500" },
-                        { label: "Consistency",   val: `${metrics.consistency}%`,   icon: Flame,       accent: metrics.consistency>=60?"from-emerald-500 to-teal-500":"from-orange-500 to-rose-500" },
-                        { label: "Quiz Avg",      val: `${metrics.quizAvg}%`,       icon: Award,       accent: metrics.quizAvg>=70?"from-green-500 to-emerald-500":"from-amber-500 to-orange-500" },
-                        { label: "FC Mastery",    val: `${metrics.fcMastery}%`,     icon: Brain,       accent: "from-indigo-500 to-violet-500" },
-                        { label: "Days Studied",  val: metrics.uniqueDays,          icon: Calendar,    accent: "from-pink-500 to-rose-500" },
-                    ].map(({ label, val, icon: Icon, accent }) => (
+                    {KPI_TILES.map(({ label, val, icon: Icon, iconBg, iconColor }) => (
                         <motion.div key={label} initial={{ opacity:0, scale:0.95 }} animate={{ opacity:1, scale:1 }}
-                            className="bg-white rounded-2xl border border-slate-100 shadow-sm p-4 flex flex-col gap-2">
-                            <div className={`w-9 h-9 rounded-xl bg-gradient-to-br ${accent} flex items-center justify-center shadow-sm`}>
-                                <Icon className="w-4 h-4 text-white" />
+                            className="card-soft p-4 flex flex-col gap-2">
+                            <div className={`w-9 h-9 rounded-xl ${iconBg} flex items-center justify-center`}>
+                                <Icon className={`w-4 h-4 ${iconColor}`} />
                             </div>
-                            <p className="text-2xl font-bold text-slate-900 leading-none">{val}</p>
-                            <p className="text-xs text-slate-500 font-medium">{label}</p>
+                            <p className="font-display font-extrabold text-2xl text-foreground leading-none">{val}</p>
+                            <p className="stat-label">{label}</p>
                         </motion.div>
                     ))}
                 </div>
@@ -287,33 +702,30 @@ export default function Analytics() {
                 {/* ── Insight Cards ── */}
                 {insights.length > 0 && (
                     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                        {insights.map((ins, i) => (
-                            <motion.div key={i} initial={{ opacity:0, x:-8 }} animate={{ opacity:1, x:0 }} transition={{ delay: i*0.05 }}
-                                className={`rounded-2xl p-4 flex items-start gap-3 border ${
-                                    ins.type==='good' ? 'bg-emerald-50 border-emerald-100' :
-                                    ins.type==='warn' ? 'bg-amber-50 border-amber-100' :
-                                    'bg-blue-50 border-blue-100'
-                                }`}>
-                                <div className={`w-7 h-7 rounded-xl flex items-center justify-center flex-shrink-0 ${
-                                    ins.type==='good' ? 'bg-emerald-100' :
-                                    ins.type==='warn' ? 'bg-amber-100' : 'bg-blue-100'
-                                }`}>
-                                    {ins.type==='good'?<CheckCircle2 className="w-4 h-4 text-emerald-600"/>:ins.type==='warn'?<AlertTriangle className="w-4 h-4 text-amber-600"/>:<Zap className="w-4 h-4 text-blue-600"/>}
-                                </div>
-                                <p className="text-sm text-slate-700 leading-relaxed">{ins.text}</p>
-                            </motion.div>
-                        ))}
+                        {insights.map((ins, i) => {
+                            const theme = INSIGHT_CARD[ins.type] || INSIGHT_CARD.info;
+                            const ThemeIcon = theme.Icon;
+                            return (
+                                <motion.div key={i} initial={{ opacity:0, x:-8 }} animate={{ opacity:1, x:0 }} transition={{ delay: i*0.05 }}
+                                    className={`rounded-2xl p-4 flex items-start gap-3 border ${theme.box}`}>
+                                    <div className={`w-7 h-7 rounded-xl flex items-center justify-center flex-shrink-0 ${theme.iconBox}`}>
+                                        <ThemeIcon className={`w-4 h-4 ${theme.iconColor}`} />
+                                    </div>
+                                    <p className="text-sm text-foreground leading-relaxed">{ins.text}</p>
+                                </motion.div>
+                            );
+                        })}
                     </div>
                 )}
 
                 {/* ── Tabs ── */}
-                <div className="flex gap-1 bg-white border border-slate-200 rounded-2xl p-1 shadow-sm w-fit">
+                <div className="flex gap-1 card-soft p-1 w-fit">
                     {tabs.map(({ id, label, icon: Icon }) => (
                         <button key={id} onClick={() => setActiveTab(id)}
                             className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold transition-all ${
                                 activeTab === id
-                                    ? "bg-gradient-to-r from-violet-600 to-indigo-600 text-white shadow-md"
-                                    : "text-slate-500 hover:text-slate-800"
+                                    ? "bg-chart-3 text-white shadow-soft"
+                                    : "text-muted-foreground hover:text-foreground"
                             }`}>
                             <Icon className="w-4 h-4" />{label}
                         </button>
@@ -324,39 +736,65 @@ export default function Analytics() {
                 {activeTab === "overview" && (
                     <div className="space-y-5">
                         {/* Daily Study Chart */}
-                        <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-6">
+                        <div className="card-soft p-6">
                             <div className="flex items-center justify-between mb-5">
-                                <div>
-                                    <h2 className="font-bold text-slate-900">Daily Study Time</h2>
-                                    <p className="text-xs text-slate-400 mt-0.5">Hours per day across all techniques</p>
+                                <div className="flex items-center gap-3">
+                                    <div className="w-10 h-10 rounded-xl bg-chart-3/10 flex items-center justify-center flex-shrink-0">
+                                        <TrendingUp className="w-5 h-5 text-chart-3" />
+                                    </div>
+                                    <div>
+                                        <h2 className="font-display font-extrabold text-foreground text-base">Daily Study Time</h2>
+                                        <p className="text-xs text-muted-foreground mt-0.5">Hours per day across all techniques</p>
+                                    </div>
                                 </div>
-                                <Badge className="bg-slate-100 text-slate-600 border-0">{fmt(metrics.totalMins)} total</Badge>
+                                <span className="pill bg-secondary text-muted-foreground">{fmt(metrics.totalMins)} total</span>
                             </div>
                             <ResponsiveContainer width="100%" height={220}>
                                 <AreaChart data={dailyData} margin={{ top:5, right:10, bottom:0, left:-10 }}>
                                     <defs>
                                         <linearGradient id="areaGrad" x1="0" y1="0" x2="0" y2="1">
-                                            <stop offset="5%" stopColor="#7C3AED" stopOpacity={0.25}/>
-                                            <stop offset="95%" stopColor="#7C3AED" stopOpacity={0}/>
+                                            <stop offset="5%" stopColor={TOKEN_HSL.chart3} stopOpacity={0.25}/>
+                                            <stop offset="95%" stopColor={TOKEN_HSL.chart3} stopOpacity={0}/>
                                         </linearGradient>
                                     </defs>
-                                    <CartesianGrid strokeDasharray="3 3" stroke="#F1F5F9" />
-                                    <XAxis dataKey="date" tick={{ fontSize:11, fill:'#94A3B8' }} axisLine={false} tickLine={false} interval="preserveStartEnd" />
-                                    <YAxis tick={{ fontSize:11, fill:'#94A3B8' }} axisLine={false} tickLine={false} tickFormatter={v=>`${v}h`} />
-                                    <Tooltip contentStyle={{ borderRadius:'12px', border:'1px solid #E2E8F0', boxShadow:'0 4px 20px rgba(0,0,0,0.08)' }}
+                                    <CartesianGrid strokeDasharray="3 3" stroke="hsl(220, 13%, 91%)" />
+                                    <XAxis dataKey="date" tick={{ fontSize:11, fill:'hsl(220, 9%, 46%)' }} axisLine={false} tickLine={false} interval="preserveStartEnd" />
+                                    <YAxis tick={{ fontSize:11, fill:'hsl(220, 9%, 46%)' }} axisLine={false} tickLine={false} tickFormatter={v=>`${v}h`} />
+                                    <Tooltip contentStyle={{ borderRadius:'12px', border:'1px solid hsl(220, 13%, 91%)', boxShadow:'0 4px 20px rgba(13,22,38,0.08)' }}
                                         formatter={v=>[fmt(v*60), 'Study Time']} />
-                                    <Area type="monotone" dataKey="hours" stroke="#7C3AED" strokeWidth={2.5} fill="url(#areaGrad)" dot={false} activeDot={{ r:4, fill:'#7C3AED' }} />
+                                    <Area type="monotone" dataKey="hours" stroke={TOKEN_HSL.chart3} strokeWidth={2.5} fill="url(#areaGrad)" dot={false} activeDot={{ r:4, fill:TOKEN_HSL.chart3 }} />
                                 </AreaChart>
                             </ResponsiveContainer>
                         </div>
 
                         <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
                             {/* Technique breakdown */}
-                            <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-6">
-                                <h2 className="font-bold text-slate-900 mb-1">Technique Breakdown</h2>
-                                <p className="text-xs text-slate-400 mb-5">How you distribute your study time</p>
+                            <div className="card-soft p-6">
+                                <div className="flex items-center gap-3 mb-5">
+                                    <div className="w-10 h-10 rounded-xl bg-chart-4/10 flex items-center justify-center flex-shrink-0">
+                                        <Layers className="w-5 h-5 text-chart-4" />
+                                    </div>
+                                    <div>
+                                        <h2 className="font-display font-extrabold text-foreground text-base">Technique Breakdown</h2>
+                                        <p className="text-xs text-muted-foreground mt-0.5">How you distribute your study time</p>
+                                    </div>
+                                </div>
                                 {techBreakdown.length === 0 ? (
-                                    <p className="text-sm text-slate-400 text-center py-8">No study sessions recorded yet</p>
+                                    <div className="flex flex-col items-center text-center gap-3 py-8">
+                                        <div className="w-10 h-10 rounded-xl bg-chart-4/10 flex items-center justify-center">
+                                            <Layers className="w-5 h-5 text-chart-4" />
+                                        </div>
+                                        <div>
+                                            <p className="font-bold text-foreground text-sm">No technique data yet</p>
+                                            <p className="text-xs text-muted-foreground mt-0.5 max-w-[240px]">Try Pomodoro, Active Recall or Blurting — we'll track your mix here.</p>
+                                        </div>
+                                        <Link to={createPageUrl("Study")}>
+                                            <Button size="sm" className="gap-1.5">
+                                                <Brain className="w-3.5 h-3.5" />
+                                                Pick a technique
+                                            </Button>
+                                        </Link>
+                                    </div>
                                 ) : (
                                     <div className="space-y-3">
                                         {techBreakdown.sort((a,b)=>b.mins-a.mins).map(t => {
@@ -366,15 +804,15 @@ export default function Analytics() {
                                                     <div className="flex items-center justify-between mb-1.5">
                                                         <div className="flex items-center gap-2">
                                                             <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: t.color }} />
-                                                            <span className="text-sm font-medium text-slate-700">{t.label}</span>
+                                                            <span className="text-sm font-medium text-foreground">{t.label}</span>
                                                         </div>
                                                         <div className="flex items-center gap-3">
-                                                            <span className="text-xs text-slate-400">{t.sessions} sessions</span>
-                                                            <span className="text-sm font-bold text-slate-800">{fmt(t.mins)}</span>
-                                                            <span className="text-xs text-slate-400 w-8 text-right">{pct}%</span>
+                                                            <span className="text-xs text-muted-foreground">{t.sessions} sessions</span>
+                                                            <span className="text-sm font-bold text-foreground">{fmt(t.mins)}</span>
+                                                            <span className="text-xs text-muted-foreground w-8 text-right">{pct}%</span>
                                                         </div>
                                                     </div>
-                                                    <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
+                                                    <div className="h-2 bg-secondary rounded-full overflow-hidden">
                                                         <motion.div initial={{ width:0 }} animate={{ width:`${pct}%` }} transition={{ duration:0.8, ease:"easeOut" }}
                                                             className="h-full rounded-full" style={{ backgroundColor: t.color }} />
                                                     </div>
@@ -386,45 +824,69 @@ export default function Analytics() {
                             </div>
 
                             {/* Quiz trend */}
-                            <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-6">
-                                <div className="flex items-center justify-between mb-1">
-                                    <h2 className="font-bold text-slate-900">Quiz Performance</h2>
-                                    {data.quizzes.length > 0 && <Badge className="bg-violet-50 text-violet-700 border-0">{data.quizzes.length} quizzes</Badge>}
+                            <div className="card-soft p-6">
+                                <div className="flex items-center justify-between mb-5">
+                                    <div className="flex items-center gap-3">
+                                        <div className="w-10 h-10 rounded-xl bg-chart-3/10 flex items-center justify-center flex-shrink-0">
+                                            <Target className="w-5 h-5 text-chart-3" />
+                                        </div>
+                                        <div>
+                                            <h2 className="font-display font-extrabold text-foreground text-base">Quiz Performance</h2>
+                                            <p className="text-xs text-muted-foreground mt-0.5">Score trend over time</p>
+                                        </div>
+                                    </div>
+                                    {data.quizzes.length > 0 && <span className="pill bg-chart-3/10 text-chart-3">{data.quizzes.length} quizzes</span>}
                                 </div>
-                                <p className="text-xs text-slate-400 mb-5">Score trend over time</p>
                                 {quizTrend.length < 2 ? (
-                                    <div className="flex flex-col items-center justify-center py-8 text-center gap-2">
-                                        <Target className="w-10 h-10 text-slate-200" />
-                                        <p className="text-sm text-slate-400">Complete at least 2 quizzes to see your trend</p>
+                                    <div className="flex flex-col items-center text-center gap-3 py-8">
+                                        <div className="w-10 h-10 rounded-xl bg-chart-3/10 flex items-center justify-center">
+                                            <Target className="w-5 h-5 text-chart-3" />
+                                        </div>
+                                        <div>
+                                            <p className="font-bold text-foreground text-sm">
+                                                {quizTrend.length === 0 ? "No quizzes yet" : "One down, one to go"}
+                                            </p>
+                                            <p className="text-xs text-muted-foreground mt-0.5 max-w-[240px]">
+                                                {quizTrend.length === 0
+                                                    ? "Take a couple of quizzes and your score trend turns up here."
+                                                    : "Take one more quiz to start your score trend."}
+                                            </p>
+                                        </div>
+                                        <Link to={createPageUrl("Quizzes")}>
+                                            <Button size="sm" className="gap-1.5">
+                                                <FileQuestion className="w-3.5 h-3.5" />
+                                                {quizTrend.length === 0 ? "Try a quiz" : "Take another"}
+                                            </Button>
+                                        </Link>
                                     </div>
                                 ) : (
                                     <ResponsiveContainer width="100%" height={180}>
                                         <LineChart data={quizTrend} margin={{ top:5, right:10, bottom:0, left:-10 }}>
-                                            <CartesianGrid strokeDasharray="3 3" stroke="#F1F5F9" />
-                                            <XAxis dataKey="n" tick={{ fontSize:11, fill:'#94A3B8' }} axisLine={false} tickLine={false} />
-                                            <YAxis domain={[0,100]} tick={{ fontSize:11, fill:'#94A3B8' }} axisLine={false} tickLine={false} tickFormatter={v=>`${v}%`} />
-                                            <Tooltip contentStyle={{ borderRadius:'12px', border:'1px solid #E2E8F0' }} formatter={v=>[`${v}%`, 'Score']} />
-                                            <Line type="monotone" dataKey="score" stroke="#8B5CF6" strokeWidth={2.5} dot={{ r:3, fill:'#8B5CF6' }} activeDot={{ r:5 }} />
+                                            <CartesianGrid strokeDasharray="3 3" stroke="hsl(220, 13%, 91%)" />
+                                            <XAxis dataKey="n" tick={{ fontSize:11, fill:'hsl(220, 9%, 46%)' }} axisLine={false} tickLine={false} />
+                                            <YAxis domain={[0,100]} tick={{ fontSize:11, fill:'hsl(220, 9%, 46%)' }} axisLine={false} tickLine={false} tickFormatter={v=>`${v}%`} />
+                                            <Tooltip contentStyle={{ borderRadius:'12px', border:'1px solid hsl(220, 13%, 91%)' }} formatter={v=>[`${v}%`, 'Score']} />
+                                            <Line type="monotone" dataKey="score" stroke={TOKEN_HSL.chart3} strokeWidth={2.5} dot={{ r:3, fill:TOKEN_HSL.chart3 }} activeDot={{ r:5 }} />
                                         </LineChart>
                                     </ResponsiveContainer>
                                 )}
                                 {data.quizzes.length > 0 && (
-                                    <div className="flex gap-4 mt-4 pt-4 border-t border-slate-100">
+                                    <div className="flex gap-4 mt-4 pt-4 border-t border-border">
                                         <div>
-                                            <p className="text-xl font-bold text-slate-900">{metrics.quizAvg}%</p>
-                                            <p className="text-xs text-slate-400">Average</p>
+                                            <p className="text-xl font-bold text-foreground">{metrics.quizAvg}%</p>
+                                            <p className="text-xs text-muted-foreground">Average</p>
                                         </div>
                                         <div>
-                                            <p className="text-xl font-bold text-slate-900">{Math.max(...data.quizzes.map(q=>q.score))}%</p>
-                                            <p className="text-xs text-slate-400">Best</p>
+                                            <p className="text-xl font-bold text-foreground">{Math.max(...data.quizzes.map(q=>q.score))}%</p>
+                                            <p className="text-xs text-muted-foreground">Best</p>
                                         </div>
                                         <div>
-                                            <p className="text-xl font-bold text-slate-900">{Math.min(...data.quizzes.map(q=>q.score))}%</p>
-                                            <p className="text-xs text-slate-400">Lowest</p>
+                                            <p className="text-xl font-bold text-foreground">{Math.min(...data.quizzes.map(q=>q.score))}%</p>
+                                            <p className="text-xs text-muted-foreground">Lowest</p>
                                         </div>
                                         <div>
-                                            <p className="text-xl font-bold text-slate-900">{data.quizzes.length}</p>
-                                            <p className="text-xs text-slate-400">Total</p>
+                                            <p className="text-xl font-bold text-foreground">{data.quizzes.length}</p>
+                                            <p className="text-xs text-muted-foreground">Total</p>
                                         </div>
                                     </div>
                                 )}
@@ -433,16 +895,23 @@ export default function Analytics() {
 
                         {/* Subject time chart */}
                         {subjectData.some(s=>s.totalMins>0) && (
-                            <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-6">
-                                <h2 className="font-bold text-slate-900 mb-1">Time Per Subject</h2>
-                                <p className="text-xs text-slate-400 mb-5">Minutes studied across your enrolled subjects</p>
+                            <div className="card-soft p-6">
+                                <div className="flex items-center gap-3 mb-5">
+                                    <div className="w-10 h-10 rounded-xl bg-chart-3/10 flex items-center justify-center flex-shrink-0">
+                                        <BookOpen className="w-5 h-5 text-chart-3" />
+                                    </div>
+                                    <div>
+                                        <h2 className="font-display font-extrabold text-foreground text-base">Time Per Subject</h2>
+                                        <p className="text-xs text-muted-foreground mt-0.5">Minutes studied across your enrolled subjects</p>
+                                    </div>
+                                </div>
                                 <ResponsiveContainer width="100%" height={200}>
                                     <BarChart data={subjectData.filter(s=>s.totalMins>0)} margin={{ top:0, right:10, bottom:0, left:-10 }}>
-                                        <CartesianGrid strokeDasharray="3 3" stroke="#F1F5F9" />
-                                        <XAxis dataKey="name" tick={{ fontSize:11, fill:'#94A3B8' }} axisLine={false} tickLine={false}
+                                        <CartesianGrid strokeDasharray="3 3" stroke="hsl(220, 13%, 91%)" />
+                                        <XAxis dataKey="name" tick={{ fontSize:11, fill:'hsl(220, 9%, 46%)' }} axisLine={false} tickLine={false}
                                             tickFormatter={n => n.length>8?n.slice(0,8)+'…':n} />
-                                        <YAxis tick={{ fontSize:11, fill:'#94A3B8' }} axisLine={false} tickLine={false} tickFormatter={v=>`${Math.round(v/60)}h`} />
-                                        <Tooltip contentStyle={{ borderRadius:'12px', border:'1px solid #E2E8F0' }} formatter={v=>[fmt(v),'Study Time']} />
+                                        <YAxis tick={{ fontSize:11, fill:'hsl(220, 9%, 46%)' }} axisLine={false} tickLine={false} tickFormatter={v=>`${Math.round(v/60)}h`} />
+                                        <Tooltip contentStyle={{ borderRadius:'12px', border:'1px solid hsl(220, 13%, 91%)' }} formatter={v=>[fmt(v),'Study Time']} />
                                         <Bar dataKey="totalMins" radius={[6,6,0,0]}>
                                             {subjectData.filter(s=>s.totalMins>0).map((s,i)=>(
                                                 <Cell key={i} fill={s.color} />
@@ -459,69 +928,82 @@ export default function Analytics() {
                 {activeTab === "subjects" && (
                     <div className="space-y-4">
                         {subjectData.length === 0 ? (
-                            <div className="bg-white rounded-2xl border border-slate-200 p-16 text-center">
-                                <BookOpen className="w-12 h-12 text-slate-200 mx-auto mb-3" />
-                                <p className="font-semibold text-slate-700">No subjects added yet</p>
-                                <p className="text-sm text-slate-400 mt-1">Add subjects in the Subjects page</p>
+                            <div className="card-soft p-16 flex flex-col items-center text-center gap-3">
+                                <div className="w-12 h-12 rounded-2xl bg-primary/10 flex items-center justify-center">
+                                    <BookOpen className="w-6 h-6 text-primary" />
+                                </div>
+                                <div>
+                                    <p className="font-display font-extrabold text-foreground">No subjects yet</p>
+                                    <p className="text-sm text-muted-foreground mt-1 max-w-xs">Add the subjects you're studying so we can break your time, scores and streaks down by class.</p>
+                                </div>
+                                <Link to={createPageUrl("Subjects")}>
+                                    <Button size="sm" className="gap-1.5">
+                                        <BookOpen className="w-3.5 h-3.5" />
+                                        Add subjects
+                                    </Button>
+                                </Link>
                             </div>
                         ) : (
                             <>
                                 <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
                                     {subjectData.map(sub => {
                                         const fcPct = sub.cards > 0 ? Math.round((sub.mastered/sub.cards)*100) : 0;
+                                        const priorityClass = PRIORITY_PILL[sub.priority] || PRIORITY_PILL.medium;
+                                        const quizTileClass = sub.quizAvg === null
+                                            ? "bg-secondary"
+                                            : sub.quizAvg >= 70 ? "bg-primary/10" : "bg-streak/10";
+                                        const quizTextClass = sub.quizAvg === null
+                                            ? "text-muted-foreground/60"
+                                            : sub.quizAvg >= 70 ? "text-primary" : "text-streak";
                                         return (
                                             <motion.div key={sub.name} initial={{ opacity:0, y:12 }} animate={{ opacity:1, y:0 }}
-                                                className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden hover:shadow-md transition-shadow">
+                                                className="card-soft overflow-hidden hover:shadow-soft transition-shadow">
                                                 <div className="h-1.5" style={{ backgroundColor: sub.color }} />
                                                 <div className="p-5 space-y-4">
                                                     <div className="flex items-start justify-between">
                                                         <div>
-                                                            <h3 className="font-bold text-slate-900">{sub.name}</h3>
-                                                            {sub.target && <p className="text-xs text-slate-400 mt-0.5">Target: {sub.target}/50</p>}
+                                                            <h3 className="font-display font-extrabold text-foreground">{sub.name}</h3>
+                                                            {sub.target && <p className="text-xs text-muted-foreground mt-0.5">Target: {sub.target}/50</p>}
                                                         </div>
-                                                        <Badge className={`text-xs border-0 ${
-                                                            sub.priority==='high' ? 'bg-rose-50 text-rose-600' :
-                                                            sub.priority==='medium' ? 'bg-amber-50 text-amber-600' :
-                                                            'bg-slate-100 text-slate-500'
-                                                        }`}>
+                                                        <span className={`pill ${priorityClass}`}>
                                                             {sub.priority || 'medium'}
-                                                        </Badge>
+                                                        </span>
                                                     </div>
                                                     <div className="grid grid-cols-3 gap-2 text-center">
-                                                        <div className="bg-slate-50 rounded-xl p-2.5">
-                                                            <p className="text-base font-bold text-slate-900">{fmt(sub.totalMins)}</p>
-                                                            <p className="text-xs text-slate-400">Study</p>
+                                                        <div className="bg-secondary/50 rounded-xl p-2.5">
+                                                            <p className="text-base font-bold text-foreground">{fmt(sub.totalMins)}</p>
+                                                            <p className="text-xs text-muted-foreground">Study</p>
                                                         </div>
-                                                        <div className="bg-slate-50 rounded-xl p-2.5">
-                                                            <p className="text-base font-bold text-slate-900">{sub.uniqueDays}d</p>
-                                                            <p className="text-xs text-slate-400">Days</p>
+                                                        <div className="bg-secondary/50 rounded-xl p-2.5">
+                                                            <p className="text-base font-bold text-foreground">{sub.uniqueDays}d</p>
+                                                            <p className="text-xs text-muted-foreground">Days</p>
                                                         </div>
-                                                        <div className={`rounded-xl p-2.5 ${sub.quizAvg === null ? 'bg-slate-50' : sub.quizAvg>=70?'bg-emerald-50':'bg-rose-50'}`}>
-                                                            <p className={`text-base font-bold ${sub.quizAvg===null?'text-slate-400':sub.quizAvg>=70?'text-emerald-700':'text-rose-600'}`}>
+                                                        <div className={`rounded-xl p-2.5 ${quizTileClass}`}>
+                                                            <p className={`text-base font-bold ${quizTextClass}`}>
                                                                 {sub.quizAvg !== null ? `${sub.quizAvg}%` : '—'}
                                                             </p>
-                                                            <p className="text-xs text-slate-400">Quiz</p>
+                                                            <p className="text-xs text-muted-foreground">Quiz</p>
                                                         </div>
                                                     </div>
                                                     {sub.cards > 0 && (
                                                         <div>
-                                                            <div className="flex justify-between text-xs text-slate-500 mb-1.5">
+                                                            <div className="flex justify-between text-xs text-muted-foreground mb-1.5">
                                                                 <span>Flashcard mastery</span>
                                                                 <span className="font-semibold">{sub.mastered}/{sub.cards} ({fcPct}%)</span>
                                                             </div>
-                                                            <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
+                                                            <div className="h-2 bg-secondary rounded-full overflow-hidden">
                                                                 <motion.div initial={{ width:0 }} animate={{ width:`${fcPct}%` }} transition={{ duration:0.8 }}
                                                                     className="h-full rounded-full" style={{ backgroundColor: sub.color }} />
                                                             </div>
                                                             {sub.weak > 0 && (
-                                                                <p className="text-xs text-amber-600 mt-1.5 flex items-center gap-1">
+                                                                <p className="text-xs text-xp mt-1.5 flex items-center gap-1">
                                                                     <AlertTriangle className="w-3 h-3" /> {sub.weak} weak-spot cards need review
                                                                 </p>
                                                             )}
                                                         </div>
                                                     )}
                                                     {sub.totalMins === 0 && (
-                                                        <p className="text-xs text-rose-500 flex items-center gap-1">
+                                                        <p className="text-xs text-streak flex items-center gap-1">
                                                             <AlertTriangle className="w-3 h-3" /> No study recorded this period
                                                         </p>
                                                     )}
@@ -533,16 +1015,23 @@ export default function Analytics() {
 
                                 {/* Subject comparison chart */}
                                 {subjectData.some(s=>s.quizAvg!==null) && (
-                                    <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-6">
-                                        <h2 className="font-bold text-slate-900 mb-1">Quiz Avg by Subject</h2>
-                                        <p className="text-xs text-slate-400 mb-5">Compare average quiz performance across subjects</p>
+                                    <div className="card-soft p-6">
+                                        <div className="flex items-center gap-3 mb-5">
+                                            <div className="w-10 h-10 rounded-xl bg-chart-3/10 flex items-center justify-center flex-shrink-0">
+                                                <Award className="w-5 h-5 text-chart-3" />
+                                            </div>
+                                            <div>
+                                                <h2 className="font-display font-extrabold text-foreground text-base">Quiz Avg by Subject</h2>
+                                                <p className="text-xs text-muted-foreground mt-0.5">Compare average quiz performance across subjects</p>
+                                            </div>
+                                        </div>
                                         <ResponsiveContainer width="100%" height={180}>
                                             <BarChart data={subjectData.filter(s=>s.quizAvg!==null)} margin={{ top:0, right:10, bottom:0, left:-10 }}>
-                                                <CartesianGrid strokeDasharray="3 3" stroke="#F1F5F9" />
-                                                <XAxis dataKey="name" tick={{ fontSize:11, fill:'#94A3B8' }} axisLine={false} tickLine={false}
+                                                <CartesianGrid strokeDasharray="3 3" stroke="hsl(220, 13%, 91%)" />
+                                                <XAxis dataKey="name" tick={{ fontSize:11, fill:'hsl(220, 9%, 46%)' }} axisLine={false} tickLine={false}
                                                     tickFormatter={n=>n.length>8?n.slice(0,8)+'…':n} />
-                                                <YAxis domain={[0,100]} tick={{ fontSize:11, fill:'#94A3B8' }} axisLine={false} tickLine={false} tickFormatter={v=>`${v}%`} />
-                                                <Tooltip contentStyle={{ borderRadius:'12px', border:'1px solid #E2E8F0' }} formatter={v=>[`${v}%`,'Quiz Avg']} />
+                                                <YAxis domain={[0,100]} tick={{ fontSize:11, fill:'hsl(220, 9%, 46%)' }} axisLine={false} tickLine={false} tickFormatter={v=>`${v}%`} />
+                                                <Tooltip contentStyle={{ borderRadius:'12px', border:'1px solid hsl(220, 13%, 91%)' }} formatter={v=>[`${v}%`,'Quiz Avg']} />
                                                 <Bar dataKey="quizAvg" radius={[6,6,0,0]}>
                                                     {subjectData.filter(s=>s.quizAvg!==null).map((s,i)=>(
                                                         <Cell key={i} fill={s.color} />
@@ -563,25 +1052,46 @@ export default function Analytics() {
                         {/* Health KPIs */}
                         <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-5 gap-3">
                             {[
-                                { label:"Total Cards",   val:fcHealth.total,      color:"bg-slate-100 text-slate-800" },
-                                { label:"Mastered",      val:fcHealth.mastered,   color:"bg-emerald-50 text-emerald-700" },
-                                { label:"Due Today",     val:fcHealth.due,        color:"bg-blue-50 text-blue-700" },
-                                { label:"Weak Spots",    val:fcHealth.weak,       color:"bg-amber-50 text-amber-700" },
-                                { label:"Never Reviewed",val:fcHealth.unreviewed, color:"bg-rose-50 text-rose-700" },
+                                { key:"total",      label:"Total Cards",    val:fcHealth.total },
+                                { key:"mastered",   label:"Mastered",       val:fcHealth.mastered },
+                                { key:"due",        label:"Due Today",      val:fcHealth.due },
+                                { key:"weak",       label:"Weak Spots",     val:fcHealth.weak },
+                                { key:"unreviewed", label:"Never Reviewed", val:fcHealth.unreviewed },
                             ].map(k => (
-                                <div key={k.label} className={`rounded-2xl p-4 ${k.color}`}>
-                                    <p className="text-2xl font-bold">{k.val}</p>
+                                <div key={k.label} className={`rounded-2xl p-4 ${FC_KPI_THEME[k.key]}`}>
+                                    <p className="font-display font-extrabold text-2xl">{k.val}</p>
                                     <p className="text-xs font-medium mt-0.5 opacity-70">{k.label}</p>
                                 </div>
                             ))}
                         </div>
 
                         {/* Mastery per subject */}
-                        <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-6">
-                            <h2 className="font-bold text-slate-900 mb-1">Mastery by Subject</h2>
-                            <p className="text-xs text-slate-400 mb-5">How well you know your flashcards in each subject</p>
+                        <div className="card-soft p-6">
+                            <div className="flex items-center gap-3 mb-5">
+                                <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center flex-shrink-0">
+                                    <Brain className="w-5 h-5 text-primary" />
+                                </div>
+                                <div>
+                                    <h2 className="font-display font-extrabold text-foreground text-base">Mastery by Subject</h2>
+                                    <p className="text-xs text-muted-foreground mt-0.5">How well you know your flashcards in each subject</p>
+                                </div>
+                            </div>
                             {subjectData.filter(s=>s.cards>0).length === 0 ? (
-                                <p className="text-sm text-slate-400 text-center py-8">No flashcards created yet</p>
+                                <div className="flex flex-col items-center text-center gap-3 py-8">
+                                    <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center">
+                                        <Layers className="w-5 h-5 text-primary" />
+                                    </div>
+                                    <div>
+                                        <p className="font-bold text-foreground text-sm">No flashcards yet</p>
+                                        <p className="text-xs text-muted-foreground mt-0.5 max-w-[240px]">Make a deck or let AI build one from your notes — mastery shows up here.</p>
+                                    </div>
+                                    <Link to={createPageUrl("Study")}>
+                                        <Button size="sm" className="gap-1.5">
+                                            <Sparkles className="w-3.5 h-3.5" />
+                                            Make a deck
+                                        </Button>
+                                    </Link>
+                                </div>
                             ) : (
                                 <div className="space-y-4">
                                     {subjectData.filter(s=>s.cards>0).map(sub => {
@@ -592,20 +1102,20 @@ export default function Analytics() {
                                                 <div className="flex items-center justify-between mb-2">
                                                     <div className="flex items-center gap-2">
                                                         <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor:sub.color }} />
-                                                        <span className="text-sm font-semibold text-slate-800">{sub.name}</span>
+                                                        <span className="text-sm font-semibold text-foreground">{sub.name}</span>
                                                     </div>
-                                                    <div className="flex items-center gap-4 text-xs text-slate-500">
-                                                        {sub.weak > 0 && <span className="text-amber-600">⚠ {sub.weak} weak</span>}
-                                                        <span className="font-bold text-slate-700">{pct}% mastered</span>
+                                                    <div className="flex items-center gap-4 text-xs text-muted-foreground">
+                                                        {sub.weak > 0 && <span className="text-xp flex items-center gap-1"><AlertTriangle className="w-3 h-3" /> {sub.weak} weak</span>}
+                                                        <span className="font-bold text-foreground">{pct}% mastered</span>
                                                         <span>{sub.mastered}/{sub.cards}</span>
                                                     </div>
                                                 </div>
-                                                <div className="h-3 bg-slate-100 rounded-full overflow-hidden relative">
+                                                <div className="h-3 bg-secondary rounded-full overflow-hidden relative">
                                                     <motion.div initial={{ width:0 }} animate={{ width:`${pct}%` }} transition={{ duration:0.8 }}
                                                         className="h-full rounded-full absolute left-0" style={{ backgroundColor:sub.color }} />
                                                     {sub.weak > 0 && (
                                                         <motion.div initial={{ width:0 }} animate={{ width:`${weakPct}%` }} transition={{ duration:0.8, delay:0.1 }}
-                                                            className="h-full rounded-full absolute right-0 bg-amber-400 opacity-60" />
+                                                            className="h-full rounded-full absolute right-0 bg-xp opacity-60" />
                                                     )}
                                                 </div>
                                             </div>
@@ -617,38 +1127,45 @@ export default function Analytics() {
 
                         {/* Rating distribution */}
                         {data.flashcards.some(f => (f.totalReviews||0)>0) && (
-                            <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-6">
-                                <h2 className="font-bold text-slate-900 mb-1">Rating Distribution</h2>
-                                <p className="text-xs text-slate-400 mb-5">Cumulative ratings across all cards</p>
+                            <div className="card-soft p-6">
+                                <div className="flex items-center gap-3 mb-5">
+                                    <div className="w-10 h-10 rounded-xl bg-chart-4/10 flex items-center justify-center flex-shrink-0">
+                                        <Activity className="w-5 h-5 text-chart-4" />
+                                    </div>
+                                    <div>
+                                        <h2 className="font-display font-extrabold text-foreground text-base">Rating Distribution</h2>
+                                        <p className="text-xs text-muted-foreground mt-0.5">Cumulative ratings across all cards</p>
+                                    </div>
+                                </div>
                                 {(() => {
                                     const again = data.flashcards.reduce((s,f)=>s+(f.review_count_again||0),0);
                                     const hard  = data.flashcards.reduce((s,f)=>s+(f.review_count_hard||0),0);
                                     const good  = data.flashcards.reduce((s,f)=>s+(f.review_count_good||0),0);
                                     const easy  = data.flashcards.reduce((s,f)=>s+(f.review_count_easy||0),0);
                                     const total = again+hard+good+easy;
-                                    if (total===0) return <p className="text-sm text-slate-400">No reviews yet</p>;
+                                    if (total===0) return <p className="text-sm text-muted-foreground/60">No reviews yet</p>;
                                     return (
                                         <div className="space-y-3">
                                             {[
-                                                { label:"Again", count:again, color:"#EF4444" },
-                                                { label:"Hard",  count:hard,  color:"#F97316" },
-                                                { label:"Good",  count:good,  color:"#6366F1" },
-                                                { label:"Easy",  count:easy,  color:"#10B981" },
+                                                { label:"Again", count:again, color:TOKEN_HSL.streak },
+                                                { label:"Hard",  count:hard,  color:TOKEN_HSL.xp },
+                                                { label:"Good",  count:good,  color:TOKEN_HSL.chart3 },
+                                                { label:"Easy",  count:easy,  color:TOKEN_HSL.primary },
                                             ].map(r => (
                                                 <div key={r.label}>
                                                     <div className="flex justify-between text-sm mb-1.5">
-                                                        <span className="font-medium text-slate-700">{r.label}</span>
-                                                        <span className="text-slate-500">{r.count} ({Math.round((r.count/total)*100)}%)</span>
+                                                        <span className="font-medium text-foreground">{r.label}</span>
+                                                        <span className="text-muted-foreground">{r.count} ({Math.round((r.count/total)*100)}%)</span>
                                                     </div>
-                                                    <div className="h-2.5 bg-slate-100 rounded-full overflow-hidden">
+                                                    <div className="h-2.5 bg-secondary rounded-full overflow-hidden">
                                                         <motion.div initial={{ width:0 }} animate={{ width:`${Math.round((r.count/total)*100)}%` }} transition={{ duration:0.8 }}
                                                             className="h-full rounded-full" style={{ backgroundColor:r.color }} />
                                                     </div>
                                                 </div>
                                             ))}
-                                            <div className="pt-3 border-t border-slate-100 flex gap-6 text-sm">
-                                                <div><span className="font-bold text-slate-900">{total}</span> <span className="text-slate-400">total reviews</span></div>
-                                                <div><span className="font-bold text-emerald-600">{Math.round(((good+easy)/total)*100)}%</span> <span className="text-slate-400">success rate</span></div>
+                                            <div className="pt-3 border-t border-border flex gap-6 text-sm">
+                                                <div><span className="font-bold text-foreground">{total}</span> <span className="text-muted-foreground">total reviews</span></div>
+                                                <div><span className="font-bold text-primary">{Math.round(((good+easy)/total)*100)}%</span> <span className="text-muted-foreground">success rate</span></div>
                                             </div>
                                         </div>
                                     );
@@ -657,13 +1174,13 @@ export default function Analytics() {
                         )}
 
                         {/* Advice */}
-                        <div className="bg-gradient-to-r from-violet-50 to-indigo-50 rounded-2xl border border-violet-100 p-6 space-y-3">
-                            <h2 className="font-bold text-slate-900 flex items-center gap-2"><Star className="w-4 h-4 text-violet-500" /> Flashcard Recommendations</h2>
-                            {fcHealth.due > 20 && <p className="text-sm text-slate-700">• You have <strong>{fcHealth.due}</strong> cards due — schedule a review session today to stay on top of spaced repetition.</p>}
-                            {fcHealth.weak > 0 && <p className="text-sm text-slate-700">• Focus your next session on the <strong>{fcHealth.weak} weak-spot cards</strong> — these are the ones you keep getting wrong.</p>}
-                            {fcHealth.unreviewed > 0 && <p className="text-sm text-slate-700">• <strong>{fcHealth.unreviewed} cards</strong> have never been reviewed. Start activating them before they pile up.</p>}
-                            {fcHealth.mastered > 0 && fcHealth.mastered === fcHealth.total && <p className="text-sm text-emerald-700 font-medium">• 🎉 You've mastered all your flashcards! Consider adding more from your notes.</p>}
-                            {fcHealth.total === 0 && <p className="text-sm text-slate-500">No flashcards yet. Use AI Generate in the Study page to create a full deck from your notes.</p>}
+                        <div className="card-soft p-6 bg-chart-4/5 border-chart-4/20 space-y-3">
+                            <h2 className="font-display font-extrabold text-foreground flex items-center gap-2"><Star className="w-4 h-4 text-chart-4" /> Flashcard Recommendations</h2>
+                            {fcHealth.due > 20 && <p className="text-sm text-foreground">• You have <strong>{fcHealth.due}</strong> cards due — schedule a review session today to stay on top of spaced repetition.</p>}
+                            {fcHealth.weak > 0 && <p className="text-sm text-foreground">• Focus your next session on the <strong>{fcHealth.weak} weak-spot cards</strong> — these are the ones you keep getting wrong.</p>}
+                            {fcHealth.unreviewed > 0 && <p className="text-sm text-foreground">• <strong>{fcHealth.unreviewed} cards</strong> have never been reviewed. Start activating them before they pile up.</p>}
+                            {fcHealth.mastered > 0 && fcHealth.mastered === fcHealth.total && <p className="text-sm text-primary font-medium">• You've mastered all your flashcards! Consider adding more from your notes.</p>}
+                            {fcHealth.total === 0 && <p className="text-sm text-muted-foreground">No flashcards yet. Use AI Generate in the Study page to create a full deck from your notes.</p>}
                         </div>
                     </div>
                 )}

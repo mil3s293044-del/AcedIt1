@@ -1,6 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import { motion } from "framer-motion";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -11,6 +10,45 @@ import { format } from "date-fns";
 import { useToast } from "@/components/ui/use-toast";
 import { base44 } from "@/api/base44Client";
 import { recordStudyAndGetStreak } from "@/components/shared/streakHelpers";
+
+// Static class lookup so Tailwind JIT can see every class string.
+// `accentVar` is the CSS variable used for inline `style` color/filter
+// (SVG stroke + drop-shadow filters need a real color value, not a class).
+const COLOR_SCHEMES = {
+    work: {
+        token: "primary",
+        ring: "text-primary",
+        timerText: "text-primary",
+        button: "bg-primary hover:bg-primary/90",
+        badge: "bg-primary/10 text-primary border-primary/20",
+        tile10: "bg-primary/10",
+        tile5: "bg-primary/5",
+        focusBg: "bg-primary/10",
+        accentVar: "hsl(var(--primary))",
+    },
+    shortBreak: {
+        token: "chart-3",
+        ring: "text-chart-3",
+        timerText: "text-chart-3",
+        button: "bg-chart-3 hover:bg-chart-3/90",
+        badge: "bg-chart-3/10 text-chart-3 border-chart-3/20",
+        tile10: "bg-chart-3/10",
+        tile5: "bg-chart-3/5",
+        focusBg: "bg-chart-3/10",
+        accentVar: "hsl(var(--chart-3))",
+    },
+    longBreak: {
+        token: "chart-4",
+        ring: "text-chart-4",
+        timerText: "text-chart-4",
+        button: "bg-chart-4 hover:bg-chart-4/90",
+        badge: "bg-chart-4/10 text-chart-4 border-chart-4/20",
+        tile10: "bg-chart-4/10",
+        tile5: "bg-chart-4/5",
+        focusBg: "bg-chart-4/10",
+        accentVar: "hsl(var(--chart-4))",
+    },
+};
 
 export default function PomodoroTimer({ onSessionComplete, userSubjects: initialUserSubjects = [] }) {
     const [settings, setSettings] = useState({
@@ -66,7 +104,7 @@ export default function PomodoroTimer({ onSessionComplete, userSubjects: initial
             topic,
             lastUpdated: Date.now()
         };
-        
+
         localStorage.setItem('globalTimerState', JSON.stringify(globalTimerState));
         window.dispatchEvent(new CustomEvent('timerStateChanged', { detail: globalTimerState }));
     }, [hasBeenStarted, isRunning, timeLeft, isBreak, session, selectedSubject, topic]);
@@ -77,12 +115,12 @@ export default function PomodoroTimer({ onSessionComplete, userSubjects: initial
             try {
                 const currentUser = await base44.auth.me();
                 setUser(currentUser);
-                
-                const subjects = await base44.entities.UserSubject.filter({ 
+
+                const subjects = await base44.entities.UserSubject.filter({
                     created_by: currentUser.email,
-                    is_active: true 
+                    is_active: true
                 });
-                
+
                 const uniqueSubjects = subjects.reduce((acc, current) => {
                     const exists = acc.find(item => item.subject_name === current.subject_name);
                     if (!exists) {
@@ -90,7 +128,7 @@ export default function PomodoroTimer({ onSessionComplete, userSubjects: initial
                     }
                     return acc;
                 }, []);
-                
+
                 setUserSubjects(uniqueSubjects || []);
             } catch (error) {
                 console.error("Error loading subjects:", error);
@@ -115,7 +153,7 @@ export default function PomodoroTimer({ onSessionComplete, userSubjects: initial
                     sessionsBeforeLongBreak: 4,
                 };
                 setSettings(currentSettings);
-                
+
                 setSession(state.session || 1);
                 setIsBreak(state.isBreak || false);
                 setHasBeenStarted(true);
@@ -194,7 +232,7 @@ export default function PomodoroTimer({ onSessionComplete, userSubjects: initial
             setIsBreak(false);
         } else {
             if (selectedSubject) await saveCompletedSession();
-            
+
             const currentSession = session;
             const nextSession = currentSession + 1;
             setSession(nextSession);
@@ -221,13 +259,13 @@ export default function PomodoroTimer({ onSessionComplete, userSubjects: initial
             const state = savedState ? JSON.parse(savedState) : null;
             const lastUpdate = state?.lastUpdated || Date.now();
             const expectedEndTime = lastUpdate + (timeLeft * 1000);
-            
+
             intervalRef.current = setInterval(() => {
                 const now = Date.now();
                 const remaining = Math.max(0, Math.ceil((expectedEndTime - now) / 1000));
-                
+
                 setTimeLeft(remaining);
-                
+
                 // Update localStorage with current timestamp
                 const currentState = localStorage.getItem('pomodoroTimerState');
                 if (currentState) {
@@ -236,7 +274,7 @@ export default function PomodoroTimer({ onSessionComplete, userSubjects: initial
                     parsed.timeLeft = remaining;
                     localStorage.setItem('pomodoroTimerState', JSON.stringify(parsed));
                 }
-                
+
                 if (remaining <= 0) {
                     clearInterval(intervalRef.current);
                     handleTimerComplete();
@@ -248,14 +286,14 @@ export default function PomodoroTimer({ onSessionComplete, userSubjects: initial
                 intervalRef.current = null;
             }
         }
-        
+
         return () => {
             if (intervalRef.current) {
                 clearInterval(intervalRef.current);
             }
         };
     }, [isRunning, handleTimerComplete]);
-    
+
     // Sync timer when page becomes visible after being hidden
     useEffect(() => {
         const handleVisibilityChange = () => {
@@ -266,16 +304,16 @@ export default function PomodoroTimer({ onSessionComplete, userSubjects: initial
                     const now = Date.now();
                     const elapsed = Math.floor((now - state.lastUpdated) / 1000);
                     const newTimeLeft = Math.max(0, state.timeLeft - elapsed);
-                    
+
                     setTimeLeft(newTimeLeft);
-                    
+
                     if (newTimeLeft <= 0) {
                         handleTimerComplete();
                     }
                 }
             }
         };
-        
+
         document.addEventListener('visibilitychange', handleVisibilityChange);
         return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
     }, [isRunning, handleTimerComplete]);
@@ -358,7 +396,7 @@ export default function PomodoroTimer({ onSessionComplete, userSubjects: initial
         localStorage.removeItem('globalTimerState');
         setSession(1);
         setIsBreak(false);
-        
+
         window.dispatchEvent(new CustomEvent('timerStateChanged', { detail: { isActive: false } }));
         isResettingRef.current = false;
     }, [hasBeenStarted, isBreak, selectedSubject, settings.workTime, timeLeft, saveSession, toast]);
@@ -385,9 +423,9 @@ export default function PomodoroTimer({ onSessionComplete, userSubjects: initial
 
     const baseTime = getCurrentSegmentTime() * 60;
     const progress = baseTime > 0 ? ((baseTime - timeLeft) / baseTime) * 100 : 0;
-    
+
     const StatusIcon = isBreak ? Coffee : Zap;
-    const statusText = isBreak 
+    const statusText = isBreak
         ? (isLongBreak(session - 1) ? `Long Break` : `Short Break`)
         : `Focus Session #${session}`;
 
@@ -432,36 +470,12 @@ export default function PomodoroTimer({ onSessionComplete, userSubjects: initial
     const getColorScheme = () => {
         if (isBreak) {
             if (isLongBreak(session - 1)) {
-                return {
-                    gradient: "from-purple-500 via-purple-600 to-indigo-600",
-                    circleColor: "text-purple-500", // Changed from 400
-                    buttonColor: "bg-purple-600 hover:bg-purple-700",
-                    badgeColor: "bg-purple-100 text-purple-700 border-purple-200",
-                    cardBg: "from-purple-50 to-purple-100",
-                    focusBg: "from-slate-900 via-purple-900 to-indigo-900",
-                    accentColor: "#a855f7" // Changed from #9333ea
-                };
+                return COLOR_SCHEMES.longBreak;
             } else {
-                return {
-                    gradient: "from-blue-500 via-blue-600 to-cyan-600",
-                    circleColor: "text-blue-500", // Changed from 400
-                    buttonColor: "bg-blue-600 hover:bg-blue-700",
-                    badgeColor: "bg-blue-100 text-blue-700 border-blue-200",
-                    cardBg: "from-blue-50 to-blue-100",
-                    focusBg: "from-slate-900 via-blue-900 to-indigo-900",
-                    accentColor: "#3b82f6"
-                };
+                return COLOR_SCHEMES.shortBreak;
             }
         } else {
-            return {
-                gradient: "from-green-500 via-emerald-600 to-teal-600",
-                circleColor: "text-green-500", // Changed from 400
-                buttonColor: "bg-green-600 hover:bg-green-700",
-                badgeColor: "bg-green-100 text-green-700 border-green-200",
-                cardBg: "from-green-50 to-emerald-100",
-                focusBg: "from-slate-900 via-green-900 to-emerald-900",
-                accentColor: "#10b981"
-            };
+            return COLOR_SCHEMES.work;
         }
     };
 
@@ -469,8 +483,8 @@ export default function PomodoroTimer({ onSessionComplete, userSubjects: initial
 
     if (isFocusMode) {
         return (
-            <div ref={focusModeRef} className="fixed inset-0 z-[10000] bg-black">
-                <div className={`absolute inset-0 bg-gradient-to-br ${colorScheme.focusBg}`}></div>
+            <div ref={focusModeRef} className="fixed inset-0 z-[10000] bg-foreground">
+                <div className={`absolute inset-0 ${colorScheme.focusBg}`}></div>
                 <div className="relative z-20 p-6 flex items-center justify-end">
                     <Button
                         onClick={() => {
@@ -478,29 +492,28 @@ export default function PomodoroTimer({ onSessionComplete, userSubjects: initial
                             setIsFocusMode(false);
                         }}
                         variant="ghost"
-                        className="bg-white/10 border-white/20 text-white hover:bg-white/20"
+                        className="bg-surface/10 border-surface/20 text-surface hover:bg-surface/20"
                     >
                         <X className="w-4 h-4 mr-2" />
                         Exit Focus Mode
                     </Button>
                 </div>
                 <div className="relative z-10 p-8 h-[calc(100vh-100px)] overflow-auto flex items-center justify-center">
-                    <div className="bg-white/5 backdrop-blur-sm rounded-3xl border border-white/10 p-12 shadow-2xl">
+                    <div className="bg-surface/5 backdrop-blur-sm rounded-3xl border border-surface/10 p-12 shadow-soft">
                         <div className="flex flex-col items-center space-y-8">
                             <div className="relative w-80 h-80 flex items-center justify-center">
                                 <svg className="absolute w-full h-full transform -rotate-90" viewBox="0 0 100 100">
-                                    <circle 
-                                        className="stroke-current text-white/10" 
-                                        strokeWidth="3" 
-                                        cx="50" 
-                                        cy="50" 
-                                        r="45" 
-                                        fill="transparent" 
+                                    <circle
+                                        className="stroke-current text-surface/10"
+                                        strokeWidth="3"
+                                        cx="50"
+                                        cy="50"
+                                        r="45"
+                                        fill="transparent"
                                     />
                                     <motion.circle
                                         key={`${isBreak}-${session}`} // Added key for re-animation
                                         className="stroke-current"
-                                        style={{ color: colorScheme.accentColor }} // Changed to style prop
                                         strokeWidth="3"
                                         strokeLinecap="round"
                                         cx="50" cy="50" r="45"
@@ -510,28 +523,28 @@ export default function PomodoroTimer({ onSessionComplete, userSubjects: initial
                                         initial={{ strokeDashoffset: 282.743 }}
                                         animate={{ strokeDashoffset: 282.743 - (progress / 100) * 282.743 }}
                                         transition={{ duration: 1 }}
-                                        style={{ filter: `drop-shadow(0 0 8px ${colorScheme.accentColor})` }} // Changed to use accentColor
+                                        style={{ color: colorScheme.accentVar, filter: `drop-shadow(0 0 8px ${colorScheme.accentVar})` }}
                                     />
                                 </svg>
                                 <div className="text-center">
-                                    <h2 className="text-7xl font-bold tracking-tighter text-white mb-2">{formatTime(timeLeft)}</h2>
-                                    <p className="text-white/70 text-lg mb-2">Time Remaining</p>
-                                    <p className="font-semibold text-xl" style={{ color: colorScheme.accentColor }}> {/* Changed to style prop */}
+                                    <h2 className="text-7xl font-bold tracking-tighter text-surface mb-2">{formatTime(timeLeft)}</h2>
+                                    <p className="text-surface/70 text-lg mb-2">Time Remaining</p>
+                                    <p className="font-semibold text-xl" style={{ color: colorScheme.accentVar }}>
                                         {isBreak ? (isLongBreak(session - 1) ? 'Long Break' : 'Short Break') : 'Work Time'}
                                     </p>
                                 </div>
                             </div>
 
                             <div className="flex items-center gap-4">
-                                <Button onClick={toggleTimer} size="lg" className={`w-40 text-lg ${colorScheme.buttonColor} text-white shadow-lg`}>
+                                <Button onClick={toggleTimer} size="lg" className={`w-40 text-lg ${colorScheme.button} text-white shadow-soft`}>
                                     {isRunning ? <Pause className="w-6 h-6 mr-2" /> : <Play className="w-6 h-6 mr-2" />}
                                     {getButtonText()}
                                 </Button>
-                                <Button onClick={resetTimer} variant="outline" size="lg" className="bg-white/10 border-white/20 hover:bg-white/20 text-white">
+                                <Button onClick={resetTimer} variant="outline" size="lg" className="bg-surface/10 border-surface/20 hover:bg-surface/20 text-surface">
                                     <RotateCcw className="w-6 h-6" />
                                 </Button>
                                 {isBreak && (
-                                    <Button onClick={skipBreak} variant="outline" size="lg" className="bg-white/10 border-white/20 hover:bg-white/20 text-white">
+                                    <Button onClick={skipBreak} variant="outline" size="lg" className="bg-surface/10 border-surface/20 hover:bg-surface/20 text-surface">
                                         Skip Break
                                     </Button>
                                 )}
@@ -545,77 +558,74 @@ export default function PomodoroTimer({ onSessionComplete, userSubjects: initial
 
     return (
         <>
-            <Card className={`overflow-hidden shadow-2xl border-0 bg-white/90 backdrop-blur-xl relative`}>
-                {/* Gradient overlay */}
-                <div className="absolute inset-0 opacity-5 pointer-events-none">
-                    <div className={`absolute inset-0 bg-gradient-to-br ${colorScheme.gradient}`} />
-                </div>
-                
-                <div className={`h-1 bg-gradient-to-r ${colorScheme.gradient}`} />
-                
-                <CardHeader className="pb-6 relative z-10">
+            <div className="card-soft overflow-hidden relative">
+                {/* Solid token tint overlay (replaces gradient) */}
+                <div className={`absolute inset-0 opacity-50 pointer-events-none ${colorScheme.tile5}`} />
+
+                <div className={`h-1 ${colorScheme.tile10}`} />
+
+                <div className="pb-6 relative z-10 p-6">
                     <div className="flex items-center justify-between flex-wrap gap-4">
                         <div className="flex items-center gap-4">
-                            <div className={`w-14 h-14 rounded-2xl bg-gradient-to-r ${colorScheme.gradient} flex items-center justify-center shadow-xl shadow-${isBreak ? 'blue' : 'green'}-200`}>
-                                <Clock className="w-7 h-7 text-white" />
+                            <div className={`w-14 h-14 rounded-2xl ${colorScheme.tile10} flex items-center justify-center`}>
+                                <Clock className={`w-7 h-7 ${colorScheme.timerText}`} />
                             </div>
                             <div>
-                                <CardTitle className="text-2xl font-bold text-gray-900">
+                                <h3 className="text-2xl font-bold text-foreground">
                                     Pomodoro Timer
-                                </CardTitle>
-                                <p className="text-sm text-gray-500 mt-0.5">Focus and productivity timer</p>
+                                </h3>
+                                <p className="text-sm text-muted-foreground mt-0.5">Focus and productivity timer</p>
                             </div>
                         </div>
                         <div className="flex items-center gap-3">
-                            <div className={`px-5 py-2.5 rounded-2xl backdrop-blur-sm bg-white/80 border-2 ${colorScheme.badgeColor} flex items-center gap-2.5 shadow-md`}>
+                            <div className={`pill px-5 py-2.5 border-2 ${colorScheme.badge} text-sm`}>
                                 <StatusIcon className="w-5 h-5" />
                                 <span className="font-bold text-sm">{statusText}</span>
                             </div>
                             {hasBeenStarted && (
-                                <Button 
-                                    variant="outline" 
+                                <Button
+                                    variant="outline"
                                     size="sm"
                                     onClick={() => {
                                         setIsFocusMode(true);
                                         enterFullscreen();
                                     }}
-                                    className="rounded-xl border-2 hover:bg-gray-50"
+                                    className="rounded-xl border-2 hover:bg-secondary"
                                 >
                                     <Maximize className="w-4 h-4 mr-2" />
                                     Focus Mode
                                 </Button>
                             )}
                             {!isRunning && !isBreak && (
-                                <Button 
-                                    variant="ghost" 
+                                <Button
+                                    variant="ghost"
                                     size="icon"
                                     onClick={() => setShowSettings(true)}
-                                    className="w-10 h-10 rounded-xl text-gray-500 hover:text-gray-900 hover:bg-gray-100/80"
+                                    className="w-10 h-10 rounded-xl text-muted-foreground hover:text-foreground hover:bg-secondary"
                                 >
                                     <Settings className="w-5 h-5" />
                                 </Button>
                             )}
                         </div>
                     </div>
-                </CardHeader>
-                
-                <CardContent className="pb-10 relative z-10">
+                </div>
+
+                <div className="pb-10 relative z-10 px-6">
                     <div className="flex flex-col items-center space-y-10">
                         {/* Timer Circle */}
                         <div className="relative w-80 h-80 flex items-center justify-center">
                             <svg className="absolute w-full h-full transform -rotate-90" viewBox="0 0 100 100">
-                                <circle 
-                                    className="stroke-current text-gray-100" 
-                                    strokeWidth="3" 
-                                    cx="50" 
-                                    cy="50" 
-                                    r="45" 
-                                    fill="transparent" 
+                                <circle
+                                    className="stroke-current text-secondary"
+                                    strokeWidth="3"
+                                    cx="50"
+                                    cy="50"
+                                    r="45"
+                                    fill="transparent"
                                 />
                                 <motion.circle
                                     key={`${isBreak}-${session}`}
                                     className="stroke-current"
-                                    style={{ color: colorScheme.accentColor }}
                                     strokeWidth="3"
                                     strokeLinecap="round"
                                     cx="50" cy="50" r="45"
@@ -625,23 +635,23 @@ export default function PomodoroTimer({ onSessionComplete, userSubjects: initial
                                     initial={{ strokeDashoffset: 282.743 }}
                                     animate={{ strokeDashoffset: 282.743 - (progress / 100) * 282.743 }}
                                     transition={{ duration: 1 }}
-                                    style={{ 
-                                        filter: `drop-shadow(0 0 12px ${colorScheme.accentColor}40)`
+                                    style={{
+                                        color: colorScheme.accentVar,
+                                        filter: `drop-shadow(0 0 12px ${colorScheme.accentVar})`
                                     }}
                                 />
                             </svg>
                             <div className="text-center">
-                                <motion.h2 
+                                <motion.h2
                                     key={timeLeft}
                                     initial={{ scale: 1.05 }}
                                     animate={{ scale: 1 }}
-                                    className="text-7xl font-bold tracking-tighter mb-3"
-                                    style={{ color: colorScheme.accentColor }}
+                                    className={`text-7xl font-bold tracking-tighter mb-3 ${colorScheme.timerText}`}
                                 >
                                     {formatTime(timeLeft)}
                                 </motion.h2>
-                                <p className="text-gray-500 text-base font-medium mb-3">Time Remaining</p>
-                                <div className={`inline-flex items-center gap-2 px-4 py-2 rounded-full ${colorScheme.badgeColor} shadow-sm`}>
+                                <p className="text-muted-foreground text-base font-medium mb-3">Time Remaining</p>
+                                <div className={`pill px-4 py-2 ${colorScheme.badge}`}>
                                     <StatusIcon className="w-4 h-4" />
                                     <span className="font-bold text-sm">
                                         {isBreak ? (isLongBreak(session - 1) ? 'Long Break' : 'Short Break') : 'Work Time'}
@@ -652,28 +662,28 @@ export default function PomodoroTimer({ onSessionComplete, userSubjects: initial
 
                         {/* Control Buttons */}
                         <div className="flex items-center gap-3">
-                            <Button 
-                                onClick={toggleTimer} 
-                                size="lg" 
-                                className={`w-44 text-base font-semibold ${colorScheme.buttonColor} text-white shadow-xl hover:shadow-2xl transition-all rounded-2xl h-14`}
+                            <Button
+                                onClick={toggleTimer}
+                                size="lg"
+                                className={`w-44 text-base font-semibold ${colorScheme.button} text-white shadow-soft transition-all rounded-2xl h-14`}
                             >
                                 {isRunning ? <Pause className="w-5 h-5 mr-2" /> : <Play className="w-5 h-5 mr-2" />}
                                 {getButtonText()}
                             </Button>
-                            <Button 
-                                onClick={resetTimer} 
-                                variant="outline" 
+                            <Button
+                                onClick={resetTimer}
+                                variant="outline"
                                 size="lg"
-                                className="w-14 h-14 rounded-2xl hover:bg-gray-100 border-2"
+                                className="w-14 h-14 rounded-2xl hover:bg-secondary border-2"
                             >
                                 <RotateCcw className="w-5 h-5" />
                             </Button>
                             {isBreak && (
-                                <Button 
-                                    onClick={skipBreak} 
-                                    variant="outline" 
+                                <Button
+                                    onClick={skipBreak}
+                                    variant="outline"
                                     size="lg"
-                                    className="rounded-2xl hover:bg-gray-100 border-2 h-14 px-6"
+                                    className="rounded-2xl hover:bg-secondary border-2 h-14 px-6"
                                 >
                                     Skip Break
                                 </Button>
@@ -687,15 +697,15 @@ export default function PomodoroTimer({ onSessionComplete, userSubjects: initial
                                 animate={{ opacity: 1, y: 0 }}
                                 className="w-full max-w-2xl space-y-4"
                             >
-                                <Card className="bg-white/80 backdrop-blur-sm border-2 border-gray-200 shadow-lg">
-                                    <CardContent className="p-6 space-y-4">
-                                        <h3 className="font-bold text-base text-gray-900 mb-4 flex items-center gap-2">
-                                            <BookOpen className="w-5 h-5 text-gray-600" />
+                                <div className="card-soft">
+                                    <div className="p-6 space-y-4">
+                                        <h3 className="font-bold text-base text-foreground mb-4 flex items-center gap-2">
+                                            <BookOpen className="w-5 h-5 text-muted-foreground" />
                                             Session Details
                                         </h3>
                                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                             <div className="space-y-2">
-                                                <Label className="text-sm font-semibold text-gray-700">Subject *</Label>
+                                                <Label className="text-sm font-semibold text-muted-foreground">Subject *</Label>
                                                 <Select onValueChange={setSelectedSubject} value={selectedSubject}>
                                                     <SelectTrigger className="h-12 rounded-xl border-2">
                                                         <SelectValue placeholder="Select a subject" />
@@ -710,17 +720,17 @@ export default function PomodoroTimer({ onSessionComplete, userSubjects: initial
                                                 </Select>
                                             </div>
                                             <div className="space-y-2">
-                                                <Label className="text-sm font-semibold text-gray-700">Topic (Optional)</Label>
-                                                <Input 
-                                                    value={topic} 
-                                                    onChange={(e) => setTopic(e.target.value)} 
-                                                    placeholder="e.g., Chapter 3 Review" 
+                                                <Label className="text-sm font-semibold text-muted-foreground">Topic (Optional)</Label>
+                                                <Input
+                                                    value={topic}
+                                                    onChange={(e) => setTopic(e.target.value)}
+                                                    placeholder="e.g., Chapter 3 Review"
                                                     className="h-12 rounded-xl border-2"
                                                 />
                                             </div>
                                         </div>
-                                    </CardContent>
-                                </Card>
+                                    </div>
+                                </div>
                             </motion.div>
                         )}
 
@@ -729,17 +739,17 @@ export default function PomodoroTimer({ onSessionComplete, userSubjects: initial
                             <motion.div
                                 initial={{ opacity: 0, scale: 0.95 }}
                                 animate={{ opacity: 1, scale: 1 }}
-                                className="text-center p-8 rounded-3xl bg-white/80 backdrop-blur-sm border-2 shadow-xl max-w-md"
-                                style={{ borderColor: `${colorScheme.accentColor}30` }}
+                                className="card-soft text-center p-8 max-w-md"
+                                style={{ borderColor: colorScheme.accentVar }}
                             >
-                                <div className={`w-16 h-16 rounded-2xl bg-gradient-to-br ${colorScheme.gradient} flex items-center justify-center mx-auto mb-4 shadow-lg`}>
-                                    <Coffee className="w-8 h-8 text-white" />
+                                <div className={`w-16 h-16 rounded-2xl ${colorScheme.tile10} flex items-center justify-center mx-auto mb-4`}>
+                                    <Coffee className={`w-8 h-8 ${colorScheme.timerText}`} />
                                 </div>
-                                <h3 className="text-2xl font-bold text-gray-900 mb-3">
+                                <h3 className="text-2xl font-bold text-foreground mb-3">
                                     {isLongBreak(session - 1) ? 'Long Break Time!' : 'Short Break Time!'}
                                 </h3>
-                                <p className="text-gray-600 leading-relaxed">
-                                    {isLongBreak(session - 1) 
+                                <p className="text-muted-foreground leading-relaxed">
+                                    {isLongBreak(session - 1)
                                         ? 'Take a longer rest - walk around, stretch, or grab a snack.'
                                         : 'Quick break - hydrate, stretch, or rest your eyes.'
                                     }
@@ -747,9 +757,9 @@ export default function PomodoroTimer({ onSessionComplete, userSubjects: initial
                             </motion.div>
                         )}
                     </div>
-                </CardContent>
-            </Card>
-            
+                </div>
+            </div>
+
             {/* Settings Dialog */}
             <Dialog open={showSettings} onOpenChange={setShowSettings}>
                 <DialogContent>
@@ -804,7 +814,7 @@ export default function PomodoroTimer({ onSessionComplete, userSubjects: initial
                         </div>
                     </div>
                     <DialogFooter>
-                        <Button onClick={() => setShowSettings(false)} className="bg-green-600 hover:bg-green-700">
+                        <Button onClick={() => setShowSettings(false)} className="bg-primary hover:bg-primary/90">
                             Save Settings
                         </Button>
                     </DialogFooter>
@@ -822,7 +832,7 @@ export default function PomodoroTimer({ onSessionComplete, userSubjects: initial
                     </DialogHeader>
                     <DialogFooter className="gap-2 sm:justify-end">
                         <Button variant="outline" onClick={() => handleStartSession(false)}>Continue Normally</Button>
-                        <Button onClick={() => handleStartSession(true)} className="bg-green-600 hover:bg-green-700">
+                        <Button onClick={() => handleStartSession(true)} className="bg-primary hover:bg-primary/90">
                             <Maximize className="w-4 h-4 mr-2" />
                             Enter Focus Mode
                         </Button>

@@ -1,24 +1,33 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
-import { Progress } from "@/components/ui/progress";
 import {
-    Trophy, Swords, Zap, Users, Crown, Flame, Activity,
-    Plus, LogIn, Loader2, Clock, Target, ArrowUpRight,
-    ArrowDownRight, BarChart2, Star, TrendingUp, ChevronRight, X
+    Trophy, Swords, Zap, Users, Crown, Activity, ClipboardList, Settings as SettingsIcon,
+    LogIn, Loader2, Clock, ChevronRight, ArrowRight
 } from "lucide-react";
 import { base44 } from "@/api/base44Client";
 import { useToast } from "@/components/ui/use-toast";
 import GoalCompetitionDetail from "@/components/competition/GoalCompetitionDetail";
-import { joinGoalCompetition } from "@/functions/joinGoalCompetition";
+import { joinGoalCompetition } from "@/api/functionsShim";
 import HelpButton from "@/components/shared/HelpButton";
 import { getSeasonRankFromXP } from "@/components/shared/xpSystem";
-import { format, isPast, parseISO, differenceInDays } from "date-fns";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { format, isPast, parseISO } from "date-fns";
 
-// ── Competition Card ─────────────────────────────────────────────────────────
+// ─── Coach voice ──────────────────────────────────────────────────────────────
+function getCoachLine({ name, hour, total, active, leading, behind, recentWins }) {
+    const period = hour < 12 ? "Morning" : hour < 17 ? "Afternoon" : hour < 21 ? "Evening" : "Late night";
+    if (total === 0) return `${period}, ${name}. No competitions yet — challenge a friend from any goal.`;
+    if (active === 0 && recentWins > 0) return `${period}, ${name}. ${recentWins} win${recentWins === 1 ? '' : 's'} under your belt. Time for another.`;
+    if (active === 0) return `${period}, ${name}. Nothing live right now — let's get a battle going.`;
+    if (behind > 0 && behind === active) return `${period}, ${name}. You're behind in every active comp. Time to push.`;
+    if (behind > 0 && leading > 0) return `${period}, ${name}. Leading ${leading}, behind in ${behind}. Mixed bag — focus on the gap.`;
+    if (leading === active) return `${period}, ${name}. Leading every active comp. Hold position.`;
+    if (leading > 0) return `${period}, ${name}. Leading ${leading} of ${active} battles. Keep building.`;
+    return `${period}, ${name}. ${active} live battle${active === 1 ? '' : 's'} on the board.`;
+}
+
+// ─── CompCard ────────────────────────────────────────────────────────────────
 function CompCard({ comp, currentUserEmail, onClick }) {
     const accepted = (comp.participants || []).filter(p => p.status === 'accepted' || p.status === 'completed');
     const me = comp.participants?.find(p => p.email === currentUserEmail);
@@ -27,44 +36,66 @@ function CompCard({ comp, currentUserEmail, onClick }) {
     const isCompleted = comp.status === 'completed';
     const isLeading = myRank === 1 && !isCompleted && accepted.length > 1;
     const myPct = Math.round(me?.progress_percent || 0);
+    const overdue = comp.goal_target_date && isPast(parseISO(comp.goal_target_date)) && !isCompleted;
+
+    // Token-tinted shell based on state
+    const shell = isCompleted
+        ? "bg-chart-4/5 border-chart-4/25"
+        : isLeading
+            ? "bg-xp/5 border-xp/30"
+            : overdue
+                ? "bg-streak/5 border-streak/25"
+                : "bg-chart-3/5 border-chart-3/25";
+
+    const accentColor = isCompleted ? "text-chart-4" : isLeading ? "text-xp" : overdue ? "text-streak" : "text-chart-3";
 
     return (
-        <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}
+        <motion.button
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
             onClick={onClick}
-            className={`relative cursor-pointer rounded-2xl border-2 p-5 hover:shadow-xl transition-all group ${
-                isCompleted ? 'border-purple-200 bg-gradient-to-br from-purple-50 to-white' :
-                isLeading ? 'border-amber-300 bg-gradient-to-br from-amber-50 to-white' :
-                'border-indigo-200 bg-gradient-to-br from-indigo-50 to-white'
-            }`}>
-            {/* Live indicator */}
+            className={`relative text-left rounded-2xl border-2 p-5 hover:shadow-soft transition-all group w-full ${shell}`}
+        >
+            {/* State indicator */}
             {!isCompleted && (
                 <div className="absolute top-4 right-4 flex items-center gap-1.5">
-                    <span className="w-2 h-2 bg-emerald-400 rounded-full animate-pulse" />
-                    <span className="text-xs font-semibold text-emerald-600">Live</span>
+                    <span className={`w-2 h-2 rounded-full animate-soft-pulse ${overdue ? 'bg-streak' : 'bg-primary'}`} />
+                    <span className={`text-xs font-extrabold ${overdue ? 'text-streak' : 'text-primary'}`}>{overdue ? 'Overdue' : 'Live'}</span>
+                </div>
+            )}
+            {isCompleted && (
+                <div className="absolute top-4 right-4 inline-flex items-center gap-1 pill bg-chart-4/15 text-chart-4">
+                    <Trophy className="w-3 h-3" /> Settled
                 </div>
             )}
 
-            <div className="mb-3 pr-16">
-                <h3 className="font-bold text-gray-900 truncate">{comp.goal_title}</h3>
-                <p className="text-xs text-gray-500 mt-0.5">by {comp.creator_name} · <Users className="w-3 h-3 inline" /> {accepted.length}</p>
+            <div className="mb-3 pr-20">
+                <h3 className="font-display font-extrabold text-foreground text-base leading-tight truncate">{comp.goal_title}</h3>
+                <p className="text-xs text-muted-foreground mt-1 inline-flex items-center gap-1">
+                    by {comp.creator_name} <span className="text-muted-foreground/40">·</span> <Users className="w-3 h-3" /> {accepted.length}
+                </p>
             </div>
 
-            {/* My progress ring + bar */}
+            {/* My progress bar */}
             {me && (
                 <div className="mb-4">
                     <div className="flex items-center justify-between text-xs mb-1.5">
-                        <span className="text-gray-500 font-medium">Your progress</span>
+                        <span className="font-bold text-muted-foreground">Your progress</span>
                         <div className="flex items-center gap-2">
-                            {isLeading && <span className="text-amber-600 font-bold flex items-center gap-1"><Crown className="w-3 h-3" />Leading</span>}
-                            <span className="font-black text-indigo-600">{myPct}%</span>
+                            {isLeading && (
+                                <span className="inline-flex items-center gap-1 font-extrabold text-xp">
+                                    <Crown className="w-3 h-3" /> Leading
+                                </span>
+                            )}
+                            <span className={`font-display font-extrabold text-base ${accentColor}`}>{myPct}%</span>
                         </div>
                     </div>
-                    <div className="h-3 bg-gray-100 rounded-full overflow-hidden">
+                    <div className="h-2 bg-secondary rounded-full overflow-hidden">
                         <motion.div
                             initial={{ width: 0 }}
                             animate={{ width: `${myPct}%` }}
-                            transition={{ duration: 1, ease: "easeOut" }}
-                            className={`h-full rounded-full ${isLeading ? 'bg-gradient-to-r from-amber-400 to-orange-400' : 'bg-gradient-to-r from-indigo-400 to-purple-500'}`}
+                            transition={{ duration: 0.9, ease: "easeOut" }}
+                            className={`h-full rounded-full ${isLeading ? 'bg-xp' : overdue ? 'bg-streak' : 'bg-chart-3'}`}
                         />
                     </div>
                 </div>
@@ -72,42 +103,49 @@ function CompCard({ comp, currentUserEmail, onClick }) {
 
             {/* Mini leaderboard */}
             <div className="space-y-1.5">
-                {ranked.slice(0, 3).map((p, i) => (
-                    <div key={p.email} className={`flex items-center gap-2 text-xs rounded-xl px-2.5 py-1.5 ${p.email === currentUserEmail ? 'bg-indigo-100 font-semibold' : 'bg-gray-50'}`}>
-                        <div className={`w-5 h-5 rounded-full flex items-center justify-center text-white text-xs font-black flex-shrink-0 ${i === 0 ? 'bg-amber-500' : i === 1 ? 'bg-gray-400' : 'bg-orange-400'}`}>{i + 1}</div>
-                        <span className="flex-1 truncate text-gray-800">{p.name?.split(' ')[0]}</span>
-                        <span className="text-indigo-600 font-bold">{Math.round(p.progress_percent || 0)}%</span>
-                        <span className="flex items-center gap-0.5 text-amber-600"><Zap className="w-3 h-3" />{p.xp_earned || 0}</span>
-                    </div>
-                ))}
+                {ranked.slice(0, 3).map((p, i) => {
+                    const placeBg = i === 0 ? 'bg-xp text-background' : i === 1 ? 'bg-secondary text-foreground' : 'bg-streak/80 text-background';
+                    const isMe = p.email === currentUserEmail;
+                    return (
+                        <div
+                            key={p.email}
+                            className={`flex items-center gap-2 text-xs rounded-xl px-2.5 py-1.5 ${isMe ? 'bg-primary/15 ring-1 ring-primary/30 font-bold' : 'bg-surface'}`}
+                        >
+                            <div className={`w-5 h-5 rounded-full flex items-center justify-center text-xs font-extrabold flex-shrink-0 ${placeBg}`}>{i + 1}</div>
+                            <span className="flex-1 truncate text-foreground">{p.name?.split(' ')[0]}</span>
+                            <span className="text-chart-3 font-bold">{Math.round(p.progress_percent || 0)}%</span>
+                            <span className="inline-flex items-center gap-0.5 text-xp font-bold">
+                                <Zap className="w-3 h-3" />{p.xp_earned || 0}
+                            </span>
+                        </div>
+                    );
+                })}
             </div>
 
             {isCompleted && comp.winner_name && (
-                <div className="mt-3 flex items-center gap-2 bg-amber-50 border border-amber-200 rounded-xl px-3 py-2">
-                    <Trophy className="w-4 h-4 text-amber-600 flex-shrink-0" />
-                    <span className="text-xs font-bold text-amber-800">🏆 {comp.winner_name} won!</span>
+                <div className="mt-3 inline-flex items-center gap-2 bg-xp/10 border-2 border-xp/25 rounded-xl px-3 py-1.5">
+                    <Trophy className="w-3.5 h-3.5 text-xp" />
+                    <span className="text-xs font-bold text-foreground">{comp.winner_name} took it</span>
                 </div>
             )}
 
             {comp.goal_target_date && (
-                <div className="mt-2.5 flex items-center gap-1 text-xs text-gray-400">
+                <div className="mt-2.5 flex items-center gap-1 text-xs text-muted-foreground">
                     <Clock className="w-3 h-3" />
                     {format(parseISO(comp.goal_target_date), 'MMM d, yyyy')}
-                    {isPast(parseISO(comp.goal_target_date)) && !isCompleted && <Badge className="bg-red-100 text-red-600 text-xs ml-1">Overdue</Badge>}
                 </div>
             )}
 
-            <ChevronRight className="absolute bottom-5 right-4 w-4 h-4 text-gray-300 group-hover:text-indigo-500 transition-colors" />
-        </motion.div>
+            <ChevronRight className="absolute bottom-5 right-4 w-4 h-4 text-muted-foreground/40 group-hover:text-foreground transition-colors" />
+        </motion.button>
     );
 }
 
-// ── Main Page ────────────────────────────────────────────────────────────────
+// ─── Main page ────────────────────────────────────────────────────────────────
 export default function Competitions() {
     const [user, setUser] = useState(null);
     const [userProfile, setUserProfile] = useState(null);
     const [competitions, setCompetitions] = useState([]);
-    const [wagers, setWagers] = useState([]);
     const [isLoading, setIsLoading] = useState(true);
     const [selectedComp, setSelectedComp] = useState(null);
     const [inviteCode, setInviteCode] = useState("");
@@ -158,7 +196,7 @@ export default function Competitions() {
             if (data?.error) {
                 toast({ title: "Could not join", description: data.error, variant: "destructive" });
             } else {
-                toast({ title: "Joined! 🏆", description: "You're in. Go win." });
+                toast({ title: "Joined! You're in.", description: "Good luck out there." });
                 setInviteCode(""); setPendingJoinCode(null);
                 await loadData();
             }
@@ -167,156 +205,374 @@ export default function Competitions() {
         } finally { setJoiningCode(false); }
     };
 
-    const activeComps = competitions.filter(c => c.status === 'active' || c.status === 'pending');
-    const completedComps = competitions.filter(c => c.status === 'completed');
+    // ─── Derived stats ────────────────────────────────────────────────────────
+    const stats = useMemo(() => {
+        const active = competitions.filter(c => c.status === 'active' || c.status === 'pending');
+        const completed = competitions.filter(c => c.status === 'completed');
+        const recentWins = completed.filter(c => c.winner_email === user?.email).length;
+
+        let leading = 0, behind = 0;
+        active.forEach(c => {
+            const accepted = (c.participants || []).filter(p => p.status === 'accepted' || p.status === 'completed');
+            if (accepted.length < 2) return;
+            const ranked = [...accepted].sort((a, b) => (b.progress_percent || 0) - (a.progress_percent || 0));
+            const myIdx = ranked.findIndex(p => p.email === user?.email);
+            if (myIdx === 0) leading++;
+            else if (myIdx > 0) behind++;
+        });
+
+        return { active, completed, recentWins, leading, behind };
+    }, [competitions, user]);
+
+    const firstName = userProfile?.username || user?.full_name?.split(' ')[0] || 'friend';
+    const hour = new Date().getHours();
+    const coachLine = getCoachLine({
+        name: firstName,
+        hour,
+        total: competitions.length,
+        active: stats.active.length,
+        leading: stats.leading,
+        behind: stats.behind,
+        recentWins: stats.recentWins,
+    });
     const seasonRank = userProfile ? getSeasonRankFromXP(userProfile.season_xp || 0) : null;
+    const seasonXp = userProfile?.season_xp || 0;
+
+    // Featured: most-active comp where user is behind, OR most recent active
+    const focus = useMemo(() => {
+        if (stats.active.length === 0) return null;
+        const sorted = [...stats.active].sort((a, b) => {
+            const am = (a.participants || []).find(p => p.email === user?.email);
+            const bm = (b.participants || []).find(p => p.email === user?.email);
+            return (am?.progress_percent || 0) - (bm?.progress_percent || 0);
+        });
+        const target = sorted[0];
+        const me = (target.participants || []).find(p => p.email === user?.email);
+        const accepted = (target.participants || []).filter(p => p.status === 'accepted' || p.status === 'completed');
+        const ranked = [...accepted].sort((a, b) => (b.progress_percent || 0) - (a.progress_percent || 0));
+        const myIdx = ranked.findIndex(p => p.email === user?.email);
+        const leader = ranked[0];
+        const isLeading = myIdx === 0;
+
+        if (isLeading) {
+            return {
+                label: "You're leading",
+                title: `Hold the lead in "${target.goal_title}"`,
+                sub: `${Math.round(me?.progress_percent || 0)}% done. ${ranked.length > 1 ? `${ranked[1].name?.split(' ')[0]} is at ${Math.round(ranked[1].progress_percent || 0)}%.` : 'You\'re alone — finish strong.'}`,
+                accent: "xp",
+                icon: Crown,
+                comp: target,
+            };
+        }
+        return {
+            label: leader ? `${leader.name?.split(' ')[0]} is ahead` : "Time to focus",
+            title: `Catch up on "${target.goal_title}"`,
+            sub: `You're at ${Math.round(me?.progress_percent || 0)}%. ${leader ? `${leader.name?.split(' ')[0]} is at ${Math.round(leader.progress_percent || 0)}% — ${Math.round((leader.progress_percent || 0) - (me?.progress_percent || 0))}pp gap.` : ''}`,
+            accent: "chart-3",
+            icon: Swords,
+            comp: target,
+        };
+    }, [stats, user]);
+
+    const FOCUS_THEME = {
+        xp:        { bg: "bg-xp/10",        border: "border-xp/25",        iconBg: "bg-xp/15",        iconText: "text-xp"        },
+        "chart-3": { bg: "bg-chart-3/10",   border: "border-chart-3/25",   iconBg: "bg-chart-3/15",   iconText: "text-chart-3"   },
+        streak:    { bg: "bg-streak/10",    border: "border-streak/25",    iconBg: "bg-streak/15",    iconText: "text-streak"    },
+        "chart-4": { bg: "bg-chart-4/10",   border: "border-chart-4/25",   iconBg: "bg-chart-4/15",   iconText: "text-chart-4"   },
+        primary:   { bg: "bg-primary/10",   border: "border-primary/25",   iconBg: "bg-primary/15",   iconText: "text-primary"   },
+    };
 
     if (isLoading) {
         return (
-            <div className="min-h-screen flex items-center justify-center">
-                <Loader2 className="w-10 h-10 animate-spin text-indigo-500" />
+            <div className="min-h-screen bg-background flex items-center justify-center">
+                <div className="text-center">
+                    <Loader2 className="w-8 h-8 text-chart-4 animate-spin mx-auto mb-3" />
+                    <p className="text-muted-foreground text-sm">Loading…</p>
+                </div>
             </div>
         );
     }
 
     if (selectedComp) {
         return (
-            <div className="p-4 lg:p-8 max-w-3xl mx-auto">
-                <GoalCompetitionDetail competition={selectedComp} currentUserEmail={user?.email}
-                    onBack={() => { setSelectedComp(null); loadData(); }} onUpdate={loadData} />
+            <div className="min-h-screen bg-background">
+                <div className="max-w-3xl mx-auto px-4 lg:px-8 py-6 lg:py-8">
+                    <GoalCompetitionDetail
+                        competition={selectedComp}
+                        currentUserEmail={user?.email}
+                        onBack={() => { setSelectedComp(null); loadData(); }}
+                        onUpdate={loadData}
+                    />
+                </div>
             </div>
         );
     }
 
     return (
-        <div className="p-4 lg:p-8">
-            <div className="max-w-5xl mx-auto space-y-6">
+        <div className="min-h-screen bg-background">
+            <div className="max-w-6xl mx-auto px-4 lg:px-8 py-6 lg:py-10 space-y-6 lg:space-y-8">
 
-                {/* ── Hero Header ── */}
-                <motion.div initial={{ opacity: 0, y: -16 }} animate={{ opacity: 1, y: 0 }}
-                    className="bg-gradient-to-br from-indigo-600 via-purple-600 to-violet-700 rounded-3xl p-6 text-white relative overflow-hidden shadow-xl shadow-indigo-500/20">
-                    {/* decorative orbs */}
-                    <div className="absolute -top-10 -right-10 w-40 h-40 bg-white/10 rounded-full blur-3xl" />
-                    <div className="absolute -bottom-8 -left-8 w-32 h-32 bg-white/10 rounded-full blur-2xl" />
-
-                    <div className="relative">
-                        <div className="flex items-center gap-3 mb-5">
-                            <div className="w-12 h-12 bg-white/20 backdrop-blur-sm rounded-2xl flex items-center justify-center">
-                                <Swords className="w-6 h-6 text-white" />
-                            </div>
-                            <div>
-                                <h1 className="text-2xl font-black">Compete</h1>
-                                <p className="text-white/70 text-xs">Goal battles & score wagers</p>
-                            </div>
-                            <HelpButton page="Competitions" className="bg-white/20 border-white/30 text-white hover:bg-white/30 hover:text-white" />
-                            {seasonRank && (
-                                <div className="ml-auto flex items-center gap-2 bg-white/10 backdrop-blur-sm rounded-2xl px-4 py-2">
-                                    <span className="text-2xl">{seasonRank.emoji}</span>
-                                    <div>
-                                        <p className="text-white/60 text-xs">Season Rank</p>
-                                        <p className="font-black text-sm">{seasonRank.name}</p>
-                                    </div>
-                                </div>
+                {/* ── COACH STRIP ─────────────────────────────────────── */}
+                <motion.section initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.35 }}>
+                    <div className="flex items-center justify-between mb-3">
+                        <div className="flex items-center gap-2 text-xs">
+                            <span className="font-bold text-muted-foreground uppercase tracking-wider">Compete</span>
+                            {stats.active.length > 0 && (
+                                <>
+                                    <span className="text-muted-foreground/40">·</span>
+                                    <span className="inline-flex items-center gap-1 font-extrabold text-chart-3">
+                                        <Activity className="w-3.5 h-3.5" /> {stats.active.length} live
+                                    </span>
+                                </>
+                            )}
+                            {stats.recentWins > 0 && (
+                                <>
+                                    <span className="text-muted-foreground/40">·</span>
+                                    <span className="inline-flex items-center gap-1 font-extrabold text-xp">
+                                        <Trophy className="w-3.5 h-3.5" /> {stats.recentWins} won
+                                    </span>
+                                </>
                             )}
                         </div>
+                        <HelpButton page="Competitions" />
+                    </div>
+                    <h1 className="font-display text-2xl sm:text-3xl lg:text-4xl font-extrabold tracking-tight text-foreground leading-[1.1]">
+                        {coachLine}
+                    </h1>
+                </motion.section>
 
-                        {/* Stats row */}
-                        <div className="grid grid-cols-2 gap-3">
-                            {[
-                                { label: "Active Comps", value: activeComps.length, IconComp: Trophy, color: "bg-white/10" },
-                                { label: "Completed", value: completedComps.length, IconComp: Activity, color: "bg-white/10" },
-                            ].map(({ label, value, IconComp, color }) => (
-                                <div key={label} className={`${color} rounded-2xl p-3.5 backdrop-blur-sm`}>
-                                    <div className="flex items-center gap-2 mb-1">
-                                        <IconComp className="w-4 h-4 text-white/70" />
-                                        <span className="text-white/60 text-xs uppercase tracking-wide">{label}</span>
-                                    </div>
-                                    <p className="text-xl font-black">{value}</p>
+                {/* ── HERO ROW: Season rank (3/5) + Stats (2/5) ───────── */}
+                <motion.section
+                    initial={{ opacity: 0, y: 12 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: 0.05 }}
+                    className="grid grid-cols-1 md:grid-cols-5 gap-5 lg:gap-6"
+                >
+                    {/* Season rank poster */}
+                    <div className="md:col-span-3">
+                        <div className="relative overflow-hidden rounded-3xl bg-chart-4/10 border-2 border-chart-4/25 p-6 lg:p-8 h-full">
+                            <Trophy className="absolute -top-4 -right-4 w-32 h-32 text-chart-4/10 pointer-events-none" />
+                            <p className="stat-label text-chart-4/80 mb-2">Season rank</p>
+                            <h2
+                                className="font-display font-extrabold text-foreground leading-none mb-3"
+                                style={{ fontSize: 'clamp(2rem, 5.5vw, 3.5rem)' }}
+                            >
+                                {seasonRank?.name || 'Unranked'}
+                            </h2>
+                            <p className="text-sm text-muted-foreground mb-4">
+                                {seasonXp.toLocaleString()} season XP{seasonRank?.maxXP && seasonRank.maxXP !== Infinity ? ` · ${(seasonRank.maxXP - seasonXp).toLocaleString()} to next tier` : ''}
+                            </p>
+                            {seasonRank?.maxXP && seasonRank.maxXP !== Infinity && (
+                                <div className="h-2 bg-chart-4/15 rounded-full overflow-hidden">
+                                    <motion.div
+                                        initial={{ width: 0 }}
+                                        animate={{ width: `${Math.min(100, ((seasonXp - seasonRank.minXP) / (seasonRank.maxXP - seasonRank.minXP)) * 100)}%` }}
+                                        transition={{ duration: 0.9, delay: 0.4 }}
+                                        className="h-full rounded-full bg-chart-4"
+                                    />
                                 </div>
-                            ))}
+                            )}
                         </div>
                     </div>
-                </motion.div>
 
-                {/* ── Join Code Bar ── */}
-                <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.1 }}
-                    className="flex items-center gap-3 bg-white rounded-2xl border border-gray-200 shadow-sm px-4 py-3 flex-wrap">
-                    <LogIn className="w-4 h-4 text-indigo-500 flex-shrink-0" />
-                    <span className="text-sm font-semibold text-gray-700">Join with invite code</span>
-                    <Input placeholder="ABCD12" value={inviteCode} onChange={e => setInviteCode(e.target.value.toUpperCase())}
-                        onKeyDown={e => e.key === 'Enter' && handleJoinByCode()}
-                        className="w-28 font-mono uppercase text-center" maxLength={6} />
-                    <Button onClick={handleJoinByCode} disabled={joiningCode || !inviteCode.trim()} size="sm" className="bg-indigo-600 hover:bg-indigo-700">
-                        {joiningCode ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Join →'}
-                    </Button>
-                </motion.div>
-
-                {/* ── Competitions ── */}
-                <div className="space-y-6">
-                    <p className="text-xs text-gray-400">Start a competition from <strong className="text-gray-600">Goals → Goal detail → Compete with Friends</strong>.</p>
-
-                    {competitions.length === 0 ? (
-                        <div className="text-center py-20 border-2 border-dashed border-gray-200 rounded-3xl">
-                            <Trophy className="w-16 h-16 mx-auto mb-4 text-gray-300" />
-                            <h3 className="text-lg font-bold text-gray-500 mb-1">No Competitions Yet</h3>
-                            <p className="text-gray-400 text-sm">Open a goal and tap "Compete" to challenge friends.</p>
-                        </div>
-                    ) : (
-                        <div className="space-y-5">
-                            {activeComps.length > 0 && (
+                    {/* Battle stats panel */}
+                    <div className="md:col-span-2">
+                        <div className="rounded-3xl bg-primary/10 border-2 border-primary/25 p-6 h-full flex flex-col">
+                            <div className="flex items-center gap-2 mb-3">
+                                <Swords className="w-4 h-4 text-primary" />
+                                <p className="stat-label text-primary/80">Battles</p>
+                            </div>
+                            <div className="grid grid-cols-2 gap-3 mb-auto">
                                 <div>
-                                    <div className="flex items-center gap-2 mb-3">
-                                        <span className="w-2 h-2 bg-emerald-400 rounded-full animate-pulse" />
-                                        <h3 className="font-black text-gray-800 text-sm uppercase tracking-wide">Live Battles ({activeComps.length})</h3>
-                                    </div>
-                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                        {activeComps.map(c => (
-                                            <CompCard key={c.id} comp={c} currentUserEmail={user?.email} onClick={() => setSelectedComp(c)} />
-                                        ))}
-                                    </div>
+                                    <p className="font-display font-extrabold text-foreground leading-none text-3xl lg:text-4xl">{stats.active.length}</p>
+                                    <p className="text-xs font-bold text-muted-foreground mt-1">Live</p>
                                 </div>
-                            )}
-                            {completedComps.length > 0 && (
                                 <div>
-                                    <h3 className="font-bold text-gray-400 text-sm uppercase tracking-wide mb-3">Settled ({completedComps.length})</h3>
-                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                        {completedComps.map(c => (
-                                            <CompCard key={c.id} comp={c} currentUserEmail={user?.email} onClick={() => setSelectedComp(c)} />
-                                        ))}
+                                    <p className="font-display font-extrabold text-foreground leading-none text-3xl lg:text-4xl">{stats.completed.length}</p>
+                                    <p className="text-xs font-bold text-muted-foreground mt-1">Settled</p>
+                                </div>
+                            </div>
+                            {stats.active.length > 0 && (
+                                <div className="mt-5 pt-4 border-t-2 border-primary/15 space-y-1.5">
+                                    <div className="flex items-baseline justify-between">
+                                        <p className="text-xs font-bold text-muted-foreground inline-flex items-center gap-1">
+                                            <Crown className="w-3 h-3 text-xp" /> Leading
+                                        </p>
+                                        <p className="text-xs font-extrabold text-foreground">{stats.leading}</p>
+                                    </div>
+                                    <div className="flex items-baseline justify-between">
+                                        <p className="text-xs font-bold text-muted-foreground inline-flex items-center gap-1">
+                                            <Activity className="w-3 h-3 text-chart-3" /> Behind
+                                        </p>
+                                        <p className="text-xs font-extrabold text-foreground">{stats.behind}</p>
                                     </div>
                                 </div>
                             )}
                         </div>
-                    )}
-                </div>
+                    </div>
+                </motion.section>
+
+                {/* ── FOCUS PANEL ─────────────────────────────────────── */}
+                {focus && (
+                    <motion.section
+                        initial={{ opacity: 0, y: 12 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ delay: 0.1 }}
+                    >
+                        <div className={`rounded-2xl ${FOCUS_THEME[focus.accent].bg} border-2 ${FOCUS_THEME[focus.accent].border} p-5 lg:p-6`}>
+                            <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
+                                <div className={`w-12 h-12 rounded-xl ${FOCUS_THEME[focus.accent].iconBg} flex items-center justify-center flex-shrink-0`}>
+                                    <focus.icon className={`w-6 h-6 ${FOCUS_THEME[focus.accent].iconText}`} />
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                    <p className="stat-label mb-1">Today's focus · {focus.label}</p>
+                                    <h2 className="font-display font-extrabold text-foreground text-base lg:text-lg leading-snug">
+                                        {focus.title}
+                                    </h2>
+                                    <p className="text-muted-foreground text-sm mt-0.5">{focus.sub}</p>
+                                </div>
+                                <Button
+                                    onClick={() => setSelectedComp(focus.comp)}
+                                    className="w-full sm:w-auto flex-shrink-0"
+                                >
+                                    Open battle <ArrowRight className="w-4 h-4" />
+                                </Button>
+                            </div>
+                        </div>
+                    </motion.section>
+                )}
+
+                {/* ── JOIN CODE BAR ───────────────────────────────────── */}
+                <motion.section
+                    initial={{ opacity: 0, y: 12 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: 0.15 }}
+                    className="card-soft p-4 lg:p-5"
+                >
+                    <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3">
+                        <div className="flex items-center gap-2.5 flex-1">
+                            <div className="w-9 h-9 rounded-xl bg-chart-3/15 flex items-center justify-center flex-shrink-0">
+                                <LogIn className="w-4 h-4 text-chart-3" />
+                            </div>
+                            <div className="min-w-0">
+                                <p className="font-bold text-foreground text-sm">Got an invite code?</p>
+                                <p className="text-xs text-muted-foreground">Drop it below to join a friend's battle.</p>
+                            </div>
+                        </div>
+                        <div className="flex items-center gap-2 w-full sm:w-auto">
+                            <Input
+                                placeholder="ABCD12"
+                                value={inviteCode}
+                                onChange={e => setInviteCode(e.target.value.toUpperCase())}
+                                onKeyDown={e => e.key === 'Enter' && handleJoinByCode()}
+                                className="w-full sm:w-32 font-mono uppercase text-center tracking-widest"
+                                maxLength={6}
+                            />
+                            <Button onClick={handleJoinByCode} disabled={joiningCode || !inviteCode.trim()}>
+                                {joiningCode ? <Loader2 className="w-4 h-4 animate-spin" /> : <>Join <ArrowRight className="w-4 h-4" /></>}
+                            </Button>
+                        </div>
+                    </div>
+                </motion.section>
+
+                {/* ── COMPETITIONS LIST ───────────────────────────────── */}
+                {competitions.length === 0 ? (
+                    <motion.section
+                        initial={{ opacity: 0, y: 12 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ delay: 0.2 }}
+                        className="rounded-3xl bg-secondary/30 border-2 border-dashed border-border p-10 text-center"
+                    >
+                        <Swords className="w-14 h-14 text-muted-foreground/30 mx-auto mb-4" />
+                        <h3 className="font-display font-extrabold text-foreground text-xl mb-2">No competitions yet</h3>
+                        <p className="text-muted-foreground text-sm mb-1 max-w-md mx-auto">
+                            Open any goal and tap "Compete with Friends" to challenge them.
+                        </p>
+                        <p className="text-muted-foreground text-sm max-w-md mx-auto">
+                            Or paste an invite code above if a friend sent you one.
+                        </p>
+                    </motion.section>
+                ) : (
+                    <div className="space-y-6">
+                        {stats.active.length > 0 && (
+                            <motion.section initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }}>
+                                <div className="flex items-center gap-2 mb-3">
+                                    <span className="w-2 h-2 bg-primary rounded-full animate-soft-pulse" />
+                                    <h2 className="font-display font-extrabold text-foreground text-lg lg:text-xl">
+                                        Live battles
+                                    </h2>
+                                    <span className="pill bg-primary/15 text-primary">{stats.active.length}</span>
+                                </div>
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                    {stats.active.map(c => (
+                                        <CompCard key={c.id} comp={c} currentUserEmail={user?.email} onClick={() => setSelectedComp(c)} />
+                                    ))}
+                                </div>
+                            </motion.section>
+                        )}
+
+                        {stats.completed.length > 0 && (
+                            <motion.section initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.25 }}>
+                                <div className="flex items-center gap-2 mb-3">
+                                    <Trophy className="w-4 h-4 text-chart-4" />
+                                    <h2 className="font-display font-extrabold text-foreground text-lg lg:text-xl">
+                                        Settled
+                                    </h2>
+                                    <span className="pill bg-chart-4/15 text-chart-4">{stats.completed.length}</span>
+                                </div>
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                    {stats.completed.map(c => (
+                                        <CompCard key={c.id} comp={c} currentUserEmail={user?.email} onClick={() => setSelectedComp(c)} />
+                                    ))}
+                                </div>
+                            </motion.section>
+                        )}
+                    </div>
+                )}
             </div>
 
             {/* Join setup dialog */}
             <AnimatePresence>
                 {joinSetupChoice === 'prompt' && (
                     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-                        className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
+                        className="fixed inset-0 z-50 flex items-center justify-center bg-foreground/40 backdrop-blur-sm p-4">
                         <motion.div initial={{ scale: 0.9, y: 20 }} animate={{ scale: 1, y: 0 }} exit={{ scale: 0.9 }}
-                            className="bg-white rounded-3xl shadow-2xl p-8 max-w-sm w-full text-center space-y-4 border-2 border-indigo-100">
-                            <div className="w-14 h-14 bg-indigo-100 rounded-2xl flex items-center justify-center mx-auto">
-                                <Trophy className="w-7 h-7 text-indigo-600" />
+                            className="bg-surface rounded-3xl shadow-soft p-7 max-w-sm w-full text-center space-y-4 border-2 border-border">
+                            <div className="w-14 h-14 bg-chart-4/15 rounded-2xl flex items-center justify-center mx-auto">
+                                <Trophy className="w-7 h-7 text-chart-4" />
                             </div>
-                            <h2 className="text-xl font-black text-gray-900">How do you compete?</h2>
-                            <p className="text-sm text-gray-500">Use their sub-goal structure or your own path?</p>
+                            <div>
+                                <h2 className="font-display font-extrabold text-foreground text-xl">How do you want to compete?</h2>
+                                <p className="text-sm text-muted-foreground mt-1">Mirror their setup, or build your own path?</p>
+                            </div>
                             <div className="space-y-3 text-left">
-                                <button onClick={() => confirmJoin(false)}
-                                    className="w-full p-4 border-2 border-indigo-200 rounded-2xl hover:bg-indigo-50 hover:border-indigo-400 transition-all">
-                                    <p className="font-bold text-indigo-700 text-sm">📋 Mirror their structure</p>
-                                    <p className="text-xs text-gray-500 mt-0.5">Same sub-goals. Fair head-to-head.</p>
+                                <button
+                                    onClick={() => confirmJoin(false)}
+                                    className="w-full p-4 border-2 border-chart-3/30 rounded-2xl hover:bg-chart-3/5 hover:border-chart-3/50 transition-all"
+                                >
+                                    <div className="flex items-center gap-2 mb-1">
+                                        <ClipboardList className="w-4 h-4 text-chart-3" />
+                                        <p className="font-bold text-chart-3 text-sm">Mirror their structure</p>
+                                    </div>
+                                    <p className="text-xs text-muted-foreground">Same sub-goals. Fair head-to-head.</p>
                                 </button>
-                                <button onClick={() => confirmJoin(true)}
-                                    className="w-full p-4 border-2 border-purple-200 rounded-2xl hover:bg-purple-50 hover:border-purple-400 transition-all">
-                                    <p className="font-bold text-purple-700 text-sm">⚙️ Custom setup</p>
-                                    <p className="text-xs text-gray-500 mt-0.5">Your own goal structure, compete on XP.</p>
+                                <button
+                                    onClick={() => confirmJoin(true)}
+                                    className="w-full p-4 border-2 border-chart-4/30 rounded-2xl hover:bg-chart-4/5 hover:border-chart-4/50 transition-all"
+                                >
+                                    <div className="flex items-center gap-2 mb-1">
+                                        <SettingsIcon className="w-4 h-4 text-chart-4" />
+                                        <p className="font-bold text-chart-4 text-sm">Custom setup</p>
+                                    </div>
+                                    <p className="text-xs text-muted-foreground">Your own goal structure, compete on XP.</p>
                                 </button>
                             </div>
-                            <button onClick={() => { setJoinSetupChoice(null); setPendingJoinCode(null); }}
-                                className="text-xs text-gray-400 hover:text-gray-600">Cancel</button>
+                            <button
+                                onClick={() => { setJoinSetupChoice(null); setPendingJoinCode(null); }}
+                                className="text-xs text-muted-foreground hover:text-foreground"
+                            >
+                                Cancel
+                            </button>
                         </motion.div>
                     </motion.div>
                 )}

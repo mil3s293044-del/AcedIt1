@@ -1,9 +1,10 @@
 import React from "react";
 import { ShieldOff, GraduationCap } from "lucide-react";
-import { base44 } from "@/api/base44Client";
 import { Button } from "@/components/ui/button";
+import { useAuth } from "@/lib/AuthContext";
 
 export default function Suspended() {
+    const { logout } = useAuth();
     return (
         <div className="min-h-screen bg-white flex flex-col items-center justify-center px-6 py-12">
             <div className="flex items-center gap-3 mb-10">
@@ -33,7 +34,7 @@ export default function Suspended() {
                 </a>
 
                 <button
-                    onClick={() => base44.auth.logout("/")}
+                    onClick={() => logout(true)}
                     className="mt-4 text-sm text-gray-400 hover:text-gray-600 underline"
                 >
                     Sign out

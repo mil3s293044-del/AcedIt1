@@ -1,8 +1,7 @@
 import React from "react";
 import { motion } from "framer-motion";
 import { Progress } from "@/components/ui/progress";
-import { Badge } from "@/components/ui/badge";
-import { Zap, TrendingUp, Trophy, Lock } from "lucide-react";
+import { Zap, TrendingUp, Trophy, Lock, Crown, Flame, Check } from "lucide-react";
 import {
     XP_RANKS, getRankFromXP, getRankProgress, xpToNextRank,
     levelFromXP, levelProgress, xpToNextLevel, xpForLevel,
@@ -18,23 +17,25 @@ export default function XPLevelCard({ totalXP = 0, seasonXP = 0, streakDays = 0,
 
     if (compact) {
         return (
-            <div className={`bg-gradient-to-r ${rank.gradient} rounded-2xl p-4 text-white`}>
+            <div className="card-soft p-4">
                 <div className="flex items-center justify-between gap-3">
                     <div className="flex items-center gap-3">
-                        <span className="text-3xl">{rank.emoji}</span>
+                        <div className="w-12 h-12 rounded-xl bg-xp/10 flex items-center justify-center flex-shrink-0">
+                            <Trophy className="w-6 h-6 text-xp" />
+                        </div>
                         <div>
-                            <p className="font-black text-sm">{rank.name}</p>
-                            <p className="text-white/80 text-xs">Level {level}</p>
+                            <p className="font-display font-extrabold text-foreground text-sm">{rank.name}</p>
+                            <p className="text-muted-foreground text-xs">Level {level}</p>
                         </div>
                     </div>
                     <div className="text-right">
-                        <p className="text-2xl font-black">{totalXP.toLocaleString()}</p>
-                        <p className="text-white/80 text-xs">Total XP</p>
+                        <p className="text-2xl font-display font-extrabold text-foreground">{totalXP.toLocaleString()}</p>
+                        <p className="stat-label">Total XP</p>
                     </div>
                 </div>
                 <div className="mt-3">
-                    <Progress value={lvlPct} className="h-1.5 bg-white/30" />
-                    <p className="text-xs text-white/70 mt-1">{xpNeeded} XP to Level {level + 1}</p>
+                    <Progress value={lvlPct} className="h-1.5" />
+                    <p className="text-xs text-muted-foreground mt-1">{xpNeeded} XP to Level {level + 1}</p>
                 </div>
             </div>
         );
@@ -44,113 +45,142 @@ export default function XPLevelCard({ totalXP = 0, seasonXP = 0, streakDays = 0,
         <div className="space-y-4">
             {/* Main rank card */}
             <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}
-                className={`bg-gradient-to-br ${rank.gradient} rounded-2xl overflow-hidden shadow-xl`}>
-                <div className="p-6">
-                    <div className="flex items-start justify-between gap-4">
-                        <div className="flex items-center gap-4">
-                            <div className="w-20 h-20 bg-white/20 backdrop-blur-sm rounded-2xl flex items-center justify-center text-5xl shadow-inner">
-                                {rank.emoji}
-                            </div>
-                            <div>
-                                <p className="text-white/80 text-sm font-semibold uppercase tracking-wider mb-1">Rank</p>
-                                <h2 className="text-2xl font-black text-white leading-tight">{rank.name}</h2>
-                                <div className="flex items-center gap-2 mt-1">
-                                    <Badge className="bg-white/20 text-white border-0 text-xs font-bold">
-                                        Level {level}
-                                    </Badge>
-                                    {streakDays >= 7 && (
-                                        <Badge className="bg-white/20 text-white border-0 text-xs font-bold">
-                                            🔥 {streakDays}d streak
-                                        </Badge>
-                                    )}
-                                </div>
+                className="card-soft p-6">
+                <div className="flex items-start justify-between gap-4">
+                    <div className="flex items-center gap-4">
+                        <div className="w-16 h-16 rounded-2xl bg-xp/10 flex items-center justify-center flex-shrink-0">
+                            <Trophy className="w-8 h-8 text-xp" />
+                        </div>
+                        <div>
+                            <p className="stat-label mb-1">Rank</p>
+                            <h2 className="font-display text-2xl font-extrabold text-foreground leading-tight">{rank.name}</h2>
+                            <div className="flex items-center gap-2 mt-2">
+                                <span className="pill bg-xp/15 text-xp">
+                                    Level {level}
+                                </span>
+                                {streakDays >= 7 && (
+                                    <span className="pill bg-streak/15 text-streak gap-1.5">
+                                        <Flame className="w-3 h-3" />
+                                        {streakDays}d streak
+                                    </span>
+                                )}
                             </div>
                         </div>
-                        <div className="text-right">
-                            <p className="text-4xl font-black text-white">{totalXP.toLocaleString()}</p>
-                            <p className="text-white/80 text-sm font-medium">Total XP</p>
-                        </div>
+                    </div>
+                    <div className="text-right">
+                        <p className="stat-num text-foreground">{totalXP.toLocaleString()}</p>
+                        <p className="stat-label">Total XP</p>
                     </div>
                 </div>
 
                 {/* Rank progress */}
-                <div className="bg-black/20 px-6 py-4">
+                <div className="mt-5 pt-5 border-t border-border">
                     {nextRank ? (
                         <div className="space-y-2">
-                            <div className="flex justify-between text-sm text-white/90 font-medium">
+                            <div className="flex justify-between text-sm font-bold text-foreground">
                                 <span>{rank.name}</span>
-                                <span>{nextRank.name}</span>
+                                <span className="text-muted-foreground">{nextRank.name}</span>
                             </div>
-                            <div className="h-3 bg-white/20 rounded-full overflow-hidden">
+                            <div className="h-3 bg-secondary rounded-full overflow-hidden">
                                 <motion.div
                                     initial={{ width: 0 }}
                                     animate={{ width: `${rankPct}%` }}
                                     transition={{ duration: 1, ease: "easeOut" }}
-                                    className="h-full bg-white/80 rounded-full"
+                                    className="h-full bg-xp rounded-full"
                                 />
                             </div>
-                            <p className="text-white/70 text-xs text-center">
+                            <p className="text-xs text-muted-foreground text-center">
                                 {xpToNextRank(totalXP).toLocaleString()} XP to next rank
                             </p>
                         </div>
                     ) : (
-                        <p className="text-white/90 text-center font-bold text-sm">👑 Max rank achieved</p>
+                        <div className="flex items-center justify-center gap-2">
+                            <Crown className="w-4 h-4 text-chart-4" />
+                            <p className="text-foreground font-bold text-sm">Max rank achieved</p>
+                        </div>
                     )}
                 </div>
             </motion.div>
 
             {/* Level card */}
             <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }}
-                className="bg-white rounded-2xl border border-gray-100 p-5">
-                <div className="flex items-center justify-between mb-4">
-                    <div className="flex items-center gap-2">
-                        <Zap className="w-5 h-5 text-amber-500" />
-                        <h3 className="font-bold text-gray-900">Level Progress</h3>
+                className="card-soft p-5">
+                <div className="flex items-center gap-3 mb-4">
+                    <div className="w-10 h-10 rounded-xl bg-xp/10 flex items-center justify-center flex-shrink-0">
+                        <Zap className="w-5 h-5 text-xp" />
                     </div>
-                    <Badge className="bg-amber-100 text-amber-800 font-bold">Level {level}</Badge>
+                    <div className="flex-1">
+                        <h3 className="font-display font-extrabold text-foreground text-base">Level Progress</h3>
+                        <p className="text-xs text-muted-foreground mt-0.5">Climb levels by earning XP from any source.</p>
+                    </div>
+                    <span className="pill bg-xp/15 text-xp">Level {level}</span>
                 </div>
                 <div className="space-y-2">
-                    <div className="flex justify-between text-sm text-gray-600">
+                    <div className="flex justify-between text-sm text-muted-foreground">
                         <span>Level {level}</span>
-                        <span className="font-semibold text-gray-900">{lvlPct}%</span>
+                        <span className="font-bold text-foreground">{lvlPct}%</span>
                         <span>Level {level + 1}</span>
                     </div>
-                    <div className="h-3 bg-gray-100 rounded-full overflow-hidden">
+                    <div className="h-3 bg-secondary rounded-full overflow-hidden">
                         <motion.div
                             initial={{ width: 0 }}
                             animate={{ width: `${lvlPct}%` }}
                             transition={{ duration: 1, ease: "easeOut", delay: 0.2 }}
-                            className="h-full bg-gradient-to-r from-amber-400 to-orange-500 rounded-full"
+                            className="h-full bg-xp rounded-full"
                         />
                     </div>
-                    <p className="text-xs text-gray-500 text-center">{xpNeeded.toLocaleString()} XP to Level {level + 1}</p>
+                    <p className="text-xs text-muted-foreground text-center">{xpNeeded.toLocaleString()} XP to Level {level + 1}</p>
                 </div>
             </motion.div>
 
             {/* Rank ladder */}
             <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.15 }}
-                className="bg-white rounded-2xl border border-gray-100 p-5">
-                <div className="flex items-center gap-2 mb-4">
-                    <Trophy className="w-5 h-5 text-purple-500" />
-                    <h3 className="font-bold text-gray-900">Rank Ladder</h3>
+                className="card-soft p-5">
+                <div className="flex items-center gap-3 mb-4">
+                    <div className="w-10 h-10 rounded-xl bg-chart-4/10 flex items-center justify-center flex-shrink-0">
+                        <Trophy className="w-5 h-5 text-chart-4" />
+                    </div>
+                    <div>
+                        <h3 className="font-display font-extrabold text-foreground text-base">Rank Ladder</h3>
+                        <p className="text-xs text-muted-foreground mt-0.5">Long-term prestige tiers — never reset.</p>
+                    </div>
                 </div>
                 <div className="space-y-2">
-                    {XP_RANKS.map((r, idx) => {
+                    {XP_RANKS.map((r) => {
                         const isUnlocked = totalXP >= r.minXP;
                         const isCurrent = r.tier === rank.tier;
                         return (
-                            <div key={r.name} className={`flex items-center gap-3 rounded-xl px-3 py-2 transition-all ${isCurrent ? "bg-purple-50 border-2 border-purple-300" : isUnlocked ? "bg-gray-50" : "opacity-40"}`}>
-                                <span className="text-xl w-8 text-center">{r.emoji}</span>
-                                <div className="flex-1">
-                                    <p className={`text-sm font-semibold ${isCurrent ? "text-purple-800" : isUnlocked ? "text-gray-800" : "text-gray-400"}`}>{r.name}</p>
-                                    <p className="text-xs text-gray-400">{r.minXP.toLocaleString()} XP{r.maxXP !== Infinity ? ` – ${r.maxXP.toLocaleString()}` : '+'}</p>
+                            <div
+                                key={r.name}
+                                className={`flex items-center gap-3 rounded-xl px-3 py-2.5 transition-all ${
+                                    isCurrent
+                                        ? 'bg-chart-4/10 border-2 border-chart-4/30'
+                                        : isUnlocked
+                                            ? 'bg-secondary/50 border-2 border-transparent'
+                                            : 'bg-secondary/30 border-2 border-transparent opacity-50'
+                                }`}
+                            >
+                                <div className={`w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 ${
+                                    isCurrent ? 'bg-chart-4/15' : isUnlocked ? 'bg-surface' : 'bg-secondary'
+                                }`}>
+                                    <Trophy className={`w-4 h-4 ${
+                                        isCurrent ? 'text-chart-4' : isUnlocked ? 'text-foreground' : 'text-muted-foreground/60'
+                                    }`} />
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                    <p className={`text-sm font-bold ${
+                                        isCurrent ? 'text-chart-4' : isUnlocked ? 'text-foreground' : 'text-muted-foreground/60'
+                                    }`}>{r.name}</p>
+                                    <p className="text-xs text-muted-foreground/60">{r.minXP.toLocaleString()} XP{r.maxXP !== Infinity ? ` – ${r.maxXP.toLocaleString()}` : '+'}</p>
                                 </div>
                                 {isCurrent ? (
-                                    <Badge className="bg-purple-500 text-white text-xs">Current</Badge>
+                                    <span className="pill bg-chart-4 text-white">Current</span>
                                 ) : !isUnlocked ? (
-                                    <Lock className="w-4 h-4 text-gray-300" />
+                                    <Lock className="w-4 h-4 text-muted-foreground/60" />
                                 ) : (
-                                    <Badge className="bg-green-100 text-green-700 text-xs">✓</Badge>
+                                    <span className="pill bg-primary/15 text-primary">
+                                        <Check className="w-3 h-3" />
+                                    </span>
                                 )}
                             </div>
                         );
@@ -160,29 +190,34 @@ export default function XPLevelCard({ totalXP = 0, seasonXP = 0, streakDays = 0,
 
             {/* XP Sources Guide */}
             <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }}
-                className="bg-gradient-to-br from-indigo-50 to-purple-50 border border-indigo-200 rounded-2xl p-5">
-                <div className="flex items-center gap-2 mb-4">
-                    <TrendingUp className="w-5 h-5 text-indigo-600" />
-                    <h3 className="font-bold text-gray-900">Earn XP From</h3>
+                className="card-soft p-5">
+                <div className="flex items-center gap-3 mb-4">
+                    <div className="w-10 h-10 rounded-xl bg-chart-3/10 flex items-center justify-center flex-shrink-0">
+                        <TrendingUp className="w-5 h-5 text-chart-3" />
+                    </div>
+                    <div>
+                        <h3 className="font-display font-extrabold text-foreground text-base">Earn XP From</h3>
+                        <p className="text-xs text-muted-foreground mt-0.5">Daily caps prevent grinding — real effort wins.</p>
+                    </div>
                 </div>
                 <div className="grid grid-cols-2 gap-2 text-sm">
                     {[
-                        ["⚡ AI Challenges", "28–104 XP"],
-                        ["🎯 Sub-goals", "40–195 XP"],
-                        ["🏆 Full Goals", "240–540 XP"],
-                        ["📝 Quizzes", "8–50 XP"],
-                        ["⏱️ Focus sessions", "1.6–96 XP/hr"],
-                        ["🔥 Daily streak", "15–100 XP"],
-                        ["🃏 Flashcards", "0.6–1.5 XP/card"],
-                        ["💰 Score wagers", "up to 3.5× bet"],
+                        ["AI Challenges", "28–104 XP"],
+                        ["Sub-goals", "40–195 XP"],
+                        ["Full Goals", "240–540 XP"],
+                        ["Quizzes", "8–50 XP"],
+                        ["Focus sessions", "1.6–96 XP/hr"],
+                        ["Daily streak", "15–100 XP"],
+                        ["Flashcards", "0.6–1.5 XP/card"],
+                        ["Score wagers", "up to 3.5× bet"],
                     ].map(([label, xp]) => (
-                        <div key={label} className="flex justify-between items-center bg-white/60 rounded-lg px-2.5 py-1.5">
-                            <span className="text-gray-700 text-xs">{label}</span>
-                            <span className="font-bold text-indigo-700 text-xs">{xp}</span>
+                        <div key={label} className="flex justify-between items-center bg-secondary/50 rounded-lg px-2.5 py-1.5">
+                            <span className="text-foreground text-xs">{label}</span>
+                            <span className="font-bold text-chart-3 text-xs">{xp}</span>
                         </div>
                     ))}
                 </div>
-                <p className="text-xs text-gray-500 mt-3 text-center">Daily caps prevent grinding. Difficulty & accuracy multipliers reward real effort.</p>
+                <p className="text-xs text-muted-foreground mt-3 text-center">Difficulty &amp; accuracy multipliers reward real effort.</p>
             </motion.div>
         </div>
     );

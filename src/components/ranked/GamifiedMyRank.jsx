@@ -1,40 +1,72 @@
 import React, { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import { base44 } from "@/api/base44Client";
-import { Clock, Flame, Target, Trophy, Zap, TrendingUp, Crown, Star, Sword, Gamepad2 } from "lucide-react";
+import {
+    Clock, Flame, Target, Trophy, Zap, TrendingUp, Crown, Star, Gamepad2,
+    Brain, Layers, Rocket, Gem, Medal, Check
+} from "lucide-react";
 import { startOfWeek } from 'date-fns';
-import { Badge } from "@/components/ui/badge";
-import { Progress } from "@/components/ui/progress";
 import XPLevelCard from "./XPLevelCard";
 import StreakMultiplier from "./StreakMultiplier";
 import DailyMissions from "./DailyMissions";
 
-const StatCard = ({ icon, value, label, color, delay, sub }) => {
+// Pre-resolved Tailwind class strings — required so the JIT can detect them at build time.
+const ACCENT_CLASSES = {
+    primary:   { bg10: "bg-primary/10",  text: "text-primary" },
+    xp:        { bg10: "bg-xp/10",       text: "text-xp" },
+    streak:    { bg10: "bg-streak/10",   text: "text-streak" },
+    "chart-3": { bg10: "bg-chart-3/10",  text: "text-chart-3" },
+    "chart-4": { bg10: "bg-chart-4/10",  text: "text-chart-4" },
+};
+
+const StatCard = ({ icon, value, label, accent, delay, sub }) => {
     const Icon = icon;
+    const cls = ACCENT_CLASSES[accent] || ACCENT_CLASSES.primary;
     return (
-        <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay }}
-            className="bg-white rounded-2xl p-4 border border-gray-100 shadow-sm hover:shadow-md transition-shadow">
-            <div className="flex items-center justify-between mb-2">
-                <div className={`w-9 h-9 rounded-xl flex items-center justify-center ${color} flex-shrink-0`}>
-                    <Icon className="w-4.5 h-4.5 text-white" />
+        <motion.div
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay }}
+            className="card-soft card-soft-hover p-4"
+        >
+            <div className="flex items-center justify-between mb-3">
+                <div className={`w-10 h-10 rounded-xl ${cls.bg10} flex items-center justify-center flex-shrink-0`}>
+                    <Icon className={`w-5 h-5 ${cls.text}`} />
                 </div>
             </div>
-            <p className="text-xl font-black text-gray-900 leading-none">{value}</p>
-            <p className="text-xs text-gray-500 mt-0.5">{label}</p>
-            {sub && <p className="text-xs text-gray-400 mt-0.5">{sub}</p>}
+            <p className="text-2xl font-display font-extrabold text-foreground leading-none">{value}</p>
+            <p className="stat-label mt-1">{label}</p>
+            {sub && <p className="text-xs text-muted-foreground/60 mt-1">{sub}</p>}
         </motion.div>
     );
 };
 
-const AchievementBadge = ({ emoji, label, desc, xp, unlocked }) => (
-    <div className={`flex flex-col items-center gap-1 p-3 rounded-xl border-2 transition-all text-center relative ${unlocked ? 'bg-white border-amber-300 shadow-sm' : 'bg-gray-50 border-gray-200 opacity-50'}`}>
-        <span className={`text-2xl ${unlocked ? '' : 'grayscale'}`}>{emoji}</span>
-        <p className={`text-xs font-bold leading-tight ${unlocked ? 'text-gray-800' : 'text-gray-400'}`}>{label}</p>
-        <p className="text-xs text-gray-400 leading-tight">{desc}</p>
-        <div className={`text-xs font-black mt-0.5 ${unlocked ? 'text-amber-600' : 'text-gray-300'}`}>+{xp} XP</div>
-        {unlocked && <div className="absolute -top-1.5 -right-1.5 w-4 h-4 bg-amber-400 rounded-full flex items-center justify-center text-white text-xs">✓</div>}
-    </div>
-);
+const AchievementBadge = ({ icon, label, desc, xp, unlocked }) => {
+    const Icon = icon;
+    return (
+        <div
+            className={`relative flex flex-col items-center gap-1.5 p-3 rounded-xl border-2 transition-all text-center ${
+                unlocked
+                    ? 'bg-xp/5 border-xp/30'
+                    : 'bg-secondary/50 border-transparent opacity-50'
+            }`}
+        >
+            <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${
+                unlocked ? 'bg-xp/15' : 'bg-secondary'
+            }`}>
+                <Icon className={`w-5 h-5 ${unlocked ? 'text-xp' : 'text-muted-foreground/60'}`} />
+            </div>
+            <p className={`text-xs font-bold leading-tight ${unlocked ? 'text-foreground' : 'text-muted-foreground/60'}`}>{label}</p>
+            <p className="text-[11px] text-muted-foreground/60 leading-tight">{desc}</p>
+            <div className={`text-xs font-display font-extrabold mt-0.5 ${unlocked ? 'text-xp' : 'text-muted-foreground/60'}`}>+{xp} XP</div>
+            {unlocked && (
+                <div className="absolute -top-1.5 -right-1.5 w-5 h-5 bg-xp rounded-full flex items-center justify-center">
+                    <Check className="w-3 h-3 text-white" />
+                </div>
+            )}
+        </div>
+    );
+};
 
 export default function GamifiedMyRank() {
     const [userProfile, setUserProfile] = useState(null);
@@ -92,9 +124,9 @@ export default function GamifiedMyRank() {
     if (isLoading) {
         return (
             <div className="space-y-4">
-                <div className="bg-gray-200 rounded-2xl animate-pulse h-44" />
+                <div className="card-soft animate-pulse h-44" />
                 <div className="grid grid-cols-2 gap-3">
-                    {[1,2,3,4].map(i => <div key={i} className="bg-white rounded-2xl p-4 animate-pulse h-20" />)}
+                    {[1,2,3,4].map(i => <div key={i} className="card-soft p-4 animate-pulse h-20" />)}
                 </div>
             </div>
         );
@@ -105,18 +137,18 @@ export default function GamifiedMyRank() {
     const streakDays = userProfile?.streak_days || 0;
 
     const achievements = [
-        { emoji: "🔥", label: "Streak Starter",    desc: "7-day streak",     xp: 200,  unlocked: streakDays >= 7 },
-        { emoji: "💥", label: "Streak Hunter",     desc: "30-day streak",    xp: 750,  unlocked: streakDays >= 30 },
-        { emoji: "👑", label: "Streak Legend",     desc: "100-day streak",   xp: 3000, unlocked: streakDays >= 100 },
-        { emoji: "🧠", label: "Quiz Machine",      desc: "100 quizzes done", xp: 500,  unlocked: quizStats.total >= 100 },
-        { emoji: "⚡", label: "Quiz Master",       desc: "Avg score 95%+",   xp: 1000, unlocked: quizStats.avgScore >= 95 },
-        { emoji: "🃏", label: "Card Collector",    desc: "500 flashcards",   xp: 400,  unlocked: flashcardStats >= 500 },
-        { emoji: "🎯", label: "Goal Crusher",      desc: "20 goals done",    xp: 600,  unlocked: completedGoals >= 20 },
-        { emoji: "⏱️", label: "Iron Student",      desc: "500hrs of study",  xp: 2000, unlocked: studyStats.totalStudyTime >= 30000 },
-        { emoji: "🏆", label: "Elite Scholar",     desc: "10,000 total XP",  xp: 1500, unlocked: totalXP >= 10000 },
-        { emoji: "🚀", label: "Study Rocket",      desc: "50hrs in a week",  xp: 800,  unlocked: studyStats.weeklyStudyTime >= 3000 },
-        { emoji: "💎", label: "Diamond Mind",      desc: "Reach Level 50",   xp: 5000, unlocked: (userProfile?.current_level || 0) >= 50 },
-        { emoji: "🌟", label: "Century Quizzes",   desc: "200 quizzes done", xp: 2500, unlocked: quizStats.total >= 200 },
+        { icon: Flame,   label: "Streak Starter", desc: "7-day streak",     xp: 200,  unlocked: streakDays >= 7 },
+        { icon: Zap,     label: "Streak Hunter",  desc: "30-day streak",    xp: 750,  unlocked: streakDays >= 30 },
+        { icon: Crown,   label: "Streak Legend",  desc: "100-day streak",   xp: 3000, unlocked: streakDays >= 100 },
+        { icon: Brain,   label: "Quiz Machine",   desc: "100 quizzes done", xp: 500,  unlocked: quizStats.total >= 100 },
+        { icon: Zap,     label: "Quiz Master",    desc: "Avg score 95%+",   xp: 1000, unlocked: quizStats.avgScore >= 95 },
+        { icon: Layers,  label: "Card Collector", desc: "500 flashcards",   xp: 400,  unlocked: flashcardStats >= 500 },
+        { icon: Target,  label: "Goal Crusher",   desc: "20 goals done",    xp: 600,  unlocked: completedGoals >= 20 },
+        { icon: Clock,   label: "Iron Student",   desc: "500hrs of study",  xp: 2000, unlocked: studyStats.totalStudyTime >= 30000 },
+        { icon: Trophy,  label: "Elite Scholar",  desc: "10,000 total XP",  xp: 1500, unlocked: totalXP >= 10000 },
+        { icon: Rocket,  label: "Study Rocket",   desc: "50hrs in a week",  xp: 800,  unlocked: studyStats.weeklyStudyTime >= 3000 },
+        { icon: Gem,     label: "Diamond Mind",   desc: "Reach Level 50",   xp: 5000, unlocked: (userProfile?.current_level || 0) >= 50 },
+        { icon: Medal,   label: "Century Quizzes",desc: "200 quizzes done", xp: 2500, unlocked: quizStats.total >= 200 },
     ];
 
     return (
@@ -126,23 +158,28 @@ export default function GamifiedMyRank() {
 
             {/* Stats grid */}
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                <StatCard icon={Zap}      value={totalXP.toLocaleString()}           label="Total XP"           color="bg-amber-500"   delay={0.04} />
-                <StatCard icon={Flame}    value={`${streakDays}d`}                    label="Study Streak"       color="bg-orange-500"  delay={0.08}
+                <StatCard icon={Zap}        value={totalXP.toLocaleString()}         label="Total XP"         accent="xp"      delay={0.04} />
+                <StatCard icon={Flame}      value={`${streakDays}d`}                 label="Study Streak"     accent="streak"  delay={0.08}
                     sub={streakDays >= 7 ? `${streakDays >= 30 ? '2.5' : streakDays >= 21 ? '2.0' : streakDays >= 14 ? '1.75' : '1.5'}× XP mult.` : 'Keep going!'} />
-                <StatCard icon={Target}   value={completedGoals}                      label="Goals Completed"    color="bg-emerald-500" delay={0.16} />
-                <StatCard icon={Clock}    value={fmt(studyStats.totalStudyTime)}      label="Total Study Time"   color="bg-blue-500"    delay={0.2} />
-                <StatCard icon={TrendingUp} value={fmt(studyStats.weeklyStudyTime)}   label="This Week"          color="bg-pink-500"    delay={0.24} />
+                <StatCard icon={Target}     value={completedGoals}                   label="Goals Completed"  accent="primary" delay={0.16} />
+                <StatCard icon={Clock}      value={fmt(studyStats.totalStudyTime)}   label="Total Study Time" accent="chart-3" delay={0.2} />
+                <StatCard icon={TrendingUp} value={fmt(studyStats.weeklyStudyTime)}  label="This Week"        accent="chart-4" delay={0.24} />
             </div>
 
             {/* Achievements */}
             <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.28 }}
-                className="bg-white rounded-2xl border border-gray-100 p-4 shadow-sm">
-                <div className="flex items-center gap-2 mb-3">
-                    <Star className="w-5 h-5 text-amber-500" />
-                    <h3 className="font-bold text-gray-900 text-sm">Achievements</h3>
-                    <Badge className="bg-amber-100 text-amber-700 border-0 text-xs ml-auto">
-                        {achievements.filter(a => a.unlocked).length}/{achievements.length} unlocked
-                    </Badge>
+                className="card-soft p-5">
+                <div className="flex items-center gap-3 mb-4">
+                    <div className="w-10 h-10 rounded-xl bg-xp/10 flex items-center justify-center flex-shrink-0">
+                        <Star className="w-5 h-5 text-xp" />
+                    </div>
+                    <div className="flex-1">
+                        <h3 className="font-display font-extrabold text-foreground text-base">Achievements</h3>
+                        <p className="text-xs text-muted-foreground mt-0.5">Long-term milestones across every system.</p>
+                    </div>
+                    <span className="pill bg-xp/15 text-xp">
+                        {achievements.filter(a => a.unlocked).length}/{achievements.length}
+                    </span>
                 </div>
                 <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
                     {achievements.map((a, i) => <AchievementBadge key={i} {...a} />)}
@@ -157,26 +194,30 @@ export default function GamifiedMyRank() {
 
             {/* XP Sources */}
             <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.35 }}
-                className="bg-gradient-to-br from-indigo-50 to-purple-50 border border-indigo-200 rounded-2xl p-5">
-                <div className="flex items-center gap-2 mb-3">
-                    <Gamepad2 className="w-5 h-5 text-indigo-600" />
-                    <h3 className="font-bold text-gray-900 text-sm">How to Earn XP</h3>
-                    <Badge className="bg-indigo-100 text-indigo-700 border-0 text-xs ml-auto">Streak mult. applies to all</Badge>
+                className="card-soft p-5">
+                <div className="flex items-center gap-3 mb-4">
+                    <div className="w-10 h-10 rounded-xl bg-chart-3/10 flex items-center justify-center flex-shrink-0">
+                        <Gamepad2 className="w-5 h-5 text-chart-3" />
+                    </div>
+                    <div className="flex-1">
+                        <h3 className="font-display font-extrabold text-foreground text-base">How to Earn XP</h3>
+                        <p className="text-xs text-muted-foreground mt-0.5">Streak multiplier applies to everything.</p>
+                    </div>
                 </div>
-                <div className="grid grid-cols-2 gap-1.5">
+                <div className="grid grid-cols-2 gap-2">
                     {[
-                        ["⏱️ Study sessions", "1 XP/min"],
-                        ["🃏 Flashcards", "0.5 XP/card"],
-                        ["📝 Quizzes", "2 XP/mark"],
-                        ["🎯 Sub-goals", "40–195 XP"],
-                        ["🏆 Full goals", "240–540 XP"],
-                        ["💰 Score wagers", "up to 3.5×"],
-                        ["🔥 Daily streak", "15–100 XP"],
-                        ["🏫 Competitions", "Bonus XP"],
+                        ["Study sessions", "1 XP/min"],
+                        ["Flashcards", "0.5 XP/card"],
+                        ["Quizzes", "2 XP/mark"],
+                        ["Sub-goals", "40–195 XP"],
+                        ["Full goals", "240–540 XP"],
+                        ["Score wagers", "up to 3.5×"],
+                        ["Daily streak", "15–100 XP"],
+                        ["Competitions", "Bonus XP"],
                     ].map(([label, xp]) => (
-                        <div key={label} className="flex justify-between items-center bg-white/70 rounded-xl px-3 py-2">
-                            <span className="text-gray-700 text-xs">{label}</span>
-                            <span className="font-black text-indigo-700 text-xs">{xp}</span>
+                        <div key={label} className="flex justify-between items-center bg-secondary/50 rounded-lg px-3 py-2">
+                            <span className="text-foreground text-xs">{label}</span>
+                            <span className="font-bold text-chart-3 text-xs">{xp}</span>
                         </div>
                     ))}
                 </div>

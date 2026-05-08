@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/components/ui/use-toast";
 import { base44 } from "@/api/base44Client";
-import { stripeCheckout } from "@/functions/stripeCheckout";
+import { stripeCheckout } from "@/api/functionsShim";
 import {
     Check,
     Crown,
@@ -21,41 +21,45 @@ const pricingPlans = [
         name: "Free",
         price: "$0",
         period: "forever",
-        description: "Perfect for getting started",
+        description: "Manual study, full social — feel the product before paying",
         icon: Zap,
         color: "from-gray-600 to-gray-700",
         features: [
-            "3 flashcard creation credits/month",
-            "2 quiz creation credits/month",
-            "Pomodoro timer",
-            "Basic study tracking",
-            "Can add friends (no sharing)"
+            "Pomodoro timer & study sessions",
+            "Manual quizzes & flashcards (unlimited)",
+            "XP, streaks, friends, leaderboards",
+            "Subjects, basic goals, competitions, wagers",
+            "3 AI-generated quizzes (lifetime)",
+            "3 AI-generated flashcard sets (lifetime)"
         ],
         limitations: [
-            "No AI Tools access",
-            "No Goals & Study Planner",
+            "No AI Tools (Essay Planner, Math Tutor, etc.)",
             "No AI Test Marker",
-            "Limited study techniques"
+            "No Spaced Repetition",
+            "No Blurting / Active Recall AI",
+            "No Goal & Roadmap AI",
+            "No Advanced Analytics"
         ]
     },
     {
         tier: "premium",
         name: "Premium",
-        price: "$10",
-        period: "per month",
-        priceId: "price_1Sdk2oRYztKnRmrdqp2OjXl3",
-        description: "Full access to everything",
+        price: "$5",
+        period: "per week",
+        priceId: import.meta.env.VITE_STRIPE_PRICE_PREMIUM,
+        description: "Everything unlocked, with fair-use daily limits",
         icon: Crown,
         color: "from-purple-600 to-pink-600",
         popular: true,
         features: [
-            "Unlimited flashcards",
-            "Unlimited quizzes & AI Test Marker",
-            "Full AI Tools access",
-            "Complete Goals & Study Planner",
-            "All study techniques",
-            "Share content with friends",
-            "Advanced analytics",
+            "All free features, plus:",
+            "Daily AI-generated quizzes & flashcard sets",
+            "All 10 AI study tools",
+            "AI Test Marker with detailed feedback",
+            "Goal & Roadmap AI generation",
+            "Spaced Repetition (SM-2)",
+            "Blurting & Active Recall with AI marking",
+            "Advanced Analytics & Performance Coach",
             "Priority support"
         ],
         limitations: []
@@ -113,11 +117,14 @@ export default function Pricing() {
         try {
             const response = await stripeCheckout({
                 priceId: plan.priceId,
-                tier: plan.tier
+                tier: plan.tier,
+                successUrl: `${window.location.origin}/PaymentSuccess?session_id={CHECKOUT_SESSION_ID}`,
+                cancelUrl: `${window.location.origin}/Pricing`,
             });
 
-            if (response.data.url) {
-                window.location.href = response.data.url;
+            const url = response?.data?.checkoutUrl || response?.data?.url || response?.checkoutUrl;
+            if (url) {
+                window.location.href = url;
             } else {
                 throw new Error("No checkout URL received");
             }

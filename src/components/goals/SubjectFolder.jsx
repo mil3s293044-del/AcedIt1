@@ -35,7 +35,7 @@ import {
 import { base44 } from "@/api/base44Client";
 import { useToast } from "@/components/ui/use-toast";
 import { format } from "date-fns";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, Link } from "react-router-dom";
 import { createPageUrl } from "@/utils";
 
 import SubjectFolderGridView from "./SubjectFolderGridView";
@@ -1228,9 +1228,20 @@ export default function SubjectFolder({ userSubjects: initialUserSubjects, user,
                     </CardHeader>
                     <CardContent className="p-4">
                       {studySessions.length === 0 ?
-                        <div className="text-center py-8">
-                          <Brain className="w-12 h-12 text-gray-300 mx-auto mb-3" />
-                          <p className="text-sm text-gray-500">No sessions yet</p>
+                        <div className="flex flex-col items-center text-center gap-3 py-8">
+                          <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-purple-100 to-pink-100 flex items-center justify-center">
+                            <Brain className="w-6 h-6 text-purple-600" />
+                          </div>
+                          <div>
+                            <p className="font-bold text-gray-900">No sessions for {selectedSubject?.subject_name || 'this subject'}</p>
+                            <p className="text-sm text-gray-500 mt-1 max-w-[260px]">Knock out a quick study session — it'll appear here.</p>
+                          </div>
+                          <Link to={createPageUrl("Study")}>
+                            <Button size="sm" className="gap-1.5 bg-gradient-to-r from-purple-500 to-pink-600 hover:from-purple-600 hover:to-pink-700">
+                              <Brain className="w-3.5 h-3.5" />
+                              Start a session
+                            </Button>
+                          </Link>
                         </div> :
 
                         <div className="space-y-3">

@@ -21,44 +21,42 @@ const pricingPlans = [
         tier: "free",
         name: "Free",
         price: "$0",
-        description: "Get started with basic features",
+        description: "Get a real taste — manual study, full social, 3 free AI generations",
         icon: Gift,
         features: [
-            "Pomodoro timer access",
-            "Active Recall & Blurting techniques",
-            "Add and share content with friends",
-            "500 AI credits (resets every 2 weeks)",
-            "AI flashcards: 100 credits each",
-            "AI quizzes: 100 credits each",
-            "Limited study tools"
+            "Pomodoro timer & study sessions",
+            "Manual quizzes & flashcards (unlimited)",
+            "Subjects, basic goals, competitions, wagers",
+            "XP, streaks, friends, leaderboards",
+            "3 AI-generated quizzes (lifetime)",
+            "3 AI-generated flashcard sets (lifetime)"
         ],
         limitations: [
-            "No Analytics",
-            "No Goals access",
-            "No Study Planner",
-            "No AI Tools",
+            "No AI Tools (Essay Planner, Math Tutor, etc.)",
+            "No AI Test Marker",
             "No Spaced Repetition",
-            "No AI Test Marker"
+            "No Blurting or Active Recall AI",
+            "No Goal AI generation",
+            "No Advanced Analytics"
         ]
     },
     {
         tier: "premium",
         name: "Premium",
-        price: "$10",
-        priceId: "price_1Sy5JDDB9myR4xodaXQtQHdH",
-        description: "Unlock full potential",
+        price: "$5",
+        priceId: import.meta.env.VITE_STRIPE_PRICE_PREMIUM,
+        description: "Everything unlocked — for serious VCE study",
         icon: Crown,
         popular: true,
         features: [
             "Everything in Free, plus:",
-            "Unlimited AI credits",
-            "Unlimited AI flashcard generation",
-            "Unlimited AI quiz generation",
+            "Daily AI-generated quizzes & flashcard sets",
+            "All 10 AI study tools",
             "AI Test Marker with detailed feedback",
-            "Full Goals & Study Planner access",
-            "All AI Tools (Essay Planner, Concept Explainer, etc.)",
-            "Spaced Repetition flashcards",
-            "Advanced Analytics",
+            "Goal & Roadmap AI generation",
+            "Spaced Repetition (SM-2 algorithm)",
+            "Blurting & Active Recall with AI marking",
+            "Advanced Analytics & Performance Coach",
             "Priority support"
         ]
     }
@@ -254,7 +252,7 @@ export default function Subscription() {
                                             <div className="flex items-baseline gap-1">
                                                 <span className="text-5xl font-bold text-gray-900">{plan.price}</span>
                                                 {plan.tier === 'premium' && (
-                                                    <span className="text-gray-600">/month</span>
+                                                    <span className="text-gray-600">/week</span>
                                                 )}
                                             </div>
                                         </div>
@@ -348,7 +346,7 @@ export default function Subscription() {
                                 <tbody>
                                     {[
                                         { feature: "Pomodoro Timer", free: true, premium: true },
-                                        { feature: "AI Credits", free: "500 (resets every 2 weeks)", premium: "Unlimited" },
+                                        { feature: "AI Credits", free: "3 lifetime quizzes + 3 lifetime flashcards", premium: "Full access with daily fair-use caps" },
                                         { feature: "AI Flashcards", free: "100 credits each", premium: "Unlimited" },
                                         { feature: "AI Quizzes", free: "100 credits each", premium: "Unlimited" },
                                         { feature: "Goals & Planning", free: false, premium: true },
@@ -417,7 +415,7 @@ export default function Subscription() {
                             <div>
                                 <h4 className="font-semibold text-gray-900 mb-2">Is there a student discount?</h4>
                                 <p className="text-gray-600 text-sm">
-                                    The current Premium price is already optimized for students! At just $10/month, you get unlimited access to all AI-powered study tools.
+                                    The current Premium price is already optimized for students! At just $5/week, you get full access to all AI-powered study tools.
                                 </p>
                             </div>
                             <div>

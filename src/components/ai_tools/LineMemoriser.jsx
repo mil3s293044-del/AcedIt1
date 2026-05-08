@@ -218,9 +218,9 @@ export default function LineMemoriser() {
 
     if (mode === MODES.SETUP) {
         return (
-            <div className="space-y-5 max-w-3xl">
+            <div className="space-y-5">
                 {savedSessions.length > 0 && (
-                    <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
+                    <div className="card-soft overflow-hidden">
                         <div className="px-5 py-4 border-b border-gray-100">
                             <div className="flex items-center gap-2">
                                 <BookOpen className="w-4 h-4 text-pink-500" />
@@ -231,10 +231,10 @@ export default function LineMemoriser() {
                             {savedSessions.map(session => (
                                 <div key={session.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-xl">
                                     <div className="flex-1 min-w-0">
-                                        <p className="text-sm font-semibold text-gray-800 truncate">{session.title}</p>
+                                        <p className="text-sm font-semibold text-foreground truncate">{session.title}</p>
                                         <div className="flex items-center gap-3 mt-1">
                                             {session.subject && <Badge className="bg-pink-100 text-pink-700 border-0 text-xs">{session.subject}</Badge>}
-                                            <span className="text-xs text-gray-400">{session.progress}% complete</span>
+                                            <span className="text-xs text-muted-foreground/70">{session.progress}% complete</span>
                                             <div className="flex-1 max-w-24"><Progress value={session.progress} className="h-1.5" /></div>
                                         </div>
                                     </div>
@@ -260,42 +260,38 @@ export default function LineMemoriser() {
                     </div>
                 )}
 
-                <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
-                    <div className="bg-gradient-to-r from-pink-500 to-rose-600 px-5 py-4">
-                        <h2 className="text-white font-bold text-lg">Line Memoriser</h2>
-                        <p className="text-white/70 text-sm">Master any text through structured, adaptive memorization</p>
-                    </div>
+                <div className="card-soft overflow-hidden">
                     <div className="p-5 space-y-4">
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                             <div className="space-y-1.5">
-                                <label className="text-xs font-bold text-gray-500 uppercase tracking-wide">Subject</label>
+                                <label className="stat-label">Subject</label>
                                 <Select value={subject} onValueChange={setSubject}>
-                                    <SelectTrigger className="bg-gray-50 border-gray-200 h-10"><SelectValue placeholder="Select subject" /></SelectTrigger>
+                                    <SelectTrigger><SelectValue placeholder="Select subject" /></SelectTrigger>
                                     <SelectContent>
                                         {userSubjects.map(s => <SelectItem key={s.id} value={s.subject_name}>{s.subject_name}</SelectItem>)}
                                     </SelectContent>
                                 </Select>
                             </div>
                             <div className="space-y-1.5">
-                                <label className="text-xs font-bold text-gray-500 uppercase tracking-wide">Title</label>
-                                <Input placeholder="e.g., Hamlet's Soliloquy" value={title} onChange={e => setTitle(e.target.value)} className="bg-gray-50 border-gray-200 h-10" />
+                                <label className="stat-label">Title</label>
+                                <Input placeholder="e.g., Hamlet's Soliloquy" value={title} onChange={e => setTitle(e.target.value)} />
                             </div>
                         </div>
                         <div className="space-y-1.5">
-                            <label className="text-xs font-bold text-gray-500 uppercase tracking-wide">Text to Memorize</label>
-                            <Textarea placeholder="Paste your essay, script, speech, or any text..." value={content} onChange={e => setContent(e.target.value)} className="min-h-36 bg-gray-50 border-gray-200 resize-none" />
-                            <p className="text-xs text-gray-400">Text is automatically split into sentences for structured learning</p>
+                            <label className="stat-label">Text to Memorize</label>
+                            <Textarea placeholder="Paste your essay, script, speech, or any text..." value={content} onChange={e => setContent(e.target.value)} className="min-h-36 resize-none" />
+                            <p className="text-xs text-muted-foreground/70">Text is automatically split into sentences for structured learning</p>
                         </div>
                         <Button onClick={() => { const p = processText(content); if (p.length) initializeSession(p, null, title, subject); else toast({ title: 'Please enter some text', variant: 'destructive' }); }}
                             disabled={!content.trim() || !title.trim() || !subject}
-                            className="w-full bg-gradient-to-r from-pink-500 to-rose-600 hover:from-pink-600 hover:to-rose-700 h-11 font-semibold shadow-lg">
+                            className="w-full">
                             <Play className="w-4 h-4 mr-2" />Start Memorising
                         </Button>
                         <div className="grid grid-cols-3 gap-3 pt-2 border-t border-gray-100">
                             {[['📚', 'Break into sentences'], ['🔄', 'Spaced repetition'], ['🎯', 'Test full recall']].map(([icon, text]) => (
                                 <div key={text} className="text-center p-3 bg-gray-50 rounded-xl">
                                     <div className="text-xl mb-1">{icon}</div>
-                                    <p className="text-xs text-gray-500">{text}</p>
+                                    <p className="text-xs text-muted-foreground">{text}</p>
                                 </div>
                             ))}
                         </div>
@@ -306,7 +302,7 @@ export default function LineMemoriser() {
     }
 
     return (
-        <div className="space-y-4 max-w-3xl">
+        <div className="space-y-4">
             <Dialog open={showMorePracticeDialog} onOpenChange={setShowMorePracticeDialog}>
                 <DialogContent>
                     <DialogHeader><DialogTitle className="flex items-center gap-2"><Trophy className="w-5 h-5 text-amber-500" />Nicely done!</DialogTitle></DialogHeader>
@@ -322,7 +318,7 @@ export default function LineMemoriser() {
                 <DialogContent className="max-w-2xl">
                     <DialogHeader><DialogTitle className="flex items-center gap-2"><HelpCircle className="w-5 h-5 text-orange-500" />Feedback</DialogTitle></DialogHeader>
                     <div className="py-2 max-h-80 overflow-y-auto">
-                        {isFeedbackLoading ? <div className="flex items-center gap-3 py-8 justify-center text-gray-500"><RotateCw className="w-5 h-5 animate-spin" /><span>Analysing...</span></div>
+                        {isFeedbackLoading ? <div className="flex items-center gap-3 py-8 justify-center text-muted-foreground"><RotateCw className="w-5 h-5 animate-spin" /><span>Analysing...</span></div>
                             : <div className="prose prose-sm max-w-none"><ReactMarkdown>{feedbackDialog.content || ''}</ReactMarkdown></div>}
                     </div>
                     <DialogFooter className="gap-2">
@@ -343,35 +339,40 @@ export default function LineMemoriser() {
                 </DialogContent>
             </Dialog>
 
-            {/* Header */}
-            <div className="bg-gradient-to-r from-pink-500 to-rose-600 rounded-2xl text-white p-5">
-                <div className="flex items-center justify-between mb-3">
+            {/* Active session header */}
+            <div className="card-soft p-5">
+                <div className="flex items-center justify-between mb-4">
                     <div>
-                        <h3 className="font-bold text-lg">{title}</h3>
-                        {subject && <Badge className="bg-white/20 text-white border-0 text-xs mt-1">{subject}</Badge>}
+                        <h3 className="font-display font-extrabold text-foreground text-lg">{title}</h3>
+                        {subject && <span className="pill bg-primary/10 text-primary mt-1 inline-flex">{subject}</span>}
                     </div>
-                    <Button variant="ghost" size="sm" onClick={() => { if (masteredSentences.size > 0 || totalCorrect > 0) { setPendingExit(true); setShowSaveProgressDialog(true); } else resetSession(); }} className="text-white/80 hover:text-white hover:bg-white/20 h-8 text-xs">
-                        <RotateCcw className="w-3.5 h-3.5 mr-1.5" />Exit
+                    <Button variant="outline" size="sm" onClick={() => { if (masteredSentences.size > 0 || totalCorrect > 0) { setPendingExit(true); setShowSaveProgressDialog(true); } else resetSession(); }}>
+                        <RotateCcw className="w-3.5 h-3.5" /> Exit
                     </Button>
                 </div>
-                <div className="grid grid-cols-4 gap-3 mb-3 text-center">
-                    {[['%', getProgressPercentage(), 'Complete'], ['🔥', streak, 'Streak'], ['✓', totalCorrect, 'Correct'], ['📜', sentences.length, 'Lines']].map(([icon, val, label]) => (
-                        <div key={label} className="bg-white/10 rounded-xl p-2">
-                            <div className="text-lg font-black">{val}</div>
-                            <div className="text-xs text-white/70">{label}</div>
+                <div className="grid grid-cols-4 gap-3 mb-4 text-center">
+                    {[
+                        { val: `${getProgressPercentage()}%`, label: 'Complete' },
+                        { val: streak, label: 'Streak' },
+                        { val: totalCorrect, label: 'Correct' },
+                        { val: sentences.length, label: 'Lines' },
+                    ].map(({ val, label }) => (
+                        <div key={label} className="bg-secondary rounded-xl p-2.5">
+                            <div className="stat-num text-foreground">{val}</div>
+                            <div className="stat-label">{label}</div>
                         </div>
                     ))}
                 </div>
-                <Progress value={getProgressPercentage()} className="h-2 bg-white/20" />
+                <Progress value={getProgressPercentage()} className="h-2.5" />
             </div>
 
             {/* Main */}
-            <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
+            <div className="card-soft overflow-hidden">
                 <div className="flex items-center justify-between px-5 py-3 border-b border-gray-100 bg-gray-50">
                     <div className="flex items-center gap-2">
-                        {mode === MODES.LEARNING && <><Brain className="w-4 h-4 text-pink-500" /><span className="text-sm font-bold text-gray-800">{isChaining ? `Chain: Lines 1–${currentSentenceIndex + 1}` : `Line ${currentSentenceIndex + 1} of ${sentences.length}`}</span></>}
-                        {mode === MODES.CHUNK_TEST && <><Target className="w-4 h-4 text-orange-500" /><span className="text-sm font-bold text-gray-800">Chunk Test</span></>}
-                        {mode === MODES.FINAL_TEST && <><Trophy className="w-4 h-4 text-amber-500" /><span className="text-sm font-bold text-gray-800">Final Test</span></>}
+                        {mode === MODES.LEARNING && <><Brain className="w-4 h-4 text-pink-500" /><span className="text-sm font-bold text-foreground">{isChaining ? `Chain: Lines 1–${currentSentenceIndex + 1}` : `Line ${currentSentenceIndex + 1} of ${sentences.length}`}</span></>}
+                        {mode === MODES.CHUNK_TEST && <><Target className="w-4 h-4 text-orange-500" /><span className="text-sm font-bold text-foreground">Chunk Test</span></>}
+                        {mode === MODES.FINAL_TEST && <><Trophy className="w-4 h-4 text-amber-500" /><span className="text-sm font-bold text-foreground">Final Test</span></>}
                     </div>
                     <div className="flex gap-2">
                         <Button size="sm" variant="outline" onClick={() => setShowSentence(!showSentence)} className="h-7 text-xs">
@@ -387,7 +388,7 @@ export default function LineMemoriser() {
                         {showSentence && (
                             <motion.div initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }}
                                 className="p-5 bg-gray-50 rounded-2xl border-2 border-dashed border-gray-200">
-                                <p className="text-base leading-relaxed text-gray-800 text-center font-medium">{getCurrentDisplayText()}</p>
+                                <p className="text-base leading-relaxed text-foreground text-center font-medium">{getCurrentDisplayText()}</p>
                                 {mode === MODES.LEARNING && (
                                     <div className="flex justify-center mt-3">
                                         <Badge className="bg-pink-100 text-pink-700 border-0 text-xs">
@@ -423,7 +424,7 @@ export default function LineMemoriser() {
                             <Eye className="w-4 h-4 mr-2" />Show Text
                         </Button>
                     </div>
-                    <p className="text-xs text-center text-gray-400">Tip: Ctrl+Enter to check answer</p>
+                    <p className="text-xs text-center text-muted-foreground/70">Tip: Ctrl+Enter to check answer</p>
                 </div>
             </div>
 

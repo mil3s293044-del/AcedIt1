@@ -8,13 +8,33 @@ import {
   GraduationCap, Clock, AlertCircle, BarChart3, Check, X,
   ChevronLeft, ChevronRight, Play, Trophy, Loader2, RefreshCw,
   Target, Flag, Brain, Zap, BookOpen, Layers, ArrowRight,
-  CheckCircle2, Circle, TrendingUp, Award, Star } from
+  CheckCircle2, Circle, TrendingUp, Award, Star, FileText,
+  Sparkles } from
 "lucide-react";
 
+// Static class lookup for SOURCES (Tailwind JIT-safe)
+const SOURCE_CLASSES = {
+  flashcards: {
+    selected: "bg-chart-3 border-chart-3 text-white shadow-soft",
+    chipBg: "bg-chart-3/10",
+    chipText: "text-chart-3"
+  },
+  quizzes: {
+    selected: "bg-chart-4 border-chart-4 text-white shadow-soft",
+    chipBg: "bg-chart-4/10",
+    chipText: "text-chart-4"
+  },
+  active_recall: {
+    selected: "bg-primary border-primary text-white shadow-soft",
+    chipBg: "bg-primary/10",
+    chipText: "text-primary"
+  }
+};
+
 const SOURCES = [
-{ id: "flashcards", label: "Flashcards", emoji: "🃏", color: "blue" },
-{ id: "quizzes", label: "Quizzes", emoji: "📝", color: "purple" },
-{ id: "active_recall", label: "Active Recall", emoji: "🧠", color: "emerald" }];
+{ id: "flashcards", label: "Flashcards", icon: BookOpen, color: "chart-3" },
+{ id: "quizzes", label: "Quizzes", icon: FileText, color: "chart-4" },
+{ id: "active_recall", label: "Active Recall", icon: Brain, color: "primary" }];
 
 
 const TIME_OPTIONS = [
@@ -27,6 +47,27 @@ const TIME_OPTIONS = [
 
 
 const COUNT_OPTIONS = [10, 20, 30, 50];
+
+// Static lookup for source pill colours in question header / hero stats
+const SOURCE_PILL = {
+  Flashcards: "bg-chart-3/10 text-chart-3",
+  Quizzes: "bg-chart-4/10 text-chart-4",
+  "Active Recall": "bg-primary/10 text-primary"
+};
+
+const SOURCE_ICON = {
+  Flashcards: BookOpen,
+  Quizzes: FileText,
+  "Active Recall": Brain
+};
+
+// Static lookup for grade tiers (no dynamic gradient strings)
+const GRADE_CLASSES = {
+  outstanding: { tile: "bg-xp/10", text: "text-xp", icon: Trophy },
+  great: { tile: "bg-primary/10", text: "text-primary", icon: Award },
+  good: { tile: "bg-chart-3/10", text: "text-chart-3", icon: Star },
+  keep: { tile: "bg-secondary", text: "text-muted-foreground", icon: BookOpen }
+};
 
 function formatTime(secs) {
   const m = Math.floor(secs / 60).toString().padStart(2, "0");
@@ -192,27 +233,25 @@ export default function ExamMode({ userSubjects }) {
     return (
       <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="max-w-2xl mx-auto space-y-5 px-1">
                 {/* Hero */}
-                <div className="relative overflow-hidden bg-gradient-to-br from-slate-900 via-slate-800 to-indigo-900 rounded-3xl p-8 text-white text-center">
-                    <div className="absolute inset-0 opacity-20">
-                        <div className="absolute top-4 right-8 w-24 h-24 bg-indigo-400 rounded-full blur-2xl" />
-                        <div className="absolute bottom-4 left-8 w-32 h-32 bg-purple-400 rounded-full blur-3xl" />
-                    </div>
+                <div className="relative overflow-hidden bg-streak/10 rounded-3xl p-8 text-center">
                     <div className="relative">
-                        <div className="w-16 h-16 bg-white/10 backdrop-blur-sm rounded-2xl flex items-center justify-center mx-auto mb-4 ring-1 ring-white/20">
-                            <GraduationCap className="w-8 h-8 text-white" />
+                        <div className="w-16 h-16 bg-streak/15 rounded-2xl flex items-center justify-center mx-auto mb-4 ring-1 ring-streak/20">
+                            <GraduationCap className="w-8 h-8 text-streak" />
                         </div>
-                        <h2 className="text-3xl font-black mb-2">Revision Mode</h2>
-                        <p className="text-white/60 text-sm max-w-sm mx-auto">Simulate real conditions with timed questions from your personal study materials.</p>
+                        <h2 className="text-3xl font-black mb-2 text-foreground">Revision Mode</h2>
+                        <p className="text-muted-foreground text-sm max-w-sm mx-auto">Simulate real conditions with timed questions from your personal study materials.</p>
                         {!isLoadingData &&
-            <div className="flex justify-center gap-6 mt-5 pt-5 border-t border-white/10">
+            <div className="flex justify-center gap-6 mt-5 pt-5 border-t border-border">
                                 {[
-              { label: "Flashcards", val: allQuestions.filter((q) => q.source === "Flashcards").length, icon: "🃏" },
-              { label: "Quiz Q's", val: allQuestions.filter((q) => q.source === "Quizzes").length, icon: "📝" },
-              { label: "Recall", val: allQuestions.filter((q) => q.source === "Active Recall").length, icon: "🧠" }].
+              { label: "Flashcards", val: allQuestions.filter((q) => q.source === "Flashcards").length, Icon: BookOpen, color: "text-chart-3" },
+              { label: "Quiz Q's", val: allQuestions.filter((q) => q.source === "Quizzes").length, Icon: FileText, color: "text-chart-4" },
+              { label: "Recall", val: allQuestions.filter((q) => q.source === "Active Recall").length, Icon: Brain, color: "text-primary" }].
               map((s) =>
               <div key={s.label} className="text-center">
-                                        <p className="text-xl font-bold">{s.val}</p>
-                                        <p className="text-xs text-white/40">{s.icon} {s.label}</p>
+                                        <p className="text-xl font-bold text-foreground">{s.val}</p>
+                                        <p className="text-xs text-muted-foreground flex items-center gap-1 justify-center mt-0.5">
+                                            <s.Icon className={`w-3 h-3 ${s.color}`} /> {s.label}
+                                        </p>
                                     </div>
               )}
                             </div>
@@ -222,48 +261,49 @@ export default function ExamMode({ userSubjects }) {
 
                 {isLoadingData ?
         <div className="flex flex-col items-center justify-center py-16 gap-3">
-                        <Loader2 className="w-7 h-7 animate-spin text-indigo-500" />
-                        <span className="text-slate-500 text-sm">Loading your study materials...</span>
+                        <Loader2 className="w-7 h-7 animate-spin text-streak" />
+                        <span className="text-muted-foreground text-sm">Loading your study materials...</span>
                     </div> :
 
         <div className="space-y-4">
                         {/* Subject */}
-                        <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-5 space-y-3">
-                            <label className="text-sm font-bold text-slate-700 flex items-center gap-2">
-                                <BookOpen className="w-4 h-4 text-slate-400" /> Subject
+                        <div className="card-soft p-5 space-y-3">
+                            <label className="text-sm font-bold text-foreground flex items-center gap-2">
+                                <BookOpen className="w-4 h-4 text-muted-foreground" /> Subject
                             </label>
                             <Select value={config.subject} onValueChange={(v) => setConfig((c) => ({ ...c, subject: v }))}>
-                                <SelectTrigger className="border-2 border-slate-100 rounded-xl h-11 bg-slate-50 focus:border-indigo-300">
+                                <SelectTrigger className="border-2 border-border rounded-xl h-11 bg-secondary/50 focus:border-streak/40">
                                     <SelectValue />
                                 </SelectTrigger>
                                 <SelectContent>
-                                    <SelectItem value="all">✨ All Subjects</SelectItem>
+                                    <SelectItem value="all"><span className="inline-flex items-center gap-2"><Sparkles className="w-3.5 h-3.5 text-xp" /> All Subjects</span></SelectItem>
                                     {userSubjects.map((s) => <SelectItem key={s.id} value={s.subject_name}>{s.subject_name}</SelectItem>)}
                                 </SelectContent>
                             </Select>
                         </div>
 
                         {/* Sources */}
-                        <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-5 space-y-3">
-                            <label className="text-sm font-bold text-slate-700 flex items-center gap-2">
-                                <Layers className="w-4 h-4 text-slate-400" /> Question Sources
+                        <div className="card-soft p-5 space-y-3">
+                            <label className="text-sm font-bold text-foreground flex items-center gap-2">
+                                <Layers className="w-4 h-4 text-muted-foreground" /> Question Sources
                             </label>
                             <div className="grid grid-cols-3 gap-3">
                                 {SOURCES.map((s) => {
                 const cnt = allQuestions.filter((q) => getSourceKey(q.source) === s.id && (config.subject === "all" || q.subject === config.subject)).length;
                 const sel = config.sources.includes(s.id);
-                const colorMap = { blue: "bg-blue-600 border-blue-600", purple: "bg-purple-600 border-purple-600", emerald: "bg-emerald-600 border-emerald-600" };
+                const cls = SOURCE_CLASSES[s.id];
+                const SourceIcon = s.icon;
                 return (
                   <button key={s.id}
                   onClick={() => {
                     if (sel && config.sources.length === 1) return;
                     setConfig((c) => ({ ...c, sources: sel ? c.sources.filter((x) => x !== s.id) : [...c.sources, s.id] }));
                   }}
-                  className={`relative flex flex-col items-center gap-2 p-4 rounded-2xl border-2 transition-all duration-200 ${sel ? `${colorMap[s.color]} text-white shadow-md` : "border-slate-200 text-slate-600 hover:border-slate-300 bg-slate-50"}`}>
+                  className={`relative flex flex-col items-center gap-2 p-4 rounded-2xl border-2 transition-all duration-200 ${sel ? cls.selected : "border-border text-muted-foreground hover:border-border bg-secondary/50"}`}>
                                             {sel && <Check className="absolute top-2 right-2 w-3.5 h-3.5" />}
-                                            <span className="text-2xl">{s.emoji}</span>
+                                            <SourceIcon className="w-6 h-6" />
                                             <span className="text-xs font-bold">{s.label}</span>
-                                            <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${sel ? "bg-white/20" : "bg-slate-200 text-slate-500"}`}>{cnt}</span>
+                                            <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${sel ? "bg-white/20" : "bg-secondary text-muted-foreground"}`}>{cnt}</span>
                                         </button>);
 
               })}
@@ -272,32 +312,32 @@ export default function ExamMode({ userSubjects }) {
 
                         {/* Count + Time in a grid */}
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                            <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-5 space-y-3">
-                                <label className="text-sm font-bold text-slate-700 flex items-center gap-2">
-                                    <Target className="w-4 h-4 text-slate-400" /> Questions
+                            <div className="card-soft p-5 space-y-3">
+                                <label className="text-sm font-bold text-foreground flex items-center gap-2">
+                                    <Target className="w-4 h-4 text-muted-foreground" /> Questions
                                 </label>
                                 <div className="flex flex-wrap gap-2">
                                     {COUNT_OPTIONS.map((n) =>
                 <button key={n} onClick={() => setConfig((c) => ({ ...c, questionCount: n }))}
-                className={`px-4 py-2 rounded-xl text-sm font-bold border-2 transition-all ${config.questionCount === n ? "bg-slate-900 border-slate-900 text-white" : "border-slate-200 text-slate-500 hover:border-slate-400"}`}>
+                className={`px-4 py-2 rounded-xl text-sm font-bold border-2 transition-all ${config.questionCount === n ? "bg-foreground border-foreground text-background" : "border-border text-muted-foreground hover:border-muted-foreground"}`}>
                                             {n}
                                         </button>
                 )}
                                     <button onClick={() => setConfig((c) => ({ ...c, questionCount: "all" }))}
-                className={`px-4 py-2 rounded-xl text-sm font-bold border-2 transition-all ${config.questionCount === "all" ? "bg-slate-900 border-slate-900 text-white" : "border-slate-200 text-slate-500 hover:border-slate-400"}`}>
+                className={`px-4 py-2 rounded-xl text-sm font-bold border-2 transition-all ${config.questionCount === "all" ? "bg-foreground border-foreground text-background" : "border-border text-muted-foreground hover:border-muted-foreground"}`}>
                                         All
                                     </button>
                                 </div>
                             </div>
 
-                            <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-5 space-y-3">
-                                <label className="text-sm font-bold text-slate-700 flex items-center gap-2">
-                                    <Clock className="w-4 h-4 text-slate-400" /> Time Limit
+                            <div className="card-soft p-5 space-y-3">
+                                <label className="text-sm font-bold text-foreground flex items-center gap-2">
+                                    <Clock className="w-4 h-4 text-muted-foreground" /> Time Limit
                                 </label>
                                 <div className="flex flex-wrap gap-2">
                                     {TIME_OPTIONS.map((t) =>
                 <button key={t.value} onClick={() => setConfig((c) => ({ ...c, timeLimit: t.value }))}
-                className={`px-3 py-2 rounded-xl text-xs font-bold border-2 transition-all text-center ${config.timeLimit === t.value ? "bg-slate-900 border-slate-900 text-white" : "border-slate-200 text-slate-500 hover:border-slate-400"}`}>
+                className={`px-3 py-2 rounded-xl text-xs font-bold border-2 transition-all text-center ${config.timeLimit === t.value ? "bg-foreground border-foreground text-background" : "border-border text-muted-foreground hover:border-muted-foreground"}`}>
                                             {t.label}
                                         </button>
                 )}
@@ -306,20 +346,20 @@ export default function ExamMode({ userSubjects }) {
                         </div>
 
                         {/* Start Button */}
-                        <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-5">
+                        <div className="card-soft p-5">
                             <div className="flex items-center justify-between gap-4">
                                 <div>
                                     {available === 0 ?
-                <p className="text-sm text-red-500 font-medium">No questions match your selection. Add flashcards or quizzes first.</p> :
+                <p className="text-sm text-streak font-medium">No questions match your selection. Add flashcards or quizzes first.</p> :
 
                 <>
-                                            <p className="text-sm text-slate-600"><span className="font-black text-slate-900 text-lg">{willUse}</span> <span className="text-slate-400">of {available} questions</span></p>
-                                            <p className="text-xs text-slate-400 mt-0.5">{config.timeLimit > 0 ? `${config.timeLimit} minute limit` : "No time limit"}</p>
+                                            <p className="text-sm text-muted-foreground"><span className="font-black text-foreground text-lg">{willUse}</span> <span className="text-muted-foreground/60">of {available} questions</span></p>
+                                            <p className="text-xs text-muted-foreground/60 mt-0.5">{config.timeLimit > 0 ? `${config.timeLimit} minute limit` : "No time limit"}</p>
                                         </>
                 }
                                 </div>
                                 <Button onClick={handleStartExam} disabled={available === 0}
-              className="bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white rounded-2xl px-8 h-12 gap-2 font-bold shadow-lg shadow-indigo-500/25 transition-all hover:scale-[1.02]">
+              className="bg-streak hover:bg-streak/90 text-white rounded-2xl px-8 h-12 gap-2 font-bold btn-3d transition-all">
                                     <Play className="w-4 h-4" /> Begin Exam
                                 </Button>
                             </div>
@@ -348,7 +388,7 @@ export default function ExamMode({ userSubjects }) {
       <div className="max-w-2xl mx-auto space-y-3">
                 {/* Header Bar */}
                 <motion.div
-          animate={{ backgroundColor: isVeryLow ? "#7f1d1d" : isLow ? "#991b1b" : "#0f172a" }}
+          animate={{ backgroundColor: isVeryLow ? "hsl(0 100% 45%)" : isLow ? "hsl(0 100% 55%)" : "hsl(218 50% 11%)" }}
           className="rounded-2xl p-4 flex items-center justify-between gap-4 transition-colors duration-1000">
 
                     <div className="flex items-center gap-3 min-w-0">
@@ -357,13 +397,13 @@ export default function ExamMode({ userSubjects }) {
                         </div>
                         <div className="min-w-0">
                             <p className="text-white font-bold text-sm truncate">Exam Mode</p>
-                            <p className="text-white/40 text-xs">{answered}/{examQuestions.length} answered</p>
+                            <p className="text-white/60 text-xs">{answered}/{examQuestions.length} answered</p>
                         </div>
                     </div>
 
                     <div className="flex items-center gap-3">
                         {config.timeLimit > 0 &&
-            <div className={`font-mono font-black text-2xl flex items-center gap-1.5 tabular-nums ${isVeryLow ? "text-red-300 animate-pulse" : isLow ? "text-orange-300" : "text-white"}`}>
+            <div className={`font-mono font-black text-2xl flex items-center gap-1.5 tabular-nums ${isVeryLow ? "text-white animate-pulse" : isLow ? "text-white" : "text-white"}`}>
                                 <Clock className="w-4 h-4" />
                                 {formatTime(timeLeft)}
                             </div>
@@ -373,30 +413,30 @@ export default function ExamMode({ userSubjects }) {
                             <Layers className="w-4 h-4 text-white/70" />
                         </button>
                         <Button size="sm" onClick={handleSubmitExam}
-            className={`rounded-xl font-bold gap-1.5 text-xs px-4 ${isLow ? "bg-red-500 hover:bg-red-600 text-white" : "bg-white/15 hover:bg-white/25 text-white border border-white/20"}`}>
+            className={`rounded-xl font-bold gap-1.5 text-xs px-4 ${isLow ? "bg-white text-streak hover:bg-white/90" : "bg-white/15 hover:bg-white/25 text-white border border-white/20"}`}>
                             <Flag className="w-3.5 h-3.5" /> Submit
                         </Button>
                     </div>
                 </motion.div>
 
                 {/* Progress bar */}
-                <div className="h-1 bg-slate-100 rounded-full overflow-hidden">
-                    <motion.div className="h-full bg-gradient-to-r from-indigo-500 to-purple-500 rounded-full" animate={{ width: `${progress}%` }} transition={{ duration: 0.4, ease: "easeOut" }} />
+                <div className="h-1 bg-secondary rounded-full overflow-hidden">
+                    <motion.div className="h-full bg-streak rounded-full" animate={{ width: `${progress}%` }} transition={{ duration: 0.4, ease: "easeOut" }} />
                 </div>
 
                 {/* Question Map Drawer */}
                 <AnimatePresence>
                     {showQuestionMap &&
           <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} exit={{ opacity: 0, height: 0 }}
-          className="bg-white rounded-2xl border border-slate-100 p-4 overflow-hidden">
-                            <p className="text-xs font-bold text-slate-400 mb-3 uppercase tracking-wider">Question Map</p>
+          className="card-soft p-4 overflow-hidden">
+                            <p className="text-xs font-bold text-muted-foreground mb-3 uppercase tracking-wider">Question Map</p>
                             <div className="flex flex-wrap gap-1.5">
                                 {examQuestions.map((eq, i) => {
                 const a = answers[eq.id] || {};
                 const done = eq.type === "mcq" ? a.selectedIndex !== undefined : a.typed?.length > 0;
                 return (
                   <button key={i} onClick={() => {setCurrentIndex(i);setShowQuestionMap(false);}}
-                  className={`w-8 h-8 rounded-lg text-xs font-bold transition-all ${i === currentIndex ? "bg-indigo-600 text-white ring-2 ring-indigo-300" : done ? "bg-emerald-100 text-emerald-700" : "bg-slate-100 text-slate-400 hover:bg-slate-200"}`}>
+                  className={`w-8 h-8 rounded-lg text-xs font-bold transition-all ${i === currentIndex ? "bg-streak text-white ring-2 ring-streak/30" : done ? "bg-primary/15 text-primary" : "bg-secondary text-muted-foreground hover:bg-secondary"}`}>
                                             {i + 1}
                                         </button>);
 
@@ -413,31 +453,31 @@ export default function ExamMode({ userSubjects }) {
           animate={{ opacity: 1, x: 0, scale: 1 }}
           exit={{ opacity: 0, x: -30, scale: 0.98 }}
           transition={{ duration: 0.2, ease: "easeOut" }}
-          className="bg-white rounded-3xl border border-slate-100 shadow-sm overflow-hidden">
+          className="card-soft overflow-hidden">
 
                         {/* Question header */}
-                        <div className="px-6 pt-5 pb-4 bg-gradient-to-r from-slate-50 to-white border-b border-slate-100">
+                        <div className="px-6 pt-5 pb-4 bg-secondary/50 border-b border-border">
                             <div className="flex items-center justify-between gap-3">
                                 <div className="flex items-center gap-2 flex-wrap">
-                                    <span className={`text-xs font-bold px-2.5 py-1 rounded-full ${q?.source === "Flashcards" ? "bg-blue-50 text-blue-600" : q?.source === "Quizzes" ? "bg-purple-50 text-purple-600" : "bg-emerald-50 text-emerald-600"}`}>
+                                    <span className={`pill ${SOURCE_PILL[q?.source] || "bg-secondary text-muted-foreground"}`}>
                                         {q?.source}
                                     </span>
-                                    <span className="text-xs text-slate-400 font-medium">{q?.subject}</span>
-                                    {q?.topic && q.topic !== q.subject && <span className="text-xs text-slate-300">• {q.topic}</span>}
+                                    <span className="text-xs text-muted-foreground font-medium">{q?.subject}</span>
+                                    {q?.topic && q.topic !== q.subject && <span className="text-xs text-muted-foreground/60">• {q.topic}</span>}
                                 </div>
                                 <div className="flex items-center gap-2">
                                     {isCurrentAnswered &&
-                  <span className="flex items-center gap-1 text-xs text-emerald-600 font-bold bg-emerald-50 px-2 py-0.5 rounded-full">
+                  <span className="pill bg-primary/10 text-primary">
                                             <Check className="w-3 h-3" /> Done
                                         </span>
                   }
-                                    <span className="text-xs font-bold text-slate-300">{currentIndex + 1} / {examQuestions.length}</span>
+                                    <span className="text-xs font-bold text-muted-foreground/60">{currentIndex + 1} / {examQuestions.length}</span>
                                 </div>
                             </div>
                         </div>
 
                         <div className="p-6 space-y-5">
-                            <p className="text-lg font-semibold text-slate-900 leading-relaxed">{q?.question}</p>
+                            <p className="text-lg font-semibold text-foreground leading-relaxed">{q?.question}</p>
 
                             {q?.type === "mcq" &&
               <div className="space-y-2.5">
@@ -447,8 +487,8 @@ export default function ExamMode({ userSubjects }) {
                     <motion.button key={i} onClick={() => handleSelectMCQ(q.id, i)}
                     whileHover={{ scale: 1.005 }}
                     whileTap={{ scale: 0.998 }}
-                    className={`w-full text-left px-5 py-4 rounded-2xl border-2 text-sm font-medium transition-all duration-150 flex items-center gap-3 group ${sel ? "bg-indigo-600 border-indigo-600 text-white shadow-lg shadow-indigo-500/20" : "border-slate-200 text-slate-700 hover:border-indigo-200 hover:bg-indigo-50/50 bg-white"}`}>
-                                                <span className={`w-7 h-7 rounded-xl flex items-center justify-center text-xs font-black flex-shrink-0 transition-all ${sel ? "bg-white/20 text-white" : "bg-slate-100 text-slate-400 group-hover:bg-indigo-100 group-hover:text-indigo-600"}`}>
+                    className={`w-full text-left px-5 py-4 rounded-2xl border-2 text-sm font-medium transition-all duration-150 flex items-center gap-3 group ${sel ? "bg-streak border-streak text-white shadow-soft" : "border-border text-foreground hover:border-streak/40 hover:bg-streak/5 bg-surface"}`}>
+                                                <span className={`w-7 h-7 rounded-xl flex items-center justify-center text-xs font-black flex-shrink-0 transition-all ${sel ? "bg-white/20 text-white" : "bg-secondary text-muted-foreground group-hover:bg-streak/10 group-hover:text-streak"}`}>
                                                     {String.fromCharCode(65 + i)}
                                                 </span>
                                                 <span className="flex-1">{opt}</span>
@@ -466,10 +506,10 @@ export default function ExamMode({ userSubjects }) {
                   onChange={(e) => handleTypeAnswer(q.id, e.target.value)}
                   placeholder="Type your answer here..."
                   rows={5}
-                  className="border-2 border-slate-200 focus:border-indigo-400 rounded-2xl resize-none text-sm bg-slate-50 focus:bg-white transition-colors placeholder:text-slate-300" />
+                  className="border-2 border-border focus:border-streak/40 rounded-2xl resize-none text-sm bg-secondary/50 focus:bg-surface transition-colors placeholder:text-muted-foreground/60" />
 
                                     {currentAnswer.typed?.length > 0 &&
-                <p className="text-xs text-slate-400 text-right">{currentAnswer.typed.length} chars</p>
+                <p className="text-xs text-muted-foreground text-right">{currentAnswer.typed.length} chars</p>
                 }
                                 </div>
               }
@@ -480,7 +520,7 @@ export default function ExamMode({ userSubjects }) {
                 {/* Navigation */}
                 <div className="flex items-center justify-between gap-3">
                     <Button variant="outline" onClick={() => setCurrentIndex((i) => Math.max(0, i - 1))} disabled={currentIndex === 0}
-          className="gap-2 rounded-xl border-2 border-slate-200 font-semibold hover:bg-slate-50">
+          className="gap-2 rounded-xl border-2 border-border font-semibold hover:bg-secondary/50">
                         <ChevronLeft className="w-4 h-4" /> Prev
                     </Button>
 
@@ -491,7 +531,7 @@ export default function ExamMode({ userSubjects }) {
               handleSubmitExam();
             }
           }}
-          className={`gap-2 rounded-xl font-bold px-6 ${currentIndex === examQuestions.length - 1 ? "bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white shadow-lg" : "bg-slate-900 hover:bg-slate-800 text-white"}`}>
+          className={`gap-2 rounded-xl font-bold px-6 ${currentIndex === examQuestions.length - 1 ? "bg-streak hover:bg-streak/90 text-white btn-3d" : "bg-foreground hover:bg-foreground/90 text-background"}`}>
                         {currentIndex === examQuestions.length - 1 ?
             <><Flag className="w-4 h-4" /> Finish</> :
 
@@ -519,40 +559,41 @@ export default function ExamMode({ userSubjects }) {
     });
     weakTopics.sort((a, b) => a.pct - b.pct);
 
-    const grade = results.score >= 85 ? { label: "Outstanding", emoji: "🏆", color: "from-amber-500 to-yellow-400" } :
-    results.score >= 70 ? { label: "Great Work", emoji: "⭐", color: "from-emerald-500 to-teal-400" } :
-    results.score >= 55 ? { label: "Good Effort", emoji: "📈", color: "from-blue-500 to-indigo-400" } :
-    { label: "Keep Revising", emoji: "📚", color: "from-slate-600 to-slate-500" };
+    const grade = results.score >= 85 ? { label: "Outstanding", key: "outstanding" } :
+    results.score >= 70 ? { label: "Great Work", key: "great" } :
+    results.score >= 55 ? { label: "Good Effort", key: "good" } :
+    { label: "Keep Revising", key: "keep" };
+    const gradeCls = GRADE_CLASSES[grade.key];
+    const GradeIcon = gradeCls.icon;
 
     return (
       <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="max-w-2xl mx-auto space-y-4">
 
                 {/* Score Hero */}
-                <div className={`bg-gradient-to-br ${grade.color} rounded-3xl p-8 text-white text-center relative overflow-hidden`}>
-                    <div className="absolute inset-0 opacity-20">
-                        <div className="absolute top-0 right-0 w-40 h-40 bg-white rounded-full -translate-y-1/2 translate-x-1/2 blur-3xl" />
-                    </div>
+                <div className={`${gradeCls.tile} rounded-3xl p-8 text-center relative overflow-hidden`}>
                     <div className="relative">
-                        <p className="text-5xl mb-3">{grade.emoji}</p>
-                        <p className="text-6xl font-black mb-1">{results.pending > 0 ? `~${results.score}%` : `${results.score}%`}</p>
-                        <p className="text-white/80 font-semibold text-lg">{grade.label}</p>
+                        <div className={`w-16 h-16 rounded-2xl bg-surface/80 flex items-center justify-center mx-auto mb-3 ${gradeCls.text}`}>
+                            <GradeIcon className="w-8 h-8" />
+                        </div>
+                        <p className={`stat-num ${gradeCls.text} mb-1`}>{results.pending > 0 ? `~${results.score}%` : `${results.score}%`}</p>
+                        <p className="text-foreground/80 font-semibold text-lg">{grade.label}</p>
                         {results.pending > 0 &&
-            <p className="text-white/60 text-xs mt-2 bg-white/10 rounded-full px-3 py-1 inline-block">
+            <p className="text-muted-foreground text-xs mt-2 bg-surface/70 rounded-full px-3 py-1 inline-block">
                                 {results.pending} open question{results.pending > 1 ? "s" : ""} need self-marking below
                             </p>
             }
-                        <div className="grid grid-cols-3 gap-4 mt-6 pt-6 border-t border-white/20">
+                        <div className="grid grid-cols-3 gap-4 mt-6 pt-6 border-t border-border">
                             <div>
-                                <p className="text-3xl font-black">{results.correct}</p>
-                                <p className="text-xs text-white/60 mt-0.5">Correct</p>
+                                <p className="text-3xl font-black text-xp">{results.correct}</p>
+                                <p className="text-xs text-muted-foreground mt-0.5">Correct</p>
                             </div>
                             <div>
-                                <p className="text-3xl font-black">{results.total}</p>
-                                <p className="text-xs text-white/60 mt-0.5">Total</p>
+                                <p className="text-3xl font-black text-foreground">{results.total}</p>
+                                <p className="text-xs text-muted-foreground mt-0.5">Total</p>
                             </div>
                             <div>
-                                <p className="text-3xl font-black font-mono">{formatTime(timeTakenSec)}</p>
-                                <p className="text-xs text-white/60 mt-0.5">Time</p>
+                                <p className="text-3xl font-black font-mono text-streak">{formatTime(timeTakenSec)}</p>
+                                <p className="text-xs text-muted-foreground mt-0.5">Time</p>
                             </div>
                         </div>
                     </div>
@@ -560,24 +601,25 @@ export default function ExamMode({ userSubjects }) {
 
                 {/* Subject Breakdown */}
                 {Object.keys(results.bySubject).length > 0 &&
-        <div className="bg-white rounded-3xl border border-slate-100 shadow-sm p-6">
-                        <h3 className="font-bold text-slate-800 mb-4 flex items-center gap-2 text-sm uppercase tracking-wider text-slate-400">
-                            <BarChart3 className="w-4 h-4" /> By Subject
+        <div className="card-soft p-6">
+                        <h3 className="font-bold mb-4 flex items-center gap-2 text-sm uppercase tracking-wider text-muted-foreground">
+                            <BarChart3 className="w-4 h-4 text-chart-3" /> By Subject
                         </h3>
                         <div className="space-y-4">
                             {Object.entries(results.bySubject).map(([subject, data]) => {
               const pct = data.total > 0 ? Math.round(data.correct / data.total * 100) : 0;
-              const barColor = pct >= 70 ? "bg-emerald-500" : pct >= 50 ? "bg-amber-400" : "bg-red-400";
+              const barColor = pct >= 70 ? "bg-primary" : pct >= 50 ? "bg-xp" : "bg-streak";
+              const pctText = pct >= 70 ? "text-primary" : pct >= 50 ? "text-xp" : "text-streak";
               return (
                 <div key={subject}>
                                         <div className="flex justify-between items-center mb-2">
-                                            <span className="text-sm font-bold text-slate-800">{subject}</span>
+                                            <span className="text-sm font-bold text-foreground">{subject}</span>
                                             <div className="flex items-center gap-2">
-                                                <span className="text-xs text-slate-400">{data.correct}/{data.total}</span>
-                                                <span className={`text-sm font-black ${pct >= 70 ? "text-emerald-600" : pct >= 50 ? "text-amber-600" : "text-red-600"}`}>{pct}%</span>
+                                                <span className="text-xs text-muted-foreground">{data.correct}/{data.total}</span>
+                                                <span className={`text-sm font-black ${pctText}`}>{pct}%</span>
                                             </div>
                                         </div>
-                                        <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
+                                        <div className="h-2 bg-secondary rounded-full overflow-hidden">
                                             <motion.div initial={{ width: 0 }} animate={{ width: `${pct}%` }} transition={{ duration: 0.8, ease: "easeOut" }}
                     className={`h-full rounded-full ${barColor}`} />
                                         </div>
@@ -590,19 +632,19 @@ export default function ExamMode({ userSubjects }) {
 
                 {/* Weak Areas */}
                 {weakTopics.length > 0 &&
-        <div className="bg-amber-50 rounded-3xl border border-amber-200 p-6">
-                        <h3 className="font-bold text-amber-800 flex items-center gap-2 text-sm mb-1">
+        <div className="bg-streak/5 rounded-3xl border border-streak/20 p-6">
+                        <h3 className="font-bold text-streak flex items-center gap-2 text-sm mb-1">
                             <AlertCircle className="w-4 h-4" /> Areas to Prioritise
                         </h3>
-                        <p className="text-xs text-amber-600 mb-4">Scored below 60% — focus revision here.</p>
+                        <p className="text-xs text-streak/80 mb-4">Scored below 60% — focus revision here.</p>
                         <div className="space-y-2">
                             {weakTopics.slice(0, 5).map((t, i) =>
-            <div key={i} className="flex items-center justify-between bg-white rounded-2xl p-3.5 border border-amber-100 shadow-sm">
+            <div key={i} className="flex items-center justify-between bg-surface rounded-2xl p-3.5 border border-border shadow-soft">
                                     <div>
-                                        <p className="font-bold text-slate-800 text-sm">{t.topic}</p>
-                                        <p className="text-xs text-slate-400">{t.subject} · {t.total} questions</p>
+                                        <p className="font-bold text-foreground text-sm">{t.topic}</p>
+                                        <p className="text-xs text-muted-foreground">{t.subject} · {t.total} questions</p>
                                     </div>
-                                    <span className="text-sm font-black text-red-600 bg-red-50 px-3 py-1 rounded-full border border-red-100">{t.pct}%</span>
+                                    <span className="pill bg-streak/10 text-streak border border-streak/20">{t.pct}%</span>
                                 </div>
             )}
                         </div>
@@ -610,16 +652,16 @@ export default function ExamMode({ userSubjects }) {
         }
 
                 {/* Question Review */}
-                <div className="bg-white rounded-3xl border border-slate-100 shadow-sm overflow-hidden">
-                    <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between">
-                        <h3 className="font-bold text-slate-700 text-sm uppercase tracking-wider flex items-center gap-2">
-                            <Target className="w-4 h-4 text-slate-400" /> Review Answers
+                <div className="card-soft overflow-hidden">
+                    <div className="px-6 py-4 border-b border-border flex items-center justify-between">
+                        <h3 className="font-bold text-foreground text-sm uppercase tracking-wider flex items-center gap-2">
+                            <Target className="w-4 h-4 text-chart-3" /> Review Answers
                         </h3>
                         {results.pending > 0 &&
-            <span className="text-xs bg-amber-100 text-amber-700 px-3 py-1 rounded-full font-bold">{results.pending} to mark</span>
+            <span className="pill bg-xp/10 text-xp">{results.pending} to mark</span>
             }
                     </div>
-                    <div className="divide-y divide-slate-50 max-h-[600px] overflow-y-auto">
+                    <div className="divide-y divide-border max-h-[600px] overflow-y-auto">
                         {examQuestions.map((eq, i) => {
               const a = answers[eq.id] || {};
               const isMCQ = eq.type === "mcq";
@@ -628,48 +670,48 @@ export default function ExamMode({ userSubjects }) {
               const isPending = !isMCQ && a.selfMark === undefined;
 
               return (
-                <div key={eq.id} className={`p-5 transition-colors ${isPending ? "bg-amber-50/50" : ""}`}>
+                <div key={eq.id} className={`p-5 transition-colors ${isPending ? "bg-xp/5" : ""}`}>
                                     <div className="flex gap-3">
-                                        <div className={`w-8 h-8 rounded-xl flex items-center justify-center flex-shrink-0 mt-0.5 text-xs font-black ${isCorrect ? "bg-emerald-100 text-emerald-600" : isWrong ? "bg-red-100 text-red-600" : "bg-slate-100 text-slate-400"}`}>
+                                        <div className={`w-8 h-8 rounded-xl flex items-center justify-center flex-shrink-0 mt-0.5 text-xs font-black ${isCorrect ? "bg-primary/10 text-primary" : isWrong ? "bg-streak/10 text-streak" : "bg-secondary text-muted-foreground"}`}>
                                             {isCorrect ? <Check className="w-4 h-4" /> : isWrong ? <X className="w-4 h-4" /> : i + 1}
                                         </div>
                                         <div className="flex-1 min-w-0">
-                                            <p className="font-semibold text-slate-900 text-sm mb-3 leading-relaxed">{eq.question}</p>
+                                            <p className="font-semibold text-foreground text-sm mb-3 leading-relaxed">{eq.question}</p>
 
                                             {isMCQ &&
                       <div className="space-y-1.5">
                                                     {eq.options.map((opt, oi) =>
-                        <div key={oi} className={`text-xs px-3 py-2 rounded-xl font-medium ${oi === eq.correctIndex ? "bg-emerald-50 text-emerald-700 border border-emerald-200" : oi === a.selectedIndex && oi !== eq.correctIndex ? "bg-red-50 text-red-700 border border-red-200" : "text-slate-400"}`}>
+                        <div key={oi} className={`text-xs px-3 py-2 rounded-xl font-medium ${oi === eq.correctIndex ? "bg-primary/10 text-primary border border-primary/20" : oi === a.selectedIndex && oi !== eq.correctIndex ? "bg-streak/10 text-streak border border-streak/20" : "text-muted-foreground"}`}>
                                                             <span className="font-bold mr-2">{oi === eq.correctIndex ? "✓" : oi === a.selectedIndex ? "✗" : String.fromCharCode(65 + oi) + "."}</span>{opt}
                                                         </div>
                         )}
-                                                    {eq.modelAnswer && <p className="text-xs text-slate-400 mt-2 pl-2 border-l-2 border-slate-100 italic">{eq.modelAnswer}</p>}
+                                                    {eq.modelAnswer && <p className="text-xs text-muted-foreground mt-2 pl-2 border-l-2 border-chart-4/40 italic">{eq.modelAnswer}</p>}
                                                 </div>
                       }
 
                                             {!isMCQ &&
                       <div className="space-y-2">
                                                     {a.typed ?
-                        <div className="bg-slate-50 rounded-xl p-3 border border-slate-100">
-                                                            <p className="text-xs text-slate-400 mb-1 font-semibold uppercase tracking-wide">Your Answer</p>
-                                                            <p className="text-sm text-slate-700">{a.typed}</p>
+                        <div className="bg-secondary/50 rounded-xl p-3 border border-border">
+                                                            <p className="text-xs text-muted-foreground mb-1 font-semibold uppercase tracking-wide">Your Answer</p>
+                                                            <p className="text-sm text-foreground">{a.typed}</p>
                                                         </div> :
 
-                        <p className="text-xs text-slate-300 italic">No answer written</p>
+                        <p className="text-xs text-muted-foreground/60 italic">No answer written</p>
                         }
                                                     {eq.modelAnswer &&
-                        <div className="bg-emerald-50 rounded-xl p-3 border border-emerald-100">
-                                                            <p className="text-xs text-emerald-600 mb-1 font-semibold uppercase tracking-wide">Model Answer</p>
-                                                            <p className="text-sm text-slate-700">{eq.modelAnswer}</p>
+                        <div className="bg-chart-4/5 rounded-xl p-3 border border-chart-4/20">
+                                                            <p className="text-xs text-chart-4 mb-1 font-semibold uppercase tracking-wide">Model Answer</p>
+                                                            <p className="text-sm text-foreground">{eq.modelAnswer}</p>
                                                         </div>
                         }
                                                     <div className="flex gap-2">
                                                         <button onClick={() => handleSelfMark(eq.id, true)}
-                          className={`flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold border-2 transition-all ${a.selfMark === true ? "bg-emerald-500 text-white border-emerald-500" : "border-slate-200 text-slate-500 hover:border-emerald-300 hover:bg-emerald-50 hover:text-emerald-700"}`}>
+                          className={`flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold border-2 transition-all ${a.selfMark === true ? "bg-primary text-white border-primary" : "border-border text-muted-foreground hover:border-primary/40 hover:bg-primary/5 hover:text-primary"}`}>
                                                             <Check className="w-3.5 h-3.5" /> Correct
                                                         </button>
                                                         <button onClick={() => handleSelfMark(eq.id, false)}
-                          className={`flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold border-2 transition-all ${a.selfMark === false ? "bg-red-500 text-white border-red-500" : "border-slate-200 text-slate-500 hover:border-red-300 hover:bg-red-50 hover:text-red-700"}`}>
+                          className={`flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold border-2 transition-all ${a.selfMark === false ? "bg-streak text-white border-streak" : "border-border text-muted-foreground hover:border-streak/40 hover:bg-streak/5 hover:text-streak"}`}>
                                                             <X className="w-3.5 h-3.5" /> Incorrect
                                                         </button>
                                                     </div>
@@ -686,11 +728,11 @@ export default function ExamMode({ userSubjects }) {
                 {/* Actions */}
                 <div className="flex gap-3 pb-4">
                     <Button onClick={() => {setPhase("setup");setExamQuestions([]);setAnswers({});}} variant="outline"
-          className="flex-1 rounded-2xl border-2 border-slate-200 h-12 gap-2 font-bold hover:bg-slate-50">
+          className="flex-1 rounded-2xl border-2 border-border h-12 gap-2 font-bold hover:bg-secondary/50">
                         <RefreshCw className="w-4 h-4" /> New Exam
                     </Button>
                     <Button onClick={handleStartExam}
-          className="flex-1 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white rounded-2xl h-12 gap-2 font-bold shadow-lg shadow-indigo-500/25">
+          className="flex-1 bg-streak hover:bg-streak/90 text-white rounded-2xl h-12 gap-2 font-bold btn-3d">
                         <Play className="w-4 h-4" /> Retry Same Setup
                     </Button>
                 </div>

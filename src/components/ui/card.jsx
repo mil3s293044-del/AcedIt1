@@ -2,10 +2,16 @@ import * as React from "react"
 
 import { cn } from "@/lib/utils"
 
+// Soft, friendly card. Layered shadow + bigger radius gives depth without
+// heavy chrome. Compatible with the original shadcn Card API.
 const Card = React.forwardRef(({ className, ...props }, ref) => (
   <div
     ref={ref}
-    className={cn("rounded-xl border bg-card text-card-foreground shadow", className)}
+    className={cn(
+      "rounded-2xl border bg-card text-card-foreground",
+      "shadow-soft",
+      className,
+    )}
     {...props} />
 ))
 Card.displayName = "Card"
@@ -21,7 +27,7 @@ CardHeader.displayName = "CardHeader"
 const CardTitle = React.forwardRef(({ className, ...props }, ref) => (
   <div
     ref={ref}
-    className={cn("font-semibold leading-none tracking-tight", className)}
+    className={cn("font-display font-extrabold text-lg tracking-tight leading-tight", className)}
     {...props} />
 ))
 CardTitle.displayName = "CardTitle"

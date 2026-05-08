@@ -9,8 +9,11 @@ import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Switch } from "@/components/ui/switch";
 import { LatexBlock, LatexInline, processLatexContent } from "@/components/shared/LatexRenderer";
+import MathText from "@/components/shared/LatexRenderer";
+import MarkdownMath from "@/components/shared/MarkdownMath";
 import MathKeyboard from "../shared/MathKeyboard";
 import MathInput from "../shared/MathInput";
+import { getExaminerPrompt, getLatexRules } from "@/lib/subjectExaminerPrompts";
 import {
     ArrowLeft, ArrowRight, Clock, Award, CheckCircle, XCircle,
     Loader2, TrendingUp, AlertCircle, Timer, AlertTriangle,
@@ -159,7 +162,7 @@ export default function AITestPlayer({ paper, onComplete, onBack }) {
             if (questionsWithImages.length > 0) {
                 try {
                     const analysis = await base44.integrations.Core.InvokeLLM({
-                        prompt: `Transcribe each image answer: math equations, text, diagrams. Be brief.\n${questionsWithImages.map(q => `Q${q.question_number}(${q.marks}m)`).join(', ')}`,
+                        prompt: `${getExaminerPrompt(paper.subject)}\n\nTranscribe each image answer: math equations, text, diagrams. Be brief.\n${questionsWithImages.map(q => `Q${q.question_number}(${q.marks}m)`).join(', ')}`,
                         file_urls: questionsWithImages.map(q => imageAnswers[q.question_number]),
                         response_json_schema: { type: "object", properties: { answers: { type: "array", items: { type: "object", properties: { question_number: { type: "string" }, description: { type: "string" } } } } } }
                     });
@@ -182,7 +185,9 @@ export default function AITestPlayer({ paper, onComplete, onBack }) {
 
             const markingResponse = await base44.integrations.Core.InvokeLLM({
                 model: "claude_sonnet_4_6",
-                prompt: `You are a highly qualified ${paper.subject} examiner. Mark every question with STRICT ACCURACY. Return EXACTLY ${answersForMarking.length} entries — one per question, no exceptions.
+                prompt: `${getExaminerPrompt(paper.subject)}
+
+You are a highly qualified ${paper.subject} examiner. Mark every question with STRICT ACCURACY. Return EXACTLY ${answersForMarking.length} entries — one per question, no exceptions.
 
 SUBJECT: ${paper.subject}. All content MUST be accurate to this subject's curriculum, conventions, and terminology.
 
@@ -346,7 +351,7 @@ CRITICAL: Every entry MUST have non-empty feedback, sample_response, and recomme
                 {results.overall_feedback && (
                     <div className="bg-white rounded-xl border border-gray-200 p-4 shadow-sm">
                         <p className="text-xs font-bold text-gray-400 uppercase tracking-wide mb-2">Examiner's Summary</p>
-                        <p className="text-sm text-gray-700 leading-relaxed">{results.overall_feedback}</p>
+                        <div className="text-sm text-gray-700 leading-relaxed"><MarkdownMath>{results.overall_feedback}</MarkdownMath></div>
                     </div>
                 )}
 
@@ -403,13 +408,13 @@ CRITICAL: Every entry MUST have non-empty feedback, sample_response, and recomme
                                                     {/* Question */}
                                                     <div className="px-4 py-3 bg-gray-50/70 border-b border-gray-100">
                                                         <p className="text-xs text-gray-400 font-bold uppercase tracking-wide mb-1.5">Question</p>
-                                                        <div className="text-sm text-gray-800 leading-relaxed">{renderLatex(q.question_text)}</div>
+                                                        <div className="text-sm text-gray-800 leading-relaxed"><MarkdownMath>{q.question_text}</MarkdownMath></div>
                                                     </div>
                                                     {/* Your answer */}
                                                     <div className="px-4 py-3 border-b border-gray-100">
                                                         <p className="text-xs text-gray-400 font-bold uppercase tracking-wide mb-1.5">Your Answer</p>
                                                         {wasAttempted ? (
-                                                            <p className="text-sm text-gray-700">{answers[q.question_number] || "(Image submitted)"}</p>
+                                                            <div className="text-sm text-gray-700"><MathText>{answers[q.question_number] || "(Image submitted)"}</MathText></div>
                                                         ) : (
                                                             <p className="text-sm text-gray-400 italic">Not attempted</p>
                                                         )}

@@ -24,7 +24,7 @@ export default function Step7Paywall({ data, onBack, onSkip }) {
         setError("");
         try {
             const response = await base44.functions.invoke('stripeCheckout', {
-                priceId: "price_1Sy5JDDB9myR4xodaXQtQHdH",
+                priceId: import.meta.env.VITE_STRIPE_PRICE_PREMIUM,
                 successUrl: `${window.location.origin}${createPageUrl("PaymentSuccess")}?session_id={CHECKOUT_SESSION_ID}`,
                 cancelUrl: window.location.href,
             });
@@ -46,22 +46,22 @@ export default function Step7Paywall({ data, onBack, onSkip }) {
                 <ChevronLeft className="w-4 h-4" /> Back
             </button>
             <h2 className="text-2xl font-bold text-gray-900 mb-1">One last step — subscribe to get started</h2>
-            <p className="text-gray-500 text-sm mb-2">$10/month. Cancel anytime.</p>
+            <p className="text-gray-500 text-sm mb-2">$5/week. Cancel anytime.</p>
 
 
             {/* Plan card */}
             <div className="border-2 rounded-2xl p-6 mb-6" style={{ borderColor: "#534AB7" }}>
                 <p className="font-bold text-xl text-gray-900 mb-1">Acedit Premium</p>
                 <div className="flex items-baseline gap-1 mb-1">
-                    <span className="text-4xl font-extrabold text-gray-900">$10</span>
-                    <span className="text-gray-500 text-sm">/month</span>
+                    <span className="text-4xl font-extrabold text-gray-900">$5</span>
+                    <span className="text-gray-500 text-sm">/week</span>
                 </div>
                 <p className="text-xs text-gray-400 mb-5">Cancel anytime. No lock-in contract.</p>
 
                 {/* Value anchor */}
                 <div className="rounded-xl p-3 mb-5" style={{ backgroundColor: "#F0EEFF" }}>
                     <p className="text-xs text-purple-800 leading-relaxed">
-                        Melbourne private tutors charge <strong>$60–$120 per hour</strong> (Learnmate Australia, 2025). Acedit gives you unlimited AI-powered study support for <strong>$10/month</strong> — available at 2am the night before your SAC.
+                        Melbourne private tutors charge <strong>$60–$120 per hour</strong> (Learnmate Australia, 2025). Acedit gives you AI-powered study support for <strong>$5/week</strong> — available at 2am the night before your SAC.
                     </p>
                 </div>
 

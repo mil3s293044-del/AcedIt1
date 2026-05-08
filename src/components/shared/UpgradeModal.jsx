@@ -170,7 +170,7 @@ export default function UpgradeModal({ isOpen, onClose, feature, requiredTier, u
                     {/* Pricing Info */}
                     <div className="text-center text-sm text-gray-500">
                         <p>
-                            {requiredTier === 'premium' && 'Only $10 AUD/month for unlimited access'}
+                            {requiredTier === 'premium' && 'Only $5 AUD/week for full access'}
                         </p>
                     </div>
                 </div>

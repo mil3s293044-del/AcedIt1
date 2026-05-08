@@ -1,7 +1,5 @@
 
 import React from "react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
     ArrowLeft,
@@ -18,31 +16,43 @@ import {
     Trash2
 } from "lucide-react";
 
+// Static lookup for subject.color values → full Tailwind class strings (avoid JIT interpolation pitfalls)
+const SUBJECT_COLOR_CLASSES = {
+    primary:   { bg: "bg-primary",   bgSoft: "bg-primary/10",   text: "text-primary",   ring: "ring-primary/20" },
+    xp:        { bg: "bg-xp",        bgSoft: "bg-xp/10",        text: "text-xp",        ring: "ring-xp/20" },
+    streak:    { bg: "bg-streak",    bgSoft: "bg-streak/10",    text: "text-streak",    ring: "ring-streak/20" },
+    "chart-3": { bg: "bg-chart-3",   bgSoft: "bg-chart-3/10",   text: "text-chart-3",   ring: "ring-chart-3/20" },
+    "chart-4": { bg: "bg-chart-4",   bgSoft: "bg-chart-4/10",   text: "text-chart-4",   ring: "ring-chart-4/20" },
+};
+
+const DIFFICULTY_PILL = {
+    beginner:     "bg-primary/10 text-primary",
+    intermediate: "bg-xp/10 text-xp",
+    advanced:     "bg-streak/10 text-streak",
+};
+
+const SCALING_PILL = {
+    high_scaling:     "bg-primary/10 text-primary",
+    moderate_scaling: "bg-xp/10 text-xp",
+    low_scaling:      "bg-streak/10 text-streak",
+};
+
 export default function SubjectDetail({ subject, onBack, onEdit, onDelete }) {
     const getDifficultyColor = (level) => {
-        switch (level) {
-            case "beginner": return "bg-green-100 text-green-800 border-green-200";
-            case "intermediate": return "bg-yellow-100 text-yellow-800 border-yellow-200";
-            case "advanced": return "bg-red-100 text-red-800 border-red-200";
-            default: return "bg-gray-100 text-gray-800 border-gray-200";
-        }
+        return DIFFICULTY_PILL[level] || "bg-secondary text-muted-foreground";
     };
 
     const getScalingColor = (reputation) => {
-        if (!reputation) return "bg-gray-100 text-gray-800 border-gray-200";
-
-        switch (reputation) {
-            case "high_scaling": return "bg-green-100 text-green-800 border-green-200";
-            case "moderate_scaling": return "bg-yellow-100 text-yellow-800 border-yellow-200";
-            case "low_scaling": return "bg-orange-100 text-orange-800 border-orange-200";
-            default: return "bg-gray-100 text-gray-800 border-gray-200";
-        }
+        if (!reputation) return "bg-secondary text-muted-foreground";
+        return SCALING_PILL[reputation] || "bg-secondary text-muted-foreground";
     };
 
     // Safe helper function to format text
     const formatText = (text) => {
         return text ? text.replace(/_/g, ' ') : 'N/A';
     };
+
+    const headerColor = SUBJECT_COLOR_CLASSES[subject.color] || SUBJECT_COLOR_CLASSES["chart-4"];
 
     return (
         <div className="p-4 lg:p-8">
@@ -52,54 +62,47 @@ export default function SubjectDetail({ subject, onBack, onEdit, onDelete }) {
                     Back to Subjects
                 </Button>
 
-                <Card>
-                    <CardHeader>
+                <div className="card-soft">
+                    <div className="p-6">
                         <div className="flex items-start justify-between">
                             <div className="flex-1">
                                 <div className="flex items-start gap-4 mb-6">
-                                    <div 
-                                        className="w-16 h-16 rounded-xl flex items-center justify-center flex-shrink-0"
-                                        style={{ backgroundColor: subject.color || '#3B82F6' }}
+                                    <div
+                                        className={`w-16 h-16 rounded-xl flex items-center justify-center flex-shrink-0 ${headerColor.bg}`}
                                     >
                                         <BookOpen className="w-8 h-8 text-white" />
                                     </div>
                                     <div className="flex-1">
                                         <div className="flex items-center gap-3 mb-2">
-                                            <h1 className="text-3xl font-bold text-gray-900">
+                                            <h1 className="text-3xl font-bold text-foreground">
                                                 {subject.name || "Unknown Subject"}
                                             </h1>
-                                            <Badge variant="secondary" className="text-sm font-mono">
+                                            <span className="pill bg-secondary text-foreground font-mono">
                                                 {subject.code || "N/A"}
-                                            </Badge>
+                                            </span>
                                             {subject.is_private && (
-                                                <Badge className="bg-purple-600 text-white hover:bg-purple-700">Private</Badge>
+                                                <span className="pill bg-chart-4 text-white">Private</span>
                                             )}
                                         </div>
                                         <div className="flex items-center gap-3 mb-4 flex-wrap">
-                                            <Badge
-                                                variant="secondary"
-                                                className={getDifficultyColor(subject.difficulty_level)}
-                                            >
+                                            <span className={`pill ${getDifficultyColor(subject.difficulty_level)}`}>
                                                 {subject.difficulty_level || 'intermediate'} level
-                                            </Badge>
+                                            </span>
                                             {subject.scaling_info && (
-                                                <Badge
-                                                    variant="secondary"
-                                                    className={getScalingColor(subject.scaling_info.difficulty_reputation)}
-                                                >
+                                                <span className={`pill ${getScalingColor(subject.scaling_info.difficulty_reputation)}`}>
                                                     Scaling: {subject.scaling_info.scaling_factor || 'Unknown'}
-                                                </Badge>
+                                                </span>
                                             )}
-                                            <div className="flex items-center gap-1 text-sm text-gray-600">
+                                            <div className="flex items-center gap-1 text-sm text-muted-foreground">
                                                 <Users className="w-4 h-4" />
                                                 <span>Popular choice</span>
                                             </div>
-                                            <div className="flex items-center gap-1 text-sm text-gray-600">
+                                            <div className="flex items-center gap-1 text-sm text-muted-foreground">
                                                 <Clock className="w-4 h-4" />
                                                 <span>2 year program</span>
                                             </div>
                                         </div>
-                                        <p className="text-lg text-gray-700 leading-relaxed">
+                                        <p className="text-lg text-muted-foreground leading-relaxed">
                                             {subject.overview || "No overview available."}
                                         </p>
                                     </div>
@@ -122,135 +125,135 @@ export default function SubjectDetail({ subject, onBack, onEdit, onDelete }) {
                                 </div>
                             )}
                         </div>
-                    </CardHeader>
+                    </div>
 
-                    {/* All content previously directly under motion.div, now inside CardContent */}
-                    <CardContent className="p-6 pt-0">
+                    {/* All content previously directly under motion.div, now inside content wrapper */}
+                    <div className="p-6 pt-0">
                         <div className="grid lg:grid-cols-3 gap-6">
                             {/* Main Content */}
                             <div className="lg:col-span-2 space-y-6">
                                 {/* Study Design Summary */}
                                 {subject.study_design_summary && (
-                                    <Card>
-                                        <CardHeader>
-                                            <CardTitle className="flex items-center gap-2">
-                                                <Target className="w-5 h-5 text-blue-600" />
+                                    <div className="card-soft">
+                                        <div className="p-6 pb-3">
+                                            <h3 className="font-display font-extrabold text-foreground flex items-center gap-2">
+                                                <Target className="w-5 h-5 text-chart-3" />
                                                 Study Design Summary
-                                            </CardTitle>
-                                        </CardHeader>
-                                        <CardContent>
+                                            </h3>
+                                        </div>
+                                        <div className="p-6 pt-0">
                                             <div className="prose prose-sm max-w-none">
-                                                <p className="text-gray-700 leading-relaxed">
+                                                <p className="text-muted-foreground leading-relaxed">
                                                     {subject.study_design_summary}
                                                 </p>
                                             </div>
-                                        </CardContent>
-                                    </Card>
+                                        </div>
+                                    </div>
                                 )}
 
                                 {/* Assessment Structure */}
                                 {subject.assessment_structure && subject.assessment_structure.length > 0 && (
-                                    <Card>
-                                        <CardHeader>
-                                            <CardTitle className="flex items-center gap-2">
-                                                <BarChart3 className="w-5 h-5 text-green-600" />
+                                    <div className="card-soft">
+                                        <div className="p-6 pb-3">
+                                            <h3 className="font-display font-extrabold text-foreground flex items-center gap-2">
+                                                <BarChart3 className="w-5 h-5 text-primary" />
                                                 Assessment Structure
-                                            </CardTitle>
-                                        </CardHeader>
-                                        <CardContent>
+                                            </h3>
+                                        </div>
+                                        <div className="p-6 pt-0">
                                             <div className="space-y-4">
                                                 {subject.assessment_structure.map((assessment, index) => (
-                                                    <div key={index} className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
+                                                    <div key={index} className="flex items-center justify-between p-4 bg-secondary/50 rounded-lg">
                                                         <div className="flex-1">
-                                                            <h4 className="font-medium text-gray-900 mb-1">
+                                                            <h4 className="font-medium text-foreground mb-1">
                                                                 {assessment.component || "Assessment Component"}
                                                             </h4>
-                                                            <p className="text-sm text-gray-600">
+                                                            <p className="text-sm text-muted-foreground">
                                                                 {assessment.description || "No description available."}
                                                             </p>
                                                         </div>
                                                         <div className="flex items-center gap-2">
                                                             <div className="text-right">
-                                                                <div className="text-2xl font-bold text-gray-900">
+                                                                <div className="text-2xl font-bold text-foreground">
                                                                     {assessment.percentage || 0}%
                                                                 </div>
                                                             </div>
                                                             <div
-                                                                className="w-2 h-12 bg-gradient-to-t from-blue-200 to-blue-500 rounded-full"
+                                                                className="w-2 h-12 bg-chart-3 rounded-full"
                                                                 style={{ height: `${Math.max((assessment.percentage || 0) / 2, 12)}px` }}
                                                             />
                                                         </div>
                                                     </div>
                                                 ))}
                                             </div>
-                                        </CardContent>
-                                    </Card>
+                                        </div>
+                                    </div>
                                 )}
 
                                 {/* Scaling Information */}
                                 {subject.scaling_info && (
-                                    <Card className="bg-gradient-to-br from-purple-50 to-indigo-50 border-purple-200/50">
-                                        <CardHeader>
-                                            <CardTitle className="flex items-center gap-2 text-purple-900">
+                                    <div className="card-soft bg-chart-4/5 border-chart-4/20">
+                                        <div className="p-6 pb-3">
+                                            <h3 className="font-display font-extrabold flex items-center gap-2 text-chart-4">
                                                 <Calculator className="w-5 h-5" />
                                                 Scaling & Study Score Information
-                                            </CardTitle>
-                                        </CardHeader>
-                                        <CardContent>
+                                            </h3>
+                                        </div>
+                                        <div className="p-6 pt-0">
                                             <div className="grid md:grid-cols-2 gap-6">
                                                 <div>
-                                                    <h4 className="font-semibold text-purple-900 mb-2">Scaling Factor</h4>
+                                                    <h4 className="font-semibold text-chart-4 mb-2">Scaling Factor</h4>
                                                     <div className="flex items-center gap-2 mb-3">
-                                                        <span className="text-3xl font-bold text-purple-900">
+                                                        <span className="text-3xl font-bold text-chart-4">
                                                             {subject.scaling_info.scaling_factor || "Unknown"}
                                                         </span>
-                                                        <Badge className={getScalingColor(subject.scaling_info.difficulty_reputation)}>
+                                                        <span className={`pill ${getScalingColor(subject.scaling_info.difficulty_reputation)}`}>
                                                             {formatText(subject.scaling_info.difficulty_reputation)}
-                                                        </Badge>
+                                                        </span>
                                                     </div>
-                                                    <p className="text-sm text-purple-800">
+                                                    <p className="text-sm text-foreground">
                                                         {subject.scaling_info.scaling_description || "No scaling information available."}
                                                     </p>
                                                 </div>
                                                 <div>
-                                                    <h4 className="font-semibold text-purple-900 mb-2">Average Scaled Study Score</h4>
-                                                    <div className="text-3xl font-bold text-purple-900 mb-3">
+                                                    <h4 className="font-semibold text-chart-4 mb-2">Average Scaled Study Score</h4>
+                                                    <div className="text-3xl font-bold text-chart-4 mb-3">
                                                         {subject.scaling_info.mean_study_score || "N/A"}
                                                     </div>
-                                                    <p className="text-sm text-purple-800">
+                                                    <p className="text-sm text-foreground">
                                                         This is the average scaled study score achieved by students in this subject.
                                                     </p>
                                                 </div>
                                             </div>
-                                            <div className="mt-4 p-3 bg-white/70 rounded-lg">
-                                                <p className="text-xs text-purple-700">
+                                            <div className="mt-4 p-3 bg-surface/70 rounded-lg">
+                                                <p className="text-xs text-muted-foreground">
                                                     💡 <strong>Remember:</strong> Scaling is based on the academic strength of students taking the subject. Choose subjects you're genuinely interested in and can perform well in!
                                                 </p>
                                             </div>
-                                        </CardContent>
-                                    </Card>
+                                        </div>
+                                    </div>
                                 )}
 
                                 {/* Study Tips */}
                                 {subject.study_tips && subject.study_tips.length > 0 && (
-                                    <Card>
-                                        <CardHeader>
-                                            <CardTitle className="flex items-center gap-2">
-                                                <Lightbulb className="w-5 h-5 text-yellow-600" />
+                                    <div className="card-soft">
+                                        <div className="p-6 pb-3">
+                                            <h3 className="font-display font-extrabold text-foreground flex items-center gap-2">
+                                                <Lightbulb className="w-5 h-5 text-xp" />
                                                 Study Tips & Strategies
-                                            </CardTitle>
-                                        </CardHeader>
-                                        <CardContent>
+                                            </h3>
+                                        </div>
+                                        <div className="p-6 pt-0">
                                             <div className="grid gap-3">
                                                 {subject.study_tips.map((tip, index) => (
-                                                    <div key={index} className="flex items-start gap-3 p-3 bg-yellow-50 rounded-lg border border-yellow-200/50">
-                                                        <CheckCircle className="w-5 h-5 text-yellow-600 mt-0.5 flex-shrink-0" />
-                                                        <p className="text-gray-700">{tip || "Study tip not available."}</p>
+                                                    <div key={index} className="flex items-start gap-3 p-3 bg-xp/5 rounded-lg border border-xp/20">
+                                                        <CheckCircle className="w-5 h-5 text-xp mt-0.5 flex-shrink-0" />
+                                                        <p className="text-foreground">{tip || "Study tip not available."}</p>
                                                     </div>
                                                 ))}
                                             </div>
-                                        </CardContent>
-                                    </Card>
+                                        </div>
+                                    </div>
                                 )}
                             </div>
 
@@ -258,77 +261,77 @@ export default function SubjectDetail({ subject, onBack, onEdit, onDelete }) {
                             <div className="space-y-6">
                                 {/* Key Skills */}
                                 {subject.key_skills && subject.key_skills.length > 0 && (
-                                    <Card>
-                                        <CardHeader>
-                                            <CardTitle className="flex items-center gap-2 text-lg">
-                                                <TrendingUp className="w-5 h-5 text-purple-600" />
+                                    <div className="card-soft">
+                                        <div className="p-6 pb-3">
+                                            <h3 className="font-display font-extrabold text-foreground flex items-center gap-2 text-lg">
+                                                <TrendingUp className="w-5 h-5 text-chart-4" />
                                                 Key Skills
-                                            </CardTitle>
-                                        </CardHeader>
-                                        <CardContent>
+                                            </h3>
+                                        </div>
+                                        <div className="p-6 pt-0">
                                             <div className="space-y-2">
                                                 {subject.key_skills.map((skill, index) => (
                                                     <div key={index} className="flex items-center gap-2">
-                                                        <div className="w-2 h-2 bg-purple-500 rounded-full" />
-                                                        <span className="text-sm text-gray-700">{skill || "Skill not specified"}</span>
+                                                        <div className="w-2 h-2 bg-chart-4 rounded-full" />
+                                                        <span className="text-sm text-muted-foreground">{skill || "Skill not specified"}</span>
                                                     </div>
                                                 ))}
                                             </div>
-                                        </CardContent>
-                                    </Card>
+                                        </div>
+                                    </div>
                                 )}
 
                                 {/* Prerequisites */}
                                 {subject.prerequisites && subject.prerequisites.length > 0 && (
-                                    <Card>
-                                        <CardHeader>
-                                            <CardTitle className="flex items-center gap-2 text-lg">
-                                                <BookOpen className="w-5 h-5 text-blue-600" />
+                                    <div className="card-soft">
+                                        <div className="p-6 pb-3">
+                                            <h3 className="font-display font-extrabold text-foreground flex items-center gap-2 text-lg">
+                                                <BookOpen className="w-5 h-5 text-chart-3" />
                                                 Prerequisites
-                                            </CardTitle>
-                                        </CardHeader>
-                                        <CardContent>
+                                            </h3>
+                                        </div>
+                                        <div className="p-6 pt-0">
                                             <div className="space-y-2">
                                                 {subject.prerequisites.map((prereq, index) => (
-                                                    <Badge key={index} variant="outline" className="mr-2 mb-2">
+                                                    <span key={index} className="pill border border-border text-foreground mr-2 mb-2">
                                                         {prereq || "No prerequisite specified"}
-                                                    </Badge>
+                                                    </span>
                                                 ))}
                                             </div>
-                                        </CardContent>
-                                    </Card>
+                                        </div>
+                                    </div>
                                 )}
 
                                 {/* Career Pathways */}
                                 {subject.career_pathways && subject.career_pathways.length > 0 && (
-                                    <Card className="bg-gradient-to-br from-indigo-50 to-purple-50 border-indigo-200/50">
-                                        <CardHeader>
-                                            <CardTitle className="flex items-center gap-2 text-lg text-indigo-900">
+                                    <div className="card-soft bg-chart-4/5 border-chart-4/20">
+                                        <div className="p-6 pb-3">
+                                            <h3 className="font-display font-extrabold flex items-center gap-2 text-lg text-chart-4">
                                                 <Users className="w-5 h-5" />
                                                 Career Pathways
-                                            </CardTitle>
-                                        </CardHeader>
-                                        <CardContent>
+                                            </h3>
+                                        </div>
+                                        <div className="p-6 pt-0">
                                             <div className="space-y-2">
                                                 {subject.career_pathways.map((career, index) => (
                                                     <div key={index} className="flex items-center gap-2">
-                                                        <div className="w-2 h-2 bg-indigo-500 rounded-full" />
-                                                        <span className="text-sm text-indigo-800">{career || "Career path not specified"}</span>
+                                                        <div className="w-2 h-2 bg-chart-4 rounded-full" />
+                                                        <span className="text-sm text-foreground">{career || "Career path not specified"}</span>
                                                     </div>
                                                 ))}
                                             </div>
-                                            <div className="mt-4 p-3 bg-white/70 rounded-lg">
-                                                <p className="text-xs text-indigo-700">
+                                            <div className="mt-4 p-3 bg-surface/70 rounded-lg">
+                                                <p className="text-xs text-muted-foreground">
                                                     💡 These are just some of the many career opportunities available. Talk to a career counselor for personalized advice!
                                                 </p>
                                             </div>
-                                        </CardContent>
-                                    </Card>
+                                        </div>
+                                    </div>
                                 )}
                             </div>
                         </div>
-                    </CardContent>
-                </Card>
+                    </div>
+                </div>
             </div>
         </div>
     );

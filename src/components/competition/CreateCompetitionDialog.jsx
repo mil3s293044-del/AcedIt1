@@ -7,7 +7,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Trophy, Users, X, Loader2, Search, Zap } from "lucide-react";
 import { base44 } from "@/api/base44Client";
-import { createGoalCompetition } from "@/functions/createGoalCompetition";
+import { createGoalCompetition } from "@/api/functionsShim";
 import { useToast } from "@/components/ui/use-toast";
 
 export default function CreateCompetitionDialog({ open, onClose, goal, onCreated }) {

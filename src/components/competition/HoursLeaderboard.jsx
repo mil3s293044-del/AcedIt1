@@ -7,8 +7,7 @@ import {
     TrendingUp, CheckCircle2, Timer
 } from "lucide-react";
 import { base44 } from "@/api/base44Client";
-import { updateCompetitionProgress } from "@/functions/updateCompetitionProgress";
-import { settleHoursCompetition } from "@/functions/settleHoursCompetition";
+import { updateCompetitionProgress, settleHoursCompetition } from "@/api/functionsShim";
 import { useToast } from "@/components/ui/use-toast";
 import { format, parseISO, differenceInDays } from "date-fns";
 

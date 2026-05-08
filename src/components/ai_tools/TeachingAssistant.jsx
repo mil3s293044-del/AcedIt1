@@ -7,13 +7,15 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/components/ui/use-toast';
 import { base44 } from '@/api/base44Client';
-import ReactMarkdown from 'react-markdown';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
-import { Send, Loader2, GraduationCap, Brain, Upload, Sparkles, Save, Trash2, Eye, MessageCircle, BookOpen, FolderOpen, ChevronDown } from 'lucide-react';
+import { Send, Loader2, GraduationCap, Brain, Upload, Sparkles, Save, Trash2, Eye, MessageCircle, BookOpen, FolderOpen, ChevronDown, Square } from 'lucide-react';
 import { moderationPresets } from '@/components/shared/contentModeration';
-import AILoadingProgress from '../shared/AILoadingProgress';
 import { recordStudyAndGetStreak } from "@/components/shared/streakHelpers";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import MarkdownMath from "@/components/shared/MarkdownMath";
+import MathText from "@/components/shared/LatexRenderer";
+import { getExaminerPrompt, getLatexRules } from "@/lib/subjectExaminerPrompts";
+import { invokeLLMStream } from "@/lib/streamingAI";
 
 export default function TeachingAssistant() {
     const [mode, setMode] = useState('concept');
@@ -36,6 +38,7 @@ export default function TeachingAssistant() {
     const [isGeneratingQuiz, setIsGeneratingQuiz] = useState(false);
     const messagesEndRef = useRef(null);
     const autoSaveRef = useRef(null);
+    const abortRef = useRef(null);
     const { toast } = useToast();
 
     useEffect(() => {
@@ -68,27 +71,83 @@ export default function TeachingAssistant() {
         if (!topic.trim() || !subject) { toast({ title: 'Please enter a topic and subject', variant: 'destructive' }); return; }
         if (mode === 'document' && !uploadedFile) { toast({ title: 'Please upload a file', variant: 'destructive' }); return; }
         try { const m = await moderationPresets.aiPrompt(topic); if (!m.isAllowed) { toast({ title: 'Content policy violation', variant: 'destructive' }); return; } } catch {}
+
+        // Open the chat immediately so the user sees something happening.
+        setHasStarted(true);
         setIsAIThinking(true);
+        setMessages([{ role: 'assistant', content: '', timestamp: new Date().toISOString(), streaming: true }]);
+
+        // Document mode: extract text up-front (cheap, no AI), then stream the
+        // welcome that references the doc. Concept mode: skip the pre-context
+        // step entirely — the model knows VCE topics; subsequent turns include
+        // topic + subject in the prompt.
+        let docContext = '';
         try {
-            let context;
             if (mode === 'document') {
                 const { file_url } = await base44.integrations.Core.UploadFile({ file: uploadedFile });
                 const ext = uploadedFile.name.split('.').pop()?.toLowerCase();
                 if (ext === 'docx' || ext === 'pptx') {
                     const textResult = await base44.functions.invoke('extractDocumentText', { file_url });
-                    context = await base44.integrations.Core.InvokeLLM({ prompt: `Summarise key concepts from this ${subject} document for a VCE student:\n\n${textResult.data?.text || ''}` });
+                    docContext = textResult.data?.text || '';
                 } else {
-                    context = await base44.integrations.Core.InvokeLLM({ prompt: `Extract and summarise key concepts from this ${subject} document for a VCE student.`, file_urls: [file_url] });
+                    // For PDF/images we keep the file_url so the model reads it on first turn.
+                    docContext = `(uploaded file: ${file_url})`;
                 }
-            } else {
-                context = await base44.integrations.Core.InvokeLLM({ prompt: `Create a comprehensive educational overview of "${topic}" for a VCE Year 12 ${subject} student. Cover core concepts, principles, examples, and common misconceptions.`, add_context_from_internet: true });
+                setConversationContext(docContext);
             }
-            setConversationContext(context);
-            setMessages([{ role: 'assistant', content: `# Let's explore **${topic}**! 🎓\n\nI'm your AI tutor for this session. I'll guide you through the material with questions and explanations.\n\n**To start:** What do you already know about **${topic}**? Share anything — even if you're unsure!`, timestamp: new Date().toISOString() }]);
-            setHasStarted(true);
+        } catch (e) {
+            setIsAIThinking(false);
+            setMessages([]);
+            setHasStarted(false);
+            toast({ title: 'Could not read your file', description: e.message, variant: 'destructive' });
+            return;
+        }
+
+        const welcomePrompt = `${getExaminerPrompt(subject)}
+
+You are an expert adaptive tutor for VCE ${subject}, starting a new tutoring session on "${topic}".
+
+${docContext ? `Source material the student uploaded:\n${docContext.slice(0, 4000)}\n\n` : ''}Write a SHORT, warm opening message (3–5 sentences) that:
+- Welcomes the student to learning about ${topic}
+- Names one interesting hook or angle on the topic
+- Ends with a question that invites them to share what they already know
+
+Format in markdown. Keep it conversational, never cocky.`;
+
+        const controller = new AbortController();
+        abortRef.current = controller;
+        try {
+            await invokeLLMStream(
+                { prompt: welcomePrompt },
+                (_delta, soFar) => {
+                    setMessages(prev => {
+                        const next = [...prev];
+                        const last = next[next.length - 1];
+                        if (last?.role === 'assistant') {
+                            next[next.length - 1] = { ...last, content: soFar, streaming: true };
+                        }
+                        return next;
+                    });
+                },
+                { signal: controller.signal }
+            );
+            setMessages(prev => {
+                const next = [...prev];
+                const last = next[next.length - 1];
+                if (last?.role === 'assistant') next[next.length - 1] = { ...last, streaming: false };
+                return next;
+            });
             recordStudyAndGetStreak().catch(() => {});
-        } catch (e) { toast({ title: 'Error starting session', description: e.message, variant: 'destructive' }); }
-        finally { setIsAIThinking(false); }
+        } catch (err) {
+            if (err?.name !== 'AbortError') {
+                toast({ title: 'Error starting session', description: err?.message, variant: 'destructive' });
+                setMessages([]);
+                setHasStarted(false);
+            }
+        } finally {
+            setIsAIThinking(false);
+            abortRef.current = null;
+        }
     };
 
     const handleSendMessage = async () => {
@@ -96,18 +155,25 @@ export default function TeachingAssistant() {
         try { const m = await moderationPresets.aiPrompt(userInput); if (!m.isAllowed) { toast({ title: 'Message not sent', variant: 'destructive' }); return; } } catch {}
         setIsAIThinking(true);
         const userMsg = { role: 'user', content: userInput, timestamp: new Date().toISOString() };
-        setMessages(prev => [...prev, userMsg]);
+        // Push user message + empty assistant placeholder so the bubble renders immediately
+        setMessages(prev => [...prev, userMsg, { role: 'assistant', content: '', timestamp: new Date().toISOString(), streaming: true }]);
+        const inputForPrompt = userInput;
         setUserInput('');
+
+        const controller = new AbortController();
+        abortRef.current = controller;
+
         try {
             const history = messages.slice(-6).map(m => `${m.role}: ${m.content}`).join('\n');
-            const response = await base44.integrations.Core.InvokeLLM({
-                prompt: `You are an expert adaptive tutor for VCE ${subject}, teaching "${topic}".
+            const prompt = `${getExaminerPrompt(subject)}
+
+You are an expert adaptive tutor for VCE ${subject}, teaching "${topic}".
 
 Knowledge base: ${conversationContext}
 
 Recent conversation: ${history}
 
-Student's response: ${userInput}
+Student's response: ${inputForPrompt}
 
 Instructions:
 - Be conversational and encouraging
@@ -117,12 +183,50 @@ Instructions:
 - Use the Socratic method — guide them to discover understanding
 - Keep responses concise (3-5 sentences max before the question)
 
-Respond in markdown.`
+Respond in markdown.`;
+
+            await invokeLLMStream(
+                { prompt },
+                (_delta, soFar) => {
+                    setMessages(prev => {
+                        const next = [...prev];
+                        const last = next[next.length - 1];
+                        if (last?.role === 'assistant') {
+                            next[next.length - 1] = { ...last, content: soFar, streaming: true };
+                        }
+                        return next;
+                    });
+                },
+                { signal: controller.signal }
+            );
+            // Mark final message as no longer streaming
+            setMessages(prev => {
+                const next = [...prev];
+                const last = next[next.length - 1];
+                if (last?.role === 'assistant') next[next.length - 1] = { ...last, streaming: false };
+                return next;
             });
-            setMessages(prev => [...prev, { role: 'assistant', content: response, timestamp: new Date().toISOString() }]);
-        } catch { toast({ title: 'Error', variant: 'destructive' }); }
-        finally { setIsAIThinking(false); }
+        } catch (err) {
+            if (err?.name === 'AbortError') {
+                // User stopped — keep partial content
+                setMessages(prev => {
+                    const next = [...prev];
+                    const last = next[next.length - 1];
+                    if (last?.role === 'assistant') next[next.length - 1] = { ...last, streaming: false, stopped: true };
+                    return next;
+                });
+            } else {
+                toast({ title: 'Error', description: err?.message, variant: 'destructive' });
+                // Drop the empty placeholder
+                setMessages(prev => prev[prev.length - 1]?.role === 'assistant' && !prev[prev.length - 1].content ? prev.slice(0, -1) : prev);
+            }
+        } finally {
+            setIsAIThinking(false);
+            abortRef.current = null;
+        }
     };
+
+    const handleStopMessage = () => abortRef.current?.abort();
 
     const saveSession = async () => {
         if (!user || !messages.length) return;
@@ -145,7 +249,7 @@ Respond in markdown.`
         try {
             const conversationText = messages.map(m => `${m.role === 'user' ? 'Student' : 'AI'}: ${m.content}`).join('\n\n');
             const response = await base44.integrations.Core.InvokeLLM({
-                prompt: `Based on this teaching conversation about "${topic}", create 10 quiz questions.\n\n${conversationText}\n\nMix 7 MCQ (4 options each, correct_answer index 0-3) and 3 short answer (with model_answer and marks). Test genuine understanding.`,
+                prompt: `${getExaminerPrompt(subject)}\n\nBased on this teaching conversation about "${topic}", create 10 quiz questions.\n\n${conversationText}\n\nMix 7 MCQ (4 options each, correct_answer index 0-3) and 3 short answer (with model_answer and marks). Test genuine understanding.`,
                 response_json_schema: { type: 'object', properties: { questions: { type: 'array', items: { type: 'object', properties: { type: { type: 'string' }, question: { type: 'string' }, options: { type: 'array', items: { type: 'string' } }, correct_answer: { type: 'number' }, model_answer: { type: 'string' }, marks: { type: 'number' }, explanation: { type: 'string' } } } } } }
             });
             const cleaned = (response.questions || []).map(q => q.type === 'mcq' ? { type: 'mcq', question: q.question, options: q.options, correct_answer: q.correct_answer, explanation: q.explanation } : { type: 'short_answer', question: q.question, model_answer: q.model_answer, marks: q.marks, explanation: q.explanation });
@@ -156,14 +260,10 @@ Respond in markdown.`
     };
 
     if (!hasStarted) return (
-        <div className="space-y-5 max-w-3xl">
+        <div className="space-y-5">
             {isGeneratingQuiz && <AILoadingProgress stage="generating" message="Creating your quiz..." estimatedTime={30} />}
 
-            <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
-                <div className="bg-gradient-to-r from-amber-500 to-orange-600 px-5 py-4">
-                    <h2 className="text-white font-bold text-lg">Teaching Assistant</h2>
-                    <p className="text-white/70 text-sm">Learn by explaining — AI will question and guide you to mastery</p>
-                </div>
+            <div className="card-soft overflow-hidden">
                 <div className="p-5 space-y-4">
                     <Tabs value={mode} onValueChange={setMode}>
                         <TabsList className="grid w-full grid-cols-2 bg-gray-100">
@@ -181,12 +281,12 @@ Respond in markdown.`
                             </div>
                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                                 <div className="space-y-1.5">
-                                    <label className="text-xs font-bold text-gray-500 uppercase tracking-wide">Subject</label>
-                                    <Select value={subject} onValueChange={setSubject}><SelectTrigger className="bg-gray-50 border-gray-200 h-10"><SelectValue placeholder="Select subject" /></SelectTrigger><SelectContent>{userSubjects.map(s => <SelectItem key={s.id} value={s.subject_name}>{s.subject_name}</SelectItem>)}</SelectContent></Select>
+                                    <label className="stat-label">Subject</label>
+                                    <Select value={subject} onValueChange={setSubject}><SelectTrigger><SelectValue placeholder="Select subject" /></SelectTrigger><SelectContent>{userSubjects.map(s => <SelectItem key={s.id} value={s.subject_name}>{s.subject_name}</SelectItem>)}</SelectContent></Select>
                                 </div>
                                 <div className="space-y-1.5">
-                                    <label className="text-xs font-bold text-gray-500 uppercase tracking-wide">What do you want to learn?</label>
-                                    <Input placeholder="e.g., Photosynthesis, WWII causes..." value={topic} onChange={e => setTopic(e.target.value)} onKeyDown={e => e.key === 'Enter' && startSession()} className="bg-gray-50 border-gray-200 h-10" />
+                                    <label className="stat-label">What do you want to learn?</label>
+                                    <Input placeholder="e.g., Photosynthesis, WWII causes..." value={topic} onChange={e => setTopic(e.target.value)} onKeyDown={e => e.key === 'Enter' && startSession()} />
                                 </div>
                             </div>
                         </TabsContent>
@@ -197,19 +297,19 @@ Respond in markdown.`
                             </div>
                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                                 <div className="space-y-1.5">
-                                    <label className="text-xs font-bold text-gray-500 uppercase tracking-wide">Subject</label>
-                                    <Select value={subject} onValueChange={setSubject}><SelectTrigger className="bg-gray-50 border-gray-200 h-10"><SelectValue placeholder="Select subject" /></SelectTrigger><SelectContent>{userSubjects.map(s => <SelectItem key={s.id} value={s.subject_name}>{s.subject_name}</SelectItem>)}</SelectContent></Select>
+                                    <label className="stat-label">Subject</label>
+                                    <Select value={subject} onValueChange={setSubject}><SelectTrigger><SelectValue placeholder="Select subject" /></SelectTrigger><SelectContent>{userSubjects.map(s => <SelectItem key={s.id} value={s.subject_name}>{s.subject_name}</SelectItem>)}</SelectContent></Select>
                                 </div>
                                 <div className="space-y-1.5">
-                                    <label className="text-xs font-bold text-gray-500 uppercase tracking-wide">Topic Name</label>
-                                    <Input placeholder="e.g., Cell Biology" value={topic} onChange={e => setTopic(e.target.value)} className="bg-gray-50 border-gray-200 h-10" />
+                                    <label className="stat-label">Topic Name</label>
+                                    <Input placeholder="e.g., Cell Biology" value={topic} onChange={e => setTopic(e.target.value)} />
                                 </div>
                             </div>
                             <div>
-                                <label className="text-xs font-bold text-gray-500 uppercase tracking-wide block mb-1.5">Upload Notes</label>
+                                <label className="stat-label block mb-1.5">Upload Notes</label>
                                 <Button asChild variant="outline" className="w-full h-12 border-dashed border-2 border-gray-300 hover:border-amber-300 hover:bg-amber-50">
                                     <label className="cursor-pointer flex items-center gap-2">
-                                        <Upload className="w-4 h-4 text-gray-400" />
+                                        <Upload className="w-4 h-4 text-muted-foreground/70" />
                                         <span className="text-sm text-gray-600">{uploadedFile ? uploadedFile.name : 'Choose PDF, DOCX, or PPTX'}</span>
                                         <input type="file" className="hidden" accept=".pdf,.txt,.docx,.pptx" onChange={e => setUploadedFile(e.target.files?.[0])} />
                                     </label>
@@ -219,21 +319,21 @@ Respond in markdown.`
                     </Tabs>
 
                     <Button onClick={startSession} disabled={isAIThinking || !topic.trim() || !subject || (mode === 'document' && !uploadedFile)}
-                        className="w-full bg-gradient-to-r from-amber-500 to-orange-600 hover:from-amber-600 hover:to-orange-700 h-11 font-semibold shadow-lg">
+                        className="w-full">
                         {isAIThinking ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Preparing Session...</> : <><GraduationCap className="w-4 h-4 mr-2" />Start Learning Session</>}
                     </Button>
                 </div>
             </div>
 
             {savedSessions.length > 0 && (
-                <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
+                <div className="card-soft overflow-hidden">
                     <button onClick={() => setShowHistory(!showHistory)} className="w-full flex items-center justify-between px-5 py-4 hover:bg-gray-50 transition-colors">
                         <div className="flex items-center gap-2">
-                            <FolderOpen className="w-4 h-4 text-gray-400" />
-                            <span className="font-semibold text-gray-700 text-sm">Previous Sessions</span>
+                            <FolderOpen className="w-4 h-4 text-muted-foreground/70" />
+                            <span className="font-semibold text-foreground text-sm">Previous Sessions</span>
                             <Badge className="bg-gray-100 text-gray-600 border-0 text-xs">{savedSessions.length}</Badge>
                         </div>
-                        <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform ${showHistory ? 'rotate-180' : ''}`} />
+                        <ChevronDown className={`w-4 h-4 text-muted-foreground/70 transition-transform ${showHistory ? 'rotate-180' : ''}`} />
                     </button>
                     <AnimatePresence>
                         {showHistory && (
@@ -242,14 +342,14 @@ Respond in markdown.`
                                     {savedSessions.map(s => (
                                         <div key={s.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-xl">
                                             <div className="flex-1 min-w-0">
-                                                <p className="text-sm font-semibold text-gray-800 truncate">{s.topic}</p>
-                                                <p className="text-xs text-gray-400">{s.subject_name} • {s.date_created}</p>
+                                                <p className="text-sm font-semibold text-foreground truncate">{s.topic}</p>
+                                                <p className="text-xs text-muted-foreground/70">{s.subject_name} • {s.date_created}</p>
                                             </div>
                                             <div className="flex gap-1.5 ml-2">
                                                 <Button size="sm" onClick={() => { try { const d = JSON.parse(s.content); setMessages(d.messages || []); setMode(d.mode || 'concept'); setSubject(s.subject_name); setTopic(s.topic); setHasStarted(true); setLoadedResultId(s.id); if (d.messages?.length) setConversationContext(d.messages.map(m => m.content).join('\n')); toast({ title: 'Session resumed!' }); } catch { toast({ title: 'Could not resume', variant: 'destructive' }); } }} className="h-7 text-xs bg-amber-600 hover:bg-amber-700">
                                                     <MessageCircle className="w-3 h-3 mr-1" />Resume
                                                 </Button>
-                                                <button onClick={() => base44.entities.AISavedResult.delete(s.id).then(() => setSavedSessions(prev => prev.filter(x => x.id !== s.id)))} className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg"><Trash2 className="w-3.5 h-3.5" /></button>
+                                                <button onClick={() => base44.entities.AISavedResult.delete(s.id).then(() => setSavedSessions(prev => prev.filter(x => x.id !== s.id)))} className="p-1.5 text-muted-foreground/70 hover:text-red-500 hover:bg-red-50 rounded-lg"><Trash2 className="w-3.5 h-3.5" /></button>
                                             </div>
                                         </div>
                                     ))}
@@ -274,11 +374,11 @@ Respond in markdown.`
     );
 
     return (
-        <div className="space-y-4 max-w-3xl">
+        <div className="space-y-4">
             {isGeneratingQuiz && <AILoadingProgress stage="generating" message="Creating your quiz..." estimatedTime={30} />}
 
             {/* Session header */}
-            <div className="bg-white rounded-2xl border border-gray-200 shadow-sm">
+            <div className="card-soft">
                 <div className="flex items-center justify-between px-5 py-3">
                     <div className="flex items-center gap-3">
                         <div className="w-9 h-9 bg-amber-100 rounded-xl flex items-center justify-center">
@@ -300,14 +400,14 @@ Respond in markdown.`
             </div>
 
             {/* Chat */}
-            <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
+            <div className="card-soft overflow-hidden">
                 <div className="h-[420px] overflow-y-auto p-4 space-y-3 bg-gray-50">
                     {messages.map((msg, i) => (
                         <motion.div key={i} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
                             <div className={`max-w-[82%] rounded-2xl px-4 py-3 ${msg.role === 'user' ? 'bg-amber-600 text-white' : 'bg-white border border-gray-200 shadow-sm'}`}>
                                 {msg.role === 'assistant' ? (
-                                    <div className="prose prose-sm max-w-none prose-headings:text-gray-900 prose-p:text-gray-700 prose-p:my-1 prose-li:text-gray-700 prose-strong:text-gray-900">
-                                        <ReactMarkdown>{msg.content}</ReactMarkdown>
+                                    <div className="prose prose-sm max-w-none prose-headings:text-gray-900 prose-p:text-foreground prose-p:my-1 prose-li:text-foreground prose-strong:text-gray-900">
+                                        <MarkdownMath isStreaming={!!msg.streaming}>{msg.content}</MarkdownMath>
                                     </div>
                                 ) : <p className="text-sm leading-relaxed">{msg.content}</p>}
                             </div>
@@ -317,7 +417,7 @@ Respond in markdown.`
                         <div className="flex justify-start">
                             <div className="bg-white border border-gray-200 rounded-2xl px-4 py-3 flex items-center gap-2">
                                 <div className="flex gap-1">{[0,1,2].map(i => <motion.div key={i} className="w-2 h-2 bg-amber-400 rounded-full" animate={{ y: [0, -6, 0] }} transition={{ duration: 0.6, repeat: Infinity, delay: i * 0.15 }} />)}</div>
-                                <span className="text-xs text-gray-400">AI is thinking...</span>
+                                <span className="text-xs text-muted-foreground/70">AI is thinking...</span>
                             </div>
                         </div>
                     )}
@@ -329,9 +429,15 @@ Respond in markdown.`
                             onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSendMessage(); } }}
                             placeholder="Type your answer or ask a question... (Enter to send)"
                             rows={2} disabled={isAIThinking} className="resize-none border-gray-200 focus:border-amber-400 text-sm flex-1" />
-                        <Button onClick={handleSendMessage} disabled={!userInput.trim() || isAIThinking} className="bg-amber-600 hover:bg-amber-700 self-end h-10">
-                            {isAIThinking ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
-                        </Button>
+                        {isAIThinking ? (
+                            <Button onClick={handleStopMessage} variant="destructive" className="self-end h-10" title="Stop generating">
+                                <Square className="w-4 h-4" />
+                            </Button>
+                        ) : (
+                            <Button onClick={handleSendMessage} disabled={!userInput.trim()} className="self-end h-10" title="Send">
+                                <Send className="w-4 h-4" />
+                            </Button>
+                        )}
                     </div>
                 </div>
             </div>

@@ -7,7 +7,8 @@ import { Label } from "@/components/ui/label";
 import {
     ArrowLeft, ArrowRight, CheckCircle, Clock, Wand2, Loader2,
     X, Calculator, Check, ChevronLeft, ChevronRight, Flag,
-    BarChart3, Target, Layers, Zap, TrendingUp, AlertCircle, Brain
+    BarChart3, Target, Layers, Zap, TrendingUp, AlertCircle, Brain,
+    Trophy, Star, BookOpen, Sparkles
 } from "lucide-react";
 import AdaptiveReview from "./AdaptiveReview";
 import DifficultyRating from "@/components/shared/DifficultyRating";
@@ -19,6 +20,56 @@ import MathKeyboard from "../shared/MathKeyboard";
 import MathInput from "../shared/MathInput";
 import { Switch } from "@/components/ui/switch";
 import { LatexBlock, LatexInline, processLatexContent } from "../shared/LatexRenderer";
+import MarkdownMath from "@/components/shared/MarkdownMath";
+import MathText from "@/components/shared/LatexRenderer";
+import { getLatexRules } from "@/lib/subjectExaminerPrompts";
+
+// ─── Static class lookup tables (no dynamic Tailwind interpolation) ──────────
+const CHOICE_STATE = {
+    default:   'border-2 border-border bg-surface text-foreground hover:border-chart-3/40 hover:bg-chart-3/5',
+    selected:  'border-2 border-chart-3 bg-chart-3/10 text-foreground',
+    correct:   'border-2 border-primary bg-primary/10 text-foreground',
+    incorrect: 'border-2 border-streak bg-streak/10 text-foreground',
+    disabled:  'border-2 border-border bg-secondary/50 text-muted-foreground',
+};
+
+const CHOICE_BADGE = {
+    default:   'bg-secondary text-muted-foreground',
+    selected:  'bg-chart-3 text-white',
+    correct:   'bg-primary text-white',
+    incorrect: 'bg-streak text-white',
+    disabled:  'bg-secondary text-muted-foreground',
+};
+
+const SCORE_TIER = {
+    excellent: { tile: 'bg-primary/10',  text: 'text-primary',  border: 'border-primary/20',  badge: 'bg-primary/15 text-primary',  label: 'Excellent', icon: Trophy },
+    good:      { tile: 'bg-chart-3/10',  text: 'text-chart-3',  border: 'border-chart-3/20',  badge: 'bg-chart-3/15 text-chart-3',  label: 'Good',      icon: Star },
+    okay:      { tile: 'bg-xp/10',       text: 'text-xp',       border: 'border-xp/20',       badge: 'bg-xp/15 text-xp',            label: 'Okay',      icon: TrendingUp },
+    poor:      { tile: 'bg-streak/10',   text: 'text-streak',   border: 'border-streak/20',   badge: 'bg-streak/15 text-streak',    label: 'Needs review', icon: BookOpen },
+};
+
+const tierFromScore = (score) => {
+    if (score >= 85) return SCORE_TIER.excellent;
+    if (score >= 70) return SCORE_TIER.good;
+    if (score >= 55) return SCORE_TIER.okay;
+    return SCORE_TIER.poor;
+};
+
+// Mark-percentage → verdict tile (used for per-question score badges)
+const markTier = (pct) => {
+    if (pct >= 80) return SCORE_TIER.excellent;
+    if (pct >= 50) return SCORE_TIER.okay;
+    return SCORE_TIER.poor;
+};
+
+// AI feedback panel palette — uses chart-4 as the special/explanation accent.
+const FEEDBACK_PANEL = {
+    explanation:   'bg-chart-3/10 border-chart-3/20 text-chart-3',
+    understanding: 'bg-chart-4/10 border-chart-4/20 text-chart-4',
+    strengths:     'bg-primary/10 border-primary/20 text-primary',
+    improve:       'bg-xp/10 border-xp/20 text-xp',
+    comparison:    'bg-chart-4/10 border-chart-4/20 text-chart-4',
+};
 
 // Sound generation
 const playCorrectSound = () => {
@@ -262,7 +313,9 @@ export default function QuizPlayer({ quiz, onComplete, onExit }) {
             }
 
             const response = await base44.integrations.Core.InvokeLLM({
-                prompt: `Mark this ${shuffledQuiz.subject} quiz. Provide feedback for ALL ${questionsForAnalysis.length} questions.${sourceFileContent}${comparisonInstructions}
+                prompt: `${getLatexRules()}
+
+Mark this ${shuffledQuiz.subject} quiz. Provide feedback for ALL ${questionsForAnalysis.length} questions.${sourceFileContent}${comparisonInstructions}
 
 MARKING: MCQ = 0 or 1 mark only. Short answer = 0 to allocation marks. Be lenient on phrasing.
 
@@ -383,37 +436,35 @@ Return exactly ${questionsForAnalysis.length} items.`,
         const currentQ = shuffledQuiz.questions[currentFeedbackIndex];
         const currentFeedback = aiFeedback[currentFeedbackIndex];
         const currentUserAnswer = userAnswers[currentFeedbackIndex];
-        const grade = overallScore >= 85 ? { label: "Outstanding", emoji: "🏆", color: "from-amber-500 to-yellow-400" }
-            : overallScore >= 70 ? { label: "Great Work", emoji: "⭐", color: "from-emerald-500 to-teal-400" }
-            : overallScore >= 55 ? { label: "Good Effort", emoji: "📈", color: "from-blue-500 to-indigo-400" }
-            : { label: "Keep Going", emoji: "📚", color: "from-slate-600 to-slate-500" };
+        const tier = tierFromScore(overallScore);
+        const TierIcon = tier.icon;
 
         return (
-            <div className="fixed inset-0 z-50 bg-slate-50 flex flex-col">
+            <div className="fixed inset-0 z-50 bg-background flex flex-col">
                 {/* Top bar */}
-                <div className="flex-shrink-0 bg-white/80 backdrop-blur-sm border-b border-slate-100 shadow-sm">
+                <div className="flex-shrink-0 bg-surface/80 backdrop-blur-sm border-b border-border shadow-soft">
                     <div className="px-4 lg:px-6 py-3 flex items-center justify-between gap-4">
                         <div className="flex items-center gap-3">
-                            <Button onClick={async () => { await clearSavedProgress(); onExit(); }} variant="ghost" size="sm" className="gap-2 rounded-xl hover:bg-slate-100">
+                            <Button onClick={async () => { await clearSavedProgress(); onExit(); }} variant="ghost" size="sm" className="gap-2 rounded-xl hover:bg-secondary">
                                 <ArrowLeft className="w-4 h-4" /> <span className="hidden sm:inline font-semibold">Exit</span>
                             </Button>
-                            <div className="h-5 w-px bg-slate-200" />
+                            <div className="h-5 w-px bg-border" />
                             <div>
-                                <h1 className="text-sm lg:text-base font-bold text-slate-900 truncate max-w-[200px] lg:max-w-none">{shuffledQuiz.title}</h1>
-                                <p className="text-xs text-slate-400">{shuffledQuiz.subject}</p>
+                                <h1 className="text-sm lg:text-base font-bold text-foreground truncate max-w-[200px] lg:max-w-none">{shuffledQuiz.title}</h1>
+                                <p className="text-xs text-muted-foreground/60">{shuffledQuiz.subject}</p>
                             </div>
                         </div>
                         <div className="flex items-center gap-2">
                             {isGeneratingFeedback && (
-                                <div className="flex items-center gap-1.5 text-xs text-indigo-600 bg-indigo-50 px-3 py-1.5 rounded-full font-medium">
+                                <div className="flex items-center gap-1.5 text-xs text-chart-4 bg-chart-4/10 px-3 py-1.5 rounded-full font-medium">
                                     <Loader2 className="w-3.5 h-3.5 animate-spin" /> Marking...
                                 </div>
                             )}
-                            <div className={`px-3 py-1.5 rounded-xl font-black text-sm ${overallScore >= 70 ? 'bg-emerald-100 text-emerald-700' : overallScore >= 50 ? 'bg-amber-100 text-amber-700' : 'bg-red-100 text-red-700'}`}>
+                            <div className={`px-3 py-1.5 rounded-xl font-black text-sm ${tier.badge}`}>
                                 {isGeneratingFeedback ? '—' : `${overallScore}%`}
                             </div>
                             {improvement !== null && improvement !== 0 && !isGeneratingFeedback && (
-                                <div className={`hidden sm:flex px-2 py-1 rounded-lg text-xs font-bold ${improvement > 0 ? 'bg-emerald-50 text-emerald-700' : 'bg-orange-50 text-orange-700'}`}>
+                                <div className={`hidden sm:flex px-2 py-1 rounded-lg text-xs font-bold ${improvement > 0 ? 'bg-primary/10 text-primary' : 'bg-streak/10 text-streak'}`}>
                                     {improvement > 0 ? `+${improvement}%` : `${improvement}%`}
                                 </div>
                             )}
@@ -423,32 +474,34 @@ Return exactly ${questionsForAnalysis.length} items.`,
 
                 <div className="flex-1 flex overflow-hidden">
                     {/* Sidebar */}
-                    <div className="hidden lg:flex flex-col w-60 bg-white border-r border-slate-100 overflow-hidden">
-                        <div className="p-4 border-b border-slate-50">
-                            <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">Questions</p>
+                    <div className="hidden lg:flex flex-col w-60 bg-surface border-r border-border overflow-hidden">
+                        <div className="p-4 border-b border-border">
+                            <p className="text-xs font-bold text-muted-foreground/60 uppercase tracking-wider">Questions</p>
                         </div>
                         <div className="flex-1 overflow-y-auto p-3 space-y-1">
                             {shuffledQuiz.questions.map((q, index) => {
                                 const fb = aiFeedback[index];
                                 const isActive = currentFeedbackIndex === index;
-                                let bg = 'bg-slate-50 text-slate-500 border-slate-100';
+                                let itemClass = 'bg-secondary/50 text-muted-foreground border-border';
                                 let badge = null;
                                 if (fb) {
                                     if (q.type === 'mcq') {
-                                        bg = fb.marks === 1 ? 'bg-emerald-50 text-emerald-700 border-emerald-100' : 'bg-red-50 text-red-700 border-red-100';
-                                        badge = fb.marks === 1 ? '✓' : '✗';
+                                        const t = fb.marks === 1 ? SCORE_TIER.excellent : SCORE_TIER.poor;
+                                        itemClass = `${t.tile} ${t.text} ${t.border}`;
+                                        badge = fb.marks === 1 ? <Check className="w-3.5 h-3.5" /> : <X className="w-3.5 h-3.5" />;
                                     } else {
                                         const pct = (fb.marks / (q.marks || 5)) * 100;
-                                        bg = pct >= 80 ? 'bg-emerald-50 text-emerald-700 border-emerald-100' : pct >= 50 ? 'bg-amber-50 text-amber-700 border-amber-100' : 'bg-red-50 text-red-700 border-red-100';
+                                        const t = markTier(pct);
+                                        itemClass = `${t.tile} ${t.text} ${t.border}`;
                                         badge = `${fb.marks}/${q.marks || 5}`;
                                     }
                                 }
                                 return (
                                     <button key={index} onClick={() => setCurrentFeedbackIndex(index)}
-                                        className={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-left transition-all border ${isActive ? 'bg-indigo-600 text-white border-indigo-600 shadow-md shadow-indigo-500/20' : `${bg} hover:opacity-80`}`}>
-                                        <span className={`w-6 h-6 rounded-lg flex items-center justify-center text-xs font-bold flex-shrink-0 ${isActive ? 'bg-white/20' : 'bg-white/70'}`}>{index + 1}</span>
+                                        className={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-left transition-all border ${isActive ? 'bg-chart-3 text-white border-chart-3 shadow-soft' : `${itemClass} hover:opacity-80`}`}>
+                                        <span className={`w-6 h-6 rounded-lg flex items-center justify-center text-xs font-bold flex-shrink-0 ${isActive ? 'bg-white/20' : 'bg-surface/70'}`}>{index + 1}</span>
                                         <span className="text-xs font-medium flex-1 truncate">{q.type === 'mcq' ? 'MCQ' : 'Short Answer'}</span>
-                                        {badge && <span className="text-xs font-bold">{badge}</span>}
+                                        {badge && <span className="text-xs font-bold inline-flex items-center">{badge}</span>}
                                     </button>
                                 );
                             })}
@@ -458,16 +511,23 @@ Return exactly ${questionsForAnalysis.length} items.`,
                     {/* Main area */}
                     <div className="flex-1 flex flex-col overflow-hidden">
                         {/* Mobile question pills */}
-                        <div className="lg:hidden flex-shrink-0 bg-white border-b border-slate-100 px-4 py-2.5 overflow-x-auto">
+                        <div className="lg:hidden flex-shrink-0 bg-surface border-b border-border px-4 py-2.5 overflow-x-auto">
                             <div className="flex gap-1.5">
                                 {shuffledQuiz.questions.map((q, index) => {
                                     const fb = aiFeedback[index];
                                     const isActive = currentFeedbackIndex === index;
-                                    let bg = 'bg-slate-200 text-slate-600';
-                                    if (fb) { bg = q.type === 'mcq' ? (fb.marks === 1 ? 'bg-emerald-500 text-white' : 'bg-red-500 text-white') : ((fb.marks / (q.marks || 5)) >= 0.8 ? 'bg-emerald-500 text-white' : (fb.marks / (q.marks || 5)) >= 0.5 ? 'bg-amber-500 text-white' : 'bg-red-500 text-white'); }
+                                    let pillClass = 'bg-secondary text-muted-foreground';
+                                    if (fb) {
+                                        if (q.type === 'mcq') {
+                                            pillClass = fb.marks === 1 ? 'bg-primary text-white' : 'bg-streak text-white';
+                                        } else {
+                                            const pct = fb.marks / (q.marks || 5);
+                                            pillClass = pct >= 0.8 ? 'bg-primary text-white' : pct >= 0.5 ? 'bg-xp text-white' : 'bg-streak text-white';
+                                        }
+                                    }
                                     return (
                                         <button key={index} onClick={() => setCurrentFeedbackIndex(index)}
-                                            className={`w-8 h-8 rounded-lg flex items-center justify-center text-xs font-bold flex-shrink-0 transition-all ${bg} ${isActive ? 'ring-2 ring-indigo-500 ring-offset-1' : ''}`}>
+                                            className={`w-8 h-8 rounded-lg flex items-center justify-center text-xs font-bold flex-shrink-0 transition-all ${pillClass} ${isActive ? 'ring-2 ring-chart-3 ring-offset-1' : ''}`}>
                                             {index + 1}
                                         </button>
                                     );
@@ -480,21 +540,31 @@ Return exactly ${questionsForAnalysis.length} items.`,
                                 {/* Score hero (only on first question) */}
                                 {currentFeedbackIndex === 0 && !isGeneratingFeedback && aiFeedback.length > 0 && (
                                     <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} className="space-y-3">
-                                        <div className={`bg-gradient-to-br ${grade.color} rounded-3xl p-6 text-white text-center relative overflow-hidden`}>
-                                            <div className="absolute inset-0 opacity-20"><div className="absolute top-0 right-0 w-32 h-32 bg-white rounded-full -translate-y-1/2 translate-x-1/2 blur-3xl" /></div>
+                                        <div className={`card-soft p-6 text-center relative overflow-hidden ${tier.tile} ${tier.border}`}>
                                             <div className="relative">
-                                                <p className="text-3xl mb-1">{grade.emoji}</p>
-                                                <p className="text-5xl font-black">{overallScore}%</p>
-                                                <p className="text-white/80 font-semibold mt-1">{grade.label}</p>
-                                                <div className="flex justify-center gap-8 mt-4 pt-4 border-t border-white/20 text-center">
-                                                    <div><p className="text-xl font-black">{aiFeedback.filter((fb, i) => shuffledQuiz.questions[i]?.type === 'mcq' ? fb.marks === 1 : fb.marks >= (shuffledQuiz.questions[i]?.marks || 5) * 0.8).length}</p><p className="text-xs text-white/60">Correct</p></div>
-                                                    <div><p className="text-xl font-black">{totalQ}</p><p className="text-xs text-white/60">Total</p></div>
-                                                    <div><p className="text-xl font-black font-mono">{formatElapsed(Date.now() - startTime)}</p><p className="text-xs text-white/60">Time</p></div>
+                                                <div className={`w-14 h-14 mx-auto rounded-2xl flex items-center justify-center mb-2 ${tier.badge}`}>
+                                                    <TierIcon className="w-7 h-7" />
+                                                </div>
+                                                <p className={`text-5xl font-black ${tier.text}`}>{overallScore}%</p>
+                                                <p className="text-foreground/80 font-semibold mt-1">{tier.label}</p>
+                                                <div className="flex justify-center gap-8 mt-4 pt-4 border-t border-border text-center">
+                                                    <div>
+                                                        <p className="stat-num text-primary">{aiFeedback.filter((fb, i) => shuffledQuiz.questions[i]?.type === 'mcq' ? fb.marks === 1 : fb.marks >= (shuffledQuiz.questions[i]?.marks || 5) * 0.8).length}</p>
+                                                        <p className="stat-label">Correct</p>
+                                                    </div>
+                                                    <div>
+                                                        <p className="stat-num text-foreground">{totalQ}</p>
+                                                        <p className="stat-label">Total</p>
+                                                    </div>
+                                                    <div>
+                                                        <p className="stat-num font-mono text-xp">{formatElapsed(Date.now() - startTime)}</p>
+                                                        <p className="stat-label">Time</p>
+                                                    </div>
                                                 </div>
                                             </div>
                                         </div>
                                         {shuffledQuiz.subject && (
-                                            <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-4">
+                                            <div className="card-soft p-4">
                                                 <DifficultyRating subjectName={shuffledQuiz.subject} />
                                             </div>
                                         )}
@@ -504,28 +574,29 @@ Return exactly ${questionsForAnalysis.length} items.`,
                                 {/* Question card */}
                                 <AnimatePresence mode="wait">
                                     <motion.div key={currentFeedbackIndex} initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} transition={{ duration: 0.2 }}
-                                        className="bg-white rounded-3xl border border-slate-100 shadow-sm overflow-hidden">
-                                        <div className="px-6 pt-5 pb-4 bg-gradient-to-r from-slate-50 to-white border-b border-slate-100">
+                                        className="card-soft overflow-hidden">
+                                        <div className="px-6 pt-5 pb-4 bg-secondary/50 border-b border-border">
                                             <div className="flex items-center justify-between gap-3">
                                                 <div className="flex items-center gap-2">
-                                                    <span className={`text-xs font-bold px-2.5 py-1 rounded-full ${currentQ.type === 'mcq' ? 'bg-purple-50 text-purple-600' : 'bg-blue-50 text-blue-600'}`}>
+                                                    <span className={`pill ${currentQ.type === 'mcq' ? 'bg-chart-4/10 text-chart-4' : 'bg-chart-3/10 text-chart-3'}`}>
                                                         {currentQ.type === 'mcq' ? 'Multiple Choice' : `Short Answer • ${currentQ.marks || 5} marks`}
                                                     </span>
                                                 </div>
-                                                {currentFeedback && (
-                                                    <span className={`text-sm font-black px-3 py-1 rounded-xl ${currentQ.type === 'mcq' ? (currentFeedback.marks === 1 ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700') : (() => { const p = (currentFeedback.marks / (currentQ.marks || 5)) * 100; return p >= 80 ? 'bg-emerald-100 text-emerald-700' : p >= 50 ? 'bg-amber-100 text-amber-700' : 'bg-red-100 text-red-700'; })()}`}>
-                                                        {currentQ.type === 'mcq' ? `${currentFeedback.marks}/1` : `${currentFeedback.marks}/${currentQ.marks || 5}`}
-                                                    </span>
-                                                )}
+                                                {currentFeedback && (() => {
+                                                    const t = currentQ.type === 'mcq'
+                                                        ? (currentFeedback.marks === 1 ? SCORE_TIER.excellent : SCORE_TIER.poor)
+                                                        : markTier((currentFeedback.marks / (currentQ.marks || 5)) * 100);
+                                                    return (
+                                                        <span className={`text-sm font-black px-3 py-1 rounded-xl ${t.badge}`}>
+                                                            {currentQ.type === 'mcq' ? `${currentFeedback.marks}/1` : `${currentFeedback.marks}/${currentQ.marks || 5}`}
+                                                        </span>
+                                                    );
+                                                })()}
                                             </div>
                                         </div>
                                         <div className="p-6 space-y-5">
-                                            <div className="text-lg font-semibold text-slate-900 leading-relaxed">
-                                                {processLatexContent(currentQ.question || "").map((part, idx) => {
-                                                    if (part.type === 'display') return <LatexBlock key={idx}>{part.content}</LatexBlock>;
-                                                    if (part.type === 'inline') return <LatexInline key={idx}>{part.content}</LatexInline>;
-                                                    return <span key={idx}>{part.content}</span>;
-                                                })}
+                                            <div className="text-lg font-semibold text-foreground leading-relaxed">
+                                                <MarkdownMath>{currentQ.question || ""}</MarkdownMath>
                                             </div>
 
                                             {currentQ.type === 'mcq' ? (
@@ -533,15 +604,18 @@ Return exactly ${questionsForAnalysis.length} items.`,
                                                     {currentQ.options?.map((option, oi) => {
                                                         const isCorr = oi === currentQ.correct_answer;
                                                         const isUser = currentUserAnswer !== undefined && parseInt(currentUserAnswer) === oi;
+                                                        const stateKey = isCorr ? 'correct' : isUser ? 'incorrect' : 'disabled';
+                                                        const choiceCls = CHOICE_STATE[stateKey];
+                                                        const badgeCls = CHOICE_BADGE[stateKey];
                                                         return (
-                                                            <div key={oi} className={`flex items-start gap-3 px-4 py-3.5 rounded-2xl border-2 ${isCorr ? 'bg-emerald-50 border-emerald-300' : isUser ? 'bg-red-50 border-red-300' : 'bg-slate-50 border-slate-100'}`}>
-                                                                <span className={`w-7 h-7 rounded-xl flex items-center justify-center font-bold text-xs flex-shrink-0 ${isCorr ? 'bg-emerald-500 text-white' : isUser ? 'bg-red-500 text-white' : 'bg-white text-slate-400 border border-slate-200'}`}>
+                                                            <div key={oi} className={`flex items-start gap-3 px-4 py-3.5 rounded-2xl ${choiceCls}`}>
+                                                                <span className={`w-7 h-7 rounded-xl flex items-center justify-center font-bold text-xs flex-shrink-0 ${badgeCls}`}>
                                                                     {isCorr ? <Check className="w-3.5 h-3.5" /> : isUser ? <X className="w-3.5 h-3.5" /> : String.fromCharCode(65 + oi)}
                                                                 </span>
                                                                 <div className="flex-1">
-                                                                    <p className={`text-sm font-medium ${isCorr ? 'text-emerald-800' : isUser ? 'text-red-800' : 'text-slate-600'}`}>{option}</p>
-                                                                    {isCorr && <p className="text-xs text-emerald-600 font-bold mt-0.5">Correct Answer</p>}
-                                                                    {isUser && !isCorr && <p className="text-xs text-red-600 font-bold mt-0.5">Your Answer</p>}
+                                                                    <p className="text-sm font-medium"><MathText>{option}</MathText></p>
+                                                                    {isCorr && <p className="text-xs text-primary font-bold mt-0.5">Correct Answer</p>}
+                                                                    {isUser && !isCorr && <p className="text-xs text-streak font-bold mt-0.5">Your Answer</p>}
                                                                 </div>
                                                             </div>
                                                         );
@@ -549,45 +623,50 @@ Return exactly ${questionsForAnalysis.length} items.`,
                                                 </div>
                                             ) : (
                                                 <div className="space-y-3">
-                                                    <div className="bg-slate-50 rounded-2xl p-4 border border-slate-100">
-                                                        <p className="text-xs font-bold text-slate-400 uppercase tracking-wide mb-2">Your Answer</p>
-                                                        <p className="text-sm text-slate-700 whitespace-pre-wrap">{currentUserAnswer || <span className="text-slate-300 italic">No answer written</span>}</p>
+                                                    <div className="bg-secondary/50 rounded-2xl p-4 border border-border">
+                                                        <p className="text-xs font-bold text-muted-foreground/60 uppercase tracking-wide mb-2">Your Answer</p>
+                                                        {currentUserAnswer
+                                                            ? <div className="text-sm text-foreground whitespace-pre-wrap"><MarkdownMath>{currentUserAnswer}</MarkdownMath></div>
+                                                            : <p className="text-sm text-foreground"><span className="text-muted-foreground/60 italic">No answer written</span></p>
+                                                        }
                                                     </div>
-                                                    <div className="bg-emerald-50 rounded-2xl p-4 border border-emerald-100">
-                                                        <p className="text-xs font-bold text-emerald-600 uppercase tracking-wide mb-2">Model Answer</p>
-                                                        <ReactMarkdown className="text-sm text-emerald-900 prose prose-sm max-w-none">{currentQ.model_answer || "No model answer provided"}</ReactMarkdown>
+                                                    <div className="bg-primary/10 rounded-2xl p-4 border border-primary/20">
+                                                        <p className="text-xs font-bold text-primary uppercase tracking-wide mb-2">Model Answer</p>
+                                                        <div className="text-sm text-foreground prose prose-sm max-w-none">
+                                                            <MarkdownMath>{currentQ.model_answer || "No model answer provided"}</MarkdownMath>
+                                                        </div>
                                                     </div>
                                                 </div>
                                             )}
 
                                             {/* AI Feedback */}
                                             {currentFeedback ? (
-                                                <div className="space-y-3 pt-2 border-t border-slate-100">
-                                                    <p className="text-xs font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
+                                                <div className="space-y-3 pt-2 border-t border-border">
+                                                    <p className="text-xs font-bold text-muted-foreground/60 uppercase tracking-wider flex items-center gap-1.5">
                                                         <Wand2 className="w-3.5 h-3.5" /> AI Feedback
                                                     </p>
                                                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
                                                         {[
-                                                            { label: "Why This Answer", content: currentFeedback.correct_answer_explanation, bg: "bg-blue-50 border-blue-100", text: "text-blue-700", body: "text-blue-900" },
-                                                            { label: "Your Understanding", content: currentFeedback.student_understanding, bg: "bg-purple-50 border-purple-100", text: "text-purple-700", body: "text-purple-900" },
-                                                            { label: "Strengths", content: currentFeedback.strengths, bg: "bg-emerald-50 border-emerald-100", text: "text-emerald-700", body: "text-emerald-900" },
-                                                            { label: "How to Improve", content: currentFeedback.how_to_improve, bg: "bg-amber-50 border-amber-100", text: "text-amber-700", body: "text-amber-900" },
+                                                            { label: "Why This Answer", content: currentFeedback.correct_answer_explanation, panel: FEEDBACK_PANEL.explanation },
+                                                            { label: "Your Understanding", content: currentFeedback.student_understanding, panel: FEEDBACK_PANEL.understanding },
+                                                            { label: "Strengths", content: currentFeedback.strengths, panel: FEEDBACK_PANEL.strengths },
+                                                            { label: "How to Improve", content: currentFeedback.how_to_improve, panel: FEEDBACK_PANEL.improve },
                                                         ].map(item => (
-                                                            <div key={item.label} className={`${item.bg} border rounded-2xl p-3.5`}>
-                                                                <p className={`text-xs font-bold ${item.text} uppercase tracking-wide mb-1.5`}>{item.label}</p>
-                                                                <p className={`text-xs ${item.body} leading-relaxed`}>{item.content}</p>
+                                                            <div key={item.label} className={`${item.panel} border rounded-2xl p-3.5`}>
+                                                                <p className="text-xs font-bold uppercase tracking-wide mb-1.5">{item.label}</p>
+                                                                <div className="text-xs text-foreground leading-relaxed"><MarkdownMath>{item.content || ""}</MarkdownMath></div>
                                                             </div>
                                                         ))}
                                                     </div>
                                                     {currentFeedback.comparison_to_previous && (
-                                                        <div className="bg-cyan-50 border border-cyan-100 rounded-2xl p-3.5">
-                                                            <p className="text-xs font-bold text-cyan-700 uppercase tracking-wide mb-1.5">vs Last Attempt</p>
-                                                            <p className="text-xs text-cyan-900 leading-relaxed">{currentFeedback.comparison_to_previous}</p>
+                                                        <div className={`${FEEDBACK_PANEL.comparison} border rounded-2xl p-3.5`}>
+                                                            <p className="text-xs font-bold uppercase tracking-wide mb-1.5">vs Last Attempt</p>
+                                                            <div className="text-xs text-foreground leading-relaxed"><MarkdownMath>{currentFeedback.comparison_to_previous}</MarkdownMath></div>
                                                         </div>
                                                     )}
                                                 </div>
                                             ) : isGeneratingFeedback ? (
-                                                <div className="flex items-center gap-2 py-4 justify-center text-slate-400">
+                                                <div className="flex items-center gap-2 py-4 justify-center text-muted-foreground/60">
                                                     <Loader2 className="w-4 h-4 animate-spin" />
                                                     <span className="text-sm">AI is marking this question...</span>
                                                 </div>
@@ -599,9 +678,9 @@ Return exactly ${questionsForAnalysis.length} items.`,
                         </div>
 
                         {/* Bottom nav */}
-                        <div className="flex-shrink-0 bg-white/80 backdrop-blur-sm border-t border-slate-100 px-4 lg:px-6 py-3">
+                        <div className="flex-shrink-0 bg-surface/80 backdrop-blur-sm border-t border-border px-4 lg:px-6 py-3">
                             <div className="max-w-2xl mx-auto flex items-center justify-between gap-3">
-                                <Button variant="outline" onClick={() => setCurrentFeedbackIndex(p => Math.max(0, p - 1))} disabled={currentFeedbackIndex === 0} className="gap-2 rounded-xl border-2 border-slate-200 font-semibold">
+                                <Button variant="outline" onClick={() => setCurrentFeedbackIndex(p => Math.max(0, p - 1))} disabled={currentFeedbackIndex === 0} className="gap-2 rounded-xl border-2 border-border font-semibold">
                                     <ChevronLeft className="w-4 h-4" /> Prev
                                 </Button>
                                 {!isGeneratingFeedback && aiFeedback.length > 0 && (() => {
@@ -612,12 +691,12 @@ Return exactly ${questionsForAnalysis.length} items.`,
                                     }).length;
                                     return wrongCount > 0 ? (
                                         <Button onClick={() => setShowAdaptiveReview(true)}
-                                            className="gap-2 rounded-xl bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-700 hover:to-indigo-700 text-white font-bold text-xs px-3">
+                                            className="gap-2 rounded-xl bg-chart-4 hover:bg-chart-4/90 text-white font-bold text-xs px-3 btn-3d">
                                             <Brain className="w-3.5 h-3.5" /> Review {wrongCount} Wrong
                                         </Button>
                                     ) : null;
                                 })()}
-                                <Button variant="outline" onClick={() => setCurrentFeedbackIndex(p => Math.min(totalQ - 1, p + 1))} disabled={currentFeedbackIndex === totalQ - 1} className="gap-2 rounded-xl border-2 border-slate-200 font-semibold">
+                                <Button variant="outline" onClick={() => setCurrentFeedbackIndex(p => Math.min(totalQ - 1, p + 1))} disabled={currentFeedbackIndex === totalQ - 1} className="gap-2 rounded-xl border-2 border-border font-semibold">
                                     Next <ChevronRight className="w-4 h-4" />
                                 </Button>
                             </div>
@@ -634,10 +713,10 @@ Return exactly ${questionsForAnalysis.length} items.`,
             <Dialog open={showSaveProgressDialog} onOpenChange={setShowSaveProgressDialog}>
                 <DialogContent>
                     <DialogHeader><DialogTitle>Save your progress?</DialogTitle></DialogHeader>
-                    <p className="text-slate-600 text-sm">You're {Math.round(((currentQuestionIndex + 1) / totalQ) * 100)}% through. Want to save and continue later?</p>
+                    <p className="text-muted-foreground text-sm">You're {Math.round(((currentQuestionIndex + 1) / totalQ) * 100)}% through. Want to save and continue later?</p>
                     <div className="flex justify-end gap-2 mt-4">
                         <Button variant="outline" onClick={async () => { await clearSavedProgress(); setShowSaveProgressDialog(false); onExit(); }}>Don't Save</Button>
-                        <Button onClick={async () => { await saveProgressToDatabase(); setShowSaveProgressDialog(false); onExit(); }} className="bg-emerald-600 hover:bg-emerald-700">Save & Exit</Button>
+                        <Button onClick={async () => { await saveProgressToDatabase(); setShowSaveProgressDialog(false); onExit(); }} className="bg-primary hover:bg-primary/90 text-white btn-3d">Save & Exit</Button>
                     </div>
                 </DialogContent>
             </Dialog>
@@ -645,32 +724,32 @@ Return exactly ${questionsForAnalysis.length} items.`,
             <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="max-w-2xl mx-auto space-y-3">
 
                 {/* Header */}
-                <div className="bg-slate-900 rounded-2xl p-4 flex items-center justify-between gap-4">
+                <div className="bg-chart-3 rounded-2xl p-4 flex items-center justify-between gap-4 shadow-soft">
                     <div className="flex items-center gap-3 min-w-0">
                         <button onClick={() => { if (Object.keys(userAnswers).length > 0) setShowSaveProgressDialog(true); else onExit(); }}
-                            className="w-8 h-8 bg-white/10 hover:bg-white/20 rounded-xl flex items-center justify-center transition-colors flex-shrink-0">
-                            <X className="w-4 h-4 text-white/70" />
+                            className="w-8 h-8 bg-white/15 hover:bg-white/25 rounded-xl flex items-center justify-center transition-colors flex-shrink-0">
+                            <X className="w-4 h-4 text-white" />
                         </button>
                         <div className="min-w-0">
                             <p className="text-white font-bold text-sm truncate">{shuffledQuiz.title}</p>
-                            <p className="text-white/40 text-xs">{shuffledQuiz.subject} · {answeredCount}/{totalQ} answered</p>
+                            <p className="text-white/70 text-xs">{shuffledQuiz.subject} · {answeredCount}/{totalQ} answered</p>
                         </div>
                     </div>
                     <div className="flex items-center gap-3 flex-shrink-0">
-                        <div className="flex items-center gap-1.5 text-white/60 text-sm font-mono font-bold">
+                        <div className="flex items-center gap-1.5 text-white/80 text-sm font-mono font-bold">
                             <Clock className="w-4 h-4" />
                             {formatElapsed(Date.now() - startTime)}
                         </div>
                         <button onClick={() => setShowQuestionMap(v => !v)}
-                            className="w-8 h-8 bg-white/10 hover:bg-white/20 rounded-xl flex items-center justify-center transition-colors">
-                            <Layers className="w-4 h-4 text-white/70" />
+                            className="w-8 h-8 bg-white/15 hover:bg-white/25 rounded-xl flex items-center justify-center transition-colors">
+                            <Layers className="w-4 h-4 text-white" />
                         </button>
                     </div>
                 </div>
 
                 {/* Progress bar */}
-                <div className="h-1 bg-slate-100 rounded-full overflow-hidden">
-                    <motion.div className="h-full bg-gradient-to-r from-indigo-500 to-purple-500 rounded-full"
+                <div className="h-1.5 bg-secondary rounded-full overflow-hidden">
+                    <motion.div className="h-full bg-chart-3 rounded-full"
                         animate={{ width: `${progress}%` }} transition={{ duration: 0.4, ease: "easeOut" }} />
                 </div>
 
@@ -678,18 +757,25 @@ Return exactly ${questionsForAnalysis.length} items.`,
                 <AnimatePresence>
                     {showQuestionMap && (
                         <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} exit={{ opacity: 0, height: 0 }}
-                            className="bg-white rounded-2xl border border-slate-100 p-4 overflow-hidden">
-                            <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3">Jump to Question</p>
+                            className="card-soft p-4 overflow-hidden">
+                            <p className="text-xs font-bold text-muted-foreground/60 uppercase tracking-wider mb-3">Jump to Question</p>
                             <div className="flex flex-wrap gap-1.5">
                                 {shuffledQuiz.questions.map((q, i) => {
                                     const a = userAnswers[i];
                                     const done = q.type === 'mcq' ? a !== undefined : (a?.length > 0);
                                     const submitted = submittedQuestions.has(i);
+                                    const mapBtn = i === currentQuestionIndex
+                                        ? 'bg-chart-3 text-white ring-2 ring-chart-3/40'
+                                        : submitted
+                                            ? 'bg-secondary text-muted-foreground cursor-not-allowed opacity-60'
+                                            : done
+                                                ? 'bg-primary/15 text-primary'
+                                                : 'bg-secondary text-muted-foreground/60 hover:bg-secondary/80';
                                     return (
                                         <button key={i}
                                             onClick={() => { if (!submitted) { setCurrentQuestionIndex(i); setShowFeedback(false); setIsCorrect(null); setShowQuestionMap(false); } }}
                                             disabled={submitted}
-                                            className={`w-8 h-8 rounded-lg text-xs font-bold transition-all ${i === currentQuestionIndex ? 'bg-indigo-600 text-white ring-2 ring-indigo-300' : submitted ? 'bg-slate-300 text-slate-500 cursor-not-allowed opacity-60' : done ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-400 hover:bg-slate-200'}`}>
+                                            className={`w-8 h-8 rounded-lg text-xs font-bold transition-all ${mapBtn}`}>
                                             {i + 1}
                                         </button>
                                     );
@@ -706,33 +792,29 @@ Return exactly ${questionsForAnalysis.length} items.`,
                         animate={{ opacity: 1, x: 0, scale: 1 }}
                         exit={{ opacity: 0, x: -30, scale: 0.98 }}
                         transition={{ duration: 0.2, ease: "easeOut" }}
-                        className="bg-white rounded-3xl border border-slate-100 shadow-sm overflow-hidden">
+                        className="card-soft overflow-hidden">
 
                         {/* Card header */}
-                        <div className="px-6 pt-5 pb-4 bg-gradient-to-r from-slate-50 to-white border-b border-slate-100">
+                        <div className="px-6 pt-5 pb-4 bg-chart-3/10 border-b border-border">
                             <div className="flex items-center justify-between gap-3">
                                 <div className="flex items-center gap-2">
-                                    <span className={`text-xs font-bold px-2.5 py-1 rounded-full ${currentQuestion.type === 'mcq' ? 'bg-purple-50 text-purple-600' : 'bg-blue-50 text-blue-600'}`}>
+                                    <span className={`pill ${currentQuestion.type === 'mcq' ? 'bg-chart-4/15 text-chart-4' : 'bg-chart-3/15 text-chart-3'}`}>
                                         {currentQuestion.type === 'mcq' ? 'Multiple Choice' : `Short Answer · ${currentQuestion.marks || 5} marks`}
                                     </span>
                                     {showFeedback && (
                                         <motion.span initial={{ scale: 0 }} animate={{ scale: 1 }}
-                                            className={`text-xs font-bold px-2.5 py-1 rounded-full ${isCorrect ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700'}`}>
-                                            {isCorrect ? '✓ Correct!' : '✗ Incorrect'}
+                                            className={`pill ${isCorrect ? 'bg-primary/15 text-primary' : 'bg-streak/15 text-streak'}`}>
+                                            {isCorrect ? <><Check className="w-3 h-3" /> Correct!</> : <><X className="w-3 h-3" /> Incorrect</>}
                                         </motion.span>
                                     )}
                                 </div>
-                                <span className="text-xs font-bold text-slate-300">{currentQuestionIndex + 1} / {totalQ}</span>
+                                <span className="text-xs font-bold text-muted-foreground/60">{currentQuestionIndex + 1} / {totalQ}</span>
                             </div>
                         </div>
 
                         <div className="p-6 space-y-5">
-                            <div className="text-lg font-semibold text-slate-900 leading-relaxed">
-                                {processLatexContent(currentQuestion.question || "").map((part, idx) => {
-                                    if (part.type === 'display') return <LatexBlock key={idx}>{part.content}</LatexBlock>;
-                                    if (part.type === 'inline') return <LatexInline key={idx}>{part.content}</LatexInline>;
-                                    return <span key={idx}>{part.content}</span>;
-                                })}
+                            <div className="text-lg font-semibold text-foreground leading-relaxed">
+                                <MarkdownMath>{currentQuestion.question || ""}</MarkdownMath>
                             </div>
 
                             {currentQuestion.type === 'mcq' ? (
@@ -740,24 +822,28 @@ Return exactly ${questionsForAnalysis.length} items.`,
                                     {currentQuestion.options?.map((option, index) => {
                                         const isSelected = getCurrentAnswer()?.toString() === index.toString();
                                         const isCorrectAnswer = index === currentQuestion.correct_answer;
-                                        let style = "border-slate-200 bg-white hover:border-indigo-200 hover:bg-indigo-50/50 text-slate-700";
+                                        let stateKey;
                                         if (showFeedback) {
-                                            if (isCorrectAnswer) style = "border-emerald-400 bg-emerald-50 text-emerald-900";
-                                            else if (isSelected && !isCorrect) style = "border-red-400 bg-red-50 text-red-900";
-                                            else style = "border-slate-100 bg-slate-50 text-slate-400";
+                                            if (isCorrectAnswer) stateKey = 'correct';
+                                            else if (isSelected && !isCorrect) stateKey = 'incorrect';
+                                            else stateKey = 'disabled';
                                         } else if (isSelected) {
-                                            style = "border-indigo-500 bg-indigo-600 text-white shadow-lg shadow-indigo-500/20";
+                                            stateKey = 'selected';
+                                        } else {
+                                            stateKey = 'default';
                                         }
+                                        const choiceCls = CHOICE_STATE[stateKey];
+                                        const badgeCls = CHOICE_BADGE[stateKey];
                                         return (
                                             <motion.button key={index} type="button" disabled={showFeedback}
                                                 whileHover={!showFeedback ? { scale: 1.005 } : {}}
                                                 whileTap={!showFeedback ? { scale: 0.998 } : {}}
                                                 onClick={() => !showFeedback && handleAnswerChange(index.toString())}
-                                                className={`w-full flex items-center gap-3 px-5 py-4 rounded-2xl border-2 text-left transition-all duration-150 ${style} ${showFeedback ? 'cursor-default' : 'cursor-pointer'}`}>
-                                                <span className={`w-7 h-7 rounded-xl flex items-center justify-center text-xs font-black flex-shrink-0 transition-all ${isSelected && !showFeedback ? 'bg-white/20 text-white' : showFeedback && isCorrectAnswer ? 'bg-emerald-500 text-white' : showFeedback && isSelected && !isCorrect ? 'bg-red-500 text-white' : 'bg-slate-100 text-slate-500 group-hover:bg-indigo-100'}`}>
+                                                className={`w-full flex items-center gap-3 px-5 py-4 rounded-2xl text-left transition-all duration-150 ${choiceCls} ${showFeedback ? 'cursor-default' : 'cursor-pointer'}`}>
+                                                <span className={`w-7 h-7 rounded-xl flex items-center justify-center text-xs font-black flex-shrink-0 transition-all ${badgeCls}`}>
                                                     {showFeedback && isCorrectAnswer ? <Check className="w-3.5 h-3.5" /> : showFeedback && isSelected && !isCorrect ? <X className="w-3.5 h-3.5" /> : String.fromCharCode(65 + index)}
                                                 </span>
-                                                <span className="flex-1 font-medium text-sm">{option}</span>
+                                                <span className="flex-1 font-medium text-sm"><MathText>{option}</MathText></span>
                                             </motion.button>
                                         );
                                     })}
@@ -765,11 +851,11 @@ Return exactly ${questionsForAnalysis.length} items.`,
                             ) : (
                                 <div className="space-y-3">
                                     <div className="flex items-center justify-between">
-                                        <span className="text-xs text-slate-400 font-medium">Write a detailed answer below</span>
+                                        <span className="text-xs text-muted-foreground/60 font-medium">Write a detailed answer below</span>
                                         <div className="flex items-center gap-2">
-                                            <Calculator className="w-3.5 h-3.5 text-slate-400" />
+                                            <Calculator className="w-3.5 h-3.5 text-muted-foreground/60" />
                                             <Switch checked={mathMode[currentQuestionIndex] || false} onCheckedChange={(v) => { setMathMode(p => ({ ...p, [currentQuestionIndex]: v })); setShowKeyboard(p => ({ ...p, [currentQuestionIndex]: v })); }} />
-                                            <Label className="text-xs text-slate-500 cursor-pointer">Math</Label>
+                                            <Label className="text-xs text-muted-foreground cursor-pointer">Math</Label>
                                         </div>
                                     </div>
                                     {mathMode[currentQuestionIndex] ? (
@@ -778,7 +864,7 @@ Return exactly ${questionsForAnalysis.length} items.`,
                                                 onCursorPositionChange={(pos) => setCursorPosition(p => ({ ...p, [currentQuestionIndex]: pos }))}
                                                 textareaRef={(ref) => { if (ref) mathInputRefs[currentQuestionIndex] = ref; }}
                                                 placeholder="Write your answer here..." rows={6}
-                                                className="w-full rounded-2xl border-2 border-slate-200 focus-within:border-indigo-400" />
+                                                className="w-full rounded-2xl border-2 border-border focus-within:border-chart-3" />
                                             <MathKeyboard
                                                 getCurrentValue={() => getCurrentAnswer() || ""}
                                                 onInput={(value, options = {}) => {
@@ -826,10 +912,10 @@ Return exactly ${questionsForAnalysis.length} items.`,
                                         </>
                                     ) : (
                                         <Textarea placeholder="Write your answer here..." value={getCurrentAnswer() || ""} onChange={(e) => handleAnswerChange(e.target.value)}
-                                            rows={6} className="border-2 border-slate-200 focus:border-indigo-400 rounded-2xl resize-none text-sm bg-slate-50 focus:bg-white transition-colors placeholder:text-slate-300" />
+                                            rows={6} className="border-2 border-border focus:border-chart-3 rounded-2xl resize-none text-sm bg-secondary/50 focus:bg-surface transition-colors placeholder:text-muted-foreground/60" />
                                     )}
                                     {getCurrentAnswer()?.length > 0 && !mathMode[currentQuestionIndex] && (
-                                        <p className="text-xs text-slate-400 text-right">{getCurrentAnswer().length} chars</p>
+                                        <p className="text-xs text-muted-foreground/60 text-right">{getCurrentAnswer().length} chars</p>
                                     )}
                                 </div>
                             )}
@@ -841,13 +927,13 @@ Return exactly ${questionsForAnalysis.length} items.`,
                 <div className="flex items-center justify-between gap-3">
                     <Button variant="outline" onClick={() => setCurrentQuestionIndex(p => Math.max(0, p - 1))}
                         disabled={showFeedback || currentQuestionIndex === 0}
-                        className="gap-2 rounded-xl border-2 border-slate-200 font-semibold hover:bg-slate-50">
+                        className="gap-2 rounded-xl border-2 border-border font-semibold hover:bg-secondary">
                         <ChevronLeft className="w-4 h-4" /> Prev
                     </Button>
 
                     <Button onClick={currentQuestion.type === 'mcq' ? handleSubmitAnswer : handleNext}
                         disabled={showFeedback}
-                        className={`gap-2 rounded-xl font-bold px-8 h-11 transition-all hover:scale-[1.02] ${currentQuestionIndex === totalQ - 1 ? 'bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white shadow-lg shadow-indigo-500/25' : 'bg-slate-900 hover:bg-slate-800 text-white'}`}>
+                        className={`gap-2 rounded-xl font-bold px-8 h-11 transition-all hover:scale-[1.02] btn-3d ${currentQuestionIndex === totalQ - 1 ? 'bg-primary hover:bg-primary/90 text-white' : 'bg-chart-3 hover:bg-chart-3/90 text-white'}`}>
                         {currentQuestionIndex === totalQ - 1 ? (
                             <><Flag className="w-4 h-4" /> {currentQuestion.type === 'mcq' ? 'Submit & Finish' : 'Finish Quiz'}</>
                         ) : (

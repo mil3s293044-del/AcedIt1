@@ -1,197 +1,129 @@
 import React, { useState, useEffect } from "react";
-import { Link, useLocation, useNavigate } from "react-router-dom";
-import { motion, AnimatePresence } from "framer-motion";
-import { GraduationCap, Menu, X, ChevronDown, Flame, Zap } from "lucide-react";
+import { Link, useLocation } from "react-router-dom";
+import { Flame, Zap, Crown } from "lucide-react";
 import { createPageUrl } from "@/utils";
 import { base44 } from "@/api/base44Client";
+import TierUsagePill from "@/components/shared/TierUsagePill";
+import { FEATURES } from "@/lib/tierAccess";
 
-const NAV_GROUPS = [
-    {
-        label: "Study",
-        items: [
-            { label: "Study Session", path: "Study" },
-            { label: "Flashcards", path: "Study" },
-            { label: "AI Tools", path: "AITools" },
-            { label: "Quizzes", path: "Quizzes" },
-            { label: "Study Roadmap", path: "StudyRoadmap" },
-        ]
-    },
-    {
-        label: "Progress",
-        items: [
-            { label: "Goals", path: "Goals" },
-            { label: "Analytics", path: "Analytics" },
-            { label: "Ranked", path: "Ranked" },
-        ]
-    },
-    {
-        label: "Social",
-        items: [
-            { label: "Friends", path: "Friends" },
-            { label: "Compete", path: "Competitions" },
-        ]
-    },
-    {
-        label: "Account",
-        items: [
-            { label: "Subjects", path: "Subjects" },
-            { label: "Subscription", path: "Subscription" },
-            { label: "Settings", path: "Settings" },
-            { label: "Support", path: "Support" },
-        ]
-    }
-];
+// Page slug → display title. Anything missing falls back to a humanized slug.
+const PAGE_TITLES = {
+    "":               "Home",
+    "Dashboard":      "Home",
+    "Study":          "Study Session",
+    "Quizzes":        "Quizzes",
+    "AITools":        "AI Tools",
+    "StudyRoadmap":   "Study Roadmap",
+    "Goals":          "Goals",
+    "Analytics":      "Analytics",
+    "Ranked":         "Ranked",
+    "Friends":        "Friends",
+    "Competitions":   "Compete",
+    "Subjects":       "Subjects",
+    "Subscription":   "Subscription",
+    "Settings":       "Settings",
+    "Support":        "Support",
+    "Pricing":        "Pricing",
+    "Paywall":        "Upgrade",
+    "Premium":        "Premium",
+    "Suspended":      "Account Suspended",
+    "AdminIPPanel":   "Admin",
+};
+
+function humanize(slug) {
+    if (!slug) return "";
+    return slug.replace(/([a-z])([A-Z])/g, "$1 $2");
+}
+
+function deriveTitle(pathname) {
+    const slug = pathname.replace(/^\//, "").split("/")[0] || "";
+    return PAGE_TITLES[slug] ?? humanize(slug) ?? "AcedIt";
+}
 
 export default function TopNav() {
     const location = useLocation();
-    const navigate = useNavigate();
-    const [mobileOpen, setMobileOpen] = useState(false);
-    const [openGroup, setOpenGroup] = useState(null);
     const [userProfile, setUserProfile] = useState(null);
 
     useEffect(() => {
-        base44.auth.me().then(user => {
-            base44.entities.UserProfile.filter({ created_by: user.email }).then(profiles => {
-                if (profiles[0]) setUserProfile(profiles[0]);
-            }).catch(() => {});
-        }).catch(() => {});
+        let cancelled = false;
+        (async () => {
+            try {
+                const user = await base44.auth.me();
+                const profiles = await base44.entities.UserProfile.filter({ created_by: user.email });
+                if (!cancelled && profiles[0]) setUserProfile(profiles[0]);
+            } catch {
+                /* not signed in / fetch failed — leave pills hidden */
+            }
+        })();
+        return () => { cancelled = true; };
     }, []);
 
-    const isDashboard = location.pathname === "/" || location.pathname === "/Dashboard";
+    const title = deriveTitle(location.pathname);
+    const streak = userProfile?.streak_days || 0;
+    const xp = userProfile?.total_xp || 0;
+    const isPremium = userProfile?.subscription_tier === "premium" || userProfile?.subscription_active === true;
 
     return (
-        <header className="sticky top-0 z-50 bg-white/80 backdrop-blur-xl border-b border-violet-100/50 shadow-sm">
-            <div className="w-full px-4 lg:px-8">
-                <div className="flex items-center justify-between h-14">
-                    {/* Logo */}
-                    <Link to="/" className="flex items-center gap-2.5 flex-shrink-0">
-                        <div className="w-8 h-8 bg-gradient-to-br from-violet-600 to-indigo-600 rounded-xl flex items-center justify-center shadow-md">
-                            <GraduationCap className="w-4.5 h-4.5 text-white" style={{ width: 18, height: 18 }} />
-                        </div>
-                        <span className="font-black text-lg bg-gradient-to-r from-violet-600 to-indigo-600 bg-clip-text text-transparent tracking-tight">
-                            AcedIt
-                        </span>
-                    </Link>
+        <header
+            // Sits above content; content has md:pl-16 to clear the SideRail.
+            className="sticky top-0 z-30 h-12 bg-surface/95 backdrop-blur-xl border-b border-border md:pl-16"
+        >
+            <div className="h-full flex items-center justify-between px-4 lg:px-6">
+                {/* ── Page title (desktop) / brand (mobile) ───────────── */}
+                <div className="flex items-center min-w-0">
+                    <h1 className="hidden md:block font-display font-extrabold text-foreground text-base tracking-tight truncate">
+                        {title}
+                    </h1>
+                    {/* Mobile shows the brand here since the SideRail logo is hidden */}
+                    <span className="md:hidden font-display font-extrabold text-foreground text-lg tracking-tight">
+                        AcedIt
+                    </span>
+                </div>
 
-                    {/* Desktop Nav */}
-                    <nav className="hidden md:flex items-center gap-1">
-                        {NAV_GROUPS.map(group => (
-                            <div
-                                key={group.label}
-                                className="relative"
-                                onMouseEnter={() => setOpenGroup(group.label)}
-                                onMouseLeave={() => setOpenGroup(null)}
-                            >
-                                <button className={`flex items-center gap-1 px-3 py-2 rounded-lg text-sm font-semibold transition-colors ${
-                                    openGroup === group.label ? 'bg-violet-50 text-violet-700' : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
-                                }`}>
-                                    {group.label}
-                                    <ChevronDown className={`w-3.5 h-3.5 transition-transform ${openGroup === group.label ? 'rotate-180' : ''}`} />
-                                </button>
-                                <AnimatePresence>
-                                    {openGroup === group.label && (
-                                        <motion.div
-                                            initial={{ opacity: 0, y: 6, scale: 0.97 }}
-                                            animate={{ opacity: 1, y: 0, scale: 1 }}
-                                            exit={{ opacity: 0, y: 4, scale: 0.97 }}
-                                            transition={{ duration: 0.15 }}
-                                            className="absolute top-full left-0 mt-1 bg-white border border-gray-100 rounded-2xl shadow-xl p-2 min-w-[160px]"
-                                        >
-                                            {group.items.map(item => (
-                                                <Link
-                                                    key={item.label}
-                                                    to={createPageUrl(item.path)}
-                                                    className="block px-3 py-2 text-sm text-gray-700 hover:bg-violet-50 hover:text-violet-700 rounded-xl font-medium transition-colors"
-                                                    onClick={() => setOpenGroup(null)}
-                                                >
-                                                    {item.label}
-                                                </Link>
-                                            ))}
-                                        </motion.div>
-                                    )}
-                                </AnimatePresence>
-                            </div>
-                        ))}
-                    </nav>
-
-                    {/* Right side — streak + xp pills */}
-                    <div className="hidden md:flex items-center gap-2">
-                        {userProfile?.streak_days > 0 && (
-                            <div className="flex items-center gap-1.5 bg-orange-50 border border-orange-100 rounded-full px-3 py-1">
-                                <Flame className="w-3.5 h-3.5 text-orange-500" />
-                                <span className="text-xs font-bold text-orange-700">{userProfile.streak_days}d</span>
-                            </div>
-                        )}
-                        {userProfile?.total_xp > 0 && (
-                            <div className="flex items-center gap-1.5 bg-violet-50 border border-violet-100 rounded-full px-3 py-1">
-                                <Zap className="w-3.5 h-3.5 text-violet-600" />
-                                <span className="text-xs font-bold text-violet-700">{userProfile.total_xp.toLocaleString()} XP</span>
-                            </div>
-                        )}
-                        {!isDashboard && (
-                            <Link to="/">
-                                <button className="text-xs font-semibold text-gray-500 hover:text-violet-600 transition-colors px-2 py-1 rounded-lg hover:bg-violet-50">
-                                    ← Home
-                                </button>
-                            </Link>
-                        )}
-                    </div>
-
-                    {/* Mobile hamburger */}
-                    <button
-                        className="md:hidden p-2 rounded-xl hover:bg-gray-100 transition-colors text-gray-600"
-                        onClick={() => setMobileOpen(!mobileOpen)}
-                    >
-                        {mobileOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
-                    </button>
+                {/* ── Stats pills + premium chip ──────────────────────── */}
+                <div className="flex items-center gap-1.5">
+                    {/* Daily AI Tools usage — always visible so the user knows
+                        their cap state without leaving the page they're on. */}
+                    {userProfile && (
+                        <TierUsagePill
+                            feature={FEATURES.AI_TOOL}
+                            userProfile={userProfile}
+                            compact
+                            className="hidden sm:inline-flex"
+                        />
+                    )}
+                    {streak > 0 && (
+                        <Link
+                            to={createPageUrl("Ranked")}
+                            className="pill bg-streak/15 text-streak gap-1.5 hover:bg-streak/20 transition-colors"
+                            aria-label={`${streak} day streak`}
+                        >
+                            <Flame className="w-3.5 h-3.5" />
+                            <span className="font-bold">{streak}d</span>
+                        </Link>
+                    )}
+                    {xp > 0 && (
+                        <Link
+                            to={createPageUrl("Ranked")}
+                            className="pill bg-xp/15 text-xp gap-1.5 hover:bg-xp/20 transition-colors"
+                            aria-label={`${xp.toLocaleString()} total XP`}
+                        >
+                            <Zap className="w-3.5 h-3.5" />
+                            <span className="font-bold">{xp.toLocaleString()}</span>
+                        </Link>
+                    )}
+                    {isPremium && (
+                        <Link
+                            to={createPageUrl("Subscription")}
+                            className="pill bg-primary/15 text-primary gap-1.5 hover:bg-primary/20 transition-colors"
+                            aria-label="Premium subscriber"
+                        >
+                            <Crown className="w-3.5 h-3.5" />
+                            <span className="font-bold hidden sm:inline">Premium</span>
+                        </Link>
+                    )}
                 </div>
             </div>
-
-            {/* Mobile Menu */}
-            <AnimatePresence>
-                {mobileOpen && (
-                    <motion.div
-                        initial={{ opacity: 0, height: 0 }}
-                        animate={{ opacity: 1, height: "auto" }}
-                        exit={{ opacity: 0, height: 0 }}
-                        className="md:hidden border-t border-gray-100 bg-white overflow-hidden"
-                    >
-                        <div className="px-4 py-3 space-y-1 max-h-[70vh] overflow-y-auto">
-                            {NAV_GROUPS.map(group => (
-                                <div key={group.label}>
-                                    <p className="text-xs font-bold text-gray-400 uppercase tracking-wider px-3 pt-3 pb-1">{group.label}</p>
-                                    {group.items.map(item => (
-                                        <Link
-                                            key={item.label}
-                                            to={createPageUrl(item.path)}
-                                            className="block px-3 py-2.5 text-sm text-gray-700 hover:bg-violet-50 hover:text-violet-700 rounded-xl font-medium transition-colors"
-                                            onClick={() => setMobileOpen(false)}
-                                        >
-                                            {item.label}
-                                        </Link>
-                                    ))}
-                                </div>
-                            ))}
-                            {userProfile && (
-                                <div className="flex items-center gap-2 px-3 pt-3 pb-2 border-t border-gray-100 mt-2">
-                                    {userProfile.streak_days > 0 && (
-                                        <div className="flex items-center gap-1 bg-orange-50 border border-orange-100 rounded-full px-2.5 py-1">
-                                            <Flame className="w-3 h-3 text-orange-500" />
-                                            <span className="text-xs font-bold text-orange-700">{userProfile.streak_days}d streak</span>
-                                        </div>
-                                    )}
-                                    {userProfile.total_xp > 0 && (
-                                        <div className="flex items-center gap-1 bg-violet-50 border border-violet-100 rounded-full px-2.5 py-1">
-                                            <Zap className="w-3 h-3 text-violet-600" />
-                                            <span className="text-xs font-bold text-violet-700">{userProfile.total_xp.toLocaleString()} XP</span>
-                                        </div>
-                                    )}
-                                </div>
-                            )}
-                        </div>
-                    </motion.div>
-                )}
-            </AnimatePresence>
         </header>
     );
 }

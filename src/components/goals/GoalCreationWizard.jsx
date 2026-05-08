@@ -4,7 +4,6 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Slider } from "@/components/ui/slider";
 import { useToast } from "@/components/ui/use-toast";
@@ -13,14 +12,15 @@ import {
     Target, Calendar, ChevronRight, ChevronLeft, Plus, Trash2,
     Sparkles, Trophy, Zap, Loader2, GripVertical, Lock, CheckCircle2,
     BookOpen, BarChart3, FileText, ClipboardList, Star, TrendingUp,
-    Minus, Brain, Lightbulb, RefreshCw, PenLine, X, Check
+    Minus, Brain, Lightbulb, RefreshCw, PenLine, X, Check,
+    FileSignature, GraduationCap, ScrollText
 } from "lucide-react";
 
 const ASSESSMENT_TYPES = [
-    { value: "SAC", label: "SAC", icon: "📝", desc: "School-Assessed Coursework" },
-    { value: "Test", label: "Test", icon: "✏️", desc: "In-class test" },
-    { value: "Exam", label: "Exam", icon: "🎓", desc: "End-of-year exam" },
-    { value: "Assignment", label: "Assignment", icon: "📋", desc: "Take-home assignment" },
+    { value: "SAC", label: "SAC", Icon: FileText, desc: "School-Assessed Coursework" },
+    { value: "Test", label: "Test", Icon: PenLine, desc: "In-class test" },
+    { value: "Exam", label: "Exam", Icon: GraduationCap, desc: "End-of-year exam" },
+    { value: "Assignment", label: "Assignment", Icon: ClipboardList, desc: "Take-home assignment" },
 ];
 
 const STEPS = ["Details", "Sub-Goals", "Review"];
@@ -319,13 +319,13 @@ Navigation should be one of: Study, Quizzes, AITools.`,
                 {STEPS.map((s, i) => (
                     <React.Fragment key={s}>
                         <div className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-sm font-semibold transition-all ${
-                            i === step ? "bg-purple-600 text-white" :
-                            i < step ? "bg-green-100 text-green-700" : "bg-gray-100 text-gray-400"
+                            i === step ? "bg-primary text-primary-foreground" :
+                            i < step ? "bg-primary/15 text-primary" : "bg-secondary text-muted-foreground/60"
                         }`}>
                             {i < step ? <CheckCircle2 className="w-4 h-4" /> : <span>{i + 1}</span>}
                             {s}
                         </div>
-                        {i < STEPS.length - 1 && <ChevronRight className="w-4 h-4 text-gray-300" />}
+                        {i < STEPS.length - 1 && <ChevronRight className="w-4 h-4 text-muted-foreground/60" />}
                     </React.Fragment>
                 ))}
             </div>
@@ -335,8 +335,8 @@ Navigation should be one of: Study, Quizzes, AITools.`,
                 {step === 0 && (
                     <motion.div key="step0" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} className="space-y-5">
                         <div>
-                            <h2 className="text-2xl font-bold text-gray-900 mb-1">Goal Details</h2>
-                            <p className="text-gray-500 text-sm">Define what you want to achieve and why it matters.</p>
+                            <h2 className="text-2xl font-bold text-foreground mb-1">Goal Details</h2>
+                            <p className="text-muted-foreground text-sm">Define what you want to achieve and why it matters.</p>
                         </div>
 
                         <div className="space-y-2">
@@ -369,30 +369,34 @@ Navigation should be one of: Study, Quizzes, AITools.`,
                         <div className="space-y-2">
                             <Label>Assessment Type *</Label>
                             <div className="grid grid-cols-2 gap-2">
-                                {ASSESSMENT_TYPES.map(a => (
-                                    <button key={a.value} onClick={() => set("assessment_type", a.value)}
-                                        className={`p-3 rounded-xl border-2 text-left transition-all ${form.assessment_type === a.value ? "border-purple-500 bg-purple-50" : "border-gray-200 hover:border-gray-300"}`}>
-                                        <div className="text-lg mb-0.5">{a.icon}</div>
-                                        <div className="font-semibold text-sm text-gray-900">{a.label}</div>
-                                        <div className="text-xs text-gray-500">{a.desc}</div>
-                                    </button>
-                                ))}
+                                {ASSESSMENT_TYPES.map(a => {
+                                    const AIcon = a.Icon;
+                                    const selected = form.assessment_type === a.value;
+                                    return (
+                                        <button key={a.value} onClick={() => set("assessment_type", a.value)}
+                                            className={`p-3 rounded-xl border-2 text-left transition-all ${selected ? "border-primary bg-primary/10" : "border-border hover:border-border"}`}>
+                                            <AIcon className={`w-5 h-5 mb-1 ${selected ? "text-primary" : "text-muted-foreground"}`} />
+                                            <div className="font-semibold text-sm text-foreground">{a.label}</div>
+                                            <div className="text-xs text-muted-foreground">{a.desc}</div>
+                                        </button>
+                                    );
+                                })}
                             </div>
                         </div>
 
                         <div className="space-y-3">
-                            <Label>Target Score: <span className="font-bold text-purple-600">{form.target_score}%</span></Label>
+                            <Label>Target Score: <span className="font-bold text-primary">{form.target_score}%</span></Label>
                             <Slider min={40} max={100} step={1} value={[form.target_score]} onValueChange={([v]) => set("target_score", v)} className="py-1" />
-                            <div className="flex justify-between text-xs text-gray-400"><span>40%</span><span>100%</span></div>
+                            <div className="flex justify-between text-xs text-muted-foreground/60"><span>40%</span><span>100%</span></div>
                         </div>
 
                         <div className="grid grid-cols-2 gap-4">
                             <div className="space-y-3">
-                                <Label>Importance: <span className="font-semibold text-orange-600">{importanceLabels[form.importance]}</span></Label>
+                                <Label>Importance: <span className="font-semibold text-xp">{importanceLabels[form.importance]}</span></Label>
                                 <Slider min={1} max={5} step={1} value={[form.importance]} onValueChange={([v]) => set("importance", v)} />
                             </div>
                             <div className="space-y-3">
-                                <Label>Confidence: <span className="font-semibold text-blue-600">{confidenceLabels[form.confidence]}</span></Label>
+                                <Label>Confidence: <span className="font-semibold text-chart-3">{confidenceLabels[form.confidence]}</span></Label>
                                 <Slider min={1} max={5} step={1} value={[form.confidence]} onValueChange={([v]) => set("confidence", v)} />
                             </div>
                         </div>
@@ -409,7 +413,7 @@ Navigation should be one of: Study, Quizzes, AITools.`,
 
                         <div className="flex justify-between pt-2">
                             <Button variant="outline" onClick={onCancel}>Cancel</Button>
-                            <Button onClick={() => setStep(1)} disabled={!canProceedStep0} className="bg-purple-600 hover:bg-purple-700">
+                            <Button onClick={() => setStep(1)} disabled={!canProceedStep0} className="btn-3d bg-primary hover:bg-primary text-primary-foreground">
                                 Next: Sub-Goals <ChevronRight className="w-4 h-4 ml-1" />
                             </Button>
                         </div>
@@ -420,25 +424,25 @@ Navigation should be one of: Study, Quizzes, AITools.`,
                 {step === 1 && (
                     <motion.div key="step1" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} className="space-y-5">
                         <div>
-                            <h2 className="text-2xl font-bold text-gray-900 mb-1">Ordered Sub-Goals</h2>
-                            <p className="text-gray-500 text-sm">Define the milestones required to achieve your goal. They unlock one at a time — top to bottom.</p>
+                            <h2 className="text-2xl font-bold text-foreground mb-1">Ordered Sub-Goals</h2>
+                            <p className="text-muted-foreground text-sm">Define the milestones required to achieve your goal. They unlock one at a time — top to bottom.</p>
                         </div>
 
-                        <div className="bg-purple-50 border border-purple-200 rounded-xl p-4 flex gap-3">
-                            <Lock className="w-5 h-5 text-purple-600 flex-shrink-0 mt-0.5" />
+                        <div className="bg-primary/10 border border-primary/20 rounded-xl p-4 flex gap-3">
+                            <Lock className="w-5 h-5 text-primary flex-shrink-0 mt-0.5" />
                             <div>
-                                <p className="text-sm font-semibold text-purple-800">Sequential Progression</p>
-                                <p className="text-xs text-purple-600">Only sub-goal #1 is active. Each one unlocks after the previous is completed. AI will generate action items under each.</p>
+                                <p className="text-sm font-semibold text-foreground">Sequential Progression</p>
+                                <p className="text-xs text-muted-foreground">Only sub-goal #1 is active. Each one unlocks after the previous is completed. AI will generate action items under each.</p>
                             </div>
                         </div>
 
                         <div className="space-y-3">
                             {subGoals.map((sg, idx) => (
                                 <motion.div key={sg.id} layout initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}
-                                    className="flex items-center gap-3 p-3 bg-white border-2 border-gray-200 rounded-xl hover:border-purple-300 transition-colors">
+                                    className="flex items-center gap-3 p-3 card-soft hover:border-primary/40 transition-colors">
                                     <div className="flex items-center gap-2 flex-shrink-0">
-                                        <GripVertical className="w-4 h-4 text-gray-300" />
-                                        <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold ${idx === 0 ? "bg-purple-600 text-white" : "bg-gray-100 text-gray-500"}`}>
+                                        <GripVertical className="w-4 h-4 text-muted-foreground/60" />
+                                        <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold ${idx === 0 ? "bg-primary text-primary-foreground" : "bg-secondary text-muted-foreground"}`}>
                                             {idx === 0 ? "1" : <Lock className="w-3 h-3" />}
                                         </div>
                                     </div>
@@ -449,7 +453,7 @@ Navigation should be one of: Study, Quizzes, AITools.`,
                                         className="border-0 shadow-none focus-visible:ring-0 bg-transparent"
                                     />
                                     {subGoals.length > 1 && (
-                                        <Button variant="ghost" size="icon" onClick={() => removeSubGoal(sg.id)} className="flex-shrink-0 text-gray-400 hover:text-red-500 w-8 h-8">
+                                        <Button variant="ghost" size="icon" onClick={() => removeSubGoal(sg.id)} className="flex-shrink-0 text-muted-foreground/60 hover:text-streak w-8 h-8">
                                             <Trash2 className="w-4 h-4" />
                                         </Button>
                                     )}
@@ -457,7 +461,7 @@ Navigation should be one of: Study, Quizzes, AITools.`,
                             ))}
                         </div>
 
-                        <Button variant="outline" onClick={addSubGoal} className="w-full border-dashed border-2 border-gray-300 hover:border-purple-400 text-gray-600">
+                        <Button variant="outline" onClick={addSubGoal} className="w-full border-dashed border-2 border-border hover:border-primary/50 text-muted-foreground">
                             <Plus className="w-4 h-4 mr-2" /> Add Sub-Goal
                         </Button>
 
@@ -466,7 +470,7 @@ Navigation should be one of: Study, Quizzes, AITools.`,
                             <Button
                                 onClick={handleGenerate}
                                 disabled={!canProceedStep1 || isGenerating}
-                                className="bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700"
+                                className="btn-3d bg-primary hover:bg-primary text-primary-foreground"
                             >
                                 {isGenerating ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Generating Plan...</> : <><Sparkles className="w-4 h-4 mr-2" />Generate AI Plan</>}
                             </Button>
@@ -496,60 +500,60 @@ Navigation should be one of: Study, Quizzes, AITools.`,
                     return (
                     <motion.div key="step2" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} className="space-y-5">
                         <div>
-                            <h2 className="text-2xl font-bold text-gray-900 mb-1">Review & Customise</h2>
-                            <p className="text-gray-500 text-sm">Delete, regenerate, or add your own challenges. Adjust targets to control XP earned.</p>
+                            <h2 className="text-2xl font-bold text-foreground mb-1">Review & Customise</h2>
+                            <p className="text-muted-foreground text-sm">Delete, regenerate, or add your own challenges. Adjust targets to control XP earned.</p>
                         </div>
 
                         {/* Live Summary Bar */}
                         <div className="grid grid-cols-3 gap-3">
-                            <div className="bg-purple-50 border border-purple-200 rounded-xl p-3 text-center">
-                                <Target className="w-4 h-4 text-purple-600 mx-auto mb-1" />
-                                <div className="text-lg font-black text-purple-700">{totalChallenges}</div>
-                                <div className="text-xs text-gray-500">Challenges</div>
+                            <div className="card-soft p-3 text-center">
+                                <Target className="w-4 h-4 text-primary mx-auto mb-1" />
+                                <div className="text-lg font-black text-foreground">{totalChallenges}</div>
+                                <div className="text-xs text-muted-foreground">Challenges</div>
                             </div>
-                            <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 text-center">
-                                <Zap className="w-4 h-4 text-amber-600 mx-auto mb-1" />
-                                <div className="text-lg font-black text-amber-700">{totalAdjustedXP}</div>
-                                <div className="text-xs text-gray-500">Total XP</div>
+                            <div className="card-soft p-3 text-center">
+                                <Zap className="w-4 h-4 text-xp mx-auto mb-1" />
+                                <div className="text-lg font-black text-foreground">{totalAdjustedXP}</div>
+                                <div className="text-xs text-muted-foreground">Total XP</div>
                             </div>
-                            <div className="bg-blue-50 border border-blue-200 rounded-xl p-3 text-center">
-                                <BarChart3 className="w-4 h-4 text-blue-600 mx-auto mb-1" />
-                                <div className="text-lg font-black text-blue-700 capitalize">{(generatedData.difficulty_level || "medium").replace("_"," ")}</div>
-                                <div className="text-xs text-gray-500">Difficulty</div>
+                            <div className="card-soft p-3 text-center">
+                                <BarChart3 className="w-4 h-4 text-chart-3 mx-auto mb-1" />
+                                <div className="text-lg font-black text-foreground capitalize">{(generatedData.difficulty_level || "medium").replace("_"," ")}</div>
+                                <div className="text-xs text-muted-foreground">Difficulty</div>
                             </div>
                         </div>
 
                         {/* XP notice */}
-                        <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 flex gap-2">
-                            <Zap className="w-4 h-4 text-amber-600 flex-shrink-0 mt-0.5" />
-                            <p className="text-xs text-amber-800"><span className="font-semibold">More effort = more XP.</span> Delete challenges you don't want, regenerate a set, or type your own below each sub-goal.</p>
+                        <div className="bg-xp/10 border border-xp/20 rounded-xl p-3 flex gap-2">
+                            <Zap className="w-4 h-4 text-xp flex-shrink-0 mt-0.5" />
+                            <p className="text-xs text-foreground"><span className="font-semibold">More effort = more XP.</span> Delete challenges you don't want, regenerate a set, or type your own below each sub-goal.</p>
                         </div>
 
                         {/* Editable sub-goals */}
                         <div className="space-y-4 max-h-[480px] overflow-y-auto pr-1">
                             {editableHierarchy.map((sg, idx) => (
-                                <div key={idx} className={`border-2 rounded-xl overflow-hidden ${idx === 0 ? "border-purple-300" : "border-gray-200"}`}>
+                                <div key={idx} className={`border-2 rounded-xl overflow-hidden ${idx === 0 ? "border-primary/40" : "border-border"}`}>
                                     {/* Sub-goal header with regenerate button */}
-                                    <div className={`flex items-center gap-3 p-3 ${idx === 0 ? "bg-purple-50" : "bg-gray-50"}`}>
-                                        <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0 ${idx === 0 ? "bg-purple-600 text-white" : "bg-gray-300 text-gray-600"}`}>
+                                    <div className={`flex items-center gap-3 p-3 ${idx === 0 ? "bg-primary/10" : "bg-secondary/50"}`}>
+                                        <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0 ${idx === 0 ? "bg-primary text-primary-foreground" : "bg-secondary text-muted-foreground"}`}>
                                             {idx === 0 ? idx + 1 : <Lock className="w-3 h-3" />}
                                         </div>
-                                        <p className="font-semibold text-sm text-gray-900 flex-1">{sg.title}</p>
+                                        <p className="font-semibold text-sm text-foreground flex-1">{sg.title}</p>
                                         <button
                                             onClick={() => regenerateSubGoal(idx)}
                                             disabled={regeneratingIdx === idx}
-                                            className="flex items-center gap-1.5 text-xs text-purple-600 hover:text-purple-800 font-semibold bg-purple-100 hover:bg-purple-200 px-2.5 py-1 rounded-lg transition-colors disabled:opacity-50"
+                                            className="flex items-center gap-1.5 text-xs text-primary hover:text-primary font-semibold bg-primary/10 hover:bg-primary/20 px-2.5 py-1 rounded-lg transition-colors disabled:opacity-50"
                                         >
                                             {regeneratingIdx === idx ? <Loader2 className="w-3 h-3 animate-spin" /> : <RefreshCw className="w-3 h-3" />}
                                             Regenerate
                                         </button>
-                                        {idx === 0 && <Badge className="bg-purple-100 text-purple-700 border-purple-300 text-xs">Active</Badge>}
+                                        {idx === 0 && <span className="pill bg-primary/15 text-primary border border-primary/20">Active</span>}
                                     </div>
 
                                     {/* Challenge items */}
-                                    <div className="divide-y divide-gray-100">
+                                    <div className="divide-y divide-border">
                                         {(sg.ai_sub_goals || []).length === 0 && (
-                                            <div className="px-4 py-3 text-xs text-gray-400 italic">No challenges yet — add one below.</div>
+                                            <div className="px-4 py-3 text-xs text-muted-foreground/60 italic">No challenges yet — add one below.</div>
                                         )}
                                         {(sg.ai_sub_goals || []).map((ai, aidx) => {
                                             const key = `${idx}_${aidx}`;
@@ -558,14 +562,14 @@ Navigation should be one of: Study, Quizzes, AITools.`,
                                             const currentTitle = updateTitleWithTarget(ai.title, ai.target, currentTarget, ai.type);
                                             const cfg = typeConfig[ai.type]
                                             return (
-                                                <div key={aidx} className="px-4 py-3 bg-white space-y-2">
+                                                <div key={aidx} className="px-4 py-3 bg-surface space-y-2">
                                                     <div className="flex items-start justify-between gap-2">
-                                                        <span className="text-sm text-gray-800 font-medium flex-1">{currentTitle}</span>
+                                                        <span className="text-sm text-foreground font-medium flex-1">{currentTitle}</span>
                                                         <div className="flex items-center gap-1.5 flex-shrink-0">
-                                                            <span className="text-xs text-amber-600 font-bold flex items-center gap-0.5"><Zap className="w-3 h-3" />{currentXp}</span>
+                                                            <span className="text-xs text-xp font-bold flex items-center gap-0.5"><Zap className="w-3 h-3" />{currentXp}</span>
                                                             <button
                                                                 onClick={() => deleteAiItem(idx, aidx)}
-                                                                className="w-5 h-5 flex items-center justify-center rounded text-gray-300 hover:text-red-500 hover:bg-red-50 transition-colors"
+                                                                className="w-5 h-5 flex items-center justify-center rounded text-muted-foreground/60 hover:text-streak hover:bg-streak/10 transition-colors"
                                                             >
                                                                 <X className="w-3.5 h-3.5" />
                                                             </button>
@@ -573,7 +577,7 @@ Navigation should be one of: Study, Quizzes, AITools.`,
                                                     </div>
                                                     <div className="flex items-center gap-3">
                                                         <button onClick={() => setAdjustedTargets(prev => ({...prev, [key]: Math.max(cfg.min, (currentTarget || cfg.min) - cfg.step)}))}
-                                                            className="w-6 h-6 rounded-full border-2 border-gray-300 flex items-center justify-center text-gray-500 hover:border-purple-400 hover:text-purple-600 flex-shrink-0">
+                                                            className="w-6 h-6 rounded-full border-2 border-border flex items-center justify-center text-muted-foreground hover:border-primary/50 hover:text-primary flex-shrink-0">
                                                             <Minus className="w-3 h-3" />
                                                         </button>
                                                         <div className="flex-1">
@@ -584,10 +588,10 @@ Navigation should be one of: Study, Quizzes, AITools.`,
                                                             />
                                                         </div>
                                                         <button onClick={() => setAdjustedTargets(prev => ({...prev, [key]: Math.min(cfg.max, (currentTarget || cfg.min) + cfg.step)}))}
-                                                            className="w-6 h-6 rounded-full border-2 border-gray-300 flex items-center justify-center text-gray-500 hover:border-purple-400 hover:text-purple-600 flex-shrink-0">
+                                                            className="w-6 h-6 rounded-full border-2 border-border flex items-center justify-center text-muted-foreground hover:border-primary/50 hover:text-primary flex-shrink-0">
                                                             <Plus className="w-3 h-3" />
                                                         </button>
-                                                        <span className="text-sm font-bold text-gray-700 w-20 text-right flex-shrink-0">{currentTarget} {cfg.unit}</span>
+                                                        <span className="text-sm font-bold text-foreground w-20 text-right flex-shrink-0">{currentTarget} {cfg.unit}</span>
                                                     </div>
                                                 </div>
                                             );
@@ -601,17 +605,17 @@ Navigation should be one of: Study, Quizzes, AITools.`,
 
                         {/* Tips */}
                         {generatedData.tips?.length > 0 && (
-                            <div className="bg-green-50 border border-green-200 rounded-xl p-4 space-y-2">
-                                <p className="text-sm font-semibold text-green-800 flex items-center gap-2"><Lightbulb className="w-4 h-4" />AI Study Tips</p>
+                            <div className="bg-primary/10 border border-primary/20 rounded-xl p-4 space-y-2">
+                                <p className="text-sm font-semibold text-foreground flex items-center gap-2"><Lightbulb className="w-4 h-4 text-primary" />AI Study Tips</p>
                                 {generatedData.tips.slice(0, 3).map((tip, i) => (
-                                    <p key={i} className="text-xs text-green-700 flex gap-2"><CheckCircle2 className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" />{tip}</p>
+                                    <p key={i} className="text-xs text-muted-foreground flex gap-2"><CheckCircle2 className="w-3.5 h-3.5 flex-shrink-0 mt-0.5 text-primary" />{tip}</p>
                                 ))}
                             </div>
                         )}
 
                         <div className="flex justify-between pt-2">
                             <Button variant="outline" onClick={() => setStep(1)}><ChevronLeft className="w-4 h-4 mr-1" /> Back</Button>
-                            <Button onClick={handleSave} disabled={isSaving || totalChallenges === 0} className="bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 font-semibold px-8">
+                            <Button onClick={handleSave} disabled={isSaving || totalChallenges === 0} className="btn-3d bg-primary hover:bg-primary text-primary-foreground font-semibold px-8">
                                 {isSaving ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Saving...</> : <><Trophy className="w-4 h-4 mr-2" />Create Goal ({totalAdjustedXP} XP)</>}
                             </Button>
                         </div>

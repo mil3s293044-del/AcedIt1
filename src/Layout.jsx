@@ -14,6 +14,8 @@ import UpgradeModal from "@/components/shared/UpgradeModal";
 import XPFeedback from "@/components/ranked/XPFeedback";
 import StreakCelebration from "@/components/ranked/StreakCelebration";
 import TopNav from "@/components/layout/TopNav";
+import BottomNav from "@/components/layout/BottomNav";
+import SideRail from "@/components/layout/SideRail";
 
 const FloatingTimer = React.memo(({ currentTime, timerPosition, isDragging, handleMouseDown, timerRef, formatTime }) => (
     <motion.div
@@ -116,9 +118,14 @@ export default function Layout({ children, currentPageName }) {
 
                 setUserProfile(profile);
 
-                // Check if banned
-                const rateLimitRecords = await base44.asServiceRole.entities.AIRateLimit.filter({ user_email: user.email });
-                const rlRecord = rateLimitRecords[0];
+                // Best-effort ban check. RLS may block reads of other users'
+                // rate-limit rows; that's fine — server.mjs enforces bans on
+                // every AI call, so a missed read here just defers detection.
+                let rlRecord = null;
+                try {
+                    const records = await base44.entities.AIRateLimit.filter({ user_email: user.email });
+                    rlRecord = records[0];
+                } catch {}
                 if (rlRecord?.is_frozen && rlRecord?.freeze_reason === 'banned_account') {
                     navigate("/Suspended");
                     return;
@@ -245,6 +252,7 @@ export default function Layout({ children, currentPageName }) {
 
     return (
         <div className="min-h-screen bg-gradient-to-br from-slate-50 via-violet-50/30 to-indigo-50/40 relative">
+            <SideRail />
             <TopNav />
 
             <AnimatePresence>
@@ -260,9 +268,11 @@ export default function Layout({ children, currentPageName }) {
                 )}
             </AnimatePresence>
 
-            <main className="text-gray-900 w-full">
+            <main className="text-gray-900 w-full pb-20 md:pb-0 md:pl-16">
                 {children}
             </main>
+
+            <BottomNav />
 
             <Toaster />
 

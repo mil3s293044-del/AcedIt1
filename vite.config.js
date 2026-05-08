@@ -2,6 +2,10 @@ import base44 from "@base44/vite-plugin"
 import react from '@vitejs/plugin-react'
 import { defineConfig } from 'vite'
 import http from 'node:http'
+import path from 'node:path'
+import { fileURLToPath } from 'node:url'
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
 // Custom plugin: intercept the Base44 SDK's HTTP call to Core/InvokeLLM
 // (and similar AI integrations) before it leaves the browser, and forward
@@ -18,7 +22,35 @@ const INTERCEPT_PATTERNS = [
   { regex: /^\/api\/apps\/[^/]+\/integration-endpoints\/Core\/UploadFile(?:\?|$)/, target: '/local-ai/uploadFile' },
   // /api/apps/{appId}/functions/extractDocumentText (DOCX/PPTX text extraction for Quizzes)
   { regex: /^\/api\/apps\/[^/]+\/functions\/extractDocumentText(?:\?|$)/, target: '/local-ai/extractDocumentText' },
+  // /local-ai/invokeAIStream — direct path used by the streamingAI client helper
+  { regex: /^\/local-ai\/invokeAIStream(?:\?|$)/, target: '/local-ai/invokeAIStream' },
 ];
+
+// ─── Phase 3 dual-run dispatcher ────────────────────────────────────────────
+// Routes `@/entities/...` and `@/functions/...` imports to our own shims
+// (which dispatch to either Base44 or Supabase based on VITE_USE_SUPABASE).
+//
+// Must run BEFORE the @base44/vite-plugin so our resolveId wins. Without this
+// override, base44 would resolve those paths to its compat shims and our flag
+// would never be consulted.
+const ENTITIES_SHIM = path.resolve(__dirname, 'src/api/entitiesShim.js')
+const FUNCTIONS_SHIM = path.resolve(__dirname, 'src/api/functionsShim.js')
+
+const dualRunDispatch = {
+  name: 'acedit-dual-run-dispatch',
+  enforce: 'pre',
+  resolveId(source, importer) {
+    if (!importer || importer.endsWith('.html')) return null
+    // Match the same patterns @base44/vite-plugin matches, scoped to project src.
+    if (source.endsWith('/entities/all') || source === '@/entities/all') {
+      return ENTITIES_SHIM
+    }
+    if (source.includes('/functions/') && (source.startsWith('@/') || source.startsWith('./') || source.startsWith('../'))) {
+      return FUNCTIONS_SHIM
+    }
+    return null
+  },
+}
 
 const interceptBase44AI = {
   name: 'intercept-base44-ai',
@@ -54,6 +86,16 @@ const interceptBase44AI = {
 // https://vite.dev/config/
 export default defineConfig({
   logLevel: 'error', // Suppress warnings, only show errors
+  resolve: {
+    // Aliases run BEFORE plugin resolveId, so they reliably beat
+    // @base44/vite-plugin's own legacySDKImports handler. This is why we
+    // route every `@/functions/X` and `@/entities/X` import to our dual-run
+    // shims here instead of relying on plugin order.
+    alias: [
+      { find: /^@\/functions\/.+$/, replacement: FUNCTIONS_SHIM },
+      { find: /^@\/entities\/all$/,  replacement: ENTITIES_SHIM },
+    ],
+  },
   server: {
     proxy: {
       // Direct access to our local AI server (used by future tools / debugging).
@@ -64,6 +106,9 @@ export default defineConfig({
     },
   },
   plugins: [
+    // MUST be registered before the base44 plugin so our shim wins resolveId
+    // for entity/function imports.
+    dualRunDispatch,
     // MUST be registered before the base44 plugin so our middleware runs first
     // and short-circuits the catch-all /api proxy for AI calls.
     interceptBase44AI,

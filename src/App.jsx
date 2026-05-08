@@ -3,12 +3,13 @@ import { QueryClientProvider } from '@tanstack/react-query'
 import { queryClientInstance } from '@/lib/query-client'
 import NavigationTracker from '@/lib/NavigationTracker'
 import { pagesConfig } from './pages.config'
-import { BrowserRouter as Router, Route, Routes } from 'react-router-dom';
+import { BrowserRouter as Router, Route, Routes, useLocation } from 'react-router-dom';
 import PageNotFound from './lib/PageNotFound';
 import StudyRoadmap from './pages/StudyRoadmap';
 import Paywall from './pages/Paywall';
 import Suspended from './pages/Suspended';
 import AdminIPPanel from './pages/AdminIPPanel';
+import Landing from './pages/Landing';
 import { AuthProvider, useAuth } from '@/lib/AuthContext';
 import UserNotRegisteredError from '@/components/UserNotRegisteredError';
 
@@ -21,7 +22,8 @@ const LayoutWrapper = ({ children, currentPageName }) => Layout ?
   : <>{children}</>;
 
 const AuthenticatedApp = () => {
-  const { isLoadingAuth, isLoadingPublicSettings, authError, navigateToLogin } = useAuth();
+  const { isAuthenticated, isLoadingAuth, isLoadingPublicSettings, authError, navigateToLogin } = useAuth();
+  const location = useLocation();
 
   // Show loading spinner while checking app public settings or auth
   if (isLoadingPublicSettings || isLoadingAuth) {
@@ -30,6 +32,13 @@ const AuthenticatedApp = () => {
         <div className="w-8 h-8 border-4 border-slate-200 border-t-slate-800 rounded-full animate-spin"></div>
       </div>
     );
+  }
+
+  // Unauthenticated visitors at `/` get the public landing page
+  // (instead of being bounced straight to login)
+  const isUnauthed = !isAuthenticated || authError?.type === 'auth_required';
+  if (isUnauthed && location.pathname === '/') {
+    return <Landing />;
   }
 
   // Handle authentication errors

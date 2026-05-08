@@ -3,8 +3,7 @@
  * Call updateStreak() on any study action to tick the streak.
  * Use getStreakMultiplier(days) to scale XP before awarding.
  */
-import { updateStreak } from '@/functions/updateStreak';
-import { awardXP } from '@/functions/awardXP';
+import { updateStreak, awardXP } from '@/api/functionsShim';
 
 export function getStreakMultiplier(days) {
     if (!days || days < 1) return 1.0;

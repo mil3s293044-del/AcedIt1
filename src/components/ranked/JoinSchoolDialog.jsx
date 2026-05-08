@@ -65,40 +65,58 @@ export default function JoinSchoolDialog({ open, onClose, existingSchools, userP
         <Dialog open={open} onOpenChange={onClose}>
             <DialogContent className="max-w-md">
                 <DialogHeader>
-                    <DialogTitle className="flex items-center gap-2">
-                        <School className="w-5 h-5 text-indigo-600" /> Join or Register Your School
+                    <DialogTitle className="font-display font-extrabold text-foreground flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-xl bg-chart-4/10 flex items-center justify-center flex-shrink-0">
+                            <School className="w-5 h-5 text-chart-4" />
+                        </div>
+                        <div>
+                            <span className="block text-base">Join or register your school</span>
+                            <span className="block text-xs font-medium text-muted-foreground mt-0.5">Connect your XP to a school's leaderboard.</span>
+                        </div>
                     </DialogTitle>
                 </DialogHeader>
 
-                <div className="flex gap-2 mb-4">
-                    <Button variant={mode === "search" ? "default" : "outline"} onClick={() => setMode("search")} size="sm" className="flex-1">
-                        Find School
+                <div className="grid grid-cols-2 gap-2 p-1.5 rounded-2xl bg-secondary border border-border">
+                    <Button
+                        variant={mode === "search" ? "default" : "ghost"}
+                        onClick={() => setMode("search")}
+                        size="sm"
+                        className="rounded-xl font-bold"
+                    >
+                        Find school
                     </Button>
-                    <Button variant={mode === "create" ? "default" : "outline"} onClick={() => setMode("create")} size="sm" className="flex-1">
-                        Register New
+                    <Button
+                        variant={mode === "create" ? "default" : "ghost"}
+                        onClick={() => setMode("create")}
+                        size="sm"
+                        className="rounded-xl font-bold"
+                    >
+                        Register new
                     </Button>
                 </div>
 
                 {mode === "search" ? (
                     <div className="space-y-3">
                         <div className="relative">
-                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground/60" />
                             <Input placeholder="Search school name..." value={searchQuery} onChange={e => setSearchQuery(e.target.value)} className="pl-10" />
                         </div>
                         <div className="space-y-2 max-h-72 overflow-y-auto">
                             {filteredSchools.length === 0 && (
-                                <p className="text-center text-gray-500 text-sm py-6">No schools found. Register yours!</p>
+                                <div className="p-6 text-center rounded-xl bg-secondary/50 border border-border">
+                                    <p className="text-muted-foreground text-sm">No schools found. Register yours.</p>
+                                </div>
                             )}
                             {filteredSchools.map(school => (
-                                <div key={school.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-xl hover:bg-gray-100">
-                                    <div className="flex items-center gap-2">
-                                        <div className="w-4 h-4 rounded-full" style={{ backgroundColor: school.logo_color || "#6366f1" }} />
-                                        <div>
-                                            <p className="font-semibold text-sm text-gray-900">{school.school_name}</p>
-                                            <p className="text-xs text-gray-500">{school.city || school.state} · {school.member_count} members</p>
+                                <div key={school.id} className="flex items-center justify-between gap-3 p-3 rounded-xl border border-border hover:bg-secondary/40 transition-colors">
+                                    <div className="flex items-center gap-3 min-w-0">
+                                        <div className="w-3 h-3 rounded-full flex-shrink-0" style={{ backgroundColor: school.logo_color || "hsl(var(--chart-4))" }} />
+                                        <div className="min-w-0">
+                                            <p className="font-display font-extrabold text-sm text-foreground truncate">{school.school_name}</p>
+                                            <p className="text-xs text-muted-foreground mt-0.5">{school.city || school.state} · {school.member_count} members</p>
                                         </div>
                                     </div>
-                                    <Button size="sm" onClick={() => handleJoinExisting(school)} disabled={isSaving}>
+                                    <Button size="sm" onClick={() => handleJoinExisting(school)} disabled={isSaving} className="flex-shrink-0">
                                         Join
                                     </Button>
                                 </div>
@@ -107,13 +125,13 @@ export default function JoinSchoolDialog({ open, onClose, existingSchools, userP
                     </div>
                 ) : (
                     <div className="space-y-4">
-                        <div>
-                            <Label>School Name</Label>
+                        <div className="space-y-1.5">
+                            <Label className="text-xs font-bold uppercase tracking-wide text-muted-foreground">School name</Label>
                             <Input placeholder="e.g. Melbourne High School" value={newSchool.school_name} onChange={e => setNewSchool(p => ({...p, school_name: e.target.value}))} />
                         </div>
                         <div className="grid grid-cols-2 gap-3">
-                            <div>
-                                <Label>State</Label>
+                            <div className="space-y-1.5">
+                                <Label className="text-xs font-bold uppercase tracking-wide text-muted-foreground">State</Label>
                                 <Select value={newSchool.state} onValueChange={v => setNewSchool(p => ({...p, state: v}))}>
                                     <SelectTrigger><SelectValue /></SelectTrigger>
                                     <SelectContent>
@@ -121,20 +139,20 @@ export default function JoinSchoolDialog({ open, onClose, existingSchools, userP
                                     </SelectContent>
                                 </Select>
                             </div>
-                            <div>
-                                <Label>City</Label>
+                            <div className="space-y-1.5">
+                                <Label className="text-xs font-bold uppercase tracking-wide text-muted-foreground">City</Label>
                                 <Input placeholder="e.g. Melbourne" value={newSchool.city} onChange={e => setNewSchool(p => ({...p, city: e.target.value}))} />
                             </div>
                         </div>
-                        <div>
-                            <Label>School Colour</Label>
-                            <div className="flex items-center gap-3 mt-1">
-                                <input type="color" value={newSchool.logo_color} onChange={e => setNewSchool(p => ({...p, logo_color: e.target.value}))} className="w-10 h-10 rounded cursor-pointer border" />
-                                <p className="text-sm text-gray-500">This colour represents your school on the leaderboard</p>
+                        <div className="bg-chart-4/5 border-2 border-chart-4/20 rounded-xl p-4">
+                            <Label className="text-xs font-bold uppercase tracking-wide text-muted-foreground">School colour</Label>
+                            <div className="flex items-center gap-3 mt-2">
+                                <input type="color" value={newSchool.logo_color} onChange={e => setNewSchool(p => ({...p, logo_color: e.target.value}))} className="w-10 h-10 rounded-lg cursor-pointer border-2 border-border" />
+                                <p className="text-xs text-muted-foreground leading-relaxed">This colour represents your school on the leaderboard.</p>
                             </div>
                         </div>
                         <Button onClick={handleCreateSchool} disabled={isSaving || !newSchool.school_name.trim()} className="w-full">
-                            {isSaving ? "Creating..." : "Register & Join School"}
+                            {isSaving ? "Creating..." : "Register & join school"}
                         </Button>
                     </div>
                 )}

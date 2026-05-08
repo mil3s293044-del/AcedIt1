@@ -2,97 +2,197 @@ import React, { useState, useEffect, useCallback, useMemo } from "react";
 import { base44 } from "@/api/base44Client";
 import { motion, AnimatePresence } from "framer-motion";
 import {
-    Clock, BookOpen, Target, TrendingUp, ChevronRight,
-    GraduationCap, Award, Zap, Flame, Brain, FileQuestion,
-    Sparkles, Trophy, Calendar, AlertCircle, Play,
-    BarChart3, CheckCircle2, Star, ArrowRight, Swords,
-    Map, Users, LayoutDashboard
+    Clock, BookOpen, Target, ChevronRight, ArrowRight,
+    GraduationCap, Zap, Flame, Brain, FileQuestion,
+    Sparkles, Trophy, Play, Layers, Timer, Users,
+    Map, Swords, BarChart3, Star, CheckCircle2, AlertTriangle,
+    TrendingUp, Crown, Medal
 } from "lucide-react";
-import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import { format, startOfWeek, differenceInDays, parseISO } from "date-fns";
+import { format, startOfWeek, differenceInDays, parseISO, isToday, isYesterday } from "date-fns";
 import { createPageUrl } from "@/utils";
 import { Link } from "react-router-dom";
-import XPLevelCard from "@/components/ranked/XPLevelCard";
 import HelpButton from "@/components/shared/HelpButton";
 import StudyIntentModal from "@/components/dashboard/StudyIntentModal";
+import { reconcileUserXP } from "@/lib/reconcileXP";
 
-const formatStudyTime = (minutes) => {
-    const h = Math.floor(minutes / 60);
-    const m = Math.round(minutes % 60);
-    if (h === 0) return `${m}m`;
-    if (m === 0) return `${h}h`;
-    return `${h}h ${m}m`;
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+const fmtTime = (m) => {
+    if (!m) return "0m";
+    const h = Math.floor(m / 60);
+    const mm = Math.round(m % 60);
+    if (h === 0) return `${mm}m`;
+    if (mm === 0) return `${h}h`;
+    return `${h}h ${mm}m`;
 };
 
-const getGreeting = () => {
-    const hour = new Date().getHours();
-    if (hour < 12) return "Good morning";
-    if (hour < 18) return "Good afternoon";
-    return "Good evening";
-};
+const fmtXP = (n) => (n || 0).toLocaleString();
 
-// Hub sections — each with a clear purpose and visual hierarchy
-const HUB_SECTIONS = [
-    {
-        id: "study",
-        title: "Study",
-        subtitle: "Start a session and build your skills",
-        color: "from-emerald-500 to-teal-600",
-        lightBg: "bg-emerald-50",
-        border: "border-emerald-100",
-        icon: Brain,
-        actions: [
-            { label: "Pomodoro Timer", desc: "25-min focus sessions", icon: Clock, link: "Study", emoji: "⏱️" },
-            { label: "Flashcards", desc: "Spaced repetition", icon: Brain, link: "Study", emoji: "🃏" },
-            { label: "Active Recall", desc: "Test your memory", icon: Zap, link: "Study", emoji: "💡" },
-            { label: "Blurting", desc: "Brain dump method", icon: BookOpen, link: "Study", emoji: "✍️" },
-        ]
-    },
-    {
-        id: "test",
-        title: "Test Yourself",
-        subtitle: "Quizzes, AI questions & past papers",
-        color: "from-indigo-500 to-purple-600",
-        lightBg: "bg-indigo-50",
-        border: "border-indigo-100",
-        icon: FileQuestion,
-        actions: [
-            { label: "Take a Quiz", desc: "Multiple choice", icon: FileQuestion, link: "Quizzes", emoji: "🧠" },
-            { label: "AI Tools", desc: "Generate questions", icon: Sparkles, link: "AITools", emoji: "⚡" },
-            { label: "Study Roadmap", desc: "AI exam prep plan", icon: Map, link: "StudyRoadmap", emoji: "🗺️" },
-        ]
-    },
-    {
-        id: "track",
-        title: "Track Progress",
-        subtitle: "Goals, rank, and analytics",
-        color: "from-amber-500 to-orange-600",
-        lightBg: "bg-amber-50",
-        border: "border-amber-100",
-        icon: Trophy,
-        actions: [
-            { label: "My Goals", desc: "ATAR & milestones", icon: Target, link: "Goals", emoji: "🎯" },
-            { label: "Ranked", desc: "XP & leaderboard", icon: Trophy, link: "Ranked", emoji: "🏆" },
-            { label: "Analytics", desc: "Study insights", icon: BarChart3, link: "Analytics", emoji: "📊" },
-        ]
-    },
-    {
-        id: "social",
-        title: "Compete & Connect",
-        subtitle: "Challenge friends, climb rankings",
-        color: "from-pink-500 to-rose-600",
-        lightBg: "bg-pink-50",
-        border: "border-pink-100",
-        icon: Swords,
-        actions: [
-            { label: "Friends", desc: "Find & add friends", icon: Users, link: "Friends", emoji: "👥" },
-            { label: "Compete", desc: "Score wagers & battles", icon: Swords, link: "Competitions", emoji: "⚔️" },
-        ]
+function getStreakMultiplier(days) {
+    if (days >= 30) return "2.5×";
+    if (days >= 21) return "2.0×";
+    if (days >= 14) return "1.75×";
+    if (days >= 7)  return "1.5×";
+    if (days >= 3)  return "1.2×";
+    return "1.0×";
+}
+
+function getNextStreakMilestone(days) {
+    const tiers = [
+        { at: 3,   mult: "1.2×" },
+        { at: 7,   mult: "1.5×" },
+        { at: 14,  mult: "1.75×" },
+        { at: 21,  mult: "2.0×" },
+        { at: 30,  mult: "2.5×" },
+    ];
+    for (const t of tiers) if (days < t.at) return { ...t, away: t.at - days };
+    return null;
+}
+
+// Coach voice — chill, supportive, motivational. Specific not generic.
+function getCoachLine({ name, hour, streakDays, todayMins, studiedYesterday, dueFlashcards, urgentDays }) {
+    const period = hour < 12 ? "Morning" : hour < 17 ? "Afternoon" : hour < 21 ? "Evening" : "Late night";
+
+    if (urgentDays !== null && urgentDays === 0) {
+        return `${period}, ${name}. You've got something due today — let's tackle it.`;
     }
-];
+    if (streakDays >= 30 && todayMins > 0) {
+        return `${period}, ${name}. ${streakDays} days deep and still showing up. Keep cooking.`;
+    }
+    if (streakDays >= 7 && todayMins === 0 && hour >= 17) {
+        return `${period}, ${name}. Quick session keeps your ${streakDays}-day streak going.`;
+    }
+    if (streakDays >= 30) {
+        return `${period}, ${name}. ${streakDays} days deep. You're built different now.`;
+    }
+    if (streakDays === 0 && todayMins === 0 && !studiedYesterday) {
+        return `${period}, ${name}. Today's a great day to start a streak.`;
+    }
+    if (todayMins >= 90) {
+        return `${period}, ${name}. ${fmtTime(todayMins)} in already. Big day shaping up.`;
+    }
+    if (todayMins >= 30) {
+        return `${period}, ${name}. ${fmtTime(todayMins)} down. Want to stack another?`;
+    }
+    if (todayMins > 0) {
+        return `${period}, ${name}. Nice start — keep building.`;
+    }
+    if (hour >= 17) {
+        return `${period}, ${name}. Even 25 minutes makes today count.`;
+    }
+    if (dueFlashcards >= 10) {
+        return `${period}, ${name}. ${dueFlashcards} flashcards waiting — quick review wins the day.`;
+    }
+    return `${period}, ${name}. Let's make today count.`;
+}
 
+function getStreakBlurb(streakDays) {
+    if (streakDays === 0) return null;
+    if (streakDays === 1) return "First day down. The next one is the test.";
+    if (streakDays < 7)   return `${streakDays} days strong. Almost at your XP boost.`;
+    if (streakDays < 14)  return `${streakDays} days in. You're past the dabblers.`;
+    if (streakDays < 30)  return `${streakDays}-day streak. Top 5% of users this month.`;
+    if (streakDays < 100) return `${streakDays} days deep. This is who you are now.`;
+    return `${streakDays} days. Different breed.`;
+}
+
+function getTodaysMove({ todayMins, streakDays, dueFlashcards, urgentDays, urgentTitle, hour }) {
+    if (urgentDays !== null && urgentDays <= 3) {
+        return {
+            label: urgentDays === 0 ? "Today's deadline" : `In ${urgentDays} day${urgentDays === 1 ? '' : 's'}`,
+            title: urgentTitle ? `${urgentTitle} is coming up` : "You've got a deadline incoming",
+            sub: "Open the planner and let's get a plan together.",
+            cta: "See planner",
+            link: "Goals",
+            accent: "streak",
+            icon: AlertTriangle,
+        };
+    }
+    if (dueFlashcards >= 10) {
+        return {
+            label: "Cards waiting",
+            title: `${dueFlashcards} flashcards ready for review`,
+            sub: "Quick session and you're back on track with spaced rep.",
+            cta: "Review now",
+            link: "Study",
+            accent: "chart-3",
+            icon: Layers,
+        };
+    }
+    if (streakDays > 0 && todayMins === 0 && hour >= 18) {
+        return {
+            label: "Streak protection",
+            title: `Quick session keeps your ${streakDays}-day streak alive`,
+            sub: `${24 - hour} hours left — a Pomodoro is all it takes.`,
+            cta: "Start a Pomodoro",
+            link: "Study",
+            accent: "streak",
+            icon: Timer,
+        };
+    }
+    if (todayMins === 0) {
+        return {
+            label: "Easiest start",
+            title: "A 25-minute Pomodoro is the easiest win today",
+            sub: "Show up, stay focused, walk away with momentum.",
+            cta: "Start a Pomodoro",
+            link: "Study",
+            accent: "primary",
+            icon: Timer,
+        };
+    }
+    if (todayMins < 60) {
+        return {
+            label: "Lock it in",
+            title: "Good start — let's test what you remember",
+            sub: "Active recall locks in what passive reading misses.",
+            cta: "Take a quiz",
+            link: "Quizzes",
+            accent: "xp",
+            icon: Brain,
+        };
+    }
+    return {
+        label: "Stack the win",
+        title: "You've got momentum — let's make it count",
+        sub: "Generate exam questions or hit your weak topics.",
+        cta: "Open AI tools",
+        link: "AITools",
+        accent: "chart-4",
+        icon: Sparkles,
+    };
+}
+
+const MOVE_THEME = {
+    primary:   { bg: "bg-primary/10",   border: "border-primary/25",   iconBg: "bg-primary/15",   iconText: "text-primary"   },
+    streak:    { bg: "bg-streak/10",    border: "border-streak/25",    iconBg: "bg-streak/15",    iconText: "text-streak"    },
+    xp:        { bg: "bg-xp/10",        border: "border-xp/25",        iconBg: "bg-xp/15",        iconText: "text-xp"        },
+    "chart-3": { bg: "bg-chart-3/10",   border: "border-chart-3/25",   iconBg: "bg-chart-3/15",   iconText: "text-chart-3"   },
+    "chart-4": { bg: "bg-chart-4/10",   border: "border-chart-4/25",   iconBg: "bg-chart-4/15",   iconText: "text-chart-4"   },
+};
+
+const URGENCY = {
+    today: { wrap: "bg-streak/10 border-streak/25 hover:bg-streak/15", iconBg: "bg-streak/20",  iconText: "text-streak",  badge: "bg-streak/20 text-streak"   },
+    soon:  { wrap: "bg-xp/10 border-xp/25 hover:bg-xp/15",             iconBg: "bg-xp/20",      iconText: "text-xp",      badge: "bg-xp/20 text-xp"           },
+    later: { wrap: "bg-secondary border-border hover:bg-secondary/70", iconBg: "bg-chart-3/15", iconText: "text-chart-3", badge: "bg-chart-3/15 text-chart-3" },
+};
+function urgencyKey(daysAway) {
+    if (daysAway <= 1) return "today";
+    if (daysAway <= 5) return "soon";
+    return "later";
+}
+
+// Avatar token color, deterministic from name (matches Friends page)
+const AVATAR_COLORS = ["bg-chart-3", "bg-chart-4", "bg-primary", "bg-xp", "bg-streak"];
+function avatarColor(name) {
+    const c = (name || "?").charCodeAt(0) || 0;
+    return AVATAR_COLORS[c % AVATAR_COLORS.length];
+}
+function initials(name) {
+    return (name || "?").split(" ").map(w => w[0]).join("").slice(0, 2).toUpperCase();
+}
+
+// ─── Component ────────────────────────────────────────────────────────────────
 export default function Dashboard() {
     const [user, setUser] = useState(null);
     const [userProfile, setUserProfile] = useState(null);
@@ -102,6 +202,7 @@ export default function Dashboard() {
     const [assessments, setAssessments] = useState([]);
     const [flashcardReminders, setFlashcardReminders] = useState([]);
     const [plannerReminders, setPlannerReminders] = useState([]);
+    const [leaderboard, setLeaderboard] = useState([]);
     const [isLoading, setIsLoading] = useState(true);
     const [showStudyIntent, setShowStudyIntent] = useState(false);
 
@@ -109,7 +210,7 @@ export default function Dashboard() {
         try {
             const today = format(new Date(), 'yyyy-MM-dd');
             const in14 = format(new Date(Date.now() + 14 * 24 * 60 * 60 * 1000), 'yyyy-MM-dd');
-            const [profileData, sessionsData, techniquesData, quizData, assessmentData, flashcardData, plannerData] = await Promise.all([
+            const [profileData, sessionsData, techniquesData, quizData, assessmentData, flashcardData, plannerData, lbData] = await Promise.all([
                 base44.entities.UserProfile.filter({ created_by: userEmail }).catch(() => []),
                 base44.entities.StudySession.filter({ created_by: userEmail }, "-date", 30).catch(() => []),
                 base44.entities.StudyTechnique.filter({ created_by: userEmail }, "-date").catch(() => []),
@@ -117,6 +218,7 @@ export default function Dashboard() {
                 base44.entities.SubjectAssessment.filter({ created_by: userEmail, is_completed: false }, "due_date", 10).catch(() => []),
                 base44.entities.Flashcard.filter({ created_by: userEmail, is_active: true }, "nextReviewDate").catch(() => []),
                 base44.entities.StudyPlan.filter({ created_by: userEmail, is_completed: false, date: { $gte: today, $lte: in14 } }, "date", 8).catch(() => []),
+                base44.entities.Leaderboard.list('-total_xp', 200).catch(() => []),
             ]);
 
             let profile = profileData[0] || null;
@@ -127,10 +229,25 @@ export default function Dashboard() {
                 }).catch(() => null);
             }
 
+            // Self-heal: if the leaderboard knows about more XP than the
+            // profile (because the profile was wiped/corrupted), restore it.
+            // XP is strictly additive — taking the max is always safe.
+            if (profile) {
+                const result = await reconcileUserXP({ email: userEmail }, profile).catch(() => null);
+                if (result?.reconciled) {
+                    profile = {
+                        ...profile,
+                        total_xp:  result.correctTotalXp,
+                        season_xp: result.correctSeasonXp,
+                    };
+                }
+            }
+
             setUserProfile(profile);
             setStudySessions(sessionsData || []);
             setStudyTechniques(techniquesData || []);
             setQuizAttempts(quizData || []);
+            setLeaderboard((lbData || []).filter(e => (e.total_xp || 0) > 0));
 
             const upcoming = (assessmentData || []).filter(a => {
                 const days = differenceInDays(parseISO(a.due_date), new Date());
@@ -192,17 +309,23 @@ export default function Dashboard() {
     }, [user]);
 
     const todaysStudyTime = useMemo(() => {
-        const today = format(new Date(), 'yyyy-MM-dd');
-        const s = studySessions.filter(s => s.date && format(new Date(s.date), 'yyyy-MM-dd') === today).reduce((a, s) => a + (s.duration_minutes || 0), 0);
-        const t = studyTechniques.filter(s => s.date && format(new Date(s.date), 'yyyy-MM-dd') === today).reduce((a, s) => a + (s.session_duration || 0), 0);
-        return s + t;
+        const sum = (arr, key) => arr
+            .filter(s => s.date && isToday(new Date(s.date)))
+            .reduce((a, s) => a + (s[key] || 0), 0);
+        return sum(studySessions, 'duration_minutes') + sum(studyTechniques, 'session_duration');
+    }, [studySessions, studyTechniques]);
+
+    const studiedYesterday = useMemo(() => {
+        return studySessions.some(s => s.date && isYesterday(new Date(s.date)))
+            || studyTechniques.some(s => s.date && isYesterday(new Date(s.date)));
     }, [studySessions, studyTechniques]);
 
     const weeklyStudyTime = useMemo(() => {
         const weekStart = startOfWeek(new Date());
-        const s = studySessions.filter(s => s.date && new Date(s.date) >= weekStart).reduce((a, s) => a + (s.duration_minutes || 0), 0);
-        const t = studyTechniques.filter(s => s.date && new Date(s.date) >= weekStart).reduce((a, s) => a + (s.session_duration || 0), 0);
-        return s + t;
+        const sum = (arr, key) => arr
+            .filter(s => s.date && new Date(s.date) >= weekStart)
+            .reduce((a, s) => a + (s[key] || 0), 0);
+        return sum(studySessions, 'duration_minutes') + sum(studyTechniques, 'session_duration');
     }, [studySessions, studyTechniques]);
 
     const avgQuizScore = useMemo(() => {
@@ -211,384 +334,643 @@ export default function Dashboard() {
         return Math.round(recent.reduce((a, q) => a + (q.score || 0), 0) / recent.length);
     }, [quizAttempts]);
 
-    const totalReminders = assessments.length + flashcardReminders.length + plannerReminders.length;
+    const dueFlashcardCount = useMemo(
+        () => flashcardReminders.reduce((a, d) => a + d.count, 0),
+        [flashcardReminders]
+    );
+
+    const nextDeadline = useMemo(() => {
+        const all = [
+            ...assessments.map(a => ({ days: differenceInDays(parseISO(a.due_date), new Date()), title: a.title })),
+            ...plannerReminders.map(e => ({ days: differenceInDays(parseISO(e.date), new Date()), title: e.title })),
+        ].filter(x => x.days >= 0).sort((a, b) => a.days - b.days);
+        return all[0] || null;
+    }, [assessments, plannerReminders]);
+
+    // Rank computation: find position + 3 rivals above + 1 below for context
+    const rankInfo = useMemo(() => {
+        if (!leaderboard.length || !user) return null;
+        const myIdx = leaderboard.findIndex(e => e.user_email === user.email);
+        const myRank = myIdx >= 0 ? myIdx + 1 : null;
+        const myEntry = myIdx >= 0 ? leaderboard[myIdx] : null;
+        const myXP = myEntry?.total_xp || userProfile?.total_xp || 0;
+
+        // Rivals above (closest 3)
+        let rivals = [];
+        if (myIdx > 0) {
+            const start = Math.max(0, myIdx - 3);
+            rivals = leaderboard.slice(start, myIdx).map((e, i) => ({
+                ...e,
+                rank: start + i + 1,
+                gap: (e.total_xp || 0) - myXP,
+            }));
+        } else if (myIdx === -1 || myIdx >= 50) {
+            // Not ranked or way down — show top 3 as aspirational
+            rivals = leaderboard.slice(0, 3).map((e, i) => ({
+                ...e,
+                rank: i + 1,
+                gap: (e.total_xp || 0) - myXP,
+            }));
+        }
+
+        // One below for context
+        const below = myIdx >= 0 && myIdx < leaderboard.length - 1
+            ? { ...leaderboard[myIdx + 1], rank: myIdx + 2, gap: (leaderboard[myIdx + 1].total_xp || 0) - myXP }
+            : null;
+
+        return { myRank, myXP, myEntry, rivals, below, total: leaderboard.length };
+    }, [leaderboard, user, userProfile]);
+
     const xp = userProfile?.total_xp || 0;
     const streakDays = userProfile?.streak_days || 0;
-    const firstName = userProfile?.username || user?.full_name?.split(' ')[0] || 'there';
+    const firstName = userProfile?.username || user?.full_name?.split(' ')[0] || 'friend';
     const goalHours = userProfile?.weekly_study_goal_hours || 20;
     const weeklyPct = Math.min(100, Math.round((weeklyStudyTime / (goalHours * 60)) * 100));
+    const totalReminders = assessments.length + flashcardReminders.length + plannerReminders.length;
+
+    const hour = new Date().getHours();
+    const coachLine = getCoachLine({
+        name: firstName,
+        hour,
+        streakDays,
+        todayMins: todaysStudyTime,
+        studiedYesterday,
+        dueFlashcards: dueFlashcardCount,
+        urgentDays: nextDeadline?.days ?? null,
+    });
+    const streakBlurb = getStreakBlurb(streakDays);
+    const multiplier = getStreakMultiplier(streakDays);
+    const milestone = getNextStreakMilestone(streakDays);
+    const move = getTodaysMove({
+        todayMins: todaysStudyTime,
+        streakDays,
+        dueFlashcards: dueFlashcardCount,
+        urgentDays: nextDeadline?.days ?? null,
+        urgentTitle: nextDeadline?.title ?? null,
+        hour,
+    });
+    const moveTheme = MOVE_THEME[move.accent];
+    const MoveIcon = move.icon;
+
+    const hasGoal = !!(userProfile?.goal_atar || userProfile?.goal_course_name);
+    const onboardingTasks = userProfile?.onboarding_tasks || {};
+    const onboardingComplete = onboardingTasks.username_set && onboardingTasks.subjects_selected && onboardingTasks.goals_set;
+    const showOnboarding = userProfile && !userProfile.onboarding_completed && !onboardingComplete;
 
     if (isLoading) {
         return (
-            <div className="min-h-screen flex items-center justify-center">
+            <div className="min-h-screen flex items-center justify-center bg-background">
                 <div className="text-center">
-                    <div className="w-12 h-12 border-4 border-purple-200 border-t-purple-600 rounded-full animate-spin mx-auto mb-4" />
-                    <p className="text-gray-500 font-medium">Loading your dashboard...</p>
+                    <div className="w-10 h-10 border-4 border-primary/20 border-t-primary rounded-full animate-spin mx-auto mb-3" />
+                    <p className="text-muted-foreground font-medium text-sm">Loading your dashboard…</p>
                 </div>
             </div>
         );
     }
 
     return (
-        <div className="min-h-screen bg-gray-50">
+        <div className="min-h-screen bg-background">
             <AnimatePresence>
                 {showStudyIntent && (
-                    <StudyIntentModal
-                        firstName={firstName}
-                        onDismiss={() => setShowStudyIntent(false)}
-                    />
+                    <StudyIntentModal firstName={firstName} onDismiss={() => setShowStudyIntent(false)} />
                 )}
             </AnimatePresence>
 
-            <div className="w-full px-4 lg:px-8 py-6 space-y-6 max-w-[1800px] mx-auto">
+            <div className="w-full px-4 lg:px-8 py-6 lg:py-10 max-w-6xl mx-auto space-y-6 lg:space-y-8">
 
-                {/* ── HERO ──────────────────────────────────────────────────── */}
-                <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4 }}
-                    className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-slate-800 via-slate-900 to-slate-800 p-5 lg:p-8 shadow-xl border border-slate-700/50">
-                    <div className="absolute -top-16 -right-16 w-64 h-64 bg-white/5 rounded-full blur-3xl pointer-events-none" />
-                    <div className="absolute -bottom-10 -left-10 w-48 h-48 bg-slate-600/30 rounded-full blur-3xl pointer-events-none" />
-
-                    <div className="relative z-10">
-                        <div className="flex items-center gap-3 mb-2">
-                            <p className="text-white/60 text-sm">{format(new Date(), 'EEEE, MMMM d')}</p>
-                            <HelpButton page="Dashboard" className="bg-white/20 border-white/30 text-white hover:bg-white/30 hover:text-white" />
-                        </div>
-                        <h1 className="text-2xl lg:text-3xl font-black text-white tracking-tight mb-1.5">
-                            {getGreeting()}, {firstName} 👋
-                        </h1>
-                        <p className="text-white/75 text-sm mb-4">
-                            {todaysStudyTime > 0
-                                ? `You've studied ${formatStudyTime(todaysStudyTime)} today — keep the momentum going!`
-                                : "What are you studying today? Pick a section below to get started."}
-                        </p>
-
-                        {/* Stat pills */}
-                        <div className="flex flex-wrap gap-3">
+                {/* ── COACH STRIP ─────────────────────────────────────── */}
+                <motion.section initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.35 }}>
+                    <div className="flex items-center justify-between mb-3">
+                        <div className="flex items-center gap-2 text-xs">
+                            <span className="font-bold text-muted-foreground uppercase tracking-wider">{format(new Date(), 'EEE · MMM d')}</span>
                             {streakDays > 0 && (
-                                <div className="flex items-center gap-2 bg-white/20 backdrop-blur-sm border border-white/30 rounded-full px-4 py-2">
-                                    <Flame className="w-4 h-4 text-orange-300" />
-                                    <span className="text-white font-bold text-sm">{streakDays}d streak</span>
-                                </div>
+                                <>
+                                    <span className="text-muted-foreground/40">·</span>
+                                    <span className="inline-flex items-center gap-1 font-extrabold text-streak">
+                                        <Flame className="w-3.5 h-3.5" /> {streakDays}d streak
+                                    </span>
+                                </>
                             )}
-                            <div className="flex items-center gap-2 bg-white/20 backdrop-blur-sm border border-white/30 rounded-full px-4 py-2">
-                                <Clock className="w-4 h-4 text-emerald-300" />
-                                <span className="text-white font-bold text-sm">{todaysStudyTime > 0 ? formatStudyTime(todaysStudyTime) : "0m"} today</span>
-                            </div>
-                            <div className="flex items-center gap-2 bg-white/20 backdrop-blur-sm border border-white/30 rounded-full px-4 py-2">
-                                <Zap className="w-4 h-4 text-yellow-300" />
-                                <span className="text-white font-bold text-sm">{xp.toLocaleString()} XP</span>
-                            </div>
-                            {avgQuizScore != null && (
-                                <div className="flex items-center gap-2 bg-white/20 backdrop-blur-sm border border-white/30 rounded-full px-4 py-2">
-                                    <BarChart3 className="w-4 h-4 text-pink-300" />
-                                    <span className="text-white font-bold text-sm">Avg Quiz: {avgQuizScore}%</span>
-                                </div>
+                            {rankInfo?.myRank && (
+                                <>
+                                    <span className="text-muted-foreground/40">·</span>
+                                    <span className="inline-flex items-center gap-1 font-extrabold text-xp">
+                                        <Trophy className="w-3.5 h-3.5" /> #{rankInfo.myRank}
+                                    </span>
+                                </>
                             )}
                         </div>
+                        <HelpButton page="Dashboard" />
                     </div>
-                </motion.div>
+                    <h1 className="font-display text-2xl sm:text-3xl lg:text-4xl font-extrabold tracking-tight text-foreground leading-[1.1]">
+                        {coachLine}
+                    </h1>
+                </motion.section>
 
-                {/* ── ALERTS / REMINDERS ────────────────────────────────────── */}
-                {totalReminders > 0 && (
-                    <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.05 }}>
-                        <div className="bg-white border border-orange-100 rounded-2xl p-5 shadow-sm">
-                            <div className="flex items-center gap-2 mb-4">
-                                <AlertCircle className="w-5 h-5 text-orange-500" />
-                                <h2 className="font-bold text-gray-900">Needs your attention</h2>
-                                <Badge className="bg-orange-100 text-orange-700 border-0 text-xs ml-1">{totalReminders}</Badge>
-                            </div>
-                            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
-                                {flashcardReminders.map((deck, i) => (
-                                    <Link key={i} to={createPageUrl("Study")}>
-                                        <div className="flex items-center gap-3 p-3 rounded-xl bg-violet-50 hover:bg-violet-100 transition-colors cursor-pointer border border-violet-100">
-                                            <span className="text-lg">🃏</span>
-                                            <div className="flex-1 min-w-0">
-                                                <p className="font-semibold text-sm text-gray-900 truncate">{deck.subject}</p>
-                                                <p className="text-xs text-violet-600">{deck.count} flashcards due</p>
-                                            </div>
-                                            <ChevronRight className="w-4 h-4 text-violet-400 flex-shrink-0" />
+                {/* ── HERO ROW: Streak (2/3) + Today snapshot (1/3) ──── */}
+                <motion.section
+                    initial={{ opacity: 0, y: 12 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: 0.05, duration: 0.4 }}
+                    className="grid grid-cols-1 lg:grid-cols-3 gap-5 lg:gap-6"
+                >
+                    {/* Streak hero */}
+                    <div className="lg:col-span-2">
+                        {streakDays > 0 ? (
+                            <div className="relative overflow-hidden rounded-3xl bg-streak/10 border-2 border-streak/25 p-6 lg:p-8 h-full">
+                                <Flame className="absolute -top-6 -right-6 w-32 h-32 text-streak/10 pointer-events-none" />
+                                <div className="relative grid grid-cols-1 sm:grid-cols-5 gap-5 items-center">
+                                    <div className="sm:col-span-3">
+                                        <p className="stat-label text-streak/80 mb-1">Day streak</p>
+                                        <div className="flex items-baseline gap-3">
+                                            <span
+                                                className="font-display font-extrabold text-streak leading-none"
+                                                style={{ fontSize: 'clamp(3.5rem, 10vw, 6rem)' }}
+                                            >
+                                                {streakDays}
+                                            </span>
+                                            <span className="font-display font-extrabold text-streak/50 text-2xl lg:text-3xl">
+                                                {streakDays === 1 ? 'day' : 'days'}
+                                            </span>
                                         </div>
-                                    </Link>
-                                ))}
-                                {plannerReminders.map((ev, i) => {
-                                    const days = differenceInDays(parseISO(ev.date), new Date());
-                                    const EVENT_EMOJIS = { SAC: '📋', Exam: '📝', Test: '✏️', Assignment: '📄', Oral: '🎤', Folio: '🗂️', Performance: '🎭' };
-                                    return (
-                                        <Link key={`plan-${ev.id}`} to={createPageUrl("Goals")}>
-                                            <div className={`flex items-center gap-3 p-3 rounded-xl border transition-colors cursor-pointer ${days <= 1 ? 'bg-red-50 border-red-100 hover:bg-red-100' : 'bg-orange-50 border-orange-100 hover:bg-orange-100'}`}>
-                                                <span className="text-lg">{EVENT_EMOJIS[ev.event_type] || '📌'}</span>
-                                                <div className="flex-1 min-w-0">
-                                                    <p className="font-semibold text-sm text-gray-900 truncate">{ev.title}</p>
-                                                    <p className="text-xs text-gray-500">{ev.event_type}</p>
+                                        {streakBlurb && (
+                                            <p className="text-foreground text-sm lg:text-base mt-2 max-w-md font-medium leading-snug">
+                                                {streakBlurb}
+                                            </p>
+                                        )}
+                                    </div>
+                                    <div className="sm:col-span-2 grid grid-cols-2 sm:grid-cols-1 gap-3">
+                                        <div className="bg-surface rounded-xl p-3 border-2 border-streak/15">
+                                            <p className="stat-label">XP boost</p>
+                                            <p className="font-display font-extrabold text-streak text-2xl mt-0.5 leading-none">{multiplier}</p>
+                                        </div>
+                                        {milestone ? (
+                                            <div className="bg-surface rounded-xl p-3 border-2 border-border">
+                                                <p className="stat-label">Next jump</p>
+                                                <p className="font-bold text-foreground text-sm mt-0.5">
+                                                    {milestone.away}d <span className="text-muted-foreground/60">→</span> {milestone.mult}
+                                                </p>
+                                                <div className="h-1 bg-secondary rounded-full mt-1.5 overflow-hidden">
+                                                    <motion.div
+                                                        className="h-full bg-streak rounded-full"
+                                                        initial={{ width: 0 }}
+                                                        animate={{ width: `${((milestone.at - milestone.away) / milestone.at) * 100}%` }}
+                                                        transition={{ duration: 0.9, delay: 0.5 }}
+                                                    />
                                                 </div>
-                                                <Badge className={`border-0 text-xs font-bold flex-shrink-0 ${days === 0 ? 'bg-red-600 text-white' : days <= 1 ? 'bg-red-100 text-red-700' : 'bg-orange-100 text-orange-700'}`}>
-                                                    {days === 0 ? 'Today' : days === 1 ? 'Tomorrow' : `${days}d`}
-                                                </Badge>
                                             </div>
-                                        </Link>
-                                    );
-                                })}
-                                {assessments.slice(0, 3).map((a) => {
-                                    const days = differenceInDays(parseISO(a.due_date), new Date());
-                                    return (
-                                        <div key={a.id} className={`flex items-center gap-3 p-3 rounded-xl border ${days <= 1 ? 'bg-red-50 border-red-100' : days <= 5 ? 'bg-orange-50 border-orange-100' : 'bg-blue-50 border-blue-100'}`}>
-                                            <span className="text-lg">📅</span>
-                                            <div className="flex-1 min-w-0">
-                                                <p className="font-semibold text-sm text-gray-900 truncate">{a.title}</p>
-                                                <p className="text-xs text-gray-500">{a.subject_name}</p>
+                                        ) : (
+                                            <div className="bg-surface rounded-xl p-3 border-2 border-border">
+                                                <p className="stat-label">Status</p>
+                                                <p className="font-bold text-streak text-sm mt-0.5">Maxed at 2.5×</p>
                                             </div>
-                                            <Badge className={`border-0 text-xs font-bold flex-shrink-0 ${days <= 1 ? 'bg-red-100 text-red-700' : days <= 5 ? 'bg-orange-100 text-orange-700' : 'bg-blue-100 text-blue-700'}`}>
-                                                {days === 0 ? 'Today' : `${days}d`}
-                                            </Badge>
-                                        </div>
-                                    );
-                                })}
-                            </div>
-                        </div>
-                    </motion.div>
-                )}
-
-                {/* ── HUB SECTIONS ──────────────────────────────────────────── */}
-                <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
-                    {HUB_SECTIONS.map((section, sIdx) => (
-                        <motion.div
-                            key={section.id}
-                            initial={{ opacity: 0, y: 12 }}
-                            animate={{ opacity: 1, y: 0 }}
-                            transition={{ delay: 0.08 + sIdx * 0.06 }}
-                            className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden"
-                        >
-                            {/* Section header */}
-                            <div className={`flex items-center gap-2.5 px-4 py-3 bg-gradient-to-r ${section.color}`}>
-                                <div className="w-7 h-7 rounded-lg bg-white/20 flex items-center justify-center">
-                                    <section.icon className="w-4 h-4 text-white" />
-                                </div>
-                                <div>
-                                    <h2 className="font-bold text-white text-sm leading-tight">{section.title}</h2>
-                                    <p className="text-white/70 text-xs hidden sm:block">{section.subtitle}</p>
+                                        )}
+                                    </div>
                                 </div>
                             </div>
-
-                            {/* Action rows */}
-                            <div className="p-3 space-y-1.5">
-                                {section.actions.map((action, aIdx) => (
-                                    <Link key={aIdx} to={createPageUrl(action.link)}>
-                                        <motion.div
-                                            whileHover={{ x: 2 }}
-                                            whileTap={{ scale: 0.99 }}
-                                            className={`group flex items-center gap-3 px-3 py-2.5 rounded-xl ${section.lightBg} border ${section.border} hover:shadow-sm transition-all duration-150 cursor-pointer`}
-                                        >
-                                            <span className="text-lg leading-none">{action.emoji}</span>
-                                            <div className="flex-1 min-w-0">
-                                                <p className="font-semibold text-gray-900 text-sm leading-tight">{action.label}</p>
-                                                <p className="text-gray-500 text-xs">{action.desc}</p>
-                                            </div>
-                                            <ChevronRight className="w-3.5 h-3.5 text-gray-400 flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity" />
-                                        </motion.div>
-                                    </Link>
-                                ))}
-                            </div>
-                        </motion.div>
-                    ))}
-                </div>
-
-                {/* ── PROGRESS ROW ──────────────────────────────────────────── */}
-                <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.35 }}>
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
-
-                        {/* XP / Level */}
-                        <div className="md:col-span-2 bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
-                            <div className="flex items-center justify-between mb-4">
-                                <div className="flex items-center gap-2">
-                                    <Trophy className="w-5 h-5 text-amber-500" />
-                                    <h2 className="font-bold text-gray-900">Rank & XP</h2>
-                                </div>
-                                <Link to={createPageUrl("Ranked")}>
-                                    <Button variant="ghost" size="sm" className="text-purple-600 text-xs gap-1 rounded-xl">
-                                        Full Rank <ArrowRight className="w-3 h-3" />
-                                    </Button>
+                        ) : (
+                            <div className="rounded-3xl bg-secondary/40 border-2 border-dashed border-border p-6 lg:p-8 text-center h-full flex flex-col items-center justify-center">
+                                <Flame className="w-12 h-12 text-muted-foreground/30 mb-3" />
+                                <h2 className="font-display font-extrabold text-foreground text-xl lg:text-2xl mb-2">
+                                    Ready to start a streak?
+                                </h2>
+                                <p className="text-muted-foreground text-sm max-w-sm mx-auto mb-5">
+                                    A study session today gets you started. Show up tomorrow to keep it.
+                                </p>
+                                <Link to={createPageUrl("Study")}>
+                                    <Button><Play className="w-4 h-4" /> Start your first session</Button>
                                 </Link>
                             </div>
-                            <XPLevelCard totalXP={xp} streakDays={streakDays} compact />
-                        </div>
+                        )}
+                    </div>
 
-                        {/* Weekly goal */}
-                        <div className="bg-white border border-gray-100 rounded-2xl p-5 shadow-sm flex flex-col justify-between">
-                            <div className="flex items-center gap-2 mb-3">
-                                <Zap className="w-5 h-5 text-amber-500" />
-                                <h2 className="font-bold text-gray-900">Weekly Goal</h2>
+                    {/* Today snapshot */}
+                    <div className="lg:col-span-1">
+                        <div className="rounded-3xl bg-primary/10 border-2 border-primary/25 p-6 h-full flex flex-col">
+                            <div className="flex items-center gap-2 mb-2">
+                                <Clock className="w-4 h-4 text-primary" />
+                                <p className="stat-label text-primary/80">Today</p>
                             </div>
-                            <div>
-                                <div className="flex items-end justify-between mb-2">
-                                    <span className="text-2xl font-black text-gray-900">{formatStudyTime(weeklyStudyTime)}</span>
-                                    <span className="text-sm text-gray-400">/ {goalHours}h</span>
+                            <p className="font-display font-extrabold text-foreground leading-none" style={{ fontSize: 'clamp(2.25rem, 5.5vw, 3rem)' }}>
+                                {fmtTime(todaysStudyTime)}
+                            </p>
+                            <p className="text-xs text-muted-foreground mt-2 leading-snug">
+                                {todaysStudyTime === 0
+                                    ? "Nothing logged yet — let's change that."
+                                    : todaysStudyTime >= 90
+                                        ? "Solid day so far. Keep cooking."
+                                        : todaysStudyTime >= 30
+                                            ? "Good start — stack another?"
+                                            : "Just getting started."}
+                            </p>
+                            <div className="space-y-2.5 mt-4 pt-4 border-t-2 border-primary/15">
+                                <div>
+                                    <div className="flex items-baseline justify-between mb-1">
+                                        <p className="text-xs font-bold text-muted-foreground">This week</p>
+                                        <p className="text-xs font-bold text-foreground">{fmtTime(weeklyStudyTime)} <span className="text-muted-foreground/60">/ {goalHours}h</span></p>
+                                    </div>
+                                    <div className="h-1.5 bg-primary/15 rounded-full overflow-hidden">
+                                        <motion.div
+                                            initial={{ width: 0 }}
+                                            animate={{ width: `${weeklyPct}%` }}
+                                            transition={{ duration: 0.9, delay: 0.3 }}
+                                            className={`h-full rounded-full ${weeklyPct >= 100 ? 'bg-primary' : 'bg-xp'}`}
+                                        />
+                                    </div>
                                 </div>
-                                <div className="h-3 bg-gray-100 rounded-full overflow-hidden mb-2">
-                                    <motion.div
-                                        initial={{ width: 0 }}
-                                        animate={{ width: `${weeklyPct}%` }}
-                                        transition={{ duration: 0.8, ease: "easeOut", delay: 0.5 }}
-                                        className={`h-full rounded-full ${weeklyPct >= 100 ? 'bg-gradient-to-r from-emerald-500 to-teal-500' : 'bg-gradient-to-r from-amber-400 to-orange-500'}`}
-                                    />
-                                </div>
-                                <div className="flex justify-between">
-                                    <span className="text-xs text-gray-400">{weeklyPct}% done</span>
-                                    {weeklyPct >= 100 && <span className="text-xs text-emerald-600 font-bold">🎉 Goal hit!</span>}
+                                <div className="flex items-baseline justify-between">
+                                    <p className="text-xs font-bold text-muted-foreground">Avg quiz</p>
+                                    <p className="text-xs font-bold text-foreground">{avgQuizScore != null ? `${avgQuizScore}%` : '—'}</p>
                                 </div>
                             </div>
                             <Link to={createPageUrl("Study")} className="mt-4">
-                                <Button size="sm" className="w-full bg-gradient-to-r from-emerald-500 to-teal-600 hover:opacity-90 rounded-xl text-xs font-bold">
-                                    <Play className="w-3.5 h-3.5 mr-1" /> Study Now
+                                <Button size="sm" className="w-full"><Play className="w-3.5 h-3.5" /> Study now</Button>
+                            </Link>
+                        </div>
+                    </div>
+                </motion.section>
+
+                {/* ── RANK & RIVALS ───────────────────────────────────── */}
+                {rankInfo && (rankInfo.rivals.length > 0 || rankInfo.below) && (
+                    <motion.section
+                        initial={{ opacity: 0, y: 12 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ delay: 0.1 }}
+                        className="rounded-3xl bg-xp/5 border-2 border-xp/20 p-6 lg:p-7"
+                    >
+                        <div className="flex items-start justify-between mb-5 flex-wrap gap-3">
+                            <div className="flex items-center gap-3">
+                                <div className="w-11 h-11 rounded-xl bg-xp/15 flex items-center justify-center flex-shrink-0">
+                                    <Trophy className="w-5 h-5 text-xp" />
+                                </div>
+                                <div>
+                                    <p className="stat-label text-xp/80 mb-0.5">Global rank</p>
+                                    <h2 className="font-display font-extrabold text-foreground text-xl lg:text-2xl leading-tight">
+                                        {rankInfo.myRank ? (
+                                            <>
+                                                #{rankInfo.myRank}
+                                                <span className="text-muted-foreground/50 text-base font-bold ml-2">
+                                                    of {rankInfo.total.toLocaleString()}
+                                                </span>
+                                            </>
+                                        ) : (
+                                            "Unranked — keep earning XP"
+                                        )}
+                                    </h2>
+                                </div>
+                            </div>
+                            <Link to={createPageUrl("Ranked")}>
+                                <Button variant="outline" size="sm">
+                                    See full board <ArrowRight className="w-3.5 h-3.5" />
+                                </Button>
+                            </Link>
+                        </div>
+
+                        <div className="space-y-1.5">
+                            {rankInfo.rivals.length > 0 && (
+                                <p className="stat-label mb-2">
+                                    {rankInfo.myRank && rankInfo.myRank <= 50 ? "Closest ahead of you" : "Top of the board"}
+                                </p>
+                            )}
+                            {rankInfo.rivals.map((r, i) => (
+                                <RankRow key={r.id || r.user_email || i} entry={r} isMe={false} userEmail={user?.email} />
+                            ))}
+                            {rankInfo.myEntry && (
+                                <RankRow entry={{ ...rankInfo.myEntry, rank: rankInfo.myRank, gap: 0 }} isMe={true} userEmail={user?.email} />
+                            )}
+                            {rankInfo.below && (
+                                <RankRow entry={rankInfo.below} isMe={false} userEmail={user?.email} below />
+                            )}
+                        </div>
+
+                        {rankInfo.rivals.length > 0 && rankInfo.rivals[rankInfo.rivals.length - 1] && rankInfo.myRank && rankInfo.myRank <= 50 && (
+                            <p className="text-sm text-muted-foreground mt-4 leading-snug">
+                                <span className="font-bold text-foreground">{fmtXP(rankInfo.rivals[rankInfo.rivals.length - 1].gap)} XP</span> from passing{' '}
+                                <span className="font-bold text-foreground">
+                                    {rankInfo.rivals[rankInfo.rivals.length - 1].is_anonymous && rankInfo.rivals[rankInfo.rivals.length - 1].user_email !== user?.email
+                                        ? `Anon #${(rankInfo.rivals[rankInfo.rivals.length - 1].id || '').slice(-4)}`
+                                        : (rankInfo.rivals[rankInfo.rivals.length - 1].username || rankInfo.rivals[rankInfo.rivals.length - 1].user_name || 'Student')}
+                                </span>.
+                            </p>
+                        )}
+                    </motion.section>
+                )}
+
+                {/* ── ONBOARDING NUDGE ────────────────────────────────── */}
+                {showOnboarding && (
+                    <motion.section
+                        initial={{ opacity: 0, y: 10 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        className="rounded-2xl bg-primary/10 border-2 border-primary/25 p-5 lg:p-6"
+                    >
+                        <div className="flex flex-col sm:flex-row sm:items-center gap-4">
+                            <div className="flex items-center gap-3 flex-1 min-w-0">
+                                <div className="w-11 h-11 rounded-xl bg-primary/20 flex items-center justify-center flex-shrink-0">
+                                    <Sparkles className="w-5 h-5 text-primary" />
+                                </div>
+                                <div>
+                                    <h3 className="font-display font-extrabold text-foreground text-base">
+                                        Quick setup. Five minutes.
+                                    </h3>
+                                    <p className="text-muted-foreground text-sm">
+                                        Tell us who you are and what you're chasing — we'll tailor everything to you.
+                                    </p>
+                                </div>
+                            </div>
+                            <div className="flex flex-wrap gap-2">
+                                {!onboardingTasks.username_set && (
+                                    <Link to={createPageUrl("Settings")}>
+                                        <Button size="sm" variant="outline"><CheckCircle2 className="w-3.5 h-3.5" /> Username</Button>
+                                    </Link>
+                                )}
+                                {!onboardingTasks.subjects_selected && (
+                                    <Link to={createPageUrl("Subjects")}>
+                                        <Button size="sm" variant="outline"><CheckCircle2 className="w-3.5 h-3.5" /> Subjects</Button>
+                                    </Link>
+                                )}
+                                {!onboardingTasks.goals_set && (
+                                    <Link to={createPageUrl("Goals")}>
+                                        <Button size="sm" variant="outline"><CheckCircle2 className="w-3.5 h-3.5" /> Goals</Button>
+                                    </Link>
+                                )}
+                            </div>
+                        </div>
+                    </motion.section>
+                )}
+
+                {/* ── REMINDERS ───────────────────────────────────────── */}
+                {totalReminders > 0 && (
+                    <motion.section
+                        initial={{ opacity: 0, y: 12 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ delay: 0.15 }}
+                    >
+                        <h2 className="font-display font-extrabold text-foreground text-lg lg:text-xl mb-3">
+                            On your radar
+                        </h2>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5">
+                            {assessments.slice(0, 3).map((a) => {
+                                const days = differenceInDays(parseISO(a.due_date), new Date());
+                                const u = URGENCY[urgencyKey(days)];
+                                return (
+                                    <Link key={a.id} to={createPageUrl("Goals")}>
+                                        <ReminderRow
+                                            icon={Target}
+                                            title={a.title}
+                                            subtitle={a.subject_name}
+                                            badge={days === 0 ? 'Today' : days === 1 ? 'Tomorrow' : `${days}d`}
+                                            theme={u}
+                                        />
+                                    </Link>
+                                );
+                            })}
+                            {plannerReminders.map((ev) => {
+                                const days = differenceInDays(parseISO(ev.date), new Date());
+                                const u = URGENCY[urgencyKey(days)];
+                                return (
+                                    <Link key={`pl-${ev.id}`} to={createPageUrl("Goals")}>
+                                        <ReminderRow
+                                            icon={FileQuestion}
+                                            title={ev.title}
+                                            subtitle={ev.event_type}
+                                            badge={days === 0 ? 'Today' : days === 1 ? 'Tomorrow' : `${days}d`}
+                                            theme={u}
+                                        />
+                                    </Link>
+                                );
+                            })}
+                            {flashcardReminders.map((deck, i) => (
+                                <Link key={`fc-${i}`} to={createPageUrl("Study")}>
+                                    <ReminderRow
+                                        icon={Layers}
+                                        title={deck.subject || 'Flashcards'}
+                                        subtitle={`${deck.count} cards due`}
+                                        badge="Now"
+                                        theme={URGENCY.soon}
+                                    />
+                                </Link>
+                            ))}
+                        </div>
+                    </motion.section>
+                )}
+
+                {/* ── TODAY'S MOVE (compact, single row) ──────────────── */}
+                <motion.section
+                    initial={{ opacity: 0, y: 12 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: 0.2 }}
+                >
+                    <div className={`rounded-2xl ${moveTheme.bg} border-2 ${moveTheme.border} p-5 lg:p-6`}>
+                        <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
+                            <div className={`w-12 h-12 rounded-xl ${moveTheme.iconBg} flex items-center justify-center flex-shrink-0`}>
+                                <MoveIcon className={`w-6 h-6 ${moveTheme.iconText}`} />
+                            </div>
+                            <div className="flex-1 min-w-0">
+                                <p className="stat-label mb-1">Today's move · {move.label}</p>
+                                <h2 className="font-display font-extrabold text-foreground text-base lg:text-lg leading-snug">
+                                    {move.title}
+                                </h2>
+                                <p className="text-muted-foreground text-sm mt-0.5">{move.sub}</p>
+                            </div>
+                            <Link to={createPageUrl(move.link)} className="w-full sm:w-auto flex-shrink-0">
+                                <Button className="w-full sm:w-auto">
+                                    {move.cta} <ArrowRight className="w-4 h-4" />
                                 </Button>
                             </Link>
                         </div>
                     </div>
-                </motion.div>
+                </motion.section>
 
-                {/* ── GOAL SNAPSHOT + RECENT SESSIONS ───────────────────────── */}
-                <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.42 }}>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-
-                        {/* ATAR / Goal */}
-                        <div className="bg-gradient-to-br from-indigo-50 to-violet-50 border border-indigo-100 rounded-2xl p-5">
-                            <div className="flex items-center justify-between mb-4">
-                                <div className="flex items-center gap-2">
-                                    <Target className="w-5 h-5 text-indigo-600" />
-                                    <h2 className="font-bold text-gray-900">Your Goal</h2>
-                                </div>
-                                <Link to={createPageUrl("Goals")}>
-                                    <Button variant="ghost" size="sm" className="text-indigo-600 text-xs gap-1 rounded-xl">
-                                        Manage <ChevronRight className="w-3 h-3" />
-                                    </Button>
-                                </Link>
-                            </div>
-                            {userProfile?.goal_atar || userProfile?.goal_course_name ? (
-                                <div className="space-y-3">
-                                    {userProfile.goal_atar && (
-                                        <div className="flex items-center gap-3 bg-white/70 rounded-xl p-3">
-                                            <div className="w-10 h-10 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-xl flex items-center justify-center flex-shrink-0">
-                                                <Award className="w-5 h-5 text-white" />
-                                            </div>
-                                            <div>
-                                                <p className="text-xs text-gray-500 font-medium">Target ATAR</p>
-                                                <p className="text-2xl font-black text-gray-900">{userProfile.goal_atar}</p>
-                                            </div>
-                                        </div>
-                                    )}
+                {/* ── GOAL POSTER + RECENT (3:2) ──────────────────────── */}
+                <motion.section
+                    initial={{ opacity: 0, y: 12 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: 0.25 }}
+                    className="grid grid-cols-1 md:grid-cols-5 gap-5 lg:gap-6"
+                >
+                    <div className="md:col-span-3">
+                        {hasGoal ? (
+                            <div className="relative overflow-hidden rounded-3xl bg-chart-3/10 border-2 border-chart-3/25 p-6 lg:p-8 h-full">
+                                <GraduationCap className="absolute -top-4 -right-4 w-32 h-32 text-chart-3/10 pointer-events-none" />
+                                <p className="stat-label text-chart-3/80 mb-2">Your shot at</p>
+                                <h2
+                                    className="font-display font-extrabold text-foreground leading-none mb-4"
+                                    style={{ fontSize: 'clamp(2.75rem, 7vw, 5rem)' }}
+                                >
+                                    {userProfile.goal_atar || '—'}
+                                </h2>
+                                <div className="space-y-1">
                                     {userProfile.goal_course_name && (
-                                        <div className="flex items-center gap-3 bg-white/70 rounded-xl p-3">
-                                            <div className="w-10 h-10 bg-gradient-to-br from-violet-500 to-fuchsia-600 rounded-xl flex items-center justify-center flex-shrink-0">
-                                                <GraduationCap className="w-5 h-5 text-white" />
-                                            </div>
-                                            <div className="flex-1 min-w-0">
-                                                <p className="text-xs text-gray-500 font-medium">Dream Course</p>
-                                                <p className="font-bold text-gray-900 text-sm truncate">{userProfile.goal_course_name}</p>
-                                                {userProfile.goal_university && <p className="text-xs text-gray-500 truncate">{userProfile.goal_university}</p>}
-                                            </div>
-                                        </div>
+                                        <p className="font-bold text-foreground text-base">{userProfile.goal_course_name}</p>
+                                    )}
+                                    {userProfile.goal_university && (
+                                        <p className="text-sm text-muted-foreground">at {userProfile.goal_university}</p>
                                     )}
                                 </div>
-                            ) : (
-                                <div className="text-center py-6">
-                                    <Target className="w-12 h-12 text-indigo-200 mx-auto mb-3" />
-                                    <p className="text-gray-500 text-sm mb-3">Set your ATAR target and dream course to stay motivated</p>
-                                    <Link to={createPageUrl("Goals")}>
-                                        <Button size="sm" className="bg-indigo-600 hover:bg-indigo-700 rounded-xl text-xs">Set Your Goal</Button>
-                                    </Link>
-                                </div>
-                            )}
-                        </div>
-
-                        {/* Recent sessions */}
-                        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
-                            <div className="flex items-center justify-between mb-4">
-                                <div className="flex items-center gap-2">
-                                    <BookOpen className="w-5 h-5 text-emerald-600" />
-                                    <h2 className="font-bold text-gray-900">Recent Sessions</h2>
-                                </div>
-                                <Link to={createPageUrl("Study")}>
-                                    <Button variant="ghost" size="sm" className="text-emerald-600 text-xs gap-1 rounded-xl">
-                                        Study <ArrowRight className="w-3 h-3" />
-                                    </Button>
+                                <Link to={createPageUrl("Goals")} className="inline-flex items-center gap-1 text-sm font-bold text-chart-3 hover:underline mt-5">
+                                    Edit goal <ArrowRight className="w-3.5 h-3.5" />
                                 </Link>
                             </div>
-                            {studySessions.length === 0 ? (
-                                <div className="text-center py-8">
-                                    <BookOpen className="w-10 h-10 text-gray-200 mx-auto mb-3" />
-                                    <p className="text-gray-400 text-sm mb-3">No sessions yet. Start studying!</p>
-                                    <Link to={createPageUrl("Study")}>
-                                        <Button size="sm" className="bg-emerald-600 hover:bg-emerald-700 rounded-xl text-xs">
-                                            <Play className="w-3.5 h-3.5 mr-1" /> Start Session
-                                        </Button>
-                                    </Link>
-                                </div>
-                            ) : (
-                                <div className="space-y-2">
-                                    {studySessions.slice(0, 4).map((session) => (
-                                        <div key={session.id} className="flex items-center gap-3 p-3 rounded-xl hover:bg-gray-50 transition-colors">
-                                            <div className="w-8 h-8 bg-emerald-100 rounded-xl flex items-center justify-center flex-shrink-0">
-                                                <BookOpen className="w-4 h-4 text-emerald-700" />
-                                            </div>
-                                            <div className="flex-1 min-w-0">
-                                                <p className="font-semibold text-gray-900 text-sm truncate">{session.subject}</p>
-                                                <p className="text-xs text-gray-400">{session.duration_minutes}min · {format(new Date(session.date), 'MMM d')}</p>
-                                            </div>
-                                            {session.productivity_rating && (
-                                                <div className="flex items-center gap-0.5 flex-shrink-0">
-                                                    {Array.from({ length: session.productivity_rating }).map((_, j) => (
-                                                        <Star key={j} className="w-3 h-3 fill-amber-400 text-amber-400" />
-                                                    ))}
-                                                </div>
-                                            )}
-                                        </div>
-                                    ))}
-                                </div>
-                            )}
-                        </div>
+                        ) : (
+                            <div className="rounded-3xl bg-secondary/30 border-2 border-dashed border-border p-6 lg:p-8 text-center h-full flex flex-col items-center justify-center">
+                                <Target className="w-12 h-12 text-muted-foreground/40 mb-3" />
+                                <h3 className="font-display font-extrabold text-foreground text-lg lg:text-xl mb-2">
+                                    What are you chasing?
+                                </h3>
+                                <p className="text-muted-foreground text-sm mb-4 max-w-xs">
+                                    Set your ATAR target and dream course — we'll help you get there.
+                                </p>
+                                <Link to={createPageUrl("Goals")}>
+                                    <Button>Set your goal</Button>
+                                </Link>
+                            </div>
+                        )}
                     </div>
-                </motion.div>
 
-                {/* ── SETUP CHECKLIST (onboarding) ──────────────────────────── */}
-                {userProfile && !userProfile.onboarding_completed && !(userProfile.onboarding_tasks?.username_set && userProfile.onboarding_tasks?.subjects_selected && userProfile.onboarding_tasks?.goals_set) && (
-                    <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}>
-                        <div className="bg-gradient-to-r from-amber-50 to-orange-50 border border-amber-200 rounded-2xl p-5">
-                            <div className="flex items-center gap-3 mb-3">
-                                <div className="w-9 h-9 bg-amber-100 rounded-xl flex items-center justify-center">
-                                    <Star className="w-5 h-5 text-amber-600" />
+                    <div className="md:col-span-2">
+                        <div className="flex items-center justify-between mb-4">
+                            <h3 className="font-display font-extrabold text-foreground text-lg lg:text-xl">Last sessions</h3>
+                            <Link to={createPageUrl("Study")} className="text-xs font-bold text-primary hover:underline">View all</Link>
+                        </div>
+                        {studySessions.length === 0 ? (
+                            <div className="flex flex-col items-center text-center gap-3 py-6">
+                                <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center">
+                                    <Brain className="w-5 h-5 text-primary" />
                                 </div>
                                 <div>
-                                    <h3 className="font-bold text-amber-900">Finish setting up your account</h3>
-                                    <p className="text-amber-700 text-sm">Complete these to unlock the full experience</p>
+                                    <p className="font-bold text-foreground text-sm">No sessions yet</p>
+                                    <p className="text-xs text-muted-foreground mt-0.5 max-w-[200px]">Knock out a quick session — it'll show up right here.</p>
                                 </div>
+                                <Link to={createPageUrl("Study")}>
+                                    <Button size="sm" className="gap-1.5">
+                                        <Brain className="w-3.5 h-3.5" />
+                                        Start a session
+                                    </Button>
+                                </Link>
                             </div>
-                            <div className="flex flex-wrap gap-2">
-                                {!userProfile.onboarding_tasks?.username_set && (
-                                    <Link to={createPageUrl("Settings")}>
-                                        <Button size="sm" className="bg-amber-500 hover:bg-amber-600 text-white rounded-xl text-xs gap-1">
-                                            <CheckCircle2 className="w-3.5 h-3.5" /> Set username
-                                        </Button>
-                                    </Link>
-                                )}
-                                {!userProfile.onboarding_tasks?.subjects_selected && (
-                                    <Link to={createPageUrl("Subjects")}>
-                                        <Button size="sm" className="bg-amber-500 hover:bg-amber-600 text-white rounded-xl text-xs gap-1">
-                                            <CheckCircle2 className="w-3.5 h-3.5" /> Add subjects
-                                        </Button>
-                                    </Link>
-                                )}
-                                {!userProfile.onboarding_tasks?.goals_set && (
-                                    <Link to={createPageUrl("Goals")}>
-                                        <Button size="sm" className="bg-amber-500 hover:bg-amber-600 text-white rounded-xl text-xs gap-1">
-                                            <CheckCircle2 className="w-3.5 h-3.5" /> Set goals
-                                        </Button>
-                                    </Link>
-                                )}
-                            </div>
-                        </div>
-                    </motion.div>
-                )}
+                        ) : (
+                            <ul className="space-y-3">
+                                {studySessions.slice(0, 4).map((s) => (
+                                    <li key={s.id} className="flex items-baseline justify-between gap-3 border-b border-border pb-3 last:border-0 last:pb-0">
+                                        <div className="min-w-0">
+                                            <p className="font-bold text-foreground text-sm truncate">{s.subject || 'Study'}</p>
+                                            <p className="text-xs text-muted-foreground">
+                                                {format(new Date(s.date), 'MMM d')} · {s.duration_minutes || 0}m
+                                            </p>
+                                        </div>
+                                        {s.productivity_rating && (
+                                            <div className="flex gap-0.5 flex-shrink-0">
+                                                {Array.from({ length: s.productivity_rating }).map((_, j) => (
+                                                    <Star key={j} className="w-3 h-3 fill-xp text-xp" />
+                                                ))}
+                                            </div>
+                                        )}
+                                    </li>
+                                ))}
+                            </ul>
+                        )}
+                    </div>
+                </motion.section>
+
+                {/* ── JUMP-TO RAIL ────────────────────────────────────── */}
+                <motion.section
+                    initial={{ opacity: 0, y: 12 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: 0.3 }}
+                    className="border-t-2 border-border pt-6"
+                >
+                    <p className="stat-label mb-3">Jump to</p>
+                    <div className="flex flex-wrap gap-2">
+                        {[
+                            { label: "Study",     icon: Brain,        link: "Study" },
+                            { label: "Quizzes",   icon: FileQuestion, link: "Quizzes" },
+                            { label: "AI Tools",  icon: Sparkles,     link: "AITools" },
+                            { label: "Goals",     icon: Target,       link: "Goals" },
+                            { label: "Ranked",    icon: Trophy,       link: "Ranked" },
+                            { label: "Subjects",  icon: BookOpen,     link: "Subjects" },
+                            { label: "Friends",   icon: Users,        link: "Friends" },
+                            { label: "Roadmap",   icon: Map,          link: "StudyRoadmap" },
+                            { label: "Compete",   icon: Swords,       link: "Competitions" },
+                            { label: "Analytics", icon: BarChart3,    link: "Analytics" },
+                        ].map((d) => (
+                            <Link key={d.link} to={createPageUrl(d.link)}>
+                                <div className="group flex items-center gap-2 px-3.5 py-2 rounded-xl bg-surface border-2 border-border hover:border-primary hover:bg-primary/5 transition-all">
+                                    <d.icon className="w-4 h-4 text-muted-foreground group-hover:text-primary transition-colors" />
+                                    <span className="text-sm font-bold text-foreground">{d.label}</span>
+                                </div>
+                            </Link>
+                        ))}
+                    </div>
+                </motion.section>
 
             </div>
+        </div>
+    );
+}
+
+// ─── Inline components ────────────────────────────────────────────────────────
+function ReminderRow({ icon: Icon, title, subtitle, badge, theme }) {
+    return (
+        <div className={`flex items-center gap-3 p-3 rounded-xl border-2 transition-all cursor-pointer ${theme.wrap}`}>
+            <div className={`w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0 ${theme.iconBg}`}>
+                <Icon className={`w-4 h-4 ${theme.iconText}`} />
+            </div>
+            <div className="flex-1 min-w-0">
+                <p className="font-bold text-foreground text-sm truncate">{title}</p>
+                <p className="text-xs text-muted-foreground truncate">{subtitle}</p>
+            </div>
+            {badge && <span className={`pill ${theme.badge} flex-shrink-0`}>{badge}</span>}
+        </div>
+    );
+}
+
+function RankRow({ entry, isMe, userEmail, below }) {
+    const display = entry.is_anonymous && entry.user_email !== userEmail
+        ? `Anon #${(entry.id || '').slice(-4)}`
+        : (entry.username || entry.user_name || 'Student');
+    const xpDisplay = fmtXP(entry.total_xp || 0);
+    const gapStr = entry.gap > 0
+        ? `+${fmtXP(entry.gap)}`
+        : entry.gap < 0
+            ? `${fmtXP(Math.abs(entry.gap))} below`
+            : 'You';
+
+    const RankIcon = entry.rank === 1 ? Crown : entry.rank === 2 ? Medal : entry.rank === 3 ? Medal : null;
+    const rankIconColor = entry.rank === 1 ? 'text-xp' : entry.rank === 2 ? 'text-muted-foreground' : entry.rank === 3 ? 'text-streak' : '';
+
+    return (
+        <div className={`flex items-center gap-3 p-3 rounded-xl border-2 transition-colors ${
+            isMe
+                ? 'bg-primary/10 border-primary'
+                : below
+                    ? 'bg-surface border-border opacity-70'
+                    : 'bg-surface border-border hover:border-xp/40'
+        }`}>
+            <div className={`flex items-center justify-center flex-shrink-0 w-10 ${isMe ? 'text-primary' : 'text-muted-foreground'} font-display font-extrabold text-lg`}>
+                #{entry.rank}
+            </div>
+            <div className={`w-9 h-9 rounded-lg ${avatarColor(display)} text-white flex items-center justify-center font-bold text-sm flex-shrink-0`}>
+                {RankIcon ? <RankIcon className={`w-4 h-4 ${rankIconColor === 'text-muted-foreground' ? 'text-white' : ''}`} /> : initials(display)}
+            </div>
+            <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2">
+                    <p className={`font-bold text-sm truncate ${isMe ? 'text-primary' : 'text-foreground'}`}>
+                        {isMe ? `${display} (you)` : display}
+                    </p>
+                    {entry.streak_days > 0 && (
+                        <span className="inline-flex items-center gap-0.5 text-xs font-bold text-streak flex-shrink-0">
+                            <Flame className="w-3 h-3" /> {entry.streak_days}
+                        </span>
+                    )}
+                </div>
+                <p className="text-xs text-muted-foreground truncate">{xpDisplay} XP</p>
+            </div>
+            {!isMe && entry.gap !== undefined && entry.gap !== 0 && (
+                <span className={`pill flex-shrink-0 ${entry.gap > 0 ? 'bg-xp/15 text-xp' : 'bg-secondary text-muted-foreground'}`}>
+                    <TrendingUp className="w-3 h-3" />
+                    {gapStr}
+                </span>
+            )}
         </div>
     );
 }

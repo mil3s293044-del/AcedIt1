@@ -1,10 +1,12 @@
 import React, { useState, useEffect } from "react";
+import { Link } from "react-router-dom";
+import { createPageUrl } from "@/utils";
 import { motion } from "framer-motion";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Globe, Users, Clock, Bell, Check, X, Flame, Zap, Trophy, Crown, Star } from "lucide-react";
+import { Globe, Users, Clock, Bell, Check, X, Flame, Zap, Trophy, Crown, Star, UserPlus } from "lucide-react";
 import { base44 } from "@/api/base44Client";
 import { useToast } from "@/components/ui/use-toast";
 import { getRankFromXP } from "@/components/shared/xpSystem";
@@ -254,10 +256,20 @@ export default function LeaderboardComponent() {
                     {friendsBoard.length > 0
                         ? <BoardList users={friendsBoard} currentUserEmail={currentUser?.email} metric="xp" />
                         : (
-                            <div className="bg-gray-50 rounded-xl p-12 text-center">
-                                <Users className="w-12 h-12 mx-auto mb-3 text-gray-300" />
-                                <h3 className="text-base font-semibold text-gray-800 mb-1">No Friends Yet</h3>
-                                <p className="text-gray-500 text-sm">Add friends to compete on the leaderboard!</p>
+                            <div className="bg-gray-50 rounded-xl p-12 flex flex-col items-center text-center gap-3">
+                                <div className="w-12 h-12 rounded-2xl bg-primary/10 flex items-center justify-center">
+                                    <Users className="w-6 h-6 text-primary" />
+                                </div>
+                                <div>
+                                    <h3 className="text-base font-semibold text-gray-800">No friends on the board yet</h3>
+                                    <p className="text-gray-500 text-sm mt-1 max-w-xs">Add a friend or two and you'll race them right here.</p>
+                                </div>
+                                <Link to={createPageUrl("Friends")}>
+                                    <Button size="sm" className="gap-1.5">
+                                        <UserPlus className="w-3.5 h-3.5" />
+                                        Add friends
+                                    </Button>
+                                </Link>
                             </div>
                         )}
                 </TabsContent>

@@ -1,4 +1,6 @@
 import React from "react";
+import { Link } from "react-router-dom";
+import { createPageUrl } from "@/utils";
 import { motion } from "framer-motion";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -402,9 +404,23 @@ export default function SubjectDetail({
               </div>
               <div className="p-4">
                 {studySessions.length === 0 ? (
-                  <div className="text-center py-8">
-                    <Brain className="w-12 h-12 text-gray-300 mx-auto mb-3" />
-                    <p className="text-sm text-gray-500 font-medium">No sessions yet</p>
+                  <div className="flex flex-col items-center text-center gap-3 py-8">
+                    <div
+                      className="w-12 h-12 rounded-2xl flex items-center justify-center"
+                      style={{ backgroundColor: `${subjectColor}1a` }}
+                    >
+                      <Brain className="w-6 h-6" style={{ color: subjectColor }} />
+                    </div>
+                    <div>
+                      <p className="font-bold text-foreground">No sessions for {selectedSubject?.name || 'this subject'}</p>
+                      <p className="text-sm text-muted-foreground mt-1 max-w-[260px]">Knock out a quick study session — it'll appear here.</p>
+                    </div>
+                    <Link to={createPageUrl("Study")}>
+                      <Button size="sm" className="gap-1.5">
+                        <Brain className="w-3.5 h-3.5" />
+                        Start a session
+                      </Button>
+                    </Link>
                   </div>
                 ) : (
                   <div className="space-y-3">
