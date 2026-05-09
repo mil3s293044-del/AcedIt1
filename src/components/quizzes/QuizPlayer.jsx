@@ -118,7 +118,8 @@ function formatElapsed(ms) {
     return `${Math.floor(s / 60)}:${(s % 60).toString().padStart(2, '0')}`;
 }
 
-export default function QuizPlayer({ quiz, onComplete, onExit }) {
+export default function QuizPlayer({ quiz, onComplete, onExit, mode = "standard", timeLimitMs = null }) {
+    const isSAC = mode === "sac" && timeLimitMs > 0;
     const [showSaveProgressDialog, setShowSaveProgressDialog] = useState(false);
     const [savedProgressId, setSavedProgressId] = useState(null);
 
@@ -139,6 +140,24 @@ export default function QuizPlayer({ quiz, onComplete, onExit }) {
     const [userAnswers, setUserAnswers] = useState({});
     const [showResults, setShowResults] = useState(false);
     const [startTime] = useState(Date.now());
+    // Re-render every second so the elapsed/countdown clock actually ticks.
+    const [, setClockTick] = useState(0);
+    useEffect(() => {
+        const id = setInterval(() => setClockTick(t => t + 1), 1000);
+        return () => clearInterval(id);
+    }, []);
+    const remainingMs = timeLimitMs ? Math.max(0, timeLimitMs - (Date.now() - startTime)) : null;
+
+    // SAC mode: auto-submit when the timer hits zero.
+    const [autoSubmitted, setAutoSubmitted] = useState(false);
+    useEffect(() => {
+        if (!isSAC || autoSubmitted || showResults) return;
+        if (remainingMs !== null && remainingMs <= 0) {
+            setAutoSubmitted(true);
+            // Defer to next tick so any state updates settle first.
+            setTimeout(() => handleFinishQuiz(), 0);
+        }
+    }, [isSAC, remainingMs, autoSubmitted, showResults]);
     const [isGeneratingFeedback, setIsGeneratingFeedback] = useState(false);
     const [aiFeedback, setAiFeedback] = useState([]);
     const [showFeedback, setShowFeedback] = useState(false);
@@ -736,10 +755,22 @@ Return exactly ${questionsForAnalysis.length} items.`,
                         </div>
                     </div>
                     <div className="flex items-center gap-3 flex-shrink-0">
-                        <div className="flex items-center gap-1.5 text-white/80 text-sm font-mono font-bold">
-                            <Clock className="w-4 h-4" />
-                            {formatElapsed(Date.now() - startTime)}
-                        </div>
+                        {isSAC ? (
+                            // Countdown — turns amber under 5 min, red under 1 min.
+                            <div className={`flex items-center gap-1.5 text-sm font-mono font-bold px-2.5 py-1 rounded-lg ${
+                                remainingMs <= 60000   ? "bg-streak/30 text-white animate-pulse"
+                                : remainingMs <= 300000 ? "bg-xp/30 text-white"
+                                : "bg-white/15 text-white/95"
+                            }`}>
+                                <Clock className="w-4 h-4" />
+                                {formatElapsed(remainingMs)}
+                            </div>
+                        ) : (
+                            <div className="flex items-center gap-1.5 text-white/80 text-sm font-mono font-bold">
+                                <Clock className="w-4 h-4" />
+                                {formatElapsed(Date.now() - startTime)}
+                            </div>
+                        )}
                         <button onClick={() => setShowQuestionMap(v => !v)}
                             className="w-8 h-8 bg-white/15 hover:bg-white/25 rounded-xl flex items-center justify-center transition-colors">
                             <Layers className="w-4 h-4 text-white" />

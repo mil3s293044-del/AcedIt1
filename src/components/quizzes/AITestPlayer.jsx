@@ -20,7 +20,7 @@ import {
     Upload, Image as ImageIcon, Ban, Calculator, Lightbulb,
     Star, ChevronDown, BookOpen, MessageSquare, Zap
 } from "lucide-react";
-import AILoadingProgress from "../shared/AILoadingProgress";
+import AISkeleton from "../shared/AISkeleton";
 import { format } from "date-fns";
 import { base44 } from "@/api/base44Client";
 import { PastPaperAttempt, User } from "@/entities/all";
@@ -509,7 +509,7 @@ CRITICAL: Every entry MUST have non-empty feedback, sample_response, and recomme
 
     // ─── SUBMITTING ──────────────────────────────────────────────
     if (isSubmitting) {
-        return <AILoadingProgress stage="analyzing" message="AI is marking your test..." estimatedTime={60} />;
+        return <div className="max-w-3xl mx-auto p-4"><AISkeleton type="marking" message="Marking your test…" /></div>;
     }
 
     // ─── TEST-TAKING VIEW ──────────────────────────────────────────

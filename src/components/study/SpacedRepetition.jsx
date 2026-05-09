@@ -13,7 +13,7 @@ import { useToast } from "@/components/ui/use-toast";
 import { motion, AnimatePresence } from "framer-motion";
 import { Link } from "react-router-dom";
 import { createPageUrl } from "@/utils";
-import AILoadingProgress from "../shared/AILoadingProgress";
+import AISkeleton from "../shared/AISkeleton";
 import {
     Plus, Play, Edit, Trash2, Share2, Check, X, Sparkles, Upload,
     Loader2, Brain, Target, AlertTriangle, Search, Clock, BarChart3,
@@ -851,7 +851,7 @@ The documents provided may be PowerPoint slides, Word documents, or text files. 
     // ─── DECK GRID VIEW ──────────────────────────────────────────────────────
     return (
         <>
-            {isGenerating && <AILoadingProgress stage="generating" message="AI is creating your flashcards..." estimatedTime={45} />}
+            {isGenerating && <AISkeleton type="flashcards" count={6} message="Creating your flashcards…" />}
 
             <div className="space-y-5">
                 {/* Search + filters + actions */}

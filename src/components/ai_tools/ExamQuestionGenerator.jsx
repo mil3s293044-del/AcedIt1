@@ -7,7 +7,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { useToast } from '@/components/ui/use-toast';
 import { base44 } from '@/api/base44Client';
 import { Wand2, Loader2, ChevronDown, ChevronUp, Copy, Check, Lightbulb, AlertTriangle, Target, RefreshCw, Download } from 'lucide-react';
-import AILoadingProgress from '../shared/AILoadingProgress';
+import AISkeleton from '../shared/AISkeleton';
 import { recordStudyAndGetStreak } from "@/components/shared/streakHelpers";
 import MathText from '@/components/shared/LatexRenderer';
 import { getExaminerPrompt } from '@/lib/subjectExaminerPrompts';
@@ -71,8 +71,9 @@ export default function ExamQuestionGenerator() {
         setQuestions([]);
 
         const examinerPrompt = getExaminerPrompt(subject);
-        const response = await base44.integrations.Core.InvokeLLM({
-            prompt: `${examinerPrompt}
+        try {
+            const response = await base44.integrations.Core.InvokeLLM({
+                prompt: `${examinerPrompt}
 
 TASK: Generate ${numQuestions} high-quality exam questions on the topic: "${topic}".
 
@@ -94,35 +95,61 @@ For EACH question, provide:
 DO NOT use markdown formatting (no ** for bold, no # headers). Write in clean prose with line breaks. Math notation rules above MUST be followed exactly.
 
 Return as a JSON object with a "questions" array.`,
-            response_json_schema: {
-                type: 'object',
-                properties: {
-                    questions: {
-                        type: 'array',
-                        items: {
-                            type: 'object',
-                            properties: {
-                                question: { type: 'string' },
-                                type: { type: 'string' },
-                                marks: { type: 'number' },
-                                options: { type: 'array', items: { type: 'string' } },
-                                correct_answer_index: { type: 'number' },
-                                model_answer: { type: 'string' },
-                                marking_criteria: { type: 'string' },
-                                common_mistakes: { type: 'string' },
-                                study_tip: { type: 'string' }
-                            },
-                            required: ['question', 'type', 'marks', 'options', 'correct_answer_index', 'model_answer', 'marking_criteria', 'common_mistakes', 'study_tip']
+                response_json_schema: {
+                    type: 'object',
+                    properties: {
+                        questions: {
+                            type: 'array',
+                            items: {
+                                type: 'object',
+                                properties: {
+                                    question: { type: 'string' },
+                                    type: { type: 'string' },
+                                    marks: { type: 'number' },
+                                    options: { type: 'array', items: { type: 'string' } },
+                                    correct_answer_index: { type: 'number' },
+                                    model_answer: { type: 'string' },
+                                    marking_criteria: { type: 'string' },
+                                    common_mistakes: { type: 'string' },
+                                    study_tip: { type: 'string' }
+                                },
+                                required: ['question', 'type', 'marks', 'options', 'correct_answer_index', 'model_answer', 'marking_criteria', 'common_mistakes', 'study_tip']
+                            }
                         }
-                    }
-                },
-                required: ['questions']
-            }
-        });
+                    },
+                    required: ['questions']
+                }
+            });
 
-        setQuestions((response.questions || []).map((q, i) => ({ ...q, id: i })));
-        setIsGenerating(false);
-        recordStudyAndGetStreak().catch(() => {});
+            const generated = (response?.questions || []).map((q, i) => ({ ...q, id: i }));
+            if (generated.length === 0) {
+                toast({
+                    title: 'No questions returned',
+                    description: 'Try a smaller count (5–8) or a more specific topic.',
+                    variant: 'destructive',
+                });
+            } else {
+                setQuestions(generated);
+                if (generated.length < numQuestions) {
+                    toast({
+                        title: `Got ${generated.length} of ${numQuestions} requested`,
+                        description: 'AI returned fewer than asked. For larger sets, generate in batches of 5–8.',
+                    });
+                }
+                recordStudyAndGetStreak().catch(() => {});
+            }
+        } catch (err) {
+            console.error('ExamQuestionGenerator failed:', err);
+            const msg = err?.message || err?.response?.data?.message || '';
+            const friendly = msg.includes('incomplete') || msg.includes('truncated')
+                ? 'AI ran out of room — try generating 5–8 questions at a time instead of 15+.'
+                : msg.includes('Premium') || msg.includes('limit') || msg.includes('cap')
+                    ? msg
+                    : 'Generation failed. Try again, or reduce the number of questions.';
+            toast({ title: 'Could not generate questions', description: friendly, variant: 'destructive' });
+        } finally {
+            setIsGenerating(false);
+        }
     };
 
     const handleCopy = (text, id) => {
@@ -159,7 +186,7 @@ Return as a JSON object with a "questions" array.`,
 
     return (
         <div className="space-y-6">
-            {isGenerating && <AILoadingProgress stage="generating" message="Creating your exam questions..." estimatedTime={30} />}
+            {isGenerating && <AISkeleton type="questions" count={numQuestions} message={`Generating ${numQuestions} ${subject || 'exam'} question${numQuestions === 1 ? '' : 's'}…`} />}
 
             {/* Input Panel */}
             <div className="card-soft overflow-hidden">

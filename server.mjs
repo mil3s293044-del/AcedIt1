@@ -1533,9 +1533,11 @@ app.post("/local-ai/invokeAI", async (req, res) => {
     ];
 
     // Build the request. Cache the VCE expert system prompt when present.
+    // max_tokens bumped to 32k — 8k truncates structured outputs like the Exam
+    // Question Generator (15 questions × marking_criteria + model_answer is big).
     const request = {
       model: MODEL,
-      max_tokens: 8192,
+      max_tokens: 32000,
       messages: [{ role: "user", content: userContent }],
     };
 
@@ -1635,8 +1637,14 @@ app.post("/local-ai/invokeAI", async (req, res) => {
       try {
         result = JSON.parse(stripped);
       } catch (e) {
-        console.error("[local-ai] Failed to parse JSON response:", stripped.slice(0, 500));
-        result = text;
+        // Parse failed — almost always means the response was truncated.
+        // Surface this as a 500 so the client's catch handler fires; returning
+        // the raw text on success silently breaks every JSON-schema caller.
+        console.error("[local-ai] Failed to parse JSON response (likely truncated). First 500 chars:", stripped.slice(0, 500));
+        return res.status(500).json({
+          message: "AI response was incomplete — try generating fewer items at once (e.g. 5–8 questions instead of 15+).",
+          truncated: true,
+        });
       }
     } else {
       result = text;
@@ -3080,9 +3088,10 @@ if (existsSync(distDir)) {
   console.log(`[local-ai] serving static build from ${distDir}`);
   app.use(express.static(distDir, { maxAge: "1h", index: false }));
   // SPA fallback — every non-API request returns index.html so react-router
-  // can take over client-side. Anything starting with /local-ai/ or /api/ is
-  // already matched above by the API handlers, so it won't reach here.
-  app.get("*", (req, res, next) => {
+  // takes over on the client. Express 5 requires a named splat ("*splat") and
+  // no longer accepts the bare "*". Anything starting with /local-ai/ or /api/
+  // is already matched above by the API handlers, so it won't reach here.
+  app.get(/.*/, (req, res, next) => {
     if (req.path.startsWith("/local-ai/") || req.path.startsWith("/api/")) {
       return next();
     }

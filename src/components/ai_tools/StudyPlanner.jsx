@@ -13,7 +13,7 @@ import {
     Bus, Trophy, Heart, Users, Pencil, GraduationCap, FileText,
     CheckCircle2, ArrowRight, Lightbulb, Target, Flame, Coffee
 } from 'lucide-react';
-import AILoadingProgress from '../shared/AILoadingProgress';
+import AISkeleton from '../shared/AISkeleton';
 
 const EVENT_TYPES = [
     { value: 'SAC', label: 'SAC', icon: '📋', color: 'bg-red-100 text-red-700 border-red-200', description: 'School Assessed Coursework' },
@@ -332,7 +332,7 @@ Respond ONLY with valid JSON matching this structure exactly.`,
 
     return (
         <div className="space-y-5 max-w-4xl pb-10">
-            {isGenerating && <AILoadingProgress stage="generating" message="AI is crafting your personalised study plan..." estimatedTime={30} />}
+            {isGenerating && <AISkeleton type="plan" message="Crafting your personalised study plan…" />}
 
             {/* Step indicator */}
             <div className="flex items-center gap-2">

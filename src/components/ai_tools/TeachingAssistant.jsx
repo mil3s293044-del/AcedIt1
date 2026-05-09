@@ -16,6 +16,7 @@ import MarkdownMath from "@/components/shared/MarkdownMath";
 import MathText from "@/components/shared/LatexRenderer";
 import { getExaminerPrompt, getLatexRules } from "@/lib/subjectExaminerPrompts";
 import { invokeLLMStream } from "@/lib/streamingAI";
+import AISkeleton from "@/components/shared/AISkeleton";
 
 export default function TeachingAssistant() {
     const [mode, setMode] = useState('concept');
@@ -261,7 +262,7 @@ Respond in markdown.`;
 
     if (!hasStarted) return (
         <div className="space-y-5">
-            {isGeneratingQuiz && <AILoadingProgress stage="generating" message="Creating your quiz..." estimatedTime={30} />}
+            {isGeneratingQuiz && <AISkeleton type="questions" count={5} message="Creating your quiz…" />}
 
             <div className="card-soft overflow-hidden">
                 <div className="p-5 space-y-4">
@@ -375,7 +376,7 @@ Respond in markdown.`;
 
     return (
         <div className="space-y-4">
-            {isGeneratingQuiz && <AILoadingProgress stage="generating" message="Creating your quiz..." estimatedTime={30} />}
+            {isGeneratingQuiz && <AISkeleton type="questions" count={5} message="Creating your quiz…" />}
 
             {/* Session header */}
             <div className="card-soft">

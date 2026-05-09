@@ -35,7 +35,7 @@ import {
 import { format, isThisWeek, parseISO } from "date-fns";
 import { useToast } from "@/components/ui/use-toast";
 import { moderationPresets } from "@/components/shared/contentModeration";
-import AILoadingProgress from "../components/shared/AILoadingProgress";
+import AISkeleton from "../components/shared/AISkeleton";
 import { isPremium } from "@/components/shared/subscriptionHelpers";
 import UpgradeModal from "@/components/shared/UpgradeModal";
 import HelpButton from "@/components/shared/HelpButton";
@@ -44,6 +44,7 @@ import { FEATURES } from "@/lib/tierAccess";
 
 import QuizCard from "../components/quizzes/QuizCard";
 import QuizPlayer from "../components/quizzes/QuizPlayer";
+import QuizModePicker from "../components/quizzes/QuizModePicker";
 
 // ─── Coach voice helpers (chill + motivational) ──────────────────────────────
 function getCoachLine({ name, hour, totalQuizzes, recentAttempts, avgScore, lowScore }) {
@@ -95,6 +96,9 @@ export default function Quizzes() {
     const [userSubjects, setUserSubjects] = useState([]);
     const [selectedQuiz, setSelectedQuiz] = useState(null);
     const [isPlaying, setIsPlaying] = useState(false);
+    const [pendingQuiz, setPendingQuiz] = useState(null);   // shown in mode picker
+    const [quizMode, setQuizMode] = useState("standard");
+    const [quizTimeLimitMs, setQuizTimeLimitMs] = useState(null);
     const [isGenerating, setIsGenerating] = useState(false);
     const [showAIDialog, setShowAIDialog] = useState(false);
     const [isManualCreate, setIsManualCreate] = useState(false);
@@ -374,8 +378,9 @@ export default function Quizzes() {
             }
         }
 
-        // Close dialog and show loading
-        setShowAIDialog(false);
+        // Keep the dialog open — the skeleton renders inside it. We close
+        // the dialog on the success path below so the user lands on the new
+        // quiz; on error we leave it open so they can adjust and retry.
         setIsGenerating(true);
 
         try {
@@ -574,6 +579,7 @@ Base ALL questions on the provided material. If files are attached, read ALL con
                 marks_per_short: "5"
             });
             setIsGenerating(false);
+            setShowAIDialog(false);
             await loadData();
         } catch (error) {
             console.error("Quiz generation error:", error);
@@ -846,7 +852,7 @@ Return valid JSON only.`,
                     cta: "Retake quiz",
                     accent: "streak",
                     icon: AlertTriangle,
-                    action: () => { setSelectedQuiz(target); setIsPlaying(true); },
+                    action: () => { setPendingQuiz(target); },
                 };
             }
         }
@@ -872,7 +878,7 @@ Return valid JSON only.`,
                 cta: "Start quiz",
                 accent: "chart-3",
                 icon: Brain,
-                action: () => { setSelectedQuiz(random); setIsPlaying(true); },
+                action: () => { setPendingQuiz(random); },
             };
         }
         // Pending shared quizzes
@@ -897,7 +903,7 @@ Return valid JSON only.`,
                 cta: "Start quiz",
                 accent: "chart-3",
                 icon: Brain,
-                action: () => { setSelectedQuiz(target); setIsPlaying(true); },
+                action: () => { setPendingQuiz(target); },
             };
         }
         // Empty state default
@@ -913,22 +919,33 @@ Return valid JSON only.`,
     }, [quizzes, quizStats, pendingSharedQuizzes]);
 
     if (isPlaying && selectedQuiz) {
+        const isSAC = quizMode === "sac";
+        // SAC: cover the entire viewport (side rail + top strip hidden) so the
+        // student is locked into the exam. Standard: normal page chrome.
+        const wrapperCls = isSAC
+            ? "fixed inset-0 z-50 bg-white overflow-y-auto"
+            : "min-h-screen bg-background";
         return (
-            <div className="min-h-screen bg-background">
+            <div className={wrapperCls}>
                 <div className="max-w-6xl mx-auto px-4 lg:px-8 py-6 lg:py-8">
                     <Button
                         variant="outline"
                         onClick={() => {
+                            if (isSAC && !window.confirm("Leave the SAC? Your progress won't be saved.")) return;
                             setIsPlaying(false);
                             setSelectedQuiz(null);
+                            setQuizMode("standard");
+                            setQuizTimeLimitMs(null);
                         }}
                         className="mb-6"
                     >
                         <ArrowLeft className="w-4 h-4 mr-2" />
-                        Back to Quizzes
+                        {isSAC ? "Exit SAC" : "Back to Quizzes"}
                     </Button>
                     <QuizPlayer
                         quiz={selectedQuiz}
+                        mode={quizMode}
+                        timeLimitMs={quizTimeLimitMs}
                         onComplete={async (results) => {
                             try {
                                 await base44.entities.QuizAttempt.create({
@@ -973,13 +990,18 @@ Return valid JSON only.`,
 
     return (
         <>
-            {isGenerating && (
-                <AILoadingProgress
-                    stage="generating"
-                    message="AI is creating your quiz..."
-                    estimatedTime={60}
-                />
-            )}
+            <QuizModePicker
+                open={!!pendingQuiz}
+                quiz={pendingQuiz}
+                onCancel={() => setPendingQuiz(null)}
+                onPick={({ mode, timeLimitMs }) => {
+                    setQuizMode(mode);
+                    setQuizTimeLimitMs(timeLimitMs);
+                    setSelectedQuiz(pendingQuiz);
+                    setPendingQuiz(null);
+                    setIsPlaying(true);
+                }}
+            />
 
             <div className="min-h-screen bg-background">
                 <div className="max-w-6xl mx-auto px-4 lg:px-8 py-6 lg:py-10 space-y-6 lg:space-y-8">
@@ -1204,7 +1226,7 @@ Return valid JSON only.`,
                                                 {subjectQuizzes.map((quiz, index) => (
                                                     <motion.div key={quiz.id} initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: index * 0.04 }} className="h-full">
                                                         <QuizCard quiz={quiz} pastAttempts={quizAttempts} subjectColor={subjectColor}
-                                                            onPlay={() => { setSelectedQuiz(quiz); setIsPlaying(true); }}
+                                                            onPlay={() => { setPendingQuiz(quiz); }}
                                                             onReshuffle={handleReshuffleQuiz} onDelete={handleDeleteQuiz} />
                                                     </motion.div>
                                                 ))}
@@ -1453,8 +1475,12 @@ Return valid JSON only.`,
 
                 {/* AI Generation Dialog - Redesigned */}
                 <Dialog open={showAIDialog} onOpenChange={(open) => {
-                    if (!open && !isGenerating) {
+                    if (!open) {
+                        // Allow closing at any time — including mid-generation.
+                        // The in-flight AI request continues in the background;
+                        // when it resolves the new quiz still appears in the list.
                         setShowAIDialog(false);
+                        setIsGenerating(false);
                         setUploadedFiles([]);
                         setAiSettings({
                             subject: "",
@@ -1484,6 +1510,15 @@ Return valid JSON only.`,
                         </DialogHeader>
 
                         <div className="flex-1 overflow-y-auto px-6">
+                            {isGenerating ? (
+                                <div className="py-6">
+                                    <AISkeleton
+                                        type="questions"
+                                        count={aiSettings.num_questions || 5}
+                                        message={`Creating your ${aiSettings.num_questions || 5}-question quiz…`}
+                                    />
+                                </div>
+                            ) : (
                             <div className="space-y-6 py-6">
                                 {/* File Upload Section */}
                                 <div className="space-y-3">
@@ -1738,21 +1773,10 @@ Return valid JSON only.`,
                                     </div>
                                 )}
                                 </div>
+                            )}
                                 </div>
 
                         <DialogFooter className="flex-shrink-0 border-t border-border p-6 bg-secondary/50">
-                            <Button
-                                variant="outline"
-                                onClick={() => {
-                                    if (!isGenerating) {
-                                        setShowAIDialog(false);
-                                        setUploadedFiles([]);
-                                    }
-                                }}
-                                disabled={isGenerating}
-                            >
-                                Cancel
-                            </Button>
                             <Button
                                 onClick={handleGenerateQuiz}
                                 disabled={!uploadedFiles.length || !aiSettings.customSubject || isGenerating}
