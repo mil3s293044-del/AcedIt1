@@ -17,9 +17,9 @@ services:
     autoDeploy: true
     envVars:
       - key: NODE_VERSION
-        value: 20
+        value: "20"
       - key: PORT
-        value: 3001
+        value: "3001"
       - key: VITE_USE_SUPABASE
         value: "true"
       - key: VITE_TIER_BYPASS
