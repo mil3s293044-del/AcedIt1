@@ -131,23 +131,20 @@ export default function Layout({ children, currentPageName }) {
                     return;
                 }
 
-                // Show onboarding if needed
-                if (!profile || profile.onboarding_completed !== true) {
-                    setShowOnboarding(true);
-                    return;
-                }
-
-                // Fix missing onboarding flag
+                // Onboarding + subscription gates intentionally removed for v1 launch:
+                //   • Free users keep access to free-tier features. Premium-only
+                //     features are gated at the page level via <RequirePremium>
+                //     (e.g. /AITools) — no app-wide blanket block.
+                //   • Onboarding modal disabled until we redesign the flow.
+                // If you ever want either back, uncomment the original blocks
+                // in git history (commit `Add SAC mode, skeleton loading, ...`).
                 if (profile && profile.subscription_active && !profile.onboarding_completed) {
+                    // Keep the data clean: any active-subscription user without
+                    // an onboarding flag gets it set silently (no UI prompt).
                     await base44.entities.UserProfile.update(profile.id, {
                         onboarding_completed: true,
                         onboarding_completed_at: new Date().toISOString(),
                     });
-                }
-
-                // Subscription gate
-                if (!profile.subscription_active) {
-                    navigate("/Paywall");
                 }
             } catch (error) {
                 console.error("Error loading user profile:", error);
