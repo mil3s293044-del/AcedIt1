@@ -451,11 +451,12 @@ Every question must test something DIFFERENT from every other question in this q
 DIFFICULTY: ${aiSettings.difficulty} — ${difficultyDesc}
 STYLE: ${styleDesc}
 
-=== FORMATTING RULES ===
-- Use plain text for ALL math: "y = e^x cos(3x)" NOT "$$e^x\\cos(3x)$$"
-- Fractions: use "/" e.g. "a/b"
-- Exponents: use "^" e.g. "x^2"
-- Square roots: write "sqrt(x)"
+=== MATH FORMATTING RULES (CRITICAL) ===
+- ALWAYS use LaTeX notation for every mathematical expression, equation, formula, fraction, integral, derivative, matrix, vector, or symbol — the app renders LaTeX as proper math.
+- Inline math: wrap in single dollars — e.g. \`Solve $f(x) = m(x-a)^2(x-b)$ for the y-intercept.\`
+- Display/block math: wrap in double dollars — e.g. \`$$\\int_0^1 x^2 \\, dx = \\frac{1}{3}$$\`
+- Exponents: \`x^2\` or \`x^{n+1}\`. Fractions: \`\\frac{a}{b}\`. Square roots: \`\\sqrt{x}\`. Greek: \`\\alpha, \\beta, \\pi\`. Functions: \`\\sin, \\cos, \\ln\`.
+- NEVER write math as raw text like \`x^2\` outside dollars — that won't render.
 
 === MULTIPLE CHOICE RULES ===
 - MUST have EXACTLY 4 answer options per question
@@ -646,30 +647,29 @@ Base ALL questions on the provided material. If files are attached, read ALL con
 
 QUESTION ORDER: All MCQ questions MUST come before any short answer questions.
 
-CRITICAL FORMATTING RULES:
-- Use plain text for ALL mathematical expressions - NO dollar signs, NO LaTeX notation
-- Write equations naturally: "y = e^x cos(3x)" not wrapped in any special syntax
-- For fractions use "/" (e.g., "a/b" or "(x+1)/(x-1)")
-- For exponents use "^" (e.g., "x^2", "e^x")
-- For square roots write "sqrt(x)"
+MATH FORMATTING RULES (CRITICAL):
+- ALWAYS use LaTeX for every mathematical expression — the app renders LaTeX as proper math via KaTeX.
+- Inline math: wrap in single dollars — e.g. \`Find the derivative of $f(x) = e^x \\cos(3x)$\`
+- Display/block math: wrap in double dollars — e.g. \`$$\\int_0^1 x^2 \\, dx = \\frac{1}{3}$$\`
+- Exponents: \`x^2\` or \`x^{n+1}\`. Fractions: \`\\frac{a}{b}\`. Square roots: \`\\sqrt{x}\`. Greek: \`\\alpha, \\pi\`. Trig: \`\\sin, \\cos, \\ln\`.
 - Examples:
-  * Correct: "Find the derivative of f(x) = e^x cos(3x)"
-  * Correct: "Solve for x when 2x + 5 = 13"
-  * Wrong: "Find the derivative of $$f(x) = e^x \\cos(3x)$$"
-  * Wrong: "Solve for $x$"
+  * CORRECT: "Solve for $x$ when $2x + 5 = 13$"
+  * CORRECT: "$$f'(x) = e^x \\cos(3x) - 3e^x \\sin(3x)$$"
+  * WRONG: "Solve for x when 2x + 5 = 13" (no LaTeX)
+  * WRONG: "f(x) = e^x cos(3x)" (raw text)
 
 MULTIPLE CHOICE:
 - MUST have EXACTLY 4 answer options for EVERY multiple choice question
 - Options must be distinct and plausible
 - One correct answer (provide its index: 0, 1, 2, or 3)
 - Brief explanation why the answer is correct
-- All math in options uses plain text (no LaTeX, no dollar signs)
+- All math in options must use LaTeX as above
 
 SHORT ANSWER:
 - Award 3, 5, or 8 marks based on complexity
 - Provide a model answer matching the mark allocation
 - 3 marks = 3 key points, 5 marks = 5 points, 8 marks = 8 points
-- All math in answers uses plain text (no LaTeX, no dollar signs)
+- All math in answers must use LaTeX as above
 
 Return valid JSON only.`,
                 file_urls: [quiz.source_file_url],
