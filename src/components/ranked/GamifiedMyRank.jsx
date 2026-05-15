@@ -105,7 +105,7 @@ export default function GamifiedMyRank() {
             setStudyStats({ totalStudyTime: total, weeklyStudyTime: weekly });
 
             if (quizAttempts.length) {
-                const avg = quizAttempts.reduce((a, q) => a + (q.score || 0), 0) / quizAttempts.length;
+                const avg = quizAttempts.reduce((a, q) => a + ((q.adjusted_score ?? q.score) || 0), 0) / quizAttempts.length;
                 setQuizStats({ total: quizAttempts.length, avgScore: Math.round(avg) });
             }
         } catch (e) {

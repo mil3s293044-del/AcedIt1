@@ -14,8 +14,11 @@ export default function QuizStats({ attempts = [] }) { // Provide default empty 
         return null;
     }
 
-    // Calculate core statistics directly within the component
-    const averageScore = Math.round(attempts.reduce((sum, a) => sum + a.score, 0) / totalAttempts);
+    // Display the adjusted score (auto + self-marked) so the stats match
+    // what the student sees on the results page.
+    const effectiveScore = (a) => (typeof a.adjusted_score === "number" ? a.adjusted_score : a.score);
+
+    const averageScore = Math.round(attempts.reduce((sum, a) => sum + effectiveScore(a), 0) / totalAttempts);
     const totalTimeMinutes = Math.floor(attempts.reduce((sum, a) => sum + (a.time_taken || 0), 0) / 60);
 
     // Calculate category-specific statistics
@@ -25,7 +28,7 @@ export default function QuizStats({ attempts = [] }) { // Provide default empty 
             acc[category] = { count: 0, totalScore: 0 };
         }
         acc[category].count++;
-        acc[category].totalScore += attempt.score;
+        acc[category].totalScore += effectiveScore(attempt);
         return acc;
     }, {});
 

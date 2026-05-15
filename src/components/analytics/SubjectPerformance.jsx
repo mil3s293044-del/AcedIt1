@@ -78,8 +78,9 @@ export default function SubjectPerformance({ data }) {
             const quizSubject = quiz.quiz_title?.split('-')[0]?.trim();
             Object.keys(subjectMap).forEach(subjectName => {
                 if (quizSubject && subjectName.toLowerCase().includes(quizSubject.toLowerCase())) {
-                    subjectMap[subjectName].quizScores.push(quiz.score);
-                    if (quiz.date) subjectMap[subjectName].quizDates.push({ date: quiz.date, score: quiz.score });
+                    const score = quiz.adjusted_score ?? quiz.score;
+                    subjectMap[subjectName].quizScores.push(score);
+                    if (quiz.date) subjectMap[subjectName].quizDates.push({ date: quiz.date, score });
                 }
             });
         });

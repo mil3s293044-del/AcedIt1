@@ -118,6 +118,78 @@ function formatElapsed(ms) {
     return `${Math.floor(s / 60)}:${(s % 60).toString().padStart(2, '0')}`;
 }
 
+// SelfMarkBox — appears below "No answer written" on short-answer questions
+// the student left blank. Lets them claim a mark for paper-and-pen work after
+// comparing to the model answer above. Marks count toward the displayed total
+// only — they don't earn XP, so goals/leaderboards stay protected.
+function SelfMarkBox({ maxMarks, currentMark, onMark, onClear }) {
+    const [editing, setEditing] = React.useState(currentMark === undefined);
+    const [draft, setDraft] = React.useState(currentMark ?? "");
+
+    if (currentMark !== undefined && !editing) {
+        return (
+            <div className="rounded-xl border-2 border-xp/40 bg-xp/5 px-3 py-2.5 flex items-center gap-3">
+                <div className="w-8 h-8 rounded-lg bg-xp/15 text-xp flex items-center justify-center font-extrabold text-sm tabular-nums">
+                    {currentMark}/{maxMarks}
+                </div>
+                <div className="flex-1 min-w-0">
+                    <p className="text-xs font-bold text-foreground">Self-marked from your paper</p>
+                    <p className="text-[10px] text-muted-foreground">Counts toward your total · doesn't earn XP</p>
+                </div>
+                <button
+                    type="button"
+                    onClick={() => { setDraft(currentMark); setEditing(true); }}
+                    className="text-xs font-bold text-muted-foreground hover:text-foreground px-2 py-1 rounded-md hover:bg-secondary"
+                >
+                    Edit
+                </button>
+                <button
+                    type="button"
+                    onClick={onClear}
+                    className="text-xs font-bold text-muted-foreground hover:text-streak px-2 py-1 rounded-md hover:bg-streak/10"
+                >
+                    Clear
+                </button>
+            </div>
+        );
+    }
+
+    return (
+        <div className="rounded-xl border-2 border-dashed border-border bg-surface px-3 py-3 space-y-2">
+            <p className="text-xs font-bold text-foreground">Did you answer this on paper?</p>
+            <p className="text-[11px] text-muted-foreground leading-relaxed">
+                Compare your written answer to the model answer above. Award yourself the marks you'd give. <strong className="text-foreground">XP isn't affected</strong> — this just updates your displayed total.
+            </p>
+            <div className="flex items-center gap-2 pt-1">
+                <input
+                    type="number"
+                    min={0}
+                    max={maxMarks}
+                    step={0.5}
+                    value={draft}
+                    onChange={(e) => setDraft(e.target.value)}
+                    placeholder={`0 – ${maxMarks}`}
+                    className="w-20 text-sm font-bold tabular-nums px-2.5 py-1.5 rounded-lg border-2 border-border bg-surface focus:border-primary focus:outline-none"
+                    aria-label="Marks to claim"
+                />
+                <span className="text-sm font-bold text-muted-foreground tabular-nums">/ {maxMarks}</span>
+                <button
+                    type="button"
+                    disabled={draft === "" || isNaN(Number(draft))}
+                    onClick={() => {
+                        const n = Math.max(0, Math.min(maxMarks, Number(draft)));
+                        onMark(n);
+                        setEditing(false);
+                    }}
+                    className="ml-auto text-xs font-bold px-3 py-1.5 rounded-lg bg-xp text-white hover:bg-xp/90 disabled:opacity-40 disabled:cursor-not-allowed"
+                >
+                    Save mark
+                </button>
+            </div>
+        </div>
+    );
+}
+
 export default function QuizPlayer({ quiz, onComplete, onExit, mode = "standard", timeLimitMs = null }) {
     const isSAC = mode === "sac" && timeLimitMs > 0;
     const [showSaveProgressDialog, setShowSaveProgressDialog] = useState(false);
@@ -147,6 +219,17 @@ export default function QuizPlayer({ quiz, onComplete, onExit, mode = "standard"
         return () => clearInterval(id);
     }, []);
     const remainingMs = timeLimitMs ? Math.max(0, timeLimitMs - (Date.now() - startTime)) : null;
+
+    // ─── Self-marked marks (paper-and-pen workflow) ─────────────────────────
+    // Map of { [questionIndex]: numberOfMarksAwarded }. Only allowed on short
+    // answer questions the student LEFT BLANK — that's the signal they did the
+    // work on paper. Self-marked marks update the displayed total score on
+    // the results page but DO NOT affect XP or the saved score field, so
+    // goals / leaderboards stay protected from inflation.
+    const [selfMarkedMarks, setSelfMarkedMarks] = useState({});
+    // QuizAttempt.id captured after the row is created in handleFinishQuiz, so
+    // self-mark edits can persist back to the same row (debounced below).
+    const [createdAttemptId, setCreatedAttemptId] = useState(null);
 
     // SAC mode: auto-submit when the timer hits zero.
     const [autoSubmitted, setAutoSubmitted] = useState(false);
@@ -398,7 +481,9 @@ Return exactly ${questionsForAnalysis.length} items.`,
             }
 
             try {
-                await base44.entities.QuizAttempt.create({ quiz_id: quiz.id, quiz_title: quiz.title, quiz_category: quiz.category, score: finalScore, questions_total: totalQ, questions_correct: questionsCorrect, time_taken: timeTaken, xp_earned: xpEarned, user_answers: userAnswers, date: new Date().toISOString().split('T')[0] });
+                const created = await base44.entities.QuizAttempt.create({ quiz_id: quiz.id, quiz_title: quiz.title, quiz_category: quiz.category, score: finalScore, questions_total: totalQ, questions_correct: questionsCorrect, time_taken: timeTaken, xp_earned: xpEarned, user_answers: userAnswers, date: new Date().toISOString().split('T')[0] });
+                // Stash the new attempt's id so any later self-marks update the same row.
+                if (created?.id) setCreatedAttemptId(created.id);
             } catch (e) {}
 
             toast({ title: "✅ Quiz marked!", description: `AI analysed all ${mappedFeedback.length} questions.` });
@@ -424,6 +509,46 @@ Return exactly ${questionsForAnalysis.length} items.`,
 
     const overallScore = calcScoreFromFeedback(aiFeedback);
     const getCurrentAnswer = () => userAnswers[currentQuestionIndex];
+
+    // ─── Adjusted score (auto + self-marked) ────────────────────────────────
+    // Sums the user's self-marked marks on top of the AI-marked total.
+    // Only used for the on-screen "your total" display — never persisted.
+    const calcAdjustedScore = () => {
+        if (!aiFeedback.length || aiFeedback.length !== shuffledQuiz.questions.length) {
+            return { adjustedPct: overallScore, extraMarks: 0, hasSelfMarked: false };
+        }
+        let total = 0, max = 0;
+        shuffledQuiz.questions.forEach((q, i) => {
+            const fb = aiFeedback[i];
+            const qMax = q.type === "mcq" ? 1 : (q.marks || 5);
+            max += qMax;
+            const autoMarks = fb?.marks || 0;
+            const selfMarks = selfMarkedMarks[i] || 0;
+            total += Math.min(qMax, autoMarks + selfMarks);
+        });
+        const extraMarks = Object.values(selfMarkedMarks).reduce((a, b) => a + (Number(b) || 0), 0);
+        return {
+            adjustedPct: max > 0 ? Math.round((total / max) * 100) : 0,
+            extraMarks,
+            hasSelfMarked: extraMarks > 0,
+        };
+    };
+    const adjusted = calcAdjustedScore();
+
+    // Persist self-marks back to the QuizAttempt row (debounced 600ms) so
+    // AI features (Study Roadmap, Analytics, Performance coach) see the
+    // adjusted picture. The base `score` field stays as-is for XP/goal
+    // integrity.
+    useEffect(() => {
+        if (!createdAttemptId) return;
+        const t = setTimeout(() => {
+            base44.entities.QuizAttempt.update(createdAttemptId, {
+                self_marked_marks: selfMarkedMarks,
+                adjusted_score: adjusted.adjustedPct,
+            }).catch(() => {});
+        }, 600);
+        return () => clearTimeout(t);
+    }, [createdAttemptId, selfMarkedMarks, adjusted.adjustedPct]);
 
     // ─── RESULTS VIEW ──────────────────────────────────────────────────────────
     // ─── ADAPTIVE REVIEW ───────────────────────────────────────────────────────
@@ -451,7 +576,9 @@ Return exactly ${questionsForAnalysis.length} items.`,
 
     if (showResults) {
         const previousAttempt = pastAttempts[0];
-        const improvement = previousAttempt ? overallScore - previousAttempt.score : null;
+        // Compare like-for-like: adjusted total vs previous adjusted total.
+        const previousScore = previousAttempt ? (previousAttempt.adjusted_score ?? previousAttempt.score) : null;
+        const improvement = previousScore !== null ? adjusted.adjustedPct - previousScore : null;
         const currentQ = shuffledQuiz.questions[currentFeedbackIndex];
         const currentFeedback = aiFeedback[currentFeedbackIndex];
         const currentUserAnswer = userAnswers[currentFeedbackIndex];
@@ -482,6 +609,12 @@ Return exactly ${questionsForAnalysis.length} items.`,
                             <div className={`px-3 py-1.5 rounded-xl font-black text-sm ${tier.badge}`}>
                                 {isGeneratingFeedback ? '—' : `${overallScore}%`}
                             </div>
+                            {!isGeneratingFeedback && adjusted.hasSelfMarked && (
+                                <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-xp/15 text-xp text-xs font-bold tabular-nums" title={`+${adjusted.extraMarks} self-marked. XP based on ${overallScore}% only.`}>
+                                    <span>→ {adjusted.adjustedPct}%</span>
+                                    <span className="hidden sm:inline text-[10px] opacity-80">incl. paper</span>
+                                </div>
+                            )}
                             {improvement !== null && improvement !== 0 && !isGeneratingFeedback && (
                                 <div className={`hidden sm:flex px-2 py-1 rounded-lg text-xs font-bold ${improvement > 0 ? 'bg-primary/10 text-primary' : 'bg-streak/10 text-streak'}`}>
                                     {improvement > 0 ? `+${improvement}%` : `${improvement}%`}
@@ -646,7 +779,21 @@ Return exactly ${questionsForAnalysis.length} items.`,
                                                         <p className="text-xs font-bold text-muted-foreground/60 uppercase tracking-wide mb-2">Your Answer</p>
                                                         {currentUserAnswer
                                                             ? <div className="text-sm text-foreground whitespace-pre-wrap"><MarkdownMath>{currentUserAnswer}</MarkdownMath></div>
-                                                            : <p className="text-sm text-foreground"><span className="text-muted-foreground/60 italic">No answer written</span></p>
+                                                            : (
+                                                                <div className="space-y-3">
+                                                                    <p className="text-sm text-foreground"><span className="text-muted-foreground/60 italic">No answer written</span></p>
+                                                                    <SelfMarkBox
+                                                                        maxMarks={currentQ.marks || 5}
+                                                                        currentMark={selfMarkedMarks[currentFeedbackIndex]}
+                                                                        onMark={(m) => setSelfMarkedMarks(prev => ({ ...prev, [currentFeedbackIndex]: m }))}
+                                                                        onClear={() => setSelfMarkedMarks(prev => {
+                                                                            const next = { ...prev };
+                                                                            delete next[currentFeedbackIndex];
+                                                                            return next;
+                                                                        })}
+                                                                    />
+                                                                </div>
+                                                            )
                                                         }
                                                     </div>
                                                     <div className="bg-primary/10 rounded-2xl p-4 border border-primary/20">

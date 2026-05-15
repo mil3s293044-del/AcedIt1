@@ -23,9 +23,13 @@ const getScoreTextClass = (score) => {
 const QuizCard = React.memo(({ quiz, onPlay, onDelete, onReshuffle, pastAttempts = [], subjectColor }) => {
     const [showResults, setShowResults] = useState(false);
     const quizAttempts = pastAttempts.filter(a => a.quiz_id === quiz.id);
+    // Display the adjusted score when present (includes self-marked paper work)
+    // so the card matches what the student sees on the results page.
+    const effectiveScore = (a) => (typeof a.adjusted_score === "number" ? a.adjusted_score : a.score);
     const bestAttempt = quizAttempts.length > 0
-        ? quizAttempts.reduce((best, current) => current.score > best.score ? current : best, quizAttempts[0])
+        ? quizAttempts.reduce((best, current) => effectiveScore(current) > effectiveScore(best) ? current : best, quizAttempts[0])
         : null;
+    const bestScore = bestAttempt ? effectiveScore(bestAttempt) : null;
 
     const difficulty = difficultyConfig[quiz.difficulty] || difficultyConfig.intermediate;
     const color = subjectColor || '#8B5CF6';
@@ -71,8 +75,8 @@ const QuizCard = React.memo(({ quiz, onPlay, onDelete, onReshuffle, pastAttempts
                         <div className="text-center py-2.5 bg-secondary/50 rounded-xl">
                             {bestAttempt ? (
                                 <>
-                                    <p className={`text-base font-bold ${getScoreTextClass(bestAttempt.score)}`}>
-                                        {bestAttempt.score}%
+                                    <p className={`text-base font-bold ${getScoreTextClass(bestScore)}`}>
+                                        {bestScore}%
                                     </p>
                                     <p className="text-[10px] text-muted-foreground uppercase tracking-wide">Best</p>
                                 </>

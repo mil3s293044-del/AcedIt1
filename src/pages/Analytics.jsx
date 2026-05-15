@@ -272,7 +272,7 @@ export default function Analytics() {
         const quizMins    = Math.round(data.quizzes.reduce((s, q) => s + ((q.time_taken||0)/60), 0));
         const totalMins   = techMins + arMins + blurtMins + quizMins;
         const totalSess   = data.techniques.length + data.activeRecall.length + data.blurting.length + data.quizzes.length;
-        const quizAvg     = data.quizzes.length > 0 ? Math.round(data.quizzes.reduce((s,q)=>s+q.score,0)/data.quizzes.length) : 0;
+        const quizAvg     = data.quizzes.length > 0 ? Math.round(data.quizzes.reduce((s,q)=>s+(q.adjusted_score ?? q.score),0)/data.quizzes.length) : 0;
         const fcMastery   = data.flashcards.length > 0 ? Math.round((data.flashcards.filter(f=>(f.successfulReviews||0)>2).length/data.flashcards.length)*100) : 0;
         const uniqueDays  = new Set([
             ...data.techniques.map(t=>t.date),
@@ -305,7 +305,7 @@ export default function Analytics() {
     // ── Quiz Trend ────────────────────────────────────────────────────────────
     const quizTrend = useMemo(() =>
         data.quizzes.slice().sort((a,b) => (a.date||'').localeCompare(b.date||'')).map((q,i) => ({
-            n: `#${i+1}`, score: q.score, date: q.date
+            n: `#${i+1}`, score: (q.adjusted_score ?? q.score), date: q.date
         })), [data.quizzes]);
 
     // ── Technique Breakdown ───────────────────────────────────────────────────
@@ -332,7 +332,7 @@ export default function Analytics() {
             const mastered = cards.filter(f=>(f.successfulReviews||0)>=3).length;
             const weak     = cards.filter(f=>f.is_weak_spot).length;
             const quizzes  = data.quizzes.filter(q=>q.quiz_title?.toLowerCase().includes(sub.subject_name.toLowerCase()));
-            const quizAvg  = quizzes.length > 0 ? Math.round(quizzes.reduce((s,q)=>s+q.score,0)/quizzes.length) : null;
+            const quizAvg  = quizzes.length > 0 ? Math.round(quizzes.reduce((s,q)=>s+(q.adjusted_score ?? q.score),0)/quizzes.length) : null;
             const uniqueDays = new Set([
                 ...data.techniques.filter(t=>t.subject===sub.subject_name).map(t=>t.date),
                 ...data.activeRecall.filter(t=>t.subject_name===sub.subject_name).map(t=>t.date),
@@ -421,8 +421,8 @@ export default function Analytics() {
         const mid = Math.floor(sorted.length / 2);
         const older = sorted.slice(0, mid);
         const newer = sorted.slice(mid);
-        const olderAvg = Math.round(older.reduce((s, q) => s + q.score, 0) / older.length);
-        const newerAvg = Math.round(newer.reduce((s, q) => s + q.score, 0) / newer.length);
+        const olderAvg = Math.round(older.reduce((s, q) => s + (q.adjusted_score ?? q.score), 0) / older.length);
+        const newerAvg = Math.round(newer.reduce((s, q) => s + (q.adjusted_score ?? q.score), 0) / newer.length);
         return newerAvg - olderAvg;
     }, [data.quizzes]);
 
@@ -877,11 +877,11 @@ export default function Analytics() {
                                             <p className="text-xs text-muted-foreground">Average</p>
                                         </div>
                                         <div>
-                                            <p className="text-xl font-bold text-foreground">{Math.max(...data.quizzes.map(q=>q.score))}%</p>
+                                            <p className="text-xl font-bold text-foreground">{Math.max(...data.quizzes.map(q=>(q.adjusted_score ?? q.score)))}%</p>
                                             <p className="text-xs text-muted-foreground">Best</p>
                                         </div>
                                         <div>
-                                            <p className="text-xl font-bold text-foreground">{Math.min(...data.quizzes.map(q=>q.score))}%</p>
+                                            <p className="text-xl font-bold text-foreground">{Math.min(...data.quizzes.map(q=>(q.adjusted_score ?? q.score)))}%</p>
                                             <p className="text-xs text-muted-foreground">Lowest</p>
                                         </div>
                                         <div>

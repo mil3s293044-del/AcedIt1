@@ -53,7 +53,10 @@ async function detectWeakAreas(subjectName) {
         ]);
         const subjectLower = subjectName.toLowerCase();
         const subjectQuizzes = quizAttempts.filter(a => matchesSubject(a, subjectLower));
-        const weakQuizTopics = subjectQuizzes.filter(a => typeof a.score === "number" && a.score < 60).map(a => a.quiz_title).filter(Boolean);
+        // Use the adjusted score when present (includes self-marked paper work)
+        // so a maths student who solves on paper isn't flagged as weak.
+        const effectiveScore = (a) => (typeof a.adjusted_score === "number" ? a.adjusted_score : a.score);
+        const weakQuizTopics = subjectQuizzes.filter(a => typeof effectiveScore(a) === "number" && effectiveScore(a) < 60).map(a => a.quiz_title).filter(Boolean);
         const subjectFlashcards = flashcards.filter(f => matchesSubject(f, subjectLower));
         const weakFlashcardTopics = subjectFlashcards.filter(f => f.is_weak_spot || (typeof f.easeFactor === "number" && f.easeFactor < 2.0)).map(f => f.topic || f.subject_name).filter(Boolean);
         const subjectTechniques = studyTechniques.filter(t => matchesSubject(t, subjectLower));

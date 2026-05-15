@@ -86,7 +86,7 @@ export default function DailyMissions({ streakDays = 0, userProfile }) {
             const todaySessions = sessions.filter(s => (s.date || s.created_date?.split('T')[0]) === today);
             const todayMins = todaySessions.reduce((a, s) => a + (s.session_duration || 0), 0);
             const todayQuizzes = quizAttempts.filter(a => (a.date || a.created_date?.split('T')[0]) === today);
-            const maxScore = todayQuizzes.length ? Math.max(...todayQuizzes.map(q => q.score || 0)) : 0;
+            const maxScore = todayQuizzes.length ? Math.max(...todayQuizzes.map(q => (q.adjusted_score ?? q.score) || 0)) : 0;
             setStats({
                 todayStudyMins: todayMins,
                 todayFlashcards: flashcards.filter(f => f.lastReviewedDate === today).length,
