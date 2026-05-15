@@ -465,6 +465,19 @@ const app = express();
 app.use(cors());
 // Stripe webhook needs the raw body to verify the signature — mount raw
 // parser for that path BEFORE the json parser would consume it.
+// Proxy /api/* → https://acedit.au — mirrors the Vite dev-server proxy so
+// the Base44 SDK's leftover calls (file uploads, analytics, app-public-settings)
+// keep working in production until each Base44 path is fully ported to
+// Supabase. MUST be mounted BEFORE express.json so the request body still
+// streams through to acedit.au unread. Once Base44 is fully cut over we can
+// delete this block entirely.
+app.use("/api", createProxyMiddleware({
+  target: "https://acedit.au",
+  changeOrigin: true,
+  // http-proxy-middleware v4 logger shape
+  logger: { info: () => {}, warn: console.warn, error: console.error },
+}));
+
 app.use("/local-ai/fn/stripe-webhook", express.raw({ type: "application/json" }));
 app.use(express.json({ limit: "20mb" }));
 
@@ -3084,19 +3097,6 @@ import { dirname, join } from "node:path";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const distDir = join(__dirname, "dist");
-
-// Proxy /api/* → https://acedit.au — mirrors the Vite dev-server proxy so
-// the Base44 SDK's leftover calls (file uploads, analytics, app-public-settings)
-// keep working in production until each is fully ported to Supabase. Once
-// Base44 is fully cut over we can delete this block entirely.
-app.use("/api", createProxyMiddleware({
-  target: "https://acedit.au",
-  changeOrigin: true,
-  // Don't log every analytics-track request as a noise event.
-  logger: {
-    info: () => {}, warn: console.warn, error: console.error,
-  },
-}));
 
 if (existsSync(distDir)) {
   console.log(`[local-ai] serving static build from ${distDir}`);
