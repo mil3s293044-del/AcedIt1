@@ -16,6 +16,7 @@ import MarkdownMath from "@/components/shared/MarkdownMath";
 import MathText from "@/components/shared/LatexRenderer";
 import { getExaminerPrompt, getLatexRules } from "@/lib/subjectExaminerPrompts";
 import { invokeLLMStream } from "@/lib/streamingAI";
+import useStickToBottom from "@/lib/useStickToBottom";
 
 // Each subject gets one design-system token (no rainbow gradients).
 // `accentText`/`accentBg`/`accentSolid` map to the same color family for the
@@ -79,6 +80,10 @@ export default function MathTutor() {
     const [isFullscreen, setIsFullscreen] = useState(false);
     const fileInputRef = useRef(null);
     const messagesEndRef = useRef(null);
+    // Stick-to-bottom scroll inside the chat container only — replaces the
+    // old scrollIntoView pattern that walked up to the document and scrolled
+    // the whole PAGE during streaming.
+    const { containerRef: chatContainerRef } = useStickToBottom([chatMessages]);
     const autoSaveRef = useRef(null);
     const abortRef = useRef(null);
     const { toast } = useToast();
@@ -87,9 +92,8 @@ export default function MathTutor() {
         loadHistory();
     }, []);
 
-    useEffect(() => {
-        messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-    }, [chatMessages]);
+    // Old scrollIntoView pattern removed — useStickToBottom (above) handles
+    // scrolling inside the chat container without dragging the whole page.
 
     useEffect(() => {
         if (!loadedResultId || !chatMessages.length) { clearInterval(autoSaveRef.current); return; }
@@ -274,7 +278,7 @@ export default function MathTutor() {
                     </div>
                 </div>
 
-                <div className={`overflow-y-auto space-y-4 p-4 bg-background ${isFullscreen ? 'flex-1' : 'max-h-[460px]'}`}>
+                <div ref={chatContainerRef} className={`overflow-y-auto space-y-4 p-4 bg-background ${isFullscreen ? 'flex-1' : 'max-h-[460px]'}`}>
                     {chatMessages.length === 0 ? (
                         <div className="text-center py-12">
                             <div className={`w-14 h-14 ${subject.accentBg} rounded-2xl flex items-center justify-center mx-auto mb-3`}>

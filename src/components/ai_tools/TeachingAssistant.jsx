@@ -17,6 +17,7 @@ import MathText from "@/components/shared/LatexRenderer";
 import { getExaminerPrompt, getLatexRules } from "@/lib/subjectExaminerPrompts";
 import { invokeLLMStream } from "@/lib/streamingAI";
 import AISkeleton from "@/components/shared/AISkeleton";
+import useStickToBottom from "@/lib/useStickToBottom";
 
 export default function TeachingAssistant() {
     const [mode, setMode] = useState('concept');
@@ -38,6 +39,10 @@ export default function TeachingAssistant() {
     const [quizTitle, setQuizTitle] = useState('');
     const [isGeneratingQuiz, setIsGeneratingQuiz] = useState(false);
     const messagesEndRef = useRef(null);
+    // Stick-to-bottom scroll inside the chat container only — replaces the
+    // old scrollIntoView pattern that walked up to the document and scrolled
+    // the whole PAGE during streaming.
+    const { containerRef: chatContainerRef } = useStickToBottom([messages]);
     const autoSaveRef = useRef(null);
     const abortRef = useRef(null);
     const { toast } = useToast();
@@ -56,9 +61,8 @@ export default function TeachingAssistant() {
         init();
     }, []);
 
-    useEffect(() => {
-        messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-    }, [messages]);
+    // Old scrollIntoView pattern removed — useStickToBottom (above) handles
+    // scrolling inside the chat container without dragging the whole page.
 
     useEffect(() => {
         if (!loadedResultId || !messages.length) return;
@@ -402,7 +406,7 @@ Respond in markdown.`;
 
             {/* Chat */}
             <div className="card-soft overflow-hidden">
-                <div className="h-[420px] overflow-y-auto p-4 space-y-3 bg-gray-50">
+                <div ref={chatContainerRef} className="h-[420px] overflow-y-auto p-4 space-y-3 bg-gray-50">
                     {messages.map((msg, i) => (
                         <motion.div key={i} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
                             <div className={`max-w-[82%] rounded-2xl px-4 py-3 ${msg.role === 'user' ? 'bg-amber-600 text-white' : 'bg-white border border-gray-200 shadow-sm'}`}>

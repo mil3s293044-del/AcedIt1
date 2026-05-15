@@ -3084,6 +3084,11 @@ import { dirname, join } from "node:path";
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const distDir = join(__dirname, "dist");
 
+// Silently swallow Base44 SDK analytics calls so they don't 404-spam the
+// production console. In dev these go through the Vite proxy to acedit.au;
+// in production we don't proxy them, and the SDK is being phased out anyway.
+app.all(/^\/api\/apps\//, (req, res) => res.status(204).end());
+
 if (existsSync(distDir)) {
   console.log(`[local-ai] serving static build from ${distDir}`);
   app.use(express.static(distDir, { maxAge: "1h", index: false }));
