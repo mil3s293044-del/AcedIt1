@@ -188,6 +188,22 @@ const integrationsProxy = new Proxy(realBase44.integrations, {
               return invokeLLM(params || {});
             };
           }
+          if (coreProp === 'UploadFile') {
+            // Route uploads to our own /local-ai/uploadFile endpoint instead
+            // of Base44's. Server stores in memory + returns local-file://<id>,
+            // which invokeAI already understands as a file_url. Required for
+            // AI tools (Quizzes, etc.) to keep working without Base44.
+            return async ({ file }) => {
+              const fd = new FormData();
+              fd.append('file', file);
+              const r = await fetch('/local-ai/uploadFile', { method: 'POST', body: fd });
+              if (!r.ok) {
+                const text = await r.text().catch(() => '');
+                throw new Error(`Upload failed (${r.status}): ${text}`);
+              }
+              return r.json(); // { file_url: 'local-file://...' }
+            };
+          }
           return coreTarget[coreProp];
         },
       });
