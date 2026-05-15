@@ -63,6 +63,7 @@
     "framer-motion": "^11.16.4",
     "heic-convert": "^2.1.0",
     "html2canvas": "^1.4.1",
+    "http-proxy-middleware": "^4.0.0",
     "input-otp": "^1.4.2",
     "jspdf": "^2.5.2",
     "jszip": "^3.10.1",

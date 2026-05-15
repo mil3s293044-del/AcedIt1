@@ -8,6 +8,7 @@ import heicConvert from "heic-convert";
 import mammoth from "mammoth";
 import JSZip from "jszip";
 import { createClient as createSupabaseClient } from "@supabase/supabase-js";
+import { createProxyMiddleware } from "http-proxy-middleware";
 import Stripe from "stripe";
 
 // dotenv looks for .env by default; explicitly load .env.local too.
@@ -3084,10 +3085,18 @@ import { dirname, join } from "node:path";
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const distDir = join(__dirname, "dist");
 
-// Silently swallow Base44 SDK analytics calls so they don't 404-spam the
-// production console. In dev these go through the Vite proxy to acedit.au;
-// in production we don't proxy them, and the SDK is being phased out anyway.
-app.all(/^\/api\/apps\//, (req, res) => res.status(204).end());
+// Proxy /api/* → https://acedit.au — mirrors the Vite dev-server proxy so
+// the Base44 SDK's leftover calls (file uploads, analytics, app-public-settings)
+// keep working in production until each is fully ported to Supabase. Once
+// Base44 is fully cut over we can delete this block entirely.
+app.use("/api", createProxyMiddleware({
+  target: "https://acedit.au",
+  changeOrigin: true,
+  // Don't log every analytics-track request as a noise event.
+  logger: {
+    info: () => {}, warn: console.warn, error: console.error,
+  },
+}));
 
 if (existsSync(distDir)) {
   console.log(`[local-ai] serving static build from ${distDir}`);
