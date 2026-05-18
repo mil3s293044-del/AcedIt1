@@ -8,7 +8,6 @@ import heicConvert from "heic-convert";
 import mammoth from "mammoth";
 import JSZip from "jszip";
 import { createClient as createSupabaseClient } from "@supabase/supabase-js";
-import { createProxyMiddleware } from "http-proxy-middleware";
 import Stripe from "stripe";
 
 // dotenv looks for .env by default; explicitly load .env.local too.
@@ -465,18 +464,12 @@ const app = express();
 app.use(cors());
 // Stripe webhook needs the raw body to verify the signature — mount raw
 // parser for that path BEFORE the json parser would consume it.
-// Proxy /api/* → https://acedit.au — mirrors the Vite dev-server proxy so
-// the Base44 SDK's leftover calls (file uploads, analytics, app-public-settings)
-// keep working in production until each Base44 path is fully ported to
-// Supabase. MUST be mounted BEFORE express.json so the request body still
-// streams through to acedit.au unread. Once Base44 is fully cut over we can
-// delete this block entirely.
-app.use("/api", createProxyMiddleware({
-  target: "https://acedit.au",
-  changeOrigin: true,
-  // http-proxy-middleware v4 logger shape
-  logger: { info: () => {}, warn: console.warn, error: console.error },
-}));
+// Quietly absorb leftover Base44 SDK calls (analytics, app-public-settings,
+// etc.). After DNS cutover acedit.au IS this server, so we can't proxy back —
+// these calls would loop. Returning 204 No Content makes the SDK's .catch
+// handlers no-op silently. File upload is intercepted client-side and routed
+// to /local-ai/uploadFile, so we don't lose any actual functionality.
+app.all(/^\/api\//, (req, res) => res.status(204).end());
 
 app.use("/local-ai/fn/stripe-webhook", express.raw({ type: "application/json" }));
 app.use(express.json({ limit: "20mb" }));
