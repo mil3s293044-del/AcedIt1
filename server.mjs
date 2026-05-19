@@ -2813,50 +2813,108 @@ app.post("/local-ai/fn/sendSupportTicket", async (req, res) => {
     const ticketShort = ticket.id.slice(0, 8);
     const emailResults = { admin: null, user: null };
 
+    // If the user uploaded a screenshot, the frontend got back a `local-file://`
+    // URL that points into our in-memory fileStore. Pull the bytes out so we
+    // can attach them to the admin email (the URL itself isn't fetchable from
+    // outside the server).
+    let screenshotAttachment = null;
+    if (screenshotUrl && typeof screenshotUrl === "string" && screenshotUrl.startsWith("local-file://")) {
+      const fid = screenshotUrl.slice("local-file://".length);
+      const fileEntry = fileStore.get(fid);
+      if (fileEntry) {
+        screenshotAttachment = {
+          filename: fileEntry.originalName || `screenshot-${ticketShort}.png`,
+          content: fileEntry.buffer.toString("base64"),
+        };
+      }
+    }
+
     if (resend) {
       const descHtml = escapeHtml(description).replace(/\n/g, "<br>");
+      const userFirst = escapeHtml((userFullName || "").split(" ")[0] || "there");
+      const username = escapeHtml(userProfile?.username || "—");
+      const tier = escapeHtml(userProfile?.subscription_tier || "free");
+      const fromName = escapeHtml(userFullName);
+      const fromEmail = escapeHtml(user.email);
+      const issueEsc = escapeHtml(issueType);
+      const locEsc = escapeHtml(location);
 
+      // Email layout uses tables + inline styles for cross-client safety
+      // (Outlook, Apple Mail, Gmail). No external CSS, no flexbox.
       const adminHtml = `
-        <div style="font-family:system-ui,sans-serif;color:#111;max-width:560px">
-          <h2 style="margin:0 0 12px">New support ticket — ${escapeHtml(issueType)}</h2>
-          <p style="margin:4px 0"><strong>From:</strong> ${escapeHtml(userFullName)} &lt;${escapeHtml(user.email)}&gt;</p>
-          <p style="margin:4px 0"><strong>Username:</strong> ${escapeHtml(userProfile?.username || "—")}</p>
-          <p style="margin:4px 0"><strong>Tier:</strong> ${escapeHtml(userProfile?.subscription_tier || "free")}</p>
-          <p style="margin:4px 0"><strong>Location:</strong> ${escapeHtml(location)}</p>
-          <p style="margin:12px 0 4px"><strong>Description:</strong></p>
-          <blockquote style="border-left:3px solid #58CC02;padding:8px 12px;margin:0;background:#f7f7f7">${descHtml}</blockquote>
-          ${screenshotUrl ? `<p style="margin:12px 0 4px"><strong>Screenshot:</strong> <a href="${escapeHtml(screenshotUrl)}">${escapeHtml(screenshotUrl)}</a></p>` : ""}
-          <hr style="border:none;border-top:1px solid #eee;margin:20px 0">
-          <p style="color:#888;font-size:12px;margin:0">Ticket ID: ${ticket.id}<br>Reply directly to this email to respond to the user.</p>
-        </div>`;
+        <table cellpadding="0" cellspacing="0" border="0" style="width:100%;background:#f4f4f5;padding:24px 0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif">
+          <tr><td align="center">
+            <table cellpadding="0" cellspacing="0" border="0" style="width:600px;max-width:100%;background:#ffffff;border-radius:12px;overflow:hidden;border:1px solid #e4e4e7">
+              <tr><td style="background:#58CC02;padding:20px 24px">
+                <div style="color:#ffffff;font-size:13px;font-weight:600;letter-spacing:0.5px;text-transform:uppercase;opacity:0.9">New support ticket</div>
+                <div style="color:#ffffff;font-size:20px;font-weight:700;margin-top:4px">${issueEsc} · ${locEsc}</div>
+              </td></tr>
+              <tr><td style="padding:24px">
+                <table cellpadding="0" cellspacing="0" border="0" style="width:100%;font-size:14px;color:#27272a">
+                  <tr><td style="padding:6px 0;color:#71717a;width:110px">From</td><td style="padding:6px 0">${fromName} &lt;${fromEmail}&gt;</td></tr>
+                  <tr><td style="padding:6px 0;color:#71717a">Username</td><td style="padding:6px 0">${username}</td></tr>
+                  <tr><td style="padding:6px 0;color:#71717a">Tier</td><td style="padding:6px 0">${tier}</td></tr>
+                  <tr><td style="padding:6px 0;color:#71717a">Submitted</td><td style="padding:6px 0">${new Date().toISOString().slice(0, 16).replace("T", " ")} UTC</td></tr>
+                </table>
+                <div style="margin-top:20px;font-size:12px;font-weight:600;color:#71717a;text-transform:uppercase;letter-spacing:0.5px">Description</div>
+                <table cellpadding="0" cellspacing="0" border="0" style="width:100%;margin-top:8px">
+                  <tr>
+                    <td style="width:4px;background:#58CC02;border-radius:2px"></td>
+                    <td style="padding:12px 16px;background:#fafafa;border-radius:0 6px 6px 0;font-size:14px;line-height:1.6;color:#27272a">${descHtml}</td>
+                  </tr>
+                </table>
+                ${screenshotAttachment ? `<div style="margin-top:20px;padding:12px 16px;background:#fef9c3;border-radius:6px;font-size:13px;color:#713f12">Screenshot attached to this email.</div>` : (screenshotUrl ? `<div style="margin-top:20px;padding:12px 16px;background:#fee2e2;border-radius:6px;font-size:13px;color:#7f1d1d">User uploaded a screenshot but the server couldn't retrieve it (likely the file expired from memory). Ticket ID below to look up manually.</div>` : "")}
+              </td></tr>
+              <tr><td style="padding:16px 24px;background:#fafafa;border-top:1px solid #e4e4e7;font-size:12px;color:#71717a">
+                <div>Ticket ID: <code style="font-family:ui-monospace,SFMono-Regular,Menlo,monospace;background:#f4f4f5;padding:2px 6px;border-radius:4px">${ticket.id}</code></div>
+                <div style="margin-top:6px">Reply directly to this email to respond to the user.</div>
+              </td></tr>
+            </table>
+          </td></tr>
+        </table>`;
 
       try {
-        const r = await resend.emails.send({
+        const sendArgs = {
           from: SUPPORT_FROM,
           to: ADMIN_EMAIL,
           replyTo: user.email,
           subject: `[AcedIt #${ticketShort}] ${issueType} - ${location}`,
           html: adminHtml,
-        });
+        };
+        if (screenshotAttachment) sendArgs.attachments = [screenshotAttachment];
+        const r = await resend.emails.send(sendArgs);
         emailResults.admin = { ok: !r.error, id: r.data?.id, error: r.error?.message || null };
       } catch (e) {
         emailResults.admin = { ok: false, error: e?.message || String(e) };
       }
 
       const userHtml = `
-        <div style="font-family:system-ui,sans-serif;color:#111;max-width:560px">
-          <p>Hey ${escapeHtml(userFullName.split(" ")[0])},</p>
-          <p>Got your message — thanks for letting us know.</p>
-          <p style="margin:16px 0 4px">Here's what you sent:</p>
-          <blockquote style="border-left:3px solid #58CC02;padding:12px;margin:0;background:#f7f7f7">
-            <strong>${escapeHtml(issueType)}</strong> · ${escapeHtml(location)}<br><br>
-            ${descHtml}
-          </blockquote>
-          <p style="margin-top:16px">We'll take a look and get back to you when we can.</p>
-          <p>— The AcedIt team</p>
-          <hr style="border:none;border-top:1px solid #eee;margin:20px 0">
-          <p style="color:#888;font-size:12px;margin:0">Ticket reference: #${ticketShort}</p>
-        </div>`;
+        <table cellpadding="0" cellspacing="0" border="0" style="width:100%;background:#f4f4f5;padding:24px 0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif">
+          <tr><td align="center">
+            <table cellpadding="0" cellspacing="0" border="0" style="width:560px;max-width:100%;background:#ffffff;border-radius:12px;overflow:hidden;border:1px solid #e4e4e7">
+              <tr><td style="padding:32px 28px 8px;text-align:center">
+                <div style="font-size:22px;font-weight:700;color:#58CC02;letter-spacing:-0.5px">AcedIt</div>
+              </td></tr>
+              <tr><td style="padding:8px 28px 24px">
+                <p style="margin:0 0 12px;font-size:16px;color:#18181b">Hey ${userFirst},</p>
+                <p style="margin:0 0 16px;font-size:15px;line-height:1.5;color:#27272a">Got your message — thanks for letting us know. We'll take a look and get back to you when we can.</p>
+                <div style="margin-top:8px;font-size:12px;font-weight:600;color:#71717a;text-transform:uppercase;letter-spacing:0.5px">What you sent</div>
+                <table cellpadding="0" cellspacing="0" border="0" style="width:100%;margin-top:8px">
+                  <tr>
+                    <td style="width:4px;background:#58CC02;border-radius:2px"></td>
+                    <td style="padding:12px 16px;background:#fafafa;border-radius:0 6px 6px 0;font-size:14px;line-height:1.6;color:#27272a">
+                      <div style="font-weight:600;margin-bottom:6px">${issueEsc} · ${locEsc}</div>
+                      ${descHtml}
+                    </td>
+                  </tr>
+                </table>
+              </td></tr>
+              <tr><td style="padding:16px 28px 24px;background:#fafafa;border-top:1px solid #e4e4e7;font-size:13px;color:#71717a;text-align:center">
+                Ticket reference: <code style="font-family:ui-monospace,SFMono-Regular,Menlo,monospace;background:#ffffff;padding:2px 6px;border-radius:4px;border:1px solid #e4e4e7">#${ticketShort}</code>
+              </td></tr>
+            </table>
+          </td></tr>
+        </table>`;
 
       try {
         const r = await resend.emails.send({
@@ -2872,7 +2930,7 @@ app.post("/local-ai/fn/sendSupportTicket", async (req, res) => {
       }
 
       console.log(
-        `[sendSupportTicket] ticket=${ticketShort} admin_email=${emailResults.admin?.ok ? "ok" : "fail"} user_email=${emailResults.user?.ok ? "ok" : "fail"}` +
+        `[sendSupportTicket] ticket=${ticketShort} admin_email=${emailResults.admin?.ok ? "ok" : "fail"} user_email=${emailResults.user?.ok ? "ok" : "fail"} screenshot_attached=${!!screenshotAttachment}` +
         (emailResults.admin?.error ? ` admin_err="${emailResults.admin.error}"` : "") +
         (emailResults.user?.error ? ` user_err="${emailResults.user.error}"` : ""),
       );
