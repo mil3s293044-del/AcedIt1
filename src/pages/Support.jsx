@@ -48,7 +48,7 @@ export default function Support() {
         setIsLoadingHistory(true);
         try {
             const tickets = await base44.entities.SupportTicket.filter(
-                { user_email: userEmail },
+                { created_by: userEmail },
                 '-created_date',
                 50
             );
