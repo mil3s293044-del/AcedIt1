@@ -9,6 +9,7 @@ import mammoth from "mammoth";
 import JSZip from "jszip";
 import { createClient as createSupabaseClient } from "@supabase/supabase-js";
 import Stripe from "stripe";
+import { Resend } from "resend";
 
 // dotenv looks for .env by default; explicitly load .env.local too.
 import { config as dotenvConfig } from "dotenv";
@@ -59,6 +60,28 @@ if (STRIPE_SECRET_KEY) {
   console.log("[local-ai] Stripe client ready.");
 } else {
   console.warn("[local-ai] STRIPE_SECRET_KEY not set — Stripe endpoints will reject calls.");
+}
+
+// ─── Resend client (transactional email) ───────────────────────────────────
+// Sender domain `acedit.au` is DNS-verified in Resend. Without RESEND_API_KEY
+// set, support tickets still save to DB but no admin/user emails are sent.
+const RESEND_API_KEY = process.env.RESEND_API_KEY;
+const ADMIN_EMAIL = process.env.ADMIN_EMAIL || "admin@acedit.com.au";
+const SUPPORT_FROM = "AcedIt Support <support@acedit.au>";
+let resend = null;
+if (RESEND_API_KEY) {
+  resend = new Resend(RESEND_API_KEY);
+  console.log("[local-ai] Resend client ready.");
+} else {
+  console.warn(
+    "[local-ai] RESEND_API_KEY not set — support emails will be skipped (tickets still save to DB).",
+  );
+}
+
+function escapeHtml(s) {
+  return String(s ?? "")
+    .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;").replace(/'/g, "&#039;");
 }
 
 // Verifies the bearer JWT in `Authorization: Bearer <token>` and returns the
@@ -2739,11 +2762,10 @@ app.post("/local-ai/fn/resolveScoreWager", async (req, res) => {
 // ════════════════════════════════════════════════════════════════════════════
 
 // ─── sendSupportTicket ─────────────────────────────────────────────────────
-// Saves a support/bug-report ticket to the support_tickets table. The Base44
-// version also fired off two SendEmail integrations (admin notification +
-// user confirmation), but we don't have an email provider wired yet — those
-// are logged as TODO and skipped. Tickets still get captured server-side;
-// admin can poll the table directly until email is added.
+// Saves the ticket to support_tickets, then fires two Resend emails: admin
+// notification to ADMIN_EMAIL and confirmation back to the user. Email
+// failures are logged but never fail the request — the ticket is the source
+// of truth.
 app.post("/local-ai/fn/sendSupportTicket", async (req, res) => {
   const user = await authenticateRequest(req);
   if (!user) return res.status(401).json({ error: "Unauthorized" });
@@ -2755,9 +2777,6 @@ app.post("/local-ai/fn/sendSupportTicket", async (req, res) => {
       return res.status(400).json({ error: "Missing required fields" });
     }
 
-    // Pull profile for richer admin context (subscription tier, username) —
-    // pack into `extra` since the lean support_tickets schema doesn't have
-    // dedicated columns for these.
     let userProfile = null;
     try {
       const { data } = await supabaseAdmin
@@ -2791,19 +2810,84 @@ app.post("/local-ai/fn/sendSupportTicket", async (req, res) => {
       .single();
     if (insertErr) throw insertErr;
 
-    console.log(
-      `[sendSupportTicket] ticket saved (id=${ticket.id}, user=${user.email}). ` +
-      `Email notifications: TODO — wire Resend/SES/SMTP before real users rely on confirmation emails.`,
-    );
+    const ticketShort = ticket.id.slice(0, 8);
+    const emailResults = { admin: null, user: null };
+
+    if (resend) {
+      const descHtml = escapeHtml(description).replace(/\n/g, "<br>");
+
+      const adminHtml = `
+        <div style="font-family:system-ui,sans-serif;color:#111;max-width:560px">
+          <h2 style="margin:0 0 12px">New support ticket — ${escapeHtml(issueType)}</h2>
+          <p style="margin:4px 0"><strong>From:</strong> ${escapeHtml(userFullName)} &lt;${escapeHtml(user.email)}&gt;</p>
+          <p style="margin:4px 0"><strong>Username:</strong> ${escapeHtml(userProfile?.username || "—")}</p>
+          <p style="margin:4px 0"><strong>Tier:</strong> ${escapeHtml(userProfile?.subscription_tier || "free")}</p>
+          <p style="margin:4px 0"><strong>Location:</strong> ${escapeHtml(location)}</p>
+          <p style="margin:12px 0 4px"><strong>Description:</strong></p>
+          <blockquote style="border-left:3px solid #58CC02;padding:8px 12px;margin:0;background:#f7f7f7">${descHtml}</blockquote>
+          ${screenshotUrl ? `<p style="margin:12px 0 4px"><strong>Screenshot:</strong> <a href="${escapeHtml(screenshotUrl)}">${escapeHtml(screenshotUrl)}</a></p>` : ""}
+          <hr style="border:none;border-top:1px solid #eee;margin:20px 0">
+          <p style="color:#888;font-size:12px;margin:0">Ticket ID: ${ticket.id}<br>Reply directly to this email to respond to the user.</p>
+        </div>`;
+
+      try {
+        const r = await resend.emails.send({
+          from: SUPPORT_FROM,
+          to: ADMIN_EMAIL,
+          replyTo: user.email,
+          subject: `[AcedIt #${ticketShort}] ${issueType} - ${location}`,
+          html: adminHtml,
+        });
+        emailResults.admin = { ok: !r.error, id: r.data?.id, error: r.error?.message || null };
+      } catch (e) {
+        emailResults.admin = { ok: false, error: e?.message || String(e) };
+      }
+
+      const userHtml = `
+        <div style="font-family:system-ui,sans-serif;color:#111;max-width:560px">
+          <p>Hey ${escapeHtml(userFullName.split(" ")[0])},</p>
+          <p>Got your message — thanks for letting us know.</p>
+          <p style="margin:16px 0 4px">Here's what you sent:</p>
+          <blockquote style="border-left:3px solid #58CC02;padding:12px;margin:0;background:#f7f7f7">
+            <strong>${escapeHtml(issueType)}</strong> · ${escapeHtml(location)}<br><br>
+            ${descHtml}
+          </blockquote>
+          <p style="margin-top:16px">We'll take a look and get back to you when we can.</p>
+          <p>— The AcedIt team</p>
+          <hr style="border:none;border-top:1px solid #eee;margin:20px 0">
+          <p style="color:#888;font-size:12px;margin:0">Ticket reference: #${ticketShort}</p>
+        </div>`;
+
+      try {
+        const r = await resend.emails.send({
+          from: SUPPORT_FROM,
+          to: user.email,
+          replyTo: ADMIN_EMAIL,
+          subject: `We got your message — AcedIt support #${ticketShort}`,
+          html: userHtml,
+        });
+        emailResults.user = { ok: !r.error, id: r.data?.id, error: r.error?.message || null };
+      } catch (e) {
+        emailResults.user = { ok: false, error: e?.message || String(e) };
+      }
+
+      console.log(
+        `[sendSupportTicket] ticket=${ticketShort} admin_email=${emailResults.admin?.ok ? "ok" : "fail"} user_email=${emailResults.user?.ok ? "ok" : "fail"}` +
+        (emailResults.admin?.error ? ` admin_err="${emailResults.admin.error}"` : "") +
+        (emailResults.user?.error ? ` user_err="${emailResults.user.error}"` : ""),
+      );
+    } else {
+      console.warn(`[sendSupportTicket] ticket=${ticketShort} saved but RESEND_API_KEY not set — no emails sent.`);
+    }
 
     return res.json({
       success: true,
       message: "Support ticket submitted successfully",
       ticket_id: ticket.id,
       emailStatus: {
-        results: [],
-        allSent: false,
-        warning: "Email delivery not yet wired in self-hosted stack — ticket saved to DB, admin can poll.",
+        admin: emailResults.admin,
+        user: emailResults.user,
+        allSent: !!(emailResults.admin?.ok && emailResults.user?.ok),
       },
     });
   } catch (err) {
