@@ -111,13 +111,29 @@ export default function TierUsagePill({ feature, userProfile: profileProp, compa
         : `${label}: ${remaining}/${cap} left ${period}`;
 
     if (exhausted) {
+        // Premium at cap → no upgrade CTA (they already are premium). Just a
+        // static pill telling them to wait until reset.
+        if (premium) {
+            return (
+                <span
+                    className={`pill ${colorClasses} gap-1.5 ${className}`}
+                    title={tooltip}
+                >
+                    <Crown className="w-3 h-3" />
+                    <span className="font-bold tabular-nums">
+                        {compact ? `0/${cap}` : `${label}: 0 left — resets midnight`}
+                    </span>
+                </span>
+            );
+        }
+        // Free at cap → upgrade CTA links to Subscription.
         return (
             <Link
                 to={createPageUrl("Subscription")}
                 className={`pill ${colorClasses} gap-1.5 hover:opacity-90 transition-opacity ${className}`}
                 title={tooltip}
             >
-                {premium ? <Crown className="w-3 h-3" /> : <Lock className="w-3 h-3" />}
+                <Lock className="w-3 h-3" />
                 <span className="font-bold tabular-nums">{compact ? `0/${cap}` : `${label}: 0 left — upgrade`}</span>
             </Link>
         );

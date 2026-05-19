@@ -140,7 +140,9 @@ export default function Subscription() {
                         </h1>
                     </div>
                     <p className="text-gray-600 text-lg">
-                        Manage your subscription and unlock premium features
+                        {isPremium
+                            ? "Manage your Premium subscription"
+                            : "Manage your subscription and unlock premium features"}
                     </p>
                 </motion.div>
 
