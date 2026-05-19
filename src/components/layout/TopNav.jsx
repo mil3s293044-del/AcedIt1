@@ -3,8 +3,7 @@ import { Link, useLocation } from "react-router-dom";
 import { Flame, Zap, Crown } from "lucide-react";
 import { createPageUrl } from "@/utils";
 import { base44 } from "@/api/base44Client";
-import TierUsagePill from "@/components/shared/TierUsagePill";
-import { FEATURES } from "@/lib/tierAccess";
+import UsageMeter from "@/components/shared/UsageMeter";
 
 // Page slug → display title. Anything missing falls back to a humanized slug.
 const PAGE_TITLES = {
@@ -81,16 +80,8 @@ export default function TopNav() {
 
                 {/* ── Stats pills + premium chip ──────────────────────── */}
                 <div className="flex items-center gap-1.5">
-                    {/* Daily AI Tools usage — always visible so the user knows
-                        their cap state without leaving the page they're on. */}
-                    {userProfile && (
-                        <TierUsagePill
-                            feature={FEATURES.AI_TOOL}
-                            userProfile={userProfile}
-                            compact
-                            className="hidden sm:inline-flex"
-                        />
-                    )}
+                    {/* Click to see all daily AI caps + weekly cost ceiling. */}
+                    {userProfile && <UsageMeter />}
                     {streak > 0 && (
                         <Link
                             to={createPageUrl("Ranked")}
