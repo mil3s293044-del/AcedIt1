@@ -324,11 +324,11 @@ export default function Support() {
                                                             <CardContent className="space-y-3">
                                                                 <div className="bg-white/80 rounded-lg p-3 border border-purple-100">
                                                                     <p className="text-sm text-gray-700 line-clamp-4 whitespace-pre-wrap">
-                                                                        {ticket.description}
+                                                                        {ticket.body || ticket.description}
                                                                     </p>
                                                                 </div>
 
-                                                                {ticket.screenshot_url && (
+                                                                {(ticket.extra?.screenshot_url || ticket.screenshot_url) && (
                                                                     <div className="flex items-center gap-1.5 text-xs text-purple-600 font-medium">
                                                                         <span>📷</span>
                                                                         <span>Screenshot attached</span>
