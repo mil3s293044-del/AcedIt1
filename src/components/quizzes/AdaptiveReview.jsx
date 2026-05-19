@@ -45,6 +45,7 @@ export default function AdaptiveReview({ quiz, wrongQuestions, aiFeedback, onCom
         const feedback = aiFeedback[q.originalIndex];
         try {
             const res = await base44.integrations.Core.InvokeLLM({
+                feature: "quiz_ai_mark",
                 prompt: `${getLatexRules()}
 
 Give a helpful hint for this ${quiz.subject} question. Don't reveal the answer directly.

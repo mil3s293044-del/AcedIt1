@@ -122,6 +122,7 @@ export default function ATARGoalPlanner({ user, userProfile, userSubjects, yearL
             const subjectsList = userSubjects.map(s => s.subject_name).join(', ') || 'General subjects';
             
             const response = await InvokeLLM({
+                feature: "goal_ai_gen",
                 prompt: `I am a VCE student in ${yearLevel}. My target ATAR is ${targetATAR} and my subjects are: ${subjectsList}. Create a comprehensive ATAR achievement plan for me.
 
 Generate 8-12 specific, time-bound milestones. Given I am in ${yearLevel}, make the milestones relevant (e.g., for Year 10, focus on building foundations; for Year 12, focus on exam performance).

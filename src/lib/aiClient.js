@@ -25,7 +25,7 @@
 //
 // Error handling: if the server blocks the call (402 = needs premium, 429 =
 // daily/monthly cap hit), the error message is the `reason` from the server.
-// The AI tool's `catch` block can show a toast + redirect to /Pricing.
+// The AI tool's `catch` block can show a toast + redirect to /Subscription.
 // ════════════════════════════════════════════════════════════════════════════
 
 import { supabase } from '@/api/supabaseClient';

@@ -23,7 +23,6 @@ const PAGE_TITLES = {
     "Subscription":   "Subscription",
     "Settings":       "Settings",
     "Support":        "Support",
-    "Pricing":        "Pricing",
     "Paywall":        "Upgrade",
     "Premium":        "Premium",
     "Suspended":      "Account Suspended",

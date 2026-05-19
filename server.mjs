@@ -151,8 +151,8 @@ async function callInvokeAI({ prompt, response_json_schema }) {
 // If a request arrives WITHOUT a Supabase JWT (legacy Base44 path), we allow
 // it but log a warning — phase 3d ships all users onto Supabase auth.
 const TIER_FREE_CAPS    = { quiz_ai_gen: 3, flashcard_ai_gen: 3 };
-const TIER_PREMIUM_CAPS = { quiz_ai_gen: 3, flashcard_ai_gen: 3, ai_tool: 6, ai_test_marker: 1, goal_ai_gen: 1, roadmap_ai_gen: 1, blurting: 5, active_recall: 8 };
-const TIER_COUNTER_KEY  = { quiz_ai_gen: "quizzes", flashcard_ai_gen: "flashcards", ai_tool: "tools", ai_test_marker: "marker", goal_ai_gen: "goal", roadmap_ai_gen: "goal", blurting: "blurting", active_recall: "active_recall" };
+const TIER_PREMIUM_CAPS = { quiz_ai_gen: 3, quiz_ai_mark: 10, flashcard_ai_gen: 3, ai_tool: 6, goal_ai_gen: 1, roadmap_ai_gen: 1, blurting: 5, active_recall: 8 };
+const TIER_COUNTER_KEY  = { quiz_ai_gen: "quizzes", quiz_ai_mark: "quiz_marks", flashcard_ai_gen: "flashcards", ai_tool: "tools", goal_ai_gen: "goal", roadmap_ai_gen: "goal", blurting: "blurting", active_recall: "active_recall" };
 const TIER_WEEKLY_CAP_CENTS = 250;
 
 // Returns YYYY-MM-DD for the Monday of the current ISO week, in UTC.

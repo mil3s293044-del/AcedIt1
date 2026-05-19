@@ -145,6 +145,7 @@ export default function RoadmapDisplay({ roadmap: initialRoadmap, userProfile, o
             const prompt = buildDayNPrompt({ roadmap, dayNum, journeyEntry, priorDays, priorRatings });
 
             const result = await base44.integrations.Core.InvokeLLM({
+                feature: "roadmap_ai_gen",
                 prompt,
                 response_json_schema: {
                     type: "object",

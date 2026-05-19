@@ -167,6 +167,7 @@ export default function BlurtingMethod({ onSessionComplete }) {
                 documentContext += `\n\n[${f.name}]:\n${textResult.data?.text || ''}`;
             }
             const response = await base44.integrations.Core.InvokeLLM({
+                feature: "blurting",
                 prompt: enhancePromptWithVCEExpert(`Evaluate this ${selectedSubject} "blurting" attempt against the source material (${sourceFiles.length} file(s)) using VCE Study Design criteria.
 
 Student's Blurted Text:

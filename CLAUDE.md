@@ -46,7 +46,7 @@ The app reads/writes through shims that route to either Base44 or Supabase based
 - **Past papers (2)**: `fetchVCAAPaper`, `renderPdfPages` — VCAAExamSimulator/PastPapersSection/PastPaperPlayer/AITestMarkerSection were all dead code, deleted 2026-05-05.
 
 ### Functions ported (continued)
-- **Support (1)**: `sendSupportTicket` — ticket saves to DB; **email delivery NOT wired** (Base44 used `SendEmail` integration). Wire Resend/SES/SMTP before real users rely on confirmation emails. Admin can poll `support_tickets` table in the meantime.
+- **Support (1)**: `sendSupportTicket` — ticket saves to DB AND sends two Resend emails (admin notification to `ADMIN_EMAIL`, confirmation to user). Sender domain `acedit.au` is DNS-verified in Resend. Wired 2026-05-19.
 
 ### Functions remaining
 - **Stripe (4)**: `stripeCheckout`, `stripePortal`, `verifySubscription`, `stripe-webhook` — critical for premium signups. Requires public webhook URL (ngrok in dev).

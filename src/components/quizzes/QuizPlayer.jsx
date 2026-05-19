@@ -415,6 +415,7 @@ export default function QuizPlayer({ quiz, onComplete, onExit, mode = "standard"
             }
 
             const response = await base44.integrations.Core.InvokeLLM({
+                feature: "quiz_ai_mark",
                 prompt: `${getLatexRules()}
 
 Mark this ${shuffledQuiz.subject} quiz. Provide feedback for ALL ${questionsForAnalysis.length} questions.${sourceFileContent}${comparisonInstructions}

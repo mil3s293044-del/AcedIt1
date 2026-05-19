@@ -60,7 +60,7 @@ export default function PaymentCancel() {
                         </div>
 
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            <Link to={createPageUrl("Pricing")} className="block">
+                            <Link to={createPageUrl("Subscription")} className="block">
                                 <Button className="w-full h-12 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700">
                                     <CreditCard className="w-5 h-5 mr-2" />
                                     View Plans Again

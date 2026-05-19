@@ -422,6 +422,7 @@ The documents provided may be PowerPoint slides, Word documents, or text files. 
             const geminiCompatibleUrls = directFiles.map(f => f.url);
 
             const response = await base44.integrations.Core.InvokeLLM({
+                feature: "flashcard_ai_gen",
                 model: "gemini_3_flash",
                 prompt: basePrompt,
                 file_urls: geminiCompatibleUrls.length ? geminiCompatibleUrls : undefined,

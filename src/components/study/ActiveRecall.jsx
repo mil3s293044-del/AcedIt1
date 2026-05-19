@@ -291,6 +291,7 @@ export default function ActiveRecall({ onSessionComplete, userSubjects: initialU
                 documentContext += `\n\n[${f.name}]:\n${textResult.data?.text || ''}`;
             }
             const response = await base44.integrations.Core.InvokeLLM({
+                feature: "active_recall",
                 prompt: enhancePromptWithVCEExpert(`Based on the uploaded study material (${sourceFiles.length} file(s)), create 8-12 active recall questions for ${selectedSubject}${topic ? ` focusing on ${topic}` : ''} that align with VCE Study Design and VCAA assessment criteria.${documentContext}
 
 CRITICAL - Use proper VCE command terms:
@@ -420,6 +421,7 @@ Questions should:
             }
             const allAnswers = userAnswers.map((ans, idx) => `Question ${idx + 1}: ${questions[idx]}\nYour Answer: ${ans}`).join("\n\n");
             const response = await base44.integrations.Core.InvokeLLM({
+                feature: "active_recall",
                 prompt: enhancePromptWithVCEExpert(`Mark the following ${selectedSubject} student answers according to VCAA standards and the provided source material.${documentContext}
 
 Student Answers:

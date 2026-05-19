@@ -98,6 +98,7 @@ export default function BlurtingMethod({ onSessionComplete }) {
         setIsGeneratingFeedback(true);
         try {
             const response = await base44.integrations.Core.InvokeLLM({
+                feature: "blurting",
                 prompt: `Review this blurting session for ${subject} - ${topic}:
 
 Student's blurted content:

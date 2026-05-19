@@ -193,6 +193,7 @@ export default function GoalCreationWizard({ userSubjects, onGoalCreated, onCanc
         setInterpretingIdx(sgIdx);
         try {
             const result = await base44.integrations.Core.InvokeLLM({
+                feature: "goal_ai_gen",
                 prompt: `Convert this student study challenge into a structured trackable goal item for the subject "${form.subject_name}".
 
 Challenge: "${text}"

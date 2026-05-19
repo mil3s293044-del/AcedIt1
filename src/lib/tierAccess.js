@@ -7,12 +7,14 @@
 //   • All other AI features   → BLOCKED (premium-only)
 //
 // Premium tier ($5/week):
-//   • AI quizzes              → 5/day
-//   • AI flashcards           → 5/day
-//   • AI tools (combined)     → 15/day across all 10 tools
-//   • AI test marker          → 3/day
-//   • Goal/roadmap AI         → 3/day
-//   • Blurting / active recall / spaced repetition / advanced analytics → unlimited
+//   • AI quiz generation      → 3/day (creating a new quiz from notes)
+//   • AI quiz marking         → 10/day (grading played quizzes — Miles, your call)
+//   • AI flashcards           → 3/day
+//   • AI tools (combined)     → 6/day across all 10 tools
+//   • Goal/Roadmap AI         → 1/day (shared bucket)
+//   • Blurting                → 5/day
+//   • Active recall           → 8/day
+//   • Spaced repetition / advanced analytics → unlimited
 //   • Weekly cost ceiling     → 250 cents ($2.50) backstop (token-based estimate)
 //                                resets every Monday UTC
 //
@@ -21,7 +23,7 @@
 //   const access = canUseFeature(profile, FEATURES.AI_TOOL);
 //   if (!access.allowed) {
 //     toast({ title: 'Premium feature', description: access.reason });
-//     navigate('/Pricing');
+//     navigate('/Subscription');
 //     return;
 //   }
 //
@@ -30,10 +32,10 @@
 // ════════════════════════════════════════════════════════════════════════════
 
 export const FEATURES = {
-  QUIZ_AI_GEN:      'quiz_ai_gen',       // free: 3 lifetime, premium: 3/day
+  QUIZ_AI_GEN:      'quiz_ai_gen',       // free: 3 lifetime, premium: 3/day (create quiz from notes)
+  QUIZ_AI_MARK:     'quiz_ai_mark',      // free: blocked, premium: 10/day (mark a played quiz)
   FLASHCARD_AI_GEN: 'flashcard_ai_gen',  // free: 3 lifetime, premium: 3/day
   AI_TOOL:          'ai_tool',           // any of the 10 AI tools (free: blocked, premium: 6/day combined)
-  AI_TEST_MARKER:   'ai_test_marker',    // free: blocked, premium: 1/day (expensive call)
   GOAL_AI_GEN:      'goal_ai_gen',       // free: blocked, premium: 1/day (shares 'goal' bucket)
   ROADMAP_AI_GEN:   'roadmap_ai_gen',    // free: blocked, premium: 1/day (shares 'goal' bucket)
   BLURTING:         'blurting',          // free: blocked, premium: 5/day (uses AI for marking)
@@ -52,9 +54,9 @@ export const FREE_LIFETIME_CAPS = {
 // $2.50 weekly $-ceiling as the backstop for outliers.
 export const PREMIUM_DAILY_CAPS = {
   [FEATURES.QUIZ_AI_GEN]:      3,
+  [FEATURES.QUIZ_AI_MARK]:     10,
   [FEATURES.FLASHCARD_AI_GEN]: 3,
   [FEATURES.AI_TOOL]:          6,
-  [FEATURES.AI_TEST_MARKER]:   1,
   [FEATURES.GOAL_AI_GEN]:      1,
   [FEATURES.ROADMAP_AI_GEN]:   1,
   [FEATURES.BLURTING]:         5,
@@ -69,9 +71,9 @@ export const WEEKLY_COST_WARN_CENTS = 200;     // $2.00 soft notice
 // goal_ai_gen and roadmap_ai_gen share `goal`.)
 const COUNTER_KEY = {
   [FEATURES.QUIZ_AI_GEN]:      'quizzes',
+  [FEATURES.QUIZ_AI_MARK]:     'quiz_marks',
   [FEATURES.FLASHCARD_AI_GEN]: 'flashcards',
   [FEATURES.AI_TOOL]:          'tools',
-  [FEATURES.AI_TEST_MARKER]:   'marker',
   [FEATURES.GOAL_AI_GEN]:      'goal',
   [FEATURES.ROADMAP_AI_GEN]:   'goal',
   [FEATURES.BLURTING]:         'blurting',

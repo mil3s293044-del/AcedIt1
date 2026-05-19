@@ -23,7 +23,6 @@ export const FEATURE_LIMITS = {
         spacedRepetition: false,
         activeRecall: true,
         blurting: true,
-        aiTestMarker: false,
         analytics: false,
     },
     [SUBSCRIPTION_TIERS.PREMIUM]: {
@@ -36,7 +35,6 @@ export const FEATURE_LIMITS = {
         spacedRepetition: true,
         activeRecall: true,
         blurting: true,
-        aiTestMarker: true,
         analytics: true,
     }
 };

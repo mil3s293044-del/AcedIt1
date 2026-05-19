@@ -136,6 +136,7 @@ export default function UniversityCoursePlanner({ user, userProfile, yearLevel, 
         setIsGeneratingPlan(true);
         try {
             const response = await InvokeLLM({
+                feature: "goal_ai_gen",
                 prompt: `I am a ${yearLevel} VCE student aiming to get into this course:
 
 Course: ${courseName}

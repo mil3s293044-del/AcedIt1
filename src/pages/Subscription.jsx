@@ -33,7 +33,6 @@ const pricingPlans = [
         ],
         limitations: [
             "No AI Tools (Essay Planner, Math Tutor, etc.)",
-            "No AI Test Marker",
             "No Spaced Repetition",
             "No Blurting or Active Recall AI",
             "No Goal AI generation",
@@ -52,7 +51,7 @@ const pricingPlans = [
             "Everything in Free, plus:",
             "Daily AI-generated quizzes & flashcard sets",
             "All 10 AI study tools",
-            "AI Test Marker with detailed feedback",
+            "AI quiz marking with detailed feedback",
             "Goal & Roadmap AI generation",
             "Spaced Repetition (SM-2 algorithm)",
             "Blurting & Active Recall with AI marking",
@@ -352,7 +351,7 @@ export default function Subscription() {
                                         { feature: "Goals & Planning", free: false, premium: true },
                                         { feature: "Study Planner", free: false, premium: true },
                                         { feature: "AI Tools", free: false, premium: true },
-                                        { feature: "AI Test Marker", free: false, premium: true },
+                                        { feature: "AI Quiz Marking", free: false, premium: true },
                                         { feature: "Advanced Techniques", free: false, premium: true },
                                         { feature: "Share Content", free: false, premium: true },
                                         { feature: "Friends", free: "Add only", premium: "Full access" }

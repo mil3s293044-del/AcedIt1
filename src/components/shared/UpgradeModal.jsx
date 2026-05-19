@@ -49,12 +49,6 @@ const FEATURE_DESCRIPTIONS = {
         icon: '✍️',
         benefits: ['Free-form knowledge testing', 'AI comparison analysis', 'Gap identification', 'Mastery tracking']
     },
-    'AITestMarker': {
-        title: 'AI Test Marker',
-        description: 'Get instant feedback on your test answers with AI-powered marking.',
-        icon: '📝',
-        benefits: ['Instant automated marking', 'Detailed feedback', 'Model answers', 'Performance insights']
-    },
     'ContentSharing': {
         title: 'Content Sharing',
         description: 'Share flashcards, quizzes, and study materials with friends.',

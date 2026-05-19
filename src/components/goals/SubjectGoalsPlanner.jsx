@@ -160,6 +160,7 @@ export default function SubjectGoalsPlanner() {
             }
 
             const response = await InvokeLLM({
+                feature: "goal_ai_gen",
                 prompt: `You are an expert VCE study planner. Create a personalized roadmap for achieving a study score of ${subject.goal_study_score || 35} in ${subject.subject_name} (${subject.subject_code}).
 
 ${contextPrompt}

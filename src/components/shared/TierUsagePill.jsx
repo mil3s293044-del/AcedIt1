@@ -14,9 +14,9 @@ import { createPageUrl } from "@/utils";
 // Friendly short label per feature, used in the pill.
 const FEATURE_LABEL = {
     [FEATURES.QUIZ_AI_GEN]:      "AI Quizzes",
+    [FEATURES.QUIZ_AI_MARK]:     "Quiz Marking",
     [FEATURES.FLASHCARD_AI_GEN]: "AI Flashcards",
     [FEATURES.AI_TOOL]:          "AI Tools",
-    [FEATURES.AI_TEST_MARKER]:   "AI Marker",
     [FEATURES.GOAL_AI_GEN]:      "Goal AI",
     [FEATURES.ROADMAP_AI_GEN]:   "Roadmap AI",
     [FEATURES.BLURTING]:         "Blurting",
@@ -71,7 +71,7 @@ export default function TierUsagePill({ feature, userProfile: profileProp, compa
     if (!premium && FREE_LIFETIME_CAPS[feature] === undefined) {
         return (
             <Link
-                to={createPageUrl("Pricing")}
+                to={createPageUrl("Subscription")}
                 className={`pill bg-secondary text-muted-foreground gap-1.5 hover:bg-primary/10 hover:text-primary transition-colors ${className}`}
                 title={`${label} is a Premium feature — click to upgrade`}
             >
@@ -113,7 +113,7 @@ export default function TierUsagePill({ feature, userProfile: profileProp, compa
     if (exhausted) {
         return (
             <Link
-                to={createPageUrl("Pricing")}
+                to={createPageUrl("Subscription")}
                 className={`pill ${colorClasses} gap-1.5 hover:opacity-90 transition-opacity ${className}`}
                 title={tooltip}
             >

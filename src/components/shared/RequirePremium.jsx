@@ -52,7 +52,7 @@ export default function RequirePremium({ children, featureName = "this feature",
                 </p>
                 <div className="flex flex-col gap-2">
                     <Link
-                        to={createPageUrl("Pricing")}
+                        to={createPageUrl("Subscription")}
                         className="inline-flex items-center justify-center gap-2 h-12 px-6 rounded-xl bg-primary text-primary-foreground font-bold text-sm btn-3d hover:scale-[1.02] transition-transform"
                     >
                         <Crown className="w-4 h-4" />

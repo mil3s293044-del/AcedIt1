@@ -32,8 +32,8 @@ const features = [
     },
     {
         icon: Brain,
-        title: "AI Test Marker",
-        description: "Upload tests and get instant AI-powered marking with detailed feedback and solutions",
+        title: "AI Quiz Marking",
+        description: "Get instant AI-powered feedback on every quiz you take, with explanations for each answer",
         color: "from-purple-500 to-indigo-500"
     },
     {
@@ -66,7 +66,7 @@ const comparisonFeatures = [
     { name: "AI Credits", free: "500 (resets every 2 weeks)", premium: "Unlimited" },
     { name: "AI Flashcard Generation", free: "100 credits per deck", premium: "Unlimited" },
     { name: "AI Quiz Generation", free: "100 credits per quiz", premium: "Unlimited" },
-    { name: "AI Test Marker", free: false, premium: true },
+    { name: "AI Quiz Marking", free: false, premium: true },
     { name: "Goals & Study Planner", free: false, premium: true },
     { name: "AI Tools Access", free: false, premium: true },
     { name: "Advanced Study Techniques", free: false, premium: true },

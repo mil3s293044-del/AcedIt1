@@ -37,7 +37,6 @@ import { useToast } from "@/components/ui/use-toast";
 import { moderationPresets } from "@/components/shared/contentModeration";
 import AISkeleton from "../components/shared/AISkeleton";
 import { isPremium } from "@/components/shared/subscriptionHelpers";
-import UpgradeModal from "@/components/shared/UpgradeModal";
 import HelpButton from "@/components/shared/HelpButton";
 import TierUsagePill from "@/components/shared/TierUsagePill";
 import { FEATURES } from "@/lib/tierAccess";
@@ -107,7 +106,6 @@ export default function Quizzes() {
     const [filterCategory, setFilterCategory] = useState("all");
 
     const [isLoading, setIsLoading] = useState(true);
-    const [showUpgradeModal, setShowUpgradeModal] = useState(false);
     const { toast } = useToast();
 
     const [aiSettings, setAiSettings] = useState({
@@ -434,6 +432,7 @@ export default function Quizzes() {
             const geminiCompatibleUrls = uploadedUrls.filter(f => f.ext !== 'docx' && f.ext !== 'pptx').map(f => f.file_url);
 
             const response = await base44.integrations.Core.InvokeLLM({
+                feature: "quiz_ai_gen",
                 model: "gemini_3_flash",
                 prompt: `You are an expert VCE quiz generator. Generate a quiz from the provided study material — including ALL text, diagrams, tables, graphs, and images.
 
@@ -635,6 +634,7 @@ Base ALL questions on the provided material. If files are attached, read ALL con
             const shortCount = numQuestions - mcqCount;
 
             const response = await base44.integrations.Core.InvokeLLM({
+                feature: "quiz_ai_gen",
                 model: "gemini_3_flash",
                 prompt: `You are a VCE quiz generator. Create a COMPLETELY NEW and DIFFERENT quiz for: ${quiz.subject}. Read ALL content in the document including text, images, diagrams, tables, and figures.
 
@@ -1800,15 +1800,6 @@ Return valid JSON only.`,
 
 
 
-                {/* Premium Feature Upgrade Modal */}
-                <UpgradeModal
-                    isOpen={showUpgradeModal}
-                    onClose={() => setShowUpgradeModal(false)}
-                    feature="AITestMarker"
-                    requiredTier="premium"
-                    userProfile={userProfile}
-                    isBlocking={false}
-                />
             </div>
         </div>
         </>

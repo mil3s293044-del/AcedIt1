@@ -59,7 +59,6 @@ import Guides from './pages/Guides';
 import PaymentCancel from './pages/PaymentCancel';
 import PaymentSuccess from './pages/PaymentSuccess';
 import Premium from './pages/Premium';
-import Pricing from './pages/Pricing';
 import Quizzes from './pages/Quizzes';
 import Ranked from './pages/Ranked';
 import Settings from './pages/Settings';
@@ -85,7 +84,6 @@ export const PAGES = {
     "PaymentCancel": PaymentCancel,
     "PaymentSuccess": PaymentSuccess,
     "Premium": Premium,
-    "Pricing": Pricing,
     "Quizzes": Quizzes,
     "Ranked": Ranked,
     "Settings": Settings,

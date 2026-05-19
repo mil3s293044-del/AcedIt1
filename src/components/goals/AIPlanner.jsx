@@ -55,6 +55,7 @@ export default function AIPlanner({ onPlanGenerated, isGenerating, user }) {
 
         try {
             const response = await InvokeLLM({
+                feature: "goal_ai_gen",
                 prompt: `You are an expert VCE study planner. Create a highly optimized and realistic weekly study schedule based on these constraints:
 
 **Subjects & Weekly Hour Goals:**

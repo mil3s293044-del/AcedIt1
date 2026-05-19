@@ -22,7 +22,7 @@ import { createPageUrl } from "@/utils";
 
 const premiumFeatures = [
     "Unlimited AI Credits",
-    "AI Test Marker with Solutions",
+    "AI Quiz Marking with Solutions",
     "Goals & Study Planner",
     "All AI Tools Access",
     "Advanced Study Techniques",
