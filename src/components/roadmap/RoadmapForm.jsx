@@ -12,6 +12,7 @@ import { Calendar } from "@/components/ui/calendar";
 import { Loader2, Sparkles, Search, BookOpen, CalendarIcon } from "lucide-react";
 import KeyTopicsEditor from "./KeyTopicsEditor";
 import { useToast } from "@/components/ui/use-toast";
+import { FEATURES, canUseFeature } from "@/lib/tierAccess";
 import { createPageUrl } from "@/utils";
 import { format, differenceInCalendarDays, startOfToday } from "date-fns";
 
@@ -317,6 +318,16 @@ export default function RoadmapForm({ onGenerated, userProfile }) {
         }
         if (!form.assessment_date) {
             toast({ title: "Select a date", description: "Please pick your assessment date.", variant: "destructive" });
+            return;
+        }
+
+        const access = canUseFeature(userProfile, FEATURES.ROADMAP_AI_GEN);
+        if (!access.allowed) {
+            toast({
+                title: access.upgradeRequired ? "Premium feature" : "Daily limit reached",
+                description: access.reason,
+                variant: "destructive",
+            });
             return;
         }
 

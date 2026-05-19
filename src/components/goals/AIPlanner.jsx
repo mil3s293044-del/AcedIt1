@@ -9,6 +9,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Wand2, Sparkles } from 'lucide-react';
 import { UserSubject } from '@/entities/all';
 import { useToast } from '@/components/ui/use-toast';
+import { FEATURES, checkLiveTier } from '@/lib/tierAccess';
 import { InvokeLLM } from '@/integrations/Core';
 
 export default function AIPlanner({ onPlanGenerated, isGenerating, user }) {
@@ -47,6 +48,16 @@ export default function AIPlanner({ onPlanGenerated, isGenerating, user }) {
     const handleGeneratePlan = async () => {
         if (userSubjects.length === 0) {
             toast({ title: "No Subjects Found", description: "Please add subjects in the 'Subjects' tab first.", variant: "destructive" });
+            return;
+        }
+
+        const access = await checkLiveTier(FEATURES.GOAL_AI_GEN);
+        if (!access.allowed) {
+            toast({
+                title: access.upgradeRequired ? "Premium feature" : "Daily limit reached",
+                description: access.reason,
+                variant: "destructive",
+            });
             return;
         }
 

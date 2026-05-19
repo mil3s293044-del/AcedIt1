@@ -23,6 +23,7 @@ import { LatexBlock, LatexInline, processLatexContent } from "../shared/LatexRen
 import MarkdownMath from "@/components/shared/MarkdownMath";
 import MathText from "@/components/shared/LatexRenderer";
 import { getLatexRules } from "@/lib/subjectExaminerPrompts";
+import { FEATURES, checkLiveTier } from "@/lib/tierAccess";
 
 // ─── Static class lookup tables (no dynamic Tailwind interpolation) ──────────
 const CHOICE_STATE = {
@@ -384,6 +385,18 @@ export default function QuizPlayer({ quiz, onComplete, onExit, mode = "standard"
     };
 
     const generateAIFeedback = async (timeTaken) => {
+        // Tier gate first — if user has hit the cap, skip AI marking with a
+        // clean message. Quiz results are still shown; just no AI feedback.
+        const access = await checkLiveTier(FEATURES.QUIZ_AI_MARK);
+        if (!access.allowed) {
+            toast({
+                title: access.upgradeRequired ? "Premium feature" : "Daily limit reached",
+                description: `${access.reason} Your answers are still saved.`,
+                variant: "destructive",
+            });
+            return;
+        }
+
         setIsGeneratingFeedback(true);
         try {
             const questionsForAnalysis = shuffledQuiz.questions.map((question, index) => {

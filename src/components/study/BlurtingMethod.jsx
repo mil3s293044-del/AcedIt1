@@ -10,6 +10,7 @@ import { PenTool, Play, Clock, CheckCircle, RotateCcw, Maximize, Upload, Wand2, 
 import { format } from "date-fns";
 import { useToast } from "@/components/ui/use-toast";
 import { base44 } from "@/api/base44Client";
+import { FEATURES, checkLiveTier } from "@/lib/tierAccess";
 import { enhancePromptWithVCEExpert } from "@/components/shared/vceExpertPrompt";
 
 // Static class lookup for AI score pill — Tailwind JIT cannot see interpolated tokens.
@@ -156,6 +157,17 @@ export default function BlurtingMethod({ onSessionComplete }) {
             toast({ title: "Missing info", description: "Upload notes and write your blurt first.", variant: "destructive" });
             return;
         }
+
+        const access = await checkLiveTier(FEATURES.BLURTING);
+        if (!access.allowed) {
+            toast({
+                title: access.upgradeRequired ? "Premium feature" : "Daily limit reached",
+                description: access.reason,
+                variant: "destructive",
+            });
+            return;
+        }
+
         setIsGeneratingFeedback(true);
         try {
             const uploaded = await Promise.all(sourceFiles.map(f => base44.integrations.Core.UploadFile({ file: f }).then(r => ({ url: r.file_url, name: f.name, ext: f.name.split('.').pop().toLowerCase() }))));

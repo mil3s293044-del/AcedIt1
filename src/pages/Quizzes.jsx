@@ -39,7 +39,7 @@ import AISkeleton from "../components/shared/AISkeleton";
 import { isPremium } from "@/components/shared/subscriptionHelpers";
 import HelpButton from "@/components/shared/HelpButton";
 import TierUsagePill from "@/components/shared/TierUsagePill";
-import { FEATURES } from "@/lib/tierAccess";
+import { FEATURES, canUseFeature } from "@/lib/tierAccess";
 
 import QuizCard from "../components/quizzes/QuizCard";
 import QuizPlayer from "../components/quizzes/QuizPlayer";
@@ -362,18 +362,16 @@ export default function Quizzes() {
 
         if (isGenerating) return;
 
-        // Check credits (free users only)
-        const isPremium = userProfile?.subscription_tier === 'premium';
-        if (!isPremium) {
-            const currentCredits = userProfile?.ai_credits || 0;
-            if (currentCredits < 100) {
-                toast({
-                    title: "Not enough credits",
-                    description: "You need 100 credits to generate a quiz.",
-                    variant: "destructive"
-                });
-                return;
-            }
+        // Tier gate — block immediately if the user has hit the cap, so we don't
+        // burn the upload + spin a loader for a request that's about to 429.
+        const access = canUseFeature(userProfile, FEATURES.QUIZ_AI_GEN);
+        if (!access.allowed) {
+            toast({
+                title: access.upgradeRequired ? "Premium feature" : "Daily limit reached",
+                description: access.reason,
+                variant: "destructive",
+            });
+            return;
         }
 
         // Keep the dialog open — the skeleton renders inside it. We close
@@ -625,6 +623,16 @@ Base ALL questions on the provided material. If files are attached, read ALL con
         }
 
         if (!window.confirm("Generate new questions from the source material? This will create a new quiz.")) return;
+
+        const reAccess = canUseFeature(userProfile, FEATURES.QUIZ_AI_GEN);
+        if (!reAccess.allowed) {
+            toast({
+                title: reAccess.upgradeRequired ? "Premium feature" : "Daily limit reached",
+                description: reAccess.reason,
+                variant: "destructive",
+            });
+            return;
+        }
 
         setIsGenerating(true);
 
@@ -1777,23 +1785,35 @@ Return valid JSON only.`,
                                 </div>
 
                         <DialogFooter className="flex-shrink-0 border-t border-border p-6 bg-secondary/50">
-                            <Button
-                                onClick={handleGenerateQuiz}
-                                disabled={!uploadedFiles.length || !aiSettings.customSubject || isGenerating}
-                                className="bg-chart-4 hover:bg-chart-4/90 text-white"
-                            >
-                                {isGenerating ? (
-                                    <>
-                                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                                        Generating...
-                                    </>
-                                ) : (
-                                    <>
-                                        <Wand2 className="w-4 h-4 mr-2" />
-                                        Generate Quiz
-                                    </>
-                                )}
-                            </Button>
+                            {(() => {
+                                const access = canUseFeature(userProfile, FEATURES.QUIZ_AI_GEN);
+                                const blocked = !access.allowed;
+                                return (
+                                    <Button
+                                        onClick={handleGenerateQuiz}
+                                        disabled={!uploadedFiles.length || !aiSettings.customSubject || isGenerating || blocked}
+                                        title={blocked ? access.reason : undefined}
+                                        className="bg-chart-4 hover:bg-chart-4/90 text-white disabled:opacity-50"
+                                    >
+                                        {isGenerating ? (
+                                            <>
+                                                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                                                Generating...
+                                            </>
+                                        ) : blocked ? (
+                                            <>
+                                                <AlertTriangle className="w-4 h-4 mr-2" />
+                                                {access.upgradeRequired ? "Upgrade to generate" : "Daily limit reached"}
+                                            </>
+                                        ) : (
+                                            <>
+                                                <Wand2 className="w-4 h-4 mr-2" />
+                                                Generate Quiz
+                                            </>
+                                        )}
+                                    </Button>
+                                );
+                            })()}
                         </DialogFooter>
                     </DialogContent>
                 </Dialog>

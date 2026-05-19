@@ -9,6 +9,7 @@ import { GraduationCap, Sparkles, Target, Edit, XCircle, ArrowLeft } from "lucid
 import { Textarea } from "@/components/ui/textarea";
 import { UserProfile, Goal, UniversityCourse } from "@/entities/all"; // Added UniversityCourse import
 import { useToast } from "@/components/ui/use-toast";
+import { FEATURES, canUseFeature } from "@/lib/tierAccess";
 import { InvokeLLM } from "@/integrations/Core";
 import MountainView from "./MountainView";
 
@@ -133,6 +134,17 @@ export default function UniversityCoursePlanner({ user, userProfile, yearLevel, 
 
     const handleGenerateCoursePlan = async () => {
          if (!courseName || !user) return;
+
+        const access = canUseFeature(userProfile, FEATURES.GOAL_AI_GEN);
+        if (!access.allowed) {
+            toast({
+                title: access.upgradeRequired ? "Premium feature" : "Daily limit reached",
+                description: access.reason,
+                variant: "destructive",
+            });
+            return;
+        }
+
         setIsGeneratingPlan(true);
         try {
             const response = await InvokeLLM({

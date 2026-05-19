@@ -13,6 +13,7 @@ import { useToast } from "@/components/ui/use-toast";
 import { motion, AnimatePresence } from "framer-motion";
 import { Link } from "react-router-dom";
 import { createPageUrl } from "@/utils";
+import { FEATURES, canUseFeature } from "@/lib/tierAccess";
 import AISkeleton from "../shared/AISkeleton";
 import {
     Plus, Play, Edit, Trash2, Share2, Check, X, Sparkles, Upload,
@@ -371,9 +372,13 @@ export default function SpacedRepetition() {
             toast({ title: "No file selected", description: "Please upload at least one file.", variant: "destructive" });
             return;
         }
-        const isPremium = userProfile?.subscription_tier === 'premium';
-        if (!isPremium && (userProfile?.ai_credits || 0) < 100) {
-            toast({ title: "Not enough credits", description: "You need 100 credits.", variant: "destructive" });
+        const access = canUseFeature(userProfile, FEATURES.FLASHCARD_AI_GEN);
+        if (!access.allowed) {
+            toast({
+                title: access.upgradeRequired ? "Premium feature" : "Daily limit reached",
+                description: access.reason,
+                variant: "destructive",
+            });
             return;
         }
 
@@ -438,7 +443,7 @@ The documents provided may be PowerPoint slides, Word documents, or text files. 
                 }
             });
 
-            if (!isPremium && userProfile) {
+            if (userProfile?.subscription_tier !== 'premium' && userProfile) {
                 await base44.entities.UserProfile.update(userProfile.id, { ai_credits: Math.max(0, userProfile.ai_credits - 100) });
             }
 

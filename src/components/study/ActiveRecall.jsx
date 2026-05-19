@@ -11,6 +11,7 @@ import { format } from "date-fns";
 import ReactMarkdown from 'react-markdown';
 import { useToast } from "@/components/ui/use-toast";
 import { base44 } from "@/api/base44Client";
+import { FEATURES, checkLiveTier } from "@/lib/tierAccess";
 import { enhancePromptWithVCEExpert } from "@/components/shared/vceExpertPrompt";
 import { recordStudyAndGetStreak } from "@/components/shared/streakHelpers";
 
@@ -280,6 +281,17 @@ export default function ActiveRecall({ onSessionComplete, userSubjects: initialU
             toast({ title: "Missing info", description: "Select a subject and upload notes first.", variant: "destructive" });
             return;
         }
+
+        const access = await checkLiveTier(FEATURES.ACTIVE_RECALL);
+        if (!access.allowed) {
+            toast({
+                title: access.upgradeRequired ? "Premium feature" : "Daily limit reached",
+                description: access.reason,
+                variant: "destructive",
+            });
+            return;
+        }
+
         setIsGeneratingQuestions(true);
         try {
             const uploaded = await Promise.all(sourceFiles.map(f => base44.integrations.Core.UploadFile({ file: f }).then(r => ({ url: r.file_url, name: f.name, ext: f.name.split('.').pop().toLowerCase() }))));
@@ -408,6 +420,17 @@ Questions should:
             toast({ title: "No source material", description: "Upload notes to get AI feedback.", variant: "destructive" });
             return;
         }
+
+        const access = await checkLiveTier(FEATURES.ACTIVE_RECALL);
+        if (!access.allowed) {
+            toast({
+                title: access.upgradeRequired ? "Premium feature" : "Daily limit reached",
+                description: access.reason,
+                variant: "destructive",
+            });
+            return;
+        }
+
         setIsGeneratingMarking(true);
         setMarkingResults([]);
         try {

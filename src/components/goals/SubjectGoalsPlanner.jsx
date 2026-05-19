@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { BookOpen, Sparkles, Target, Wand2, RefreshCw } from "lucide-react";
 import { User, UserSubject, Goal } from "@/entities/all"; // Added User and Goal imports
 import { useToast } from "@/components/ui/use-toast";
+import { FEATURES, checkLiveTier } from "@/lib/tierAccess";
 import { InvokeLLM } from "@/integrations/Core";
 import MountainView from "./MountainView";
 
@@ -136,6 +137,16 @@ export default function SubjectGoalsPlanner() {
     };
 
     const generateSubjectPlan = async (subject) => {
+        const access = await checkLiveTier(FEATURES.GOAL_AI_GEN);
+        if (!access.allowed) {
+            toast({
+                title: access.upgradeRequired ? "Premium feature" : "Daily limit reached",
+                description: access.reason,
+                variant: "destructive",
+            });
+            return;
+        }
+
         setIsAIGenerating(subject.subject_code);
         try {
             // Determine an overall year level for context, fallback to first subject's year level or default

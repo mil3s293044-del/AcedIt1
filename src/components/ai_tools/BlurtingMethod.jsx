@@ -9,6 +9,7 @@ import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useToast } from '@/components/ui/use-toast';
 import { base44 } from '@/api/base44Client';
+import { FEATURES, checkLiveTier } from '@/lib/tierAccess';
 import { recordStudyAndGetStreak } from "@/components/shared/streakHelpers";
 import { Wand2, Clock, Play, Save, RotateCcw, CheckCircle, Lightbulb, AlertCircle, Calendar, Trash2, FolderOpen, Eye, Loader2 } from 'lucide-react';
 
@@ -92,6 +93,16 @@ export default function BlurtingMethod({ onSessionComplete }) {
     const handleGetFeedback = async () => {
         if (!blurtedText.trim()) {
             toast({ title: 'No content', description: 'Please write something before getting feedback.', variant: 'destructive' });
+            return;
+        }
+
+        const access = await checkLiveTier(FEATURES.BLURTING);
+        if (!access.allowed) {
+            toast({
+                title: access.upgradeRequired ? "Premium feature" : "Daily limit reached",
+                description: access.reason,
+                variant: "destructive",
+            });
             return;
         }
 

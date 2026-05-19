@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Target, Sparkles, Edit, XCircle } from "lucide-react";
 import { UserProfile, Goal } from "@/entities/all";
 import { useToast } from "@/components/ui/use-toast";
+import { FEATURES, canUseFeature } from "@/lib/tierAccess";
 import { InvokeLLM } from "@/integrations/Core";
 import MountainView from "./MountainView";
 
@@ -116,6 +117,16 @@ export default function ATARGoalPlanner({ user, userProfile, userSubjects, yearL
 
     const handleGenerateATARPlan = async () => {
         if (!targetATAR || !user) return;
+
+        const access = canUseFeature(userProfile, FEATURES.GOAL_AI_GEN);
+        if (!access.allowed) {
+            toast({
+                title: access.upgradeRequired ? "Premium feature" : "Daily limit reached",
+                description: access.reason,
+                variant: "destructive",
+            });
+            return;
+        }
 
         setIsGeneratingPlan(true);
         try {

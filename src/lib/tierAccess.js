@@ -181,3 +181,23 @@ export function formatRemaining(profile, feature) {
   const period = isPremium(profile) ? 'today' : 'lifetime';
   return `${access.used ?? 0} of ${access.cap} ${period}`;
 }
+
+// Fetch the current user's profile fresh from Supabase and run the gate.
+// Use this from handlers that don't already have `userProfile` in scope —
+// it adds ~200ms but avoids prop-drilling. Caller is expected to inspect
+// `allowed` and bail with a toast.
+//
+//   const access = await checkLiveTier(FEATURES.GOAL_AI_GEN);
+//   if (!access.allowed) { toast({ ... }); return; }
+export async function checkLiveTier(feature) {
+  if (TIER_BYPASS) return { allowed: true };
+  try {
+    const { base44 } = await import('@/api/base44Client');
+    const me = await base44.auth.me();
+    const rows = await base44.entities.UserProfile.filter({ created_by: me.email });
+    return canUseFeature(rows?.[0] ?? null, feature);
+  } catch {
+    // Couldn't fetch — let it proceed; the server still enforces.
+    return { allowed: true };
+  }
+}
