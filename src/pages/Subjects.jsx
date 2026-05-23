@@ -270,24 +270,33 @@ export default function Subjects() {
             }
         } catch {}
 
-        const newSubject = await VCESubject.create({
-            name: newSubjectForm.name.trim(), code: newSubjectForm.code.trim(),
-            color: newSubjectForm.color, overview: newSubjectForm.name.trim(), is_private: true
-        });
-        await UserSubject.create({
-            subject_name: newSubject.name, subject_code: newSubject.code,
-            vce_subject_id: newSubject.id, color: newSubjectForm.color,
-            year_level: newSubjectForm.year_level, is_active: true
-        });
-        if (user?.email) {
-            const profiles = await UserProfile.filter({ created_by: user.email });
-            if (profiles[0]) await UserProfile.update(profiles[0].id, { onboarding_tasks: { ...profiles[0].onboarding_tasks, subjects_selected: true } });
+        try {
+            const newSubject = await VCESubject.create({
+                name: newSubjectForm.name.trim(), code: newSubjectForm.code.trim(),
+                color: newSubjectForm.color, overview: newSubjectForm.name.trim(), is_private: true
+            });
+            await UserSubject.create({
+                subject_name: newSubject.name, subject_code: newSubject.code,
+                vce_subject_id: newSubject.id, color: newSubjectForm.color,
+                year_level: newSubjectForm.year_level, is_active: true
+            });
+            if (user?.email) {
+                const profiles = await UserProfile.filter({ created_by: user.email });
+                if (profiles[0]) await UserProfile.update(profiles[0].id, { onboarding_tasks: { ...profiles[0].onboarding_tasks, subjects_selected: true } });
+            }
+            setNewSubjectForm({ name: "", code: "", year_level: "Year 12 Units 3&4", color: subjectColors[0] });
+            setShowCreateDialog(false);
+            if (user?.email) await loadData(user.email);
+            toast({ title: "Subject created", description: `${newSubject.name} added to your subjects.` });
+            setActiveTab("my");
+        } catch (err) {
+            console.error("[Subjects] custom subject create failed:", err);
+            toast({
+                title: "Couldn't create subject",
+                description: err?.message || "Something went wrong. Try again in a moment.",
+                variant: "destructive",
+            });
         }
-        setNewSubjectForm({ name: "", code: "", year_level: "Year 12 Units 3&4", color: subjectColors[0] });
-        setShowCreateDialog(false);
-        if (user?.email) await loadData(user.email);
-        toast({ title: "Subject created!", description: `${newSubject.name} added to your subjects.` });
-        setActiveTab("my");
     };
 
     // ─── Detail view ──────────────────────────────────────────────────────────
