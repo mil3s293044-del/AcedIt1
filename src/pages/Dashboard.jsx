@@ -163,18 +163,19 @@ function getTodaysMove({ todayMins, streakDays, dueFlashcards, urgentDays, urgen
     };
 }
 
+// Direction A — softer tints, lighter borders, shadow for depth.
 const MOVE_THEME = {
-    primary:   { bg: "bg-primary/10",   border: "border-primary/25",   iconBg: "bg-primary/15",   iconText: "text-primary"   },
-    streak:    { bg: "bg-streak/10",    border: "border-streak/25",    iconBg: "bg-streak/15",    iconText: "text-streak"    },
-    xp:        { bg: "bg-xp/10",        border: "border-xp/25",        iconBg: "bg-xp/15",        iconText: "text-xp"        },
-    "chart-3": { bg: "bg-chart-3/10",   border: "border-chart-3/25",   iconBg: "bg-chart-3/15",   iconText: "text-chart-3"   },
-    "chart-4": { bg: "bg-chart-4/10",   border: "border-chart-4/25",   iconBg: "bg-chart-4/15",   iconText: "text-chart-4"   },
+    primary:   { bg: "bg-primary/5",   border: "border-primary/15",   iconBg: "bg-primary/10",   iconText: "text-primary"   },
+    streak:    { bg: "bg-streak/5",    border: "border-streak/15",    iconBg: "bg-streak/10",    iconText: "text-streak"    },
+    xp:        { bg: "bg-xp/5",        border: "border-xp/15",        iconBg: "bg-xp/10",        iconText: "text-xp"        },
+    "chart-3": { bg: "bg-chart-3/5",   border: "border-chart-3/15",   iconBg: "bg-chart-3/10",   iconText: "text-chart-3"   },
+    "chart-4": { bg: "bg-chart-4/5",   border: "border-chart-4/15",   iconBg: "bg-chart-4/10",   iconText: "text-chart-4"   },
 };
 
 const URGENCY = {
-    today: { wrap: "bg-streak/10 border-streak/25 hover:bg-streak/15", iconBg: "bg-streak/20",  iconText: "text-streak",  badge: "bg-streak/20 text-streak"   },
-    soon:  { wrap: "bg-xp/10 border-xp/25 hover:bg-xp/15",             iconBg: "bg-xp/20",      iconText: "text-xp",      badge: "bg-xp/20 text-xp"           },
-    later: { wrap: "bg-secondary border-border hover:bg-secondary/70", iconBg: "bg-chart-3/15", iconText: "text-chart-3", badge: "bg-chart-3/15 text-chart-3" },
+    today: { wrap: "bg-streak/5 border-streak/15 hover:bg-streak/10",   iconBg: "bg-streak/15",  iconText: "text-streak",  badge: "bg-streak/15 text-streak"   },
+    soon:  { wrap: "bg-xp/5 border-xp/15 hover:bg-xp/10",               iconBg: "bg-xp/15",      iconText: "text-xp",      badge: "bg-xp/15 text-xp"           },
+    later: { wrap: "bg-surface border-border/60 hover:bg-secondary/40", iconBg: "bg-chart-3/10", iconText: "text-chart-3", badge: "bg-chart-3/10 text-chart-3" },
 };
 function urgencyKey(daysAway) {
     if (daysAway <= 1) return "today";
@@ -436,7 +437,7 @@ export default function Dashboard() {
                 )}
             </AnimatePresence>
 
-            <div className="w-full px-4 lg:px-8 py-6 lg:py-10 max-w-6xl mx-auto space-y-6 lg:space-y-8">
+            <div className="w-full px-4 lg:px-8 py-6 lg:py-10 max-w-6xl mx-auto space-y-8 lg:space-y-10">
 
                 {/* ── COACH STRIP ─────────────────────────────────────── */}
                 <motion.section initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.35 }}>
@@ -477,8 +478,8 @@ export default function Dashboard() {
                     {/* Streak hero */}
                     <div className="lg:col-span-2">
                         {streakDays > 0 ? (
-                            <div className="relative overflow-hidden rounded-3xl bg-streak/10 border-2 border-streak/25 p-6 lg:p-8 h-full">
-                                <Flame className="absolute -top-6 -right-6 w-32 h-32 text-streak/10 pointer-events-none" />
+                            <div className="relative overflow-hidden rounded-2xl bg-streak/5 border border-streak/15 shadow-soft p-6 lg:p-8 h-full">
+                                <Flame className="absolute -top-6 -right-6 w-32 h-32 text-streak/[0.08] pointer-events-none" />
                                 <div className="relative grid grid-cols-1 sm:grid-cols-5 gap-5 items-center">
                                     <div className="sm:col-span-3">
                                         <p className="stat-label text-streak/80 mb-1">Day streak</p>
@@ -500,12 +501,12 @@ export default function Dashboard() {
                                         )}
                                     </div>
                                     <div className="sm:col-span-2 grid grid-cols-2 sm:grid-cols-1 gap-3">
-                                        <div className="bg-surface rounded-xl p-3 border-2 border-streak/15">
+                                        <div className="bg-surface rounded-xl p-3 border border-streak/10 shadow-soft">
                                             <p className="stat-label">XP boost</p>
                                             <p className="font-display font-extrabold text-streak text-2xl mt-0.5 leading-none">{multiplier}</p>
                                         </div>
                                         {milestone ? (
-                                            <div className="bg-surface rounded-xl p-3 border-2 border-border">
+                                            <div className="bg-surface rounded-xl p-3 border border-border/60 shadow-soft">
                                                 <p className="stat-label">Next jump</p>
                                                 <p className="font-bold text-foreground text-sm mt-0.5">
                                                     {milestone.away}d <span className="text-muted-foreground/60">→</span> {milestone.mult}
@@ -520,7 +521,7 @@ export default function Dashboard() {
                                                 </div>
                                             </div>
                                         ) : (
-                                            <div className="bg-surface rounded-xl p-3 border-2 border-border">
+                                            <div className="bg-surface rounded-xl p-3 border border-border/60 shadow-soft">
                                                 <p className="stat-label">Status</p>
                                                 <p className="font-bold text-streak text-sm mt-0.5">Maxed at 2.5×</p>
                                             </div>
@@ -529,7 +530,7 @@ export default function Dashboard() {
                                 </div>
                             </div>
                         ) : (
-                            <div className="rounded-3xl bg-secondary/40 border-2 border-dashed border-border p-6 lg:p-8 text-center h-full flex flex-col items-center justify-center">
+                            <div className="rounded-2xl bg-surface border border-dashed border-border p-6 lg:p-8 text-center h-full flex flex-col items-center justify-center shadow-soft">
                                 <Flame className="w-12 h-12 text-muted-foreground/30 mb-3" />
                                 <h2 className="font-display font-extrabold text-foreground text-xl lg:text-2xl mb-2">
                                     Ready to start a streak?
@@ -546,7 +547,7 @@ export default function Dashboard() {
 
                     {/* Today snapshot */}
                     <div className="lg:col-span-1">
-                        <div className="rounded-3xl bg-primary/10 border-2 border-primary/25 p-6 h-full flex flex-col">
+                        <div className="rounded-2xl bg-primary/5 border border-primary/15 shadow-soft p-6 h-full flex flex-col">
                             <div className="flex items-center gap-2 mb-2">
                                 <Clock className="w-4 h-4 text-primary" />
                                 <p className="stat-label text-primary/80">Today</p>
@@ -563,13 +564,13 @@ export default function Dashboard() {
                                             ? "Good start — stack another?"
                                             : "Just getting started."}
                             </p>
-                            <div className="space-y-2.5 mt-4 pt-4 border-t-2 border-primary/15">
+                            <div className="space-y-2.5 mt-4 pt-4 border-t border-primary/10">
                                 <div>
                                     <div className="flex items-baseline justify-between mb-1">
                                         <p className="text-xs font-bold text-muted-foreground">This week</p>
                                         <p className="text-xs font-bold text-foreground">{fmtTime(weeklyStudyTime)} <span className="text-muted-foreground/60">/ {goalHours}h</span></p>
                                     </div>
-                                    <div className="h-1.5 bg-primary/15 rounded-full overflow-hidden">
+                                    <div className="h-1.5 bg-primary/10 rounded-full overflow-hidden">
                                         <motion.div
                                             initial={{ width: 0 }}
                                             animate={{ width: `${weeklyPct}%` }}
@@ -596,11 +597,11 @@ export default function Dashboard() {
                         initial={{ opacity: 0, y: 12 }}
                         animate={{ opacity: 1, y: 0 }}
                         transition={{ delay: 0.1 }}
-                        className="rounded-3xl bg-xp/5 border-2 border-xp/20 p-6 lg:p-7"
+                        className="rounded-2xl bg-xp/[0.04] border border-xp/15 shadow-soft p-6 lg:p-7"
                     >
                         <div className="flex items-start justify-between mb-5 flex-wrap gap-3">
                             <div className="flex items-center gap-3">
-                                <div className="w-11 h-11 rounded-xl bg-xp/15 flex items-center justify-center flex-shrink-0">
+                                <div className="w-11 h-11 rounded-xl bg-xp/10 flex items-center justify-center flex-shrink-0">
                                     <Trophy className="w-5 h-5 text-xp" />
                                 </div>
                                 <div>
@@ -661,11 +662,11 @@ export default function Dashboard() {
                     <motion.section
                         initial={{ opacity: 0, y: 10 }}
                         animate={{ opacity: 1, y: 0 }}
-                        className="rounded-2xl bg-primary/10 border-2 border-primary/25 p-5 lg:p-6"
+                        className="rounded-2xl bg-primary/5 border border-primary/15 shadow-soft p-5 lg:p-6"
                     >
                         <div className="flex flex-col sm:flex-row sm:items-center gap-4">
                             <div className="flex items-center gap-3 flex-1 min-w-0">
-                                <div className="w-11 h-11 rounded-xl bg-primary/20 flex items-center justify-center flex-shrink-0">
+                                <div className="w-11 h-11 rounded-xl bg-primary/10 flex items-center justify-center flex-shrink-0">
                                     <Sparkles className="w-5 h-5 text-primary" />
                                 </div>
                                 <div>
@@ -760,7 +761,7 @@ export default function Dashboard() {
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ delay: 0.2 }}
                 >
-                    <div className={`rounded-2xl ${moveTheme.bg} border-2 ${moveTheme.border} p-5 lg:p-6`}>
+                    <div className={`rounded-2xl ${moveTheme.bg} border ${moveTheme.border} shadow-soft p-5 lg:p-6`}>
                         <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
                             <div className={`w-12 h-12 rounded-xl ${moveTheme.iconBg} flex items-center justify-center flex-shrink-0`}>
                                 <MoveIcon className={`w-6 h-6 ${moveTheme.iconText}`} />
@@ -790,8 +791,8 @@ export default function Dashboard() {
                 >
                     <div className="md:col-span-3">
                         {hasGoal ? (
-                            <div className="relative overflow-hidden rounded-3xl bg-chart-3/10 border-2 border-chart-3/25 p-6 lg:p-8 h-full">
-                                <GraduationCap className="absolute -top-4 -right-4 w-32 h-32 text-chart-3/10 pointer-events-none" />
+                            <div className="relative overflow-hidden rounded-2xl bg-chart-3/5 border border-chart-3/15 shadow-soft p-6 lg:p-8 h-full">
+                                <GraduationCap className="absolute -top-4 -right-4 w-32 h-32 text-chart-3/[0.08] pointer-events-none" />
                                 <p className="stat-label text-chart-3/80 mb-2">Your shot at</p>
                                 <h2
                                     className="font-display font-extrabold text-foreground leading-none mb-4"
@@ -812,7 +813,7 @@ export default function Dashboard() {
                                 </Link>
                             </div>
                         ) : (
-                            <div className="rounded-3xl bg-secondary/30 border-2 border-dashed border-border p-6 lg:p-8 text-center h-full flex flex-col items-center justify-center">
+                            <div className="rounded-2xl bg-surface border border-dashed border-border p-6 lg:p-8 text-center h-full flex flex-col items-center justify-center shadow-soft">
                                 <Target className="w-12 h-12 text-muted-foreground/40 mb-3" />
                                 <h3 className="font-display font-extrabold text-foreground text-lg lg:text-xl mb-2">
                                     What are you chasing?
@@ -834,7 +835,7 @@ export default function Dashboard() {
                         </div>
                         {studySessions.length === 0 ? (
                             <div className="flex flex-col items-center text-center gap-3 py-6">
-                                <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center">
+                                <div className="w-10 h-10 rounded-xl bg-primary/5 flex items-center justify-center border border-primary/10">
                                     <Brain className="w-5 h-5 text-primary" />
                                 </div>
                                 <div>
@@ -877,7 +878,7 @@ export default function Dashboard() {
                     initial={{ opacity: 0, y: 12 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ delay: 0.3 }}
-                    className="border-t-2 border-border pt-6"
+                    className="border-t border-border/60 pt-6"
                 >
                     <p className="stat-label mb-3">Jump to</p>
                     <div className="flex flex-wrap gap-2">
@@ -894,7 +895,7 @@ export default function Dashboard() {
                             { label: "Analytics", icon: BarChart3,    link: "Analytics" },
                         ].map((d) => (
                             <Link key={d.link} to={createPageUrl(d.link)}>
-                                <div className="group flex items-center gap-2 px-3.5 py-2 rounded-xl bg-surface border-2 border-border hover:border-primary hover:bg-primary/5 transition-all">
+                                <div className="group flex items-center gap-2 px-3.5 py-2 rounded-xl bg-surface border border-border/60 shadow-soft hover:border-primary/40 hover:bg-primary/5 transition-all">
                                     <d.icon className="w-4 h-4 text-muted-foreground group-hover:text-primary transition-colors" />
                                     <span className="text-sm font-bold text-foreground">{d.label}</span>
                                 </div>
@@ -911,7 +912,7 @@ export default function Dashboard() {
 // ─── Inline components ────────────────────────────────────────────────────────
 function ReminderRow({ icon: Icon, title, subtitle, badge, theme }) {
     return (
-        <div className={`flex items-center gap-3 p-3 rounded-xl border-2 transition-all cursor-pointer ${theme.wrap}`}>
+        <div className={`flex items-center gap-3 p-3 rounded-xl border shadow-soft transition-all cursor-pointer ${theme.wrap}`}>
             <div className={`w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0 ${theme.iconBg}`}>
                 <Icon className={`w-4 h-4 ${theme.iconText}`} />
             </div>
@@ -939,12 +940,12 @@ function RankRow({ entry, isMe, userEmail, below }) {
     const rankIconColor = entry.rank === 1 ? 'text-xp' : entry.rank === 2 ? 'text-muted-foreground' : entry.rank === 3 ? 'text-streak' : '';
 
     return (
-        <div className={`flex items-center gap-3 p-3 rounded-xl border-2 transition-colors ${
+        <div className={`flex items-center gap-3 p-3 rounded-xl border shadow-soft transition-colors ${
             isMe
-                ? 'bg-primary/10 border-primary'
+                ? 'bg-primary/5 border-primary/40'
                 : below
-                    ? 'bg-surface border-border opacity-70'
-                    : 'bg-surface border-border hover:border-xp/40'
+                    ? 'bg-surface border-border/60 opacity-70'
+                    : 'bg-surface border-border/60 hover:border-xp/30'
         }`}>
             <div className={`flex items-center justify-center flex-shrink-0 w-10 ${isMe ? 'text-primary' : 'text-muted-foreground'} font-display font-extrabold text-lg`}>
                 #{entry.rank}
