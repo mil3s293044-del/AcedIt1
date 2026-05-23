@@ -2,16 +2,16 @@ import React, { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import { base44 } from "@/api/base44Client";
 import { Badge } from "@/components/ui/badge";
-import { Calendar, Trophy, Zap, Target, Swords, Star } from "lucide-react";
+import { Calendar, Trophy, Zap, Target, Swords, Star, Medal, Globe, Award, Flame } from "lucide-react";
 import { SEASONS, COMPOSITE_TIERS, getCompositeTier } from "@/components/shared/rankingEngine";
 
 const REWARD_LABELS = {
-    "season_finisher":  { label: "Season Finisher",   emoji: "🎖️", color: "bg-blue-100 text-blue-700" },
-    "top10_global":     { label: "Top 10 Global",      emoji: "🌍", color: "bg-yellow-100 text-yellow-700" },
-    "top100_global":    { label: "Top 100 Global",     emoji: "🏅", color: "bg-amber-100 text-amber-700" },
-    "streak_warrior":   { label: "Streak Warrior",     emoji: "🔥", color: "bg-orange-100 text-orange-700" },
-    "goal_crusher":     { label: "Goal Crusher",       emoji: "🎯", color: "bg-green-100 text-green-700" },
-    "comp_champion":    { label: "Comp Champion",      emoji: "⚔️", color: "bg-purple-100 text-purple-700" },
+    "season_finisher":  { label: "Season Finisher", Icon: Medal,  color: "bg-blue-100 text-blue-700" },
+    "top10_global":     { label: "Top 10 Global",   Icon: Globe,  color: "bg-yellow-100 text-yellow-700" },
+    "top100_global":    { label: "Top 100 Global",  Icon: Award,  color: "bg-amber-100 text-amber-700" },
+    "streak_warrior":   { label: "Streak Warrior",  Icon: Flame,  color: "bg-orange-100 text-orange-700" },
+    "goal_crusher":     { label: "Goal Crusher",    Icon: Target, color: "bg-green-100 text-green-700" },
+    "comp_champion":    { label: "Comp Champion",   Icon: Swords, color: "bg-purple-100 text-purple-700" },
 };
 
 export default function SeasonHistory() {
@@ -114,10 +114,12 @@ export default function SeasonHistory() {
                                         {record.rewards_claimed?.length > 0 && (
                                             <div className="flex flex-wrap gap-1.5 mt-2">
                                                 {record.rewards_claimed.map(reward => {
-                                                    const meta = REWARD_LABELS[reward] || { label: reward, emoji: "🏅", color: "bg-gray-100 text-gray-600" };
+                                                    const meta = REWARD_LABELS[reward] || { label: reward, Icon: Award, color: "bg-gray-100 text-gray-600" };
+                                                    const RewardIcon = meta.Icon;
                                                     return (
-                                                        <span key={reward} className={`text-xs font-semibold px-2 py-0.5 rounded-full ${meta.color}`}>
-                                                            {meta.emoji} {meta.label}
+                                                        <span key={reward} className={`inline-flex items-center gap-1 text-xs font-semibold px-2 py-0.5 rounded-full ${meta.color}`}>
+                                                            <RewardIcon className="w-3 h-3" strokeWidth={2.5} />
+                                                            {meta.label}
                                                         </span>
                                                     );
                                                 })}

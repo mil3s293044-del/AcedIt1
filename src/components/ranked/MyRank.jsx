@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import { base44 } from "@/api/base44Client";
-import { Clock, Flame, Target, Trophy, Zap, TrendingUp } from "lucide-react";
+import { Clock, Flame, Target, Trophy, Zap, TrendingUp, Layers, BrainCircuit, Coins, School } from "lucide-react";
 import { startOfWeek } from 'date-fns';
 import XPLevelCard from "./XPLevelCard";
 
@@ -100,17 +100,20 @@ export default function MyRank() {
                 </div>
                 <div className="grid grid-cols-2 gap-1.5">
                     {[
-                        ["⏱️ Study sessions", "1 XP/min"],
-                        ["🃏 Flashcards", "0.5 XP/card"],
-                        ["📝 Quizzes", "2 XP/mark"],
-                        ["🎯 Sub-goals", "40–195 XP"],
-                        ["🏆 Full goals", "240–540 XP"],
-                        ["💰 Score wagers", "up to 3.5×"],
-                        ["🔥 Daily streak", "15–100 XP"],
-                        ["🏫 Competitions", "Bonus XP"],
-                    ].map(([label, xp]) => (
+                        [Clock,        "Study sessions", "1 XP/min"],
+                        [Layers,       "Flashcards",     "0.5 XP/card"],
+                        [BrainCircuit, "Quizzes",        "2 XP/mark"],
+                        [Target,       "Sub-goals",      "40–195 XP"],
+                        [Trophy,       "Full goals",     "240–540 XP"],
+                        [Coins,        "Score wagers",   "up to 3.5×"],
+                        [Flame,        "Daily streak",   "15–100 XP"],
+                        [School,       "Competitions",   "Bonus XP"],
+                    ].map(([Icon, label, xp]) => (
                         <div key={label} className="flex justify-between items-center bg-white/70 rounded-lg px-2.5 py-1.5">
-                            <span className="text-gray-700 text-xs">{label}</span>
+                            <span className="flex items-center gap-1.5 text-gray-700 text-xs">
+                                <Icon className="w-3.5 h-3.5 text-indigo-600 flex-shrink-0" strokeWidth={2.5} />
+                                {label}
+                            </span>
                             <span className="font-bold text-indigo-700 text-xs">{xp}</span>
                         </div>
                     ))}

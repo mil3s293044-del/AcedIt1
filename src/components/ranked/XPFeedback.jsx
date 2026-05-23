@@ -4,7 +4,7 @@
  */
 import React, { useState, useEffect, useCallback, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Zap, Star, TrendingUp, Flame, Crown, Sparkles, Trophy, Target, ChevronUp } from "lucide-react";
+import { Zap, Star, TrendingUp, Flame, Crown, Sparkles, Trophy, Target, ChevronUp, Timer, Layers, BrainCircuit, Lightbulb, PencilLine, Coins, Medal } from "lucide-react";
 
 const SOURCE_LABELS = {
     study_session:      "Focus Session",
@@ -23,20 +23,21 @@ const SOURCE_LABELS = {
     migration:          "Legacy XP",
 };
 
-const SOURCE_EMOJIS = {
-    study_session:     "⏱️",
-    focus_session:     "⏱️",
-    flashcard:         "🃏",
-    quiz:              "🧠",
-    challenge:         "⚡",
-    sub_goal:          "🎯",
-    goal:              "🏆",
-    streak:            "🔥",
-    weekly_streak:     "🔥",
-    wager:             "💰",
-    competition_bonus: "🏅",
-    active_recall:     "💡",
-    blurting:          "✍️",
+// Map each XP source to a Lucide icon component (replaces previous emoji map).
+const SOURCE_ICONS = {
+    study_session:     Timer,
+    focus_session:     Timer,
+    flashcard:         Layers,
+    quiz:              BrainCircuit,
+    challenge:         Zap,
+    sub_goal:          Target,
+    goal:              Trophy,
+    streak:            Flame,
+    weekly_streak:     Flame,
+    wager:             Coins,
+    competition_bonus: Medal,
+    active_recall:     Lightbulb,
+    blurting:          PencilLine,
 };
 
 // Fun taunt messages to stoke competitiveness
@@ -167,7 +168,7 @@ function XPPopup({ xp, source, streak, taunt }) {
     if (!xp || xp <= 0) return null;
     const huge = xp >= 200;
     const big = xp >= 80;
-    const emoji = SOURCE_EMOJIS[source] || "⚡";
+    const Icon = SOURCE_ICONS[source] || Zap;
 
     return (
         <div className={`rounded-2xl shadow-2xl border overflow-hidden backdrop-blur-sm ${
@@ -187,11 +188,11 @@ function XPPopup({ xp, source, streak, taunt }) {
                 <motion.div
                     animate={{ scale: [1, 1.25, 1], rotate: [0, -8, 8, 0] }}
                     transition={{ duration: 0.45, delay: 0.1 }}
-                    className={`w-10 h-10 rounded-xl flex items-center justify-center text-xl flex-shrink-0 ${
-                        huge || big ? 'bg-white/20' : 'bg-indigo-50'
+                    className={`w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 ${
+                        huge || big ? 'bg-white/20' : 'bg-primary/10'
                     }`}
                 >
-                    {emoji}
+                    <Icon className={`w-5 h-5 ${huge || big ? 'text-white' : 'text-primary'}`} strokeWidth={2.5} />
                 </motion.div>
 
                 <div className="min-w-0 flex-1">

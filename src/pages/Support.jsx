@@ -9,7 +9,8 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { HelpCircle, Upload as UploadIcon, Info, Loader2, History, Clock } from "lucide-react";
+import { HelpCircle, Upload as UploadIcon, Info, Loader2, History, Clock, Camera } from "lucide-react";
+import EmptyState from "@/components/shared/EmptyState";
 import { useToast } from "@/components/ui/use-toast";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
@@ -293,11 +294,12 @@ export default function Support() {
                                             <Loader2 className="w-8 h-8 animate-spin text-purple-600" />
                                         </div>
                                     ) : ticketHistory.length === 0 ? (
-                                        <div className="text-center py-12">
-                                            <History className="w-16 h-16 mx-auto mb-4 text-gray-300" />
-                                            <h3 className="text-xl font-bold text-gray-900 mb-2">No Support Tickets Yet</h3>
-                                            <p className="text-gray-600">Your submitted support tickets will appear here.</p>
-                                        </div>
+                                        <EmptyState
+                                            icon={History}
+                                            title="No tickets yet"
+                                            description="Submitted bug reports and support tickets will appear here."
+                                            tone="muted"
+                                        />
                                     ) : (
                                         <ScrollArea className="h-[600px] pr-4">
                                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -330,7 +332,7 @@ export default function Support() {
 
                                                                 {(ticket.extra?.screenshot_url || ticket.screenshot_url) && (
                                                                     <div className="flex items-center gap-1.5 text-xs text-purple-600 font-medium">
-                                                                        <span>📷</span>
+                                                                        <Camera className="w-3.5 h-3.5" strokeWidth={2.5} />
                                                                         <span>Screenshot attached</span>
                                                                     </div>
                                                                 )}

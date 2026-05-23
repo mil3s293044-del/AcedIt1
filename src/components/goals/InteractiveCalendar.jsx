@@ -37,17 +37,17 @@ const TYPE_TOKEN_CLASSES = {
 
 // ── Event type config ──────────────────────────────────────────────────────────
 const EVENT_TYPES = [
-    { value: 'SAC',         label: 'SAC',             icon: FileText,      emoji: '📋' },
-    { value: 'Exam',        label: 'Exam',            icon: GraduationCap, emoji: '📝' },
-    { value: 'Test',        label: 'Test / Quiz',     icon: FileText,      emoji: '✏️' },
-    { value: 'Assignment',  label: 'Assignment',      icon: FileText,      emoji: '📄' },
-    { value: 'Oral',        label: 'Oral / Pres.',    icon: Mic,           emoji: '🎤' },
-    { value: 'Folio',       label: 'Folio',           icon: Folder,        emoji: '🗂️' },
-    { value: 'Performance', label: 'Performance',     icon: Music,         emoji: '🎭' },
-    { value: 'Sport',       label: 'Sport / Fitness', icon: Dumbbell,      emoji: '🏅' },
-    { value: 'Excursion',   label: 'Excursion / Camp',icon: Bus,           emoji: '🚌' },
-    { value: 'Study',       label: 'Study Session',   icon: BookOpen,      emoji: '📚' },
-    { value: 'Other',       label: 'Other',           icon: Target,        emoji: '📌' },
+    { value: 'SAC',         label: 'SAC',             icon: FileText      },
+    { value: 'Exam',        label: 'Exam',            icon: GraduationCap },
+    { value: 'Test',        label: 'Test / Quiz',     icon: FileText      },
+    { value: 'Assignment',  label: 'Assignment',      icon: FileText      },
+    { value: 'Oral',        label: 'Oral / Pres.',    icon: Mic           },
+    { value: 'Folio',       label: 'Folio',           icon: Folder        },
+    { value: 'Performance', label: 'Performance',     icon: Music         },
+    { value: 'Sport',       label: 'Sport / Fitness', icon: Dumbbell      },
+    { value: 'Excursion',   label: 'Excursion / Camp',icon: Bus           },
+    { value: 'Study',       label: 'Study Session',   icon: BookOpen      },
+    { value: 'Other',       label: 'Other',           icon: Target        },
 ].map(t => ({ ...t, ...TYPE_TOKEN_CLASSES[t.value], color: TYPE_TOKEN_CLASSES[t.value].hex }));
 
 const REPEAT_OPTIONS = [
@@ -108,8 +108,8 @@ function EventForm({ event, onChange, subjects }) {
                     {EVENT_TYPES.map(t => (
                         <button key={t.value} type="button"
                             onClick={() => onChange({ ...event, event_type: t.value })}
-                            className={`flex items-center gap-1 px-2.5 py-1.5 rounded-xl text-xs font-semibold border transition-all ${event.event_type === t.value ? `${t.bg} ${t.text} ${t.border} ring-2 ring-offset-1 ring-current` : 'bg-secondary/50 text-muted-foreground border-border hover:bg-secondary'}`}>
-                            <span>{t.emoji}</span> {t.label}
+                            className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl text-xs font-semibold border transition-all ${event.event_type === t.value ? `${t.bg} ${t.text} ${t.border} ring-2 ring-offset-1 ring-current` : 'bg-secondary/50 text-muted-foreground border-border hover:bg-secondary'}`}>
+                            <t.icon className="w-3.5 h-3.5" strokeWidth={2.5} /> {t.label}
                         </button>
                     ))}
                 </div>
@@ -119,7 +119,7 @@ function EventForm({ event, onChange, subjects }) {
             <div>
                 <Label className="text-xs font-bold text-foreground mb-1 block">Title *</Label>
                 <Input value={event.title} onChange={e => onChange({ ...event, title: e.target.value })}
-                    placeholder={`e.g., ${selected.emoji} ${event.event_type === 'SAC' ? 'Chemistry Unit 3 SAC 1' : event.event_type === 'Exam' ? 'English Exam' : 'Biology Study Session'}`}
+                    placeholder={`e.g., ${event.event_type === 'SAC' ? 'Chemistry Unit 3 SAC 1' : event.event_type === 'Exam' ? 'English Exam' : 'Biology Study Session'}`}
                     className="h-10 text-sm" />
             </div>
 
@@ -521,7 +521,7 @@ export default function InteractiveCalendar({ user }) {
                                     <motion.div key={ev.id} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}>
                                         <div className="card-soft p-4 flex items-start gap-3"
                                             style={{ borderLeftColor: typeInfo.color, borderLeftWidth: 4 }}>
-                                            <span className="text-2xl flex-shrink-0 mt-0.5">{typeInfo.emoji}</span>
+                                            <typeInfo.icon className="w-6 h-6 flex-shrink-0 mt-0.5" style={{ color: typeInfo.color }} strokeWidth={2.5} />
                                             <div className="flex-1 min-w-0">
                                                 <div className="flex items-center gap-2 flex-wrap mb-1">
                                                     <span className="font-bold text-foreground text-sm">{ev.title}</span>
@@ -563,7 +563,7 @@ export default function InteractiveCalendar({ user }) {
                 <div className="flex flex-wrap gap-2">
                     {EVENT_TYPES.map(t => (
                         <div key={t.value} className={`flex items-center gap-1.5 px-2.5 py-1 rounded-xl text-xs font-semibold ${t.bg} ${t.text} border ${t.border}`}>
-                            <span>{t.emoji}</span> {t.label}
+                            <t.icon className="w-3.5 h-3.5" strokeWidth={2.5} /> {t.label}
                         </div>
                     ))}
                 </div>
@@ -669,7 +669,7 @@ function EventCard({ event, subjects, onToggle, onEdit, onDelete }) {
             </button>
             <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-1.5 flex-wrap mb-0.5">
-                    <span className="text-sm">{typeInfo.emoji}</span>
+                    <typeInfo.icon className="w-3.5 h-3.5 flex-shrink-0" style={{ color: typeInfo.color }} strokeWidth={2.5} />
                     <span className={`font-semibold text-sm text-foreground ${event.is_completed ? 'line-through' : ''}`}>{event.title}</span>
                     <span className={`pill ${urg.color} text-[10px] py-0`}>{urg.label}</span>
                     {event.priority && event.priority !== 'Medium' && (
