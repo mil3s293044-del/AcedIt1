@@ -9,11 +9,12 @@ import {
     TrendingUp, Crown, Medal
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { format, startOfWeek, differenceInDays, parseISO, isToday, isYesterday } from "date-fns";
+import { format, startOfWeek, differenceInDays, parseISO, isToday, isYesterday, formatDistanceToNow, subDays, isSameDay } from "date-fns";
 import { createPageUrl } from "@/utils";
 import { Link } from "react-router-dom";
 import HelpButton from "@/components/shared/HelpButton";
 import StudyIntentModal from "@/components/dashboard/StudyIntentModal";
+import EmptyState from "@/components/shared/EmptyState";
 import { reconcileUserXP } from "@/lib/reconcileXP";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -203,6 +204,7 @@ export default function Dashboard() {
     const [flashcardReminders, setFlashcardReminders] = useState([]);
     const [plannerReminders, setPlannerReminders] = useState([]);
     const [leaderboard, setLeaderboard] = useState([]);
+    const [userSubjects, setUserSubjects] = useState([]);
     const [isLoading, setIsLoading] = useState(true);
     const [showStudyIntent, setShowStudyIntent] = useState(false);
 
@@ -210,7 +212,7 @@ export default function Dashboard() {
         try {
             const today = format(new Date(), 'yyyy-MM-dd');
             const in14 = format(new Date(Date.now() + 14 * 24 * 60 * 60 * 1000), 'yyyy-MM-dd');
-            const [profileData, sessionsData, techniquesData, quizData, assessmentData, flashcardData, plannerData, lbData] = await Promise.all([
+            const [profileData, sessionsData, techniquesData, quizData, assessmentData, flashcardData, plannerData, lbData, subjectsData] = await Promise.all([
                 base44.entities.UserProfile.filter({ created_by: userEmail }).catch(() => []),
                 base44.entities.StudySession.filter({ created_by: userEmail }, "-date", 30).catch(() => []),
                 base44.entities.StudyTechnique.filter({ created_by: userEmail }, "-date").catch(() => []),
@@ -219,7 +221,9 @@ export default function Dashboard() {
                 base44.entities.Flashcard.filter({ created_by: userEmail, is_active: true }, "nextReviewDate").catch(() => []),
                 base44.entities.StudyPlan.filter({ created_by: userEmail, is_completed: false, date: { $gte: today, $lte: in14 } }, "date", 8).catch(() => []),
                 base44.entities.Leaderboard.list('-total_xp', 200).catch(() => []),
+                base44.entities.UserSubject.filter({ created_by: userEmail }).catch(() => []),
             ]);
+            setUserSubjects(subjectsData || []);
 
             let profile = profileData[0] || null;
             if (!profile) {
@@ -347,6 +351,85 @@ export default function Dashboard() {
         return all[0] || null;
     }, [assessments, plannerReminders]);
 
+    // Most recent study session (across sessions + techniques) — drives the
+    // "pick up where you left off" hero card.
+    const lastSession = useMemo(() => {
+        const all = [
+            ...studySessions.map(s => ({
+                id: s.id,
+                subject: s.subject,
+                date: s.date,
+                duration: s.duration_minutes || 0,
+                kind: 'session',
+            })),
+            ...studyTechniques.map(s => ({
+                id: s.id,
+                subject: s.subject_name || s.subject,
+                date: s.date,
+                duration: s.session_duration || 0,
+                kind: 'technique',
+            })),
+        ].filter(s => s.date).sort((a, b) => new Date(b.date) - new Date(a.date));
+        return all[0] || null;
+    }, [studySessions, studyTechniques]);
+
+    // Per-subject snapshot stats — minutes this week + last session ago.
+    const subjectStats = useMemo(() => {
+        const weekStart = startOfWeek(new Date());
+        return userSubjects.map(sub => {
+            const matchingSessions = studySessions.filter(s =>
+                s.subject && sub.subject_name &&
+                s.subject.toLowerCase() === sub.subject_name.toLowerCase()
+            );
+            const matchingTech = studyTechniques.filter(s =>
+                (s.subject_name || s.subject) && sub.subject_name &&
+                (s.subject_name || s.subject).toLowerCase() === sub.subject_name.toLowerCase()
+            );
+            const weekMins =
+                matchingSessions
+                    .filter(s => new Date(s.date) >= weekStart)
+                    .reduce((a, s) => a + (s.duration_minutes || 0), 0) +
+                matchingTech
+                    .filter(s => new Date(s.date) >= weekStart)
+                    .reduce((a, s) => a + (s.session_duration || 0), 0);
+
+            const last = [...matchingSessions, ...matchingTech]
+                .filter(s => s.date)
+                .sort((a, b) => new Date(b.date) - new Date(a.date))[0];
+
+            return {
+                id: sub.id,
+                name: sub.subject_name,
+                code: sub.subject_code,
+                weekMins,
+                lastDate: last?.date || null,
+            };
+        }).sort((a, b) => b.weekMins - a.weekMins); // most-studied first
+    }, [userSubjects, studySessions, studyTechniques]);
+
+    // Daily study totals for the last 7 days — drives the heatmap strip.
+    // Values: array of { date: 'YYYY-MM-DD', minutes: N, label: 'Mon' }, oldest → today.
+    const dailyHeatmap = useMemo(() => {
+        const today = new Date();
+        const days = [];
+        for (let i = 6; i >= 0; i--) {
+            const d = subDays(today, i);
+            const sessMins = studySessions
+                .filter(s => s.date && isSameDay(new Date(s.date), d))
+                .reduce((a, s) => a + (s.duration_minutes || 0), 0);
+            const techMins = studyTechniques
+                .filter(s => s.date && isSameDay(new Date(s.date), d))
+                .reduce((a, s) => a + (s.session_duration || 0), 0);
+            days.push({
+                date: format(d, 'yyyy-MM-dd'),
+                label: format(d, 'EEEEEE'), // M, T, W…
+                minutes: sessMins + techMins,
+                isToday: isSameDay(d, today),
+            });
+        }
+        return days;
+    }, [studySessions, studyTechniques]);
+
     // Rank computation: find position + 3 rivals above + 1 below for context
     const rankInfo = useMemo(() => {
         if (!leaderboard.length || !user) return null;
@@ -467,210 +550,22 @@ export default function Dashboard() {
                     </h1>
                 </motion.section>
 
-                {/* ── HERO ROW: Streak (2/3) + Today snapshot (1/3) ──── */}
-                <motion.section
-                    initial={{ opacity: 0, y: 12 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: 0.05, duration: 0.4 }}
-                    className="grid grid-cols-1 lg:grid-cols-3 gap-5 lg:gap-6"
-                >
-                    {/* Streak hero */}
-                    <div className="lg:col-span-2">
-                        {streakDays > 0 ? (
-                            <div className="relative overflow-hidden rounded-3xl bg-streak/10 border-2 border-streak/25 p-6 lg:p-8 h-full">
-                                <Flame className="absolute -top-6 -right-6 w-32 h-32 text-streak/10 pointer-events-none" />
-                                <div className="relative grid grid-cols-1 sm:grid-cols-5 gap-5 items-center">
-                                    <div className="sm:col-span-3">
-                                        <p className="stat-label text-streak/80 mb-1">Day streak</p>
-                                        <div className="flex items-baseline gap-3">
-                                            <span
-                                                className="font-display font-extrabold text-streak leading-none"
-                                                style={{ fontSize: 'clamp(3.5rem, 10vw, 6rem)' }}
-                                            >
-                                                {streakDays}
-                                            </span>
-                                            <span className="font-display font-extrabold text-streak/50 text-2xl lg:text-3xl">
-                                                {streakDays === 1 ? 'day' : 'days'}
-                                            </span>
-                                        </div>
-                                        {streakBlurb && (
-                                            <p className="text-foreground text-sm lg:text-base mt-2 max-w-md font-medium leading-snug">
-                                                {streakBlurb}
-                                            </p>
-                                        )}
-                                    </div>
-                                    <div className="sm:col-span-2 grid grid-cols-2 sm:grid-cols-1 gap-3">
-                                        <div className="bg-surface rounded-xl p-3 border-2 border-streak/15">
-                                            <p className="stat-label">XP boost</p>
-                                            <p className="font-display font-extrabold text-streak text-2xl mt-0.5 leading-none">{multiplier}</p>
-                                        </div>
-                                        {milestone ? (
-                                            <div className="bg-surface rounded-xl p-3 border-2 border-border">
-                                                <p className="stat-label">Next jump</p>
-                                                <p className="font-bold text-foreground text-sm mt-0.5">
-                                                    {milestone.away}d <span className="text-muted-foreground/60">→</span> {milestone.mult}
-                                                </p>
-                                                <div className="h-1 bg-secondary rounded-full mt-1.5 overflow-hidden">
-                                                    <motion.div
-                                                        className="h-full bg-streak rounded-full"
-                                                        initial={{ width: 0 }}
-                                                        animate={{ width: `${((milestone.at - milestone.away) / milestone.at) * 100}%` }}
-                                                        transition={{ duration: 0.9, delay: 0.5 }}
-                                                    />
-                                                </div>
-                                            </div>
-                                        ) : (
-                                            <div className="bg-surface rounded-xl p-3 border-2 border-border">
-                                                <p className="stat-label">Status</p>
-                                                <p className="font-bold text-streak text-sm mt-0.5">Maxed at 2.5×</p>
-                                            </div>
-                                        )}
-                                    </div>
-                                </div>
-                            </div>
-                        ) : (
-                            <div className="rounded-3xl bg-secondary/40 border-2 border-dashed border-border p-6 lg:p-8 text-center h-full flex flex-col items-center justify-center">
-                                <Flame className="w-12 h-12 text-muted-foreground/30 mb-3" />
-                                <h2 className="font-display font-extrabold text-foreground text-xl lg:text-2xl mb-2">
-                                    Ready to start a streak?
-                                </h2>
-                                <p className="text-muted-foreground text-sm max-w-sm mx-auto mb-5">
-                                    A study session today gets you started. Show up tomorrow to keep it.
-                                </p>
-                                <Link to={createPageUrl("Study")}>
-                                    <Button><Play className="w-4 h-4" /> Start your first session</Button>
-                                </Link>
-                            </div>
-                        )}
-                    </div>
-
-                    {/* Today snapshot */}
-                    <div className="lg:col-span-1">
-                        <div className="rounded-3xl bg-primary/10 border-2 border-primary/25 p-6 h-full flex flex-col">
-                            <div className="flex items-center gap-2 mb-2">
-                                <Clock className="w-4 h-4 text-primary" />
-                                <p className="stat-label text-primary/80">Today</p>
-                            </div>
-                            <p className="font-display font-extrabold text-foreground leading-none" style={{ fontSize: 'clamp(2.25rem, 5.5vw, 3rem)' }}>
-                                {fmtTime(todaysStudyTime)}
-                            </p>
-                            <p className="text-xs text-muted-foreground mt-2 leading-snug">
-                                {todaysStudyTime === 0
-                                    ? "Nothing logged yet — let's change that."
-                                    : todaysStudyTime >= 90
-                                        ? "Solid day so far. Keep cooking."
-                                        : todaysStudyTime >= 30
-                                            ? "Good start — stack another?"
-                                            : "Just getting started."}
-                            </p>
-                            <div className="space-y-2.5 mt-4 pt-4 border-t-2 border-primary/15">
-                                <div>
-                                    <div className="flex items-baseline justify-between mb-1">
-                                        <p className="text-xs font-bold text-muted-foreground">This week</p>
-                                        <p className="text-xs font-bold text-foreground">{fmtTime(weeklyStudyTime)} <span className="text-muted-foreground/60">/ {goalHours}h</span></p>
-                                    </div>
-                                    <div className="h-1.5 bg-primary/15 rounded-full overflow-hidden">
-                                        <motion.div
-                                            initial={{ width: 0 }}
-                                            animate={{ width: `${weeklyPct}%` }}
-                                            transition={{ duration: 0.9, delay: 0.3 }}
-                                            className={`h-full rounded-full ${weeklyPct >= 100 ? 'bg-primary' : 'bg-xp'}`}
-                                        />
-                                    </div>
-                                </div>
-                                <div className="flex items-baseline justify-between">
-                                    <p className="text-xs font-bold text-muted-foreground">Avg quiz</p>
-                                    <p className="text-xs font-bold text-foreground">{avgQuizScore != null ? `${avgQuizScore}%` : '—'}</p>
-                                </div>
-                            </div>
-                            <Link to={createPageUrl("Study")} className="mt-4">
-                                <Button size="sm" className="w-full"><Play className="w-3.5 h-3.5" /> Study now</Button>
-                            </Link>
-                        </div>
-                    </div>
-                </motion.section>
-
-                {/* ── RANK & RIVALS ───────────────────────────────────── */}
-                {rankInfo && (rankInfo.rivals.length > 0 || rankInfo.below) && (
+                {/* ── ONBOARDING NUDGE (only for new users) ──────────── */}
+                {showOnboarding && (
                     <motion.section
                         initial={{ opacity: 0, y: 12 }}
                         animate={{ opacity: 1, y: 0 }}
-                        transition={{ delay: 0.1 }}
-                        className="rounded-3xl bg-xp/5 border-2 border-xp/20 p-6 lg:p-7"
-                    >
-                        <div className="flex items-start justify-between mb-5 flex-wrap gap-3">
-                            <div className="flex items-center gap-3">
-                                <div className="w-11 h-11 rounded-xl bg-xp/15 flex items-center justify-center flex-shrink-0">
-                                    <Trophy className="w-5 h-5 text-xp" />
-                                </div>
-                                <div>
-                                    <p className="stat-label text-xp/80 mb-0.5">Global rank</p>
-                                    <h2 className="font-display font-extrabold text-foreground text-xl lg:text-2xl leading-tight">
-                                        {rankInfo.myRank ? (
-                                            <>
-                                                #{rankInfo.myRank}
-                                                <span className="text-muted-foreground/50 text-base font-bold ml-2">
-                                                    of {rankInfo.total.toLocaleString()}
-                                                </span>
-                                            </>
-                                        ) : (
-                                            "Unranked — keep earning XP"
-                                        )}
-                                    </h2>
-                                </div>
-                            </div>
-                            <Link to={createPageUrl("Ranked")}>
-                                <Button variant="outline" size="sm">
-                                    See full board <ArrowRight className="w-3.5 h-3.5" />
-                                </Button>
-                            </Link>
-                        </div>
-
-                        <div className="space-y-1.5">
-                            {rankInfo.rivals.length > 0 && (
-                                <p className="stat-label mb-2">
-                                    {rankInfo.myRank && rankInfo.myRank <= 50 ? "Closest ahead of you" : "Top of the board"}
-                                </p>
-                            )}
-                            {rankInfo.rivals.map((r, i) => (
-                                <RankRow key={r.id || r.user_email || i} entry={r} isMe={false} userEmail={user?.email} />
-                            ))}
-                            {rankInfo.myEntry && (
-                                <RankRow entry={{ ...rankInfo.myEntry, rank: rankInfo.myRank, gap: 0 }} isMe={true} userEmail={user?.email} />
-                            )}
-                            {rankInfo.below && (
-                                <RankRow entry={rankInfo.below} isMe={false} userEmail={user?.email} below />
-                            )}
-                        </div>
-
-                        {rankInfo.rivals.length > 0 && rankInfo.rivals[rankInfo.rivals.length - 1] && rankInfo.myRank && rankInfo.myRank <= 50 && (
-                            <p className="text-sm text-muted-foreground mt-4 leading-snug">
-                                <span className="font-bold text-foreground">{fmtXP(rankInfo.rivals[rankInfo.rivals.length - 1].gap)} XP</span> from passing{' '}
-                                <span className="font-bold text-foreground">
-                                    {rankInfo.rivals[rankInfo.rivals.length - 1].is_anonymous && rankInfo.rivals[rankInfo.rivals.length - 1].user_email !== user?.email
-                                        ? `Anon #${(rankInfo.rivals[rankInfo.rivals.length - 1].id || '').slice(-4)}`
-                                        : (rankInfo.rivals[rankInfo.rivals.length - 1].username || rankInfo.rivals[rankInfo.rivals.length - 1].user_name || 'Student')}
-                                </span>.
-                            </p>
-                        )}
-                    </motion.section>
-                )}
-
-                {/* ── ONBOARDING NUDGE ────────────────────────────────── */}
-                {showOnboarding && (
-                    <motion.section
-                        initial={{ opacity: 0, y: 10 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        className="rounded-2xl bg-primary/10 border-2 border-primary/25 p-5 lg:p-6"
+                        transition={{ delay: 0.05 }}
+                        className="rounded-3xl bg-primary/10 border-2 border-primary/25 p-6 lg:p-8"
                     >
                         <div className="flex flex-col sm:flex-row sm:items-center gap-4">
                             <div className="flex items-center gap-3 flex-1 min-w-0">
-                                <div className="w-11 h-11 rounded-xl bg-primary/20 flex items-center justify-center flex-shrink-0">
-                                    <Sparkles className="w-5 h-5 text-primary" />
+                                <div className="w-12 h-12 rounded-xl bg-primary/20 flex items-center justify-center flex-shrink-0">
+                                    <Sparkles className="w-6 h-6 text-primary" />
                                 </div>
                                 <div>
-                                    <h3 className="font-display font-extrabold text-foreground text-base">
-                                        Quick setup. Five minutes.
+                                    <h3 className="font-display font-extrabold text-foreground text-lg">
+                                        Quick setup · Five minutes
                                     </h3>
                                     <p className="text-muted-foreground text-sm">
                                         Tell us who you are and what you're chasing — we'll tailor everything to you.
@@ -698,96 +593,276 @@ export default function Dashboard() {
                     </motion.section>
                 )}
 
-                {/* ── REMINDERS ───────────────────────────────────────── */}
-                {totalReminders > 0 && (
-                    <motion.section
-                        initial={{ opacity: 0, y: 12 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        transition={{ delay: 0.15 }}
-                    >
-                        <h2 className="font-display font-extrabold text-foreground text-lg lg:text-xl mb-3">
-                            On your radar
-                        </h2>
-                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5">
-                            {assessments.slice(0, 3).map((a) => {
-                                const days = differenceInDays(parseISO(a.due_date), new Date());
-                                const u = URGENCY[urgencyKey(days)];
-                                return (
-                                    <Link key={a.id} to={createPageUrl("Goals")}>
-                                        <ReminderRow
-                                            icon={Target}
-                                            title={a.title}
-                                            subtitle={a.subject_name}
-                                            badge={days === 0 ? 'Today' : days === 1 ? 'Tomorrow' : `${days}d`}
-                                            theme={u}
-                                        />
-                                    </Link>
-                                );
-                            })}
-                            {plannerReminders.map((ev) => {
-                                const days = differenceInDays(parseISO(ev.date), new Date());
-                                const u = URGENCY[urgencyKey(days)];
-                                return (
-                                    <Link key={`pl-${ev.id}`} to={createPageUrl("Goals")}>
-                                        <ReminderRow
-                                            icon={FileQuestion}
-                                            title={ev.title}
-                                            subtitle={ev.event_type}
-                                            badge={days === 0 ? 'Today' : days === 1 ? 'Tomorrow' : `${days}d`}
-                                            theme={u}
-                                        />
-                                    </Link>
-                                );
-                            })}
-                            {flashcardReminders.map((deck, i) => (
-                                <Link key={`fc-${i}`} to={createPageUrl("Study")}>
-                                    <ReminderRow
-                                        icon={Layers}
-                                        title={deck.subject || 'Flashcards'}
-                                        subtitle={`${deck.count} cards due`}
-                                        badge="Now"
-                                        theme={URGENCY.soon}
-                                    />
+                {/* ── PICK UP WHERE YOU LEFT OFF (hero) ──────────────── */}
+                <motion.section
+                    initial={{ opacity: 0, y: 12 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: 0.08, duration: 0.4 }}
+                >
+                    {lastSession ? (
+                        <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-primary/10 via-primary/5 to-surface border-2 border-primary/25 p-6 lg:p-8">
+                            <Brain className="absolute -top-4 -right-4 w-32 h-32 text-primary/10 pointer-events-none" />
+                            <div className="relative flex flex-col sm:flex-row sm:items-center gap-5">
+                                <div className="flex-1 min-w-0">
+                                    <p className="stat-label text-primary/80 mb-1.5">Pick up where you left off</p>
+                                    <h2
+                                        className="font-display font-extrabold text-foreground leading-[1.05] mb-2"
+                                        style={{ fontSize: 'clamp(1.75rem, 4vw, 2.5rem)' }}
+                                    >
+                                        {lastSession.subject || 'Your last study session'}
+                                    </h2>
+                                    <p className="text-muted-foreground text-sm sm:text-base">
+                                        {lastSession.duration > 0 ? `${lastSession.duration}m session` : 'Session'}
+                                        {' · '}
+                                        {(() => {
+                                            try { return formatDistanceToNow(new Date(lastSession.date), { addSuffix: true }); }
+                                            catch { return 'recently'; }
+                                        })()}
+                                        {dueFlashcardCount > 0 && (
+                                            <>
+                                                {' · '}
+                                                <span className="font-bold text-foreground">{dueFlashcardCount} flashcard{dueFlashcardCount === 1 ? '' : 's'} due</span>
+                                            </>
+                                        )}
+                                    </p>
+                                </div>
+                                <Link to={createPageUrl("Study")} className="w-full sm:w-auto flex-shrink-0">
+                                    <Button className="w-full sm:w-auto btn-3d gap-1.5">
+                                        <Play className="w-4 h-4" /> Resume
+                                    </Button>
                                 </Link>
-                            ))}
+                            </div>
                         </div>
-                    </motion.section>
-                )}
+                    ) : (
+                        <EmptyState
+                            icon={Brain}
+                            title="Ready to start your first session?"
+                            description="A 25-minute Pomodoro is the easiest way in. Show up today and tomorrow's streak takes care of itself."
+                            actionLabel="Start a session"
+                            actionHref={createPageUrl("Study")}
+                            className="rounded-3xl bg-secondary/30 border-2 border-dashed border-border"
+                        />
+                    )}
+                </motion.section>
 
-                {/* ── TODAY'S MOVE (compact, single row) ──────────────── */}
+                {/* ── YOUR SUBJECTS strip ────────────────────────────── */}
+                <motion.section
+                    initial={{ opacity: 0, y: 12 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: 0.12 }}
+                >
+                    <div className="flex items-center justify-between mb-3">
+                        <h2 className="font-display font-extrabold text-foreground text-lg lg:text-xl">Your subjects</h2>
+                        <Link to={createPageUrl("Subjects")} className="text-xs font-bold text-primary hover:underline">All subjects →</Link>
+                    </div>
+                    {subjectStats.length === 0 ? (
+                        <div className="rounded-2xl bg-secondary/30 border-2 border-dashed border-border p-6 text-center">
+                            <BookOpen className="w-10 h-10 text-muted-foreground/40 mx-auto mb-3" />
+                            <p className="font-bold text-foreground text-sm mb-1">Add your VCE subjects</p>
+                            <p className="text-xs text-muted-foreground mb-4 max-w-xs mx-auto">
+                                We'll track time and progress per subject and surface what to focus on.
+                            </p>
+                            <Link to={createPageUrl("Subjects")}>
+                                <Button size="sm">Add subjects</Button>
+                            </Link>
+                        </div>
+                    ) : (
+                        <div className="flex gap-3 overflow-x-auto pb-2 -mx-4 px-4 sm:mx-0 sm:px-0 snap-x snap-mandatory sm:snap-none">
+                            {subjectStats.map((sub) => {
+                                const lastAgo = sub.lastDate
+                                    ? (() => {
+                                        try { return formatDistanceToNow(new Date(sub.lastDate), { addSuffix: true }); }
+                                        catch { return null; }
+                                    })()
+                                    : null;
+                                const cardColor = AVATAR_COLORS[(sub.name || '?').charCodeAt(0) % AVATAR_COLORS.length];
+                                return (
+                                    <Link
+                                        key={sub.id}
+                                        to={createPageUrl("Study")}
+                                        className="snap-start flex-shrink-0 w-52 sm:w-56 card-soft card-soft-hover p-4 group"
+                                    >
+                                        <div className="flex items-start justify-between mb-3">
+                                            <div className={`w-9 h-9 rounded-xl ${cardColor} text-white flex items-center justify-center font-bold text-sm`}>
+                                                {initials(sub.name)}
+                                            </div>
+                                            {sub.weekMins > 0 && (
+                                                <span className="pill bg-primary/10 text-primary text-[10px]">
+                                                    {fmtTime(sub.weekMins)}
+                                                </span>
+                                            )}
+                                        </div>
+                                        <p className="font-display font-extrabold text-foreground text-sm leading-tight mb-1 line-clamp-2">
+                                            {sub.name}
+                                        </p>
+                                        {sub.code && (
+                                            <p className="text-xs text-muted-foreground mb-3">{sub.code}</p>
+                                        )}
+                                        <div className="flex items-center justify-between text-xs">
+                                            <span className="text-muted-foreground">
+                                                {lastAgo ? `Last: ${lastAgo}` : 'No sessions yet'}
+                                            </span>
+                                            <Play className="w-3.5 h-3.5 text-primary opacity-0 group-hover:opacity-100 transition-opacity" />
+                                        </div>
+                                    </Link>
+                                );
+                            })}
+                        </div>
+                    )}
+                </motion.section>
+
+                {/* ── TODAY'S PLAN + STATS SIDEBAR ───────────────────── */}
+                <motion.section
+                    initial={{ opacity: 0, y: 12 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: 0.16 }}
+                    className="grid grid-cols-1 lg:grid-cols-3 gap-5 lg:gap-6"
+                >
+                    {/* Today's plan — 2/3 */}
+                    <div className="lg:col-span-2">
+                        <div className="flex items-center justify-between mb-3">
+                            <h2 className="font-display font-extrabold text-foreground text-lg lg:text-xl">Today's plan</h2>
+                            {totalReminders > 0 && (
+                                <span className="text-xs font-bold text-muted-foreground">{totalReminders} item{totalReminders === 1 ? '' : 's'}</span>
+                            )}
+                        </div>
+                        {totalReminders === 0 ? (
+                            <div className="card-soft p-6 text-center">
+                                <CheckCircle2 className="w-10 h-10 text-primary/40 mx-auto mb-2" />
+                                <p className="font-bold text-foreground text-sm mb-1">Nothing pressing today</p>
+                                <p className="text-xs text-muted-foreground max-w-xs mx-auto">
+                                    A quiet day — perfect time to stack a focused study session.
+                                </p>
+                            </div>
+                        ) : (
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                                {assessments.slice(0, 3).map((a) => {
+                                    const days = differenceInDays(parseISO(a.due_date), new Date());
+                                    const u = URGENCY[urgencyKey(days)];
+                                    return (
+                                        <Link key={a.id} to={createPageUrl("Goals")}>
+                                            <ReminderRow
+                                                icon={Target}
+                                                title={a.title}
+                                                subtitle={a.subject_name}
+                                                badge={days === 0 ? 'Today' : days === 1 ? 'Tomorrow' : `${days}d`}
+                                                theme={u}
+                                            />
+                                        </Link>
+                                    );
+                                })}
+                                {plannerReminders.slice(0, 3).map((ev) => {
+                                    const days = differenceInDays(parseISO(ev.date), new Date());
+                                    const u = URGENCY[urgencyKey(days)];
+                                    return (
+                                        <Link key={`pl-${ev.id}`} to={createPageUrl("Goals")}>
+                                            <ReminderRow
+                                                icon={FileQuestion}
+                                                title={ev.title}
+                                                subtitle={ev.event_type}
+                                                badge={days === 0 ? 'Today' : days === 1 ? 'Tomorrow' : `${days}d`}
+                                                theme={u}
+                                            />
+                                        </Link>
+                                    );
+                                })}
+                                {flashcardReminders.map((deck, i) => (
+                                    <Link key={`fc-${i}`} to={createPageUrl("Study")}>
+                                        <ReminderRow
+                                            icon={Layers}
+                                            title={deck.subject || 'Flashcards'}
+                                            subtitle={`${deck.count} cards due`}
+                                            badge="Now"
+                                            theme={URGENCY.soon}
+                                        />
+                                    </Link>
+                                ))}
+                            </div>
+                        )}
+                    </div>
+
+                    {/* Stats sidebar — 1/3 */}
+                    <div className="lg:col-span-1 space-y-3">
+                        {/* Streak */}
+                        <div className="card-soft p-4 flex items-center gap-3">
+                            <div className="w-11 h-11 rounded-xl bg-streak/15 flex items-center justify-center flex-shrink-0">
+                                <Flame className="w-5 h-5 text-streak" strokeWidth={2.5} />
+                            </div>
+                            <div className="flex-1 min-w-0">
+                                <p className="stat-label text-streak/80">Streak</p>
+                                <p className="font-display font-extrabold text-foreground text-xl leading-none mt-0.5">
+                                    {streakDays}<span className="text-muted-foreground/60 text-sm font-bold ml-1">{streakDays === 1 ? 'day' : 'days'}</span>
+                                </p>
+                            </div>
+                            <span className="pill bg-streak/15 text-streak text-[10px] flex-shrink-0">{multiplier}</span>
+                        </div>
+
+                        {/* Week progress */}
+                        <div className="card-soft p-4">
+                            <div className="flex items-center gap-2 mb-2">
+                                <Clock className="w-3.5 h-3.5 text-primary" strokeWidth={2.5} />
+                                <p className="stat-label text-primary/80">This week</p>
+                            </div>
+                            <div className="flex items-baseline justify-between mb-1.5">
+                                <span className="font-display font-extrabold text-foreground text-xl leading-none">
+                                    {fmtTime(weeklyStudyTime)}
+                                </span>
+                                <span className="text-xs font-bold text-muted-foreground">/ {goalHours}h goal</span>
+                            </div>
+                            <div className="h-1.5 bg-primary/15 rounded-full overflow-hidden">
+                                <motion.div
+                                    initial={{ width: 0 }}
+                                    animate={{ width: `${weeklyPct}%` }}
+                                    transition={{ duration: 0.9, delay: 0.3 }}
+                                    className={`h-full rounded-full ${weeklyPct >= 100 ? 'bg-primary' : 'bg-xp'}`}
+                                />
+                            </div>
+                            <p className="text-xs text-muted-foreground mt-1.5">
+                                {weeklyPct >= 100 ? 'Goal smashed.' : `${weeklyPct}% of goal`}
+                            </p>
+                        </div>
+
+                        {/* Rank */}
+                        {rankInfo?.myRank && (
+                            <Link to={createPageUrl("Ranked")}>
+                                <div className="card-soft card-soft-hover p-4 flex items-center gap-3 cursor-pointer">
+                                    <div className="w-11 h-11 rounded-xl bg-xp/15 flex items-center justify-center flex-shrink-0">
+                                        <Trophy className="w-5 h-5 text-xp" strokeWidth={2.5} />
+                                    </div>
+                                    <div className="flex-1 min-w-0">
+                                        <p className="stat-label text-xp/80">Global rank</p>
+                                        <p className="font-display font-extrabold text-foreground text-xl leading-none mt-0.5">
+                                            #{rankInfo.myRank}<span className="text-muted-foreground/60 text-sm font-bold ml-1">of {rankInfo.total.toLocaleString()}</span>
+                                        </p>
+                                    </div>
+                                    <ChevronRight className="w-4 h-4 text-muted-foreground/60 flex-shrink-0" />
+                                </div>
+                            </Link>
+                        )}
+
+                        {/* Avg quiz */}
+                        {avgQuizScore != null && (
+                            <div className="card-soft p-4 flex items-center gap-3">
+                                <div className="w-11 h-11 rounded-xl bg-chart-3/15 flex items-center justify-center flex-shrink-0">
+                                    <Brain className="w-5 h-5 text-chart-3" strokeWidth={2.5} />
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                    <p className="stat-label text-chart-3/80">Avg quiz</p>
+                                    <p className="font-display font-extrabold text-foreground text-xl leading-none mt-0.5">{avgQuizScore}%</p>
+                                </div>
+                            </div>
+                        )}
+                    </div>
+                </motion.section>
+
+                {/* ── GOAL + WEEKLY HEATMAP ──────────────────────────── */}
                 <motion.section
                     initial={{ opacity: 0, y: 12 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ delay: 0.2 }}
-                >
-                    <div className={`rounded-2xl ${moveTheme.bg} border-2 ${moveTheme.border} p-5 lg:p-6`}>
-                        <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
-                            <div className={`w-12 h-12 rounded-xl ${moveTheme.iconBg} flex items-center justify-center flex-shrink-0`}>
-                                <MoveIcon className={`w-6 h-6 ${moveTheme.iconText}`} />
-                            </div>
-                            <div className="flex-1 min-w-0">
-                                <p className="stat-label mb-1">Today's move · {move.label}</p>
-                                <h2 className="font-display font-extrabold text-foreground text-base lg:text-lg leading-snug">
-                                    {move.title}
-                                </h2>
-                                <p className="text-muted-foreground text-sm mt-0.5">{move.sub}</p>
-                            </div>
-                            <Link to={createPageUrl(move.link)} className="w-full sm:w-auto flex-shrink-0">
-                                <Button className="w-full sm:w-auto">
-                                    {move.cta} <ArrowRight className="w-4 h-4" />
-                                </Button>
-                            </Link>
-                        </div>
-                    </div>
-                </motion.section>
-
-                {/* ── GOAL POSTER + RECENT (3:2) ──────────────────────── */}
-                <motion.section
-                    initial={{ opacity: 0, y: 12 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: 0.25 }}
                     className="grid grid-cols-1 md:grid-cols-5 gap-5 lg:gap-6"
                 >
+                    {/* Goal poster — 3/5 */}
                     <div className="md:col-span-3">
                         {hasGoal ? (
                             <div className="relative overflow-hidden rounded-3xl bg-chart-3/10 border-2 border-chart-3/25 p-6 lg:p-8 h-full">
@@ -827,48 +902,55 @@ export default function Dashboard() {
                         )}
                     </div>
 
+                    {/* Weekly heatmap — 2/5 */}
                     <div className="md:col-span-2">
-                        <div className="flex items-center justify-between mb-4">
-                            <h3 className="font-display font-extrabold text-foreground text-lg lg:text-xl">Last sessions</h3>
-                            <Link to={createPageUrl("Study")} className="text-xs font-bold text-primary hover:underline">View all</Link>
-                        </div>
-                        {studySessions.length === 0 ? (
-                            <div className="flex flex-col items-center text-center gap-3 py-6">
-                                <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center">
-                                    <Brain className="w-5 h-5 text-primary" />
-                                </div>
-                                <div>
-                                    <p className="font-bold text-foreground text-sm">No sessions yet</p>
-                                    <p className="text-xs text-muted-foreground mt-0.5 max-w-[200px]">Knock out a quick session — it'll show up right here.</p>
-                                </div>
-                                <Link to={createPageUrl("Study")}>
-                                    <Button size="sm" className="gap-1.5">
-                                        <Brain className="w-3.5 h-3.5" />
-                                        Start a session
-                                    </Button>
-                                </Link>
+                        <div className="card-soft p-5 h-full flex flex-col">
+                            <div className="flex items-center justify-between mb-4">
+                                <h3 className="font-display font-extrabold text-foreground text-base">Last 7 days</h3>
+                                <span className="text-xs font-bold text-muted-foreground">
+                                    {fmtTime(dailyHeatmap.reduce((a, d) => a + d.minutes, 0))}
+                                </span>
                             </div>
-                        ) : (
-                            <ul className="space-y-3">
-                                {studySessions.slice(0, 4).map((s) => (
-                                    <li key={s.id} className="flex items-baseline justify-between gap-3 border-b border-border pb-3 last:border-0 last:pb-0">
-                                        <div className="min-w-0">
-                                            <p className="font-bold text-foreground text-sm truncate">{s.subject || 'Study'}</p>
-                                            <p className="text-xs text-muted-foreground">
-                                                {format(new Date(s.date), 'MMM d')} · {s.duration_minutes || 0}m
-                                            </p>
-                                        </div>
-                                        {s.productivity_rating && (
-                                            <div className="flex gap-0.5 flex-shrink-0">
-                                                {Array.from({ length: s.productivity_rating }).map((_, j) => (
-                                                    <Star key={j} className="w-3 h-3 fill-xp text-xp" />
-                                                ))}
+                            <div className="flex-1 flex items-end justify-between gap-1.5">
+                                {(() => {
+                                    const max = Math.max(60, ...dailyHeatmap.map(d => d.minutes));
+                                    return dailyHeatmap.map((d) => {
+                                        const ratio = d.minutes / max;
+                                        // Color intensity: empty / low / medium / high
+                                        const colorClass = d.minutes === 0
+                                            ? 'bg-secondary'
+                                            : ratio < 0.33
+                                                ? 'bg-primary/30'
+                                                : ratio < 0.66
+                                                    ? 'bg-primary/60'
+                                                    : 'bg-primary';
+                                        const heightPct = d.minutes === 0 ? 6 : Math.max(8, ratio * 100);
+                                        return (
+                                            <div key={d.date} className="flex-1 flex flex-col items-center gap-1.5">
+                                                <div
+                                                    className="w-full rounded-md flex items-end justify-center relative group"
+                                                    style={{ height: '100px' }}
+                                                    title={`${d.label}: ${fmtTime(d.minutes)}`}
+                                                >
+                                                    <motion.div
+                                                        initial={{ height: 0 }}
+                                                        animate={{ height: `${heightPct}%` }}
+                                                        transition={{ duration: 0.6, delay: 0.4 + dailyHeatmap.indexOf(d) * 0.04 }}
+                                                        className={`w-full rounded-md ${colorClass} ${d.isToday ? 'ring-2 ring-primary ring-offset-1' : ''}`}
+                                                    />
+                                                </div>
+                                                <span className={`text-[10px] font-bold ${d.isToday ? 'text-primary' : 'text-muted-foreground'}`}>
+                                                    {d.label}
+                                                </span>
                                             </div>
-                                        )}
-                                    </li>
-                                ))}
-                            </ul>
-                        )}
+                                        );
+                                    });
+                                })()}
+                            </div>
+                            <p className="text-xs text-muted-foreground mt-3 text-center leading-snug">
+                                {dailyHeatmap.filter(d => d.minutes > 0).length}/7 days studied this week
+                            </p>
+                        </div>
                     </div>
                 </motion.section>
 
@@ -924,53 +1006,3 @@ function ReminderRow({ icon: Icon, title, subtitle, badge, theme }) {
     );
 }
 
-function RankRow({ entry, isMe, userEmail, below }) {
-    const display = entry.is_anonymous && entry.user_email !== userEmail
-        ? `Anon #${(entry.id || '').slice(-4)}`
-        : (entry.username || entry.user_name || 'Student');
-    const xpDisplay = fmtXP(entry.total_xp || 0);
-    const gapStr = entry.gap > 0
-        ? `+${fmtXP(entry.gap)}`
-        : entry.gap < 0
-            ? `${fmtXP(Math.abs(entry.gap))} below`
-            : 'You';
-
-    const RankIcon = entry.rank === 1 ? Crown : entry.rank === 2 ? Medal : entry.rank === 3 ? Medal : null;
-    const rankIconColor = entry.rank === 1 ? 'text-xp' : entry.rank === 2 ? 'text-muted-foreground' : entry.rank === 3 ? 'text-streak' : '';
-
-    return (
-        <div className={`flex items-center gap-3 p-3 rounded-xl border-2 transition-colors ${
-            isMe
-                ? 'bg-primary/10 border-primary'
-                : below
-                    ? 'bg-surface border-border opacity-70'
-                    : 'bg-surface border-border hover:border-xp/40'
-        }`}>
-            <div className={`flex items-center justify-center flex-shrink-0 w-10 ${isMe ? 'text-primary' : 'text-muted-foreground'} font-display font-extrabold text-lg`}>
-                #{entry.rank}
-            </div>
-            <div className={`w-9 h-9 rounded-lg ${avatarColor(display)} text-white flex items-center justify-center font-bold text-sm flex-shrink-0`}>
-                {RankIcon ? <RankIcon className={`w-4 h-4 ${rankIconColor === 'text-muted-foreground' ? 'text-white' : ''}`} /> : initials(display)}
-            </div>
-            <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2">
-                    <p className={`font-bold text-sm truncate ${isMe ? 'text-primary' : 'text-foreground'}`}>
-                        {isMe ? `${display} (you)` : display}
-                    </p>
-                    {entry.streak_days > 0 && (
-                        <span className="inline-flex items-center gap-0.5 text-xs font-bold text-streak flex-shrink-0">
-                            <Flame className="w-3 h-3" /> {entry.streak_days}
-                        </span>
-                    )}
-                </div>
-                <p className="text-xs text-muted-foreground truncate">{xpDisplay} XP</p>
-            </div>
-            {!isMe && entry.gap !== undefined && entry.gap !== 0 && (
-                <span className={`pill flex-shrink-0 ${entry.gap > 0 ? 'bg-xp/15 text-xp' : 'bg-secondary text-muted-foreground'}`}>
-                    <TrendingUp className="w-3 h-3" />
-                    {gapStr}
-                </span>
-            )}
-        </div>
-    );
-}
