@@ -4,94 +4,89 @@ import { Link } from "react-router-dom";
 import { createPageUrl } from "@/utils";
 import { Button } from "@/components/ui/button";
 import {
-    BookOpen, Zap, Brain, Clock, CheckCircle2, ArrowRight,
-    FileQuestion, Sparkles, Play, Map, Target, ChevronRight, X
+    BookOpen, Zap, Brain, Clock, CheckCircle2,
+    FileQuestion, Sparkles, Play, Map, Target, ChevronRight, X, Sprout
 } from "lucide-react";
 
+// Three intent modes — Lucide icons, tokenised colours via per-mode classes
+// (static Tailwind classes only — JIT can't see template strings).
 const MODES = [
     {
-        id: "homework",
-        emoji: "📚",
-        label: "Homework",
-        desc: "I've got assignments or tasks to finish",
-        color: "from-blue-500 to-indigo-600",
-        bg: "bg-blue-50 border-blue-200 hover:bg-blue-100",
-        selectedBg: "bg-blue-500 border-blue-600",
-        tag: "bg-blue-100 text-blue-700",
+        id:      "homework",
+        Icon:    BookOpen,
+        label:   "Homework",
+        desc:    "I've got assignments or tasks to finish",
+        // Surfaces (Direction A — /5 tint, /15 border, shadow on hover)
+        wrap:    "bg-chart-3/5 border-chart-3/15 hover:border-chart-3/30",
+        iconWrap:"bg-chart-3/10 text-chart-3 border-chart-3/15",
     },
     {
-        id: "cramming",
-        emoji: "⚡",
-        label: "Cramming",
-        desc: "Exam or SAC coming up — need to cover content fast",
-        color: "from-orange-500 to-red-500",
-        bg: "bg-orange-50 border-orange-200 hover:bg-orange-100",
-        selectedBg: "bg-orange-500 border-orange-600",
-        tag: "bg-orange-100 text-orange-700",
+        id:      "cramming",
+        Icon:    Zap,
+        label:   "Cramming",
+        desc:    "Exam or SAC coming up — need to cover content fast",
+        wrap:    "bg-xp/5 border-xp/15 hover:border-xp/30",
+        iconWrap:"bg-xp/10 text-xp border-xp/15",
     },
     {
-        id: "free",
-        emoji: "🌱",
-        label: "Free Study",
-        desc: "No pressure — building knowledge at my own pace",
-        color: "from-emerald-500 to-teal-500",
-        bg: "bg-emerald-50 border-emerald-200 hover:bg-emerald-100",
-        selectedBg: "bg-emerald-500 border-emerald-600",
-        tag: "bg-emerald-100 text-emerald-700",
+        id:      "free",
+        Icon:    Sprout,
+        label:   "Free study",
+        desc:    "No pressure — building knowledge at my own pace",
+        wrap:    "bg-primary/5 border-primary/15 hover:border-primary/30",
+        iconWrap:"bg-primary/10 text-primary border-primary/15",
     },
 ];
 
-const DURATION_OPTIONS = [15, 25, 45, 60, 90];
-
 const RECOMMENDATIONS = {
     homework: {
-        title: "Homework Mode 📚",
+        title:    "Homework mode",
         subtitle: "Let's get it done efficiently.",
-        durations: [25, 45, 60],
+        durations:[25, 45, 60],
         defaultDuration: 45,
         steps: [
-            { icon: Target, text: "List every task you need to complete before starting", color: "text-blue-600", bg: "bg-blue-50" },
-            { icon: Clock, text: "Use the Pomodoro timer — 25 min work, 5 min break", color: "text-indigo-600", bg: "bg-indigo-50" },
-            { icon: CheckCircle2, text: "Tick off tasks as you go to keep momentum", color: "text-emerald-600", bg: "bg-emerald-50" },
-            { icon: Sparkles, text: "Use AI Tools if you're stuck on a concept", color: "text-pink-600", bg: "bg-pink-50" },
+            { Icon: Target,        text: "List every task you need to complete before starting." },
+            { Icon: Clock,         text: "Use the Pomodoro timer — 25 minutes work, 5 minutes break." },
+            { Icon: CheckCircle2,  text: "Tick off tasks as you go to keep momentum." },
+            { Icon: Sparkles,      text: "Open AI Tools if you get stuck on a concept." },
         ],
-        cta: { label: "Start Pomodoro Timer", link: "Study", icon: Play },
-        secondary: { label: "Open AI Tools", link: "AITools", icon: Sparkles },
+        cta:       { label: "Start Pomodoro timer", link: "Study",    Icon: Play },
+        secondary: { label: "Open AI tools",        link: "AITools",  Icon: Sparkles },
     },
     cramming: {
-        title: "Cram Mode ⚡",
+        title:    "Cram mode",
         subtitle: "High intensity. Cover the most ground.",
-        durations: [45, 60, 90],
+        durations:[45, 60, 90],
         defaultDuration: 60,
         steps: [
-            { icon: Map, text: "Open your Study Roadmap to identify the highest priority topics", color: "text-orange-600", bg: "bg-orange-50" },
-            { icon: Brain, text: "Use Active Recall — don't just re-read, test yourself", color: "text-red-600", bg: "bg-red-50" },
-            { icon: FileQuestion, text: "Do a practice quiz after each topic to lock in the knowledge", color: "text-purple-600", bg: "bg-purple-50" },
-            { icon: Clock, text: "Take a 10 min break every 50 min — your brain needs it", color: "text-blue-600", bg: "bg-blue-50" },
+            { Icon: Map,           text: "Open your study roadmap to identify the highest-priority topics." },
+            { Icon: Brain,         text: "Use active recall — test yourself, don't just re-read." },
+            { Icon: FileQuestion,  text: "Do a practice quiz after each topic to lock in the knowledge." },
+            { Icon: Clock,         text: "Take a 10-minute break every 50 minutes — your brain needs it." },
         ],
-        cta: { label: "View My Roadmap", link: "StudyRoadmap", icon: Map },
-        secondary: { label: "Take a Quiz", link: "Quizzes", icon: FileQuestion },
+        cta:       { label: "View my roadmap", link: "StudyRoadmap", Icon: Map },
+        secondary: { label: "Take a quiz",     link: "Quizzes",      Icon: FileQuestion },
     },
     free: {
-        title: "Free Study 🌱",
+        title:    "Free study",
         subtitle: "Low pressure. Explore and build.",
-        durations: [15, 25, 45],
+        durations:[15, 25, 45],
         defaultDuration: 25,
         steps: [
-            { icon: Brain, text: "Review flashcards for subjects you haven't touched recently", color: "text-violet-600", bg: "bg-violet-50" },
-            { icon: Sparkles, text: "Use the Concept Explainer to explore something you're curious about", color: "text-pink-600", bg: "bg-pink-50" },
-            { icon: FileQuestion, text: "Try a low-stakes quiz on a topic you feel shaky on", color: "text-indigo-600", bg: "bg-indigo-50" },
-            { icon: BookOpen, text: "Read a Study Guide — no pressure, just absorb", color: "text-emerald-600", bg: "bg-emerald-50" },
+            { Icon: Brain,         text: "Review flashcards for subjects you haven't touched in a while." },
+            { Icon: Sparkles,      text: "Use the Concept Explainer to dig into something you're curious about." },
+            { Icon: FileQuestion,  text: "Try a low-stakes quiz on a topic you feel shaky on." },
+            { Icon: BookOpen,      text: "Read a study guide — no pressure, just absorb." },
         ],
-        cta: { label: "Start Study Session", link: "Study", icon: Play },
-        secondary: { label: "Browse AI Tools", link: "AITools", icon: Sparkles },
+        cta:       { label: "Start study session", link: "Study",   Icon: Play },
+        secondary: { label: "Browse AI tools",     link: "AITools", Icon: Sparkles },
     },
 };
 
 export default function StudyIntentModal({ firstName, onDismiss }) {
     const [selected, setSelected] = useState(null);
     const [duration, setDuration] = useState(null);
-    const [step, setStep] = useState("pick"); // "pick" | "plan"
+    const [step, setStep]         = useState("pick"); // "pick" | "plan"
 
     const rec = selected ? RECOMMENDATIONS[selected.id] : null;
 
@@ -102,32 +97,39 @@ export default function StudyIntentModal({ firstName, onDismiss }) {
         setStep("plan");
     };
 
+    const fmtDuration = (d) => (d < 60 ? `${d}m` : d % 60 === 0 ? `${d / 60}h` : `${Math.floor(d / 60)}h ${d % 60}m`);
+
     return (
         <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4"
+            className="fixed inset-0 z-50 flex items-center justify-center bg-foreground/40 backdrop-blur-sm p-4"
         >
             <motion.div
-                initial={{ opacity: 0, scale: 0.94, y: 20 }}
-                animate={{ opacity: 1, scale: 1, y: 0 }}
-                exit={{ opacity: 0, scale: 0.94, y: 20 }}
+                initial={{ opacity: 0, scale: 0.96, y: 12 }}
+                animate={{ opacity: 1, scale: 1,  y: 0 }}
+                exit={{ opacity: 0, scale: 0.96, y: 12 }}
                 transition={{ type: "spring", stiffness: 320, damping: 28 }}
-                className="bg-white rounded-3xl shadow-2xl w-full max-w-lg overflow-hidden"
+                className="bg-surface rounded-2xl border border-border/60 shadow-soft-lg w-full max-w-lg overflow-hidden"
             >
-                {/* Header */}
-                <div className="relative bg-gradient-to-br from-violet-600 via-purple-600 to-indigo-700 p-6 pb-5">
-                    <button onClick={onDismiss} className="absolute top-4 right-4 w-8 h-8 bg-white/20 hover:bg-white/30 rounded-full flex items-center justify-center transition-colors">
-                        <X className="w-4 h-4 text-white" />
+                {/* Header — Direction A: subtle, not gradient-heavy */}
+                <div className="relative px-6 pt-6 pb-5 border-b border-border/60">
+                    <button
+                        onClick={onDismiss}
+                        aria-label="Close"
+                        className="absolute top-4 right-4 w-8 h-8 rounded-full bg-muted hover:bg-muted/70 flex items-center justify-center transition-colors"
+                    >
+                        <X className="w-4 h-4 text-muted-foreground" />
                     </button>
-                    <div className="absolute -top-8 -right-8 w-32 h-32 bg-white/10 rounded-full blur-2xl" />
-                    <p className="text-white/70 text-sm font-medium mb-1">Hey {firstName} 👋</p>
-                    <h2 className="text-2xl font-black text-white leading-tight">
+                    <p className="stat-label text-muted-foreground mb-1.5">
+                        {step === "pick" ? `Hey ${firstName}` : "Plan for today"}
+                    </p>
+                    <h2 className="font-display font-extrabold text-foreground text-2xl tracking-tight leading-tight">
                         {step === "pick" ? "What are we studying today?" : rec?.title}
                     </h2>
                     {step === "plan" && (
-                        <p className="text-white/80 text-sm mt-1">{rec?.subtitle}</p>
+                        <p className="text-muted-foreground text-sm mt-1.5">{rec?.subtitle}</p>
                     )}
                 </div>
 
@@ -135,28 +137,31 @@ export default function StudyIntentModal({ firstName, onDismiss }) {
                     {step === "pick" && (
                         <motion.div
                             key="pick"
-                            initial={{ opacity: 0, x: -16 }}
+                            initial={{ opacity: 0, x: -12 }}
                             animate={{ opacity: 1, x: 0 }}
-                            exit={{ opacity: 0, x: 16 }}
-                            className="p-5 space-y-3"
+                            exit={{ opacity: 0, x: 12 }}
+                            className="p-5 space-y-2.5"
                         >
                             {MODES.map((mode) => (
                                 <button
                                     key={mode.id}
                                     onClick={() => handleModeSelect(mode)}
-                                    className={`w-full flex items-center gap-4 p-4 rounded-2xl border-2 transition-all duration-200 text-left group hover:scale-[1.01] hover:shadow-md ${mode.bg}`}
+                                    className={`w-full flex items-center gap-4 p-4 rounded-xl border shadow-soft transition-all duration-200 text-left group ${mode.wrap}`}
                                 >
-                                    <div className={`w-12 h-12 rounded-2xl bg-gradient-to-br ${mode.color} flex items-center justify-center text-2xl shadow-md flex-shrink-0`}>
-                                        {mode.emoji}
+                                    <div className={`w-11 h-11 rounded-xl border flex items-center justify-center flex-shrink-0 ${mode.iconWrap}`}>
+                                        <mode.Icon className="w-5 h-5" strokeWidth={2.5} />
                                     </div>
-                                    <div className="flex-1">
-                                        <p className="font-bold text-gray-900 text-base">{mode.label}</p>
-                                        <p className="text-sm text-gray-500 mt-0.5">{mode.desc}</p>
+                                    <div className="flex-1 min-w-0">
+                                        <p className="font-display font-extrabold text-foreground text-base">{mode.label}</p>
+                                        <p className="text-sm text-muted-foreground leading-snug mt-0.5">{mode.desc}</p>
                                     </div>
-                                    <ChevronRight className="w-5 h-5 text-gray-400 group-hover:text-gray-600 flex-shrink-0" />
+                                    <ChevronRight className="w-5 h-5 text-muted-foreground/60 group-hover:text-foreground transition-colors flex-shrink-0" />
                                 </button>
                             ))}
-                            <button onClick={onDismiss} className="w-full text-center text-sm text-gray-400 hover:text-gray-600 pt-1 transition-colors">
+                            <button
+                                onClick={onDismiss}
+                                className="w-full text-center text-sm font-semibold text-muted-foreground hover:text-foreground pt-2 transition-colors"
+                            >
                                 Skip for now
                             </button>
                         </motion.div>
@@ -165,26 +170,26 @@ export default function StudyIntentModal({ firstName, onDismiss }) {
                     {step === "plan" && rec && (
                         <motion.div
                             key="plan"
-                            initial={{ opacity: 0, x: 16 }}
+                            initial={{ opacity: 0, x: 12 }}
                             animate={{ opacity: 1, x: 0 }}
-                            exit={{ opacity: 0, x: -16 }}
-                            className="p-5 space-y-4"
+                            exit={{ opacity: 0, x: -12 }}
+                            className="p-5 space-y-5"
                         >
                             {/* Duration picker */}
                             <div>
-                                <p className="text-sm font-semibold text-gray-700 mb-2">How long do you want to study?</p>
+                                <p className="text-xs font-bold text-muted-foreground uppercase tracking-wider mb-2">How long?</p>
                                 <div className="flex flex-wrap gap-2">
                                     {rec.durations.map((d) => (
                                         <button
                                             key={d}
                                             onClick={() => setDuration(d)}
-                                            className={`px-4 py-2 rounded-xl text-sm font-bold border-2 transition-all ${
+                                            className={`px-4 py-2 rounded-xl text-sm font-bold border shadow-soft transition-colors ${
                                                 duration === d
-                                                    ? "bg-violet-600 border-violet-600 text-white shadow-md scale-105"
-                                                    : "bg-white border-gray-200 text-gray-700 hover:border-violet-400"
+                                                    ? "bg-primary border-primary text-primary-foreground"
+                                                    : "bg-surface border-border/60 text-foreground hover:border-primary/40"
                                             }`}
                                         >
-                                            {d < 60 ? `${d}m` : d === 60 ? "1h" : `${d / 60}h ${d % 60 > 0 ? `${d % 60}m` : ""}`}
+                                            {fmtDuration(d)}
                                         </button>
                                     ))}
                                 </div>
@@ -192,14 +197,14 @@ export default function StudyIntentModal({ firstName, onDismiss }) {
 
                             {/* Steps */}
                             <div>
-                                <p className="text-sm font-semibold text-gray-700 mb-2">Your plan for success:</p>
+                                <p className="text-xs font-bold text-muted-foreground uppercase tracking-wider mb-2">Your plan</p>
                                 <div className="space-y-2">
-                                    {rec.steps.map((step, i) => (
-                                        <div key={i} className={`flex items-start gap-3 p-3 rounded-xl ${step.bg}`}>
-                                            <div className={`w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0 ${step.bg}`}>
-                                                <step.icon className={`w-4 h-4 ${step.color}`} />
+                                    {rec.steps.map((s, i) => (
+                                        <div key={i} className="flex items-start gap-3 p-3 rounded-xl bg-muted/40 border border-border/40">
+                                            <div className="w-7 h-7 rounded-lg bg-surface border border-border/60 flex items-center justify-center flex-shrink-0 mt-0.5">
+                                                <s.Icon className="w-3.5 h-3.5 text-foreground" strokeWidth={2.5} />
                                             </div>
-                                            <p className="text-sm text-gray-700 leading-snug">{step.text}</p>
+                                            <p className="text-sm text-foreground leading-snug">{s.text}</p>
                                         </div>
                                     ))}
                                 </div>
@@ -208,21 +213,25 @@ export default function StudyIntentModal({ firstName, onDismiss }) {
                             {/* CTAs */}
                             <div className="flex flex-col gap-2 pt-1">
                                 <Link to={createPageUrl(rec.cta.link)} onClick={onDismiss} className="w-full">
-                                    <Button className="w-full bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-700 hover:to-indigo-700 text-white rounded-2xl py-3 font-bold text-base shadow-lg shadow-violet-500/30 gap-2">
-                                        <rec.cta.icon className="w-5 h-5" />
+                                    <Button className="w-full btn-3d bg-primary text-primary-foreground hover:bg-primary gap-2 h-12 text-base">
+                                        <rec.cta.Icon className="w-5 h-5" />
                                         {rec.cta.label}
-                                        {duration && <span className="ml-1 bg-white/20 rounded-lg px-2 py-0.5 text-sm">{duration}m</span>}
+                                        {duration && (
+                                            <span className="ml-1 bg-primary-foreground/20 rounded-md px-2 py-0.5 text-xs font-bold">
+                                                {fmtDuration(duration)}
+                                            </span>
+                                        )}
                                     </Button>
                                 </Link>
                                 <Link to={createPageUrl(rec.secondary.link)} onClick={onDismiss} className="w-full">
-                                    <Button variant="outline" className="w-full rounded-2xl gap-2 text-gray-700 border-gray-200">
-                                        <rec.secondary.icon className="w-4 h-4" />
+                                    <Button variant="outline" className="w-full gap-2 border-border/60">
+                                        <rec.secondary.Icon className="w-4 h-4" />
                                         {rec.secondary.label}
                                     </Button>
                                 </Link>
                                 <button
                                     onClick={() => setStep("pick")}
-                                    className="text-sm text-gray-400 hover:text-gray-600 transition-colors text-center pt-1"
+                                    className="text-sm font-semibold text-muted-foreground hover:text-foreground transition-colors text-center pt-1"
                                 >
                                     ← Change mode
                                 </button>
