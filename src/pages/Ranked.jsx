@@ -1,10 +1,10 @@
 import React, { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { TrendingUp, Users, School, Sparkles, Flame, Trophy } from 'lucide-react';
+import { Shield, Users, School, Sparkles, Flame, Trophy } from 'lucide-react';
 
+import LeagueView from '../components/ranked/LeagueView';
 import GamifiedMyRank from '../components/ranked/GamifiedMyRank';
-import CompetitiveLeaderboard from '../components/ranked/CompetitiveLeaderboard';
 import SchoolLeaderboard from '../components/ranked/SchoolLeaderboard';
 import PerksSystem from '../components/ranked/PerksSystem';
 import { base44 } from "@/api/base44Client";
@@ -20,10 +20,10 @@ function getStreakMultiplier(days) {
 }
 
 const TABS = [
-    { value: 'my-rank',     icon: TrendingUp, label: 'My Rank',     short: 'Me' },
-    { value: 'leaderboard', icon: Users,      label: 'Leaderboard', short: 'Board' },
-    { value: 'perks',       icon: Sparkles,   label: 'Perks',       short: 'Perks' },
-    { value: 'schools',     icon: School,     label: 'Schools',     short: 'Sch.' },
+    { value: 'league',  icon: Shield,   label: 'League',      short: 'League' },
+    { value: 'profile', icon: Trophy,   label: 'My Profile',  short: 'Me'     },
+    { value: 'perks',   icon: Sparkles, label: 'Perks',       short: 'Perks'  },
+    { value: 'schools', icon: School,   label: 'Schools',     short: 'Sch.'   },
 ];
 
 export default function RankedPage() {
@@ -51,30 +51,30 @@ export default function RankedPage() {
                     transition={{ duration: 0.35 }}
                 >
                     <div className="flex items-start justify-between mb-1">
-                        <p className="text-sm text-muted-foreground font-medium">Compete</p>
+                        <p className="stat-label text-muted-foreground">Compete</p>
                         <HelpButton page="Ranked" />
                     </div>
                     <div className="flex items-center gap-3">
-                        <div className="w-12 h-12 rounded-2xl bg-xp/10 flex items-center justify-center flex-shrink-0">
-                            <Trophy className="w-6 h-6 text-xp" />
+                        <div className="w-12 h-12 rounded-2xl bg-xp/10 border border-xp/15 flex items-center justify-center flex-shrink-0">
+                            <Trophy className="w-6 h-6 text-xp" strokeWidth={2.5} />
                         </div>
                         <div className="min-w-0">
                             <h1 className="font-display text-3xl lg:text-4xl font-extrabold tracking-tight text-foreground">
                                 Ranked
                             </h1>
                             <p className="text-muted-foreground text-sm mt-0.5">
-                                XP, streaks, perks, and leaderboards.
+                                Weekly leagues. Top 5 promote, bottom 5 drop.
                             </p>
                         </div>
                     </div>
 
                     {streakDays > 0 && (
-                        <div className="mt-4 inline-flex items-center gap-2.5 bg-streak/10 border-2 border-streak/20 rounded-xl px-4 py-2.5">
-                            <Flame className="w-4 h-4 text-streak" />
+                        <div className="mt-4 inline-flex items-center gap-2.5 bg-streak/5 border border-streak/15 shadow-soft rounded-xl px-4 py-2.5">
+                            <Flame className="w-4 h-4 text-streak" strokeWidth={2.5} />
                             <span className="text-sm font-bold text-foreground">
                                 {streakDays} day streak active
                             </span>
-                            <span className="pill bg-streak/15 text-streak text-[11px] py-0.5">
+                            <span className="pill bg-streak/10 text-streak text-[11px] py-0.5">
                                 {getStreakMultiplier(streakDays)} XP
                             </span>
                         </div>
@@ -82,8 +82,8 @@ export default function RankedPage() {
                 </motion.section>
 
                 {/* ── TABS ──────────────────────────────────────────────── */}
-                <Tabs defaultValue="my-rank" className="space-y-5">
-                    <TabsList className="grid w-full grid-cols-4 h-auto p-1.5 rounded-2xl bg-surface border-2 border-border shadow-soft">
+                <Tabs defaultValue="league" className="space-y-5">
+                    <TabsList className="grid w-full grid-cols-4 h-auto p-1.5 rounded-2xl bg-surface border border-border/60 shadow-soft">
                         {TABS.map(({ value, icon: Icon, label, short }) => (
                             <TabsTrigger
                                 key={value}
@@ -97,8 +97,8 @@ export default function RankedPage() {
                         ))}
                     </TabsList>
 
-                    <TabsContent value="my-rank"><GamifiedMyRank /></TabsContent>
-                    <TabsContent value="leaderboard"><CompetitiveLeaderboard /></TabsContent>
+                    <TabsContent value="league"><LeagueView /></TabsContent>
+                    <TabsContent value="profile"><GamifiedMyRank /></TabsContent>
                     <TabsContent value="perks"><PerksSystem totalXP={totalXP} /></TabsContent>
                     <TabsContent value="schools"><SchoolLeaderboard /></TabsContent>
                 </Tabs>

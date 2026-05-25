@@ -166,6 +166,174 @@ function currentWeekStartUTC() {
   return d.toISOString().slice(0, 10);
 }
 
+// ─── Weekly Leagues (Duolingo-style) ───────────────────────────────────────
+// 6 tiers, groups of 30, top 5 promote / bottom 5 demote each week.
+// Lazy rollover — no cron required: every awardXP triggers a check.
+const LEAGUE_TIERS = ['bronze', 'silver', 'gold', 'platinum', 'diamond', 'master'];
+const LEAGUE_GROUP_SIZE = 30;
+const LEAGUE_PROMOTE_COUNT = 5;
+const LEAGUE_DEMOTE_COUNT  = 5;
+
+function nextTier(t) { const i = LEAGUE_TIERS.indexOf(t); return LEAGUE_TIERS[Math.min(i + 1, LEAGUE_TIERS.length - 1)]; }
+function prevTier(t) { const i = LEAGUE_TIERS.indexOf(t); return LEAGUE_TIERS[Math.max(i - 1, 0)]; }
+
+// Settle a stale membership (week_start < current). Sorts the user's group
+// by weekly_xp, marks promoted/demoted, and updates user_profiles.tier.
+// Idempotent — if final_position is already set, no-ops.
+async function settleStaleMembership(membership, currentTierOfUser) {
+  if (!supabaseAdmin) return currentTierOfUser;
+  if (membership.final_position) return currentTierOfUser; // already settled
+
+  // Pull all members of this group, sort by weekly_xp DESC.
+  const { data: groupMembers } = await supabaseAdmin
+    .from('league_memberships')
+    .select('id, user_email, weekly_xp')
+    .eq('league_group_id', membership.league_group_id)
+    .order('weekly_xp', { ascending: false });
+
+  if (!groupMembers?.length) return currentTierOfUser;
+
+  // Find my position in this group.
+  const myIdx = groupMembers.findIndex(m => m.user_email === membership.user_email);
+  if (myIdx < 0) return currentTierOfUser;
+
+  const finalPosition = myIdx + 1;
+  const promoted = finalPosition <= LEAGUE_PROMOTE_COUNT;
+  const demoted  = finalPosition > (groupMembers.length - LEAGUE_DEMOTE_COUNT);
+
+  // Compute the resulting tier the user starts the new week in.
+  let newTier = membership.tier;
+  if (promoted) newTier = nextTier(membership.tier);
+  else if (demoted) newTier = prevTier(membership.tier);
+
+  // Persist outcome on the stale membership row.
+  await supabaseAdmin
+    .from('league_memberships')
+    .update({ final_position: finalPosition, promoted, demoted })
+    .eq('id', membership.id);
+
+  // Bump lifetime counters on user_profiles.
+  const profileUpdate = { current_league_tier: newTier };
+  // The lifetime promote/demote counters get incremented via an RPC pattern
+  // (or we just re-read + write). We'll do the lighter-weight read+write here.
+  const { data: profRow } = await supabaseAdmin
+    .from('user_profiles')
+    .select('id, league_lifetime_promotes, league_lifetime_demotes')
+    .eq('created_by', membership.user_email)
+    .maybeSingle();
+  if (profRow) {
+    if (promoted) profileUpdate.league_lifetime_promotes = (profRow.league_lifetime_promotes ?? 0) + 1;
+    if (demoted)  profileUpdate.league_lifetime_demotes  = (profRow.league_lifetime_demotes ?? 0) + 1;
+    await supabaseAdmin.from('user_profiles').update(profileUpdate).eq('id', profRow.id);
+  }
+
+  return newTier;
+}
+
+// Find an open league_group for (tier, weekStart) or create a new one.
+async function findOrCreateOpenGroup(tier, weekStart) {
+  if (!supabaseAdmin) return null;
+  const { data: open } = await supabaseAdmin
+    .from('league_groups')
+    .select('id, member_count')
+    .eq('tier', tier)
+    .eq('week_start', weekStart)
+    .eq('is_full', false)
+    .order('created_at', { ascending: true })
+    .limit(1);
+  if (open?.[0]) return open[0];
+
+  const { data: created } = await supabaseAdmin
+    .from('league_groups')
+    .insert({ tier, week_start: weekStart, member_count: 0, is_full: false })
+    .select('id, member_count')
+    .single();
+  return created || null;
+}
+
+// Place user in the current week's league. Handles lazy settlement of
+// previous week if stale. Returns the user's current membership row
+// (with group + position info) or null on failure.
+async function ensureCurrentLeagueMembership(userEmail, userProfile) {
+  if (!supabaseAdmin || !userEmail) return null;
+  const weekStart = currentWeekStartUTC();
+
+  // 1. Does a current-week membership already exist? Return it.
+  const { data: current } = await supabaseAdmin
+    .from('league_memberships')
+    .select('*')
+    .eq('user_email', userEmail)
+    .eq('week_start', weekStart)
+    .maybeSingle();
+  if (current) return current;
+
+  // 2. Find any stale memberships and settle them. Most-recent first.
+  const { data: stale } = await supabaseAdmin
+    .from('league_memberships')
+    .select('*')
+    .eq('user_email', userEmail)
+    .lt('week_start', weekStart)
+    .order('week_start', { ascending: false })
+    .limit(1);
+
+  let nextStartTier = userProfile?.current_league_tier || 'bronze';
+  if (stale?.[0]) {
+    nextStartTier = await settleStaleMembership(stale[0], nextStartTier);
+  }
+
+  // 3. Place into an open group at `nextStartTier`.
+  const group = await findOrCreateOpenGroup(nextStartTier, weekStart);
+  if (!group) return null;
+
+  const isAnon = !!userProfile?.league_anonymous_default;
+  const { data: newMem } = await supabaseAdmin
+    .from('league_memberships')
+    .insert({
+      user_email:      userEmail,
+      league_group_id: group.id,
+      week_start:      weekStart,
+      tier:            nextStartTier,
+      weekly_xp:       0,
+      is_anonymous:    isAnon,
+    })
+    .select('*')
+    .single();
+
+  // Bump group member_count + close if full.
+  const newCount = (group.member_count ?? 0) + 1;
+  await supabaseAdmin
+    .from('league_groups')
+    .update({ member_count: newCount, is_full: newCount >= LEAGUE_GROUP_SIZE })
+    .eq('id', group.id);
+
+  // Mirror tier + group on user_profiles for fast reads.
+  await supabaseAdmin
+    .from('user_profiles')
+    .update({ current_league_tier: nextStartTier, current_league_group_id: group.id })
+    .eq('created_by', userEmail);
+
+  return newMem || null;
+}
+
+// Add XP delta to the user's current-week membership. Best-effort, lazily
+// initialises the membership if it doesn't exist yet.
+async function addLeagueXP(userEmail, userProfile, deltaXp) {
+  if (!supabaseAdmin || !userEmail || !deltaXp || deltaXp <= 0) return;
+  try {
+    const mem = await ensureCurrentLeagueMembership(userEmail, userProfile);
+    if (!mem) return;
+    await supabaseAdmin
+      .from('league_memberships')
+      .update({
+        weekly_xp:  (mem.weekly_xp ?? 0) + deltaXp,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', mem.id);
+  } catch (e) {
+    console.warn('[leagues] addLeagueXP failed:', e?.message || e);
+  }
+}
+
 function tierIsPremium(profile) {
   if (!profile) return false;
   if (profile.subscription_tier === "premium") return true;
@@ -1166,6 +1334,12 @@ app.post("/local-ai/fn/awardXP", async (req, res) => {
       console.warn("[awardXP] leaderboard update failed:", e?.message);
     }
 
+    // Weekly Leagues — credit XP to the user's current-week league
+    // membership. Fire-and-forget; failure doesn't block the awardXP response.
+    addLeagueXP(userEmail, profile, finalXP).catch((e) =>
+      console.warn("[leagues] hook from awardXP failed:", e?.message || e),
+    );
+
     return res.json({
       success: true,
       xp_awarded: finalXP,
@@ -1308,6 +1482,9 @@ app.post("/local-ai/fn/awardXPIncremental", async (req, res) => {
         xp_velocity_log: updatedVelocity,
       })
       .eq("id", profile.id);
+
+    // Leagues: credit incremental XP to the user's current weekly membership.
+    addLeagueXP(userEmail, profile, finalXP).catch(() => {});
 
     return res.json({ success: true, xp_awarded: finalXP, total_xp: newTotalXP });
   } catch (err) {
@@ -2771,6 +2948,134 @@ app.post("/local-ai/fn/resolveScoreWager", async (req, res) => {
 // notification to ADMIN_EMAIL and confirmation back to the user. Email
 // failures are logged but never fail the request — the ticket is the source
 // of truth.
+// ════════════════════════════════════════════════════════════════════════════
+// Weekly Leagues — read endpoints for the Ranked page
+// ════════════════════════════════════════════════════════════════════════════
+
+// GET /local-ai/fn/getLeagueStanding
+// Returns the user's current league membership + the full group leaderboard
+// (up to 30 rows). Auto-creates the membership on first call.
+app.post("/local-ai/fn/getLeagueStanding", async (req, res) => {
+  const user = await authenticateRequest(req);
+  if (!user) return res.status(401).json({ error: "Unauthorized" });
+  if (!supabaseAdmin) return res.status(500).json({ error: "Supabase admin not configured" });
+
+  try {
+    const profile = await loadUserProfile(user.email);
+    if (!profile) return res.status(404).json({ error: "Profile not found" });
+
+    const mem = await ensureCurrentLeagueMembership(user.email, profile);
+    if (!mem) return res.status(500).json({ error: "Could not place in league" });
+
+    // Pull all members of my group + the user_profile data we want to show.
+    const { data: groupMembers, error: gmErr } = await supabaseAdmin
+      .from('league_memberships')
+      .select('id, user_email, weekly_xp, is_anonymous, joined_at')
+      .eq('league_group_id', mem.league_group_id)
+      .order('weekly_xp', { ascending: false });
+    if (gmErr) throw gmErr;
+
+    // Hydrate username + streak per member (fast lookup).
+    const emails = (groupMembers || []).map(m => m.user_email);
+    let profiles = [];
+    if (emails.length) {
+      const { data: pData } = await supabaseAdmin
+        .from('user_profiles')
+        .select('created_by, username, full_name, streak_days, total_xp')
+        .in('created_by', emails);
+      profiles = pData || [];
+    }
+    const byEmail = Object.fromEntries(profiles.map(p => [p.created_by, p]));
+
+    const rows = (groupMembers || []).map((m, i) => {
+      const p = byEmail[m.user_email] || {};
+      const isMe = m.user_email === user.email;
+      const displayName = m.is_anonymous && !isMe
+        ? `Anon #${(m.id || '').slice(-4)}`
+        : (p.username || p.full_name || (m.user_email?.split('@')[0]) || 'Student');
+      return {
+        position:        i + 1,
+        user_email:      isMe ? user.email : null,   // never leak others' emails
+        is_me:           isMe,
+        display_name:    displayName,
+        weekly_xp:       m.weekly_xp ?? 0,
+        streak_days:     p.streak_days ?? 0,
+        total_xp:        p.total_xp ?? 0,
+        is_anonymous:    m.is_anonymous,
+      };
+    });
+
+    // League_group meta
+    const { data: groupRow } = await supabaseAdmin
+      .from('league_groups')
+      .select('id, tier, week_start, member_count')
+      .eq('id', mem.league_group_id)
+      .maybeSingle();
+
+    // Compute reset time = next Monday 00:00 UTC
+    const weekStart = new Date(`${groupRow?.week_start || mem.week_start}T00:00:00Z`);
+    const resetsAt = new Date(weekStart.getTime() + 7 * 24 * 60 * 60 * 1000);
+
+    return res.json({
+      success: true,
+      group: {
+        id:           groupRow?.id || mem.league_group_id,
+        tier:         groupRow?.tier || mem.tier,
+        week_start:   groupRow?.week_start || mem.week_start,
+        resets_at:    resetsAt.toISOString(),
+        member_count: groupRow?.member_count || rows.length,
+        promote_count: LEAGUE_PROMOTE_COUNT,
+        demote_count:  LEAGUE_DEMOTE_COUNT,
+        group_size:    LEAGUE_GROUP_SIZE,
+      },
+      me: {
+        user_email:   user.email,
+        position:     rows.find(r => r.is_me)?.position || null,
+        weekly_xp:    mem.weekly_xp ?? 0,
+        tier:         mem.tier,
+        is_anonymous: mem.is_anonymous,
+        lifetime_promotes: profile.league_lifetime_promotes ?? 0,
+        lifetime_demotes:  profile.league_lifetime_demotes ?? 0,
+      },
+      rows,
+    });
+  } catch (err) {
+    console.error("[getLeagueStanding] error:", err);
+    return res.status(500).json({ error: err?.message || String(err) });
+  }
+});
+
+// POST /local-ai/fn/setLeagueAnonymity { is_anonymous: boolean }
+// Toggle the user's anonymity on the league leaderboard. Affects both the
+// current membership row AND the user_profile default for future weeks.
+app.post("/local-ai/fn/setLeagueAnonymity", async (req, res) => {
+  const user = await authenticateRequest(req);
+  if (!user) return res.status(401).json({ error: "Unauthorized" });
+  if (!supabaseAdmin) return res.status(500).json({ error: "Supabase admin not configured" });
+
+  try {
+    const { is_anonymous } = req.body || {};
+    const anon = !!is_anonymous;
+    const weekStart = currentWeekStartUTC();
+
+    await supabaseAdmin
+      .from('league_memberships')
+      .update({ is_anonymous: anon, updated_at: new Date().toISOString() })
+      .eq('user_email', user.email)
+      .eq('week_start', weekStart);
+
+    await supabaseAdmin
+      .from('user_profiles')
+      .update({ league_anonymous_default: anon })
+      .eq('created_by', user.email);
+
+    return res.json({ success: true, is_anonymous: anon });
+  } catch (err) {
+    console.error("[setLeagueAnonymity] error:", err);
+    return res.status(500).json({ error: err?.message || String(err) });
+  }
+});
+
 app.post("/local-ai/fn/sendSupportTicket", async (req, res) => {
   const user = await authenticateRequest(req);
   if (!user) return res.status(401).json({ error: "Unauthorized" });
