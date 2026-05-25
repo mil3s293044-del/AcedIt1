@@ -150,10 +150,12 @@ async function callInvokeAI({ prompt, response_json_schema }) {
 //
 // If a request arrives WITHOUT a Supabase JWT (legacy Base44 path), we allow
 // it but log a warning — phase 3d ships all users onto Supabase auth.
-const TIER_FREE_CAPS    = { quiz_ai_gen: 3, flashcard_ai_gen: 3 };
+const TIER_FREE_CAPS    = { quiz_ai_gen: 5, flashcard_ai_gen: 5, ai_tool: 5 };
+const TIER_FREE_COUNTER = { quiz_ai_gen: "free_ai_quizzes_used", flashcard_ai_gen: "free_ai_flashcards_used", ai_tool: "free_ai_tools_used" };
 const TIER_PREMIUM_CAPS = { quiz_ai_gen: 3, quiz_ai_mark: 10, flashcard_ai_gen: 3, ai_tool: 6, goal_ai_gen: 1, roadmap_ai_gen: 1, blurting: 5, active_recall: 8 };
 const TIER_COUNTER_KEY  = { quiz_ai_gen: "quizzes", quiz_ai_mark: "quiz_marks", flashcard_ai_gen: "flashcards", ai_tool: "tools", goal_ai_gen: "goal", roadmap_ai_gen: "goal", blurting: "blurting", active_recall: "active_recall" };
 const TIER_WEEKLY_CAP_CENTS = 250;
+const TIER_FREE_LIFETIME_COST_CAP_CENTS = 100;   // $1 hard ceiling per free user, lifetime
 
 // Returns YYYY-MM-DD for the Monday of the current ISO week, in UTC.
 function currentWeekStartUTC() {
@@ -203,11 +205,15 @@ function checkTierAccess(profile, feature) {
     }
     return { allowed: true };
   }
+  // Free-tier lifetime cost ceiling — first check, $1 hard backstop.
+  if ((profile.lifetime_ai_cost_cents ?? 0) >= TIER_FREE_LIFETIME_COST_CAP_CENTS) {
+    return { allowed: false, status: 402, reason: "You've reached your free AI usage limit. Upgrade to Premium for daily access." };
+  }
   const cap = TIER_FREE_CAPS[feature];
   if (cap === undefined) {
     return { allowed: false, status: 402, reason: "This is a Premium feature — upgrade to unlock." };
   }
-  const usedKey = feature === "quiz_ai_gen" ? "free_ai_quizzes_used" : "free_ai_flashcards_used";
+  const usedKey = TIER_FREE_COUNTER[feature];
   const used = profile[usedKey] ?? 0;
   if (used >= cap) {
     return { allowed: false, status: 402, reason: `You've used all ${cap} free generations. Upgrade for daily access.` };
@@ -250,11 +256,10 @@ async function recordTierUsage(profile, feature, usage) {
     updates.weekly_ai_cost_cents = baseCost + estimateCostCents(usage);
     updates.weekly_cost_period_start = weekStartStr;
   } else {
-    if (feature === "quiz_ai_gen") {
-      updates.free_ai_quizzes_used = (profile.free_ai_quizzes_used ?? 0) + 1;
-    } else if (feature === "flashcard_ai_gen") {
-      updates.free_ai_flashcards_used = (profile.free_ai_flashcards_used ?? 0) + 1;
-    }
+    // Free user — increment the matching counter AND the lifetime cost.
+    const counterKey = TIER_FREE_COUNTER[feature];
+    if (counterKey) updates[counterKey] = (profile[counterKey] ?? 0) + 1;
+    updates.lifetime_ai_cost_cents = (profile.lifetime_ai_cost_cents ?? 0) + estimateCostCents(usage);
   }
   if (Object.keys(updates).length > 0) {
     await supabaseAdmin.from("user_profiles").update(updates).eq("id", profile.id);

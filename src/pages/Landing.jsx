@@ -81,7 +81,12 @@ export default function Landing() {
     return () => window.removeEventListener("scroll", onScroll);
   }, []);
 
-  const startTrial = () => navigateToLogin();
+  // Primary CTA: route new visitors through the personalised onboarding
+  // wizard (which collects year + subjects + goals, sells Premium, then
+  // hands off to Google OAuth). Existing users use the secondary
+  // "Sign in" link in the nav which hits navigateToLogin directly.
+  const startTrial = () => { window.location.assign("/onboarding"); };
+  const signInDirect = () => navigateToLogin();
 
   const scrollToId = (id) => {
     const el = document.getElementById(id);

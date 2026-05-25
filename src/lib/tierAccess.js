@@ -2,8 +2,10 @@
 // Tier access — single source of truth for what each subscription tier can do.
 //
 // Free tier:
-//   • AI quiz generation     → 3 lifetime
-//   • AI flashcard generation → 3 lifetime
+//   • AI quiz generation     → 5 lifetime
+//   • AI flashcard generation → 5 lifetime
+//   • AI study tools (combined) → 5 lifetime
+//   • Lifetime cost ceiling  → 100 cents ($1) hard backstop
 //   • All other AI features   → BLOCKED (premium-only)
 //
 // Premium tier ($5/week):
@@ -46,9 +48,16 @@ export const FEATURES = {
 
 // ─── Limits config ─────────────────────────────────────────────────────────
 export const FREE_LIFETIME_CAPS = {
-  [FEATURES.QUIZ_AI_GEN]:      3,
-  [FEATURES.FLASHCARD_AI_GEN]: 3,
+  [FEATURES.QUIZ_AI_GEN]:      5,
+  [FEATURES.FLASHCARD_AI_GEN]: 5,
+  [FEATURES.AI_TOOL]:          5,  // combined across the 10 AI study tools
 };
+
+// Hard cost ceiling for free users (lifetime, in cents). Even if their count
+// caps aren't hit, once they've spent this much compute they're blocked.
+// Backstops the case where a user uploads massive files that drive cost-per-
+// call above the typical ~5-10c.
+export const FREE_LIFETIME_COST_CAP_CENTS = 100;
 
 // Daily caps sized to land typical heavy-user spend around $1-2/week, with the
 // $2.50 weekly $-ceiling as the backstop for outliers.
@@ -91,7 +100,25 @@ export function isPremium(profile) {
 }
 
 // ─── Free tier limits ──────────────────────────────────────────────────────
+// Maps each capped free feature to the counter field on user_profiles.
+const FREE_COUNTER_KEY = {
+  [FEATURES.QUIZ_AI_GEN]:      'free_ai_quizzes_used',
+  [FEATURES.FLASHCARD_AI_GEN]: 'free_ai_flashcards_used',
+  [FEATURES.AI_TOOL]:          'free_ai_tools_used',
+};
+
 function checkFreeTier(profile, feature) {
+  // Hard lifetime cost ceiling — first stop.
+  const lifetimeCost = profile?.lifetime_ai_cost_cents ?? 0;
+  if (lifetimeCost >= FREE_LIFETIME_COST_CAP_CENTS) {
+    return {
+      allowed: false,
+      reason: 'You\'ve reached your free AI usage limit. Upgrade to Premium for daily access.',
+      upgradeRequired: true,
+      lifetimeCostHit: true,
+    };
+  }
+
   const cap = FREE_LIFETIME_CAPS[feature];
   if (cap === undefined) {
     return {
@@ -100,9 +127,8 @@ function checkFreeTier(profile, feature) {
       upgradeRequired: true,
     };
   }
-  const usedKey = feature === FEATURES.QUIZ_AI_GEN
-    ? 'free_ai_quizzes_used'
-    : 'free_ai_flashcards_used';
+
+  const usedKey = FREE_COUNTER_KEY[feature];
   const used = profile?.[usedKey] ?? 0;
   const remaining = Math.max(0, cap - used);
   if (remaining <= 0) {

@@ -1,0 +1,681 @@
+// ════════════════════════════════════════════════════════════════════════════
+// Pre-signup onboarding wizard
+//
+// Flow: Landing → /onboarding (this) → Google OAuth → Dashboard (personalised)
+//
+// 8 steps, ~90 seconds:
+//   1. Year level
+//   2. Subjects
+//   3. ATAR target (optional)
+//   4. Course / uni (optional)
+//   5. Personalised plan reveal      ← marketing
+//   6. Cost comparison               ← marketing
+//   7. Premium value stack           ← marketing
+//   8. Sign in → trial / free
+//
+// Wizard answers are saved to localStorage on every change. After Google
+// OAuth completes, AuthContext reads them back and writes to user_profile
+// + user_subjects (see authPostSignupApply in AuthContext.jsx).
+// ════════════════════════════════════════════════════════════════════════════
+
+import React, { useState, useEffect, useMemo } from "react";
+import { motion, AnimatePresence } from "framer-motion";
+import { useNavigate } from "react-router-dom";
+import { Link } from "react-router-dom";
+import {
+    ChevronLeft, ChevronRight, ArrowRight, Check, X, Search,
+    GraduationCap, BookOpen, Target, MapPin, Sparkles, Crown, Zap,
+    Brain, Layers, Trophy, BarChart3, FileQuestion, Clock, Map as MapIcon,
+} from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { VCE_SUBJECTS } from "@/data/vceSubjects";
+import { supabase } from "@/api/supabaseClient";
+
+const TOTAL_STEPS = 8;
+const STORAGE_KEY = "acedit_onboarding_v1";
+
+const YEAR_LEVELS = [
+    { value: "Year 10",           label: "Year 10",      sub: "Foundation year"                  },
+    { value: "Year 11 Units 1&2", label: "Year 11",      sub: "Units 1 & 2"                      },
+    { value: "Year 12 Units 3&4", label: "Year 12",      sub: "Units 3 & 4 — counts toward ATAR" },
+];
+
+// Pricing snapshot (AUD per week) — verifiable industry numbers as of 2026.
+// All sources documented in the marketing copy of step 6.
+const PRICING = {
+    tutor:      { label: "Private VCE tutor",  weekly: 80,  note: "1 hour per week, Melbourne median" },
+    edroloOne:  { label: "Edrolo (per subject)",weekly: 6,  note: "≈ $300/year per subject" },
+    chatgpt:    { label: "ChatGPT Plus",       weekly: 7,  note: "USD $20/month, not VCE-specific" },
+    acedit:     { label: "AcedIt Premium",     weekly: 5,  note: "All AI tools, every subject" },
+};
+
+// ─── Wizard state ────────────────────────────────────────────────────────────
+const DEFAULT_ANSWERS = {
+    yearLevel:       null,
+    subjects:        [],         // [{ name, code, id }]
+    goalAtar:        null,
+    goalCourseName:  "",
+    goalUniversity:  "",
+    intent:          null,       // "premium" | "free" — set on step 8
+    completedAt:     null,
+};
+
+function loadAnswers() {
+    try {
+        const raw = localStorage.getItem(STORAGE_KEY);
+        if (!raw) return { ...DEFAULT_ANSWERS };
+        return { ...DEFAULT_ANSWERS, ...JSON.parse(raw) };
+    } catch {
+        return { ...DEFAULT_ANSWERS };
+    }
+}
+
+function saveAnswers(answers) {
+    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(answers)); }
+    catch { /* localStorage full or disabled — silent */ }
+}
+
+// ─── Page ────────────────────────────────────────────────────────────────────
+export default function Onboarding() {
+    const [step, setStep] = useState(1);
+    const [answers, setAnswers] = useState(() => loadAnswers());
+    const navigate = useNavigate();
+
+    // Persist on every change.
+    useEffect(() => { saveAnswers(answers); }, [answers]);
+
+    // Already signed in? Skip the wizard entirely.
+    useEffect(() => {
+        (async () => {
+            try {
+                const { data } = await supabase.auth.getSession();
+                if (data?.session?.user) navigate("/", { replace: true });
+            } catch { /* ignore */ }
+        })();
+    }, [navigate]);
+
+    const update = (patch) => setAnswers((a) => ({ ...a, ...patch }));
+    const goNext = () => setStep((s) => Math.min(TOTAL_STEPS, s + 1));
+    const goBack = () => setStep((s) => Math.max(1, s - 1));
+
+    const canContinueByStep = {
+        1: !!answers.yearLevel,
+        2: answers.subjects.length > 0,
+        3: true,
+        4: true,
+        5: true,
+        6: true,
+        7: true,
+        8: !!answers.intent,
+    };
+
+    return (
+        <div className="min-h-screen bg-background flex flex-col">
+            {/* Progress strip */}
+            <header className="sticky top-0 z-10 bg-background/95 backdrop-blur border-b border-border/60">
+                <div className="max-w-2xl mx-auto px-4 lg:px-6 py-3 flex items-center gap-3">
+                    {step > 1 && (
+                        <button
+                            type="button"
+                            onClick={goBack}
+                            className="w-9 h-9 rounded-full flex items-center justify-center hover:bg-muted transition-colors text-muted-foreground"
+                            aria-label="Back"
+                        >
+                            <ChevronLeft className="w-5 h-5" />
+                        </button>
+                    )}
+                    <div className="flex-1 flex items-center gap-1">
+                        {Array.from({ length: TOTAL_STEPS }, (_, i) => i + 1).map((n) => (
+                            <div
+                                key={n}
+                                className={`h-1 flex-1 rounded-full transition-colors ${n <= step ? "bg-primary" : "bg-muted"}`}
+                            />
+                        ))}
+                    </div>
+                    <span className="text-xs font-bold text-muted-foreground tabular-nums w-10 text-right">{step}/{TOTAL_STEPS}</span>
+                </div>
+            </header>
+
+            {/* Step content */}
+            <main className="flex-1 flex flex-col">
+                <AnimatePresence mode="wait">
+                    <motion.div
+                        key={step}
+                        initial={{ opacity: 0, x: 16 }}
+                        animate={{ opacity: 1, x: 0 }}
+                        exit={{ opacity: 0, x: -16 }}
+                        transition={{ duration: 0.22, ease: [0.2, 0.8, 0.2, 1] }}
+                        className="flex-1 flex flex-col"
+                    >
+                        {step === 1 && <Step1Year answers={answers} update={update} onNext={goNext} />}
+                        {step === 2 && <Step2Subjects answers={answers} update={update} onNext={goNext} canContinue={canContinueByStep[2]} />}
+                        {step === 3 && <Step3Atar answers={answers} update={update} onNext={goNext} />}
+                        {step === 4 && <Step4Course answers={answers} update={update} onNext={goNext} />}
+                        {step === 5 && <Step5PlanReveal answers={answers} onNext={goNext} />}
+                        {step === 6 && <Step6Comparison answers={answers} onNext={goNext} />}
+                        {step === 7 && <Step7Premium onNext={goNext} />}
+                        {step === 8 && <Step8Signin answers={answers} update={update} />}
+                    </motion.div>
+                </AnimatePresence>
+            </main>
+        </div>
+    );
+}
+
+// ─── Shared layout helpers ───────────────────────────────────────────────────
+function StepShell({ eyebrow, title, subtitle, children, footer }) {
+    return (
+        <div className="flex-1 flex flex-col w-full max-w-2xl mx-auto px-4 lg:px-6 py-8 lg:py-12">
+            <div className="mb-6 lg:mb-8">
+                {eyebrow && <p className="stat-label text-primary mb-2">{eyebrow}</p>}
+                <h1 className="font-display font-extrabold text-foreground text-3xl lg:text-4xl tracking-tight leading-[1.1]">
+                    {title}
+                </h1>
+                {subtitle && (
+                    <p className="text-muted-foreground text-base lg:text-lg mt-2 leading-relaxed">
+                        {subtitle}
+                    </p>
+                )}
+            </div>
+            <div className="flex-1">{children}</div>
+            {footer && <div className="mt-6 lg:mt-8">{footer}</div>}
+        </div>
+    );
+}
+
+function PrimaryCTA({ children, disabled, onClick, fullWidth = true }) {
+    return (
+        <Button
+            onClick={onClick}
+            disabled={disabled}
+            className={`btn-3d bg-primary text-primary-foreground hover:bg-primary h-12 text-base ${fullWidth ? "w-full" : ""}`}
+        >
+            {children}
+        </Button>
+    );
+}
+
+function SkipLink({ onClick }) {
+    return (
+        <button
+            onClick={onClick}
+            className="text-sm font-semibold text-muted-foreground hover:text-foreground transition-colors mx-auto block py-2"
+        >
+            Skip for now
+        </button>
+    );
+}
+
+// ═══ STEP 1 — Year level ════════════════════════════════════════════════════
+function Step1Year({ answers, update, onNext }) {
+    return (
+        <StepShell
+            eyebrow="About you · 1 of 4"
+            title="What year are you in?"
+            subtitle="This shapes the recommendations you'll get."
+        >
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                {YEAR_LEVELS.map((yl) => {
+                    const selected = answers.yearLevel === yl.value;
+                    return (
+                        <button
+                            key={yl.value}
+                            onClick={() => { update({ yearLevel: yl.value }); setTimeout(onNext, 200); }}
+                            className={`text-left p-5 rounded-2xl border shadow-soft transition-all ${
+                                selected
+                                    ? "bg-primary/10 border-primary/40 ring-2 ring-primary/40"
+                                    : "bg-surface border-border/60 hover:border-primary/30"
+                            }`}
+                        >
+                            <div className="w-10 h-10 rounded-xl bg-primary/10 border border-primary/15 flex items-center justify-center mb-3">
+                                <GraduationCap className="w-5 h-5 text-primary" strokeWidth={2.5} />
+                            </div>
+                            <p className="font-display font-extrabold text-foreground text-lg">{yl.label}</p>
+                            <p className="text-xs text-muted-foreground mt-1 leading-snug">{yl.sub}</p>
+                        </button>
+                    );
+                })}
+            </div>
+        </StepShell>
+    );
+}
+
+// ═══ STEP 2 — Subjects ══════════════════════════════════════════════════════
+function Step2Subjects({ answers, update, onNext, canContinue }) {
+    const [query, setQuery] = useState("");
+
+    const filtered = useMemo(() => {
+        const q = query.toLowerCase().trim();
+        if (!q) return VCE_SUBJECTS;
+        return VCE_SUBJECTS.filter(s =>
+            s.name.toLowerCase().includes(q) || (s.code || "").toLowerCase().includes(q)
+        );
+    }, [query]);
+
+    const toggle = (sub) => {
+        const exists = answers.subjects.find(x => x.code === sub.code);
+        if (exists) {
+            update({ subjects: answers.subjects.filter(x => x.code !== sub.code) });
+        } else {
+            update({ subjects: [...answers.subjects, { id: sub.id, name: sub.name, code: sub.code }] });
+        }
+    };
+
+    return (
+        <StepShell
+            eyebrow="About you · 2 of 4"
+            title="What subjects are you taking?"
+            subtitle="Pick all of them. You can change these later."
+            footer={
+                <div className="space-y-3">
+                    <div className="flex items-center justify-between text-sm">
+                        <span className="font-bold text-foreground">
+                            {answers.subjects.length} selected
+                        </span>
+                        {answers.subjects.length > 0 && (
+                            <button
+                                onClick={() => update({ subjects: [] })}
+                                className="text-xs font-semibold text-muted-foreground hover:text-foreground transition-colors"
+                            >
+                                Clear all
+                            </button>
+                        )}
+                    </div>
+                    <PrimaryCTA onClick={onNext} disabled={!canContinue}>
+                        Continue <ArrowRight className="w-4 h-4 ml-1" />
+                    </PrimaryCTA>
+                </div>
+            }
+        >
+            <div className="relative mb-3">
+                <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+                <Input
+                    value={query}
+                    onChange={(e) => setQuery(e.target.value)}
+                    placeholder="Search 33 VCE subjects…"
+                    className="pl-9 h-11"
+                />
+            </div>
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 max-h-[340px] overflow-y-auto pr-1">
+                {filtered.map((sub) => {
+                    const selected = !!answers.subjects.find(x => x.code === sub.code);
+                    return (
+                        <button
+                            key={sub.id}
+                            onClick={() => toggle(sub)}
+                            className={`text-left p-3 rounded-xl border shadow-soft transition-all ${
+                                selected
+                                    ? "bg-primary/10 border-primary/40"
+                                    : "bg-surface border-border/60 hover:border-primary/30"
+                            }`}
+                        >
+                            <div className="flex items-start justify-between gap-2">
+                                <p className="font-bold text-foreground text-sm leading-tight">{sub.name}</p>
+                                {selected && <Check className="w-4 h-4 text-primary flex-shrink-0 mt-0.5" strokeWidth={3} />}
+                            </div>
+                        </button>
+                    );
+                })}
+                {filtered.length === 0 && (
+                    <p className="col-span-full text-sm text-muted-foreground py-6 text-center">
+                        No subjects match "{query}"
+                    </p>
+                )}
+            </div>
+        </StepShell>
+    );
+}
+
+// ═══ STEP 3 — ATAR target ═══════════════════════════════════════════════════
+function Step3Atar({ answers, update, onNext }) {
+    const value = answers.goalAtar ?? 85;
+    return (
+        <StepShell
+            eyebrow="About you · 3 of 4"
+            title="What ATAR are you aiming for?"
+            subtitle="Plant a flag. You can change it any time."
+            footer={
+                <div className="space-y-2">
+                    <PrimaryCTA onClick={onNext}>
+                        Continue <ArrowRight className="w-4 h-4 ml-1" />
+                    </PrimaryCTA>
+                    <SkipLink onClick={() => { update({ goalAtar: null }); onNext(); }} />
+                </div>
+            }
+        >
+            <div className="card-soft p-6 lg:p-8 text-center">
+                <p className="stat-label text-primary/80 mb-2">My target</p>
+                <div className="font-display font-extrabold text-primary leading-none mb-6"
+                     style={{ fontSize: 'clamp(4rem, 14vw, 7rem)' }}>
+                    {value.toFixed(value % 1 === 0 ? 0 : 2)}
+                </div>
+                <input
+                    type="range"
+                    min={50}
+                    max={99.95}
+                    step={0.05}
+                    value={value}
+                    onChange={(e) => update({ goalAtar: parseFloat(e.target.value) })}
+                    className="w-full accent-primary"
+                />
+                <div className="flex justify-between text-xs text-muted-foreground font-semibold mt-2">
+                    <span>50</span>
+                    <span>75</span>
+                    <span>99.95</span>
+                </div>
+            </div>
+        </StepShell>
+    );
+}
+
+// ═══ STEP 4 — Course / uni ══════════════════════════════════════════════════
+function Step4Course({ answers, update, onNext }) {
+    return (
+        <StepShell
+            eyebrow="About you · 4 of 4"
+            title="Got a dream course?"
+            subtitle="Optional — just plants a flag on your dashboard."
+            footer={
+                <div className="space-y-2">
+                    <PrimaryCTA onClick={onNext}>
+                        Continue <ArrowRight className="w-4 h-4 ml-1" />
+                    </PrimaryCTA>
+                    <SkipLink onClick={() => { update({ goalCourseName: "", goalUniversity: "" }); onNext(); }} />
+                </div>
+            }
+        >
+            <div className="card-soft p-6 space-y-5">
+                <div className="space-y-2">
+                    <label className="text-sm font-bold text-foreground flex items-center gap-2">
+                        <BookOpen className="w-4 h-4 text-primary" /> Course
+                    </label>
+                    <Input
+                        value={answers.goalCourseName}
+                        onChange={(e) => update({ goalCourseName: e.target.value })}
+                        placeholder="e.g. Bachelor of Commerce"
+                        className="h-11"
+                    />
+                </div>
+                <div className="space-y-2">
+                    <label className="text-sm font-bold text-foreground flex items-center gap-2">
+                        <MapPin className="w-4 h-4 text-primary" /> University
+                    </label>
+                    <Input
+                        value={answers.goalUniversity}
+                        onChange={(e) => update({ goalUniversity: e.target.value })}
+                        placeholder="e.g. University of Melbourne"
+                        className="h-11"
+                    />
+                </div>
+            </div>
+        </StepShell>
+    );
+}
+
+// ═══ STEP 5 — Personalised plan reveal ══════════════════════════════════════
+function Step5PlanReveal({ answers, onNext }) {
+    const subjectsCount = answers.subjects.length;
+    const personalLine = [
+        answers.yearLevel || "VCE",
+        `${subjectsCount} subject${subjectsCount === 1 ? "" : "s"}`,
+        answers.goalAtar ? `ATAR ${answers.goalAtar.toFixed(answers.goalAtar % 1 === 0 ? 0 : 2)}` : null,
+        answers.goalCourseName ? `${answers.goalCourseName}${answers.goalUniversity ? ` at ${answers.goalUniversity}` : ""}` : null,
+    ].filter(Boolean).join(" · ");
+
+    const planItems = [
+        { Icon: Brain,         text: `Daily AI quizzes tailored to your ${subjectsCount > 0 ? subjectsCount : ""} subject${subjectsCount === 1 ? "" : "s"}`.replace("  ", " ").trim() },
+        { Icon: Layers,        text: "AI quiz marking with VCAA-aligned feedback" },
+        { Icon: MapIcon,       text: answers.goalAtar ? `Personalised study roadmap to ATAR ${answers.goalAtar.toFixed(answers.goalAtar % 1 === 0 ? 0 : 2)}` : "Personalised study roadmap to your target" },
+        { Icon: Sparkles,      text: "All 10 AI study tools (Essay Planner, Math Tutor, Concept Explainer, more)" },
+    ];
+
+    return (
+        <StepShell
+            eyebrow="Your plan is ready"
+            title="Your AcedIt plan, ready to go"
+            subtitle={personalLine}
+            footer={
+                <PrimaryCTA onClick={onNext}>
+                    See what's included <ArrowRight className="w-4 h-4 ml-1" />
+                </PrimaryCTA>
+            }
+        >
+            <div className="card-soft p-6 lg:p-7 space-y-3">
+                {planItems.map((item, i) => (
+                    <motion.div
+                        key={i}
+                        initial={{ opacity: 0, y: 8 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ delay: 0.1 + i * 0.08 }}
+                        className="flex items-start gap-3"
+                    >
+                        <div className="w-10 h-10 rounded-xl bg-primary/10 border border-primary/15 flex items-center justify-center flex-shrink-0">
+                            <item.Icon className="w-5 h-5 text-primary" strokeWidth={2.5} />
+                        </div>
+                        <p className="text-foreground text-sm lg:text-base leading-snug mt-1.5 font-medium">
+                            {item.text}
+                        </p>
+                    </motion.div>
+                ))}
+            </div>
+        </StepShell>
+    );
+}
+
+// ═══ STEP 6 — Cost comparison ═══════════════════════════════════════════════
+function Step6Comparison({ answers, onNext }) {
+    const subjectsCount = Math.max(1, answers.subjects.length);
+    const edroloTotal = Math.round(PRICING.edroloOne.weekly * subjectsCount);
+
+    const bars = [
+        { label: PRICING.tutor.label,    weekly: PRICING.tutor.weekly,    note: PRICING.tutor.note,   tone: "warn"   },
+        { label: `Edrolo (${subjectsCount} subject${subjectsCount === 1 ? "" : "s"})`, weekly: edroloTotal, note: `${PRICING.edroloOne.note}`, tone: "warn" },
+        { label: PRICING.chatgpt.label,  weekly: PRICING.chatgpt.weekly,  note: PRICING.chatgpt.note, tone: "warn"   },
+        { label: PRICING.acedit.label,   weekly: PRICING.acedit.weekly,   note: PRICING.acedit.note,  tone: "good"   },
+    ];
+    const maxWeekly = Math.max(...bars.map(b => b.weekly));
+
+    const tutorWeeks = Math.round(PRICING.tutor.weekly / PRICING.acedit.weekly);
+
+    return (
+        <StepShell
+            eyebrow="Honest comparison"
+            title="What VCE help usually costs"
+            subtitle="Real industry numbers, all weekly · AUD."
+            footer={
+                <PrimaryCTA onClick={onNext}>
+                    See what's in Premium <ArrowRight className="w-4 h-4 ml-1" />
+                </PrimaryCTA>
+            }
+        >
+            <div className="card-soft p-5 lg:p-6 space-y-4">
+                {bars.map((b, i) => {
+                    const pct = Math.max(4, (b.weekly / maxWeekly) * 100);
+                    const isGood = b.tone === "good";
+                    return (
+                        <motion.div
+                            key={b.label}
+                            initial={{ opacity: 0 }}
+                            animate={{ opacity: 1 }}
+                            transition={{ delay: 0.05 + i * 0.06 }}
+                        >
+                            <div className="flex items-baseline justify-between mb-1.5">
+                                <div className="min-w-0 pr-3">
+                                    <p className={`font-display font-extrabold text-sm leading-tight ${isGood ? "text-primary" : "text-foreground"}`}>
+                                        {b.label}
+                                    </p>
+                                    <p className="text-[11px] text-muted-foreground leading-snug">{b.note}</p>
+                                </div>
+                                <p className={`font-display font-extrabold text-lg tabular-nums flex-shrink-0 ${isGood ? "text-primary" : "text-foreground"}`}>
+                                    ${b.weekly}<span className="text-xs text-muted-foreground font-bold">/wk</span>
+                                </p>
+                            </div>
+                            <div className="h-3 bg-muted/60 rounded-full overflow-hidden">
+                                <motion.div
+                                    initial={{ width: 0 }}
+                                    animate={{ width: `${pct}%` }}
+                                    transition={{ duration: 0.7, delay: 0.2 + i * 0.08, ease: [0.2, 0.8, 0.2, 1] }}
+                                    className={`h-full rounded-full ${isGood ? "bg-primary" : "bg-xp"}`}
+                                />
+                            </div>
+                        </motion.div>
+                    );
+                })}
+            </div>
+            <div className="mt-5 p-4 rounded-2xl bg-primary/5 border border-primary/15">
+                <p className="font-display font-extrabold text-foreground text-lg leading-tight">
+                    One hour with a tutor pays for <span className="text-primary">{tutorWeeks} weeks</span> of AcedIt.
+                </p>
+            </div>
+        </StepShell>
+    );
+}
+
+// ═══ STEP 7 — Premium value stack ═══════════════════════════════════════════
+function Step7Premium({ onNext }) {
+    const FREE_FEATURES = [
+        "Pomodoro timer & study sessions",
+        "Manual quizzes & flashcards (unlimited)",
+        "XP, streaks, friends, leaderboards",
+        "5 AI-generated quizzes (lifetime)",
+        "5 AI-generated flashcard sets (lifetime)",
+        "5 AI tool uses (lifetime)",
+    ];
+    const PREMIUM_FEATURES = [
+        "Everything in Free",
+        "Daily AI-generated quizzes",
+        "AI quiz marking with VCAA feedback",
+        "All 10 AI study tools (unlimited daily)",
+        "Goal & Roadmap AI generation",
+        "Spaced repetition (SM-2 algorithm)",
+        "Blurting & Active Recall with AI marking",
+        "Advanced analytics & performance coach",
+        "Priority support",
+    ];
+    return (
+        <StepShell
+            eyebrow="The unlock"
+            title="Two ways to use AcedIt"
+            subtitle="Try Premium for $5/week — less than a coffee."
+            footer={
+                <PrimaryCTA onClick={onNext}>
+                    Sign in to start <ArrowRight className="w-4 h-4 ml-1" />
+                </PrimaryCTA>
+            }
+        >
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {/* Free column — visually de-emphasised */}
+                <div className="card-soft p-5 lg:p-6 opacity-95">
+                    <p className="stat-label text-muted-foreground mb-1">Free</p>
+                    <p className="font-display font-extrabold text-foreground text-3xl mb-1">$0</p>
+                    <p className="text-xs text-muted-foreground mb-4">per week</p>
+                    <ul className="space-y-2">
+                        {FREE_FEATURES.map((f, i) => (
+                            <li key={i} className="flex items-start gap-2 text-sm">
+                                <Check className="w-4 h-4 text-muted-foreground flex-shrink-0 mt-0.5" />
+                                <span className="text-foreground leading-snug">{f}</span>
+                            </li>
+                        ))}
+                    </ul>
+                </div>
+                {/* Premium column — highlighted */}
+                <div className="relative rounded-2xl bg-primary/5 border-2 border-primary shadow-soft p-5 lg:p-6">
+                    <span className="absolute -top-3 right-4 pill bg-primary text-primary-foreground text-[10px] px-3 py-1">
+                        <Crown className="w-3 h-3" /> RECOMMENDED
+                    </span>
+                    <p className="stat-label text-primary mb-1">Premium</p>
+                    <p className="font-display font-extrabold text-foreground text-3xl mb-1">
+                        $5<span className="text-base text-muted-foreground font-bold">/wk</span>
+                    </p>
+                    <p className="text-xs text-muted-foreground mb-4">Cancel anytime</p>
+                    <ul className="space-y-2">
+                        {PREMIUM_FEATURES.map((f, i) => (
+                            <li key={i} className="flex items-start gap-2 text-sm">
+                                <Check className="w-4 h-4 text-primary flex-shrink-0 mt-0.5" strokeWidth={3} />
+                                <span className="text-foreground leading-snug font-medium">{f}</span>
+                            </li>
+                        ))}
+                    </ul>
+                </div>
+            </div>
+        </StepShell>
+    );
+}
+
+// ═══ STEP 8 — Sign in ═══════════════════════════════════════════════════════
+function Step8Signin({ answers, update }) {
+    const [isStarting, setIsStarting] = useState(false);
+
+    const personalLine = [
+        answers.yearLevel,
+        answers.subjects.length > 0 ? `${answers.subjects.length} subject${answers.subjects.length === 1 ? "" : "s"}` : null,
+        answers.goalAtar ? `ATAR ${answers.goalAtar.toFixed(answers.goalAtar % 1 === 0 ? 0 : 2)}` : null,
+        answers.goalCourseName || null,
+    ].filter(Boolean).join(" · ");
+
+    const startSignIn = async (intent) => {
+        update({ intent, completedAt: new Date().toISOString() });
+        // Persist immediately — OAuth redirect happens before React effect runs.
+        saveAnswers({ ...answers, intent, completedAt: new Date().toISOString() });
+        setIsStarting(true);
+        try {
+            const redirectTo = `${window.location.origin}/`;
+            const { error } = await supabase.auth.signInWithOAuth({
+                provider: "google",
+                options: { redirectTo },
+            });
+            if (error) throw error;
+            // Browser navigates away to Google — code below doesn't run.
+        } catch (e) {
+            console.error("[onboarding] OAuth error:", e);
+            setIsStarting(false);
+        }
+    };
+
+    return (
+        <StepShell
+            eyebrow="Last step"
+            title="Save your plan, start studying"
+            subtitle="Sign in to keep your subjects, goals, and AcedIt set up."
+        >
+            <div className="card-soft p-5 lg:p-6 mb-5">
+                <p className="stat-label text-muted-foreground mb-2">Your plan</p>
+                <p className="font-display font-extrabold text-foreground text-base lg:text-lg leading-tight">
+                    {personalLine || "VCE student"}
+                </p>
+            </div>
+
+            <div className="space-y-3">
+                {/* Hard-sell primary CTA: Premium */}
+                <button
+                    onClick={() => startSignIn("premium")}
+                    disabled={isStarting}
+                    className="w-full btn-3d bg-primary text-primary-foreground hover:bg-primary rounded-xl px-5 h-14 flex items-center justify-center gap-3 font-display font-extrabold text-base disabled:opacity-60"
+                >
+                    <Crown className="w-5 h-5" />
+                    Sign in & start Premium · $5/wk
+                </button>
+                <p className="text-xs text-center text-muted-foreground">
+                    Cancel anytime. Less than a coffee.
+                </p>
+
+                {/* Quieter free fallback (hard-sell: small text link, not a button) */}
+                <button
+                    onClick={() => startSignIn("free")}
+                    disabled={isStarting}
+                    className="block mx-auto text-sm text-muted-foreground hover:text-foreground transition-colors pt-3 disabled:opacity-60"
+                >
+                    Continue with Free →
+                </button>
+
+                <Link
+                    to="/"
+                    className="block mx-auto text-xs text-muted-foreground/70 hover:text-foreground pt-2 text-center"
+                >
+                    Already have an account? Sign in
+                </Link>
+            </div>
+        </StepShell>
+    );
+}

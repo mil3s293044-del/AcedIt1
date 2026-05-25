@@ -10,6 +10,7 @@ import Paywall from './pages/Paywall';
 import Suspended from './pages/Suspended';
 import AdminIPPanel from './pages/AdminIPPanel';
 import Landing from './pages/Landing';
+import Onboarding from './pages/Onboarding';
 import { AuthProvider, useAuth } from '@/lib/AuthContext';
 import UserNotRegisteredError from '@/components/UserNotRegisteredError';
 
@@ -39,6 +40,10 @@ const AuthenticatedApp = () => {
   const isUnauthed = !isAuthenticated || authError?.type === 'auth_required';
   if (isUnauthed && location.pathname === '/') {
     return <Landing />;
+  }
+  // Pre-signup onboarding wizard — public, no auth needed.
+  if (isUnauthed && location.pathname === '/onboarding') {
+    return <Onboarding />;
   }
 
   // Handle authentication errors
@@ -71,6 +76,7 @@ const AuthenticatedApp = () => {
           }
         />
       ))}
+      <Route path="/onboarding" element={<Onboarding />} />
       <Route path="/StudyRoadmap" element={<LayoutWrapper currentPageName="StudyRoadmap"><StudyRoadmap /></LayoutWrapper>} />
       <Route path="/Paywall" element={<Paywall />} />
       <Route path="/Suspended" element={<Suspended />} />
