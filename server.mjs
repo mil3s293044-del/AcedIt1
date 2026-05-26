@@ -366,6 +366,160 @@ async function addLeagueXP(userEmail, userProfile, deltaXp) {
   }
 }
 
+// ─── Achievements ──────────────────────────────────────────────────────────
+// Catalog lives in code so adding/tweaking is a code change, not a DB change.
+// `check(stats)` returns true when the user qualifies; stats are built fresh
+// in checkAndGrantAchievements from a single profile + count query.
+//
+// rarities: common | rare | epic | legendary
+const ACHIEVEMENT_CATALOG = [
+  // ─── Common (50-100 XP) ─────────────────────────────────────────────
+  { code: "FIRST_SPARK",       name: "First Spark",       desc: "Earn your first 100 XP",                          icon: "Sparkles",   rarity: "common",    reward_xp: 50,   sort: 1,   check: (s) => s.total_xp >= 100 },
+  { code: "FIRST_SESSION",     name: "Day One",           desc: "Complete your first study session",               icon: "Play",       rarity: "common",    reward_xp: 50,   sort: 2,   check: (s) => s.session_count >= 1 },
+  { code: "FIRST_QUIZ",        name: "Quizmaster Apprentice", desc: "Complete your first quiz",                    icon: "BrainCircuit", rarity: "common",  reward_xp: 50,   sort: 3,   check: (s) => s.quiz_count >= 1 },
+  { code: "SUBJECT_PICKED",    name: "Subject Selector",  desc: "Add your first VCE subject",                      icon: "BookOpen",   rarity: "common",    reward_xp: 50,   sort: 4,   check: (s) => s.subject_count >= 1 },
+  { code: "STREAK_3",          name: "Three In A Row",    desc: "Hit a 3-day study streak",                        icon: "Flame",      rarity: "common",    reward_xp: 100,  sort: 5,   check: (s) => s.peak_streak >= 3 },
+
+  // ─── Rare (150-300 XP) ─────────────────────────────────────────────
+  { code: "STREAK_7",          name: "Week One",          desc: "Hit a 7-day study streak",                        icon: "Flame",      rarity: "rare",      reward_xp: 200,  sort: 10,  check: (s) => s.peak_streak >= 7 },
+  { code: "QUIZ_25",           name: "Quiz Master",       desc: "Complete 25 quizzes",                             icon: "BrainCircuit", rarity: "rare",    reward_xp: 250,  sort: 11,  check: (s) => s.quiz_count >= 25 },
+  { code: "FRIEND_MAGNET",     name: "Friend Magnet",     desc: "Add 3 friends",                                   icon: "Users",      rarity: "rare",      reward_xp: 150,  sort: 12,  check: (s) => s.friend_count >= 3 },
+  { code: "COMPETE_FIRST",     name: "Competitor",        desc: "Join your first competition",                     icon: "Swords",     rarity: "rare",      reward_xp: 150,  sort: 13,  check: (s) => s.competition_count >= 1 },
+  { code: "GOAL_FIRST",        name: "Goal Setter",       desc: "Create your first study goal",                    icon: "Target",     rarity: "rare",      reward_xp: 150,  sort: 14,  check: (s) => s.goal_count >= 1 },
+  { code: "BLURTING_5",        name: "Blurter",           desc: "Complete 5 blurting sessions",                    icon: "PencilLine", rarity: "rare",      reward_xp: 200,  sort: 15,  check: (s) => s.blurting_count >= 5 },
+  { code: "ACTIVE_RECALL_5",   name: "Recall Adept",      desc: "Complete 5 active recall sessions",               icon: "Lightbulb",  rarity: "rare",      reward_xp: 200,  sort: 16,  check: (s) => s.active_recall_count >= 5 },
+
+  // ─── Epic (500-800 XP) ─────────────────────────────────────────────
+  { code: "STREAK_14",         name: "Two-Week Wonder",   desc: "Hit a 14-day study streak",                       icon: "Flame",      rarity: "epic",      reward_xp: 500,  sort: 20,  check: (s) => s.peak_streak >= 14 },
+  { code: "QUIZ_100",          name: "Quiz Legend",       desc: "Complete 100 quizzes",                            icon: "BrainCircuit", rarity: "epic",    reward_xp: 700,  sort: 21,  check: (s) => s.quiz_count >= 100 },
+  { code: "COMPETE_WIN",       name: "First Blood",       desc: "Win your first competition",                      icon: "Trophy",     rarity: "epic",      reward_xp: 500,  sort: 22,  check: (s) => s.competition_wins >= 1 },
+  { code: "ROADMAP_DONE",      name: "Roadmap Runner",    desc: "Complete a study roadmap",                        icon: "Map",        rarity: "epic",      reward_xp: 600,  sort: 23,  check: (s) => s.roadmap_completions >= 1 },
+  { code: "XP_5K",             name: "Five Grand",        desc: "Earn 5,000 lifetime XP",                          icon: "Zap",        rarity: "epic",      reward_xp: 500,  sort: 24,  check: (s) => s.total_xp >= 5000 },
+  { code: "WEEK_TOP_3",        name: "Podium",            desc: "Finish top 3 on the weekly leaderboard",          icon: "Medal",      rarity: "epic",      reward_xp: 750,  sort: 25,  check: (s) => s.best_weekly_rank > 0 && s.best_weekly_rank <= 3 },
+
+  // ─── Legendary (1000-3000 XP) ──────────────────────────────────────
+  { code: "STREAK_30",         name: "Monthly Master",    desc: "Hit a 30-day study streak",                       icon: "Flame",      rarity: "legendary", reward_xp: 1500, sort: 30,  check: (s) => s.peak_streak >= 30 },
+  { code: "STREAK_60",         name: "Marathon",          desc: "Hit a 60-day study streak",                       icon: "Flame",      rarity: "legendary", reward_xp: 3000, sort: 31,  check: (s) => s.peak_streak >= 60 },
+  { code: "XP_25K",            name: "XP Tycoon",         desc: "Earn 25,000 lifetime XP",                         icon: "Crown",      rarity: "legendary", reward_xp: 2000, sort: 32,  check: (s) => s.total_xp >= 25000 },
+  { code: "QUIZ_250",          name: "Quiz Deity",        desc: "Complete 250 quizzes",                            icon: "BrainCircuit", rarity: "legendary", reward_xp: 2000, sort: 33, check: (s) => s.quiz_count >= 250 },
+  { code: "COMPETE_5",         name: "Conqueror",         desc: "Win 5 competitions",                              icon: "Swords",     rarity: "legendary", reward_xp: 2000, sort: 34,  check: (s) => s.competition_wins >= 5 },
+  { code: "WEEK_TOP_1",        name: "Top Dog",           desc: "Finish #1 on the weekly leaderboard",             icon: "Crown",      rarity: "legendary", reward_xp: 2500, sort: 35,  check: (s) => s.best_weekly_rank === 1 },
+];
+
+const ACHIEVEMENT_BY_CODE = Object.fromEntries(ACHIEVEMENT_CATALOG.map(a => [a.code, a]));
+
+// Build the stats object used by all `check()` predicates.
+async function buildAchievementStats(userEmail, profile) {
+  if (!supabaseAdmin || !userEmail) return {};
+  const stats = {
+    total_xp:           profile?.total_xp ?? 0,
+    peak_streak:        profile?.peak_streak ?? profile?.streak_days ?? 0,
+    streak_days:        profile?.streak_days ?? 0,
+  };
+
+  // Count-style stats — use Postgrest count=exact via head request to avoid
+  // pulling the rows themselves.
+  const counts = await Promise.all([
+    supabaseAdmin.from('quiz_attempts').select('id', { count: 'exact', head: true }).eq('created_by', userEmail),
+    supabaseAdmin.from('study_sessions').select('id', { count: 'exact', head: true }).eq('created_by', userEmail),
+    supabaseAdmin.from('user_subjects').select('id', { count: 'exact', head: true }).eq('created_by', userEmail).eq('is_active', true),
+    supabaseAdmin.from('friendships').select('id', { count: 'exact', head: true }).eq('status', 'accepted')
+      .or(`created_by.eq.${userEmail},friend_email.eq.${userEmail}`),
+    supabaseAdmin.from('goal_competitions').select('id', { count: 'exact', head: true })
+      .or(`creator_email.eq.${userEmail}`),
+    supabaseAdmin.from('goal_competitions').select('id', { count: 'exact', head: true }).eq('winner_email', userEmail),
+    supabaseAdmin.from('goals').select('id', { count: 'exact', head: true }).eq('created_by', userEmail),
+    supabaseAdmin.from('blurting_sessions').select('id', { count: 'exact', head: true }).eq('created_by', userEmail),
+    supabaseAdmin.from('active_recall_sessions').select('id', { count: 'exact', head: true }).eq('created_by', userEmail),
+    supabaseAdmin.from('study_roadmaps').select('id', { count: 'exact', head: true }).eq('created_by', userEmail),
+  ]);
+  stats.quiz_count             = counts[0].count ?? 0;
+  stats.session_count          = counts[1].count ?? 0;
+  stats.subject_count          = counts[2].count ?? 0;
+  stats.friend_count           = counts[3].count ?? 0;
+  stats.competition_count      = counts[4].count ?? 0;
+  stats.competition_wins       = counts[5].count ?? 0;
+  stats.goal_count             = counts[6].count ?? 0;
+  stats.blurting_count         = counts[7].count ?? 0;
+  stats.active_recall_count    = counts[8].count ?? 0;
+  stats.roadmap_completions    = counts[9].count ?? 0;
+
+  // Best weekly leaderboard rank ever achieved.
+  const { data: bestWeek } = await supabaseAdmin
+    .from('league_memberships')
+    .select('final_position')
+    .eq('user_email', userEmail)
+    .not('final_position', 'is', null)
+    .order('final_position', { ascending: true })
+    .limit(1);
+  stats.best_weekly_rank = bestWeek?.[0]?.final_position ?? 0;
+
+  return stats;
+}
+
+// Detect newly-qualified achievements, insert unlocks, grant reward XP.
+// Returns array of newly-unlocked achievement codes.
+async function checkAndGrantAchievements(userEmail, profile) {
+  if (!supabaseAdmin || !userEmail) return [];
+  try {
+    // Already-unlocked set.
+    const { data: existing } = await supabaseAdmin
+      .from('user_achievements')
+      .select('achievement_code')
+      .eq('user_email', userEmail);
+    const have = new Set((existing || []).map(r => r.achievement_code));
+
+    const candidates = ACHIEVEMENT_CATALOG.filter(a => !have.has(a.code));
+    if (candidates.length === 0) return [];
+
+    const stats = await buildAchievementStats(userEmail, profile);
+    const newlyUnlocked = candidates.filter(a => {
+      try { return !!a.check(stats); } catch { return false; }
+    });
+    if (newlyUnlocked.length === 0) return [];
+
+    // Insert unlock rows.
+    const rows = newlyUnlocked.map(a => ({
+      user_email:        userEmail,
+      achievement_code:  a.code,
+      reward_xp_awarded: a.reward_xp || 0,
+    }));
+    await supabaseAdmin.from('user_achievements').insert(rows);
+
+    // Grant reward XP — direct profile + leaderboards bump (no daily caps,
+    // achievement rewards bypass them by design).
+    const totalReward = newlyUnlocked.reduce((sum, a) => sum + (a.reward_xp || 0), 0);
+    if (totalReward > 0 && profile) {
+      const newTotal  = (profile.total_xp ?? 0) + totalReward;
+      const newSeason = (profile.season_xp ?? 0) + totalReward;
+      await supabaseAdmin
+        .from('user_profiles')
+        .update({ total_xp: newTotal, season_xp: newSeason })
+        .eq('id', profile.id);
+
+      // Mirror to leaderboards.
+      try {
+        const { data: lbRows } = await supabaseAdmin
+          .from('leaderboards').select('id').eq('user_email', userEmail).limit(1);
+        if (lbRows?.[0]) {
+          await supabaseAdmin.from('leaderboards')
+            .update({ total_xp: newTotal, season_xp: newSeason, last_updated: new Date().toISOString() })
+            .eq('id', lbRows[0].id);
+        }
+      } catch {}
+
+      // Mirror to league weekly XP.
+      addLeagueXP(userEmail, profile, totalReward).catch(() => {});
+    }
+
+    console.log(`[achievements] unlocked ${newlyUnlocked.length} for ${userEmail}: ${newlyUnlocked.map(a => a.code).join(', ')}`);
+    return newlyUnlocked.map(a => a.code);
+  } catch (e) {
+    console.warn('[achievements] check failed:', e?.message || e);
+    return [];
+  }
+}
+
 function tierIsPremium(profile) {
   if (!profile) return false;
   if (profile.subscription_tier === "premium") return true;
@@ -1370,6 +1524,15 @@ app.post("/local-ai/fn/awardXP", async (req, res) => {
     // membership. Fire-and-forget; failure doesn't block the awardXP response.
     addLeagueXP(userEmail, profile, finalXP).catch((e) =>
       console.warn("[leagues] hook from awardXP failed:", e?.message || e),
+    );
+
+    // Achievements — check if this XP gain unlocked any. Fire-and-forget
+    // so the awardXP response isn't delayed by the count queries.
+    // We pass the UPDATED profile (with new total_xp) so streak/xp checks
+    // see the latest values.
+    const updatedProfile = { ...profile, total_xp: newTotalXP, season_xp: newSeasonXP };
+    checkAndGrantAchievements(userEmail, updatedProfile).catch((e) =>
+      console.warn("[achievements] hook from awardXP failed:", e?.message || e),
     );
 
     return res.json({
@@ -2980,6 +3143,68 @@ app.post("/local-ai/fn/resolveScoreWager", async (req, res) => {
 // notification to ADMIN_EMAIL and confirmation back to the user. Email
 // failures are logged but never fail the request — the ticket is the source
 // of truth.
+// ════════════════════════════════════════════════════════════════════════════
+// Achievements — read endpoint for the Ranked page gallery
+// ════════════════════════════════════════════════════════════════════════════
+
+// GET /local-ai/fn/getAchievements
+// Returns the full catalog + which ones the user has unlocked.
+app.post("/local-ai/fn/getAchievements", async (req, res) => {
+  const user = await authenticateRequest(req);
+  if (!user) return res.status(401).json({ error: "Unauthorized" });
+  if (!supabaseAdmin) return res.status(500).json({ error: "Supabase admin not configured" });
+
+  try {
+    const { data: unlocks } = await supabaseAdmin
+      .from('user_achievements')
+      .select('achievement_code, unlocked_at, reward_xp_awarded')
+      .eq('user_email', user.email);
+    const byCode = Object.fromEntries((unlocks || []).map(u => [u.achievement_code, u]));
+
+    const items = ACHIEVEMENT_CATALOG.map(a => {
+      const u = byCode[a.code];
+      return {
+        code:       a.code,
+        name:       a.name,
+        desc:       a.desc,
+        icon:       a.icon,
+        rarity:     a.rarity,
+        reward_xp:  a.reward_xp,
+        sort:       a.sort,
+        unlocked:   !!u,
+        unlocked_at: u?.unlocked_at || null,
+      };
+    }).sort((a, b) => a.sort - b.sort);
+
+    const unlockedCount = items.filter(i => i.unlocked).length;
+    return res.json({
+      success: true,
+      items,
+      unlocked_count: unlockedCount,
+      total_count:    items.length,
+    });
+  } catch (err) {
+    console.error("[getAchievements] error:", err);
+    return res.status(500).json({ error: err?.message || String(err) });
+  }
+});
+
+// POST /local-ai/fn/checkAchievements
+// Optional manual re-check (e.g. for testing or to recover after a missed
+// hook). Returns the codes that were newly unlocked.
+app.post("/local-ai/fn/checkAchievements", async (req, res) => {
+  const user = await authenticateRequest(req);
+  if (!user) return res.status(401).json({ error: "Unauthorized" });
+  try {
+    const profile = await loadUserProfile(user.email);
+    const newCodes = await checkAndGrantAchievements(user.email, profile);
+    return res.json({ success: true, newly_unlocked: newCodes });
+  } catch (err) {
+    console.error("[checkAchievements] error:", err);
+    return res.status(500).json({ error: err?.message || String(err) });
+  }
+});
+
 // ════════════════════════════════════════════════════════════════════════════
 // Weekly Leagues — read endpoints for the Ranked page
 // ════════════════════════════════════════════════════════════════════════════

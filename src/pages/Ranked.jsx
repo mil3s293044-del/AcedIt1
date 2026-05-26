@@ -1,12 +1,13 @@
 import React, { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Shield, Users, School, Sparkles, Flame, Trophy } from 'lucide-react';
+import { Shield, Users, School, Sparkles, Flame, Trophy, Award } from 'lucide-react';
 
 import LeagueView from '../components/ranked/LeagueView';
 import GamifiedMyRank from '../components/ranked/GamifiedMyRank';
 import SchoolLeaderboard from '../components/ranked/SchoolLeaderboard';
 import PerksSystem from '../components/ranked/PerksSystem';
+import AchievementsGallery from '../components/ranked/AchievementsGallery';
 import { base44 } from "@/api/base44Client";
 import HelpButton from "@/components/shared/HelpButton";
 
@@ -20,10 +21,11 @@ function getStreakMultiplier(days) {
 }
 
 const TABS = [
-    { value: 'league',  icon: Shield,   label: 'League',      short: 'League' },
-    { value: 'profile', icon: Trophy,   label: 'My Profile',  short: 'Me'     },
-    { value: 'perks',   icon: Sparkles, label: 'Perks',       short: 'Perks'  },
-    { value: 'schools', icon: School,   label: 'Schools',     short: 'Sch.'   },
+    { value: 'league',       icon: Shield,   label: 'League',       short: 'League' },
+    { value: 'achievements', icon: Award,    label: 'Achievements', short: 'Awards' },
+    { value: 'profile',      icon: Trophy,   label: 'My Profile',   short: 'Me'     },
+    { value: 'perks',        icon: Sparkles, label: 'Perks',        short: 'Perks'  },
+    { value: 'schools',      icon: School,   label: 'Schools',      short: 'Sch.'   },
 ];
 
 export default function RankedPage() {
@@ -83,7 +85,7 @@ export default function RankedPage() {
 
                 {/* ── TABS ──────────────────────────────────────────────── */}
                 <Tabs defaultValue="league" className="space-y-5">
-                    <TabsList className="grid w-full grid-cols-4 h-auto p-1.5 rounded-2xl bg-surface border border-border/60 shadow-soft">
+                    <TabsList className="grid w-full grid-cols-5 h-auto p-1.5 rounded-2xl bg-surface border border-border/60 shadow-soft">
                         {TABS.map(({ value, icon: Icon, label, short }) => (
                             <TabsTrigger
                                 key={value}
@@ -98,6 +100,7 @@ export default function RankedPage() {
                     </TabsList>
 
                     <TabsContent value="league"><LeagueView /></TabsContent>
+                    <TabsContent value="achievements"><AchievementsGallery /></TabsContent>
                     <TabsContent value="profile"><GamifiedMyRank /></TabsContent>
                     <TabsContent value="perks"><PerksSystem totalXP={totalXP} /></TabsContent>
                     <TabsContent value="schools"><SchoolLeaderboard /></TabsContent>
