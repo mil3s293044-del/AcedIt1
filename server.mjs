@@ -166,9 +166,15 @@ function currentWeekStartUTC() {
   return d.toISOString().slice(0, 10);
 }
 
-// ─── Weekly Leagues (Duolingo-style) ───────────────────────────────────────
-// 6 tiers, groups of 30, top 5 promote / bottom 5 demote each week.
-// Lazy rollover — no cron required: every awardXP triggers a check.
+// ─── Weekly Leagues ────────────────────────────────────────────────────────
+// At current scale (<100 active users) we run ONE global weekly leaderboard.
+// The tier/group schema is kept for forward-compat — when active users >= 100
+// we'll flip LEAGUES_SCALE_MODE to "tiered" and re-enable promotion/demotion.
+//
+// "global" mode: everyone for a given week goes into the SAME group regardless
+//                of tier. Group size is unlimited. No promotion/demotion.
+// "tiered" mode: 6 tiers, groups of 30, top 5 promote / bottom 5 demote.
+const LEAGUES_SCALE_MODE = "global"; // flip to "tiered" once active >= 100
 const LEAGUE_TIERS = ['bronze', 'silver', 'gold', 'platinum', 'diamond', 'master'];
 const LEAGUE_GROUP_SIZE = 30;
 const LEAGUE_PROMOTE_COUNT = 5;
@@ -230,9 +236,32 @@ async function settleStaleMembership(membership, currentTierOfUser) {
   return newTier;
 }
 
-// Find an open league_group for (tier, weekStart) or create a new one.
+// Find an open league_group for the current week.
+//   "global" mode: ONE group per week, all users together, unlimited size
+//   "tiered" mode: groups of LEAGUE_GROUP_SIZE per (tier, week_start)
 async function findOrCreateOpenGroup(tier, weekStart) {
   if (!supabaseAdmin) return null;
+
+  if (LEAGUES_SCALE_MODE === "global") {
+    // Single global group per week. We use tier='bronze' as a stable placeholder
+    // since the column is NOT NULL. The UI ignores tier in global mode.
+    const { data: open } = await supabaseAdmin
+      .from('league_groups')
+      .select('id, member_count')
+      .eq('week_start', weekStart)
+      .order('created_at', { ascending: true })
+      .limit(1);
+    if (open?.[0]) return open[0];
+
+    const { data: created } = await supabaseAdmin
+      .from('league_groups')
+      .insert({ tier: 'bronze', week_start: weekStart, member_count: 0, is_full: false })
+      .select('id, member_count')
+      .single();
+    return created || null;
+  }
+
+  // Tiered mode (future) — groups of 30 per tier.
   const { data: open } = await supabaseAdmin
     .from('league_groups')
     .select('id, member_count')
@@ -277,7 +306,10 @@ async function ensureCurrentLeagueMembership(userEmail, userProfile) {
     .limit(1);
 
   let nextStartTier = userProfile?.current_league_tier || 'bronze';
-  if (stale?.[0]) {
+  // In global mode we skip the tier-rollover dance entirely — everyone
+  // just starts the next week in their existing tier (which is bronze for
+  // everyone by default).
+  if (stale?.[0] && LEAGUES_SCALE_MODE === "tiered") {
     nextStartTier = await settleStaleMembership(stale[0], nextStartTier);
   }
 
@@ -3018,14 +3050,16 @@ app.post("/local-ai/fn/getLeagueStanding", async (req, res) => {
 
     return res.json({
       success: true,
+      mode: LEAGUES_SCALE_MODE,
       group: {
         id:           groupRow?.id || mem.league_group_id,
         tier:         groupRow?.tier || mem.tier,
         week_start:   groupRow?.week_start || mem.week_start,
         resets_at:    resetsAt.toISOString(),
         member_count: groupRow?.member_count || rows.length,
-        promote_count: LEAGUE_PROMOTE_COUNT,
-        demote_count:  LEAGUE_DEMOTE_COUNT,
+        // In global mode, promote/demote zones are off (no tiering happening).
+        promote_count: LEAGUES_SCALE_MODE === "tiered" ? LEAGUE_PROMOTE_COUNT : 0,
+        demote_count:  LEAGUES_SCALE_MODE === "tiered" ? LEAGUE_DEMOTE_COUNT  : 0,
         group_size:    LEAGUE_GROUP_SIZE,
       },
       me: {

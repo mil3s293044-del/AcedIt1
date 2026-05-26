@@ -63,7 +63,7 @@ export default function RankedPage() {
                                 Ranked
                             </h1>
                             <p className="text-muted-foreground text-sm mt-0.5">
-                                Weekly leagues. Top 5 promote, bottom 5 drop.
+                                Weekly leaderboard. Resets every Monday.
                             </p>
                         </div>
                     </div>
