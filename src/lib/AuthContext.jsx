@@ -30,6 +30,11 @@ const makeUserShape = (u) => ({
 // stay where they are (Dashboard).
 const ONBOARDING_STORAGE_KEY = 'acedit_onboarding_v1';
 
+// How long onboarding answers are considered fresh after completion. Beyond
+// this, treat the localStorage as stale (probably belongs to a different
+// user who never finished OAuth) and clear it without applying.
+const ONBOARDING_STALENESS_MS = 30 * 60 * 1000; // 30 minutes
+
 async function applyOnboardingFromStorage(userEmail) {
   let answers = null;
   try {
@@ -38,6 +43,15 @@ async function applyOnboardingFromStorage(userEmail) {
     answers = JSON.parse(raw);
   } catch { return null; }
   if (!answers?.completedAt) return null; // wizard not finished
+
+  // Staleness guard — if completedAt is older than 30 min, the localStorage
+  // probably belongs to a different visitor who never finished OAuth.
+  // Clear and bail rather than inheriting someone else's data.
+  const ageMs = Date.now() - new Date(answers.completedAt).getTime();
+  if (Number.isFinite(ageMs) && ageMs > ONBOARDING_STALENESS_MS) {
+    try { localStorage.removeItem(ONBOARDING_STORAGE_KEY); } catch {}
+    return null;
+  }
 
   // Wait for the handle_new_auth_user trigger to create the profile row.
   // Up to ~1.5s of polling — usually completes in <200ms.
@@ -80,20 +94,57 @@ async function applyOnboardingFromStorage(userEmail) {
     console.error('[onboarding] profile update failed:', e);
   }
 
-  // Create user_subjects rows.
+  // Create user_subjects rows. For custom subjects (is_custom: true) we first
+  // create a private vce_subjects row, then point user_subjects at it via
+  // vce_subject_id. Canonical VCE subjects don't need a vce_subjects row
+  // because the catalog is hardcoded in src/data/vceSubjects.js.
   if (Array.isArray(answers.subjects) && answers.subjects.length > 0) {
-    const rows = answers.subjects.map((s) => ({
-      created_by:    userEmail,
-      subject_name:  s.name,
-      subject_code:  s.code,
-      vce_subject_id: s.id || null,
-      year_level:    answers.yearLevel || null,
-      is_active:     true,
-    }));
-    try {
-      await supabase.from('user_subjects').insert(rows);
-    } catch (e) {
-      console.error('[onboarding] user_subjects insert failed:', e);
+    const userSubjectRows = [];
+
+    for (const s of answers.subjects) {
+      let vceSubjectId = null;
+
+      if (s.is_custom) {
+        try {
+          const { data: created, error: createErr } = await supabase
+            .from('vce_subjects')
+            .insert({
+              name:       s.name,
+              code:       s.code,
+              overview:   s.name,
+              is_private: true,
+              created_by: userEmail,
+            })
+            .select('id')
+            .single();
+          if (createErr) {
+            console.error('[onboarding] custom vce_subjects insert failed:', createErr);
+          } else {
+            vceSubjectId = created?.id || null;
+          }
+        } catch (e) {
+          console.error('[onboarding] custom subject create error:', e);
+        }
+      } else {
+        vceSubjectId = s.id || null;
+      }
+
+      userSubjectRows.push({
+        created_by:     userEmail,
+        subject_name:   s.name,
+        subject_code:   s.code,
+        vce_subject_id: vceSubjectId,
+        year_level:     answers.yearLevel || null,
+        is_active:      true,
+      });
+    }
+
+    if (userSubjectRows.length > 0) {
+      try {
+        await supabase.from('user_subjects').insert(userSubjectRows);
+      } catch (e) {
+        console.error('[onboarding] user_subjects insert failed:', e);
+      }
     }
   }
 

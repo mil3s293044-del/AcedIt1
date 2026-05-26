@@ -23,9 +23,9 @@ import { motion, AnimatePresence } from "framer-motion";
 import { useNavigate } from "react-router-dom";
 import { Link } from "react-router-dom";
 import {
-    ChevronLeft, ChevronRight, ArrowRight, Check, X, Search,
+    ChevronLeft, ChevronRight, ArrowRight, Check, X, Search, Plus,
     GraduationCap, BookOpen, Target, MapPin, Sparkles, Crown, Zap,
-    Brain, Layers, Trophy, BarChart3, FileQuestion, Clock, Map as MapIcon,
+    Brain, Layers, Trophy, BarChart3, FileQuestion, Clock, Map as MapIcon, Info,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -36,10 +36,19 @@ const TOTAL_STEPS = 8;
 const STORAGE_KEY = "acedit_onboarding_v1";
 
 const YEAR_LEVELS = [
-    { value: "Year 10",           label: "Year 10",      sub: "Foundation year"                  },
-    { value: "Year 11 Units 1&2", label: "Year 11",      sub: "Units 1 & 2"                      },
-    { value: "Year 12 Units 3&4", label: "Year 12",      sub: "Units 3 & 4 — counts toward ATAR" },
+    { value: "Year 7",            label: "Year 7",   sub: "Junior secondary" },
+    { value: "Year 8",            label: "Year 8",   sub: "Junior secondary" },
+    { value: "Year 9",            label: "Year 9",   sub: "Junior secondary" },
+    { value: "Year 10",           label: "Year 10",  sub: "Senior foundation" },
+    { value: "Year 11 Units 1&2", label: "Year 11",  sub: "VCE Units 1 & 2" },
+    { value: "Year 12 Units 3&4", label: "Year 12",  sub: "VCE Units 3 & 4 — counts toward ATAR" },
 ];
+
+// Younger years (Year 7-10) won't see most of their subjects in the VCE catalog.
+// We show a hint nudging them toward the custom-subject flow.
+function isPreVceYear(yearLevel) {
+    return yearLevel && (yearLevel.startsWith("Year 7") || yearLevel.startsWith("Year 8") || yearLevel.startsWith("Year 9"));
+}
 
 // Pricing snapshot (AUD per week) — verifiable industry numbers as of 2026.
 // All sources documented in the marketing copy of step 6.
@@ -215,24 +224,24 @@ function Step1Year({ answers, update, onNext }) {
             title="What year are you in?"
             subtitle="This shapes the recommendations you'll get."
         >
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
                 {YEAR_LEVELS.map((yl) => {
                     const selected = answers.yearLevel === yl.value;
                     return (
                         <button
                             key={yl.value}
                             onClick={() => { update({ yearLevel: yl.value }); setTimeout(onNext, 200); }}
-                            className={`text-left p-5 rounded-2xl border shadow-soft transition-all ${
+                            className={`text-left p-4 sm:p-5 rounded-2xl border shadow-soft transition-all ${
                                 selected
                                     ? "bg-primary/10 border-primary/40 ring-2 ring-primary/40"
                                     : "bg-surface border-border/60 hover:border-primary/30"
                             }`}
                         >
-                            <div className="w-10 h-10 rounded-xl bg-primary/10 border border-primary/15 flex items-center justify-center mb-3">
-                                <GraduationCap className="w-5 h-5 text-primary" strokeWidth={2.5} />
+                            <div className="w-9 h-9 rounded-xl bg-primary/10 border border-primary/15 flex items-center justify-center mb-3">
+                                <GraduationCap className="w-4 h-4 text-primary" strokeWidth={2.5} />
                             </div>
-                            <p className="font-display font-extrabold text-foreground text-lg">{yl.label}</p>
-                            <p className="text-xs text-muted-foreground mt-1 leading-snug">{yl.sub}</p>
+                            <p className="font-display font-extrabold text-foreground text-base sm:text-lg">{yl.label}</p>
+                            <p className="text-[11px] sm:text-xs text-muted-foreground mt-1 leading-snug">{yl.sub}</p>
                         </button>
                     );
                 })}
@@ -244,6 +253,9 @@ function Step1Year({ answers, update, onNext }) {
 // ═══ STEP 2 — Subjects ══════════════════════════════════════════════════════
 function Step2Subjects({ answers, update, onNext, canContinue }) {
     const [query, setQuery] = useState("");
+    const [showCustomForm, setShowCustomForm] = useState(false);
+    const [customName, setCustomName] = useState("");
+    const [customCode, setCustomCode] = useState("");
 
     const filtered = useMemo(() => {
         const q = query.toLowerCase().trim();
@@ -258,20 +270,45 @@ function Step2Subjects({ answers, update, onNext, canContinue }) {
         if (exists) {
             update({ subjects: answers.subjects.filter(x => x.code !== sub.code) });
         } else {
-            update({ subjects: [...answers.subjects, { id: sub.id, name: sub.name, code: sub.code }] });
+            update({ subjects: [...answers.subjects, { id: sub.id, name: sub.name, code: sub.code, is_custom: !!sub.is_custom }] });
         }
     };
+
+    const addCustom = () => {
+        const name = customName.trim();
+        const code = (customCode.trim() || name.slice(0, 12).replace(/\s+/g, "_")).toUpperCase();
+        if (!name) return;
+        // Avoid duplicate codes with existing picks.
+        const exists = answers.subjects.find(x => x.code === code);
+        if (exists) {
+            setCustomName(""); setCustomCode(""); setShowCustomForm(false);
+            return;
+        }
+        update({
+            subjects: [
+                ...answers.subjects,
+                { id: `custom_${Date.now()}`, name, code, is_custom: true },
+            ],
+        });
+        setCustomName(""); setCustomCode(""); setShowCustomForm(false);
+    };
+
+    const youngerYear = isPreVceYear(answers.yearLevel);
+    const customsPicked = answers.subjects.filter(s => s.is_custom);
 
     return (
         <StepShell
             eyebrow="About you · 2 of 4"
             title="What subjects are you taking?"
-            subtitle="Pick all of them. You can change these later."
+            subtitle="Pick what you study. You can change these later."
             footer={
                 <div className="space-y-3">
                     <div className="flex items-center justify-between text-sm">
                         <span className="font-bold text-foreground">
                             {answers.subjects.length} selected
+                            {customsPicked.length > 0 && (
+                                <span className="text-muted-foreground font-medium ml-1">· {customsPicked.length} custom</span>
+                            )}
                         </span>
                         {answers.subjects.length > 0 && (
                             <button
@@ -288,16 +325,99 @@ function Step2Subjects({ answers, update, onNext, canContinue }) {
                 </div>
             }
         >
+            {/* Contextual hint for pre-VCE years */}
+            {youngerYear && (
+                <div className="mb-3 flex items-start gap-2 rounded-xl bg-chart-3/5 border border-chart-3/15 p-3">
+                    <Info className="w-4 h-4 text-chart-3 flex-shrink-0 mt-0.5" strokeWidth={2.5} />
+                    <p className="text-xs text-foreground leading-relaxed">
+                        Below are VCE subjects — most Year 7–10 subjects aren't here.
+                        Use <span className="font-bold">“Add your own”</span> for things like Maths, English, Science, History, Geography, etc.
+                    </p>
+                </div>
+            )}
+
             <div className="relative mb-3">
                 <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
                 <Input
                     value={query}
                     onChange={(e) => setQuery(e.target.value)}
-                    placeholder="Search 33 VCE subjects…"
+                    placeholder={`Search ${VCE_SUBJECTS.length} VCE subjects…`}
                     className="pl-9 h-11"
                 />
             </div>
+
+            {/* Custom subjects the user has added — pinned at top so they're visible */}
+            {customsPicked.length > 0 && (
+                <div className="mb-3 flex flex-wrap gap-2">
+                    {customsPicked.map((sub) => (
+                        <button
+                            key={sub.id}
+                            onClick={() => toggle(sub)}
+                            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-chart-4/10 border border-chart-4/20 text-chart-4 text-xs font-bold hover:bg-chart-4/15 transition-colors"
+                        >
+                            <span>{sub.name}</span>
+                            <X className="w-3 h-3" strokeWidth={3} />
+                        </button>
+                    ))}
+                </div>
+            )}
+
+            {/* Inline custom-add form */}
+            {showCustomForm && (
+                <div className="mb-3 rounded-xl bg-chart-4/5 border border-chart-4/15 p-3 space-y-2">
+                    <div className="grid grid-cols-3 gap-2">
+                        <Input
+                            value={customName}
+                            onChange={(e) => setCustomName(e.target.value)}
+                            placeholder="Subject name (e.g. Year 9 Science)"
+                            className="col-span-2 h-10 text-sm"
+                            autoFocus
+                            onKeyDown={(e) => e.key === "Enter" && addCustom()}
+                        />
+                        <Input
+                            value={customCode}
+                            onChange={(e) => setCustomCode(e.target.value.toUpperCase())}
+                            placeholder="CODE (optional)"
+                            className="h-10 text-sm uppercase"
+                            maxLength={16}
+                            onKeyDown={(e) => e.key === "Enter" && addCustom()}
+                        />
+                    </div>
+                    <div className="flex items-center gap-2">
+                        <Button
+                            type="button"
+                            onClick={addCustom}
+                            disabled={!customName.trim()}
+                            size="sm"
+                            className="bg-chart-4 hover:bg-chart-4/90 text-white"
+                        >
+                            <Plus className="w-3.5 h-3.5 mr-1" /> Add
+                        </Button>
+                        <button
+                            type="button"
+                            onClick={() => { setShowCustomForm(false); setCustomName(""); setCustomCode(""); }}
+                            className="text-xs font-semibold text-muted-foreground hover:text-foreground"
+                        >
+                            Cancel
+                        </button>
+                    </div>
+                </div>
+            )}
+
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 max-h-[340px] overflow-y-auto pr-1">
+                {/* "Add your own" tile sits first so it's discoverable */}
+                {!showCustomForm && (
+                    <button
+                        onClick={() => setShowCustomForm(true)}
+                        className="text-left p-3 rounded-xl border border-dashed border-chart-4/40 bg-chart-4/5 hover:bg-chart-4/10 transition-all flex items-center gap-2"
+                    >
+                        <div className="w-7 h-7 rounded-lg bg-chart-4/15 border border-chart-4/25 flex items-center justify-center flex-shrink-0">
+                            <Plus className="w-4 h-4 text-chart-4" strokeWidth={3} />
+                        </div>
+                        <p className="font-bold text-chart-4 text-sm leading-tight">Add your own</p>
+                    </button>
+                )}
+
                 {filtered.map((sub) => {
                     const selected = !!answers.subjects.find(x => x.code === sub.code);
                     return (
@@ -319,7 +439,7 @@ function Step2Subjects({ answers, update, onNext, canContinue }) {
                 })}
                 {filtered.length === 0 && (
                     <p className="col-span-full text-sm text-muted-foreground py-6 text-center">
-                        No subjects match "{query}"
+                        No VCE subjects match "{query}". Try <span className="font-bold text-chart-4">Add your own</span> above.
                     </p>
                 )}
             </div>
