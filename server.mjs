@@ -2996,6 +2996,15 @@ app.post("/local-ai/fn/settleHoursCompetition", async (req, res) => {
       .eq("id", competition_id);
     if (updErr) throw updErr;
 
+    // Achievement detection — competition wins unlock First Blood / Conqueror.
+    // Self-heal each participant in case any qualify.
+    for (const p of participants) {
+      try {
+        const pProfile = await loadUserProfile(p.email);
+        await checkAndGrantAchievements(p.email, pProfile);
+      } catch {}
+    }
+
     return res.json({ success: true, results, winner });
   } catch (err) {
     console.error("[settleHoursCompetition] error:", err);
@@ -3148,13 +3157,25 @@ app.post("/local-ai/fn/resolveScoreWager", async (req, res) => {
 // ════════════════════════════════════════════════════════════════════════════
 
 // GET /local-ai/fn/getAchievements
-// Returns the full catalog + which ones the user has unlocked.
+// Self-healing: runs checkAndGrantAchievements first so any unlocks missed
+// by event hooks (friend adds, streak crossings, etc.) get detected when
+// the user opens the gallery. Then returns the full catalog + unlock state.
 app.post("/local-ai/fn/getAchievements", async (req, res) => {
   const user = await authenticateRequest(req);
   if (!user) return res.status(401).json({ error: "Unauthorized" });
   if (!supabaseAdmin) return res.status(500).json({ error: "Supabase admin not configured" });
 
   try {
+    // Self-heal first so the user sees newly-unlocked achievements
+    // immediately when they open the tab.
+    let newlyUnlocked = [];
+    try {
+      const profile = await loadUserProfile(user.email);
+      newlyUnlocked = await checkAndGrantAchievements(user.email, profile);
+    } catch (e) {
+      console.warn("[getAchievements] self-heal failed:", e?.message || e);
+    }
+
     const { data: unlocks } = await supabaseAdmin
       .from('user_achievements')
       .select('achievement_code, unlocked_at, reward_xp_awarded')
@@ -3182,6 +3203,7 @@ app.post("/local-ai/fn/getAchievements", async (req, res) => {
       items,
       unlocked_count: unlockedCount,
       total_count:    items.length,
+      newly_unlocked: newlyUnlocked, // codes unlocked during this self-heal pass
     });
   } catch (err) {
     console.error("[getAchievements] error:", err);

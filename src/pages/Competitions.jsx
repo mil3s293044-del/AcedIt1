@@ -11,6 +11,7 @@ import { useToast } from "@/components/ui/use-toast";
 import GoalCompetitionDetail from "@/components/competition/GoalCompetitionDetail";
 import { joinGoalCompetition } from "@/api/functionsShim";
 import HelpButton from "@/components/shared/HelpButton";
+import EmptyState from "@/components/shared/EmptyState";
 import { getSeasonRankFromXP } from "@/components/shared/xpSystem";
 import { format, isPast, parseISO } from "date-fns";
 
@@ -274,13 +275,19 @@ export default function Competitions() {
         };
     }, [stats, user]);
 
+    // Direction A: lighter tints, 1px borders, shadow-soft for depth.
     const FOCUS_THEME = {
-        xp:        { bg: "bg-xp/10",        border: "border-xp/25",        iconBg: "bg-xp/15",        iconText: "text-xp"        },
-        "chart-3": { bg: "bg-chart-3/10",   border: "border-chart-3/25",   iconBg: "bg-chart-3/15",   iconText: "text-chart-3"   },
-        streak:    { bg: "bg-streak/10",    border: "border-streak/25",    iconBg: "bg-streak/15",    iconText: "text-streak"    },
-        "chart-4": { bg: "bg-chart-4/10",   border: "border-chart-4/25",   iconBg: "bg-chart-4/15",   iconText: "text-chart-4"   },
-        primary:   { bg: "bg-primary/10",   border: "border-primary/25",   iconBg: "bg-primary/15",   iconText: "text-primary"   },
+        xp:        { bg: "bg-xp/5",         border: "border-xp/15",        iconBg: "bg-xp/10",        iconText: "text-xp"        },
+        "chart-3": { bg: "bg-chart-3/5",    border: "border-chart-3/15",   iconBg: "bg-chart-3/10",   iconText: "text-chart-3"   },
+        streak:    { bg: "bg-streak/5",     border: "border-streak/15",    iconBg: "bg-streak/10",    iconText: "text-streak"    },
+        "chart-4": { bg: "bg-chart-4/5",    border: "border-chart-4/15",   iconBg: "bg-chart-4/10",   iconText: "text-chart-4"   },
+        primary:   { bg: "bg-primary/5",    border: "border-primary/15",   iconBg: "bg-primary/10",   iconText: "text-primary"   },
     };
+
+    // Hall of Fame stats — derived from existing data, no new schema needed.
+    const winRate = stats.completed.length > 0
+        ? Math.round((stats.recentWins / stats.completed.length) * 100)
+        : 0;
 
     if (isLoading) {
         return (
@@ -348,10 +355,10 @@ export default function Competitions() {
                     transition={{ delay: 0.05 }}
                     className="grid grid-cols-1 md:grid-cols-5 gap-5 lg:gap-6"
                 >
-                    {/* Season rank poster */}
+                    {/* Season rank poster — Direction A */}
                     <div className="md:col-span-3">
-                        <div className="relative overflow-hidden rounded-3xl bg-chart-4/10 border-2 border-chart-4/25 p-6 lg:p-8 h-full">
-                            <Trophy className="absolute -top-4 -right-4 w-32 h-32 text-chart-4/10 pointer-events-none" />
+                        <div className="relative overflow-hidden rounded-2xl bg-chart-4/5 border border-chart-4/15 shadow-soft p-6 lg:p-8 h-full">
+                            <Trophy className="absolute -top-4 -right-4 w-32 h-32 text-chart-4/[0.08] pointer-events-none" />
                             <p className="stat-label text-chart-4/80 mb-2">Season rank</p>
                             <h2
                                 className="font-display font-extrabold text-foreground leading-none mb-3"
@@ -363,7 +370,7 @@ export default function Competitions() {
                                 {seasonXp.toLocaleString()} season XP{seasonRank?.maxXP && seasonRank.maxXP !== Infinity ? ` · ${(seasonRank.maxXP - seasonXp).toLocaleString()} to next tier` : ''}
                             </p>
                             {seasonRank?.maxXP && seasonRank.maxXP !== Infinity && (
-                                <div className="h-2 bg-chart-4/15 rounded-full overflow-hidden">
+                                <div className="h-2 bg-chart-4/10 rounded-full overflow-hidden">
                                     <motion.div
                                         initial={{ width: 0 }}
                                         animate={{ width: `${Math.min(100, ((seasonXp - seasonRank.minXP) / (seasonRank.maxXP - seasonRank.minXP)) * 100)}%` }}
@@ -375,34 +382,41 @@ export default function Competitions() {
                         </div>
                     </div>
 
-                    {/* Battle stats panel */}
+                    {/* Hall of Fame panel — W-L record + live battle status */}
                     <div className="md:col-span-2">
-                        <div className="rounded-3xl bg-primary/10 border-2 border-primary/25 p-6 h-full flex flex-col">
-                            <div className="flex items-center gap-2 mb-3">
-                                <Swords className="w-4 h-4 text-primary" />
-                                <p className="stat-label text-primary/80">Battles</p>
+                        <div className="rounded-2xl bg-primary/5 border border-primary/15 shadow-soft p-6 h-full flex flex-col">
+                            <div className="flex items-center justify-between mb-3">
+                                <div className="flex items-center gap-2">
+                                    <Swords className="w-4 h-4 text-primary" />
+                                    <p className="stat-label text-primary/80">Hall of fame</p>
+                                </div>
+                                {stats.completed.length > 0 && (
+                                    <span className="pill bg-primary/10 text-primary text-[10px]">
+                                        {winRate}% win rate
+                                    </span>
+                                )}
                             </div>
                             <div className="grid grid-cols-2 gap-3 mb-auto">
                                 <div>
-                                    <p className="font-display font-extrabold text-foreground leading-none text-3xl lg:text-4xl">{stats.active.length}</p>
-                                    <p className="text-xs font-bold text-muted-foreground mt-1">Live</p>
+                                    <p className="font-display font-extrabold text-primary leading-none text-3xl lg:text-4xl">{stats.recentWins}</p>
+                                    <p className="text-xs font-bold text-muted-foreground mt-1">Wins</p>
                                 </div>
                                 <div>
-                                    <p className="font-display font-extrabold text-foreground leading-none text-3xl lg:text-4xl">{stats.completed.length}</p>
-                                    <p className="text-xs font-bold text-muted-foreground mt-1">Settled</p>
+                                    <p className="font-display font-extrabold text-muted-foreground leading-none text-3xl lg:text-4xl">{stats.completed.length - stats.recentWins}</p>
+                                    <p className="text-xs font-bold text-muted-foreground mt-1">Losses</p>
                                 </div>
                             </div>
                             {stats.active.length > 0 && (
-                                <div className="mt-5 pt-4 border-t-2 border-primary/15 space-y-1.5">
+                                <div className="mt-5 pt-4 border-t border-primary/10 space-y-1.5">
                                     <div className="flex items-baseline justify-between">
                                         <p className="text-xs font-bold text-muted-foreground inline-flex items-center gap-1">
-                                            <Crown className="w-3 h-3 text-xp" /> Leading
+                                            <Crown className="w-3 h-3 text-xp" /> Leading now
                                         </p>
                                         <p className="text-xs font-extrabold text-foreground">{stats.leading}</p>
                                     </div>
                                     <div className="flex items-baseline justify-between">
                                         <p className="text-xs font-bold text-muted-foreground inline-flex items-center gap-1">
-                                            <Activity className="w-3 h-3 text-chart-3" /> Behind
+                                            <Activity className="w-3 h-3 text-chart-3" /> Catching up
                                         </p>
                                         <p className="text-xs font-extrabold text-foreground">{stats.behind}</p>
                                     </div>
@@ -419,7 +433,7 @@ export default function Competitions() {
                         animate={{ opacity: 1, y: 0 }}
                         transition={{ delay: 0.1 }}
                     >
-                        <div className={`rounded-2xl ${FOCUS_THEME[focus.accent].bg} border-2 ${FOCUS_THEME[focus.accent].border} p-5 lg:p-6`}>
+                        <div className={`rounded-2xl ${FOCUS_THEME[focus.accent].bg} border ${FOCUS_THEME[focus.accent].border} shadow-soft p-5 lg:p-6`}>
                             <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
                                 <div className={`w-12 h-12 rounded-xl ${FOCUS_THEME[focus.accent].iconBg} flex items-center justify-center flex-shrink-0`}>
                                     <focus.icon className={`w-6 h-6 ${FOCUS_THEME[focus.accent].iconText}`} />
@@ -451,7 +465,7 @@ export default function Competitions() {
                 >
                     <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3">
                         <div className="flex items-center gap-2.5 flex-1">
-                            <div className="w-9 h-9 rounded-xl bg-chart-3/15 flex items-center justify-center flex-shrink-0">
+                            <div className="w-9 h-9 rounded-xl bg-chart-3/10 border border-chart-3/15 flex items-center justify-center flex-shrink-0">
                                 <LogIn className="w-4 h-4 text-chart-3" />
                             </div>
                             <div className="min-w-0">
@@ -481,16 +495,14 @@ export default function Competitions() {
                         initial={{ opacity: 0, y: 12 }}
                         animate={{ opacity: 1, y: 0 }}
                         transition={{ delay: 0.2 }}
-                        className="rounded-3xl bg-secondary/30 border-2 border-dashed border-border p-10 text-center"
+                        className="rounded-2xl bg-surface border border-dashed border-border shadow-soft"
                     >
-                        <Swords className="w-14 h-14 text-muted-foreground/30 mx-auto mb-4" />
-                        <h3 className="font-display font-extrabold text-foreground text-xl mb-2">No competitions yet</h3>
-                        <p className="text-muted-foreground text-sm mb-1 max-w-md mx-auto">
-                            Open any goal and tap "Compete with Friends" to challenge them.
-                        </p>
-                        <p className="text-muted-foreground text-sm max-w-md mx-auto">
-                            Or paste an invite code above if a friend sent you one.
-                        </p>
+                        <EmptyState
+                            icon={Swords}
+                            title="No battles yet"
+                            description="Open any goal and tap “Compete with friends” to challenge them — or paste an invite code above to join one."
+                            tone="muted"
+                        />
                     </motion.section>
                 ) : (
                     <div className="space-y-6">
@@ -537,9 +549,9 @@ export default function Competitions() {
                     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
                         className="fixed inset-0 z-50 flex items-center justify-center bg-foreground/40 backdrop-blur-sm p-4">
                         <motion.div initial={{ scale: 0.9, y: 20 }} animate={{ scale: 1, y: 0 }} exit={{ scale: 0.9 }}
-                            className="bg-surface rounded-3xl shadow-soft p-7 max-w-sm w-full text-center space-y-4 border-2 border-border">
-                            <div className="w-14 h-14 bg-chart-4/15 rounded-2xl flex items-center justify-center mx-auto">
-                                <Trophy className="w-7 h-7 text-chart-4" />
+                            className="bg-surface rounded-2xl shadow-soft-lg p-7 max-w-sm w-full text-center space-y-4 border border-border/60">
+                            <div className="w-14 h-14 bg-chart-4/10 border border-chart-4/15 rounded-2xl flex items-center justify-center mx-auto">
+                                <Trophy className="w-7 h-7 text-chart-4" strokeWidth={2.5} />
                             </div>
                             <div>
                                 <h2 className="font-display font-extrabold text-foreground text-xl">How do you want to compete?</h2>
@@ -548,7 +560,7 @@ export default function Competitions() {
                             <div className="space-y-3 text-left">
                                 <button
                                     onClick={() => confirmJoin(false)}
-                                    className="w-full p-4 border-2 border-chart-3/30 rounded-2xl hover:bg-chart-3/5 hover:border-chart-3/50 transition-all"
+                                    className="w-full p-4 border border-chart-3/20 rounded-xl shadow-soft hover:bg-chart-3/5 hover:border-chart-3/40 transition-all"
                                 >
                                     <div className="flex items-center gap-2 mb-1">
                                         <ClipboardList className="w-4 h-4 text-chart-3" />
@@ -558,7 +570,7 @@ export default function Competitions() {
                                 </button>
                                 <button
                                     onClick={() => confirmJoin(true)}
-                                    className="w-full p-4 border-2 border-chart-4/30 rounded-2xl hover:bg-chart-4/5 hover:border-chart-4/50 transition-all"
+                                    className="w-full p-4 border border-chart-4/20 rounded-xl shadow-soft hover:bg-chart-4/5 hover:border-chart-4/40 transition-all"
                                 >
                                     <div className="flex items-center gap-2 mb-1">
                                         <SettingsIcon className="w-4 h-4 text-chart-4" />
