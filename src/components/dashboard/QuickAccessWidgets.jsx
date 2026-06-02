@@ -138,7 +138,7 @@ export default function QuickAccessWidgets({ user }) {
                         dueCards: 0
                     };
                 }
-                if (card.nextReviewDate <= today) {
+                if (card.next_review_date && card.next_review_date <= today) {
                     deckMap[deckId].dueCards++;
                 }
             });

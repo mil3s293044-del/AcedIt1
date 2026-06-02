@@ -31,7 +31,7 @@ export default function UpcomingAssessments({ user }) {
                 base44.entities.Flashcard.filter({
                     created_by: user.email,
                     is_active: true
-                }, "nextReviewDate")
+                }, "next_review_date")
             ]);
             
             const upcoming = allAssessments.filter(assessment => {
@@ -40,7 +40,7 @@ export default function UpcomingAssessments({ user }) {
             });
             
             const today = format(new Date(), 'yyyy-MM-dd');
-            const dueFlashcards = allFlashcards.filter(card => card.nextReviewDate <= today);
+            const dueFlashcards = allFlashcards.filter(card => card.next_review_date && card.next_review_date <= today);
             
             const deckMap = {};
             dueFlashcards.forEach(card => {
@@ -49,7 +49,7 @@ export default function UpcomingAssessments({ user }) {
                         deck_id: card.deck_id,
                         subject: card.subject_name,
                         topic: card.topic || "General",
-                        nextReviewDate: card.nextReviewDate,
+                        next_review_date: card.next_review_date,
                         cards: []
                     };
                 }

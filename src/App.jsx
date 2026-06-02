@@ -11,6 +11,9 @@ import Suspended from './pages/Suspended';
 import AdminIPPanel from './pages/AdminIPPanel';
 import Landing from './pages/Landing';
 import Onboarding from './pages/Onboarding';
+import Login from './pages/Login';
+import ForgotPassword from './pages/ForgotPassword';
+import ResetPassword from './pages/ResetPassword';
 import { AuthProvider, useAuth } from '@/lib/AuthContext';
 import UserNotRegisteredError from '@/components/UserNotRegisteredError';
 
@@ -44,6 +47,19 @@ const AuthenticatedApp = () => {
   // Pre-signup onboarding wizard — public, no auth needed.
   if (isUnauthed && location.pathname === '/onboarding') {
     return <Onboarding />;
+  }
+  // Email+password sign-in / recovery routes — public.
+  if (isUnauthed && location.pathname === '/login') {
+    return <Login />;
+  }
+  if (isUnauthed && location.pathname === '/forgot-password') {
+    return <ForgotPassword />;
+  }
+  // /reset-password runs the user through Supabase's recovery flow. The user
+  // IS technically authenticated by the recovery token at this point, so this
+  // check has to allow the route through regardless of isAuthenticated.
+  if (location.pathname === '/reset-password') {
+    return <ResetPassword />;
   }
 
   // Handle authentication errors

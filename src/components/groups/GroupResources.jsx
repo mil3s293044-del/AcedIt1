@@ -213,12 +213,11 @@ export default function GroupResources({ group, user }) {
                         deck_id: deckId,
                         question: card.question,
                         answer: card.answer,
-                        interval: 1,
+                        interval_days: 1,
                         repetitions: 0,
-                        easeFactor: 2.5,
-                        nextReviewDate: format(addDays(new Date(), 1), 'yyyy-MM-dd'),
-                        totalReviews: 0,
-                        successfulReviews: 0,
+                        easiness_factor: 2.5,
+                        next_review_date: format(addDays(new Date(), 1), 'yyyy-MM-dd'),
+                        total_reviews: 0,
                         is_active: true, // Added is_active for new flashcards
                         created_by: user.email // Ensure user's email is set for new flashcards
                     });

@@ -148,7 +148,6 @@ export default function EnglishMentor() {
         }
         setIsGenerating(true);
         setAiResponse("");
-        setShowResultModal(true);
 
         const controller = new AbortController();
         abortRef.current = controller;

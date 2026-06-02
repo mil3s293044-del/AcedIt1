@@ -26,11 +26,13 @@ import {
     ChevronLeft, ChevronRight, ArrowRight, Check, X, Search, Plus,
     GraduationCap, BookOpen, Target, MapPin, Sparkles, Crown, Zap,
     Brain, Layers, Trophy, BarChart3, FileQuestion, Clock, Map as MapIcon, Info,
+    Mail, Lock,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { VCE_SUBJECTS } from "@/data/vceSubjects";
 import { supabase } from "@/api/supabaseClient";
+import { useAuth } from "@/lib/AuthContext";
 
 const TOTAL_STEPS = 8;
 const STORAGE_KEY = "acedit_onboarding_v1";
@@ -68,6 +70,10 @@ const DEFAULT_ANSWERS = {
     goalUniversity:  "",
     intent:          null,       // "premium" | "free" — set on step 8
     completedAt:     null,
+    email:           null,       // set on email+password path only — used as
+                                 // the AuthContext email-match guard so the
+                                 // 7-day storage window can't leak to a
+                                 // different user on a shared browser.
 };
 
 function loadAnswers() {
@@ -724,8 +730,30 @@ function Step7Premium({ onNext }) {
 }
 
 // ═══ STEP 8 — Sign in ═══════════════════════════════════════════════════════
+// Two separate decisions, made in this order:
+//   1. Plan picker — Premium (default-selected, highlighted) vs Free
+//   2. Auth method — Continue with Google OR Continue with email
+// Picking the email button reveals an inline form below the choice; the plan
+// already chosen carries through, so the form has a single submit button.
 function Step8Signin({ answers, update }) {
+    const { signUpWithPassword } = useAuth();
     const [isStarting, setIsStarting] = useState(false);
+
+    // Plan: "premium" (default) | "free"
+    const [selectedPlan, setSelectedPlan] = useState(answers.intent || "premium");
+
+    // Auth method: null (chooser visible) | "email" (form visible)
+    // Google has no in-page form — clicking it redirects out, so we don't need
+    // a "google" mode state.
+    const [authMode, setAuthMode] = useState(null);
+
+    // Email path form state
+    const [email, setEmail] = useState("");
+    const [password, setPassword] = useState("");
+    const [confirmPassword, setConfirmPassword] = useState("");
+    const [fullName, setFullName] = useState("");
+    const [emailError, setEmailError] = useState(null);
+    const [emailSent, setEmailSent] = useState(false);
 
     const personalLine = [
         answers.yearLevel,
@@ -734,10 +762,11 @@ function Step8Signin({ answers, update }) {
         answers.goalCourseName || null,
     ].filter(Boolean).join(" · ");
 
-    const startSignIn = async (intent) => {
-        update({ intent, completedAt: new Date().toISOString() });
-        // Persist immediately — OAuth redirect happens before React effect runs.
-        saveAnswers({ ...answers, intent, completedAt: new Date().toISOString() });
+    // ─── Google OAuth path ──────────────────────────────────────────────────
+    const startGoogleSignIn = async () => {
+        const completedAt = new Date().toISOString();
+        update({ intent: selectedPlan, completedAt });
+        saveAnswers({ ...answers, intent: selectedPlan, completedAt });
         setIsStarting(true);
         try {
             const redirectTo = `${window.location.origin}/`;
@@ -746,19 +775,125 @@ function Step8Signin({ answers, update }) {
                 options: { redirectTo },
             });
             if (error) throw error;
-            // Browser navigates away to Google — code below doesn't run.
+            // Browser navigates away — code below doesn't run.
         } catch (e) {
             console.error("[onboarding] OAuth error:", e);
             setIsStarting(false);
         }
     };
 
+    // ─── Email + password path ──────────────────────────────────────────────
+    const submitEmailSignup = async () => {
+        setEmailError(null);
+
+        const trimmedEmail = email.trim().toLowerCase();
+        if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmedEmail)) {
+            setEmailError("Enter a valid email address.");
+            return;
+        }
+        if (password.length < 8) {
+            setEmailError("Password needs to be at least 8 characters.");
+            return;
+        }
+        if (password !== confirmPassword) {
+            setEmailError("Passwords don't match.");
+            return;
+        }
+
+        // Stash the typed email in storage so the post-verify apply only fires
+        // for THIS user (email-match guard in AuthContext).
+        const completedAt = new Date().toISOString();
+        const nextAnswers = { ...answers, intent: selectedPlan, completedAt, email: trimmedEmail };
+        update({ intent: selectedPlan, completedAt, email: trimmedEmail });
+        saveAnswers(nextAnswers);
+
+        setIsStarting(true);
+        const { ok, error } = await signUpWithPassword({
+            email: trimmedEmail,
+            password,
+            fullName: fullName.trim() || undefined,
+        });
+        setIsStarting(false);
+
+        if (!ok) {
+            const msg = error?.message || "Sign-up failed. Try again in a moment.";
+            // Be specific about which error we got. Surface Supabase's real
+            // message for anything we don't recognise — generic "try again"
+            // hides whether the SMTP / quota / email-format is actually broken.
+            if (/already registered|exists/i.test(msg)) {
+                setEmailError("This email already has an account. Try signing in instead.");
+            } else if (/email rate limit|rate limit exceeded/i.test(msg)) {
+                // This is the Supabase free-tier 3-emails-per-hour cap. Once we
+                // wire Resend SMTP this should never fire in practice.
+                setEmailError("Hit Supabase's email rate limit (3/hour on built-in SMTP). Wait an hour, or have Miles set up Resend SMTP.");
+            } else if (/for security purposes/i.test(msg)) {
+                // Supabase per-email-address cooldown: 60s between sends to same email
+                setEmailError("Too soon to resend to this email — wait about a minute and try again.");
+            } else if (/invalid.*email|unable to validate/i.test(msg)) {
+                setEmailError("Supabase rejected that email address. Try a different one.");
+            } else {
+                setEmailError(msg);
+            }
+            return;
+        }
+        setEmailSent(true);
+    };
+
+    // ─── Success state: verify-email instructions ──────────────────────────
+    if (emailSent) {
+        return (
+            <StepShell
+                eyebrow="One more step"
+                title="Check your inbox"
+                subtitle={`We sent a verification link to ${email}. Click it to finish signing up and start studying.`}
+            >
+                <div className="card-soft p-6 space-y-4">
+                    <div className="flex items-start gap-3">
+                        <div className="w-10 h-10 rounded-xl bg-primary/10 border border-primary/15 flex items-center justify-center flex-shrink-0">
+                            <Mail className="w-5 h-5 text-primary" strokeWidth={2.5} />
+                        </div>
+                        <div className="text-sm text-foreground leading-relaxed">
+                            <p className="font-bold mb-1">Almost there.</p>
+                            <p className="text-muted-foreground">
+                                Open the email from AcedIt and tap the verification link.
+                                Your subjects, goals, and plan will be ready when you land back here.
+                            </p>
+                        </div>
+                    </div>
+                    <div className="rounded-xl bg-chart-3/5 border border-chart-3/15 p-3 text-xs text-foreground leading-relaxed">
+                        <p>
+                            <span className="font-bold">Already have an AcedIt account with Google?</span>{" "}
+                            You won't get an email — close this tab and{" "}
+                            <Link to="/login" className="text-primary font-bold hover:underline">sign in with Google</Link> instead.
+                        </p>
+                    </div>
+                    <p className="text-xs text-muted-foreground text-center pt-2">
+                        Can't find the email? Check spam, or{" "}
+                        <button
+                            type="button"
+                            onClick={() => setEmailSent(false)}
+                            className="font-bold text-primary hover:underline"
+                        >
+                            try a different email
+                        </button>.
+                    </p>
+                </div>
+            </StepShell>
+        );
+    }
+
+    // ─── Default state: plan picker + auth method buttons ──────────────────
+    const planSubLabel = selectedPlan === "premium"
+        ? "Cancel anytime · Less than a coffee"
+        : "Limited AI use · Upgrade any time";
+
     return (
         <StepShell
             eyebrow="Last step"
             title="Save your plan, start studying"
-            subtitle="Sign in to keep your subjects, goals, and AcedIt set up."
+            subtitle="Pick your plan, then sign in to keep everything."
         >
+            {/* Personal plan recap */}
             <div className="card-soft p-5 lg:p-6 mb-5">
                 <p className="stat-label text-muted-foreground mb-2">Your plan</p>
                 <p className="font-display font-extrabold text-foreground text-base lg:text-lg leading-tight">
@@ -766,36 +901,199 @@ function Step8Signin({ answers, update }) {
                 </p>
             </div>
 
-            <div className="space-y-3">
-                {/* Hard-sell primary CTA: Premium */}
-                <button
-                    onClick={() => startSignIn("premium")}
-                    disabled={isStarting}
-                    className="w-full btn-3d bg-primary text-primary-foreground hover:bg-primary rounded-xl px-5 h-14 flex items-center justify-center gap-3 font-display font-extrabold text-base disabled:opacity-60"
-                >
-                    <Crown className="w-5 h-5" />
-                    Sign in & start Premium · $5/wk
-                </button>
-                <p className="text-xs text-center text-muted-foreground">
-                    Cancel anytime. Less than a coffee.
+            {/* ─── 1. Plan picker ──────────────────────────────────────────── */}
+            <div className="mb-5">
+                <p className="text-[11px] uppercase tracking-wider font-bold text-muted-foreground mb-2.5">
+                    Choose your plan
                 </p>
+                <div className="grid grid-cols-2 gap-3">
+                    {/* Premium */}
+                    <button
+                        type="button"
+                        onClick={() => setSelectedPlan("premium")}
+                        disabled={isStarting}
+                        className={`relative text-left p-4 rounded-2xl border-2 shadow-soft transition-all ${
+                            selectedPlan === "premium"
+                                ? "bg-primary/10 border-primary"
+                                : "bg-surface border-border/60 hover:border-primary/30"
+                        }`}
+                    >
+                        {selectedPlan === "premium" && (
+                            <span className="absolute -top-2 right-3 pill bg-primary text-primary-foreground text-[10px] px-2 py-0.5">
+                                <Crown className="w-3 h-3" /> PICK
+                            </span>
+                        )}
+                        <div className="flex items-center gap-1.5 mb-1.5">
+                            <Crown className={`w-3.5 h-3.5 ${selectedPlan === "premium" ? "text-primary" : "text-muted-foreground"}`} strokeWidth={2.5} />
+                            <span className={`text-[11px] uppercase tracking-wider font-bold ${selectedPlan === "premium" ? "text-primary" : "text-muted-foreground"}`}>
+                                Premium
+                            </span>
+                        </div>
+                        <p className="font-display font-extrabold text-foreground text-2xl leading-none">
+                            $5<span className="text-sm text-muted-foreground font-bold">/wk</span>
+                        </p>
+                        <p className="text-[11px] text-muted-foreground mt-1.5 leading-snug">All AI tools, every subject</p>
+                    </button>
 
-                {/* Quieter free fallback (hard-sell: small text link, not a button) */}
-                <button
-                    onClick={() => startSignIn("free")}
-                    disabled={isStarting}
-                    className="block mx-auto text-sm text-muted-foreground hover:text-foreground transition-colors pt-3 disabled:opacity-60"
-                >
-                    Continue with Free →
-                </button>
-
-                <Link
-                    to="/"
-                    className="block mx-auto text-xs text-muted-foreground/70 hover:text-foreground pt-2 text-center"
-                >
-                    Already have an account? Sign in
-                </Link>
+                    {/* Free */}
+                    <button
+                        type="button"
+                        onClick={() => setSelectedPlan("free")}
+                        disabled={isStarting}
+                        className={`text-left p-4 rounded-2xl border-2 shadow-soft transition-all ${
+                            selectedPlan === "free"
+                                ? "bg-foreground/[0.04] border-foreground/40"
+                                : "bg-surface border-border/60 hover:border-foreground/20"
+                        }`}
+                    >
+                        <div className="flex items-center gap-1.5 mb-1.5">
+                            <span className={`text-[11px] uppercase tracking-wider font-bold ${selectedPlan === "free" ? "text-foreground" : "text-muted-foreground"}`}>
+                                Free
+                            </span>
+                        </div>
+                        <p className="font-display font-extrabold text-foreground text-2xl leading-none">
+                            $0<span className="text-sm text-muted-foreground font-bold">/wk</span>
+                        </p>
+                        <p className="text-[11px] text-muted-foreground mt-1.5 leading-snug">Limited AI, basic tools</p>
+                    </button>
+                </div>
+                <p className="text-[11px] text-muted-foreground mt-2 text-center">{planSubLabel}</p>
             </div>
+
+            {/* ─── 2. Auth method ──────────────────────────────────────────── */}
+            {authMode === null ? (
+                <div>
+                    <p className="text-[11px] uppercase tracking-wider font-bold text-muted-foreground mb-2.5">
+                        Sign in to start
+                    </p>
+                    <div className="space-y-2.5">
+                        {/* Google */}
+                        <button
+                            type="button"
+                            onClick={startGoogleSignIn}
+                            disabled={isStarting}
+                            className="w-full btn-3d bg-primary text-primary-foreground hover:bg-primary rounded-xl px-5 h-14 flex items-center justify-center gap-2.5 font-display font-extrabold text-base disabled:opacity-60"
+                        >
+                            <svg className="w-5 h-5" viewBox="0 0 24 24" aria-hidden>
+                                <path fill="#fff" opacity="0.95" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
+                                <path fill="#fff" opacity="0.95" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.99.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84A10.99 10.99 0 0 0 12 23z"/>
+                                <path fill="#fff" opacity="0.95" d="M5.84 14.09a6.6 6.6 0 0 1 0-4.18V7.07H2.18a10.99 10.99 0 0 0 0 9.86l3.66-2.84z"/>
+                                <path fill="#fff" opacity="0.95" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84C6.71 7.31 9.14 5.38 12 5.38z"/>
+                            </svg>
+                            Continue with Google
+                        </button>
+
+                        {/* Email */}
+                        <button
+                            type="button"
+                            onClick={() => { setAuthMode("email"); setEmailError(null); }}
+                            disabled={isStarting}
+                            className="w-full rounded-xl border-2 border-border bg-surface hover:bg-muted/40 px-5 h-14 flex items-center justify-center gap-2.5 font-display font-extrabold text-base text-foreground transition-colors disabled:opacity-60"
+                        >
+                            <Mail className="w-5 h-5" />
+                            Continue with email
+                        </button>
+                    </div>
+
+                    <Link
+                        to="/login"
+                        className="block mx-auto text-xs font-semibold text-muted-foreground hover:text-foreground pt-4 text-center"
+                    >
+                        Already have an account? <span className="text-primary">Sign in</span>
+                    </Link>
+                </div>
+            ) : (
+                <div>
+                    <div className="flex items-center justify-between mb-3">
+                        <p className="text-[11px] uppercase tracking-wider font-bold text-muted-foreground">
+                            Sign up with email
+                        </p>
+                        <button
+                            type="button"
+                            onClick={() => { setAuthMode(null); setEmailError(null); }}
+                            disabled={isStarting}
+                            className="text-xs font-semibold text-muted-foreground hover:text-foreground"
+                        >
+                            ← Back
+                        </button>
+                    </div>
+                    <div className="card-soft p-4 space-y-3">
+                        <div>
+                            <label className="text-xs font-bold text-foreground mb-1.5 block">Full name (optional)</label>
+                            <Input
+                                value={fullName}
+                                onChange={(e) => setFullName(e.target.value)}
+                                placeholder="e.g. Sienna L"
+                                autoComplete="name"
+                                className="h-11"
+                                disabled={isStarting}
+                            />
+                        </div>
+                        <div>
+                            <label className="text-xs font-bold text-foreground mb-1.5 block">Email</label>
+                            <Input
+                                type="email"
+                                value={email}
+                                onChange={(e) => setEmail(e.target.value)}
+                                placeholder="you@example.com"
+                                autoComplete="email"
+                                className="h-11"
+                                disabled={isStarting}
+                            />
+                        </div>
+                        <div>
+                            <label className="text-xs font-bold text-foreground mb-1.5 block">Password</label>
+                            <Input
+                                type="password"
+                                value={password}
+                                onChange={(e) => setPassword(e.target.value)}
+                                placeholder="At least 8 characters"
+                                autoComplete="new-password"
+                                className="h-11"
+                                disabled={isStarting}
+                            />
+                        </div>
+                        <div>
+                            <label className="text-xs font-bold text-foreground mb-1.5 block">Confirm password</label>
+                            <Input
+                                type="password"
+                                value={confirmPassword}
+                                onChange={(e) => setConfirmPassword(e.target.value)}
+                                placeholder="Type it again"
+                                autoComplete="new-password"
+                                className="h-11"
+                                disabled={isStarting}
+                            />
+                        </div>
+                        {emailError && (
+                            <div className="rounded-lg bg-destructive/10 border border-destructive/20 px-3 py-2 text-xs text-destructive font-medium">
+                                {emailError}
+                            </div>
+                        )}
+                    </div>
+
+                    <button
+                        type="button"
+                        onClick={submitEmailSignup}
+                        disabled={isStarting}
+                        className="w-full btn-3d bg-primary text-primary-foreground hover:bg-primary rounded-xl px-5 h-14 flex items-center justify-center gap-2.5 font-display font-extrabold text-base disabled:opacity-60 mt-4"
+                    >
+                        {isStarting ? "Creating account…" : (
+                            <>
+                                {selectedPlan === "premium" ? <Crown className="w-5 h-5" /> : <ArrowRight className="w-5 h-5" />}
+                                Create account & start {selectedPlan === "premium" ? "Premium" : "Free"}
+                            </>
+                        )}
+                    </button>
+
+                    <Link
+                        to="/login"
+                        className="block mx-auto text-xs font-semibold text-muted-foreground hover:text-foreground pt-4 text-center"
+                    >
+                        Already have an account? <span className="text-primary">Sign in</span>
+                    </Link>
+                </div>
+            )}
         </StepShell>
     );
 }

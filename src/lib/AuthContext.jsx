@@ -33,7 +33,11 @@ const ONBOARDING_STORAGE_KEY = 'acedit_onboarding_v1';
 // How long onboarding answers are considered fresh after completion. Beyond
 // this, treat the localStorage as stale (probably belongs to a different
 // user who never finished OAuth) and clear it without applying.
-const ONBOARDING_STALENESS_MS = 30 * 60 * 1000; // 30 minutes
+//
+// 7 days because email-confirmation signups may not click the verify link
+// straight away. The email-match guard below means we don't risk applying
+// answers to the wrong user even with this longer window.
+const ONBOARDING_STALENESS_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
 
 async function applyOnboardingFromStorage(userEmail) {
   let answers = null;
@@ -44,12 +48,19 @@ async function applyOnboardingFromStorage(userEmail) {
   } catch { return null; }
   if (!answers?.completedAt) return null; // wizard not finished
 
-  // Staleness guard — if completedAt is older than 30 min, the localStorage
-  // probably belongs to a different visitor who never finished OAuth.
-  // Clear and bail rather than inheriting someone else's data.
+  // Staleness guard — if completedAt is too old, the localStorage probably
+  // belongs to an abandoned session. Clear and bail.
   const ageMs = Date.now() - new Date(answers.completedAt).getTime();
   if (Number.isFinite(ageMs) && ageMs > ONBOARDING_STALENESS_MS) {
     try { localStorage.removeItem(ONBOARDING_STORAGE_KEY); } catch {}
+    return null;
+  }
+
+  // Email-match guard. The Step 8 email+password path stores the typed email
+  // in the payload — if the user who just signed in doesn't match, this is
+  // somebody else's wizard state (shared browser, abandoned session, etc.).
+  // OAuth signups don't write `answers.email`, so they bypass this check.
+  if (answers.email && answers.email.toLowerCase() !== (userEmail || '').toLowerCase()) {
     return null;
   }
 
@@ -162,6 +173,14 @@ export const AuthProvider = ({ children }) => {
   const [authError, setAuthError] = useState(null);
   const [appPublicSettings, setAppPublicSettings] = useState(null);
 
+  // Set to true when Supabase fires PASSWORD_RECOVERY (i.e. the user clicked
+  // the reset-password link in their email and supabase-js exchanged the
+  // recovery token in the URL for a session). /reset-password reads this as
+  // the ONLY trusted signal that the visitor is in a real recovery flow —
+  // checking supabase.auth.getSession() directly can return a stale prior
+  // session before the token exchange completes.
+  const [recoveryInProgress, setRecoveryInProgress] = useState(false);
+
   const useSupabase = shouldUseSupabase();
 
   useEffect(() => {
@@ -187,6 +206,26 @@ export const AuthProvider = ({ children }) => {
       })();
 
       const { data } = supabase.auth.onAuthStateChange(async (event, session) => {
+        // Temp diagnostic — remove once /reset-password is verified end-to-end.
+        // Helps prove PASSWORD_RECOVERY actually fires (and when) on a real
+        // reset-link click.
+        console.log('[auth] event =', event, 'user =', session?.user?.email || '(none)');
+
+        // PASSWORD_RECOVERY: user clicked the reset link in their email and
+        // Supabase exchanged the recovery token for a session. Mark recovery
+        // mode and DO NOT run the normal SIGNED_IN side effects (onboarding
+        // apply, premium redirect) — recovery is a special flow that ends
+        // when the user submits a new password.
+        if (event === 'PASSWORD_RECOVERY') {
+          setRecoveryInProgress(true);
+          if (session?.user) {
+            setUser(makeUserShape(session.user));
+            setIsAuthenticated(true);
+            setAuthError(null);
+          }
+          return;
+        }
+
         if (session?.user) {
           setUser(makeUserShape(session.user));
           setIsAuthenticated(true);
@@ -194,7 +233,8 @@ export const AuthProvider = ({ children }) => {
 
           // On a SIGNED_IN event (initial OAuth landing or fresh login),
           // check if there are unapplied onboarding answers and apply them.
-          if (event === 'SIGNED_IN') {
+          // Skip if we're already in a recovery flow.
+          if (event === 'SIGNED_IN' && !recoveryInProgress) {
             try {
               const intent = await applyOnboardingFromStorage(session.user.email);
               // Premium-intent users land on Subscription page (hard sell).
@@ -209,6 +249,9 @@ export const AuthProvider = ({ children }) => {
         } else {
           setUser(null);
           setIsAuthenticated(false);
+          // Signing out also clears recovery mode — recovery sessions end
+          // when the password reset completes and we sign out.
+          setRecoveryInProgress(false);
         }
       });
       unsub = data?.subscription;
@@ -327,6 +370,41 @@ export const AuthProvider = ({ children }) => {
     base44.auth.redirectToLogin(window.location.href);
   };
 
+  // ─── Email + password helpers (Supabase-only) ───────────────────────────
+  // These power the /login, /onboarding (Step 8 email path), /forgot-password
+  // and /reset-password pages. They never touch the Base44 fallback path.
+
+  const signUpWithPassword = async ({ email, password, fullName }) => {
+    const redirectTo = `${window.location.origin}/`;
+    const { data, error } = await supabase.auth.signUp({
+      email,
+      password,
+      options: {
+        emailRedirectTo: redirectTo,
+        data: fullName ? { full_name: fullName } : undefined,
+      },
+    });
+    if (error) return { ok: false, error };
+    // With "Confirm email" ON, `data.session` is null and the user receives
+    // a verification email. The caller should show a "check your inbox" UI.
+    // With it off, `data.session` is populated and onAuthStateChange handles
+    // the SIGNED_IN apply path.
+    return { ok: true, session: data?.session ?? null, user: data?.user ?? null };
+  };
+
+  const signInWithPassword = async ({ email, password }) => {
+    const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+    if (error) return { ok: false, error };
+    return { ok: true, session: data?.session ?? null, user: data?.user ?? null };
+  };
+
+  const requestPasswordReset = async (email) => {
+    const redirectTo = `${window.location.origin}/reset-password`;
+    const { error } = await supabase.auth.resetPasswordForEmail(email, { redirectTo });
+    if (error) return { ok: false, error };
+    return { ok: true };
+  };
+
   return (
     <AuthContext.Provider value={{
       user,
@@ -338,6 +416,10 @@ export const AuthProvider = ({ children }) => {
       logout,
       navigateToLogin,
       checkAppState,
+      signUpWithPassword,
+      signInWithPassword,
+      requestPasswordReset,
+      recoveryInProgress,
     }}>
       {children}
     </AuthContext.Provider>

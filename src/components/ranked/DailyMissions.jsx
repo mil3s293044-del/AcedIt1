@@ -89,7 +89,7 @@ export default function DailyMissions({ streakDays = 0, userProfile }) {
             const maxScore = todayQuizzes.length ? Math.max(...todayQuizzes.map(q => (q.adjusted_score ?? q.score) || 0)) : 0;
             setStats({
                 todayStudyMins: todayMins,
-                todayFlashcards: flashcards.filter(f => f.lastReviewedDate === today).length,
+                todayFlashcards: flashcards.filter(f => f.last_reviewed_date === today).length,
                 todayQuizzes: todayQuizzes.length,
                 todayQuizScore: maxScore,
                 streak: streakDays,

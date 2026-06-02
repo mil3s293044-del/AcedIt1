@@ -111,14 +111,14 @@ export default function Study() {
                 StudyTechnique.filter({ created_by: userEmail }, "-created_date", 50),
                 UserSubject.filter({ created_by: userEmail, is_active: true }),
                 base44.entities.StudySession.filter({ created_by: userEmail }, "-date", 50).catch(() => []),
-                base44.entities.Flashcard.filter({ created_by: userEmail, is_active: true }, "nextReviewDate").catch(() => []),
+                base44.entities.Flashcard.filter({ created_by: userEmail, is_active: true }, "next_review_date").catch(() => []),
                 base44.entities.SubjectAssessment.filter({ created_by: userEmail, is_completed: false }, "due_date", 10).catch(() => []),
             ]);
             setUserProfile(profileData);
             setRecentSessions(sessionsData || []);
             setUserSubjects(subjectsData || []);
             setStudySessions(studySessionsData || []);
-            setFlashcards((flashcardData || []).filter(c => c.nextReviewDate <= today));
+            setFlashcards((flashcardData || []).filter(c => c.next_review_date && c.next_review_date <= today));
             setAssessments(assessmentData || []);
         } catch (error) {
             console.error("Error loading data:", error);

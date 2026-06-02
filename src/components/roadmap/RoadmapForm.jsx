@@ -59,7 +59,7 @@ async function detectWeakAreas(subjectName) {
         const effectiveScore = (a) => (typeof a.adjusted_score === "number" ? a.adjusted_score : a.score);
         const weakQuizTopics = subjectQuizzes.filter(a => typeof effectiveScore(a) === "number" && effectiveScore(a) < 60).map(a => a.quiz_title).filter(Boolean);
         const subjectFlashcards = flashcards.filter(f => matchesSubject(f, subjectLower));
-        const weakFlashcardTopics = subjectFlashcards.filter(f => f.is_weak_spot || (typeof f.easeFactor === "number" && f.easeFactor < 2.0)).map(f => f.topic || f.subject_name).filter(Boolean);
+        const weakFlashcardTopics = subjectFlashcards.filter(f => f.is_weak_spot || (typeof f.easiness_factor === "number" && f.easiness_factor < 2.0)).map(f => f.topic || f.subject_name).filter(Boolean);
         const subjectTechniques = studyTechniques.filter(t => matchesSubject(t, subjectLower));
         const lowConfidenceTechniques = subjectTechniques.filter(t => typeof t.confidence_rating === "number" && t.confidence_rating <= 2).map(t => t.topic || t.subject).filter(Boolean);
         const subjectRecall = recallSessions.filter(r => matchesSubject(r, subjectLower));

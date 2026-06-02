@@ -83,10 +83,10 @@ export default function Landing() {
 
   // Primary CTA: route new visitors through the personalised onboarding
   // wizard (which collects year + subjects + goals, sells Premium, then
-  // hands off to Google OAuth). Existing users use the secondary
-  // "Sign in" link in the nav which hits navigateToLogin directly.
+  // hands off to sign-in). Existing users use the "Login" link which sends
+  // them to /login (email+password OR Google).
   const startTrial = () => { window.location.assign("/onboarding"); };
-  const signInDirect = () => navigateToLogin();
+  const goToLogin = () => { window.location.assign("/login"); };
 
   const scrollToId = (id) => {
     const el = document.getElementById(id);
@@ -141,7 +141,7 @@ export default function Landing() {
               Pricing
             </button>
             <button
-              onClick={startTrial}
+              onClick={goToLogin}
               className={`text-sm font-semibold hover:opacity-70 transition cursor-pointer ${scrolled ? "text-[#0D1626]" : "text-white/90"}`}
             >
               Login
@@ -957,7 +957,7 @@ export default function Landing() {
             <button onClick={() => scrollToId("how")} className="hover:text-[#0D1626] cursor-pointer">How it works</button>
             <button onClick={() => scrollToId("features")} className="hover:text-[#0D1626] cursor-pointer">Features</button>
             <button onClick={() => scrollToId("pricing")} className="hover:text-[#0D1626] cursor-pointer">Pricing</button>
-            <button onClick={startTrial} className="hover:text-[#0D1626] cursor-pointer">Login</button>
+            <button onClick={goToLogin} className="hover:text-[#0D1626] cursor-pointer">Login</button>
             <a href="mailto:hello@acedit.au" className="hover:text-[#0D1626] cursor-pointer">Contact</a>
           </div>
           <div className="text-xs text-[#0D1626]/40">

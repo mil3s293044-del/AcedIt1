@@ -115,7 +115,7 @@ export default function AIPerformanceAnalyzer({ data, userProfile }) {
 
         // Flashcards for this subject
         const flashcards = data.flashcards.filter(f => f.subject_name === subjectName);
-        const masteredFlashcards = flashcards.filter(f => (f.successfulReviews || 0) >= 3);
+        const masteredFlashcards = flashcards.filter(f => ((f.review_count_good || 0) + (f.review_count_easy || 0)) >= 3);
 
         // Quiz performance
         const quizzes = (data.quizzes || []).filter(q =>

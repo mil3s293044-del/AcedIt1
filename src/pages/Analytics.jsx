@@ -273,7 +273,7 @@ export default function Analytics() {
         const totalMins   = techMins + arMins + blurtMins + quizMins;
         const totalSess   = data.techniques.length + data.activeRecall.length + data.blurting.length + data.quizzes.length;
         const quizAvg     = data.quizzes.length > 0 ? Math.round(data.quizzes.reduce((s,q)=>s+(q.adjusted_score ?? q.score),0)/data.quizzes.length) : 0;
-        const fcMastery   = data.flashcards.length > 0 ? Math.round((data.flashcards.filter(f=>(f.successfulReviews||0)>2).length/data.flashcards.length)*100) : 0;
+        const fcMastery   = data.flashcards.length > 0 ? Math.round((data.flashcards.filter(f=>((f.review_count_good||0)+(f.review_count_easy||0))>2).length/data.flashcards.length)*100) : 0;
         const uniqueDays  = new Set([
             ...data.techniques.map(t=>t.date),
             ...data.activeRecall.map(t=>t.date),
@@ -329,7 +329,7 @@ export default function Analytics() {
             const blMins   = data.blurting.filter(t=>t.subject_name===sub.subject_name).reduce((s,t)=>s+(t.session_duration||0),0);
             const totalMins = techMins + arMins + blMins;
             const cards    = data.flashcards.filter(f=>f.subject_name===sub.subject_name);
-            const mastered = cards.filter(f=>(f.successfulReviews||0)>=3).length;
+            const mastered = cards.filter(f=>((f.review_count_good||0)+(f.review_count_easy||0))>=3).length;
             const weak     = cards.filter(f=>f.is_weak_spot).length;
             const quizzes  = data.quizzes.filter(q=>q.quiz_title?.toLowerCase().includes(sub.subject_name.toLowerCase()));
             const quizAvg  = quizzes.length > 0 ? Math.round(quizzes.reduce((s,q)=>s+(q.adjusted_score ?? q.score),0)/quizzes.length) : null;
@@ -353,7 +353,7 @@ export default function Analytics() {
         const mastered= data.flashcards.filter(f=>(f.review_count_good||0)+(f.review_count_easy||0)>=3&&!f.is_weak_spot).length;
         const weak    = data.flashcards.filter(f=>f.is_weak_spot).length;
         const due     = data.flashcards.filter(f=>(f.session_skip_count||0)===0).length;
-        const unreviewed = data.flashcards.filter(f=>(f.totalReviews||0)===0).length;
+        const unreviewed = data.flashcards.filter(f=>(f.total_reviews||0)===0).length;
         return { total, mastered, weak, due, unreviewed };
     }, [data.flashcards]);
 
@@ -1126,7 +1126,7 @@ export default function Analytics() {
                         </div>
 
                         {/* Rating distribution */}
-                        {data.flashcards.some(f => (f.totalReviews||0)>0) && (
+                        {data.flashcards.some(f => (f.total_reviews||0)>0) && (
                             <div className="card-soft p-6">
                                 <div className="flex items-center gap-3 mb-5">
                                     <div className="w-10 h-10 rounded-xl bg-chart-4/10 flex items-center justify-center flex-shrink-0">

@@ -1804,13 +1804,30 @@ app.post("/local-ai/invokeAIStream", async (req, res) => {
   console.log(`[local-ai] invokeAIStream received (file_urls=${(req.body?.file_urls || []).length})`);
 
   res.setHeader("Content-Type", "text/event-stream");
-  res.setHeader("Cache-Control", "no-cache");
+  // no-transform stops intermediary proxies (nginx/Cloudflare) from gzip/
+  // buffering the stream; X-Accel-Buffering:no disables nginx response
+  // buffering specifically. Without these, SSE deltas get held back until the
+  // whole response finishes — the browser shows nothing for a long time and
+  // then may hit an idle timeout (the "tutor runs forever, no output" bug).
+  res.setHeader("Cache-Control", "no-cache, no-transform");
   res.setHeader("Connection", "keep-alive");
+  res.setHeader("X-Accel-Buffering", "no");
   res.flushHeaders();
+  // Flush an opening comment immediately so the connection (and any proxy in
+  // front of it) starts streaming bytes right away rather than waiting.
+  res.write(": open\n\n");
 
   const sse = (event, data) => {
     res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
   };
+
+  // Heartbeat comment every 15s. Time-to-first-token can be many seconds on a
+  // long essay-marking prompt; without traffic an edge proxy may close the
+  // idle connection. SSE comment lines (": ...") are ignored by the client.
+  const heartbeat = setInterval(() => {
+    try { res.write(": ping\n\n"); } catch { /* socket gone */ }
+  }, 15000);
+  req.on("close", () => clearInterval(heartbeat));
 
   try {
     const params = req.body || {};
@@ -1822,7 +1839,7 @@ app.post("/local-ai/invokeAIStream", async (req, res) => {
         message:
           "🚫 This request has been flagged as potentially malicious and cannot be processed.",
       });
-      return res.end();
+      return;
     }
 
     // ─── Tier gate (streaming) ────────────────────────────────────────────
@@ -1835,7 +1852,7 @@ app.post("/local-ai/invokeAIStream", async (req, res) => {
       if (!access.allowed) {
         console.log(`[local-ai] (stream) tier-gate blocked: ${tierUser.email} feature=${feature} status=${access.status}`);
         sse("error", { message: access.reason, upgradeRequired: access.status === 402 });
-        return res.end();
+        return;
       }
     } else {
       console.warn(`[local-ai] invokeAIStream called without auth — tier limits NOT enforced (legacy path).`);
@@ -1884,12 +1901,13 @@ app.post("/local-ai/invokeAIStream", async (req, res) => {
     }
 
     sse("done", { ok: true });
-    res.end();
   } catch (err) {
     console.error("[local-ai] stream error:", err);
     try {
       sse("error", { message: err?.message || String(err) });
     } catch {}
+  } finally {
+    clearInterval(heartbeat);
     res.end();
   }
 });

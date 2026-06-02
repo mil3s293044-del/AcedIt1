@@ -68,7 +68,7 @@ export default function SubjectPerformance({ data }) {
         data.flashcards.forEach(card => {
             if (!card.subject_name || !subjectMap[card.subject_name]) return;
             subjectMap[card.subject_name].flashcards += 1;
-            if (card.successfulReviews >= 3) {
+            if (((card.review_count_good || 0) + (card.review_count_easy || 0)) >= 3) {
                 subjectMap[card.subject_name].flashcardsMastered += 1;
             }
         });

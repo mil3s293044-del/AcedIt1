@@ -129,13 +129,13 @@ export default function DataExportModal({ open, onClose }) {
                 if (format === "csv") {
                     const csv = toCSV(
                         ["Subject", "Unit", "Topic", "Question", "Answer", "Total Reviews", "Successful Reviews", "Ease Factor", "Next Review", "Is Weak Spot"],
-                        data.map(r => [r.subject_name, r.unit || "", r.topic || "", r.question, r.answer, r.totalReviews || 0, r.successfulReviews || 0, r.easeFactor || 2.5, r.nextReviewDate || "", r.is_weak_spot ? "Yes" : "No"])
+                        data.map(r => [r.subject_name, r.unit || "", r.topic || "", r.question, r.answer, r.total_reviews || 0, (r.review_count_good || 0) + (r.review_count_easy || 0), r.easiness_factor || 2.5, r.next_review_date || "", r.is_weak_spot ? "Yes" : "No"])
                     );
                     downloadCSV("flashcards.csv", csv);
                 } else {
                     downloadPDF("flashcards.pdf", "Flashcards Export", [{
                         heading: `${data.length} Flashcards`,
-                        lines: data.slice(0, 100).map(r => `[${r.subject_name}] Q: ${r.question.slice(0, 60)}${r.question.length > 60 ? "…" : ""} | Reviews: ${r.totalReviews || 0}`)
+                        lines: data.slice(0, 100).map(r => `[${r.subject_name}] Q: ${r.question.slice(0, 60)}${r.question.length > 60 ? "…" : ""} | Reviews: ${r.total_reviews || 0}`)
                     }]);
                 }
             }
@@ -200,7 +200,7 @@ export default function DataExportModal({ open, onClose }) {
                     { heading: "Flashcards", lines: [
                         `Total Flashcards: ${flashcards.length}`, `Active: ${flashcards.filter(f => f.is_active).length}`,
                         `Weak Spots: ${flashcards.filter(f => f.is_weak_spot).length}`,
-                        `Total Reviews Completed: ${flashcards.reduce((s, f) => s + (f.totalReviews || 0), 0)}`,
+                        `Total Reviews Completed: ${flashcards.reduce((s, f) => s + (f.total_reviews || 0), 0)}`,
                     ]},
                     { heading: "Goals", lines: [
                         `Total Goals: ${goals.length}`, `Completed: ${goals.filter(g => g.is_completed).length}`,

@@ -43,19 +43,19 @@ export default function FlashcardPerformance({ user }) {
 
             // Calculate overall stats
             const totalCards = allCards.length;
-            const reviewedCards = allCards.filter(c => c.totalReviews > 0);
+            const reviewedCards = allCards.filter(c => c.total_reviews > 0);
             const cardsReviewedCount = reviewedCards.length;
             
             const avgSuccessRate = cardsReviewedCount > 0
                 ? Math.round(
                     (reviewedCards.reduce((sum, c) => 
-                        sum + (c.totalReviews > 0 ? (c.successfulReviews / c.totalReviews) : 0), 0
+                        sum + (c.total_reviews > 0 ? (((c.review_count_good || 0) + (c.review_count_easy || 0)) / c.total_reviews) : 0), 0
                     ) / cardsReviewedCount) * 100
                 )
                 : 0;
 
             // Calculate due cards
-            const dueCards = allCards.filter(c => c.nextReviewDate <= today).length;
+            const dueCards = allCards.filter(c => c.next_review_date && c.next_review_date <= today).length;
 
             // Group by subject and calculate performance
             const subjectPerformance = {};
@@ -70,8 +70,8 @@ export default function FlashcardPerformance({ user }) {
                     };
                 }
                 subjectPerformance[subject].cards.push(card);
-                subjectPerformance[subject].totalReviews += card.totalReviews || 0;
-                subjectPerformance[subject].successfulReviews += card.successfulReviews || 0;
+                subjectPerformance[subject].totalReviews += card.total_reviews || 0;
+                subjectPerformance[subject].successfulReviews += (card.review_count_good || 0) + (card.review_count_easy || 0);
             });
 
             // Calculate success rates per subject
@@ -81,7 +81,7 @@ export default function FlashcardPerformance({ user }) {
                     name: s.name,
                     successRate: Math.round((s.successfulReviews / s.totalReviews) * 100),
                     totalCards: s.cards.length,
-                    averageEaseFactor: s.cards.reduce((sum, c) => sum + (c.easeFactor || 2.5), 0) / s.cards.length
+                    averageEaseFactor: s.cards.reduce((sum, c) => sum + (c.easiness_factor || 2.5), 0) / s.cards.length
                 }));
 
             // Identify strengths (success rate >= 80%)
@@ -100,7 +100,7 @@ export default function FlashcardPerformance({ user }) {
             let streak = 0;
             for (let i = 0; i < 7; i++) {
                 const date = format(subDays(new Date(), i), 'yyyy-MM-dd');
-                const hasReviews = allCards.some(c => c.lastReviewedDate === date);
+                const hasReviews = allCards.some(c => c.last_reviewed_date === date);
                 if (hasReviews) {
                     streak++;
                 } else if (i > 0) {

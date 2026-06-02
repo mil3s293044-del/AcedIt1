@@ -51,22 +51,31 @@ const computeMasteryScore = (card) => {
     const successRate = (good + easy) / total;
 
     // 2. Interval factor: cap at 30 days → score 0–1
-    const interval = card.interval || 1;
+    const interval = card.interval_days || 1;
     const intervalScore = Math.min(interval / 30, 1);
 
     // 3. Ease factor: range 1.3–3.0 → normalise to 0–1
-    const ef = card.easeFactor || 2.5;
+    const ef = card.easiness_factor || 2.5;
     const efScore = Math.max(0, Math.min((ef - 1.3) / (3.0 - 1.3), 1));
 
     // 4. Recency: if reviewed in last 7 days = 1, else decay over 30 days
     let recencyScore = 0;
-    if (card.lastReviewedDate) {
-        const daysSince = Math.floor((Date.now() - new Date(card.lastReviewedDate).getTime()) / 86400000);
+    if (card.last_reviewed_date) {
+        const daysSince = Math.floor((Date.now() - new Date(card.last_reviewed_date).getTime()) / 86400000);
         recencyScore = Math.max(0, 1 - daysSince / 30);
     }
 
     const raw = successRate * 0.40 + intervalScore * 0.30 + efScore * 0.20 + recencyScore * 0.10;
     return Math.round(raw * 100);
+};
+
+// A card is due when its scheduled next_review_date has arrived (today or
+// earlier). Brand-new cards with no next_review_date are always due. This is
+// the SM-2 contract — a skip counter is not a substitute for the schedule.
+const isDue = (card) => {
+    if (!card.next_review_date) return true;
+    const today = new Date().toISOString().split('T')[0];
+    return card.next_review_date <= today;
 };
 
 const calculateNextReview = (quality, card) => {
@@ -81,8 +90,8 @@ const calculateNextReview = (quality, card) => {
     };
 
     // SM-2 ease factor and interval
-    let ef = card.easeFactor || 2.5;
-    let interval = card.interval || 1;
+    let ef = card.easiness_factor || 2.5;
+    let interval = card.interval_days || 1;
     let repetitions = card.repetitions || 0;
 
     if (quality === 1) {
@@ -140,21 +149,25 @@ const calculateNextReview = (quality, card) => {
         else isWeakSpot = true;
     }
 
-    // Compute mastery score for updated card state
+    // Compute mastery score for updated card state. Local-only — the
+    // flashcards schema has no mastery_score column, so we compute it on read
+    // rather than persist it.
     const updatedCardForMastery = {
-        ...card, ...updatedCounts, easeFactor: ef, interval, lastReviewedDate: new Date().toISOString().split('T')[0]
+        ...card, ...updatedCounts, easiness_factor: ef, interval_days: interval, last_reviewed_date: new Date().toISOString().split('T')[0],
     };
     const masteryScore = computeMasteryScore(updatedCardForMastery);
 
     return {
         ...updatedCounts,
-        session_skip_count: sessionSkipCount,
-        is_weak_spot: isWeakSpot,
-        easeFactor: ef,
-        interval,
+        session_skip_count:  sessionSkipCount,
+        is_weak_spot:        isWeakSpot,
+        easiness_factor:     ef,
+        interval_days:       interval,
         repetitions,
-        nextReviewDate,
-        mastery_score: masteryScore,
+        next_review_date:    nextReviewDate,
+        // mastery_score kept here as a derived field for the caller; not
+        // sent to the DB (filtered out before .update()).
+        _mastery_score:      masteryScore,
     };
 };
 
@@ -171,10 +184,10 @@ const ratingConfig = [
 // ─── Deck card component ─────────────────────────────────────────────────────
 function DeckCard({ deck, subjectColor, onSelect, onDelete, onStats }) {
     const total = deck.cards.length;
-    const due = deck.cards.filter(c => c.session_skip_count === 0).length;
+    const due = deck.cards.filter(isDue).length;
     const weak = deck.cards.filter(c => c.is_weak_spot).length;
-    const mastered = deck.cards.filter(c => (c.mastery_score || 0) >= 80 && !c.is_weak_spot).length;
-    const avgMastery = total > 0 ? Math.round(deck.cards.reduce((s, c) => s + (c.mastery_score || 0), 0) / total) : 0;
+    const mastered = deck.cards.filter(c => computeMasteryScore(c) >= 80 && !c.is_weak_spot).length;
+    const avgMastery = total > 0 ? Math.round(deck.cards.reduce((s, c) => s + computeMasteryScore(c), 0) / total) : 0;
     const masteryPct = avgMastery;
 
     return (
@@ -467,7 +480,26 @@ The documents provided may be PowerPoint slides, Word documents, or text files. 
                     const mod = await moderationPresets.flashcard(card.question, card.answer);
                     if (!mod.isAllowed) return null;
                 } catch { }
-                return Flashcard.create({ ...card, subject_name: deckInfo.subject_name, subject_code: deckInfo.subject_code, topic: deckInfo.topic, unit: deckInfo.unit, deck_id: deckId, is_active: true, session_skip_count: 0, review_count_again: 0, review_count_hard: 0, review_count_good: 0, review_count_easy: 0, consecutive_good: 0, consecutive_easy: 0, is_weak_spot: false });
+                // Note: schema has no subject_code column on flashcards —
+                // subject_name is enough. Keeping the field would 400 the insert.
+                return Flashcard.create({
+                    ...card,
+                    subject_name:        deckInfo.subject_name,
+                    topic:               deckInfo.topic,
+                    unit:                deckInfo.unit,
+                    deck_id:             deckId,
+                    is_active:           true,
+                    session_skip_count:  0,
+                    review_count_again:  0,
+                    review_count_hard:   0,
+                    review_count_good:   0,
+                    review_count_easy:   0,
+                    consecutive_good:    0,
+                    consecutive_easy:    0,
+                    is_weak_spot:        false,
+                    // First review = today so the card shows up in due lists right away.
+                    next_review_date:    new Date().toISOString().split('T')[0],
+                });
             });
             const results = await Promise.all(createPromises);
             toast({ title: "Deck saved!", description: `${results.filter(Boolean).length} cards added.` });
@@ -514,7 +546,8 @@ The documents provided may be PowerPoint slides, Word documents, or text files. 
             if (!mod.isAllowed) { toast({ title: "Content Policy Violation", variant: "destructive" }); return; }
         } catch { }
         try {
-            await Flashcard.create({ ...newCard, subject_name: newDeck.subject_name, subject_code: newDeck.subject_code, topic: newDeck.topic, unit: newDeck.unit, deck_id: newDeck.deck_id, is_active: true, created_by: user.email, session_skip_count: 0, review_count_again: 0, review_count_hard: 0, review_count_good: 0, review_count_easy: 0, consecutive_good: 0, consecutive_easy: 0, is_weak_spot: false });
+            const today = new Date().toISOString().split('T')[0];
+            await Flashcard.create({ ...newCard, subject_name: newDeck.subject_name, topic: newDeck.topic, unit: newDeck.unit, deck_id: newDeck.deck_id, is_active: true, created_by: user.email, session_skip_count: 0, repetitions: 0, easiness_factor: 2.5, interval_days: 1, next_review_date: today, total_reviews: 0, review_count_again: 0, review_count_hard: 0, review_count_good: 0, review_count_easy: 0, consecutive_good: 0, consecutive_easy: 0, is_weak_spot: false });
             toast({ title: "Card added!" });
             setNewCard({ question: '', answer: '' });
             await loadDecks(user.email);
@@ -522,7 +555,7 @@ The documents provided may be PowerPoint slides, Word documents, or text files. 
     };
 
     const handleStartReview = (deck, filter = 'all') => {
-        let cards = filter === 'due' ? deck.cards.filter(c => c.session_skip_count === 0) :
+        let cards = filter === 'due' ? deck.cards.filter(isDue) :
             filter === 'weak' ? deck.cards.filter(c => c.is_weak_spot) : deck.cards;
         if (!cards.length) { toast({ title: "No cards available", description: "No cards match that filter." }); return; }
         setReviewCards(cards); setCurrentCardIndex(0); setShowAnswer(false); setIsFlipped(false);
@@ -554,7 +587,7 @@ The documents provided may be PowerPoint slides, Word documents, or text files. 
         setIsRating(true);
         const card = reviewCards[currentCardIndex];
         const updates = calculateNextReview(quality, card);
-        const newTotalReviews = (card.totalReviews || 0) + 1;
+        const newTotalReviews = (card.total_reviews || 0) + 1;
 
         setSessionStats(prev => ({
             totalReviews: prev.totalReviews + 1,
@@ -564,10 +597,17 @@ The documents provided may be PowerPoint slides, Word documents, or text files. 
             easyCount: prev.easyCount + (quality === 4 ? 1 : 0)
         }));
 
-        setReviewCards(prev => prev.map((c, i) => i === currentCardIndex ? { ...c, ...updates, totalReviews: newTotalReviews, lastQuality: quality } : c));
+        setReviewCards(prev => prev.map((c, i) => i === currentCardIndex ? { ...c, ...updates, total_reviews: newTotalReviews, last_quality: quality } : c));
 
         try {
-            await Flashcard.update(card.id, { ...updates, lastReviewedDate: format(new Date(), 'yyyy-MM-dd'), totalReviews: newTotalReviews, lastQuality: quality });
+            // Strip the derived _mastery_score before persisting — it's not in schema.
+            const { _mastery_score, ...persistable } = updates;
+            await Flashcard.update(card.id, {
+                ...persistable,
+                last_reviewed_date: format(new Date(), 'yyyy-MM-dd'),
+                total_reviews:      newTotalReviews,
+                last_quality:       quality,
+            });
             // Fire instant XP animation for this card (good/easy = reward, again/hard = smaller)
             const cardXP = quality >= 3 ? 1 : 0;
             if (cardXP > 0) {
@@ -748,7 +788,7 @@ The documents provided may be PowerPoint slides, Word documents, or text files. 
 
     // ─── DECK DETAIL VIEW ────────────────────────────────────────────────────
     if (selectedDeck) {
-        const stats = { total: selectedDeck.cards.length, due: selectedDeck.cards.filter(c => c.session_skip_count === 0).length, weak: selectedDeck.cards.filter(c => c.is_weak_spot).length };
+        const stats = { total: selectedDeck.cards.length, due: selectedDeck.cards.filter(isDue).length, weak: selectedDeck.cards.filter(c => c.is_weak_spot).length };
         const subjectColor = userSubjects.find(s => s.subject_name === selectedDeck.subject_name)?.color || '#3B82F6';
 
         return (
@@ -832,9 +872,9 @@ The documents provided may be PowerPoint slides, Word documents, or text files. 
                                         <p className="font-medium text-foreground text-sm">{card.question}</p>
                                         <p className="text-sm text-muted-foreground mt-1 line-clamp-2">{card.answer}</p>
                                         <div className="flex gap-1.5 mt-2 flex-wrap">
-                                            <span className="pill bg-secondary text-muted-foreground">{card.totalReviews || 0} reviews</span>
+                                            <span className="pill bg-secondary text-muted-foreground">{card.total_reviews || 0} reviews</span>
                                             {card.is_weak_spot && <span className="pill bg-streak/15 text-streak">Weak Spot</span>}
-                                            {card.session_skip_count === 0 && <span className="pill bg-chart-3/15 text-chart-3">Due</span>}
+                                            {isDue(card) && <span className="pill bg-chart-3/15 text-chart-3">Due</span>}
                                         </div>
                                     </div>
                                     <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0">
@@ -898,7 +938,7 @@ The documents provided may be PowerPoint slides, Word documents, or text files. 
                 ) : (
                     Object.entries(decksBySubject).map(([subjectName, subjectDecks]) => {
                         const subjectColor = userSubjects.find(s => s.subject_name === subjectName)?.color || '#3B82F6';
-                        const totalDue = subjectDecks.reduce((sum, d) => sum + d.cards.filter(c => c.session_skip_count === 0).length, 0);
+                        const totalDue = subjectDecks.reduce((sum, d) => sum + d.cards.filter(isDue).length, 0);
                         return (
                             <div key={subjectName} className="space-y-3">
                                 <div className="flex items-center gap-3">
@@ -1198,9 +1238,9 @@ The documents provided may be PowerPoint slides, Word documents, or text files. 
                                 <div className="grid grid-cols-4 gap-3">
                                     {[
                                         { label: "Total", val: viewingStats.cards.length, color: "text-foreground", bg: "bg-secondary/50" },
-                                        { label: "Due", val: viewingStats.cards.filter(c => c.session_skip_count === 0).length, color: "text-chart-3", bg: "bg-chart-3/10" },
+                                        { label: "Due", val: viewingStats.cards.filter(isDue).length, color: "text-chart-3", bg: "bg-chart-3/10" },
                                         { label: "Weak", val: viewingStats.cards.filter(c => c.is_weak_spot).length, color: "text-streak", bg: "bg-streak/10" },
-                                        { label: "Mastered", val: viewingStats.cards.filter(c => (c.mastery_score || 0) >= 80 && !c.is_weak_spot).length, color: "text-primary", bg: "bg-primary/10" },
+                                        { label: "Mastered", val: viewingStats.cards.filter(c => computeMasteryScore(c) >= 80 && !c.is_weak_spot).length, color: "text-primary", bg: "bg-primary/10" },
                                     ].map(s => (
                                         <div key={s.label} className={`${s.bg} rounded-2xl p-3 text-center`}>
                                             <p className={`text-2xl font-bold ${s.color}`}>{s.val}</p>
@@ -1236,11 +1276,11 @@ The documents provided may be PowerPoint slides, Word documents, or text files. 
                                 </div>
                                 <div className="grid grid-cols-2 gap-3">
                                     <div className="bg-secondary/50 rounded-2xl p-4">
-                                        <p className="text-xl font-bold text-foreground">{viewingStats.cards.reduce((s, c) => s + (c.totalReviews || 0), 0)}</p>
+                                        <p className="text-xl font-bold text-foreground">{viewingStats.cards.reduce((s, c) => s + (c.total_reviews || 0), 0)}</p>
                                         <p className="text-xs text-muted-foreground">Total Reviews</p>
                                     </div>
                                     <div className="bg-secondary/50 rounded-2xl p-4">
-                                        <p className="text-xl font-bold text-foreground">{Math.round(viewingStats.cards.reduce((s, c) => s + (c.totalReviews || 0), 0) / (viewingStats.cards.length || 1))}</p>
+                                        <p className="text-xl font-bold text-foreground">{Math.round(viewingStats.cards.reduce((s, c) => s + (c.total_reviews || 0), 0) / (viewingStats.cards.length || 1))}</p>
                                         <p className="text-xs text-muted-foreground">Avg per Card</p>
                                     </div>
                                 </div>

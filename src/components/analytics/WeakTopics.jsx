@@ -25,8 +25,8 @@ export default function WeakTopics({ data, subjects }) {
                     type: 'flashcards'
                 };
             }
-            flashcardTopics[key].total += card.totalReviews || 0;
-            flashcardTopics[key].successful += card.successfulReviews || 0;
+            flashcardTopics[key].total += card.total_reviews || 0;
+            flashcardTopics[key].successful += (card.review_count_good || 0) + (card.review_count_easy || 0);
         });
 
         Object.values(flashcardTopics).forEach(topic => {

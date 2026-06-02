@@ -44,10 +44,10 @@ export default function TechniqueAnalytics({ data }) {
         {
             name: "Spaced Repetition",
             key: "spaced_repetition",
-            sessions: spacedRepSessions.filter(f => f.totalReviews > 0).length,
+            sessions: spacedRepSessions.filter(f => f.total_reviews > 0).length,
             totalMinutes: spacedRepSessions.length * 2, // Estimate 2 min per card
             avgConfidence: spacedRepSessions.length > 0
-                ? Math.round((spacedRepSessions.filter(f => f.successfulReviews > 2).length / spacedRepSessions.length) * 100)
+                ? Math.round((spacedRepSessions.filter(f => ((f.review_count_good || 0) + (f.review_count_easy || 0)) > 2).length / spacedRepSessions.length) * 100)
                 : 0,
             subjects: [...new Set(spacedRepSessions.map(s => s.subject_name))].length
         },

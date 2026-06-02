@@ -217,7 +217,7 @@ export default function Dashboard() {
                 base44.entities.StudyTechnique.filter({ created_by: userEmail }, "-date").catch(() => []),
                 base44.entities.QuizAttempt.filter({ created_by: userEmail }, "-date", 10).catch(() => []),
                 base44.entities.SubjectAssessment.filter({ created_by: userEmail, is_completed: false }, "due_date", 10).catch(() => []),
-                base44.entities.Flashcard.filter({ created_by: userEmail, is_active: true }, "nextReviewDate").catch(() => []),
+                base44.entities.Flashcard.filter({ created_by: userEmail, is_active: true }, "next_review_date").catch(() => []),
                 base44.entities.StudyPlan.filter({ created_by: userEmail, is_completed: false, date: { $gte: today, $lte: in14 } }, "date", 8).catch(() => []),
                 base44.entities.Leaderboard.list('-total_xp', 200).catch(() => []),
             ]);
@@ -262,7 +262,7 @@ export default function Dashboard() {
                 .slice(0, 5);
             setPlannerReminders(plannerEvents);
 
-            const dueCards = (flashcardData || []).filter(c => c.nextReviewDate <= today);
+            const dueCards = (flashcardData || []).filter(c => c.next_review_date && c.next_review_date <= today);
             const deckMap = {};
             dueCards.forEach(card => {
                 const key = card.deck_id || `${card.subject_name}_${card.topic}`;

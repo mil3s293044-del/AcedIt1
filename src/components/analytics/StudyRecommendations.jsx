@@ -23,7 +23,7 @@ export default function StudyRecommendations({ data, userProfile, user }) {
         
         const techniqueUsage = {
             pomodoro: data.techniques.filter(t => t.technique_name === 'pomodoro').length,
-            spaced_repetition: data.flashcards.filter(f => f.totalReviews > 0).length,
+            spaced_repetition: data.flashcards.filter(f => f.total_reviews > 0).length,
             active_recall: data.activeRecall.length,
             blurting: data.blurting.length
         };
