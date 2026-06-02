@@ -350,7 +350,12 @@ export const AuthProvider = ({ children }) => {
 
   const navigateToLogin = async () => {
     if (useSupabase) {
-      const redirectTo = `${window.location.origin}${window.location.pathname}`;
+      // Always return to the app root after OAuth, never the current path.
+      // Logging in from /login or /onboarding used to redirect back to that
+      // same path — but those have no authenticated route, so the user hit a
+      // 404 ("login page does not exist"). Root resolves to the app for
+      // authenticated users.
+      const redirectTo = `${window.location.origin}/`;
       const { error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
         options: {

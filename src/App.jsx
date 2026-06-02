@@ -3,7 +3,7 @@ import { QueryClientProvider } from '@tanstack/react-query'
 import { queryClientInstance } from '@/lib/query-client'
 import NavigationTracker from '@/lib/NavigationTracker'
 import { pagesConfig } from './pages.config'
-import { BrowserRouter as Router, Route, Routes, useLocation } from 'react-router-dom';
+import { BrowserRouter as Router, Route, Routes, useLocation, Navigate } from 'react-router-dom';
 import PageNotFound from './lib/PageNotFound';
 import StudyRoadmap from './pages/StudyRoadmap';
 import Paywall from './pages/Paywall';
@@ -60,6 +60,16 @@ const AuthenticatedApp = () => {
   // check has to allow the route through regardless of isAuthenticated.
   if (location.pathname === '/reset-password') {
     return <ResetPassword />;
+  }
+
+  // Once authenticated, the public auth/onboarding pages must not render —
+  // after OAuth/email sign-in the browser can land back on /login or
+  // /onboarding, which would otherwise 404 (no authed /login route) or
+  // re-show the wizard to someone who's already signed up. Send them into
+  // the app instead. (Onboarding answers are already applied by the
+  // SIGNED_IN handler in AuthContext before this redirect.)
+  if (isAuthenticated && ['/login', '/forgot-password', '/onboarding'].includes(location.pathname)) {
+    return <Navigate to="/" replace />;
   }
 
   // Handle authentication errors
