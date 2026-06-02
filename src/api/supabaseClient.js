@@ -99,6 +99,17 @@ function applyWhere(query, where) {
       query = query.in(key, value);
     } else if (value === null) {
       query = query.is(key, null);
+    } else if (typeof value === 'object') {
+      // Mongo-style comparison operators (Base44 used these for date ranges,
+      // e.g. `date: { $gte: start, $lte: end }`). Without translation they'd
+      // serialise to `?date=eq.[object Object]` and match nothing — the
+      // "analytics not synced" bug. Map each to its PostgREST equivalent.
+      const OP = { $gte: 'gte', $lte: 'lte', $gt: 'gt', $lt: 'lt', $ne: 'neq', $eq: 'eq' };
+      for (const [op, opVal] of Object.entries(value)) {
+        if (opVal === undefined || opVal === '' || opVal === 'undefined') continue;
+        const pgOp = OP[op];
+        if (pgOp) query = query[pgOp](key, opVal);
+      }
     } else {
       query = query.eq(key, value);
     }

@@ -352,7 +352,8 @@ export default function Analytics() {
         const total   = data.flashcards.length;
         const mastered= data.flashcards.filter(f=>(f.review_count_good||0)+(f.review_count_easy||0)>=3&&!f.is_weak_spot).length;
         const weak    = data.flashcards.filter(f=>f.is_weak_spot).length;
-        const due     = data.flashcards.filter(f=>(f.session_skip_count||0)===0).length;
+        const today   = new Date().toISOString().split('T')[0];
+        const due     = data.flashcards.filter(f=>!f.next_review_date || f.next_review_date <= today).length;
         const unreviewed = data.flashcards.filter(f=>(f.total_reviews||0)===0).length;
         return { total, mastered, weak, due, unreviewed };
     }, [data.flashcards]);
