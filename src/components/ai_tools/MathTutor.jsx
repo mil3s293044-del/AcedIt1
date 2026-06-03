@@ -140,6 +140,7 @@ export default function MathTutor() {
 
             await invokeLLMStream(
                 {
+                    feature: "ai_chat",
                     prompt: fullPrompt,
                     file_urls: userMsg.image ? [userMsg.image] : undefined,
                 },

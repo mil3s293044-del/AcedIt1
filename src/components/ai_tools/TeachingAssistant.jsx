@@ -123,7 +123,7 @@ Format in markdown. Keep it conversational, never cocky.`;
         abortRef.current = controller;
         try {
             await invokeLLMStream(
-                { prompt: welcomePrompt },
+                { feature: "ai_chat", prompt: welcomePrompt },
                 (_delta, soFar) => {
                     setMessages(prev => {
                         const next = [...prev];
@@ -191,7 +191,7 @@ Instructions:
 Respond in markdown.`;
 
             await invokeLLMStream(
-                { prompt },
+                { feature: "ai_chat", prompt },
                 (_delta, soFar) => {
                     setMessages(prev => {
                         const next = [...prev];

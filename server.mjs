@@ -150,10 +150,15 @@ async function callInvokeAI({ prompt, response_json_schema }) {
 //
 // If a request arrives WITHOUT a Supabase JWT (legacy Base44 path), we allow
 // it but log a warning — phase 3d ships all users onto Supabase auth.
-const TIER_FREE_CAPS    = { quiz_ai_gen: 5, flashcard_ai_gen: 5, ai_tool: 5 };
-const TIER_FREE_COUNTER = { quiz_ai_gen: "free_ai_quizzes_used", flashcard_ai_gen: "free_ai_flashcards_used", ai_tool: "free_ai_tools_used" };
-const TIER_PREMIUM_CAPS = { quiz_ai_gen: 3, quiz_ai_mark: 10, flashcard_ai_gen: 3, ai_tool: 6, goal_ai_gen: 1, roadmap_ai_gen: 1, blurting: 5, active_recall: 8 };
-const TIER_COUNTER_KEY  = { quiz_ai_gen: "quizzes", quiz_ai_mark: "quiz_marks", flashcard_ai_gen: "flashcards", ai_tool: "tools", goal_ai_gen: "goal", roadmap_ai_gen: "goal", blurting: "blurting", active_recall: "active_recall" };
+// ai_chat = conversational tools (Math Tutor, Teaching Assistant). These are
+// multi-turn chats, so a per-MESSAGE charge against the shared 6/day `ai_tool`
+// bucket made them unusable (6 messages = whole day's tools gone). They get
+// their own generous daily message bucket; the weekly $ ceiling is still the
+// real cost backstop. Free users' chat shares the free tools lifetime cap.
+const TIER_FREE_CAPS    = { quiz_ai_gen: 5, flashcard_ai_gen: 5, ai_tool: 5, ai_chat: 5 };
+const TIER_FREE_COUNTER = { quiz_ai_gen: "free_ai_quizzes_used", flashcard_ai_gen: "free_ai_flashcards_used", ai_tool: "free_ai_tools_used", ai_chat: "free_ai_tools_used" };
+const TIER_PREMIUM_CAPS = { quiz_ai_gen: 3, quiz_ai_mark: 10, flashcard_ai_gen: 3, ai_tool: 6, ai_chat: 30, goal_ai_gen: 1, roadmap_ai_gen: 1, blurting: 5, active_recall: 8 };
+const TIER_COUNTER_KEY  = { quiz_ai_gen: "quizzes", quiz_ai_mark: "quiz_marks", flashcard_ai_gen: "flashcards", ai_tool: "tools", ai_chat: "chat", goal_ai_gen: "goal", roadmap_ai_gen: "goal", blurting: "blurting", active_recall: "active_recall" };
 const TIER_WEEKLY_CAP_CENTS = 250;
 const TIER_FREE_LIFETIME_COST_CAP_CENTS = 100;   // $1 hard ceiling per free user, lifetime
 
@@ -595,7 +600,7 @@ async function recordTierUsage(profile, feature, usage) {
     const today = new Date().toISOString().slice(0, 10);
     let counters = profile.daily_ai_counters ?? {};
     if (counters.date !== today) {
-      counters = { date: today, quizzes: 0, flashcards: 0, tools: 0, marker: 0, goal: 0, blurting: 0, active_recall: 0 };
+      counters = { date: today, quizzes: 0, flashcards: 0, tools: 0, chat: 0, marker: 0, goal: 0, blurting: 0, active_recall: 0 };
     }
     const counterKey = TIER_COUNTER_KEY[feature];
     if (counterKey) counters = { ...counters, [counterKey]: (counters[counterKey] ?? 0) + 1 };

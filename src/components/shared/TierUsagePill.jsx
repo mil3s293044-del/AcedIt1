@@ -17,6 +17,7 @@ const FEATURE_LABEL = {
     [FEATURES.QUIZ_AI_MARK]:     "Quiz Marking",
     [FEATURES.FLASHCARD_AI_GEN]: "AI Flashcards",
     [FEATURES.AI_TOOL]:          "AI Tools",
+    [FEATURES.AI_CHAT]:          "AI Chat",
     [FEATURES.GOAL_AI_GEN]:      "Goal AI",
     [FEATURES.ROADMAP_AI_GEN]:   "Roadmap AI",
     [FEATURES.BLURTING]:         "Blurting",

@@ -36,6 +36,7 @@ const tools = [
     accent: 'chart-4',
     category: 'math',
     badge: 'Popular',
+    feature: 'ai_chat', // conversational — uses the chat message bucket, not the one-shot tools bucket
     tips: [
       'Snap a photo of the question — the AI reads handwriting, diagrams, and printed problems.',
       'Tell it whether you want CAS or tech-free working before asking.',
@@ -99,6 +100,7 @@ const tools = [
     accent: 'xp',
     category: 'study',
     badge: null,
+    feature: 'ai_chat', // conversational — uses the chat message bucket, not the one-shot tools bucket
     tips: [
       'Best for active recall — try teaching what you just studied without notes.',
       'The AI plays "naive student" and asks follow-ups. Defend your reasoning.',
@@ -349,7 +351,7 @@ function AIToolsInner() {
                 <p className="text-muted-foreground text-xs truncate hidden sm:block">{currentTool.description}</p>
               </div>
               <div className="ml-auto flex items-center gap-1.5 flex-shrink-0">
-                <TierUsagePill feature={FEATURES.AI_TOOL} />
+                <TierUsagePill feature={currentTool.feature || FEATURES.AI_TOOL} />
                 <button
                   onClick={() => setIsFullscreen(f => !f)}
                   className="p-2 rounded-xl text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors cursor-pointer"
