@@ -14,6 +14,7 @@ import { recordStudyAndGetStreak } from "@/components/shared/streakHelpers";
 import MarkdownMath from "@/components/shared/MarkdownMath";
 import { getExaminerPrompt } from "@/lib/subjectExaminerPrompts";
 import { invokeLLMStream } from "@/lib/streamingAI";
+import CheatSheetMaker from "./CheatSheetMaker";
 
 const SUMMARY_TYPES = [
     { value: 'concise',  label: 'Concise',         desc: 'Key points only' },
@@ -39,6 +40,9 @@ const REFINE_PRESETS = [
 ];
 
 export default function NoteSummarizer() {
+    // ─── Mode ────────────────────────────────────────────────────────────────
+    const [mode, setMode] = useState('summary'); // 'summary' | 'cheatsheet'
+
     // ─── Setup ───────────────────────────────────────────────────────────────
     const [subject, setSubject] = useState('');
     const [uploadedFiles, setUploadedFiles] = useState([]);
@@ -304,6 +308,26 @@ Apply the refinement and return the COMPLETE updated summary from start to finis
 
     return (
         <div className="space-y-5">
+            {/* ── MODE TOGGLE ─────────────────────────────────────────── */}
+            <div className="inline-flex p-1 rounded-xl bg-secondary gap-1">
+                <button
+                    onClick={() => setMode('summary')}
+                    className={`px-4 py-1.5 rounded-lg text-xs font-bold transition-all ${mode === 'summary' ? 'bg-surface text-foreground shadow-soft' : 'text-muted-foreground hover:text-foreground'}`}
+                >
+                    Summary
+                </button>
+                <button
+                    onClick={() => setMode('cheatsheet')}
+                    className={`px-4 py-1.5 rounded-lg text-xs font-bold transition-all ${mode === 'cheatsheet' ? 'bg-surface text-foreground shadow-soft' : 'text-muted-foreground hover:text-foreground'}`}
+                >
+                    Cheat Sheet
+                </button>
+            </div>
+
+            {mode === 'cheatsheet' && <CheatSheetMaker />}
+
+            {mode === 'summary' && (
+            <>
             {/* ── SETUP PANEL ─────────────────────────────────────────── */}
             <AnimatePresence initial={false}>
                 {showSetup && (
@@ -616,6 +640,8 @@ Apply the refinement and return the COMPLETE updated summary from start to finis
                     </DialogFooter>
                 </DialogContent>
             </Dialog>
+            </>
+            )}
         </div>
     );
 }
