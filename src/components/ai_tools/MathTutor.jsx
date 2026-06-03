@@ -1,20 +1,18 @@
 import React, { useState, useEffect, useRef } from "react";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Switch } from "@/components/ui/switch";
-import { Label } from "@/components/ui/label";
-import { Calculator, Loader2, Send, Upload, X, History, Eye, Trash2, FileText, Printer, Play, Save, Maximize2, Minimize2, Square } from "lucide-react";
+import { Send, Upload, X, History, Eye, Trash2, FileText, Printer, Play, Save, Maximize2, Minimize2, Square, Plus, Sigma } from "lucide-react";
 import { base44 } from "@/api/base44Client";
 import { useToast } from "@/components/ui/use-toast";
 import { recordStudyAndGetStreak } from "@/components/shared/streakHelpers";
 import MarkdownMath from "@/components/shared/MarkdownMath";
 import MathText from "@/components/shared/LatexRenderer";
-import { getExaminerPrompt, getLatexRules } from "@/lib/subjectExaminerPrompts";
+import { getExaminerPrompt } from "@/lib/subjectExaminerPrompts";
 import { invokeLLMStream } from "@/lib/streamingAI";
 import useStickToBottom from "@/lib/useStickToBottom";
 
@@ -222,71 +220,48 @@ export default function MathTutor() {
     const showTypingDots = isGenerating && lastMsg?.role === 'tutor' && !lastMsg?.content;
 
     return (
-        <div className={`space-y-4 ${isFullscreen ? 'fixed inset-0 z-50 bg-background p-4 overflow-auto' : ''}`}>
-            {/* Subject selector */}
-            <div className="grid grid-cols-4 gap-2">
-                {Object.entries(SUBJECTS).map(([key, s]) => (
-                    <button
-                        key={key}
-                        onClick={() => { if (chatMessages.length > 0 && key !== selectedSubject) { if (!window.confirm('Start new subject? Current chat will be lost.')) return; resetChat(); } setSelectedSubject(key); setSelectedTopic(''); }}
-                        className={`px-3 py-2.5 rounded-xl border-2 text-sm font-bold transition-all text-center ${
-                            selectedSubject === key
-                                ? `border-primary ${s.accentBg} ${s.accentText}`
-                                : 'border-border text-muted-foreground hover:border-primary/40 bg-surface'
-                        }`}
-                    >
-                        {key === 'foundation' ? 'Foundation' : key === 'general' ? 'General' : key === 'methods' ? 'Methods' : 'Specialist'}
-                    </button>
-                ))}
-            </div>
+        <div className={`flex flex-col ${isFullscreen ? 'fixed inset-0 z-50 bg-background p-4' : 'h-[calc(100vh-220px)] min-h-[520px]'}`}>
+            {/* Compact control bar — subject + topic condensed into dropdowns */}
+            <div className="flex items-center gap-2 flex-wrap flex-shrink-0 pb-3">
+                <Select value={selectedSubject} onValueChange={(key) => { if (chatMessages.length > 0 && key !== selectedSubject) { if (!window.confirm('Start a new subject? The current chat will be cleared.')) return; resetChat(); } setSelectedSubject(key); setSelectedTopic(''); }}>
+                    <SelectTrigger className="h-9 w-[185px] text-xs font-bold rounded-full"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                        {Object.entries(SUBJECTS).map(([key, s]) => <SelectItem key={key} value={key} className="text-xs">{s.name}</SelectItem>)}
+                    </SelectContent>
+                </Select>
 
-            {/* Settings */}
-            <div className="card-soft px-4 py-3 flex items-center gap-4 flex-wrap">
-                <div className="flex items-center gap-2">
-                    <label className="stat-label">Topic</label>
-                    <Select value={selectedTopic} onValueChange={setSelectedTopic}>
-                        <SelectTrigger className="h-9 w-44 text-xs"><SelectValue placeholder="All topics" /></SelectTrigger>
-                        <SelectContent>
-                            <SelectItem value={null}>All Topics</SelectItem>
-                            {subject.topics.map(t => <SelectItem key={t} value={t} className="text-xs">{t}</SelectItem>)}
-                        </SelectContent>
-                    </Select>
-                </div>
-                <div className="flex items-center gap-2 ml-auto">
-                    <span className={`text-xs font-bold ${isTechFree ? 'text-streak' : 'text-muted-foreground/70'}`}>Tech-Free</span>
+                <Select value={selectedTopic} onValueChange={setSelectedTopic}>
+                    <SelectTrigger className="h-9 w-[150px] text-xs rounded-full"><SelectValue placeholder="All topics" /></SelectTrigger>
+                    <SelectContent>
+                        <SelectItem value={null}>All topics</SelectItem>
+                        {subject.topics.map(t => <SelectItem key={t} value={t} className="text-xs">{t}</SelectItem>)}
+                    </SelectContent>
+                </Select>
+
+                <div className="flex items-center gap-2 h-9 px-3 rounded-full border border-border bg-surface">
+                    <span className={`text-xs font-bold ${isTechFree ? 'text-streak' : 'text-muted-foreground/60'}`}>Tech-Free</span>
                     <Switch checked={!isTechFree} onCheckedChange={c => setIsTechFree(!c)} />
-                    <span className={`text-xs font-bold ${!isTechFree ? 'text-primary' : 'text-muted-foreground/70'}`}>CAS</span>
+                    <span className={`text-xs font-bold ${!isTechFree ? 'text-primary' : 'text-muted-foreground/60'}`}>CAS</span>
                 </div>
-                <div className="flex gap-2">
-                    {chatMessages.length > 0 && <Button size="sm" variant="outline" disabled={isGenerating} onClick={() => { setSaveTitle(chatMessages[0]?.content?.slice(0, 50) || 'Math Session'); setIsSaveDialogOpen(true); }}><Save className="w-3.5 h-3.5" /> Save</Button>}
-                    <Button size="sm" variant="outline" onClick={() => setIsHistoryOpen(true)}><History className="w-3.5 h-3.5" /></Button>
-                    <Button size="sm" variant="outline" onClick={() => setIsFullscreen(!isFullscreen)}>{isFullscreen ? <Minimize2 className="w-3.5 h-3.5" /> : <Maximize2 className="w-3.5 h-3.5" />}</Button>
+
+                <div className="flex items-center gap-1.5 ml-auto">
+                    {chatMessages.length > 0 && <Button size="sm" variant="ghost" onClick={resetChat} disabled={isGenerating} className="h-9 px-2.5 text-xs text-muted-foreground"><Plus className="w-3.5 h-3.5 mr-1" />New</Button>}
+                    {chatMessages.length > 0 && <Button size="sm" variant="outline" disabled={isGenerating} onClick={() => { setSaveTitle(chatMessages[0]?.content?.slice(0, 50) || 'Math Session'); setIsSaveDialogOpen(true); }} className="h-9 w-9 p-0" title="Save session"><Save className="w-4 h-4" /></Button>}
+                    <Button size="sm" variant="outline" onClick={() => setIsHistoryOpen(true)} className="h-9 w-9 p-0" title="History"><History className="w-4 h-4" /></Button>
+                    <Button size="sm" variant="outline" onClick={() => setIsFullscreen(!isFullscreen)} className="h-9 w-9 p-0" title={isFullscreen ? 'Exit fullscreen' : 'Fullscreen'}>{isFullscreen ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}</Button>
                 </div>
             </div>
 
-            {/* Chat */}
-            <div className="card-soft overflow-hidden">
-                <div className={`flex flex-col px-4 py-3 border-b border-border bg-surface`}>
-                    <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-2.5">
-                            <div className={`w-8 h-8 ${subject.accentBg} rounded-lg flex items-center justify-center`}>
-                                <Calculator className={`w-4 h-4 ${subject.accentText}`} />
-                            </div>
-                            <span className="font-display font-extrabold text-foreground text-sm">{subject.name}</span>
-                            {selectedTopic && <span className={`pill ${subject.accentBg} ${subject.accentText}`}>{selectedTopic}</span>}
-                        </div>
-                        <span className={`pill ${isTechFree ? 'bg-streak/10 text-streak' : 'bg-primary/10 text-primary'}`}>{isTechFree ? 'TECH-FREE' : 'CAS'}</span>
-                    </div>
-                </div>
-
-                <div ref={chatContainerRef} className={`overflow-y-auto space-y-4 p-4 bg-background ${isFullscreen ? 'flex-1' : 'max-h-[460px]'}`}>
+            {/* Conversation — Claude-style: avatar + flowing answer, user bubbles right */}
+            <div ref={chatContainerRef} className="flex-1 overflow-y-auto">
+                <div className="max-w-3xl mx-auto w-full px-1 py-2">
                     {chatMessages.length === 0 ? (
-                        <div className="text-center py-12">
-                            <div className={`w-14 h-14 ${subject.accentBg} rounded-2xl flex items-center justify-center mx-auto mb-3`}>
-                                <Calculator className={`w-7 h-7 ${subject.accentText}`} />
+                        <div className="text-center py-16">
+                            <div className="w-14 h-14 rounded-2xl bg-primary/10 flex items-center justify-center mx-auto mb-4">
+                                <Sigma className="w-7 h-7 text-primary" />
                             </div>
-                            <h3 className="font-display font-extrabold text-foreground text-lg mb-1">Start your {subject.name} session</h3>
-                            <p className="text-sm text-muted-foreground max-w-sm mx-auto mb-4">Ask any question. Get exam-standard working with full LaTeX formatting.</p>
+                            <h3 className="font-display font-extrabold text-foreground text-xl mb-1.5">Start your {subject.name} session</h3>
+                            <p className="text-sm text-muted-foreground max-w-sm mx-auto mb-5">Ask any question — get exam-standard working with full LaTeX formatting.</p>
                             <div className="flex flex-wrap gap-2 justify-center">
                                 {['Step-by-step solutions', 'VCE exam format', 'Practice questions', isTechFree ? 'Manual working' : 'CAS strategies'].map(t => (
                                     <span key={t} className="pill bg-secondary text-muted-foreground">{t}</span>
@@ -294,103 +269,104 @@ export default function MathTutor() {
                             </div>
                         </div>
                     ) : (
-                        <>
+                        <div className="space-y-6">
                             {chatMessages.map((msg, idx) => (
-                                <motion.div key={idx} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="space-y-3">
-                                    <div className={`flex ${msg.role === 'student' ? 'justify-end' : 'justify-start'}`}>
-                                        <div className={`max-w-[85%] rounded-2xl px-4 py-3 ${
-                                            msg.role === 'student'
-                                                ? `${subject.accentSolid} text-white`
-                                                : 'bg-surface border border-border shadow-soft'
-                                        }`}>
-                                            {msg.image && <img src={msg.image} alt="Q" className="max-w-xs rounded-xl mb-3 border border-border" />}
-                                            {msg.role === 'tutor' ? (
-                                                <MarkdownMath className="text-sm leading-relaxed space-y-2 text-foreground" isStreaming={!!msg.streaming}>{msg.content}</MarkdownMath>
-                                            ) : (
-                                                <MathText className="text-sm whitespace-pre-wrap font-medium">{msg.content}</MathText>
-                                            )}
-                                        </div>
-                                    </div>
-
-                                    {msg.role === 'tutor' && msg.summarySheet && (
-                                        <div className="flex justify-start">
-                                            <div className="max-w-[90%] card-soft border-xp/30 bg-xp/5 overflow-hidden">
-                                                <div className="flex items-center justify-between bg-xp/15 px-4 py-2">
-                                                    <div className="flex items-center gap-2">
-                                                        <FileText className="w-4 h-4 text-xp" />
-                                                        <span className="font-bold text-foreground text-sm">Summary Sheet</span>
-                                                    </div>
-                                                    <button onClick={() => { const w = window.open('', '_blank'); w.document.write(`<html><head><title>Summary</title></head><body>${msg.summarySheet}</body></html>`); w.document.close(); setTimeout(() => w.print(), 500); }} className="px-3 py-1 bg-surface text-xp rounded-lg text-xs font-semibold hover:bg-xp/10 flex items-center gap-1 border border-xp/30">
-                                                        <Printer className="w-3 h-3" /> Print
-                                                    </button>
-                                                </div>
-                                                <div className="p-3 max-h-64 overflow-y-auto text-sm space-y-1 text-foreground"><MarkdownMath>{msg.summarySheet}</MarkdownMath></div>
+                                <motion.div key={idx} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}>
+                                    {msg.role === 'student' ? (
+                                        <div className="flex justify-end">
+                                            <div className="max-w-[80%] rounded-2xl rounded-br-md bg-secondary px-4 py-2.5">
+                                                {msg.image && <img src={msg.image} alt="Q" className="max-w-xs rounded-xl mb-2 border border-border" />}
+                                                <MathText className="text-sm whitespace-pre-wrap text-foreground">{msg.content}</MathText>
                                             </div>
                                         </div>
-                                    )}
+                                    ) : (
+                                        <div className="flex gap-3">
+                                            <div className="w-7 h-7 rounded-lg bg-primary/10 flex items-center justify-center flex-shrink-0 mt-0.5">
+                                                <Sigma className="w-4 h-4 text-primary" />
+                                            </div>
+                                            <div className="flex-1 min-w-0 space-y-3 pt-0.5">
+                                                <MarkdownMath className="text-sm leading-relaxed text-foreground" isStreaming={!!msg.streaming}>{msg.content}</MarkdownMath>
 
-                                    {msg.role === 'tutor' && msg.practiceQuestions?.length > 0 && (
-                                        <div className="flex justify-start">
-                                            <div className="max-w-[90%] space-y-2">
-                                                <p className="stat-label ml-1">Practice Questions</p>
-                                                {msg.practiceQuestions.map((q, qi) => (
-                                                    <motion.button
-                                                        key={qi}
-                                                        whileHover={{ x: 4 }}
-                                                        onClick={() => setChatInput(q)}
-                                                        className="w-full text-left px-4 py-3 bg-surface hover:bg-primary/5 border-2 border-border hover:border-primary/40 rounded-xl text-sm transition-all"
-                                                    >
-                                                        <div className="flex items-start gap-3">
-                                                            <span className="flex-shrink-0 w-6 h-6 bg-primary/10 text-primary rounded-lg flex items-center justify-center text-xs font-black">{qi + 1}</span>
-                                                            <div className="flex-1 leading-relaxed text-foreground"><MathText>{q}</MathText></div>
+                                                {msg.summarySheet && (
+                                                    <div className="rounded-xl border border-xp/30 bg-xp/5 overflow-hidden">
+                                                        <div className="flex items-center justify-between bg-xp/15 px-4 py-2">
+                                                            <div className="flex items-center gap-2">
+                                                                <FileText className="w-4 h-4 text-xp" />
+                                                                <span className="font-bold text-foreground text-sm">Summary Sheet</span>
+                                                            </div>
+                                                            <button onClick={() => { const w = window.open('', '_blank'); w.document.write(`<html><head><title>Summary</title></head><body>${msg.summarySheet}</body></html>`); w.document.close(); setTimeout(() => w.print(), 500); }} className="px-3 py-1 bg-surface text-xp rounded-lg text-xs font-semibold hover:bg-xp/10 flex items-center gap-1 border border-xp/30">
+                                                                <Printer className="w-3 h-3" /> Print
+                                                            </button>
                                                         </div>
-                                                    </motion.button>
-                                                ))}
+                                                        <div className="p-3 max-h-64 overflow-y-auto text-sm space-y-1 text-foreground"><MarkdownMath>{msg.summarySheet}</MarkdownMath></div>
+                                                    </div>
+                                                )}
+
+                                                {msg.practiceQuestions?.length > 0 && (
+                                                    <div className="space-y-2">
+                                                        <p className="stat-label ml-0.5">Practice Questions</p>
+                                                        {msg.practiceQuestions.map((q, qi) => (
+                                                            <motion.button
+                                                                key={qi}
+                                                                whileHover={{ x: 3 }}
+                                                                onClick={() => setChatInput(q)}
+                                                                className="w-full text-left px-4 py-3 bg-surface hover:bg-primary/5 border border-border hover:border-primary/40 rounded-xl text-sm transition-all"
+                                                            >
+                                                                <div className="flex items-start gap-3">
+                                                                    <span className="flex-shrink-0 w-6 h-6 bg-primary/10 text-primary rounded-lg flex items-center justify-center text-xs font-black">{qi + 1}</span>
+                                                                    <div className="flex-1 leading-relaxed text-foreground"><MathText>{q}</MathText></div>
+                                                                </div>
+                                                            </motion.button>
+                                                        ))}
+                                                    </div>
+                                                )}
                                             </div>
                                         </div>
                                     )}
                                 </motion.div>
                             ))}
                             {showTypingDots && (
-                                <div className="flex justify-start">
-                                    <div className="bg-surface border border-border rounded-2xl px-4 py-3 flex items-center gap-2 shadow-soft">
-                                        <div className="flex gap-1">
-                                            {[0,1,2].map(i => <motion.div key={i} className={`w-2 h-2 ${subject.accentSolid} rounded-full`} animate={{ y: [0, -5, 0] }} transition={{ duration: 0.6, repeat: Infinity, delay: i * 0.15 }} />)}
-                                        </div>
-                                        <span className="text-xs text-muted-foreground">Solving…</span>
+                                <div className="flex gap-3">
+                                    <div className="w-7 h-7 rounded-lg bg-primary/10 flex items-center justify-center flex-shrink-0">
+                                        <Sigma className="w-4 h-4 text-primary" />
+                                    </div>
+                                    <div className="flex items-center gap-1 pt-2.5">
+                                        {[0,1,2].map(i => <motion.div key={i} className="w-2 h-2 bg-primary rounded-full" animate={{ y: [0, -5, 0] }} transition={{ duration: 0.6, repeat: Infinity, delay: i * 0.15 }} />)}
                                     </div>
                                 </div>
                             )}
                             <div ref={messagesEndRef} />
-                        </>
-                    )}
-                </div>
-
-                {/* Input */}
-                <div className="border-t border-border p-3 bg-surface">
-                    {uploadedImage && (
-                        <div className="relative inline-block mb-2">
-                            <img src={uploadedImage} alt="Upload" className="max-h-20 rounded-xl border" />
-                            <button onClick={() => setUploadedImage(null)} className="absolute -top-2 -right-2 w-5 h-5 bg-red-500 text-white rounded-full flex items-center justify-center text-xs"><X className="w-3 h-3" /></button>
                         </div>
                     )}
-                    <div className="flex gap-2">
-                        <input ref={fileInputRef} type="file" accept="image/*" onChange={handleImageUpload} className="hidden" />
-                        <Button variant="outline" size="sm" onClick={() => fileInputRef.current?.click()} disabled={isGenerating} className="h-10 w-10 p-0 flex-shrink-0"><Upload className="w-4 h-4" /></Button>
+                </div>
+            </div>
+
+            {/* Composer — single rounded container, Claude-style */}
+            <div className="flex-shrink-0 pt-3">
+                <div className="max-w-3xl mx-auto w-full">
+                    <div className="rounded-2xl border border-border bg-surface shadow-soft focus-within:border-primary/50 transition-colors overflow-hidden">
+                        {uploadedImage && (
+                            <div className="relative inline-block m-3 mb-0">
+                                <img src={uploadedImage} alt="Upload" className="max-h-24 rounded-xl border border-border" />
+                                <button onClick={() => setUploadedImage(null)} className="absolute -top-2 -right-2 w-5 h-5 bg-streak text-white rounded-full flex items-center justify-center"><X className="w-3 h-3" /></button>
+                            </div>
+                        )}
                         <Textarea value={chatInput} onChange={e => setChatInput(e.target.value)}
                             onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSend(); } }}
-                            placeholder={`Ask your ${subject.name} question... (Enter to send, Shift+Enter for new line)`}
-                            rows={2} disabled={isGenerating} className="flex-1 resize-none border-border focus:border-primary text-sm" />
-                        {isGenerating ? (
-                            <Button onClick={handleStop} variant="destructive" className="flex-shrink-0 h-10 w-10 p-0" title="Stop generating">
-                                <Square className="w-4 h-4" />
-                            </Button>
-                        ) : (
-                            <Button onClick={handleSend} disabled={!chatInput.trim() && !uploadedImage} className="flex-shrink-0 h-10 w-10 p-0" title="Send">
-                                <Send className="w-4 h-4" />
-                            </Button>
-                        )}
+                            placeholder={`Ask your ${subject.name} question…`}
+                            rows={1} disabled={isGenerating}
+                            className="min-h-[48px] max-h-40 resize-none border-0 bg-transparent shadow-none focus-visible:ring-0 focus-visible:ring-offset-0 text-sm px-4 pt-3.5" />
+                        <div className="flex items-center justify-between px-2.5 pb-2.5">
+                            <input ref={fileInputRef} type="file" accept="image/*" onChange={handleImageUpload} className="hidden" />
+                            <Button variant="ghost" size="sm" onClick={() => fileInputRef.current?.click()} disabled={isGenerating} className="h-8 w-8 p-0 text-muted-foreground hover:text-foreground" title="Attach image"><Upload className="w-4 h-4" /></Button>
+                            {isGenerating ? (
+                                <Button onClick={handleStop} variant="destructive" className="h-8 w-8 p-0 rounded-full" title="Stop generating"><Square className="w-3.5 h-3.5" /></Button>
+                            ) : (
+                                <Button onClick={handleSend} disabled={!chatInput.trim() && !uploadedImage} className="h-8 w-8 p-0 rounded-full" title="Send"><Send className="w-4 h-4" /></Button>
+                            )}
+                        </div>
                     </div>
+                    <p className="text-[11px] text-center text-muted-foreground mt-1.5">Enter to send · Shift+Enter for new line · {isTechFree ? 'Tech-Free mode' : 'CAS mode'}</p>
                 </div>
             </div>
 
