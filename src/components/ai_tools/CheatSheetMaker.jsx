@@ -18,6 +18,12 @@ import { getExaminerPrompt } from "@/lib/subjectExaminerPrompts";
 // asked for a larger ranked pool so excluded items can be swapped for free.
 const ITEMS_PER_PAGE = 22;
 
+// Per-sheet swap budget. Swaps (auto-replace on remove, or pinning a pooled
+// item) are free of AI cost, but the oversized pool means unlimited swapping
+// would let one credit's generation be harvested for several sheets' worth of
+// content. Cap it; once spent, the user regenerates (1 credit) for a fresh set.
+const SWAP_LIMIT = 8;
+
 // Static class strings (Tailwind JIT-safe — literals live here, not built from
 // template variables).
 const TYPE_META = {
@@ -49,6 +55,7 @@ export default function CheatSheetMaker() {
     const [isGenerating, setIsGenerating] = useState(false);
     const [customInput, setCustomInput] = useState("");
     const [showPool, setShowPool] = useState(false);
+    const [swapsUsed, setSwapsUsed] = useState(0);
 
     const printRef = useRef(null);
     const { toast } = useToast();
@@ -172,6 +179,7 @@ ${extracted ? `\nEXTRACTED CONTENT:${extracted}` : ""}`;
                 .sort((a, b) => b.importance - a.importance);
             const fit = pages * ITEMS_PER_PAGE;
             setItems(sorted.map((it, idx) => ({ ...it, status: idx < fit ? "in" : "out" })));
+            setSwapsUsed(0);
             setHasGenerated(true);
             recordStudyAndGetStreak().catch(() => {});
         } catch (err) {
@@ -182,32 +190,43 @@ ${extracted ? `\nEXTRACTED CONTENT:${extracted}` : ""}`;
     };
 
     // ─── Item actions ────────────────────────────────────────────────────────
-    // Remove an item from the sheet and auto-promote the best alternate (the
-    // "exclude & replace" behaviour).
+    const swapsLeft = SWAP_LIMIT - swapsUsed;
+    const swapLimitReached = swapsLeft <= 0;
+
+    // Remove an item. While there's swap budget, auto-promote the best alternate
+    // (the "exclude & replace" behaviour). Once the budget is spent, removing
+    // still works (trimming) but no replacement is pulled in.
     const excludeItem = (id) => {
-        setItems((prev) => {
-            let next = prev.map((it) => (it.id === id ? { ...it, status: "out", userExcluded: true } : it));
-            const candidate = next
-                .filter((it) => it.status === "out" && !it.userExcluded)
-                .sort((a, b) => b.importance - a.importance)[0];
-            if (candidate) next = next.map((it) => (it.id === candidate.id ? { ...it, status: "in" } : it));
-            return next;
-        });
+        const removed = items.map((it) => (it.id === id ? { ...it, status: "out", userExcluded: true } : it));
+        if (swapLimitReached) { setItems(removed); return; }
+        const candidate = removed
+            .filter((it) => it.status === "out" && !it.userExcluded)
+            .sort((a, b) => b.importance - a.importance)[0];
+        if (candidate) {
+            setItems(removed.map((it) => (it.id === candidate.id ? { ...it, status: "in" } : it)));
+            setSwapsUsed((s) => s + 1);
+        } else {
+            setItems(removed);
+        }
     };
 
-    const promoteItem = (id) =>
+    const promoteItem = (id) => {
+        if (swapLimitReached) { toast({ title: "Swap limit reached", description: "Regenerate for a fresh set of suggestions." }); return; }
         setItems((prev) => prev.map((it) => (it.id === id ? { ...it, status: "in", userExcluded: false } : it)));
+        setSwapsUsed((s) => s + 1);
+    };
 
     const addCustom = () => {
         const text = customInput.trim();
         if (!text) return;
+        // Your own text — no AI, no swap cost.
         setItems((prev) => [...prev, { id: `c-${Date.now()}`, type: "key-point", section: "My additions", content: text, importance: 5, status: "in", userExcluded: false }]);
         setCustomInput("");
     };
 
     const startOver = () => {
         if (hasGenerated && !window.confirm("Discard this cheat sheet and start over?")) return;
-        setItems([]); setHasGenerated(false); setUploadedFiles([]);
+        setItems([]); setHasGenerated(false); setUploadedFiles([]); setSwapsUsed(0);
     };
 
     // ─── Print / Save as PDF ─────────────────────────────────────────────────
@@ -338,7 +357,7 @@ ${extracted ? `\nEXTRACTED CONTENT:${extracted}` : ""}`;
                         <div className="flex-1 min-w-0">
                             <p className="font-display font-extrabold text-foreground text-sm leading-tight truncate">{title || subject || "Cheat Sheet"}</p>
                             <p className={`text-xs ${overBudget ? "text-streak font-bold" : "text-muted-foreground"}`}>
-                                {included.length} items · {overBudget ? `slightly over — trim a few to fit ${pages} page${pages > 1 ? "s" : ""}` : `fits ~${estPages} page${estPages > 1 ? "s" : ""}`}
+                                {included.length} items · {overBudget ? `slightly over — trim a few to fit ${pages} page${pages > 1 ? "s" : ""}` : `fits ~${estPages} page${estPages > 1 ? "s" : ""}`} · {swapLimitReached ? "no swaps left" : `${swapsLeft} swap${swapsLeft === 1 ? "" : "s"} left`}
                             </p>
                         </div>
                         <div className="flex gap-2 flex-shrink-0">
@@ -348,7 +367,11 @@ ${extracted ? `\nEXTRACTED CONTENT:${extracted}` : ""}`;
                     </div>
 
                     <div className="px-5 py-5 bg-surface space-y-5">
-                        <p className="text-xs text-muted-foreground">Tap any item to remove it — the next-best alternate drops in automatically. Add your own below.</p>
+                        <p className="text-xs text-muted-foreground">
+                            {swapLimitReached
+                                ? "Swap limit reached — you can still remove items or add your own. Regenerate for a fresh set of suggestions."
+                                : `Tap any item to remove it — the next-best alternate drops in (up to ${SWAP_LIMIT} swaps). Add your own below.`}
+                        </p>
 
                         {/* Included items, grouped, two-column on wide screens */}
                         <div className="sm:columns-2 sm:gap-5 space-y-3">
@@ -405,8 +428,9 @@ ${extracted ? `\nEXTRACTED CONTENT:${extracted}` : ""}`;
                                                         <button
                                                             key={it.id}
                                                             onClick={() => promoteItem(it.id)}
-                                                            title="Add to cheat sheet"
-                                                            className="group w-full text-left flex items-start gap-2 px-3 py-2 rounded-xl border border-border bg-background hover:border-primary/40 hover:bg-primary/5 transition-all"
+                                                            disabled={swapLimitReached}
+                                                            title={swapLimitReached ? "Swap limit reached" : "Add to cheat sheet"}
+                                                            className="group w-full text-left flex items-start gap-2 px-3 py-2 rounded-xl border border-border bg-background hover:border-primary/40 hover:bg-primary/5 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                                                         >
                                                             <span className={`flex-shrink-0 w-5 h-5 rounded-md ${m.bg} flex items-center justify-center mt-0.5`}>
                                                                 <m.Icon className={`w-3 h-3 ${m.color}`} />
