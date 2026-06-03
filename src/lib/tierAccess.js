@@ -38,7 +38,7 @@ export const FEATURES = {
   QUIZ_AI_MARK:     'quiz_ai_mark',      // free: blocked, premium: 10/day (mark a played quiz)
   FLASHCARD_AI_GEN: 'flashcard_ai_gen',  // free: 3 lifetime, premium: 3/day
   AI_TOOL:          'ai_tool',           // one-shot AI tools (free: 5 lifetime, premium: 6/day combined)
-  AI_CHAT:          'ai_chat',           // conversational tools (Math Tutor, Teaching Assistant) — premium: 30 msgs/day, free: shares the tools lifetime cap
+  AI_CHAT:          'ai_chat',           // conversational tools (Math Tutor, Teaching Assistant) — premium: 8 msgs/day, free: shares the tools lifetime cap
   GOAL_AI_GEN:      'goal_ai_gen',       // free: blocked, premium: 1/day (shares 'goal' bucket)
   ROADMAP_AI_GEN:   'roadmap_ai_gen',    // free: blocked, premium: 1/day (shares 'goal' bucket)
   BLURTING:         'blurting',          // free: blocked, premium: 5/day (uses AI for marking)
@@ -68,7 +68,7 @@ export const PREMIUM_DAILY_CAPS = {
   [FEATURES.QUIZ_AI_MARK]:     10,
   [FEATURES.FLASHCARD_AI_GEN]: 3,
   [FEATURES.AI_TOOL]:          6,
-  [FEATURES.AI_CHAT]:          30,
+  [FEATURES.AI_CHAT]:          8,
   [FEATURES.GOAL_AI_GEN]:      1,
   [FEATURES.ROADMAP_AI_GEN]:   1,
   [FEATURES.BLURTING]:         5,

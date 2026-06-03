@@ -157,7 +157,7 @@ async function callInvokeAI({ prompt, response_json_schema }) {
 // real cost backstop. Free users' chat shares the free tools lifetime cap.
 const TIER_FREE_CAPS    = { quiz_ai_gen: 5, flashcard_ai_gen: 5, ai_tool: 5, ai_chat: 5 };
 const TIER_FREE_COUNTER = { quiz_ai_gen: "free_ai_quizzes_used", flashcard_ai_gen: "free_ai_flashcards_used", ai_tool: "free_ai_tools_used", ai_chat: "free_ai_tools_used" };
-const TIER_PREMIUM_CAPS = { quiz_ai_gen: 3, quiz_ai_mark: 10, flashcard_ai_gen: 3, ai_tool: 6, ai_chat: 30, goal_ai_gen: 1, roadmap_ai_gen: 1, blurting: 5, active_recall: 8 };
+const TIER_PREMIUM_CAPS = { quiz_ai_gen: 3, quiz_ai_mark: 10, flashcard_ai_gen: 3, ai_tool: 6, ai_chat: 8, goal_ai_gen: 1, roadmap_ai_gen: 1, blurting: 5, active_recall: 8 };
 const TIER_COUNTER_KEY  = { quiz_ai_gen: "quizzes", quiz_ai_mark: "quiz_marks", flashcard_ai_gen: "flashcards", ai_tool: "tools", ai_chat: "chat", goal_ai_gen: "goal", roadmap_ai_gen: "goal", blurting: "blurting", active_recall: "active_recall" };
 const TIER_WEEKLY_CAP_CENTS = 250;
 const TIER_FREE_LIFETIME_COST_CAP_CENTS = 100;   // $1 hard ceiling per free user, lifetime
@@ -1867,9 +1867,15 @@ app.post("/local-ai/invokeAIStream", async (req, res) => {
     const fileBlocks = await buildFileContentBlocks(params.file_urls);
     const userContent = [...fileBlocks, { type: "text", text: user }];
 
+    // Chat tools (Math Tutor, Teaching Assistant) are meant to give short,
+    // conversational replies ("3-5 sentences then a question"). Output tokens
+    // dominate cost (~$15/M), so capping chat responses at 2048 roughly halves
+    // the per-message cost (~5c → ~2.5c) with no real quality loss. One-shot
+    // tools (essay plans, explanations) still get the full 8192.
+    const maxTokens = feature === "ai_chat" ? 2048 : 8192;
     const request = {
       model: MODEL,
-      max_tokens: 8192,
+      max_tokens: maxTokens,
       messages: [{ role: "user", content: userContent }],
     };
 
