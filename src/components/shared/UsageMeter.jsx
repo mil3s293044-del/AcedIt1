@@ -19,6 +19,7 @@ const PREMIUM_ROWS = [
     { feature: FEATURES.QUIZ_AI_MARK,     counter: "quiz_marks",    label: "Quiz marking" },
     { feature: FEATURES.FLASHCARD_AI_GEN, counter: "flashcards",    label: "Flashcard generation" },
     { feature: FEATURES.AI_TOOL,          counter: "tools",         label: "AI study tools" },
+    { feature: FEATURES.AI_CHAT,          counter: "chat",          label: "AI chat (tutors)" },
     { feature: FEATURES.BLURTING,         counter: "blurting",      label: "Blurting" },
     { feature: FEATURES.ACTIVE_RECALL,    counter: "active_recall", label: "Active recall" },
     { feature: FEATURES.GOAL_AI_GEN,      counter: "goal",          label: "Goals & roadmap" },
