@@ -12,10 +12,7 @@ import {
     Flame,
     Sparkles,
     Timer,
-    Layers,
-    ArrowRight,
-    TrendingUp,
-    Target
+    Layers
 } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
@@ -414,7 +411,19 @@ export default function Study() {
         };
     }, [nextDeadline, dueFlashcardCount, todayMins, dominantRecentTechnique]);
 
-    const featuredTheme = featured ? ACCENT_THEME[featured.accent] : null;
+    // Diverse "suggested today" options — one per technique, each with a
+    // dynamic, context-aware one-liner. The smart top pick (featured.tab) gets
+    // a badge; every tool is offered so the student has varied options.
+    const suggestionSub = (id) => {
+        switch (id) {
+            case "pomodoro":          return todayMins === 0 ? "Easiest way to start today." : "Stack another focused block.";
+            case "spaced_repetition": return dueFlashcardCount > 0 ? `${dueFlashcardCount} cards due now.` : "Keep your flashcards fresh.";
+            case "active_recall":     return "Quiz yourself — beats re-reading.";
+            case "blurting":          return "Brain-dump a topic, spot the gaps.";
+            case "exam":              return nextDeadline && nextDeadline.days <= 14 ? `Exam in ${nextDeadline.days}d — run a paper.` : "Practice under exam conditions.";
+            default:                  return "";
+        }
+    };
 
     if (authError) {
         return (
@@ -543,12 +552,12 @@ export default function Study() {
                         </div>
                     </div>
 
-                    {/* Today stats panel */}
+                    {/* Today stats panel — colour-matched to the selected technique */}
                     <div className="md:col-span-2">
-                        <div className="rounded-3xl bg-primary/10 border-2 border-primary/25 p-6 h-full flex flex-col">
+                        <div className={`rounded-3xl ${currentTheme.bg} border-2 ${currentTheme.border} p-6 h-full flex flex-col transition-colors`}>
                             <div className="flex items-center gap-2 mb-2">
-                                <Clock className="w-4 h-4 text-primary" />
-                                <p className="stat-label text-primary/80">Today</p>
+                                <Clock className={`w-4 h-4 ${currentTheme.iconText}`} />
+                                <p className={`stat-label ${currentTheme.iconText}/80`}>Today</p>
                             </div>
                             <p className="font-display font-extrabold text-foreground leading-none" style={{ fontSize: 'clamp(2.25rem, 5.5vw, 3rem)' }}>
                                 {fmtTime(todayMins)}
@@ -562,7 +571,7 @@ export default function Study() {
                                             ? "Good start — stack another?"
                                             : "Just getting started."}
                             </p>
-                            <div className="space-y-2.5 mt-4 pt-4 border-t-2 border-primary/15">
+                            <div className={`space-y-2.5 mt-4 pt-4 border-t-2 ${currentTheme.divider}`}>
                                 <div className="flex items-baseline justify-between">
                                     <p className="text-xs font-bold text-muted-foreground">This week</p>
                                     <p className="text-xs font-bold text-foreground">{fmtTime(weekMins)}</p>
@@ -582,35 +591,40 @@ export default function Study() {
                     </div>
                 </motion.section>
 
-                {/* ── FEATURED PANEL ──────────────────────────────────── */}
-                {featured && (
-                    <motion.section
-                        initial={{ opacity: 0, y: 12 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        transition={{ delay: 0.1 }}
-                    >
-                        <div className={`rounded-2xl ${featuredTheme.bg} border-2 ${featuredTheme.border} p-5 lg:p-6`}>
-                            <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
-                                <div className={`w-12 h-12 rounded-xl ${featuredTheme.iconBg} flex items-center justify-center flex-shrink-0`}>
-                                    <featured.icon className={`w-6 h-6 ${featuredTheme.iconText}`} />
-                                </div>
-                                <div className="flex-1 min-w-0">
-                                    <p className="stat-label mb-1">Suggested today · {featured.label}</p>
-                                    <h2 className="font-display font-extrabold text-foreground text-base lg:text-lg leading-snug">
-                                        {featured.title}
-                                    </h2>
-                                    <p className="text-muted-foreground text-sm mt-0.5">{featured.sub}</p>
-                                </div>
-                                <Button
-                                    onClick={() => setActiveTab(featured.tab)}
-                                    className="w-full sm:w-auto flex-shrink-0"
+                {/* ── SUGGESTED TODAY — diverse, colour-coded per technique ── */}
+                <motion.section
+                    initial={{ opacity: 0, y: 12 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: 0.1 }}
+                >
+                    <div className="flex items-center gap-2 mb-3">
+                        <Sparkles className="w-4 h-4 text-muted-foreground" />
+                        <p className="stat-label">Suggested today</p>
+                    </div>
+                    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+                        {TECHNIQUES.map((t) => {
+                            const th = ACCENT_THEME[t.accent];
+                            const Icon = t.icon;
+                            const isTop = featured?.tab === t.id;
+                            return (
+                                <button
+                                    key={t.id}
+                                    onClick={() => setActiveTab(t.id)}
+                                    className={`relative text-left rounded-2xl border-2 p-4 transition-all hover:-translate-y-0.5 ${th.bg} ${th.border} ${isTop ? 'shadow-soft' : ''}`}
                                 >
-                                    {featured.cta} <ArrowRight className="w-4 h-4" />
-                                </Button>
-                            </div>
-                        </div>
-                    </motion.section>
-                )}
+                                    {isTop && (
+                                        <span className={`absolute top-2.5 right-2.5 pill ${th.pillBg} ${th.pillText}`}>Top pick</span>
+                                    )}
+                                    <div className={`w-10 h-10 rounded-xl ${th.iconBg} flex items-center justify-center mb-2.5`}>
+                                        <Icon className={`w-5 h-5 ${th.iconText}`} />
+                                    </div>
+                                    <p className="font-display font-extrabold text-foreground text-sm leading-tight">{t.name}</p>
+                                    <p className="text-xs text-muted-foreground mt-1 leading-snug">{suggestionSub(t.id)}</p>
+                                </button>
+                            );
+                        })}
+                    </div>
+                </motion.section>
 
                 {/* ── TABS ──────────────────────────────────────────────── */}
                 <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-5">
