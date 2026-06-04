@@ -19,12 +19,6 @@ import { getExaminerPrompt } from "@/lib/subjectExaminerPrompts";
 // asked for a larger ranked pool so excluded items can be swapped for free.
 const ITEMS_PER_PAGE = 22;
 
-// Per-sheet swap budget. Swaps (auto-replace on remove, or pinning a pooled
-// item) are free of AI cost, but the oversized pool means unlimited swapping
-// would let one credit's generation be harvested for several sheets' worth of
-// content. Cap it; once spent, the user regenerates (1 credit) for a fresh set.
-const SWAP_LIMIT = 8;
-
 // Static class strings (Tailwind JIT-safe — literals live here, not built from
 // template variables).
 const TYPE_META = {
@@ -57,7 +51,6 @@ export default function CheatSheetMaker() {
     const [customInput, setCustomInput] = useState("");
     const [showPool, setShowPool] = useState(false);
     const [showPreview, setShowPreview] = useState(false);
-    const [swapsUsed, setSwapsUsed] = useState(0);
 
     const printRef = useRef(null);
     const { toast } = useToast();
@@ -128,9 +121,9 @@ export default function CheatSheetMaker() {
             const { directUrls, extracted } = await prepareSources();
 
             const fitCount = pages * ITEMS_PER_PAGE;
-            // Only generate a small buffer beyond what fits (8 swaps + a little).
-            // A 2.2× pool meant up to ~144 items for 3 pages — that huge JSON is
-            // what made generation crawl. Keep output tight.
+            // Generate a modest buffer of alternates beyond what fits, so there
+            // are suggestions to swap in. A 2.2× pool meant up to ~144 items for
+            // 3 pages — that huge JSON is what made generation crawl. Keep it tight.
             const poolCount = fitCount + 12;
             // Cap how much source text we send so a big upload doesn't balloon
             // the input (and latency/cost). Claude still reads attached PDFs.
@@ -188,7 +181,6 @@ ${sourceText ? `\nEXTRACTED CONTENT:${sourceText}` : ""}`;
                 .sort((a, b) => b.importance - a.importance);
             const fit = pages * ITEMS_PER_PAGE;
             setItems(sorted.map((it, idx) => ({ ...it, status: idx < fit ? "in" : "out" })));
-            setSwapsUsed(0);
             setHasGenerated(true);
             recordStudyAndGetStreak().catch(() => {});
         } catch (err) {
@@ -199,22 +191,14 @@ ${sourceText ? `\nEXTRACTED CONTENT:${sourceText}` : ""}`;
     };
 
     // ─── Item actions ────────────────────────────────────────────────────────
-    const swapsLeft = SWAP_LIMIT - swapsUsed;
-    const swapLimitReached = swapsLeft <= 0;
-
-    // Remove an item from the sheet — this just drops it (the count goes down).
-    // The student adds a replacement themselves, either from the suggestions
-    // pool or their own text. Removing is free and doesn't spend a swap.
+    // Remove an item from the sheet — drops it (the count goes down). The
+    // student adds a replacement themselves, from the suggestions pool or their
+    // own text. All of this is free (no AI), so swaps are unlimited.
     const excludeItem = (id) =>
         setItems((prev) => prev.map((it) => (it.id === id ? { ...it, status: "out", userExcluded: true } : it)));
 
-    // Pulling a NEW suggestion onto the sheet is the action that could harvest
-    // the oversized pool, so it spends one of the swap budget.
-    const promoteItem = (id) => {
-        if (swapLimitReached) { toast({ title: "Swap limit reached", description: "Regenerate for a fresh set of suggestions." }); return; }
+    const promoteItem = (id) =>
         setItems((prev) => prev.map((it) => (it.id === id ? { ...it, status: "in", userExcluded: false } : it)));
-        setSwapsUsed((s) => s + 1);
-    };
 
     const addCustom = () => {
         const text = customInput.trim();
@@ -226,7 +210,7 @@ ${sourceText ? `\nEXTRACTED CONTENT:${sourceText}` : ""}`;
 
     const startOver = () => {
         if (hasGenerated && !window.confirm("Discard this cheat sheet and start over?")) return;
-        setItems([]); setHasGenerated(false); setUploadedFiles([]); setSwapsUsed(0);
+        setItems([]); setHasGenerated(false); setUploadedFiles([]);
     };
 
     // ─── Export (print + download share one A4 HTML document) ────────────────
@@ -378,7 +362,7 @@ ${sourceText ? `\nEXTRACTED CONTENT:${sourceText}` : ""}`;
                         <div className="flex-1 min-w-0">
                             <p className="font-display font-extrabold text-foreground text-sm leading-tight truncate">{title || subject || "Cheat Sheet"}</p>
                             <p className={`text-xs ${overBudget ? "text-streak font-bold" : "text-muted-foreground"}`}>
-                                {included.length} items · {overBudget ? `slightly over — trim a few to fit ${pages} page${pages > 1 ? "s" : ""}` : `fits ~${estPages} page${estPages > 1 ? "s" : ""}`} · {swapLimitReached ? "no swaps left" : `${swapsLeft} swap${swapsLeft === 1 ? "" : "s"} left`}
+                                {included.length} items · {overBudget ? `slightly over — trim a few to fit ${pages} page${pages > 1 ? "s" : ""}` : `fits ~${estPages} page${estPages > 1 ? "s" : ""}`}
                             </p>
                         </div>
                         <div className="flex gap-1.5 flex-shrink-0 flex-wrap justify-end">
@@ -391,8 +375,7 @@ ${sourceText ? `\nEXTRACTED CONTENT:${sourceText}` : ""}`;
 
                     <div className="px-5 py-5 bg-surface space-y-5">
                         <p className="text-xs text-muted-foreground">
-                            Tap any item to remove it. Add a replacement from your own text below, or from “more suggestions”
-                            {swapLimitReached ? " (swap limit reached — regenerate for more)." : ` (up to ${SWAP_LIMIT} per sheet).`}
+                            Tap any item to remove it. Add a replacement from your own text below, or from “more suggestions”.
                         </p>
 
                         {/* Included items, grouped, two-column on wide screens */}
@@ -450,9 +433,8 @@ ${sourceText ? `\nEXTRACTED CONTENT:${sourceText}` : ""}`;
                                                         <button
                                                             key={it.id}
                                                             onClick={() => promoteItem(it.id)}
-                                                            disabled={swapLimitReached}
-                                                            title={swapLimitReached ? "Swap limit reached" : "Add to cheat sheet"}
-                                                            className="group w-full text-left flex items-start gap-2 px-3 py-2 rounded-xl border border-border bg-background hover:border-primary/40 hover:bg-primary/5 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                                                            title="Add to cheat sheet"
+                                                            className="group w-full text-left flex items-start gap-2 px-3 py-2 rounded-xl border border-border bg-background hover:border-primary/40 hover:bg-primary/5 transition-all"
                                                         >
                                                             <span className={`flex-shrink-0 w-5 h-5 rounded-md ${m.bg} flex items-center justify-center mt-0.5`}>
                                                                 <m.Icon className={`w-3 h-3 ${m.color}`} />
