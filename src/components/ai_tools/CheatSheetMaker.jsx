@@ -128,25 +128,32 @@ export default function CheatSheetMaker() {
             const { directUrls, extracted } = await prepareSources();
 
             const fitCount = pages * ITEMS_PER_PAGE;
-            const poolCount = Math.round(fitCount * 2.2); // ranked superset for free swaps
+            // Only generate a small buffer beyond what fits (8 swaps + a little).
+            // A 2.2× pool meant up to ~144 items for 3 pages — that huge JSON is
+            // what made generation crawl. Keep output tight.
+            const poolCount = fitCount + 12;
+            // Cap how much source text we send so a big upload doesn't balloon
+            // the input (and latency/cost). Claude still reads attached PDFs.
+            const sourceText = extracted ? extracted.slice(0, 12000) : "";
 
             const prompt = `${getExaminerPrompt(subject)}
 
 You are building a high-density EXAM CHEAT SHEET for VCE ${subject}${title ? ` on "${title}"` : ""}, sized to fit ${pages} A4 page${pages > 1 ? "s" : ""} of tight two-column notes.
 
-From the study material provided${extracted ? " (extracted text below, plus any attached files)" : ""}, pull the single most useful, exam-relevant items: key formulas, definitions, must-know facts, and sharp exam tips.
+From the study material provided${sourceText ? " (extracted text below, plus any attached files)" : ""}, pull the single most useful, exam-relevant items: key formulas, definitions, must-know facts, and sharp exam tips.
 
 RULES
-- Return a RANKED list of about ${poolCount} items (deliberately MORE than fit on the page, so the best fill the sheet and the rest are alternates).
+- Return EXACTLY ${poolCount} items, no more — ranked best-first so the top ones fill the sheet and the rest are alternates.
 - importance: integer 1-5. 5 = absolutely essential, 1 = nice-to-have. Be decisive — only a handful of 5s.
 - Each item is ONE concise line — a phrase, a formula, a definition. No full paragraphs, no filler.
 - ALL maths in LaTeX: inline $...$ or display $$...$$. NEVER plain-text maths.
 - Give each item a short "section" label (e.g. "Calculus", "Definitions", "Exam tips").
 - Prioritise things a student forgets under pressure. Exclude trivial or obvious content.
-${extracted ? `\nEXTRACTED CONTENT:${extracted}` : ""}`;
+${sourceText ? `\nEXTRACTED CONTENT:${sourceText}` : ""}`;
 
             const response = await base44.integrations.Core.InvokeLLM({
                 feature: "ai_tool",
+                fast: true,
                 prompt,
                 file_urls: directUrls.length ? directUrls : undefined,
                 response_json_schema: {
@@ -356,7 +363,7 @@ ${extracted ? `\nEXTRACTED CONTENT:${extracted}` : ""}`;
                     </div>
 
                     <Button onClick={handleGenerate} disabled={!subject || !uploadedFiles.length || isGenerating} size="lg" className="w-full">
-                        {isGenerating ? <><Loader2 className="w-4 h-4 animate-spin" /> Building your cheat sheet…</> : <><Wand2 className="w-4 h-4" /> Generate cheat sheet</>}
+                        {isGenerating ? <><Loader2 className="w-4 h-4 animate-spin" /> Building your cheat sheet… (~20–40s)</> : <><Wand2 className="w-4 h-4" /> Generate cheat sheet</>}
                     </Button>
                 </div>
             )}

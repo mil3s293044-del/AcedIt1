@@ -17,6 +17,11 @@ dotenvConfig({ path: ".env.local", override: true });
 
 const PORT = Number(process.env.LOCAL_AI_PORT || 3001);
 const MODEL = process.env.ANTHROPIC_MODEL || "claude-sonnet-4-6";
+// Optional faster/cheaper model for latency-sensitive structured tools (e.g.
+// the cheat sheet maker), used when a request passes `fast: true`. Falls back
+// to the default model if not configured, so behaviour is unchanged until an
+// id is set in the Render dashboard.
+const FAST_MODEL = process.env.ANTHROPIC_FAST_MODEL || MODEL;
 
 if (!process.env.ANTHROPIC_API_KEY) {
   console.error(
@@ -1972,7 +1977,7 @@ app.post("/local-ai/invokeAI", async (req, res) => {
     // max_tokens bumped to 32k — 8k truncates structured outputs like the Exam
     // Question Generator (15 questions × marking_criteria + model_answer is big).
     const request = {
-      model: MODEL,
+      model: params.fast ? FAST_MODEL : MODEL,
       max_tokens: 32000,
       messages: [{ role: "user", content: userContent }],
     };
