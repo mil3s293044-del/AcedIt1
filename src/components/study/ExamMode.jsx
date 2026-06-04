@@ -385,7 +385,7 @@ export default function ExamMode({ userSubjects }) {
     const isCurrentAnswered = q?.type === "mcq" ? currentAnswer.selectedIndex !== undefined : currentAnswer.typed?.length > 0;
 
     return (
-      <div className="max-w-2xl mx-auto space-y-3">
+      <div className="max-w-3xl mx-auto space-y-4">
                 {/* Header Bar */}
                 <motion.div
           animate={{ backgroundColor: isVeryLow ? "hsl(0 100% 45%)" : isLow ? "hsl(0 100% 55%)" : "hsl(218 50% 11%)" }}
@@ -476,19 +476,19 @@ export default function ExamMode({ userSubjects }) {
                             </div>
                         </div>
 
-                        <div className="p-6 space-y-5">
-                            <p className="text-lg font-semibold text-foreground leading-relaxed">{q?.question}</p>
+                        <div className="p-6 sm:p-8 space-y-6">
+                            <p className="text-xl sm:text-2xl font-semibold text-foreground leading-relaxed">{q?.question}</p>
 
                             {q?.type === "mcq" &&
-              <div className="space-y-2.5">
+              <div className="space-y-3">
                                     {q.options.map((opt, i) => {
                   const sel = currentAnswer.selectedIndex === i;
                   return (
                     <motion.button key={i} onClick={() => handleSelectMCQ(q.id, i)}
                     whileHover={{ scale: 1.005 }}
                     whileTap={{ scale: 0.998 }}
-                    className={`w-full text-left px-5 py-4 rounded-2xl border-2 text-sm font-medium transition-all duration-150 flex items-center gap-3 group ${sel ? "bg-streak border-streak text-white shadow-soft" : "border-border text-foreground hover:border-streak/40 hover:bg-streak/5 bg-surface"}`}>
-                                                <span className={`w-7 h-7 rounded-xl flex items-center justify-center text-xs font-black flex-shrink-0 transition-all ${sel ? "bg-white/20 text-white" : "bg-secondary text-muted-foreground group-hover:bg-streak/10 group-hover:text-streak"}`}>
+                    className={`w-full text-left px-5 py-4 rounded-2xl border-2 text-base font-medium transition-all duration-150 flex items-center gap-4 group ${sel ? "bg-streak border-streak text-white shadow-soft" : "border-border text-foreground hover:border-streak/40 hover:bg-streak/5 bg-surface"}`}>
+                                                <span className={`w-9 h-9 rounded-xl flex items-center justify-center text-sm font-black flex-shrink-0 transition-all ${sel ? "bg-white/20 text-white" : "bg-secondary text-muted-foreground group-hover:bg-streak/10 group-hover:text-streak"}`}>
                                                     {String.fromCharCode(65 + i)}
                                                 </span>
                                                 <span className="flex-1">{opt}</span>

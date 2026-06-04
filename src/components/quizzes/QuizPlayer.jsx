@@ -901,7 +901,7 @@ Return exactly ${questionsForAnalysis.length} items.`,
                 </DialogContent>
             </Dialog>
 
-            <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="max-w-2xl mx-auto space-y-3">
+            <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="max-w-3xl mx-auto space-y-4">
 
                 {/* Header */}
                 <div className="bg-chart-3 rounded-2xl p-4 flex items-center justify-between gap-4 shadow-soft">
@@ -1004,13 +1004,13 @@ Return exactly ${questionsForAnalysis.length} items.`,
                             </div>
                         </div>
 
-                        <div className="p-6 space-y-5">
-                            <div className="text-lg font-semibold text-foreground leading-relaxed">
+                        <div className="p-6 sm:p-8 space-y-6">
+                            <div className="text-xl sm:text-2xl font-semibold text-foreground leading-relaxed">
                                 <MarkdownMath>{currentQuestion.question || ""}</MarkdownMath>
                             </div>
 
                             {currentQuestion.type === 'mcq' ? (
-                                <div className="space-y-2.5">
+                                <div className="space-y-3">
                                     {currentQuestion.options?.map((option, index) => {
                                         const isSelected = getCurrentAnswer()?.toString() === index.toString();
                                         const isCorrectAnswer = index === currentQuestion.correct_answer;
@@ -1031,11 +1031,11 @@ Return exactly ${questionsForAnalysis.length} items.`,
                                                 whileHover={!showFeedback ? { scale: 1.005 } : {}}
                                                 whileTap={!showFeedback ? { scale: 0.998 } : {}}
                                                 onClick={() => !showFeedback && handleAnswerChange(index.toString())}
-                                                className={`w-full flex items-center gap-3 px-5 py-4 rounded-2xl text-left transition-all duration-150 ${choiceCls} ${showFeedback ? 'cursor-default' : 'cursor-pointer'}`}>
-                                                <span className={`w-7 h-7 rounded-xl flex items-center justify-center text-xs font-black flex-shrink-0 transition-all ${badgeCls}`}>
-                                                    {showFeedback && isCorrectAnswer ? <Check className="w-3.5 h-3.5" /> : showFeedback && isSelected && !isCorrect ? <X className="w-3.5 h-3.5" /> : String.fromCharCode(65 + index)}
+                                                className={`w-full flex items-center gap-4 px-5 py-4 rounded-2xl text-left transition-all duration-150 ${choiceCls} ${showFeedback ? 'cursor-default' : 'cursor-pointer'}`}>
+                                                <span className={`w-9 h-9 rounded-xl flex items-center justify-center text-sm font-black flex-shrink-0 transition-all ${badgeCls}`}>
+                                                    {showFeedback && isCorrectAnswer ? <Check className="w-4 h-4" /> : showFeedback && isSelected && !isCorrect ? <X className="w-4 h-4" /> : String.fromCharCode(65 + index)}
                                                 </span>
-                                                <span className="flex-1 font-medium text-sm"><MathText>{option}</MathText></span>
+                                                <span className="flex-1 font-medium text-base"><MathText>{option}</MathText></span>
                                             </motion.button>
                                         );
                                     })}
