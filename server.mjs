@@ -1216,6 +1216,7 @@ const DAILY_CAPS = {
   competition_bonus:  500,
   wager:              300,
   season_reward:      2000,
+  loading_quiz:       50,
 };
 const HOURLY_VELOCITY_CAP = 600;
 
@@ -1340,6 +1341,7 @@ app.post("/local-ai/fn/awardXP", async (req, res) => {
         break;
       case "competition_bonus":
       case "season_reward":
+      case "loading_quiz":
         rawXP = flat_xp || 0;
         break;
       case "wager":

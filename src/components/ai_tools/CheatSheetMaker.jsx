@@ -11,6 +11,7 @@ import {
 } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { recordStudyAndGetStreak } from "@/components/shared/streakHelpers";
+import LoadingQuiz from "@/components/shared/LoadingQuiz";
 import MarkdownMath from "@/components/shared/MarkdownMath";
 import { getExaminerPrompt } from "@/lib/subjectExaminerPrompts";
 
@@ -351,6 +352,9 @@ ${sourceText ? `\nEXTRACTED CONTENT:${sourceText}` : ""}`;
                     </Button>
                 </div>
             )}
+
+            {/* ── LOADING MINI-QUIZ ─────────────────────────────────── */}
+            {isGenerating && !hasGenerated && <LoadingQuiz />}
 
             {/* ── RESULT ────────────────────────────────────────────── */}
             {hasGenerated && (
