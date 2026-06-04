@@ -14,7 +14,6 @@ import {
     Timer,
     Layers
 } from "lucide-react";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { format, isToday, startOfWeek, parseISO, differenceInDays } from "date-fns";
 
@@ -626,33 +625,18 @@ export default function Study() {
                     </div>
                 </motion.section>
 
-                {/* ── TABS ──────────────────────────────────────────────── */}
-                <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-5">
-                    <TabsList className="grid w-full grid-cols-5 h-auto p-1.5 rounded-2xl bg-surface border-2 border-border shadow-soft">
-                        {TECHNIQUES.map(({ id, name, icon: Icon }) => (
-                            <TabsTrigger
-                                key={id}
-                                value={id}
-                                className="flex flex-col sm:flex-row items-center justify-center gap-1.5 py-2.5 px-2 rounded-xl text-[11px] sm:text-xs lg:text-sm font-bold text-muted-foreground data-[state=active]:bg-foreground data-[state=active]:text-background data-[state=active]:shadow-soft transition-all"
-                            >
-                                <Icon className="w-4 h-4" />
-                                <span className="leading-tight">{name}</span>
-                            </TabsTrigger>
-                        ))}
-                    </TabsList>
-
-                    {Object.entries(techniqueComponents).map(([key, component]) => (
-                        <TabsContent key={key} value={key}>
-                            <motion.div
-                                initial={{ opacity: 0, y: 12 }}
-                                animate={{ opacity: 1, y: 0 }}
-                                transition={{ duration: 0.3 }}
-                            >
-                                {component}
-                            </motion.div>
-                        </TabsContent>
-                    ))}
-                </Tabs>
+                {/* ── ACTIVE TOOL ───────────────────────────────────────── */}
+                {/* Tool switching happens via the colour-coded suggestion grid
+                    above and the selected-technique panel — the old tab bar was
+                    redundant, so it's removed. */}
+                <motion.div
+                    key={activeTab}
+                    initial={{ opacity: 0, y: 12 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ duration: 0.3 }}
+                >
+                    {techniqueComponents[activeTab]}
+                </motion.div>
             </div>
         </div>
     );
