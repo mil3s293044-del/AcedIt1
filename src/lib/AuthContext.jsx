@@ -39,7 +39,15 @@ const ONBOARDING_STORAGE_KEY = 'acedit_onboarding_v1';
 // answers to the wrong user even with this longer window.
 const ONBOARDING_STALENESS_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
 
+// Module-level guard. The post-signup apply can be triggered from several
+// places (getSession on first paint, plus SIGNED_IN / INITIAL_SESSION events)
+// because Supabase doesn't reliably fire SIGNED_IN after a full-page OAuth
+// redirect. We call it from all of them, but only the first call with real
+// answers does the work — the rest bail here so subjects aren't inserted twice.
+let onboardingApplyStarted = false;
+
 async function applyOnboardingFromStorage(userEmail) {
+  if (onboardingApplyStarted) return null;
   let answers = null;
   try {
     const raw = localStorage.getItem(ONBOARDING_STORAGE_KEY);
@@ -47,6 +55,9 @@ async function applyOnboardingFromStorage(userEmail) {
     answers = JSON.parse(raw);
   } catch { return null; }
   if (!answers?.completedAt) return null; // wizard not finished
+
+  // We have real answers to apply — claim the run so concurrent callers bail.
+  onboardingApplyStarted = true;
 
   // Staleness guard — if completedAt is too old, the localStorage probably
   // belongs to an abandoned session. Clear and bail.
@@ -65,19 +76,22 @@ async function applyOnboardingFromStorage(userEmail) {
   }
 
   // Wait for the handle_new_auth_user trigger to create the profile row.
-  // Up to ~1.5s of polling — usually completes in <200ms.
+  // Brand-new signups can lag a little, so poll up to ~6s before giving up.
   let profile = null;
-  for (let i = 0; i < 8; i++) {
+  for (let i = 0; i < 20; i++) {
     const { data } = await supabase
       .from('user_profiles')
       .select('id, onboarding_tasks')
       .eq('created_by', userEmail)
       .maybeSingle();
     if (data) { profile = data; break; }
-    await new Promise((r) => setTimeout(r, 200));
+    await new Promise((r) => setTimeout(r, 300));
   }
   if (!profile) {
-    console.warn('[onboarding] no user_profile row yet — skipping apply');
+    console.warn('[onboarding] no user_profile row yet — will retry on next load');
+    // Release the guard so a later auth signal (or a reload, where localStorage
+    // still holds the answers) can try again instead of being blocked forever.
+    onboardingApplyStarted = false;
     return null;
   }
 
@@ -193,16 +207,42 @@ export const AuthProvider = ({ children }) => {
       setAppPublicSettings({});
       setIsLoadingPublicSettings(false);
 
+      // Apply onboarding answers (if any) then route premium-intent users to
+      // the subscription page. Safe to call from multiple auth signals — the
+      // module guard inside applyOnboardingFromStorage ensures it runs once.
+      const runPostSignup = async (email) => {
+        try {
+          const intent = await applyOnboardingFromStorage(email);
+          if (intent === 'premium' && window.location.pathname !== '/Subscription') {
+            window.location.assign('/Subscription');
+          }
+        } catch (e) {
+          console.error('[onboarding] post-signup apply failed:', e);
+        }
+      };
+
       (async () => {
         // detectSessionInUrl on the client picks up the OAuth code from the
-        // hash on the redirect-back, so getSession() returns the new session
+        // URL on the redirect-back, so getSession() returns the new session
         // on first paint after login.
+        const oauthInUrl = typeof window !== 'undefined' &&
+          (window.location.search.includes('code=') || window.location.hash.includes('access_token'));
+
         const { data: { session } } = await supabase.auth.getSession();
         if (session?.user) {
           setUser(makeUserShape(session.user));
           setIsAuthenticated(true);
+          runPostSignup(session.user.email);
+          setIsLoadingAuth(false);
+        } else if (oauthInUrl) {
+          // OAuth redirect is still being exchanged — keep the loading spinner
+          // up so the public Landing page doesn't flash for a frame. The
+          // onAuthStateChange handler below finishes once the session lands.
+          // Fallback timeout so we never hang if the exchange fails.
+          setTimeout(() => setIsLoadingAuth(false), 5000);
+        } else {
+          setIsLoadingAuth(false);
         }
-        setIsLoadingAuth(false);
       })();
 
       const { data } = supabase.auth.onAuthStateChange(async (event, session) => {
@@ -230,21 +270,15 @@ export const AuthProvider = ({ children }) => {
           setUser(makeUserShape(session.user));
           setIsAuthenticated(true);
           setAuthError(null);
+          setIsLoadingAuth(false);
 
-          // On a SIGNED_IN event (initial OAuth landing or fresh login),
-          // check if there are unapplied onboarding answers and apply them.
-          // Skip if we're already in a recovery flow.
-          if (event === 'SIGNED_IN' && !recoveryInProgress) {
-            try {
-              const intent = await applyOnboardingFromStorage(session.user.email);
-              // Premium-intent users land on Subscription page (hard sell).
-              // Free-intent users stay where they are (typically Dashboard).
-              if (intent === 'premium' && window.location.pathname !== '/Subscription') {
-                window.location.assign('/Subscription');
-              }
-            } catch (e) {
-              console.error('[onboarding] post-signup apply failed:', e);
-            }
+          // Apply unapplied onboarding answers. We listen for SIGNED_IN *and*
+          // INITIAL_SESSION because a full-page OAuth redirect doesn't reliably
+          // fire SIGNED_IN — it can arrive as INITIAL_SESSION, which previously
+          // meant a brand-new user's subjects were never saved. The module
+          // guard makes this idempotent vs the getSession call above.
+          if ((event === 'SIGNED_IN' || event === 'INITIAL_SESSION') && !recoveryInProgress) {
+            runPostSignup(session.user.email);
           }
         } else {
           setUser(null);
