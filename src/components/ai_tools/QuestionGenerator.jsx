@@ -8,6 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { useToast } from '@/components/ui/use-toast';
 import { base44 } from '@/api/base44Client';
 import { Loader, Brain, Upload, FileText, Save, FolderOpen, ExternalLink, Eye, Download, Trash2, Calendar, Sparkles, HelpCircle, X } from 'lucide-react';
+import LoadingQuiz from '@/components/shared/LoadingQuiz';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
@@ -486,6 +487,8 @@ export default function QuestionGenerator() {
                             </>
                         )}
                     </Button>
+
+                    {isGenerating && <div className="pt-4"><LoadingQuiz /></div>}
 
                     {result && (
                         <motion.div

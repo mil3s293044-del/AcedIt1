@@ -12,6 +12,7 @@ import { base44 } from '@/api/base44Client';
 import { FEATURES, checkLiveTier } from '@/lib/tierAccess';
 import { recordStudyAndGetStreak } from "@/components/shared/streakHelpers";
 import { Wand2, Clock, Play, Save, RotateCcw, CheckCircle, Lightbulb, AlertCircle, Calendar, Trash2, FolderOpen, Eye, Loader2 } from 'lucide-react';
+import LoadingQuiz from '@/components/shared/LoadingQuiz';
 
 export default function BlurtingMethod({ onSessionComplete }) {
     const [phase, setPhase] = useState('setup');
@@ -370,6 +371,8 @@ Format your response as JSON.`,
                                     )}
                                 </Button>
                             )}
+
+                            {isGeneratingFeedback && <LoadingQuiz />}
 
                             {aiFeedback && (
                                 <motion.div

@@ -5,6 +5,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Loader2, Sparkles, Copy, Check, BookOpen } from 'lucide-react';
+import LoadingQuiz from '@/components/shared/LoadingQuiz';
 import { useToast } from '@/components/ui/use-toast';
 import { base44 } from '@/api/base44Client';
 import MathText from '@/components/shared/LatexRenderer';
@@ -186,6 +187,9 @@ Question: ${question.trim()}`
                     )}
                 </Button>
             </div>
+
+            {/* Loading mini-quiz while the sample answer generates */}
+            {isGenerating && <LoadingQuiz />}
 
             {/* Result Card */}
             <AnimatePresence>

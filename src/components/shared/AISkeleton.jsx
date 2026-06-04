@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { motion } from "framer-motion";
 import { Sparkles } from "lucide-react";
+import LoadingQuiz from "@/components/shared/LoadingQuiz";
 
 // AISkeleton — inline placeholder UI shown while an AI tool is generating.
 // Replaces the old full-screen <AILoadingProgress> modal with quiet, shaped
@@ -150,6 +151,7 @@ export default function AISkeleton({
     count = 5,
     message,
     className = "",
+    withQuiz = true,   // show the loading mini-quiz above the skeleton
 }) {
     const [seconds, setSeconds] = useState(0);
     useEffect(() => {
@@ -192,6 +194,9 @@ export default function AISkeleton({
             aria-live="polite"
             aria-label={message || "AI is generating"}
         >
+            {/* Loading mini-quiz — turns the wait into quick revision + XP */}
+            {withQuiz && <LoadingQuiz />}
+
             {/* Status strip — honest, no fake percent. Just an animated icon,
                 a friendly status line, and a rolling seconds counter. */}
             <div className="flex items-center gap-2.5 px-1 py-1">
