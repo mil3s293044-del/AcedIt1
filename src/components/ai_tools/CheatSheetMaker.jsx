@@ -7,8 +7,9 @@ import { useToast } from "@/components/ui/use-toast";
 import { base44 } from "@/api/base44Client";
 import {
     Upload, X, FileText, Loader2, Wand2, Printer, Plus, RotateCcw,
-    Sigma, BookOpen, Check, Lightbulb, ChevronDown
+    Sigma, BookOpen, Check, Lightbulb, ChevronDown, Download, Eye
 } from "lucide-react";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { recordStudyAndGetStreak } from "@/components/shared/streakHelpers";
 import MarkdownMath from "@/components/shared/MarkdownMath";
 import { getExaminerPrompt } from "@/lib/subjectExaminerPrompts";
@@ -55,6 +56,7 @@ export default function CheatSheetMaker() {
     const [isGenerating, setIsGenerating] = useState(false);
     const [customInput, setCustomInput] = useState("");
     const [showPool, setShowPool] = useState(false);
+    const [showPreview, setShowPreview] = useState(false);
     const [swapsUsed, setSwapsUsed] = useState(0);
 
     const printRef = useRef(null);
@@ -193,23 +195,14 @@ ${extracted ? `\nEXTRACTED CONTENT:${extracted}` : ""}`;
     const swapsLeft = SWAP_LIMIT - swapsUsed;
     const swapLimitReached = swapsLeft <= 0;
 
-    // Remove an item. While there's swap budget, auto-promote the best alternate
-    // (the "exclude & replace" behaviour). Once the budget is spent, removing
-    // still works (trimming) but no replacement is pulled in.
-    const excludeItem = (id) => {
-        const removed = items.map((it) => (it.id === id ? { ...it, status: "out", userExcluded: true } : it));
-        if (swapLimitReached) { setItems(removed); return; }
-        const candidate = removed
-            .filter((it) => it.status === "out" && !it.userExcluded)
-            .sort((a, b) => b.importance - a.importance)[0];
-        if (candidate) {
-            setItems(removed.map((it) => (it.id === candidate.id ? { ...it, status: "in" } : it)));
-            setSwapsUsed((s) => s + 1);
-        } else {
-            setItems(removed);
-        }
-    };
+    // Remove an item from the sheet — this just drops it (the count goes down).
+    // The student adds a replacement themselves, either from the suggestions
+    // pool or their own text. Removing is free and doesn't spend a swap.
+    const excludeItem = (id) =>
+        setItems((prev) => prev.map((it) => (it.id === id ? { ...it, status: "out", userExcluded: true } : it)));
 
+    // Pulling a NEW suggestion onto the sheet is the action that could harvest
+    // the oversized pool, so it spends one of the swap budget.
     const promoteItem = (id) => {
         if (swapLimitReached) { toast({ title: "Swap limit reached", description: "Regenerate for a fresh set of suggestions." }); return; }
         setItems((prev) => prev.map((it) => (it.id === id ? { ...it, status: "in", userExcluded: false } : it)));
@@ -229,18 +222,16 @@ ${extracted ? `\nEXTRACTED CONTENT:${extracted}` : ""}`;
         setItems([]); setHasGenerated(false); setUploadedFiles([]); setSwapsUsed(0);
     };
 
-    // ─── Print / Save as PDF ─────────────────────────────────────────────────
-    const printSheet = () => {
-        const node = printRef.current;
-        if (!node) return;
-        const w = window.open("", "_blank");
-        if (!w) { toast({ title: "Pop-up blocked", description: "Allow pop-ups to print.", variant: "destructive" }); return; }
-        w.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>${(title || subject || "Cheat Sheet").replace(/</g, "")} — Cheat Sheet</title>
+    // ─── Export (print + download share one A4 HTML document) ────────────────
+    const docTitle = () => (title || subject || "Cheat Sheet").replace(/</g, "");
+    const buildDoc = () => {
+        const inner = printRef.current?.innerHTML || "";
+        return `<!doctype html><html><head><meta charset="utf-8"><title>${docTitle()} — Cheat Sheet</title>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">
 <style>
   @page { size: A4; margin: 9mm; }
   * { box-sizing: border-box; }
-  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif; font-size: 9.5px; line-height: 1.35; color: #0D1626; margin: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif; font-size: 9.5px; line-height: 1.35; color: #0D1626; margin: 0; padding: 14px; }
   h1 { font-size: 15px; margin: 0 0 8px; }
   .cols { column-count: 2; column-gap: 14px; }
   .sec { break-inside: avoid; margin-bottom: 9px; }
@@ -250,9 +241,32 @@ ${extracted ? `\nEXTRACTED CONTENT:${extracted}` : ""}`;
   .katex { font-size: 1em; }
   p { margin: 0; }
 </style></head>
-<body><h1>${(title || subject || "Cheat Sheet").replace(/</g, "")}</h1><div class="cols">${node.innerHTML}</div></body></html>`);
+<body><h1>${docTitle()}</h1><div class="cols">${inner}</div></body></html>`;
+    };
+
+    const printSheet = () => {
+        if (!printRef.current) return;
+        const w = window.open("", "_blank");
+        if (!w) { toast({ title: "Pop-up blocked", description: "Allow pop-ups to print.", variant: "destructive" }); return; }
+        w.document.write(buildDoc());
         w.document.close();
         setTimeout(() => { w.focus(); w.print(); }, 450);
+    };
+
+    // Download a self-contained .html document (renders formulas, opens in any
+    // browser, saves straight to the device's Files/Downloads).
+    const downloadSheet = () => {
+        if (!printRef.current) return;
+        const blob = new Blob([buildDoc()], { type: "text/html" });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = `${docTitle().replace(/[^a-z0-9]+/gi, "-").toLowerCase() || "cheat-sheet"}.html`;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        URL.revokeObjectURL(url);
+        toast({ title: "Downloaded", description: "Saved to your files." });
     };
 
     const included = items.filter((it) => it.status === "in");
@@ -360,17 +374,18 @@ ${extracted ? `\nEXTRACTED CONTENT:${extracted}` : ""}`;
                                 {included.length} items · {overBudget ? `slightly over — trim a few to fit ${pages} page${pages > 1 ? "s" : ""}` : `fits ~${estPages} page${estPages > 1 ? "s" : ""}`} · {swapLimitReached ? "no swaps left" : `${swapsLeft} swap${swapsLeft === 1 ? "" : "s"} left`}
                             </p>
                         </div>
-                        <div className="flex gap-2 flex-shrink-0">
-                            <Button size="sm" variant="outline" onClick={startOver}><RotateCcw className="w-3.5 h-3.5" /> Start over</Button>
+                        <div className="flex gap-1.5 flex-shrink-0 flex-wrap justify-end">
+                            <Button size="sm" variant="outline" onClick={startOver} title="Start over"><RotateCcw className="w-3.5 h-3.5" /></Button>
+                            <Button size="sm" variant="outline" onClick={() => setShowPreview(true)} disabled={!included.length}><Eye className="w-3.5 h-3.5" /> Preview</Button>
+                            <Button size="sm" variant="outline" onClick={downloadSheet} disabled={!included.length} title="Download as a document"><Download className="w-3.5 h-3.5" /></Button>
                             <Button size="sm" onClick={printSheet} disabled={!included.length}><Printer className="w-3.5 h-3.5" /> Print / PDF</Button>
                         </div>
                     </div>
 
                     <div className="px-5 py-5 bg-surface space-y-5">
                         <p className="text-xs text-muted-foreground">
-                            {swapLimitReached
-                                ? "Swap limit reached — you can still remove items or add your own. Regenerate for a fresh set of suggestions."
-                                : `Tap any item to remove it — the next-best alternate drops in (up to ${SWAP_LIMIT} swaps). Add your own below.`}
+                            Tap any item to remove it. Add a replacement from your own text below, or from “more suggestions”
+                            {swapLimitReached ? " (swap limit reached — regenerate for more)." : ` (up to ${SWAP_LIMIT} per sheet).`}
                         </p>
 
                         {/* Included items, grouped, two-column on wide screens */}
@@ -449,6 +464,33 @@ ${extracted ? `\nEXTRACTED CONTENT:${extracted}` : ""}`;
                     </div>
                 </motion.div>
             )}
+
+            {/* Preview — shows the printable A4 layout before exporting */}
+            <Dialog open={showPreview} onOpenChange={setShowPreview}>
+                <DialogContent className="max-w-4xl max-h-[88vh] overflow-y-auto">
+                    <DialogHeader><DialogTitle>Preview · {title || subject || "Cheat Sheet"}</DialogTitle></DialogHeader>
+                    <div className="bg-white text-[#0D1626] rounded-lg border border-border shadow-soft p-6">
+                        <h1 className="text-lg font-extrabold mb-3">{title || subject || "Cheat Sheet"}</h1>
+                        <div className="columns-1 sm:columns-2 gap-6 text-[12px] leading-snug">
+                            {sections.map((sec) => (
+                                <div key={sec.name} className="break-inside-avoid mb-3">
+                                    <p className="text-[13px] font-bold text-chart-3 border-b border-gray-200 pb-0.5 mb-1">{sec.name}</p>
+                                    {sec.items.map((it) => (
+                                        <div key={it.id} className="flex gap-1.5 mb-1">
+                                            <span className="text-primary flex-shrink-0">•</span>
+                                            <div className="flex-1 min-w-0"><MarkdownMath>{it.content}</MarkdownMath></div>
+                                        </div>
+                                    ))}
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                    <div className="flex justify-end gap-2">
+                        <Button variant="outline" onClick={downloadSheet}><Download className="w-4 h-4" /> Download</Button>
+                        <Button onClick={printSheet}><Printer className="w-4 h-4" /> Print / PDF</Button>
+                    </div>
+                </DialogContent>
+            </Dialog>
 
             {/* Hidden print source — KaTeX renders here so the print window gets typeset maths */}
             <div ref={printRef} className="hidden">
