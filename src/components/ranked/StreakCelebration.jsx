@@ -1,51 +1,41 @@
 /**
- * StreakCelebration — fullscreen animated overlay shown when a user's streak ticks up.
- * Triggered by window event 'streak_updated' with detail { streak_days, is_consecutive, hit_milestone }.
+ * StreakCelebration — animated overlay shown when a user's streak ticks up.
+ * Triggered by window event 'streak_updated' with detail { streak_days, multiplier, hit_milestone }.
+ *
+ * On-brand: uses the streak (red) → xp (orange) design tokens, a glowing Lucide
+ * Flame, pulsing halo rings and soft embers — no rainbow gradients or emoji.
  */
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Flame } from 'lucide-react';
 
 const MILESTONE_MESSAGES = {
-    3:   { msg: "3 Day Streak!", sub: "You're building a habit 🌱" },
-    7:   { msg: "1 Week Streak! 🔥", sub: "1.25× XP multiplier unlocked!" },
-    14:  { msg: "2 Week Streak! ⚡", sub: "1.5× XP multiplier unlocked!" },
-    30:  { msg: "30 Day Streak! 👑", sub: "DOUBLE XP unlocked! Incredible!" },
-    60:  { msg: "60 Days! 🏆", sub: "You're a studying machine!" },
-    100: { msg: "100 DAY LEGEND! 🌟", sub: "2× XP — You are unstoppable!" },
-    150: { msg: "150 Days! 💎", sub: "VCE royalty status achieved." },
-    200: { msg: "200 Days! 🚀", sub: "200 consecutive days of greatness." },
-    365: { msg: "365 DAYS! 👑🔥", sub: "A FULL YEAR. You are a legend." },
+    3:   { msg: "3 day streak", sub: "You're building a habit." },
+    7:   { msg: "1 week streak", sub: "1.25× XP multiplier unlocked." },
+    14:  { msg: "2 week streak", sub: "1.5× XP multiplier unlocked." },
+    30:  { msg: "30 day streak", sub: "Double XP unlocked — incredible." },
+    60:  { msg: "60 days", sub: "You're a studying machine." },
+    100: { msg: "100 day legend", sub: "2× XP — you are unstoppable." },
+    150: { msg: "150 days", sub: "VCE royalty status achieved." },
+    200: { msg: "200 days", sub: "200 consecutive days of greatness." },
+    365: { msg: "365 days", sub: "A full year. You are a legend." },
 };
 
 function getFlameSize(days) {
-    if (days >= 100) return 'text-9xl';
-    if (days >= 30)  return 'text-8xl';
-    if (days >= 7)   return 'text-7xl';
-    return 'text-6xl';
+    if (days >= 100) return 'w-24 h-24';
+    if (days >= 30)  return 'w-20 h-20';
+    if (days >= 7)   return 'w-16 h-16';
+    return 'w-14 h-14';
 }
 
-function getGradient(days) {
-    if (days >= 100) return 'from-yellow-400 via-orange-500 to-red-600';
-    if (days >= 30)  return 'from-orange-400 via-red-500 to-pink-600';
-    if (days >= 14)  return 'from-amber-400 via-orange-500 to-red-500';
-    if (days >= 7)   return 'from-yellow-400 via-amber-500 to-orange-500';
-    if (days >= 3)   return 'from-lime-400 via-green-500 to-emerald-500';
-    return 'from-orange-400 to-red-500';
-}
-
-// Floating ember particle
-const Ember = ({ style }) => (
+// Soft ember rising from the flame — brand orange/red, gentle drift.
+const Ember = ({ delay, left, color }) => (
     <motion.div
-        className="absolute w-2 h-2 rounded-full bg-orange-400 opacity-80"
-        style={style}
-        animate={{
-            y: [-20, -120, -200],
-            x: [0, (Math.random() - 0.5) * 80],
-            opacity: [0.8, 0.6, 0],
-            scale: [1, 0.8, 0.2],
-        }}
-        transition={{ duration: 1.5 + Math.random(), ease: 'easeOut' }}
+        className={`absolute bottom-0 w-1.5 h-1.5 rounded-full ${color}`}
+        style={{ left }}
+        initial={{ y: 0, opacity: 0, scale: 1 }}
+        animate={{ y: [-10, -90, -150], x: [0, (Math.random() - 0.5) * 50], opacity: [0, 0.9, 0], scale: [1, 0.7, 0.2] }}
+        transition={{ duration: 1.8, ease: 'easeOut', repeat: Infinity, delay }}
     />
 );
 
@@ -53,17 +43,14 @@ export default function StreakCelebration() {
     const [event, setEvent] = useState(null);
 
     useEffect(() => {
-        const handler = (e) => {
-            const d = e.detail;
-            if (d?.streak_days >= 1) setEvent(d);
-        };
+        const handler = (e) => { if (e.detail?.streak_days >= 1) setEvent(e.detail); };
         window.addEventListener('streak_updated', handler);
         return () => window.removeEventListener('streak_updated', handler);
     }, []);
 
     useEffect(() => {
         if (!event) return;
-        const t = setTimeout(() => setEvent(null), event.hit_milestone ? 4000 : 2500);
+        const t = setTimeout(() => setEvent(null), event.hit_milestone ? 4000 : 2600);
         return () => clearTimeout(t);
     }, [event]);
 
@@ -71,13 +58,16 @@ export default function StreakCelebration() {
 
     const days = event.streak_days;
     const milestone = MILESTONE_MESSAGES[days];
-    const gradient = getGradient(days);
     const flameSize = getFlameSize(days);
 
-    const embers = Array.from({ length: 12 }, (_, i) => ({
-        left: `${10 + i * 7}%`,
-        bottom: '30%',
-    }));
+    const embers = [
+        { left: '20%', delay: 0,   color: 'bg-xp' },
+        { left: '38%', delay: 0.5, color: 'bg-streak' },
+        { left: '55%', delay: 0.25, color: 'bg-xp/90' },
+        { left: '70%', delay: 0.75, color: 'bg-streak/80' },
+        { left: '46%', delay: 1.0, color: 'bg-xp' },
+        { left: '30%', delay: 1.3, color: 'bg-streak/70' },
+    ];
 
     return (
         <AnimatePresence>
@@ -88,79 +78,76 @@ export default function StreakCelebration() {
                     animate={{ opacity: 1 }}
                     exit={{ opacity: 0 }}
                 >
-                    {/* Dim backdrop for milestones only */}
-                    {milestone && (
-                        <motion.div
-                            className="absolute inset-0 bg-black/40 backdrop-blur-sm"
-                            initial={{ opacity: 0 }}
-                            animate={{ opacity: 1 }}
-                            exit={{ opacity: 0 }}
-                        />
-                    )}
-
-                    {/* Embers */}
-                    <div className="absolute inset-0 overflow-hidden pointer-events-none">
-                        {embers.map((s, i) => <Ember key={i} style={s} />)}
-                    </div>
-
-                    {/* Main card */}
+                    {/* Backdrop — subtle for daily, stronger for milestones */}
                     <motion.div
-                        className={`relative z-10 flex flex-col items-center gap-4 px-10 py-8 rounded-3xl shadow-2xl bg-gradient-to-br ${gradient} text-white`}
-                        initial={{ scale: 0.3, opacity: 0, y: 60 }}
+                        className={`absolute inset-0 ${milestone ? 'bg-foreground/40 backdrop-blur-sm' : 'bg-foreground/10'}`}
+                        initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+                    />
+
+                    {/* Main card — brand streak→xp gradient */}
+                    <motion.div
+                        className="relative z-10 flex flex-col items-center gap-3 px-10 py-9 rounded-3xl shadow-2xl bg-gradient-to-br from-streak to-xp text-white overflow-hidden"
+                        initial={{ scale: 0.4, opacity: 0, y: 50 }}
                         animate={{ scale: 1, opacity: 1, y: 0 }}
-                        exit={{ scale: 0.8, opacity: 0, y: -40 }}
-                        transition={{ type: 'spring', stiffness: 300, damping: 20 }}
+                        exit={{ scale: 0.85, opacity: 0, y: -30 }}
+                        transition={{ type: 'spring', stiffness: 280, damping: 20 }}
                     >
-                        {/* Flame icon with pulse */}
-                        <motion.div
-                            animate={{
-                                scale: [1, 1.15, 1, 1.1, 1],
-                                rotate: [0, -8, 8, -4, 0],
-                            }}
-                            transition={{ duration: 0.8, repeat: 2 }}
-                            className={flameSize}
-                        >
-                            🔥
-                        </motion.div>
+                        {/* Embers rising behind the flame */}
+                        <div className="absolute inset-x-0 bottom-1/3 h-32 pointer-events-none">
+                            {embers.map((e, i) => <Ember key={i} {...e} />)}
+                        </div>
+
+                        {/* Flame with glow + pulsing halo rings */}
+                        <div className="relative flex items-center justify-center mb-1">
+                            {[0, 1].map((i) => (
+                                <motion.span
+                                    key={i}
+                                    className="absolute rounded-full bg-white/30"
+                                    style={{ width: 80, height: 80 }}
+                                    initial={{ scale: 0.6, opacity: 0.5 }}
+                                    animate={{ scale: [0.6, 1.8], opacity: [0.5, 0] }}
+                                    transition={{ duration: 1.6, repeat: Infinity, delay: i * 0.8, ease: 'easeOut' }}
+                                />
+                            ))}
+                            <motion.div
+                                animate={{ scale: [1, 1.12, 1, 1.08, 1], rotate: [0, -6, 6, -3, 0] }}
+                                transition={{ duration: 1.1, repeat: 1 }}
+                                className="relative drop-shadow-[0_4px_18px_rgba(255,255,255,0.45)]"
+                            >
+                                <Flame className={`${flameSize} text-white`} fill="currentColor" strokeWidth={1.5} />
+                            </motion.div>
+                        </div>
 
                         {/* Day count */}
                         <motion.div
                             className="text-center"
-                            initial={{ opacity: 0, y: 10 }}
-                            animate={{ opacity: 1, y: 0 }}
-                            transition={{ delay: 0.2 }}
+                            initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.15 }}
                         >
-                            <div className="font-black text-6xl drop-shadow-lg leading-none">
-                                {days}
-                            </div>
-                            <div className="text-xl font-bold opacity-90 mt-1">
-                                {days === 1 ? 'Day Streak!' : 'Day Streak!'}
+                            <div className="font-display font-black text-6xl drop-shadow-md leading-none tabular-nums">{days}</div>
+                            <div className="text-base font-extrabold uppercase tracking-wider opacity-90 mt-1.5">
+                                Day Streak
                             </div>
                         </motion.div>
 
                         {/* Milestone message */}
                         {milestone && (
                             <motion.div
-                                className="text-center"
-                                initial={{ opacity: 0, scale: 0.8 }}
-                                animate={{ opacity: 1, scale: 1 }}
-                                transition={{ delay: 0.4 }}
+                                className="text-center mt-1"
+                                initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: 0.35 }}
                             >
                                 <div className="font-bold text-lg">{milestone.msg}</div>
-                                <div className="text-sm opacity-80 mt-0.5">{milestone.sub}</div>
+                                <div className="text-sm opacity-85 mt-0.5">{milestone.sub}</div>
                             </motion.div>
                         )}
 
                         {/* Multiplier badge */}
                         {event.multiplier > 1.0 && (
                             <motion.div
-                                className="flex items-center gap-1.5 bg-white/20 rounded-full px-4 py-1.5 text-sm font-bold"
-                                initial={{ opacity: 0 }}
-                                animate={{ opacity: 1 }}
-                                transition={{ delay: 0.5 }}
+                                className="flex items-center gap-1.5 bg-white/20 rounded-full px-4 py-1.5 text-sm font-bold mt-1"
+                                initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.5 }}
                             >
-                                <Flame className="w-4 h-4" />
-                                {event.multiplier}× XP Multiplier Active
+                                <Flame className="w-4 h-4" fill="currentColor" />
+                                {event.multiplier}× XP active
                             </motion.div>
                         )}
                     </motion.div>

@@ -8,7 +8,18 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Save, X, Star, Zap } from "lucide-react";
 import DifficultyRating from "@/components/shared/DifficultyRating";
 
+// Per-technique accent (matches the Study page tiles). Static class strings
+// (literals here) so Tailwind JIT keeps them.
+const ACCENT = {
+    pomodoro:      { text: "text-primary", btn: "bg-primary hover:bg-primary", ring: "bg-primary/15", icon: "text-primary" },
+    active_recall: { text: "text-chart-4", btn: "bg-chart-4 hover:bg-chart-4", ring: "bg-chart-4/15", icon: "text-chart-4" },
+    blurting:      { text: "text-xp",      btn: "bg-xp hover:bg-xp",           ring: "bg-xp/15",      icon: "text-xp" },
+    spaced_repetition: { text: "text-chart-3", btn: "bg-chart-3 hover:bg-chart-3", ring: "bg-chart-3/15", icon: "text-chart-3" },
+    exam:          { text: "text-streak",  btn: "bg-streak hover:bg-streak",   ring: "bg-streak/15",  icon: "text-streak" },
+};
+
 export default function SessionCompleteModal({ session, onSave, onCancel }) {
+    const a = ACCENT[session.technique_name] || ACCENT.pomodoro;
     const [formData, setFormData] = useState({
         subject: "",
         topic: "",
@@ -36,13 +47,15 @@ export default function SessionCompleteModal({ session, onSave, onCancel }) {
                 onClick={(e) => e.stopPropagation()}
                 className="w-full max-w-md"
             >
-                <Card className="bg-white shadow-2xl">
+                <Card className="bg-surface border-border shadow-2xl">
                     <CardHeader className="text-center">
-                        <CardTitle className="text-2xl text-green-600 flex items-center justify-center gap-2">
-                            <Zap className="w-6 h-6" />
+                        <div className={`w-12 h-12 rounded-2xl ${a.ring} flex items-center justify-center mx-auto mb-1`}>
+                            <Zap className={`w-6 h-6 ${a.icon}`} />
+                        </div>
+                        <CardTitle className={`text-2xl ${a.text}`}>
                             Session Complete!
                         </CardTitle>
-                        <p className="text-gray-600">
+                        <p className="text-muted-foreground">
                             You studied for {session.session_duration} minutes using {session.technique_name.replace('_', ' ')}!
                         </p>
                     </CardHeader>
@@ -76,7 +89,7 @@ export default function SessionCompleteModal({ session, onSave, onCancel }) {
                             </div>
 
                             {formData.subject && (
-                                <div className="p-3 bg-gray-50 rounded-xl border border-gray-100">
+                                <div className="p-3 bg-secondary rounded-xl border border-border">
                                     <DifficultyRating subjectName={formData.subject} />
                                 </div>
                             )}
@@ -94,8 +107,8 @@ export default function SessionCompleteModal({ session, onSave, onCancel }) {
                                             }))}
                                             className={`p-2 rounded-lg transition-colors ${
                                                 rating <= formData.confidence_rating
-                                                    ? 'text-yellow-500'
-                                                    : 'text-gray-300'
+                                                    ? 'text-xp'
+                                                    : 'text-muted-foreground/30'
                                             }`}
                                         >
                                             <Star className="w-6 h-6 fill-current" />
@@ -130,7 +143,7 @@ export default function SessionCompleteModal({ session, onSave, onCancel }) {
                                 </Button>
                                 <Button
                                     type="submit"
-                                    className="flex-1 bg-green-600 hover:bg-green-700"
+                                    className={`flex-1 text-white ${a.btn}`}
                                 >
                                     <Save className="w-4 h-4 mr-2" />
                                     Save & Earn XP
