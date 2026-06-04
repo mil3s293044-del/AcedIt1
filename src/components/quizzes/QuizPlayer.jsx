@@ -348,7 +348,9 @@ export default function QuizPlayer({ quiz, onComplete, onExit, mode = "standard"
             if (correct) {
                 window.dispatchEvent(new CustomEvent('xp_awarded', { detail: { xp: 2, source: 'quiz' } }));
             }
-            setTimeout(() => handleNext(), 1800);
+            // Snappy when right (you nailed it), a touch longer when wrong so
+            // there's time to see the correct answer highlighted.
+            setTimeout(() => handleNext(), correct ? 750 : 1500);
         } else {
             handleNext();
         }
@@ -980,10 +982,10 @@ Return exactly ${questionsForAnalysis.length} items.`,
                 {/* Question card */}
                 <AnimatePresence mode="wait">
                     <motion.div key={currentQuestionIndex}
-                        initial={{ opacity: 0, x: 30, scale: 0.98 }}
+                        initial={{ opacity: 0, x: 40, scale: 0.96 }}
                         animate={{ opacity: 1, x: 0, scale: 1 }}
-                        exit={{ opacity: 0, x: -30, scale: 0.98 }}
-                        transition={{ duration: 0.2, ease: "easeOut" }}
+                        exit={{ opacity: 0, x: -40, scale: 0.96 }}
+                        transition={{ type: "spring", stiffness: 420, damping: 32, mass: 0.6 }}
                         className="card-soft overflow-hidden">
 
                         {/* Card header */}

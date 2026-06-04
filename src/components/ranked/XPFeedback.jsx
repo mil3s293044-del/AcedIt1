@@ -60,7 +60,8 @@ function getRandomTaunt() {
 
 // Lightweight confetti burst using DOM
 function spawnConfetti(count = 18) {
-    const colors = ['#a855f7', '#6366f1', '#f59e0b', '#10b981', '#f43f5e', '#3b82f6'];
+    // On-brand palette: primary green, xp orange, streak red, chart-3 blue, chart-4 purple.
+    const colors = ['#58CC02', '#FF9600', '#FF4B4B', '#217BE0', '#C77DFF'];
     const container = document.getElementById('xp-confetti-root');
     if (!container) return;
 
@@ -137,17 +138,17 @@ export default function XPFeedback() {
 
             {/* Popup stack */}
             <div
-                className="fixed bottom-24 right-4 z-[200] flex flex-col-reverse gap-2 pointer-events-none"
-                style={{ maxWidth: 270 }}
+                className="fixed bottom-24 right-4 z-[200] flex flex-col-reverse gap-2.5 pointer-events-none"
+                style={{ maxWidth: 300 }}
             >
                 <AnimatePresence>
                     {popups.map(p => (
                         <motion.div
                             key={p.id}
-                            initial={{ opacity: 0, x: 90, scale: 0.5, rotate: 8 }}
-                            animate={{ opacity: 1, x: 0, scale: 1, rotate: 0 }}
-                            exit={{ opacity: 0, x: 70, scale: 0.85, y: -8 }}
-                            transition={{ type: "spring", stiffness: 500, damping: 28 }}
+                            initial={{ opacity: 0, y: 60, scale: 0.4, rotate: -6 }}
+                            animate={{ opacity: 1, y: 0, scale: 1, rotate: 0 }}
+                            exit={{ opacity: 0, x: 60, scale: 0.7 }}
+                            transition={{ type: "spring", stiffness: 320, damping: 13, mass: 0.7 }}
                         >
                             {p.leveled_up ? (
                                 <LevelUpBanner level={p.level_after} rankUp={p.rank_up} rank={p.alltime_rank} />
@@ -168,63 +169,85 @@ function XPPopup({ xp, source, streak, taunt }) {
     if (!xp || xp <= 0) return null;
     const huge = xp >= 200;
     const big = xp >= 80;
+    const gradient = huge || big;
     const Icon = SOURCE_ICONS[source] || Zap;
 
     return (
-        <div className={`rounded-2xl shadow-2xl border overflow-hidden backdrop-blur-sm ${
-            huge
-                ? 'bg-gradient-to-r from-amber-400 via-orange-500 to-rose-500 border-amber-300'
-                : big
-                ? 'bg-gradient-to-r from-violet-500 via-purple-600 to-indigo-600 border-violet-400'
-                : 'bg-white border-gray-200'
-        }`}>
-            {/* Shimmer overlay */}
-            {(huge || big) && (
-                <div className="absolute inset-0 bg-gradient-to-r from-white/0 via-white/10 to-white/0 animate-pulse" />
-            )}
+        // Gentle continuous bob so it draws the eye while it's on screen.
+        <motion.div
+            animate={{ y: [0, -3, 0] }}
+            transition={{ duration: 1.8, repeat: Infinity, ease: "easeInOut" }}
+            className="relative"
+        >
+            {/* Sparkle burst on appear */}
+            <div className="absolute left-7 top-1/2 pointer-events-none">
+                {[...Array(6)].map((_, i) => {
+                    const angle = (i / 6) * Math.PI * 2;
+                    return (
+                        <motion.span
+                            key={i}
+                            className="absolute text-xp"
+                            initial={{ opacity: 0, x: 0, y: 0, scale: 0 }}
+                            animate={{ opacity: [0, 1, 0], x: Math.cos(angle) * 32, y: Math.sin(angle) * 32, scale: [0, 1, 0.3] }}
+                            transition={{ duration: 0.7, delay: 0.05, ease: "easeOut" }}
+                        >
+                            <Sparkles className="w-3 h-3" fill="currentColor" />
+                        </motion.span>
+                    );
+                })}
+            </div>
 
-            <div className="relative flex items-center gap-2.5 px-3.5 py-2.5">
-                {/* Icon */}
-                <motion.div
-                    animate={{ scale: [1, 1.25, 1], rotate: [0, -8, 8, 0] }}
-                    transition={{ duration: 0.45, delay: 0.1 }}
-                    className={`w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 ${
-                        huge || big ? 'bg-white/20' : 'bg-primary/10'
-                    }`}
-                >
-                    <Icon className={`w-5 h-5 ${huge || big ? 'text-white' : 'text-primary'}`} strokeWidth={2.5} />
-                </motion.div>
+            <div className={`relative rounded-2xl shadow-2xl border overflow-hidden ${
+                huge
+                    ? 'bg-gradient-to-r from-xp via-streak to-chart-4 border-white/30'
+                    : big
+                    ? 'bg-gradient-to-r from-xp to-streak border-white/30'
+                    : 'bg-surface border-border'
+            }`}>
+                {/* Shimmer sweep */}
+                {gradient && (
+                    <div className="absolute inset-0 bg-gradient-to-r from-white/0 via-white/15 to-white/0 animate-pulse" />
+                )}
 
-                <div className="min-w-0 flex-1">
-                    <motion.p
-                        initial={{ scale: 0.7 }}
-                        animate={{ scale: 1 }}
-                        transition={{ type: "spring", stiffness: 600, damping: 20 }}
-                        className={`font-black leading-tight ${
-                            huge ? 'text-white text-xl' : big ? 'text-white text-lg' : 'text-indigo-700 text-base'
-                        }`}
+                <div className="relative flex items-center gap-2.5 px-3.5 py-3">
+                    {/* Icon — pops + wiggles in */}
+                    <motion.div
+                        animate={{ scale: [1, 1.3, 1], rotate: [0, -12, 12, 0] }}
+                        transition={{ duration: 0.5, delay: 0.05 }}
+                        className={`w-11 h-11 rounded-xl flex items-center justify-center flex-shrink-0 ${gradient ? 'bg-white/20' : 'bg-xp/15'}`}
                     >
-                        +{xp.toLocaleString()} XP
-                    </motion.p>
-                    <p className={`text-xs truncate font-medium ${huge || big ? 'text-white/80' : 'text-gray-500'}`}>
-                        {SOURCE_LABELS[source] || source}
-                    </p>
-                    {taunt && (
-                        <p className={`text-xs font-semibold mt-0.5 truncate ${huge || big ? 'text-white/90' : 'text-purple-600'}`}>
-                            {taunt}
+                        <Icon className={`w-5 h-5 ${gradient ? 'text-white' : 'text-xp'}`} strokeWidth={2.5} />
+                    </motion.div>
+
+                    <div className="min-w-0 flex-1">
+                        <motion.p
+                            initial={{ scale: 0.4 }}
+                            animate={{ scale: [0.4, 1.35, 1] }}
+                            transition={{ duration: 0.5, times: [0, 0.6, 1], ease: "easeOut" }}
+                            className={`font-black leading-tight ${huge ? 'text-white text-2xl' : big ? 'text-white text-xl' : 'text-xp text-lg'}`}
+                        >
+                            +{xp.toLocaleString()} XP
+                        </motion.p>
+                        <p className={`text-xs truncate font-bold ${gradient ? 'text-white/85' : 'text-muted-foreground'}`}>
+                            {SOURCE_LABELS[source] || source}
                         </p>
+                        {taunt && (
+                            <p className={`text-xs font-semibold mt-0.5 truncate ${gradient ? 'text-white/90' : 'text-xp'}`}>
+                                {taunt}
+                            </p>
+                        )}
+                    </div>
+
+                    {/* Streak multiplier */}
+                    {streak > 1 && (
+                        <div className={`flex items-center gap-0.5 flex-shrink-0 ${gradient ? 'text-white' : 'text-streak'}`}>
+                            <Flame className="w-4 h-4" fill="currentColor" />
+                            <span className="text-sm font-black">×{streak}</span>
+                        </div>
                     )}
                 </div>
-
-                {/* Streak multiplier */}
-                {streak > 1 && (
-                    <div className={`flex items-center gap-0.5 flex-shrink-0 ${huge || big ? 'text-white' : 'text-orange-500'}`}>
-                        <Flame className="w-4 h-4" />
-                        <span className="text-sm font-black">×{streak}</span>
-                    </div>
-                )}
             </div>
-        </div>
+        </motion.div>
     );
 }
 

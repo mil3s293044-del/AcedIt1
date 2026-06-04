@@ -449,10 +449,10 @@ export default function ExamMode({ userSubjects }) {
                 {/* Question Card */}
                 <AnimatePresence mode="wait">
                     <motion.div key={currentIndex}
-          initial={{ opacity: 0, x: 30, scale: 0.98 }}
+          initial={{ opacity: 0, x: 40, scale: 0.96 }}
           animate={{ opacity: 1, x: 0, scale: 1 }}
-          exit={{ opacity: 0, x: -30, scale: 0.98 }}
-          transition={{ duration: 0.2, ease: "easeOut" }}
+          exit={{ opacity: 0, x: -40, scale: 0.96 }}
+          transition={{ type: "spring", stiffness: 420, damping: 32, mass: 0.6 }}
           className="card-soft overflow-hidden">
 
                         {/* Question header */}
