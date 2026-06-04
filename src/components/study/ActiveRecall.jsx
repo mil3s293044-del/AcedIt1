@@ -115,7 +115,7 @@ function QuestionCard({ question, index, total, answer, onAnswerChange, onNext, 
                 </Button>
                 <Button
                     onClick={onNext}
-                    className={`gap-2 px-6 ${isLast ? 'bg-primary hover:bg-primary/90' : 'bg-chart-4 hover:bg-chart-4/90'} text-white shadow-soft`}
+                    className="gap-2 px-6 bg-chart-4 hover:bg-chart-4/90 text-white shadow-soft"
                 >
                     {isLast ? (
                         <><CheckCircle className="w-4 h-4" /> Finish Session</>
@@ -764,7 +764,7 @@ For each answer:
     const renderReview = () => (
         <motion.div key="review" initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} className="space-y-5">
             {/* Summary bar */}
-            <div className="bg-primary rounded-3xl p-6 text-white">
+            <div className="bg-chart-4 rounded-3xl p-6 text-white">
                 <div className="flex items-center gap-3 mb-4">
                     <div className="w-10 h-10 bg-white/20 rounded-2xl flex items-center justify-center">
                         <CheckCircle className="w-5 h-5 text-white" />
@@ -858,7 +858,7 @@ For each answer:
                 </Button>
                 <Button
                     onClick={() => { completeSession(4); if (isFocusMode) { exitFullscreen(); setIsFocusMode(false); } }}
-                    className="flex-1 h-12 bg-primary hover:bg-primary/90 text-white rounded-xl font-medium gap-2 shadow-soft"
+                    className="flex-1 h-12 bg-chart-4 hover:bg-chart-4/90 text-white rounded-xl font-medium gap-2 shadow-soft"
                 >
                     <CheckCircle className="w-4 h-4" /> Save & Finish
                 </Button>

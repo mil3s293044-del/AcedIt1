@@ -733,7 +733,7 @@ Reference Study Design requirements in your feedback.`),
                 </Button>
                 <Button
                     onClick={() => { completeSession(4); if (isFocusMode) { exitFullscreen(); setIsFocusMode(false); } }}
-                    className="flex-1 h-12 bg-primary hover:bg-primary/90 text-white rounded-xl font-medium gap-2 shadow-soft"
+                    className="flex-1 h-12 bg-xp hover:bg-xp/90 text-white rounded-xl font-medium gap-2 shadow-soft"
                 >
                     <CheckCircle className="w-4 h-4" /> Save & Finish
                 </Button>

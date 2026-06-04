@@ -862,7 +862,7 @@ The documents provided may be PowerPoint slides, Word documents, or text files. 
                                     <Textarea value={editingCard.question} onChange={e => setEditingCard({ ...editingCard, question: e.target.value })} placeholder="Question" rows={2} className="border-2 border-chart-3/30 focus:border-chart-3 rounded-xl" />
                                     <Textarea value={editingCard.answer} onChange={e => setEditingCard({ ...editingCard, answer: e.target.value })} placeholder="Answer" rows={2} className="border-2 border-primary/30 focus:border-primary rounded-xl" />
                                     <div className="flex gap-2">
-                                        <Button onClick={handleSaveCard} size="sm" className="btn-3d bg-primary hover:bg-primary text-primary-foreground rounded-xl gap-1.5"><Check className="w-3.5 h-3.5" /> Save</Button>
+                                        <Button onClick={handleSaveCard} size="sm" className="btn-3d bg-chart-3 hover:bg-chart-3 text-white rounded-xl gap-1.5"><Check className="w-3.5 h-3.5" /> Save</Button>
                                         <Button onClick={() => setEditingCard(null)} variant="outline" size="sm" className="rounded-xl"><X className="w-3.5 h-3.5" /></Button>
                                     </div>
                                 </div>
@@ -1013,7 +1013,7 @@ The documents provided may be PowerPoint slides, Word documents, or text files. 
                     </div>
                     <DialogFooter>
                         <Button variant="outline" onClick={() => setIsAddingCard(false)} className="rounded-xl">Done</Button>
-                        <Button onClick={handleAddCard} className="btn-3d bg-primary hover:bg-primary text-primary-foreground rounded-xl gap-2"><Plus className="w-4 h-4" /> Add Card</Button>
+                        <Button onClick={handleAddCard} className="btn-3d bg-chart-3 hover:bg-chart-3 text-white rounded-xl gap-2"><Plus className="w-4 h-4" /> Add Card</Button>
                     </DialogFooter>
                 </DialogContent>
             </Dialog>
@@ -1220,7 +1220,7 @@ The documents provided may be PowerPoint slides, Word documents, or text files. 
                                 {isGenerating ? <><Loader2 className="w-4 h-4 animate-spin" /> Generating...</> : <><Sparkles className="w-4 h-4" /> Generate All Cards</>}
                             </Button>
                         ) : (
-                            <Button onClick={() => handleSaveGeneratedFlashcards(newDeck)} disabled={!newDeck.subject_name || !newDeck.topic || isSavingDeck} className="btn-3d bg-primary hover:bg-primary text-primary-foreground rounded-xl gap-2">
+                            <Button onClick={() => handleSaveGeneratedFlashcards(newDeck)} disabled={!newDeck.subject_name || !newDeck.topic || isSavingDeck} className="btn-3d bg-chart-3 hover:bg-chart-3 text-white rounded-xl gap-2">
                                 {isSavingDeck ? <><Loader2 className="w-4 h-4 animate-spin" /> Saving...</> : <><Check className="w-4 h-4" /> Save Deck</>}
                             </Button>
                         )}
