@@ -50,6 +50,7 @@ export const FEATURES = {
 // ─── Limits config ─────────────────────────────────────────────────────────
 export const FREE_LIFETIME_CAPS = {
   [FEATURES.QUIZ_AI_GEN]:      5,
+  [FEATURES.QUIZ_AI_MARK]:     5,  // AI marking of played quizzes, lifetime
   [FEATURES.FLASHCARD_AI_GEN]: 5,
   [FEATURES.AI_TOOL]:          5,  // combined across the AI study tools
   [FEATURES.AI_CHAT]:          5,  // free chat shares the tools lifetime counter below
@@ -107,6 +108,7 @@ export function isPremium(profile) {
 // Maps each capped free feature to the counter field on user_profiles.
 const FREE_COUNTER_KEY = {
   [FEATURES.QUIZ_AI_GEN]:      'free_ai_quizzes_used',
+  [FEATURES.QUIZ_AI_MARK]:     'free_ai_quiz_marks_used',
   [FEATURES.FLASHCARD_AI_GEN]: 'free_ai_flashcards_used',
   [FEATURES.AI_TOOL]:          'free_ai_tools_used',
   [FEATURES.AI_CHAT]:          'free_ai_tools_used', // free chat shares the tools lifetime counter

@@ -21,6 +21,7 @@ const pricingPlans = [
             "Subjects, basic goals, competitions, wagers",
             "XP, streaks, friends, leaderboards",
             "5 AI-generated quizzes (lifetime)",
+            "5 AI quiz markings (lifetime)",
             "5 AI-generated flashcard sets (lifetime)",
         ],
         limitations: [
@@ -59,8 +60,8 @@ const COMPARISON = [
     { feature: "XP, streaks & leaderboards", free: true, premium: true },
     { feature: "AI quizzes", free: "5 lifetime", premium: "Daily" },
     { feature: "AI flashcards", free: "5 lifetime", premium: "Daily" },
+    { feature: "AI quiz marking", free: "5 lifetime", premium: "Daily" },
     { feature: "AI study tools", free: false, premium: true },
-    { feature: "AI quiz marking", free: false, premium: true },
     { feature: "Spaced Repetition", free: false, premium: true },
     { feature: "Blurting & Active Recall AI", free: false, premium: true },
     { feature: "Goal & Roadmap AI", free: false, premium: true },

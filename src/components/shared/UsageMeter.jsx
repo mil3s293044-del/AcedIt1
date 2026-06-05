@@ -28,6 +28,7 @@ const PREMIUM_ROWS = [
 // Free users only see what they can actually access.
 const FREE_ROWS = [
     { feature: FEATURES.QUIZ_AI_GEN,      profileKey: "free_ai_quizzes_used",    label: "AI quiz generation" },
+    { feature: FEATURES.QUIZ_AI_MARK,     profileKey: "free_ai_quiz_marks_used", label: "AI quiz marking" },
     { feature: FEATURES.FLASHCARD_AI_GEN, profileKey: "free_ai_flashcards_used", label: "Flashcard generation" },
 ];
 
