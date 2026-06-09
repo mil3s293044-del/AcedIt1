@@ -30,7 +30,12 @@ import {
     BarChart3,
     Target,
     Zap,
-    AlertTriangle
+    AlertTriangle,
+    Bookmark,
+    ChevronDown,
+    ChevronUp,
+    Trash2,
+    Eye
 } from "lucide-react";
 import { format, isThisWeek, parseISO } from "date-fns";
 import { useToast } from "@/components/ui/use-toast";
@@ -43,6 +48,7 @@ import { FEATURES, canUseFeature } from "@/lib/tierAccess";
 
 import QuizCard from "../components/quizzes/QuizCard";
 import QuizPlayer from "../components/quizzes/QuizPlayer";
+import MarkdownMath from "@/components/shared/MarkdownMath";
 import QuizModePicker from "../components/quizzes/QuizModePicker";
 
 // ─── Coach voice helpers (chill + motivational) ──────────────────────────────
@@ -95,6 +101,9 @@ export default function Quizzes() {
     const [userSubjects, setUserSubjects] = useState([]);
     const [selectedQuiz, setSelectedQuiz] = useState(null);
     const [isPlaying, setIsPlaying] = useState(false);
+    const [savedAnswers, setSavedAnswers] = useState([]);
+    const [showSaved, setShowSaved] = useState(false);
+    const [viewingSaved, setViewingSaved] = useState(null);
     const [pendingQuiz, setPendingQuiz] = useState(null);   // shown in mode picker
     const [quizMode, setQuizMode] = useState("standard");
     const [quizTimeLimitMs, setQuizTimeLimitMs] = useState(null);
@@ -196,6 +205,15 @@ export default function Quizzes() {
                 });
             } catch (e) {
                 console.error("Error loading user subjects:", e);
+            }
+
+            try {
+                const saved = await base44.entities.AISavedResult.filter(
+                    { created_by: currentUser.email, tool_type: 'saved_answer' }, '-date_created'
+                );
+                setSavedAnswers(saved || []);
+            } catch (e) {
+                console.error("Error loading saved answers:", e);
             }
 
             setQuizzes(quizzesData || []);
@@ -1046,6 +1064,39 @@ Return valid JSON only.`,
                     </h1>
                 </motion.section>
 
+                {/* ── SAVED ANSWERS LIBRARY ───────────────────────────── */}
+                {savedAnswers.length > 0 && (
+                    <motion.section initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} className="card-soft overflow-hidden">
+                        <button
+                            onClick={() => setShowSaved(s => !s)}
+                            className="w-full flex items-center justify-between px-5 py-4 hover:bg-secondary/40 transition-colors"
+                        >
+                            <div className="flex items-center gap-2">
+                                <Bookmark className="w-4 h-4 text-chart-4" />
+                                <span className="font-display font-extrabold text-foreground text-sm">Saved answers</span>
+                                <span className="pill bg-chart-4/15 text-chart-4">{savedAnswers.length}</span>
+                            </div>
+                            {showSaved ? <ChevronUp className="w-4 h-4 text-muted-foreground" /> : <ChevronDown className="w-4 h-4 text-muted-foreground" />}
+                        </button>
+                        {showSaved && (
+                            <div className="px-3 pb-3 space-y-2 max-h-80 overflow-y-auto border-t border-border pt-3">
+                                {savedAnswers.map(s => (
+                                    <div key={s.id} className="flex items-center justify-between gap-2 p-3 bg-background rounded-xl border border-border">
+                                        <div className="flex-1 min-w-0">
+                                            <p className="text-sm font-bold text-foreground truncate">{s.title}</p>
+                                            <p className="text-xs text-muted-foreground">{s.subject_name || s.topic || 'Quiz'} · {s.date_created}</p>
+                                        </div>
+                                        <div className="flex gap-1 flex-shrink-0">
+                                            <button onClick={() => setViewingSaved(s)} className="p-1.5 text-muted-foreground hover:text-chart-4 hover:bg-chart-4/10 rounded-lg transition-colors"><Eye className="w-3.5 h-3.5" /></button>
+                                            <button onClick={() => base44.entities.AISavedResult.delete(s.id).then(() => setSavedAnswers(prev => prev.filter(x => x.id !== s.id)))} className="p-1.5 text-muted-foreground hover:text-streak hover:bg-streak/10 rounded-lg transition-colors"><Trash2 className="w-3.5 h-3.5" /></button>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+                    </motion.section>
+                )}
+
                 {/* ── HERO ROW: Your quizzing (3/5) + This week (2/5) ── */}
                 <motion.section
                     initial={{ opacity: 0, y: 12 }}
@@ -1833,7 +1884,13 @@ Return valid JSON only.`,
                     </DialogContent>
                 </Dialog>
 
-
+                {/* Saved answer viewer */}
+                <Dialog open={!!viewingSaved} onOpenChange={() => setViewingSaved(null)}>
+                    <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
+                        <DialogHeader><DialogTitle>{viewingSaved?.subject_name || 'Saved answer'}</DialogTitle></DialogHeader>
+                        <div className="text-sm text-foreground"><MarkdownMath>{viewingSaved?.content || ''}</MarkdownMath></div>
+                    </DialogContent>
+                </Dialog>
 
             </div>
         </div>

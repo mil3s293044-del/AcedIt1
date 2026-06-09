@@ -8,7 +8,7 @@ import {
     ArrowLeft, ArrowRight, CheckCircle, Clock, Wand2, Loader2,
     X, Calculator, Check, ChevronLeft, ChevronRight, Flag,
     BarChart3, Target, Layers, Zap, TrendingUp, AlertCircle, Brain,
-    Trophy, Star, BookOpen, Sparkles
+    Trophy, Star, BookOpen, Sparkles, Bookmark, BookmarkCheck
 } from "lucide-react";
 import AdaptiveReview from "./AdaptiveReview";
 import DifficultyRating from "@/components/shared/DifficultyRating";
@@ -257,7 +257,38 @@ export default function QuizPlayer({ quiz, onComplete, onExit, mode = "standard"
     const [showQuestionMap, setShowQuestionMap] = useState(false);
     const [showAdaptiveReview, setShowAdaptiveReview] = useState(false);
     const [submittedQuestions, setSubmittedQuestions] = useState(new Set());
+    const [savedQuestions, setSavedQuestions] = useState(new Set());
     const { toast } = useToast();
+
+    // Bookmark a question + model/correct answer into the revise-later library
+    // (stored as an AISavedResult — no new table needed).
+    const handleSaveAnswer = async (idx) => {
+        if (savedQuestions.has(idx)) return;
+        const q = shuffledQuiz.questions[idx];
+        if (!q) return;
+        const ua = userAnswers[idx];
+        const yourAns = q.type === 'mcq'
+            ? (ua !== undefined ? q.options?.[parseInt(ua)] : 'No answer')
+            : (ua || 'No answer');
+        const modelOrCorrect = q.type === 'mcq' ? q.options?.[q.correct_answer] : q.model_answer;
+        const fb = aiFeedback[idx];
+        const content = `**Question**\n${q.question || ''}\n\n**Your answer**\n${yourAns}\n\n**${q.type === 'mcq' ? 'Correct answer' : 'Model answer'}**\n${modelOrCorrect || '—'}${fb?.correct_answer_explanation ? `\n\n**Why**\n${fb.correct_answer_explanation}` : ''}`;
+        try {
+            await base44.entities.AISavedResult.create({
+                tool_type: 'saved_answer',
+                title: (q.question || 'Saved answer').slice(0, 80),
+                subject_name: shuffledQuiz.subject || '',
+                topic: shuffledQuiz.title || '',
+                content,
+                input_data: { quiz_title: shuffledQuiz.title, type: q.type },
+                date_created: new Date().toISOString().split('T')[0],
+            });
+            setSavedQuestions(s => new Set([...s, idx]));
+            toast({ title: 'Saved to your library', description: 'Find it under Saved answers on the Quizzes page.' });
+        } catch (e) {
+            toast({ title: "Couldn't save", description: e.message, variant: "destructive" });
+        }
+    };
 
     const currentQuestion = shuffledQuiz.questions[currentQuestionIndex];
     const totalQ = shuffledQuiz.questions.length;
@@ -749,6 +780,14 @@ Return exactly ${questionsForAnalysis.length} items.`,
                                                     <span className={`pill ${currentQ.type === 'mcq' ? 'bg-chart-4/10 text-chart-4' : 'bg-chart-3/10 text-chart-3'}`}>
                                                         {currentQ.type === 'mcq' ? 'Multiple Choice' : `Short Answer • ${currentQ.marks || 5} marks`}
                                                     </span>
+                                                    <button
+                                                        onClick={() => handleSaveAnswer(currentFeedbackIndex)}
+                                                        disabled={savedQuestions.has(currentFeedbackIndex)}
+                                                        className={`inline-flex items-center gap-1 text-xs font-bold px-2 py-1 rounded-lg transition-colors ${savedQuestions.has(currentFeedbackIndex) ? 'text-primary' : 'text-muted-foreground hover:text-foreground hover:bg-secondary'}`}
+                                                        title="Save this question + answer to revise later"
+                                                    >
+                                                        {savedQuestions.has(currentFeedbackIndex) ? <><BookmarkCheck className="w-3.5 h-3.5" /> Saved</> : <><Bookmark className="w-3.5 h-3.5" /> Save</>}
+                                                    </button>
                                                 </div>
                                                 {currentFeedback && (() => {
                                                     const t = currentQ.type === 'mcq'
