@@ -1,13 +1,12 @@
 import React, { useState, useEffect } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { Slider } from "@/components/ui/slider";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Zap, Target, AlertTriangle, Loader2, TrendingUp } from "lucide-react";
+import { Zap, Target, AlertTriangle, Loader2 } from "lucide-react";
 import { base44 } from "@/api/base44Client";
 import { useToast } from "@/components/ui/use-toast";
-import { format, parseISO, isPast } from "date-fns";
+import { parseISO, isPast } from "date-fns";
 
 export default function CreateWagerDialog({ open, onClose, onCreated }) {
     const [assessments, setAssessments] = useState([]);
@@ -85,8 +84,6 @@ export default function CreateWagerDialog({ open, onClose, onCreated }) {
         }
     };
 
-    const diff = 5; // example diff for preview
-    const previewXP = wageredXP * 3;
     const totalXP = userProfile?.total_xp || 0;
     const maxWager = Math.min(500, totalXP);
 
@@ -95,22 +92,22 @@ export default function CreateWagerDialog({ open, onClose, onCreated }) {
             <DialogContent className="max-w-md">
                 <DialogHeader>
                     <DialogTitle className="flex items-center gap-2">
-                        <Target className="w-5 h-5 text-purple-600" />
+                        <Target className="w-5 h-5 text-chart-4" />
                         Place a Score Wager
                     </DialogTitle>
                 </DialogHeader>
 
                 {loading ? (
                     <div className="flex items-center justify-center py-8">
-                        <Loader2 className="w-8 h-8 animate-spin text-purple-400" />
+                        <Loader2 className="w-8 h-8 animate-spin text-chart-4" />
                     </div>
                 ) : (
                     <div className="space-y-5">
                         {/* Assessment selector */}
                         <div>
-                            <label className="text-sm font-semibold text-gray-700 block mb-2">Assessment</label>
+                            <label className="text-sm font-semibold text-foreground block mb-2">Assessment</label>
                             {assessments.length === 0 ? (
-                                <div className="text-center py-6 bg-gray-50 rounded-xl border text-gray-500 text-sm">
+                                <div className="text-center py-6 bg-secondary rounded-xl border text-muted-foreground text-sm">
                                     No eligible assessments found.<br />
                                     <span className="text-xs">Add upcoming assessments in Subjects → Assessments</span>
                                 </div>
@@ -133,11 +130,11 @@ export default function CreateWagerDialog({ open, onClose, onCreated }) {
                         {/* Predicted score */}
                         <div>
                             <div className="flex justify-between text-sm mb-2">
-                                <label className="font-semibold text-gray-700">Predicted Score</label>
-                                <span className="font-black text-purple-700 text-lg">{predictedScore}%</span>
+                                <label className="font-semibold text-foreground">Predicted Score</label>
+                                <span className="font-black text-chart-4 text-lg">{predictedScore}%</span>
                             </div>
                             <Slider value={[predictedScore]} onValueChange={([v]) => setPredictedScore(v)} min={0} max={100} step={1} />
-                            <div className="flex justify-between text-xs text-gray-400 mt-1">
+                            <div className="flex justify-between text-xs text-muted-foreground mt-1">
                                 <span>0%</span><span>50%</span><span>100%</span>
                             </div>
                         </div>
@@ -145,37 +142,37 @@ export default function CreateWagerDialog({ open, onClose, onCreated }) {
                         {/* Wagered XP */}
                         <div>
                             <div className="flex justify-between text-sm mb-2">
-                                <label className="font-semibold text-gray-700">Wager</label>
-                                <span className="font-black text-amber-600 text-lg flex items-center gap-1">
+                                <label className="font-semibold text-foreground">Wager</label>
+                                <span className="font-black text-xp text-lg flex items-center gap-1">
                                     <Zap className="w-4 h-4" />{wageredXP} XP
                                 </span>
                             </div>
                             <Slider value={[wageredXP]} onValueChange={([v]) => setWageredXP(v)} min={10} max={maxWager || 500} step={10} />
-                            <div className="flex justify-between text-xs text-gray-400 mt-1">
+                            <div className="flex justify-between text-xs text-muted-foreground mt-1">
                                 <span>10 XP</span>
-                                <span className="text-gray-500">You have {totalXP.toLocaleString()} XP</span>
+                                <span className="text-muted-foreground">You have {totalXP.toLocaleString()} XP</span>
                                 <span>500 XP max</span>
                             </div>
                         </div>
 
                         {/* Payout preview */}
                         <div className="grid grid-cols-3 gap-2 text-center">
-                            <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-3">
-                                <p className="text-xs font-semibold text-emerald-700 mb-1">🎯 Exact (±3%)</p>
-                                <p className="text-sm font-black text-emerald-700">+{wageredXP * 3} XP</p>
+                            <div className="bg-primary/10 border border-primary/20 rounded-xl p-3">
+                                <p className="text-xs font-semibold text-primary mb-1">🎯 Exact (±3%)</p>
+                                <p className="text-sm font-black text-primary">+{wageredXP * 3} XP</p>
                             </div>
-                            <div className="bg-blue-50 border border-blue-200 rounded-xl p-3">
-                                <p className="text-xs font-semibold text-blue-700 mb-1">✅ Close (±10%)</p>
-                                <p className="text-sm font-black text-blue-700">+{Math.round(wageredXP * 1.5)} XP</p>
+                            <div className="bg-chart-3/10 border border-chart-3/20 rounded-xl p-3">
+                                <p className="text-xs font-semibold text-chart-3 mb-1">✅ Close (±10%)</p>
+                                <p className="text-sm font-black text-chart-3">+{Math.round(wageredXP * 1.5)} XP</p>
                             </div>
-                            <div className="bg-red-50 border border-red-200 rounded-xl p-3">
-                                <p className="text-xs font-semibold text-red-700 mb-1">❌ Wrong</p>
-                                <p className="text-sm font-black text-red-700">-{wageredXP} XP</p>
+                            <div className="bg-streak/10 border border-streak/20 rounded-xl p-3">
+                                <p className="text-xs font-semibold text-streak mb-1">❌ Wrong</p>
+                                <p className="text-sm font-black text-streak">-{wageredXP} XP</p>
                             </div>
                         </div>
 
-                        <div className="flex items-start gap-2 text-xs text-gray-500 bg-gray-50 rounded-lg p-3">
-                            <AlertTriangle className="w-4 h-4 text-amber-500 flex-shrink-0 mt-0.5" />
+                        <div className="flex items-start gap-2 text-xs text-muted-foreground bg-secondary rounded-lg p-3">
+                            <AlertTriangle className="w-4 h-4 text-xp flex-shrink-0 mt-0.5" />
                             <span>Prediction locks after the assessment due date. Enter your actual score afterwards to resolve the wager.</span>
                         </div>
                     </div>
@@ -186,7 +183,7 @@ export default function CreateWagerDialog({ open, onClose, onCreated }) {
                     <Button
                         onClick={handleCreate}
                         disabled={creating || !selectedAssessmentId || assessments.length === 0}
-                        className="bg-gradient-to-r from-purple-600 to-indigo-600"
+                        className="bg-gradient-to-r from-chart-4 to-chart-3 text-white"
                     >
                         {creating ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Zap className="w-4 h-4 mr-2" />}
                         {creating ? 'Placing...' : 'Place Wager'}
