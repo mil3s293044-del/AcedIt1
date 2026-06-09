@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Button } from "@/components/ui/button";
-import { Play, Trash2, FileQuestion, ChevronDown, ChevronUp, Clock, History, Shuffle } from "lucide-react";
+import { Play, Trash2, FileQuestion, ChevronDown, ChevronUp, Clock, History, Shuffle, Target } from "lucide-react";
 
 // Static lookup tables (Tailwind JIT-safe)
 const difficultyConfig = {
@@ -20,9 +20,19 @@ const getScoreTextClass = (score) => {
     return "text-streak";
 };
 
-const QuizCard = React.memo(({ quiz, onPlay, onDelete, onReshuffle, pastAttempts = [], subjectColor }) => {
+const QuizCard = React.memo(({ quiz, onPlay, onRetryWrong, onDelete, onReshuffle, pastAttempts = [], subjectColor }) => {
     const [showResults, setShowResults] = useState(false);
     const quizAttempts = pastAttempts.filter(a => a.quiz_id === quiz.id);
+
+    // Wrong MCQ questions from the most recent attempt (short answers can't be
+    // auto-graded without stored feedback, so they're excluded).
+    const mostRecent = [...quizAttempts].sort((a, b) => new Date(b.created_date || 0) - new Date(a.created_date || 0))[0];
+    const wrongIdx = mostRecent?.user_answers
+        ? (quiz.questions || [])
+            .map((q, i) => ({ q, i }))
+            .filter(({ q, i }) => q.type === 'mcq' && (mostRecent.user_answers[i] === undefined || parseInt(mostRecent.user_answers[i]) !== q.correct_answer))
+            .map(({ i }) => i)
+        : [];
     // Display the adjusted score when present (includes self-marked paper work)
     // so the card matches what the student sees on the results page.
     const effectiveScore = (a) => (typeof a.adjusted_score === "number" ? a.adjusted_score : a.score);
@@ -152,6 +162,18 @@ const QuizCard = React.memo(({ quiz, onPlay, onDelete, onReshuffle, pastAttempts
                     {/* Spacer to push actions to bottom */}
                     <div className="flex-1" />
 
+                    {/* Retry-wrong shortcut */}
+                    {wrongIdx.length > 0 && onRetryWrong && (
+                        <Button
+                            onClick={() => onRetryWrong(wrongIdx)}
+                            variant="outline"
+                            className="w-full h-9 rounded-xl font-medium text-streak border-streak/30 hover:bg-streak/10 hover:border-streak/50 mb-2"
+                        >
+                            <Target className="w-4 h-4 mr-1.5" />
+                            Retry {wrongIdx.length} wrong
+                        </Button>
+                    )}
+
                     {/* Actions */}
                     <div className="flex gap-2 mt-auto">
                         <Button
@@ -159,7 +181,7 @@ const QuizCard = React.memo(({ quiz, onPlay, onDelete, onReshuffle, pastAttempts
                             className="flex-1 h-10 rounded-xl font-medium bg-chart-3 hover:bg-chart-3/90 text-white"
                         >
                             <Play className="w-4 h-4 mr-1.5" />
-                            {quizAttempts.length > 0 ? 'Retry' : 'Start'}
+                            {quizAttempts.length > 0 ? 'Retry all' : 'Start'}
                         </Button>
                         {quiz.source_file_url && onReshuffle && (
                             <Button

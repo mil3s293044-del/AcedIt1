@@ -955,6 +955,9 @@ Return valid JSON only.`,
                         mode={quizMode}
                         timeLimitMs={quizTimeLimitMs}
                         onComplete={async (results) => {
+                            // "Retry wrong" runs are pure practice — don't save an
+                            // attempt or award XP (would skew stats / be farmable).
+                            if (selectedQuiz._isRetry) { await loadData(); return; }
                             try {
                                 await base44.entities.QuizAttempt.create({
                                     quiz_id: selectedQuiz.id,
@@ -1235,6 +1238,18 @@ Return valid JSON only.`,
                                                     <motion.div key={quiz.id} initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: index * 0.04 }} className="h-full">
                                                         <QuizCard quiz={quiz} pastAttempts={quizAttempts} subjectColor={subjectColor}
                                                             onPlay={() => { setPendingQuiz(quiz); }}
+                                                            onRetryWrong={(wrongIdx) => {
+                                                                const subset = {
+                                                                    ...quiz,
+                                                                    _isRetry: true,
+                                                                    title: `${quiz.title} — wrong only`,
+                                                                    questions: wrongIdx.map(i => quiz.questions[i]),
+                                                                };
+                                                                setQuizMode('standard');
+                                                                setQuizTimeLimitMs(null);
+                                                                setSelectedQuiz(subset);
+                                                                setIsPlaying(true);
+                                                            }}
                                                             onReshuffle={handleReshuffleQuiz} onDelete={handleDeleteQuiz} />
                                                     </motion.div>
                                                 ))}
