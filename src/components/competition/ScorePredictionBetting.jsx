@@ -14,24 +14,6 @@ import {
 const XP_OPTS = [25, 50, 100, 200];
 const WIN_MULT = 1.8;
 
-// ── Compute simple implied odds display ──────────────────────────────────────
-function OddsDisplay({ line, direction }) {
-    // Simple fixed odds for display: more extreme = longer odds
-    const dist = Math.abs(line - 50);
-    let overOdds, underOdds;
-    if (line < 50) {
-        overOdds = 1 + (50 - line) / 50 * 0.8;
-        underOdds = 1 - (50 - line) / 100 * 0.3;
-    } else {
-        overOdds = 1 - (line - 50) / 100 * 0.3;
-        underOdds = 1 + (line - 50) / 50 * 0.8;
-    }
-    const display = direction === 'over'
-        ? `${overOdds.toFixed(2)}×`
-        : `${underOdds.toFixed(2)}×`;
-    return <span className="font-black text-amber-600">{display}</span>;
-}
-
 // ── My Prediction Panel ──────────────────────────────────────────────────────
 function MyPrediction({ competition, currentUserEmail, onUpdate }) {
     const { toast } = useToast();
@@ -63,7 +45,7 @@ function MyPrediction({ competition, currentUserEmail, onUpdate }) {
 
     if (!editing && hasLine) {
         return (
-            <div className="bg-gradient-to-br from-purple-600 to-indigo-700 rounded-2xl p-4 text-white">
+            <div className="bg-gradient-to-br from-chart-4 to-chart-3 rounded-2xl p-4 text-white">
                 <div className="flex items-center justify-between mb-2">
                     <p className="text-white/70 text-xs font-semibold uppercase tracking-wide">Your Score Prediction</p>
                     <button onClick={() => setEditing(true)} className="text-white/60 hover:text-white text-xs flex items-center gap-1">
@@ -71,7 +53,7 @@ function MyPrediction({ competition, currentUserEmail, onUpdate }) {
                     </button>
                 </div>
                 <div className="flex items-end gap-3">
-                    <p className="text-5xl font-black">{me.self_line}%</p>
+                    <p className="font-display text-5xl font-black">{me.self_line}%</p>
                     <div className="mb-1">
                         {me.self_line_label && <p className="text-white/80 text-xs mb-1">"{me.self_line_label}"</p>}
                         <div className="flex items-center gap-1.5">
@@ -82,8 +64,8 @@ function MyPrediction({ competition, currentUserEmail, onUpdate }) {
                 </div>
                 {me?.result_submitted && (
                     <div className="mt-3 pt-3 border-t border-white/20 flex items-center gap-2">
-                        <CheckCircle2 className="w-4 h-4 text-emerald-300" />
-                        <span className="text-emerald-300 text-xs font-semibold">Actual result submitted: {me.actual_result}%</span>
+                        <CheckCircle2 className="w-4 h-4 text-white" />
+                        <span className="text-white text-xs font-semibold">Actual result submitted: {me.actual_result}%</span>
                     </div>
                 )}
             </div>
@@ -91,23 +73,23 @@ function MyPrediction({ competition, currentUserEmail, onUpdate }) {
     }
 
     return (
-        <div className="bg-purple-50 border-2 border-purple-200 rounded-2xl p-4 space-y-4">
+        <div className="bg-chart-4/5 border-2 border-chart-4/20 rounded-2xl p-4 space-y-4">
             <div className="flex items-center gap-2">
-                <Flag className="w-4 h-4 text-purple-600" />
-                <p className="font-bold text-purple-900 text-sm">Set Your Score Prediction</p>
+                <Flag className="w-4 h-4 text-chart-4" />
+                <p className="font-bold text-foreground text-sm">Set Your Score Prediction</p>
             </div>
-            <p className="text-xs text-purple-700">Predict your assessment score. Friends will bet over or under. Win big if they're wrong!</p>
+            <p className="text-xs text-muted-foreground">Predict your assessment score. Friends will bet over or under. Win big if they're wrong!</p>
 
             <div>
                 <div className="flex justify-between mb-2">
-                    <span className="text-xs text-gray-600">I predict I'll score:</span>
-                    <span className="text-3xl font-black text-purple-700">{line}%</span>
+                    <span className="text-xs text-muted-foreground">I predict I'll score:</span>
+                    <span className="text-3xl font-black text-chart-4">{line}%</span>
                 </div>
                 <Slider value={[line]} onValueChange={([v]) => setLine(v)} min={0} max={100} step={1} />
                 <div className="flex gap-2 mt-2">
                     {[40, 50, 60, 70, 80, 90].map(v => (
                         <button key={v} onClick={() => setLine(v)}
-                            className={`flex-1 text-xs py-1 rounded font-semibold transition-all ${line === v ? 'bg-purple-600 text-white' : 'bg-gray-100 text-gray-500 hover:bg-purple-100'}`}>{v}</button>
+                            className={`flex-1 text-xs py-1 rounded font-semibold transition-all ${line === v ? 'bg-chart-4 text-white' : 'bg-secondary text-muted-foreground hover:bg-chart-4/10'}`}>{v}</button>
                     ))}
                 </div>
             </div>
@@ -116,7 +98,7 @@ function MyPrediction({ competition, currentUserEmail, onUpdate }) {
                 placeholder="e.g. I'll score 85% on my Chem SAC"
                 className="text-sm" maxLength={80} />
 
-            <Button onClick={handleSave} disabled={saving} className="w-full bg-purple-600 hover:bg-purple-700 text-white font-bold rounded-xl">
+            <Button onClick={handleSave} disabled={saving} className="w-full bg-chart-4 hover:bg-chart-4 text-white font-bold rounded-xl">
                 {saving ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Flag className="w-4 h-4 mr-2" />}
                 Publish Prediction
             </Button>
@@ -145,7 +127,6 @@ function SubmitResult({ competition, currentUserEmail, onUpdate }) {
                     : p
             );
 
-            // Resolve any bets where this user is the target
             const bets = competition.progress_bets || [];
             const updatedBets = bets.map(bet => {
                 if (bet.status !== 'open' || bet.target_email !== currentUserEmail) return bet;
@@ -159,21 +140,16 @@ function SubmitResult({ competition, currentUserEmail, onUpdate }) {
                 progress_bets: updatedBets
             });
 
-            // Settle XP for resolved bets:
-            // XP was already escrowed (deducted) when the bet was placed.
-            // On WIN: reward the wagered_xp back PLUS winnings (wagered_xp * WIN_MULT total).
-            // On LOSS: nothing to do — XP was already taken at bet time.
             const resolved = updatedBets.filter((b, i) => b.status !== 'open' && bets[i]?.status === 'open');
             for (const bet of resolved) {
-                if (bet.status !== 'won') continue; // losers already had XP deducted
+                if (bet.status !== 'won') continue;
                 try {
                     const profiles = await base44.entities.UserProfile.filter({ created_by: bet.bettor_email });
                     if (profiles[0]) {
-                        const returnAmount = Math.floor(bet.wagered_xp * WIN_MULT); // e.g. stake + winnings
+                        const returnAmount = Math.floor(bet.wagered_xp * WIN_MULT);
                         const newTotal = (profiles[0].total_xp || 0) + returnAmount;
                         const newSeason = (profiles[0].season_xp || 0) + returnAmount;
                         await base44.entities.UserProfile.update(profiles[0].id, { total_xp: newTotal, season_xp: newSeason });
-                        // Also update Leaderboard
                         try {
                             const lbEntries = await base44.entities.Leaderboard.filter({ user_email: bet.bettor_email });
                             if (lbEntries[0]) {
@@ -198,35 +174,35 @@ function SubmitResult({ competition, currentUserEmail, onUpdate }) {
     };
 
     return (
-        <div className="bg-amber-50 border-2 border-amber-300 rounded-2xl p-4 space-y-4">
+        <div className="bg-xp/5 border-2 border-xp/30 rounded-2xl p-4 space-y-4">
             <div className="flex items-center gap-2">
-                <Target className="w-4 h-4 text-amber-600" />
-                <p className="font-bold text-amber-900 text-sm">Submit Your Actual Score</p>
+                <Target className="w-4 h-4 text-xp" />
+                <p className="font-bold text-foreground text-sm">Submit Your Actual Score</p>
             </div>
-            <p className="text-xs text-amber-700">You predicted <strong>{me.self_line}%</strong>. Enter your actual score to settle bets.</p>
+            <p className="text-xs text-muted-foreground">You predicted <strong className="text-foreground">{me.self_line}%</strong>. Enter your actual score to settle bets.</p>
 
             <div>
                 <div className="flex justify-between mb-2">
-                    <span className="text-xs text-gray-600">Actual score:</span>
-                    <span className="text-3xl font-black text-amber-700">{result}%</span>
+                    <span className="text-xs text-muted-foreground">Actual score:</span>
+                    <span className="text-3xl font-black text-xp">{result}%</span>
                 </div>
                 <Slider value={[result]} onValueChange={([v]) => setResult(v)} min={0} max={100} step={1} />
                 <div className="flex gap-1 mt-2">
                     {[0, 40, 50, 60, 70, 80, 90, 100].map(v => (
                         <button key={v} onClick={() => setResult(v)}
-                            className={`flex-1 text-xs py-1 rounded font-semibold transition-all ${result === v ? 'bg-amber-500 text-white' : 'bg-gray-100 text-gray-500 hover:bg-amber-100'}`}>{v}</button>
+                            className={`flex-1 text-xs py-1 rounded font-semibold transition-all ${result === v ? 'bg-xp text-white' : 'bg-secondary text-muted-foreground hover:bg-xp/10'}`}>{v}</button>
                     ))}
                 </div>
             </div>
 
-            <div className={`rounded-xl p-3 border-2 text-center ${accuracy === 'exact' ? 'bg-emerald-50 border-emerald-300' : accuracy === 'close' ? 'bg-blue-50 border-blue-300' : 'bg-red-50 border-red-200'}`}>
+            <div className={`rounded-xl p-3 border-2 text-center ${accuracy === 'exact' ? 'bg-primary/10 border-primary/30' : accuracy === 'close' ? 'bg-chart-3/10 border-chart-3/30' : 'bg-streak/10 border-streak/20'}`}>
                 <p className="text-lg mb-0.5">{accuracy === 'exact' ? '🎯' : accuracy === 'close' ? '👍' : '😬'}</p>
-                <p className="text-xs font-bold text-gray-700">
+                <p className="text-xs font-bold text-foreground">
                     {accuracy === 'exact' ? 'Perfect prediction!' : accuracy === 'close' ? 'Close call' : `Off by ${diff}%`}
                 </p>
             </div>
 
-            <Button onClick={handleSubmit} disabled={saving} className="w-full bg-amber-500 hover:bg-amber-600 text-white font-bold rounded-xl">
+            <Button onClick={handleSubmit} disabled={saving} className="w-full bg-xp hover:bg-xp text-white font-bold rounded-xl">
                 {saving ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <CheckCircle2 className="w-4 h-4 mr-2" />}
                 Confirm & Settle Bets
             </Button>
@@ -268,16 +244,11 @@ function BetPanel({ target, competition, currentUserEmail, onUpdate }) {
             const updatedBets = [...(competition.progress_bets || []), newBet];
             await base44.entities.GoalCompetition.update(competition.id, { progress_bets: updatedBets });
 
-            // Escrow: deduct XP from bettor's profile AND leaderboard
             const bettorProfiles = await base44.entities.UserProfile.filter({ created_by: currentUserEmail });
             if (bettorProfiles[0]) {
                 const newTotal = Math.max(0, (bettorProfiles[0].total_xp || 0) - wageredXP);
                 const newSeason = Math.max(0, (bettorProfiles[0].season_xp || 0) - wageredXP);
-                await base44.entities.UserProfile.update(bettorProfiles[0].id, {
-                    total_xp: newTotal,
-                    season_xp: newSeason
-                });
-                // Also deduct from leaderboard
+                await base44.entities.UserProfile.update(bettorProfiles[0].id, { total_xp: newTotal, season_xp: newSeason });
                 try {
                     const lbEntries = await base44.entities.Leaderboard.filter({ user_email: currentUserEmail });
                     if (lbEntries[0]) {
@@ -301,25 +272,25 @@ function BetPanel({ target, competition, currentUserEmail, onUpdate }) {
     };
 
     return (
-        <div className="border-2 border-gray-100 rounded-2xl overflow-hidden bg-white">
-            <div className="flex items-center gap-3 p-3.5 cursor-pointer hover:bg-gray-50 transition-colors"
+        <div className="border-2 border-border rounded-2xl overflow-hidden bg-surface">
+            <div className="flex items-center gap-3 p-3.5 cursor-pointer hover:bg-secondary/50 transition-colors"
                 onClick={() => !existingBet && !target.result_submitted && setOpen(o => !o)}>
                 <div className="flex-1 min-w-0">
-                    <p className="font-bold text-gray-900 text-sm">{target.name}{isMe ? ' (you)' : ''}</p>
-                    {target.self_line_label && <p className="text-xs text-gray-400 truncate mt-0.5">"{target.self_line_label}"</p>}
-                    <p className="text-xs text-gray-400 mt-0.5">{betCount} bet{betCount !== 1 ? 's' : ''}</p>
+                    <p className="font-bold text-foreground text-sm">{target.name}{isMe ? ' (you)' : ''}</p>
+                    {target.self_line_label && <p className="text-xs text-muted-foreground truncate mt-0.5">"{target.self_line_label}"</p>}
+                    <p className="text-xs text-muted-foreground mt-0.5">{betCount} bet{betCount !== 1 ? 's' : ''}</p>
                 </div>
                 <div className="text-right flex-shrink-0">
-                    <p className="text-3xl font-black text-purple-700">{target.self_line}%</p>
+                    <p className="text-3xl font-black text-chart-4">{target.self_line}%</p>
                     {target.result_submitted && (
-                        <p className="text-xs text-emerald-600 font-semibold">Actual: {target.actual_result}%</p>
+                        <p className="text-xs text-primary font-semibold">Actual: {target.actual_result}%</p>
                     )}
                 </div>
                 {existingBet ? (
                     <Badge className={`ml-2 text-xs flex-shrink-0 ${
-                        existingBet.status === 'won' ? 'bg-emerald-100 text-emerald-700' :
-                        existingBet.status === 'lost' ? 'bg-red-100 text-red-700' :
-                        existingBet.direction === 'over' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
+                        existingBet.status === 'won' ? 'bg-primary/15 text-primary' :
+                        existingBet.status === 'lost' ? 'bg-streak/15 text-streak' :
+                        existingBet.direction === 'over' ? 'bg-primary/15 text-primary' : 'bg-streak/15 text-streak'
                     }`}>
                         {existingBet.status === 'open'
                             ? `${existingBet.direction.toUpperCase()} · ${existingBet.wagered_xp}XP`
@@ -328,10 +299,10 @@ function BetPanel({ target, competition, currentUserEmail, onUpdate }) {
                             : `${existingBet.xp_outcome}XP 💔`}
                     </Badge>
                 ) : target.result_submitted ? (
-                    <Badge className="ml-2 text-xs bg-gray-100 text-gray-500 flex-shrink-0"><Lock className="w-3 h-3 mr-1" />Settled</Badge>
+                    <Badge className="ml-2 text-xs bg-secondary text-muted-foreground flex-shrink-0"><Lock className="w-3 h-3 mr-1" />Settled</Badge>
                 ) : (
                     <button className={`ml-2 text-xs font-bold px-3 py-1.5 rounded-xl border-2 transition-all flex-shrink-0 ${
-                        open ? 'bg-purple-600 border-purple-600 text-white' : 'border-purple-200 text-purple-600 hover:bg-purple-50'
+                        open ? 'bg-chart-4 border-chart-4 text-white' : 'border-chart-4/30 text-chart-4 hover:bg-chart-4/5'
                     }`}>
                         {open ? '✕ Cancel' : 'Bet →'}
                     </button>
@@ -341,20 +312,20 @@ function BetPanel({ target, competition, currentUserEmail, onUpdate }) {
             <AnimatePresence>
                 {open && !existingBet && (
                     <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }}
-                        className="overflow-hidden border-t border-gray-100 bg-gradient-to-br from-purple-50 to-indigo-50 px-4 py-4 space-y-4">
+                        className="overflow-hidden border-t border-border bg-chart-4/5 px-4 py-4 space-y-4">
 
                         {/* Over/Under toggle */}
                         <div className="grid grid-cols-2 gap-2">
                             <button onClick={() => setDirection('over')}
                                 className={`flex items-center justify-center gap-2 px-4 py-3 rounded-xl border-2 font-bold text-sm transition-all ${
-                                    direction === 'over' ? 'bg-emerald-500 border-emerald-500 text-white shadow-lg shadow-emerald-200' : 'bg-white border-gray-200 text-gray-700 hover:border-emerald-300'
+                                    direction === 'over' ? 'bg-primary border-primary text-white shadow-soft' : 'bg-surface border-border text-foreground hover:border-primary/40'
                                 }`}>
                                 <TrendingUp className="w-4 h-4" /> OVER
                                 <span className="text-xs opacity-70">{target.self_line}%</span>
                             </button>
                             <button onClick={() => setDirection('under')}
                                 className={`flex items-center justify-center gap-2 px-4 py-3 rounded-xl border-2 font-bold text-sm transition-all ${
-                                    direction === 'under' ? 'bg-red-500 border-red-500 text-white shadow-lg shadow-red-200' : 'bg-white border-gray-200 text-gray-700 hover:border-red-300'
+                                    direction === 'under' ? 'bg-streak border-streak text-white shadow-soft' : 'bg-surface border-border text-foreground hover:border-streak/40'
                                 }`}>
                                 <TrendingDown className="w-4 h-4" /> UNDER
                                 <span className="text-xs opacity-70">{target.self_line}%</span>
@@ -363,33 +334,33 @@ function BetPanel({ target, competition, currentUserEmail, onUpdate }) {
 
                         {/* XP stake chips */}
                         <div>
-                            <p className="text-xs text-gray-500 mb-2 font-semibold">Stake (held in escrow)</p>
+                            <p className="text-xs text-muted-foreground mb-2 font-semibold">Stake (held in escrow)</p>
                             <div className="flex gap-2 flex-wrap">
                                 {XP_OPTS.map(amt => (
                                     <button key={amt} onClick={() => setWageredXP(amt)}
                                         className={`px-3.5 py-2 rounded-xl text-sm font-bold border-2 transition-all ${
                                             wageredXP === amt
-                                                ? 'bg-indigo-600 border-indigo-600 text-white shadow-md'
-                                                : 'bg-white border-gray-200 text-gray-700 hover:border-indigo-300'
+                                                ? 'bg-chart-3 border-chart-3 text-white shadow-soft'
+                                                : 'bg-surface border-border text-foreground hover:border-chart-3/40'
                                         }`}>{amt} XP</button>
                                 ))}
                             </div>
                         </div>
 
                         {/* Summary */}
-                        <div className={`rounded-xl p-3.5 border-2 ${direction === 'over' ? 'bg-emerald-50 border-emerald-200' : 'bg-red-50 border-red-200'}`}>
-                            <p className="text-sm font-black text-gray-800 mb-1">
+                        <div className={`rounded-xl p-3.5 border-2 ${direction === 'over' ? 'bg-primary/10 border-primary/20' : 'bg-streak/10 border-streak/20'}`}>
+                            <p className="text-sm font-black text-foreground mb-1">
                                 {direction === 'over' ? '📈' : '📉'} {target.name.split(' ')[0]} goes {direction.toUpperCase()} {target.self_line}%
                             </p>
                             <div className="flex justify-between text-xs font-semibold">
-                                <span className="text-emerald-600">Win: +{Math.floor(wageredXP * WIN_MULT)} XP ({WIN_MULT}×)</span>
-                                <span className="text-red-600">Lose: -{wageredXP} XP</span>
+                                <span className="text-primary">Win: +{Math.floor(wageredXP * WIN_MULT)} XP ({WIN_MULT}×)</span>
+                                <span className="text-streak">Lose: -{wageredXP} XP</span>
                             </div>
                         </div>
 
-                        <Button onClick={handleBet} disabled={placing} className="w-full bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white font-bold rounded-xl py-5">
+                        <Button onClick={handleBet} disabled={placing} className="w-full bg-gradient-to-r from-chart-4 to-chart-3 text-white font-bold rounded-xl py-5">
                             {placing ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Zap className="w-4 h-4 mr-2" />}
-                            {placing ? 'Placing...' : `Bet ${wageredXP} XP`}
+                            {placing ? 'Placing…' : `Bet ${wageredXP} XP`}
                         </Button>
                     </motion.div>
                 )}
@@ -400,7 +371,6 @@ function BetPanel({ target, competition, currentUserEmail, onUpdate }) {
 
 // ── Main component ──────────────────────────────────────────────────────────
 export default function ScorePredictionBetting({ competition, currentUserEmail, onUpdate }) {
-    const isCompleted = competition.status === 'completed';
     const me = (competition.participants || []).find(p => p.email === currentUserEmail);
     const deadline = competition.goal_target_date;
     const isPastDeadline = deadline && new Date() > new Date(deadline);
@@ -413,18 +383,18 @@ export default function ScorePredictionBetting({ competition, currentUserEmail, 
     return (
         <div className="space-y-5">
             <div className="flex items-center gap-2">
-                <TrendingUp className="w-5 h-5 text-purple-600" />
-                <h3 className="font-black text-gray-900">Score Predictions & Bets</h3>
+                <TrendingUp className="w-5 h-5 text-chart-4" />
+                <h3 className="font-display font-extrabold text-foreground">Score Predictions & Bets</h3>
                 {(competition.progress_bets || []).length > 0 && (
-                    <Badge className="bg-purple-100 text-purple-700 border-0 text-xs">
+                    <Badge className="bg-chart-4/15 text-chart-4 border-0 text-xs">
                         {(competition.progress_bets || []).length} bet{(competition.progress_bets || []).length !== 1 ? 's' : ''}
                     </Badge>
                 )}
             </div>
 
-            <p className="text-xs text-gray-500">
-                Set your predicted score for an upcoming assessment. Your opponents bet <strong>over</strong> or <strong>under</strong>. 
-                Correct bets pay <strong>{WIN_MULT}×</strong>. Wrong bets lose the stake.
+            <p className="text-xs text-muted-foreground">
+                Set your predicted score for an upcoming assessment. Your opponents bet <strong className="text-foreground">over</strong> or <strong className="text-foreground">under</strong>.
+                Correct bets pay <strong className="text-foreground">{WIN_MULT}×</strong>. Wrong bets lose the stake.
             </p>
 
             {/* My prediction */}
@@ -438,7 +408,7 @@ export default function ScorePredictionBetting({ competition, currentUserEmail, 
             {/* Others' predictions to bet on */}
             {accepted.filter(p => p.email !== currentUserEmail).length > 0 && (
                 <div className="space-y-3">
-                    <p className="text-xs font-bold text-gray-600 uppercase tracking-wide">Bet on your rivals</p>
+                    <p className="text-xs font-bold text-muted-foreground uppercase tracking-wide">Bet on your rivals</p>
                     {accepted.filter(p => p.email !== currentUserEmail).map(p => (
                         <BetPanel
                             key={p.email}
@@ -452,7 +422,7 @@ export default function ScorePredictionBetting({ competition, currentUserEmail, 
             )}
 
             {accepted.filter(p => p.email !== currentUserEmail).length === 0 && accepted.length === 0 && (
-                <p className="text-xs text-gray-400 text-center py-4 italic">
+                <p className="text-xs text-muted-foreground text-center py-4 italic">
                     No one has set a prediction yet. Be the first!
                 </p>
             )}
@@ -460,29 +430,29 @@ export default function ScorePredictionBetting({ competition, currentUserEmail, 
             {/* My bets summary */}
             {myBets.length > 0 && (
                 <div className="space-y-2">
-                    <p className="text-xs font-bold text-gray-600 uppercase tracking-wide">Your active bets</p>
+                    <p className="text-xs font-bold text-muted-foreground uppercase tracking-wide">Your active bets</p>
                     {myBets.map(bet => (
                         <div key={bet.id} className={`flex items-center gap-3 rounded-xl px-3 py-2.5 border-2 ${
-                            bet.status === 'won' ? 'bg-emerald-50 border-emerald-200' :
-                            bet.status === 'lost' ? 'bg-red-50 border-red-200' : 'bg-white border-gray-200'
+                            bet.status === 'won' ? 'bg-primary/10 border-primary/20' :
+                            bet.status === 'lost' ? 'bg-streak/10 border-streak/20' : 'bg-surface border-border'
                         }`}>
-                            <div className={`w-7 h-7 rounded-full flex items-center justify-center flex-shrink-0 ${bet.direction === 'over' ? 'bg-emerald-100' : 'bg-red-100'}`}>
+                            <div className={`w-7 h-7 rounded-full flex items-center justify-center flex-shrink-0 ${bet.direction === 'over' ? 'bg-primary/15' : 'bg-streak/15'}`}>
                                 {bet.direction === 'over'
-                                    ? <TrendingUp className="w-4 h-4 text-emerald-600" />
-                                    : <TrendingDown className="w-4 h-4 text-red-600" />}
+                                    ? <TrendingUp className="w-4 h-4 text-primary" />
+                                    : <TrendingDown className="w-4 h-4 text-streak" />}
                             </div>
                             <div className="flex-1 min-w-0">
-                                <p className="text-xs font-semibold text-gray-800">
-                                    {bet.target_name.split(' ')[0]} — <span className={bet.direction === 'over' ? 'text-emerald-700' : 'text-red-700'}>{bet.direction.toUpperCase()}</span> {bet.line}%
+                                <p className="text-xs font-semibold text-foreground">
+                                    {bet.target_name.split(' ')[0]} — <span className={bet.direction === 'over' ? 'text-primary' : 'text-streak'}>{bet.direction.toUpperCase()}</span> {bet.line}%
                                 </p>
-                                <p className="text-xs text-gray-400">
+                                <p className="text-xs text-muted-foreground">
                                     {bet.status === 'open' ? `Waiting for result` : bet.status === 'won' ? '🎉 Won' : '💔 Lost'}
                                 </p>
                             </div>
                             <div className="flex-shrink-0">
-                                {bet.status === 'open' && <span className="text-xs font-black text-amber-600 flex items-center gap-0.5"><Zap className="w-3 h-3" />{bet.wagered_xp}</span>}
-                                {bet.status === 'won' && <span className="text-xs font-black text-emerald-600 flex items-center gap-0.5"><ArrowUpRight className="w-3 h-3" />+{bet.xp_outcome}</span>}
-                                {bet.status === 'lost' && <span className="text-xs font-black text-red-600 flex items-center gap-0.5"><ArrowDownRight className="w-3 h-3" />{bet.xp_outcome}</span>}
+                                {bet.status === 'open' && <span className="text-xs font-black text-xp flex items-center gap-0.5"><Zap className="w-3 h-3" />{bet.wagered_xp}</span>}
+                                {bet.status === 'won' && <span className="text-xs font-black text-primary flex items-center gap-0.5"><ArrowUpRight className="w-3 h-3" />+{bet.xp_outcome}</span>}
+                                {bet.status === 'lost' && <span className="text-xs font-black text-streak flex items-center gap-0.5"><ArrowDownRight className="w-3 h-3" />{bet.xp_outcome}</span>}
                             </div>
                         </div>
                     ))}
