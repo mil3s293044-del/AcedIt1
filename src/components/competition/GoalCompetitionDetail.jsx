@@ -37,8 +37,8 @@ export default function GoalCompetitionDetail({ competition, currentUserEmail, o
                     <ChevronLeft className="w-4 h-4 mr-1" /> Back
                 </Button>
                 <div className="flex-1 min-w-0">
-                    <h2 className="text-lg font-black text-gray-900 truncate">{competition.goal_title}</h2>
-                    <p className="text-xs text-gray-400">
+                    <h2 className="font-display font-extrabold text-foreground text-lg truncate">{competition.goal_title}</h2>
+                    <p className="text-xs text-muted-foreground">
                         by {competition.creator_name} · {accepted.length} participant{accepted.length !== 1 ? 's' : ''}
                         {competition.goal_target_date && ` · ends ${format(parseISO(competition.goal_target_date), 'MMM d')}`}
                     </p>
@@ -46,7 +46,7 @@ export default function GoalCompetitionDetail({ competition, currentUserEmail, o
                 {!isCompleted && (
                     <Button variant="outline" size="sm" onClick={handleCopyCode}
                         className="gap-1.5 font-mono font-bold text-xs rounded-xl border-dashed">
-                        {copied ? <Check className="w-3.5 h-3.5 text-green-600" /> : <Copy className="w-3.5 h-3.5" />}
+                        {copied ? <Check className="w-3.5 h-3.5 text-primary" /> : <Copy className="w-3.5 h-3.5" />}
                         {competition.invite_code}
                     </Button>
                 )}
@@ -58,15 +58,15 @@ export default function GoalCompetitionDetail({ competition, currentUserEmail, o
                     <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }}
                         className={`rounded-2xl p-5 text-center ${
                             isWinner
-                                ? 'bg-gradient-to-br from-amber-400 to-yellow-500 text-white shadow-xl shadow-amber-500/30'
-                                : 'bg-gradient-to-br from-purple-50 to-indigo-50 border-2 border-purple-200'
+                                ? 'bg-gradient-to-br from-xp to-streak text-white shadow-soft'
+                                : 'card-soft border-chart-4/25 bg-chart-4/5'
                         }`}>
                         <div className="text-4xl mb-2">{isWinner ? '🏆' : '🎖️'}</div>
-                        <p className="text-lg font-black">
+                        <p className={`font-display font-extrabold text-lg ${isWinner ? 'text-white' : 'text-foreground'}`}>
                             {isWinner ? 'You won!' : `${competition.winner_name} won!`}
                         </p>
                         {me?.bonus_xp_awarded > 0 && (
-                            <p className={`text-sm mt-1 flex items-center justify-center gap-1 ${isWinner ? 'text-white/90' : 'text-purple-700'}`}>
+                            <p className={`text-sm mt-1 flex items-center justify-center gap-1 font-bold ${isWinner ? 'text-white/90' : 'text-chart-4'}`}>
                                 <Zap className="w-4 h-4" />+{me.bonus_xp_awarded} XP awarded
                             </p>
                         )}
@@ -76,26 +76,26 @@ export default function GoalCompetitionDetail({ competition, currentUserEmail, o
 
             {/* Invited waiting */}
             {invited.length > 0 && !isCompleted && (
-                <div className="flex items-center gap-2 flex-wrap bg-amber-50 border border-amber-200 rounded-xl px-3 py-2.5">
-                    <Users className="w-4 h-4 text-amber-600 flex-shrink-0" />
-                    <span className="text-xs text-amber-700 font-semibold">Waiting for:</span>
-                    {invited.map(p => <Badge key={p.email} className="text-xs bg-amber-100 text-amber-700 border-0">{p.name.split(' ')[0]}</Badge>)}
-                    <span className="text-xs text-amber-600 ml-auto">Share code: <strong>{competition.invite_code}</strong></span>
+                <div className="flex items-center gap-2 flex-wrap bg-xp/5 border border-xp/20 rounded-xl px-3 py-2.5">
+                    <Users className="w-4 h-4 text-xp flex-shrink-0" />
+                    <span className="text-xs text-xp font-semibold">Waiting for:</span>
+                    {invited.map(p => <Badge key={p.email} className="text-xs bg-xp/15 text-xp border-0">{p.name.split(' ')[0]}</Badge>)}
+                    <span className="text-xs text-muted-foreground ml-auto">Share code: <strong className="text-foreground">{competition.invite_code}</strong></span>
                 </div>
             )}
 
             {/* Tabs: Hours Battle / Score Bets */}
             <Tabs defaultValue="hours">
-                <TabsList className="grid grid-cols-2 bg-gray-100 p-1 rounded-2xl h-auto">
+                <TabsList className="grid grid-cols-2 bg-secondary p-1 rounded-2xl h-auto">
                     <TabsTrigger value="hours"
-                        className="flex items-center gap-1.5 py-2.5 data-[state=active]:bg-white data-[state=active]:shadow rounded-xl text-sm font-bold">
+                        className="flex items-center gap-1.5 py-2.5 text-muted-foreground data-[state=active]:bg-surface data-[state=active]:text-foreground data-[state=active]:shadow-soft rounded-xl text-sm font-bold transition-all">
                         <Timer className="w-4 h-4" /> Hours Battle
                     </TabsTrigger>
                     <TabsTrigger value="bets"
-                        className="flex items-center gap-1.5 py-2.5 data-[state=active]:bg-white data-[state=active]:shadow rounded-xl text-sm font-bold">
+                        className="flex items-center gap-1.5 py-2.5 text-muted-foreground data-[state=active]:bg-surface data-[state=active]:text-foreground data-[state=active]:shadow-soft rounded-xl text-sm font-bold transition-all">
                         <TrendingUp className="w-4 h-4" /> Score Bets
                         {(competition.progress_bets || []).length > 0 && (
-                            <span className="w-5 h-5 bg-purple-100 text-purple-700 rounded-full text-xs font-black flex items-center justify-center">
+                            <span className="w-5 h-5 bg-chart-4/15 text-chart-4 rounded-full text-xs font-black flex items-center justify-center">
                                 {(competition.progress_bets || []).length}
                             </span>
                         )}
