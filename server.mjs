@@ -2929,10 +2929,20 @@ app.post("/local-ai/fn/updateCompetitionProgress", async (req, res) => {
       .reduce((sum, s) => sum + (s.duration_minutes || 0), 0);
     const totalMinutes = techMinutes + sessMinutes;
 
+    // Compete Score over the battle window — the new ranking basis.
+    const cs = await competitionCompeteScore(userEmail, startDate.toISOString());
+
     const now = new Date().toISOString();
     const updatedParticipants = participants.map((p) =>
       p.email === userEmail
-        ? { ...p, study_minutes: totalMinutes, last_hours_sync: now, last_activity: now }
+        ? {
+            ...p,
+            study_minutes: totalMinutes,
+            compete_score: cs.total,
+            score_breakdown: { effort: cs.effort, mastery: cs.mastery, consistency: cs.consistency },
+            last_hours_sync: now,
+            last_activity: now,
+          }
         : p,
     );
 
@@ -2946,6 +2956,7 @@ app.post("/local-ai/fn/updateCompetitionProgress", async (req, res) => {
       success: true,
       study_minutes: totalMinutes,
       study_hours: (totalMinutes / 60).toFixed(1),
+      compete_score: cs.total,
       subject: subjectFilter,
       since: startDate.toISOString(),
     });
@@ -2969,7 +2980,8 @@ app.post("/local-ai/fn/settleHoursCompetition", async (req, res) => {
 
     const authHeader = req.headers.authorization || "";
     const userEmail = user.email;
-    const XP_RATES = [75, 50, 30, 15];
+    // Flat XP by finishing rank (1st / 2nd / 3rd / 4th+).
+    const FLAT_XP = [150, 100, 60, 30];
 
     const { data: comp, error: fetchErr } = await supabaseAdmin
       .from("goal_competitions").select("*").eq("id", competition_id).maybeSingle();
@@ -2983,18 +2995,24 @@ app.post("/local-ai/fn/settleHoursCompetition", async (req, res) => {
     }
 
     const participants = comp.participants || [];
-    const accepted = participants
-      .filter((p) => p.status === "accepted" || p.status === "completed")
-      .sort((a, b) => (b.study_minutes || 0) - (a.study_minutes || 0));
+    const startIso = (comp.competition_start_date ? new Date(comp.competition_start_date) : new Date(comp.created_date)).toISOString();
+
+    // Recompute each participant's Compete Score fresh at settle time so
+    // ranking is fair regardless of when each last synced.
+    const acceptedRaw = participants.filter((p) => p.status === "accepted" || p.status === "completed");
+    const scored = [];
+    for (const p of acceptedRaw) {
+      const cs = await competitionCompeteScore(p.email, startIso);
+      scored.push({ p, score: cs.total, breakdown: cs });
+    }
+    scored.sort((a, b) => (b.score - a.score) || ((b.p.study_minutes || 0) - (a.p.study_minutes || 0)));
 
     const results = [];
-    for (let i = 0; i < accepted.length; i++) {
-      const p = accepted[i];
+    for (let i = 0; i < scored.length; i++) {
+      const { p, score } = scored[i];
       const rank = i + 1;
-      const xpRate = XP_RATES[Math.min(i, XP_RATES.length - 1)];
-      const hours = (p.study_minutes || 0) / 60;
-      const bonusXP = Math.round(hours * xpRate);
-      results.push({ email: p.email, name: p.name, rank, hours, xpRate, bonusXP });
+      const bonusXP = FLAT_XP[Math.min(i, FLAT_XP.length - 1)];
+      results.push({ email: p.email, name: p.name, rank, compete_score: score, bonusXP });
 
       if (bonusXP > 0) {
         try {
@@ -3002,7 +3020,7 @@ app.post("/local-ai/fn/settleHoursCompetition", async (req, res) => {
             "awardXP",
             {
               source: "competition_bonus",
-              event_key: `hours_comp_${competition_id}_${p.email}`,
+              event_key: `comp_settle_${competition_id}_${p.email}`,
               flat_xp: bonusXP,
             },
             authHeader,
@@ -3015,9 +3033,17 @@ app.post("/local-ai/fn/settleHoursCompetition", async (req, res) => {
 
     const winner = results[0];
     const updatedParticipants = participants.map((p) => {
+      const s = scored.find((x) => x.p.email === p.email);
       const r = results.find((x) => x.email === p.email);
       if (!r) return p;
-      return { ...p, final_rank: r.rank, bonus_xp_awarded: r.bonusXP, status: "completed" };
+      return {
+        ...p,
+        final_rank: r.rank,
+        bonus_xp_awarded: r.bonusXP,
+        compete_score: r.compete_score,
+        score_breakdown: s ? { effort: s.breakdown.effort, mastery: s.breakdown.mastery, consistency: s.breakdown.consistency } : p.score_breakdown,
+        status: "completed",
+      };
     });
 
     const { error: updErr } = await supabaseAdmin
@@ -3280,6 +3306,28 @@ function computeCompeteScore({ minutes = 0, avgAccuracy = 0, activeDays = 0, str
   const mastery = Math.round((avgAccuracy / 100) * 400);
   const consistency = Math.round(Math.min(activeDays / 7, 1) * 150 + Math.min(streak / 14, 1) * 50);
   return { effort, mastery, consistency, total: effort + mastery + consistency };
+}
+
+// Compute one user's Compete Score over a competition window [startIso, now].
+// Used to rank battles by "best study" instead of raw hours.
+async function competitionCompeteScore(email, startIso) {
+  if (!supabaseAdmin) return computeCompeteScore({});
+  const [techRes, sessRes, quizRes, profile] = await Promise.all([
+    supabaseAdmin.from("study_techniques").select("session_duration, created_date").eq("created_by", email).gte("created_date", startIso),
+    supabaseAdmin.from("study_sessions").select("duration_minutes, created_date").eq("created_by", email).gte("created_date", startIso),
+    supabaseAdmin.from("quiz_attempts").select("score, created_date").eq("created_by", email).gte("created_date", startIso),
+    loadUserProfile(email),
+  ]);
+  const techs = techRes.data || [], sess = sessRes.data || [], quizzes = quizRes.data || [];
+  const minutes = techs.reduce((a, t) => a + (t.session_duration || 0), 0) + sess.reduce((a, s) => a + (s.duration_minutes || 0), 0);
+  const scores = quizzes.map((q) => q.score).filter((s) => typeof s === "number");
+  const avgAccuracy = scores.length ? scores.reduce((a, b) => a + b, 0) / scores.length : 0;
+  const days = new Set([
+    ...techs.map((t) => t.created_date?.slice(0, 10)),
+    ...sess.map((s) => s.created_date?.slice(0, 10)),
+    ...quizzes.map((q) => q.created_date?.slice(0, 10)),
+  ].filter(Boolean)).size;
+  return computeCompeteScore({ minutes, avgAccuracy, activeDays: days, streak: profile?.streak_days || 0 });
 }
 
 app.post("/local-ai/fn/getLeagueStanding", async (req, res) => {

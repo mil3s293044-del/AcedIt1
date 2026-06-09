@@ -4,13 +4,14 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
     Clock, Zap, RefreshCw, Loader2, Trophy,
-    CheckCircle2, Timer
+    CheckCircle2, Swords
 } from "lucide-react";
 import { updateCompetitionProgress, settleHoursCompetition } from "@/api/functionsShim";
 import { useToast } from "@/components/ui/use-toast";
 import { format, parseISO, differenceInDays } from "date-fns";
 
-const XP_RATES = [75, 50, 30, 15];
+// Flat XP by finishing rank (1st / 2nd / 3rd / 4th+).
+const FLAT_XP = [150, 100, 60, 30];
 // On-brand rank styles: gold → xp, silver → secondary, bronze → streak.
 const RANK_STYLES = [
     { bg: "bg-xp", text: "text-white", label: "🥇" },
@@ -26,11 +27,12 @@ function formatTime(minutes) {
     return m > 0 ? `${h}h ${m}m` : `${h}h`;
 }
 
-function ParticipantRow({ participant, rank, currentUserEmail, isCompleted, totalMinutes }) {
+function ParticipantRow({ participant, rank, currentUserEmail, isCompleted, maxScore }) {
     const isMe = participant.email === currentUserEmail;
     const rs = RANK_STYLES[Math.min(rank - 1, RANK_STYLES.length - 1)];
-    const xpRate = XP_RATES[Math.min(rank - 1, XP_RATES.length - 1)];
-    const barPct = totalMinutes > 0 ? Math.round(((participant.study_minutes || 0) / totalMinutes) * 100) : 0;
+    const score = participant.compete_score || 0;
+    const flatXP = FLAT_XP[Math.min(rank - 1, FLAT_XP.length - 1)];
+    const barPct = maxScore > 0 ? Math.round((score / maxScore) * 100) : 0;
 
     return (
         <motion.div
@@ -42,7 +44,6 @@ function ParticipantRow({ participant, rank, currentUserEmail, isCompleted, tota
             }`}
         >
             <div className="flex items-center gap-3">
-                {/* Rank badge */}
                 <div className={`w-9 h-9 rounded-xl flex items-center justify-center font-black text-sm flex-shrink-0 shadow-soft ${rs.bg} ${rs.text}`}>
                     {rank <= 3 ? rs.label : rank}
                 </div>
@@ -67,19 +68,18 @@ function ParticipantRow({ participant, rank, currentUserEmail, isCompleted, tota
                 </div>
 
                 <div className="text-right flex-shrink-0">
-                    <p className="font-black text-foreground text-sm flex items-center gap-1 justify-end">
-                        <Clock className="w-3.5 h-3.5 text-muted-foreground" />
-                        {formatTime(participant.study_minutes || 0)}
-                    </p>
-                    {!isCompleted && (
+                    <p className="font-black text-foreground text-sm tabular-nums">{score}<span className="text-xs text-muted-foreground font-bold"> pts</span></p>
+                    {!isCompleted ? (
+                        <p className="text-xs text-muted-foreground flex items-center gap-1 justify-end mt-0.5">
+                            <Clock className="w-3 h-3" />{formatTime(participant.study_minutes || 0)}
+                        </p>
+                    ) : participant.bonus_xp_awarded > 0 ? (
                         <p className="text-xs text-xp font-semibold flex items-center gap-0.5 justify-end mt-0.5">
-                            <Zap className="w-3 h-3" />{xpRate}/hr
+                            <Zap className="w-3 h-3" />+{participant.bonus_xp_awarded} XP
                         </p>
-                    )}
-                    {isCompleted && participant.bonus_xp_awarded > 0 && (
-                        <p className="text-xs text-primary font-semibold justify-end mt-0.5">
-                            +{participant.bonus_xp_awarded} XP
-                        </p>
+                    ) : null}
+                    {!isCompleted && rank <= 4 && (
+                        <p className="text-xs text-xp font-semibold mt-0.5">+{flatXP} XP if you finish here</p>
                     )}
                 </div>
             </div>
@@ -94,25 +94,24 @@ export default function HoursLeaderboard({ competition, currentUserEmail, onUpda
 
     const accepted = (competition.participants || [])
         .filter(p => p.status === 'accepted' || p.status === 'completed')
-        .sort((a, b) => (b.study_minutes || 0) - (a.study_minutes || 0));
+        .sort((a, b) => (b.compete_score || 0) - (a.compete_score || 0) || (b.study_minutes || 0) - (a.study_minutes || 0));
 
     const isCompleted = competition.status === 'completed';
     const isCreator = competition.creator_email === currentUserEmail;
     const me = competition.participants?.find(p => p.email === currentUserEmail);
     const myRank = accepted.findIndex(p => p.email === currentUserEmail) + 1;
-    const totalMinutes = accepted.reduce((sum, p) => Math.max(sum, p.study_minutes || 0), 0) || 1;
+    const maxScore = accepted.reduce((sum, p) => Math.max(sum, p.compete_score || 0), 0) || 1;
 
     const daysLeft = competition.goal_target_date
         ? differenceInDays(parseISO(competition.goal_target_date), new Date())
         : null;
-
     const isPastDeadline = daysLeft !== null && daysLeft < 0;
 
     const handleSync = async () => {
         setSyncing(true);
         try {
             await updateCompetitionProgress({ competition_id: competition.id });
-            toast({ title: "Hours synced! 📊" });
+            toast({ title: "Score synced! 📊" });
             onUpdate?.();
         } catch (e) {
             toast({ title: "Sync failed", description: e.message, variant: "destructive" });
@@ -135,16 +134,16 @@ export default function HoursLeaderboard({ competition, currentUserEmail, onUpda
         }
     };
 
+    const myScore = me?.compete_score || 0;
     const myHours = ((me?.study_minutes || 0) / 60).toFixed(1);
-    const myXPRate = XP_RATES[Math.min(myRank - 1, XP_RATES.length - 1)];
 
     return (
         <div className="space-y-4">
             {/* Header */}
             <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
-                    <Timer className="w-5 h-5 text-chart-4" />
-                    <h3 className="font-display font-extrabold text-foreground">Study Hours Battle</h3>
+                    <Swords className="w-5 h-5 text-chart-4" />
+                    <h3 className="font-display font-extrabold text-foreground">Compete Score Battle</h3>
                     {competition.subject_name && (
                         <Badge className="bg-chart-4/15 text-chart-4 border-0 text-xs">{competition.subject_name}</Badge>
                     )}
@@ -163,16 +162,16 @@ export default function HoursLeaderboard({ competition, currentUserEmail, onUpda
                 <div className="bg-gradient-to-br from-chart-4 to-chart-3 rounded-2xl p-4 text-white">
                     <div className="grid grid-cols-3 gap-3">
                         <div className="text-center">
-                            <p className="text-white/70 text-xs mb-1">Your hours</p>
-                            <p className="font-display font-black text-2xl">{myHours}h</p>
+                            <p className="text-white/70 text-xs mb-1">Your score</p>
+                            <p className="font-display font-black text-2xl tabular-nums">{myScore}</p>
                         </div>
                         <div className="text-center border-x border-white/20">
                             <p className="text-white/70 text-xs mb-1">Your rank</p>
                             <p className="font-display font-black text-2xl">#{myRank}</p>
                         </div>
                         <div className="text-center">
-                            <p className="text-white/70 text-xs mb-1">XP rate</p>
-                            <p className="font-display font-black text-2xl">{myXPRate}<span className="text-sm font-bold text-white/70">/hr</span></p>
+                            <p className="text-white/70 text-xs mb-1">Hours</p>
+                            <p className="font-display font-black text-2xl">{myHours}h</p>
                         </div>
                     </div>
                     {!isCompleted && daysLeft !== null && (
@@ -180,7 +179,7 @@ export default function HoursLeaderboard({ competition, currentUserEmail, onUpda
                             <p className="text-white/80 text-xs">
                                 {isPastDeadline
                                     ? `Competition ended ${Math.abs(daysLeft)} day${Math.abs(daysLeft) !== 1 ? 's' : ''} ago`
-                                    : `${daysLeft} day${daysLeft !== 1 ? 's' : ''} remaining · every hour you study = ${myXPRate} XP`
+                                    : `${daysLeft} day${daysLeft !== 1 ? 's' : ''} left · study smart — effort, accuracy & consistency all count`
                                 }
                             </p>
                         </div>
@@ -188,19 +187,19 @@ export default function HoursLeaderboard({ competition, currentUserEmail, onUpda
                 </div>
             )}
 
-            {/* XP Prize tiers */}
+            {/* Flat XP prize tiers */}
             {!isCompleted && (
                 <div className="grid grid-cols-4 gap-2">
                     {[
-                        { pos: "1st", emoji: "🥇", rate: 75, color: "bg-xp/10 border-xp/20" },
-                        { pos: "2nd", emoji: "🥈", rate: 50, color: "bg-secondary border-border" },
-                        { pos: "3rd", emoji: "🥉", rate: 30, color: "bg-streak/10 border-streak/20" },
-                        { pos: "4th+", emoji: "📚", rate: 15, color: "bg-secondary border-border" },
+                        { pos: "1st", emoji: "🥇", xp: 150, color: "bg-xp/10 border-xp/20" },
+                        { pos: "2nd", emoji: "🥈", xp: 100, color: "bg-secondary border-border" },
+                        { pos: "3rd", emoji: "🥉", xp: 60, color: "bg-streak/10 border-streak/20" },
+                        { pos: "4th+", emoji: "📚", xp: 30, color: "bg-secondary border-border" },
                     ].map(tier => (
                         <div key={tier.pos} className={`${tier.color} border rounded-xl p-2.5 text-center`}>
                             <p className="text-lg mb-0.5">{tier.emoji}</p>
                             <p className="text-xs font-bold text-muted-foreground">{tier.pos}</p>
-                            <p className="text-xs font-black text-xp">{tier.rate} XP/hr</p>
+                            <p className="text-xs font-black text-xp">{tier.xp} XP</p>
                         </div>
                     ))}
                 </div>
@@ -219,7 +218,7 @@ export default function HoursLeaderboard({ competition, currentUserEmail, onUpda
                                 rank={i + 1}
                                 currentUserEmail={currentUserEmail}
                                 isCompleted={isCompleted}
-                                totalMinutes={totalMinutes}
+                                maxScore={maxScore}
                             />
                         ))}
                     </AnimatePresence>
@@ -237,7 +236,7 @@ export default function HoursLeaderboard({ competition, currentUserEmail, onUpda
 
             {competition.competition_start_date && (
                 <p className="text-xs text-muted-foreground text-center">
-                    Counting {competition.subject_name ? `${competition.subject_name} ` : ''}study sessions from{' '}
+                    Scoring effort, accuracy &amp; consistency since{' '}
                     {format(parseISO(competition.competition_start_date), 'MMM d, yyyy')}
                     {competition.goal_target_date ? ` → ${format(parseISO(competition.goal_target_date), 'MMM d, yyyy')}` : ''}
                 </p>
