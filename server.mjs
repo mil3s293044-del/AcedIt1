@@ -1357,6 +1357,15 @@ app.post("/local-ai/fn/awardXP", async (req, res) => {
       rawXP = Math.round(rawXP * safeMultiplier);
     }
 
+    // ── Temporary XP boost (admin-granted, stored in profile.extra) ─────
+    // extra: { xp_boost_mult: 8, xp_boost_expires_at: "<ISO>" }. Stacks on top
+    // of the streak multiplier while active. No new columns needed.
+    const boostMult = Number(profile.extra?.xp_boost_mult) || 1;
+    const boostExp = profile.extra?.xp_boost_expires_at;
+    if (boostMult > 1 && boostExp && new Date(boostExp) > new Date()) {
+      rawXP = Math.round(rawXP * boostMult);
+    }
+
     // Helper: write a zero-XP audit event (for capped/zero outcomes)
     const writeZeroEvent = async (flags = [], metadata = {}) => {
       await supabaseAdmin.from("xp_events").insert({
