@@ -3,8 +3,8 @@ import { motion, AnimatePresence } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
-    Trophy, Swords, Zap, Users, Crown, Activity, ClipboardList, Settings as SettingsIcon,
-    LogIn, Loader2, Clock, ChevronRight, ArrowRight
+    Trophy, Swords, Users, Crown, Activity, ClipboardList, Settings as SettingsIcon,
+    LogIn, Loader2, Clock, ChevronRight, ArrowRight, TrendingUp
 } from "lucide-react";
 import { base44 } from "@/api/base44Client";
 import { useToast } from "@/components/ui/use-toast";
@@ -14,6 +14,9 @@ import HelpButton from "@/components/shared/HelpButton";
 import EmptyState from "@/components/shared/EmptyState";
 import { getSeasonRankFromXP } from "@/components/shared/xpSystem";
 import { format, isPast, parseISO } from "date-fns";
+
+// Battles now rank by Compete Score; fall back to legacy progress for old data.
+const rankVal = (p) => (p?.compete_score ?? p?.progress_percent ?? 0);
 
 // ─── Coach voice ──────────────────────────────────────────────────────────────
 function getCoachLine({ name, hour, total, active, leading, behind, recentWins }) {
@@ -32,11 +35,16 @@ function getCoachLine({ name, hour, total, active, leading, behind, recentWins }
 function CompCard({ comp, currentUserEmail, onClick }) {
     const accepted = (comp.participants || []).filter(p => p.status === 'accepted' || p.status === 'completed');
     const me = comp.participants?.find(p => p.email === currentUserEmail);
-    const ranked = [...accepted].sort((a, b) => (b.progress_percent || 0) - (a.progress_percent || 0) || (b.xp_earned || 0) - (a.xp_earned || 0));
+    const ranked = [...accepted].sort((a, b) => rankVal(b) - rankVal(a));
     const myRank = ranked.findIndex(p => p.email === currentUserEmail) + 1;
     const isCompleted = comp.status === 'completed';
     const isLeading = myRank === 1 && !isCompleted && accepted.length > 1;
-    const myPct = Math.round(me?.progress_percent || 0);
+    const myScore = Math.round(rankVal(me));
+    const leaderScore = Math.round(rankVal(ranked[0])) || 1;
+    const myPct = Math.min(100, Math.round((myScore / leaderScore) * 100));
+    // Live rivalry: who's just above (chasing) or just below (defending)?
+    const rival = isLeading ? ranked[1] : ranked[0];
+    const gap = rival ? Math.abs(Math.round(rankVal(me) - rankVal(rival))) : 0;
     const overdue = comp.goal_target_date && isPast(parseISO(comp.goal_target_date)) && !isCompleted;
 
     // Token-tinted shell based on state
@@ -81,14 +89,14 @@ function CompCard({ comp, currentUserEmail, onClick }) {
             {me && (
                 <div className="mb-4">
                     <div className="flex items-center justify-between text-xs mb-1.5">
-                        <span className="font-bold text-muted-foreground">Your progress</span>
+                        <span className="font-bold text-muted-foreground">Your score</span>
                         <div className="flex items-center gap-2">
                             {isLeading && (
                                 <span className="inline-flex items-center gap-1 font-extrabold text-xp">
                                     <Crown className="w-3 h-3" /> Leading
                                 </span>
                             )}
-                            <span className={`font-display font-extrabold text-base ${accentColor}`}>{myPct}%</span>
+                            <span className={`font-display font-extrabold text-base ${accentColor}`}>{myScore} pts</span>
                         </div>
                     </div>
                     <div className="h-2 bg-secondary rounded-full overflow-hidden">
@@ -114,14 +122,20 @@ function CompCard({ comp, currentUserEmail, onClick }) {
                         >
                             <div className={`w-5 h-5 rounded-full flex items-center justify-center text-xs font-extrabold flex-shrink-0 ${placeBg}`}>{i + 1}</div>
                             <span className="flex-1 truncate text-foreground">{p.name?.split(' ')[0]}</span>
-                            <span className="text-chart-3 font-bold">{Math.round(p.progress_percent || 0)}%</span>
-                            <span className="inline-flex items-center gap-0.5 text-xp font-bold">
-                                <Zap className="w-3 h-3" />{p.xp_earned || 0}
-                            </span>
+                            <span className="text-chart-3 font-bold">{Math.round(rankVal(p))} pts</span>
                         </div>
                     );
                 })}
             </div>
+
+            {/* Live rivalry alert — push the user to study */}
+            {!isCompleted && accepted.length > 1 && rival && (
+                <div className={`mt-3 flex items-center gap-2 rounded-xl px-3 py-2 text-xs font-bold ${isLeading ? 'bg-primary/10 text-primary' : 'bg-streak/10 text-streak'}`}>
+                    {isLeading
+                        ? <><Crown className="w-3.5 h-3.5 flex-shrink-0" /> {rival.name?.split(' ')[0]} is {gap} pts behind — defend your lead</>
+                        : <><TrendingUp className="w-3.5 h-3.5 flex-shrink-0" /> {gap} pts behind {rival.name?.split(' ')[0]} — catch up!</>}
+                </div>
+            )}
 
             {isCompleted && comp.winner_name && (
                 <div className="mt-3 inline-flex items-center gap-2 bg-xp/10 border-2 border-xp/25 rounded-xl px-3 py-1.5">
@@ -208,21 +222,46 @@ export default function Competitions() {
 
     // ─── Derived stats ────────────────────────────────────────────────────────
     const stats = useMemo(() => {
+        const myEmail = user?.email;
         const active = competitions.filter(c => c.status === 'active' || c.status === 'pending');
         const completed = competitions.filter(c => c.status === 'completed');
-        const recentWins = completed.filter(c => c.winner_email === user?.email).length;
+        const recentWins = completed.filter(c => c.winner_email === myEmail).length;
 
         let leading = 0, behind = 0;
         active.forEach(c => {
             const accepted = (c.participants || []).filter(p => p.status === 'accepted' || p.status === 'completed');
             if (accepted.length < 2) return;
-            const ranked = [...accepted].sort((a, b) => (b.progress_percent || 0) - (a.progress_percent || 0));
-            const myIdx = ranked.findIndex(p => p.email === user?.email);
+            const ranked = [...accepted].sort((a, b) => rankVal(b) - rankVal(a));
+            const myIdx = ranked.findIndex(p => p.email === myEmail);
             if (myIdx === 0) leading++;
             else if (myIdx > 0) behind++;
         });
 
-        return { active, completed, recentWins, leading, behind };
+        // Current win streak — consecutive wins from the most recent settled battle.
+        const settledByDate = [...completed].sort((a, b) =>
+            new Date(b.completed_at || b.updated_date || 0) - new Date(a.completed_at || a.updated_date || 0));
+        let winStreak = 0;
+        for (const c of settledByDate) {
+            if (c.winner_email === myEmail) winStreak++; else break;
+        }
+
+        // Head-to-head rivalries from settled battles.
+        const rivalMap = {};
+        completed.forEach(c => {
+            const iWon = c.winner_email === myEmail;
+            (c.participants || []).filter(p => p.email && p.email !== myEmail).forEach(p => {
+                if (!rivalMap[p.email]) rivalMap[p.email] = { email: p.email, name: p.name, wins: 0, losses: 0 };
+                if (iWon) rivalMap[p.email].wins++;
+                else if (c.winner_email === p.email) rivalMap[p.email].losses++;
+            });
+        });
+        const rivals = Object.values(rivalMap)
+            .map(r => ({ ...r, games: r.wins + r.losses }))
+            .filter(r => r.games > 0)
+            .sort((a, b) => b.games - a.games)
+            .slice(0, 4);
+
+        return { active, completed, recentWins, leading, behind, winStreak, rivals };
     }, [competitions, user]);
 
     const firstName = userProfile?.username || user?.full_name?.split(' ')[0] || 'friend';
@@ -390,11 +429,16 @@ export default function Competitions() {
                                     <Swords className="w-4 h-4 text-primary" />
                                     <p className="stat-label text-primary/80">Hall of fame</p>
                                 </div>
-                                {stats.completed.length > 0 && (
-                                    <span className="pill bg-primary/10 text-primary text-[10px]">
-                                        {winRate}% win rate
-                                    </span>
-                                )}
+                                <div className="flex items-center gap-1.5">
+                                    {stats.winStreak > 1 && (
+                                        <span className="pill bg-xp/15 text-xp text-[10px]">🔥 {stats.winStreak} streak</span>
+                                    )}
+                                    {stats.completed.length > 0 && (
+                                        <span className="pill bg-primary/10 text-primary text-[10px]">
+                                            {winRate}% win rate
+                                        </span>
+                                    )}
+                                </div>
                             </div>
                             <div className="grid grid-cols-2 gap-3 mb-auto">
                                 <div>
@@ -452,6 +496,38 @@ export default function Competitions() {
                                     Open battle <ArrowRight className="w-4 h-4" />
                                 </Button>
                             </div>
+                        </div>
+                    </motion.section>
+                )}
+
+                {/* ── RIVALRIES (head-to-head records) ────────────────── */}
+                {stats.rivals.length > 0 && (
+                    <motion.section initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.12 }}>
+                        <div className="flex items-center gap-2 mb-3">
+                            <Swords className="w-4 h-4 text-muted-foreground" />
+                            <p className="stat-label">Your rivalries</p>
+                        </div>
+                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                            {stats.rivals.map(r => {
+                                const ahead = r.wins > r.losses;
+                                const even = r.wins === r.losses;
+                                return (
+                                    <div key={r.email} className="card-soft p-4">
+                                        <div className="flex items-center gap-2 mb-2">
+                                            <div className="w-8 h-8 rounded-lg bg-secondary flex items-center justify-center text-xs font-bold text-foreground flex-shrink-0">{(r.name || '?').slice(0, 2).toUpperCase()}</div>
+                                            <p className="font-bold text-foreground text-sm truncate">{r.name?.split(' ')[0]}</p>
+                                        </div>
+                                        <p className="font-display font-extrabold text-lg leading-none">
+                                            <span className="text-primary">{r.wins}</span>
+                                            <span className="text-muted-foreground/50"> – </span>
+                                            <span className="text-streak">{r.losses}</span>
+                                        </p>
+                                        <p className={`text-xs font-bold mt-1 ${ahead ? 'text-primary' : even ? 'text-muted-foreground' : 'text-streak'}`}>
+                                            {ahead ? 'You lead' : even ? 'Dead even' : 'They lead'}
+                                        </p>
+                                    </div>
+                                );
+                            })}
                         </div>
                     </motion.section>
                 )}
