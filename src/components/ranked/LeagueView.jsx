@@ -96,14 +96,14 @@ function LeagueViewRendered({ data, onChange }) {
         if (myPosition == null || myPosition === 1) return null;
         const above = data.rows[myPosition - 2]; // 0-indexed
         if (!above) return null;
-        return { ...above, gap: above.weekly_xp - data.me.weekly_xp };
+        return { ...above, gap: (above.compete_score ?? 0) - (data.me.compete_score ?? 0) };
     }, [data, myPosition]);
 
     const chaser = useMemo(() => {
         if (myPosition == null || myPosition >= totalMembers) return null;
         const below = data.rows[myPosition];
         if (!below) return null;
-        return { ...below, gap: data.me.weekly_xp - below.weekly_xp };
+        return { ...below, gap: (data.me.compete_score ?? 0) - (below.compete_score ?? 0) };
     }, [data, myPosition, totalMembers]);
 
     const toggleAnon = async () => {
@@ -138,11 +138,11 @@ function LeagueViewRendered({ data, onChange }) {
                         <p className="text-xs text-muted-foreground mt-1">of {totalMembers} this week</p>
                     </div>
                     <div className="bg-surface rounded-xl border border-border/60 shadow-soft p-4 text-center">
-                        <p className="stat-label text-muted-foreground">Week XP</p>
+                        <p className="stat-label text-muted-foreground">Compete Score</p>
                         <p className="font-display font-extrabold text-foreground leading-none mt-1.5 tabular-nums" style={{ fontSize: 'clamp(2.5rem, 7vw, 3.5rem)' }}>
-                            {(data.me.weekly_xp ?? 0).toLocaleString()}
+                            {(data.me.compete_score ?? 0).toLocaleString()}
                         </p>
-                        <p className="text-xs text-muted-foreground mt-1">earned since Monday</p>
+                        <p className="text-xs text-muted-foreground mt-1">of 1000 this week</p>
                     </div>
                     <div className="bg-surface rounded-xl border border-border/60 shadow-soft p-4 text-center">
                         <p className="stat-label text-muted-foreground flex items-center justify-center gap-1.5">
@@ -184,7 +184,7 @@ function LeagueViewRendered({ data, onChange }) {
                                     {catchTarget.display_name}
                                 </p>
                                 <p className="text-xs text-muted-foreground">
-                                    <span className="font-bold text-foreground">{catchTarget.gap.toLocaleString()} XP</span> ahead · #{catchTarget.position}
+                                    <span className="font-bold text-foreground">{Math.max(0, catchTarget.gap).toLocaleString()} pts</span> ahead · #{catchTarget.position}
                                 </p>
                             </div>
                         </div>
@@ -200,7 +200,7 @@ function LeagueViewRendered({ data, onChange }) {
                                     {chaser.display_name}
                                 </p>
                                 <p className="text-xs text-muted-foreground">
-                                    <span className="font-bold text-foreground">{chaser.gap.toLocaleString()} XP</span> behind · #{chaser.position}
+                                    <span className="font-bold text-foreground">{Math.max(0, chaser.gap).toLocaleString()} pts</span> behind · #{chaser.position}
                                 </p>
                             </div>
                         </div>
@@ -220,7 +220,7 @@ function LeagueViewRendered({ data, onChange }) {
                 </div>
                 {totalMembers === 0 ? (
                     <div className="p-8 text-center">
-                        <p className="text-sm text-muted-foreground">No one's earned XP yet this week. Be the first.</p>
+                        <p className="text-sm text-muted-foreground">No scores yet this week. Be the first.</p>
                     </div>
                 ) : (
                     <div className="divide-y divide-border/40">
@@ -254,9 +254,9 @@ function LeagueViewRendered({ data, onChange }) {
                                     </div>
                                     <div className="text-right flex-shrink-0">
                                         <p className="font-display font-extrabold text-foreground text-sm tabular-nums">
-                                            {(row.weekly_xp ?? 0).toLocaleString()}
+                                            {(row.compete_score ?? 0).toLocaleString()}
                                         </p>
-                                        <p className="text-[10px] text-muted-foreground">XP this week</p>
+                                        <p className="text-[10px] text-muted-foreground">score</p>
                                     </div>
                                 </div>
                             );

@@ -3270,6 +3270,18 @@ app.post("/local-ai/fn/checkAchievements", async (req, res) => {
 // GET /local-ai/fn/getLeagueStanding
 // Returns the user's current league membership + the full group leaderboard
 // (up to 30 rows). Auto-creates the membership on first call.
+// Weekly "Compete Score" (max 1000) — mirrors CompeteScoreCard.jsx so the
+// personal card and the leaderboard always agree.
+//   Effort (0–400) = study minutes this week, capped at 400
+//   Mastery (0–400) = average quiz accuracy this week
+//   Consistency (0–200) = active days this week + current streak
+function computeCompeteScore({ minutes = 0, avgAccuracy = 0, activeDays = 0, streak = 0 }) {
+  const effort = Math.round(Math.min(minutes, 400));
+  const mastery = Math.round((avgAccuracy / 100) * 400);
+  const consistency = Math.round(Math.min(activeDays / 7, 1) * 150 + Math.min(streak / 14, 1) * 50);
+  return { effort, mastery, consistency, total: effort + mastery + consistency };
+}
+
 app.post("/local-ai/fn/getLeagueStanding", async (req, res) => {
   const user = await authenticateRequest(req);
   if (!user) return res.status(401).json({ error: "Unauthorized" });
@@ -3302,8 +3314,38 @@ app.post("/local-ai/fn/getLeagueStanding", async (req, res) => {
     }
     const byEmail = Object.fromEntries(profiles.map(p => [p.created_by, p]));
 
-    const rows = (groupMembers || []).map((m, i) => {
+    // ── Compute each member's weekly Compete Score from their activity ──
+    // Three aggregate queries total (not per-member), so this scales fine.
+    const weekStartStr = currentWeekStartUTC();
+    const agg = {};
+    emails.forEach(e => { agg[e] = { minutes: 0, accSum: 0, quizCount: 0, days: new Set() }; });
+    if (emails.length) {
+      const [sessRes, techRes, quizRes] = await Promise.all([
+        supabaseAdmin.from('study_sessions').select('created_by, duration_minutes, date').in('created_by', emails).gte('date', weekStartStr),
+        supabaseAdmin.from('study_techniques').select('created_by, session_duration, date').in('created_by', emails).gte('date', weekStartStr),
+        supabaseAdmin.from('quiz_attempts').select('created_by, score, date').in('created_by', emails).gte('date', weekStartStr),
+      ]);
+      (sessRes.data || []).forEach(r => { const a = agg[r.created_by]; if (a) { a.minutes += r.duration_minutes || 0; if (r.date) a.days.add(r.date); } });
+      (techRes.data || []).forEach(r => { const a = agg[r.created_by]; if (a) { a.minutes += r.session_duration || 0; if (r.date) a.days.add(r.date); } });
+      (quizRes.data || []).forEach(r => { const a = agg[r.created_by]; if (a) { if (typeof r.score === 'number') { a.accSum += r.score; a.quizCount++; } if (r.date) a.days.add(r.date); } });
+    }
+
+    const scored = (groupMembers || []).map(m => {
       const p = byEmail[m.user_email] || {};
+      const a = agg[m.user_email] || { minutes: 0, accSum: 0, quizCount: 0, days: new Set() };
+      const avgAccuracy = a.quizCount ? a.accSum / a.quizCount : 0;
+      const cs = computeCompeteScore({ minutes: a.minutes, avgAccuracy, activeDays: a.days.size, streak: p.streak_days || 0 });
+      return { m, p, cs };
+    });
+
+    // Rank by Compete Score (desc); tie-break on weekly XP then lifetime XP.
+    scored.sort((x, y) =>
+      (y.cs.total - x.cs.total) ||
+      ((y.m.weekly_xp ?? 0) - (x.m.weekly_xp ?? 0)) ||
+      ((y.p.total_xp ?? 0) - (x.p.total_xp ?? 0)),
+    );
+
+    const rows = scored.map(({ m, p, cs }, i) => {
       const isMe = m.user_email === user.email;
       const displayName = m.is_anonymous && !isMe
         ? `Anon #${(m.id || '').slice(-4)}`
@@ -3313,6 +3355,8 @@ app.post("/local-ai/fn/getLeagueStanding", async (req, res) => {
         user_email:      isMe ? user.email : null,   // never leak others' emails
         is_me:           isMe,
         display_name:    displayName,
+        compete_score:   cs.total,
+        score_breakdown: { effort: cs.effort, mastery: cs.mastery, consistency: cs.consistency },
         weekly_xp:       m.weekly_xp ?? 0,
         streak_days:     p.streak_days ?? 0,
         total_xp:        p.total_xp ?? 0,
@@ -3346,10 +3390,11 @@ app.post("/local-ai/fn/getLeagueStanding", async (req, res) => {
         group_size:    LEAGUE_GROUP_SIZE,
       },
       me: {
-        user_email:   user.email,
-        position:     rows.find(r => r.is_me)?.position || null,
-        weekly_xp:    mem.weekly_xp ?? 0,
-        tier:         mem.tier,
+        user_email:    user.email,
+        position:      rows.find(r => r.is_me)?.position || null,
+        compete_score: rows.find(r => r.is_me)?.compete_score ?? 0,
+        weekly_xp:     mem.weekly_xp ?? 0,
+        tier:          mem.tier,
         is_anonymous: mem.is_anonymous,
         lifetime_promotes: profile.league_lifetime_promotes ?? 0,
         lifetime_demotes:  profile.league_lifetime_demotes ?? 0,
