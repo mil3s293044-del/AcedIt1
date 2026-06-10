@@ -387,83 +387,60 @@ export default function Competitions() {
                     </h1>
                 </motion.section>
 
-                {/* ── HERO ROW: Season rank (3/5) + Stats (2/5) ───────── */}
+                {/* ── ARENA HERO — bold competitive banner ─────────────── */}
                 <motion.section
                     initial={{ opacity: 0, y: 12 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ delay: 0.05 }}
-                    className="grid grid-cols-1 md:grid-cols-5 gap-5 lg:gap-6"
                 >
-                    {/* Season rank poster — Direction A */}
-                    <div className="md:col-span-3">
-                        <div className="relative overflow-hidden rounded-2xl bg-chart-4/5 border border-chart-4/15 shadow-soft p-6 lg:p-8 h-full">
-                            <Trophy className="absolute -top-4 -right-4 w-32 h-32 text-chart-4/[0.08] pointer-events-none" />
-                            <p className="stat-label text-chart-4/80 mb-2">Season rank</p>
-                            <h2
-                                className="font-display font-extrabold text-foreground leading-none mb-3"
-                                style={{ fontSize: 'clamp(2rem, 5.5vw, 3.5rem)' }}
-                            >
+                    <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-chart-4 via-chart-4 to-chart-3 p-6 lg:p-8 text-white shadow-soft">
+                        <Swords className="absolute -top-8 -right-8 w-48 h-48 text-white/10 pointer-events-none" />
+                        <div className="relative">
+                            <div className="flex items-center gap-2 mb-1.5 flex-wrap">
+                                <p className="text-xs font-bold uppercase tracking-widest text-white/70">Your arena</p>
+                                {stats.winStreak > 1 && (
+                                    <span className="inline-flex items-center gap-1 text-xs font-extrabold bg-white/20 rounded-full px-2.5 py-0.5">🔥 {stats.winStreak} win streak</span>
+                                )}
+                            </div>
+                            <h2 className="font-display font-black leading-none mb-1.5" style={{ fontSize: 'clamp(2rem, 6vw, 3.5rem)' }}>
                                 {seasonRank?.name || 'Unranked'}
                             </h2>
-                            <p className="text-sm text-muted-foreground mb-4">
+                            <p className="text-sm text-white/80 mb-5">
                                 {seasonXp.toLocaleString()} season XP{seasonRank?.maxXP && seasonRank.maxXP !== Infinity ? ` · ${(seasonRank.maxXP - seasonXp).toLocaleString()} to next tier` : ''}
                             </p>
+
+                            {/* Bold stat tiles */}
+                            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-5">
+                                {[
+                                    { label: 'Wins', val: stats.recentWins },
+                                    { label: 'Losses', val: Math.max(0, stats.completed.length - stats.recentWins) },
+                                    { label: 'Win rate', val: `${winRate}%` },
+                                    { label: 'Live battles', val: stats.active.length },
+                                ].map(s => (
+                                    <div key={s.label} className="bg-white/15 rounded-2xl p-3.5 text-center">
+                                        <p className="font-display font-black text-3xl leading-none tabular-nums">{s.val}</p>
+                                        <p className="text-[11px] font-bold text-white/75 mt-1.5 uppercase tracking-wide">{s.label}</p>
+                                    </div>
+                                ))}
+                            </div>
+
+                            {/* Tier progress */}
                             {seasonRank?.maxXP && seasonRank.maxXP !== Infinity && (
-                                <div className="h-2 bg-chart-4/10 rounded-full overflow-hidden">
+                                <div className="h-2 bg-white/20 rounded-full overflow-hidden">
                                     <motion.div
                                         initial={{ width: 0 }}
                                         animate={{ width: `${Math.min(100, ((seasonXp - seasonRank.minXP) / (seasonRank.maxXP - seasonRank.minXP)) * 100)}%` }}
                                         transition={{ duration: 0.9, delay: 0.4 }}
-                                        className="h-full rounded-full bg-chart-4"
+                                        className="h-full rounded-full bg-white"
                                     />
                                 </div>
                             )}
-                        </div>
-                    </div>
 
-                    {/* Hall of Fame panel — W-L record + live battle status */}
-                    <div className="md:col-span-2">
-                        <div className="rounded-2xl bg-primary/5 border border-primary/15 shadow-soft p-6 h-full flex flex-col">
-                            <div className="flex items-center justify-between mb-3">
-                                <div className="flex items-center gap-2">
-                                    <Swords className="w-4 h-4 text-primary" />
-                                    <p className="stat-label text-primary/80">Hall of fame</p>
-                                </div>
-                                <div className="flex items-center gap-1.5">
-                                    {stats.winStreak > 1 && (
-                                        <span className="pill bg-xp/15 text-xp text-[10px]">🔥 {stats.winStreak} streak</span>
-                                    )}
-                                    {stats.completed.length > 0 && (
-                                        <span className="pill bg-primary/10 text-primary text-[10px]">
-                                            {winRate}% win rate
-                                        </span>
-                                    )}
-                                </div>
-                            </div>
-                            <div className="grid grid-cols-2 gap-3 mb-auto">
-                                <div>
-                                    <p className="font-display font-extrabold text-primary leading-none text-3xl lg:text-4xl">{stats.recentWins}</p>
-                                    <p className="text-xs font-bold text-muted-foreground mt-1">Wins</p>
-                                </div>
-                                <div>
-                                    <p className="font-display font-extrabold text-muted-foreground leading-none text-3xl lg:text-4xl">{stats.completed.length - stats.recentWins}</p>
-                                    <p className="text-xs font-bold text-muted-foreground mt-1">Losses</p>
-                                </div>
-                            </div>
+                            {/* Leading / catching-up live status */}
                             {stats.active.length > 0 && (
-                                <div className="mt-5 pt-4 border-t border-primary/10 space-y-1.5">
-                                    <div className="flex items-baseline justify-between">
-                                        <p className="text-xs font-bold text-muted-foreground inline-flex items-center gap-1">
-                                            <Crown className="w-3 h-3 text-xp" /> Leading now
-                                        </p>
-                                        <p className="text-xs font-extrabold text-foreground">{stats.leading}</p>
-                                    </div>
-                                    <div className="flex items-baseline justify-between">
-                                        <p className="text-xs font-bold text-muted-foreground inline-flex items-center gap-1">
-                                            <Activity className="w-3 h-3 text-chart-3" /> Catching up
-                                        </p>
-                                        <p className="text-xs font-extrabold text-foreground">{stats.behind}</p>
-                                    </div>
+                                <div className="flex items-center gap-4 mt-4 text-xs font-bold">
+                                    <span className="inline-flex items-center gap-1.5"><Crown className="w-3.5 h-3.5" /> Leading {stats.leading}</span>
+                                    <span className="inline-flex items-center gap-1.5 text-white/80"><Activity className="w-3.5 h-3.5" /> Catching up {stats.behind}</span>
                                 </div>
                             )}
                         </div>
