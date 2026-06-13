@@ -4,11 +4,12 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
     Clock, Zap, RefreshCw, Loader2, Trophy,
-    CheckCircle2, Swords
+    CheckCircle2, Swords, Coins, TrendingUp, Crown, Flame, ShieldAlert
 } from "lucide-react";
 import { updateCompetitionProgress, settleHoursCompetition } from "@/api/functionsShim";
 import { useToast } from "@/components/ui/use-toast";
 import { format, parseISO, differenceInDays } from "date-fns";
+import { Countdown, computePot } from "./arenaHelpers";
 
 // Flat XP by finishing rank (1st / 2nd / 3rd / 4th+).
 const FLAT_XP = [150, 100, 60, 30];
@@ -27,12 +28,18 @@ function formatTime(minutes) {
     return m > 0 ? `${h}h ${m}m` : `${h}h`;
 }
 
-function ParticipantRow({ participant, rank, currentUserEmail, isCompleted, maxScore }) {
+function ParticipantRow({ participant, rank, currentUserEmail, isCompleted, maxScore, scoreAbove, scoreBelow }) {
     const isMe = participant.email === currentUserEmail;
     const rs = RANK_STYLES[Math.min(rank - 1, RANK_STYLES.length - 1)];
     const score = participant.compete_score || 0;
     const flatXP = FLAT_XP[Math.min(rank - 1, FLAT_XP.length - 1)];
     const barPct = maxScore > 0 ? Math.round((score / maxScore) * 100) : 0;
+
+    // Momentum: how far behind the person directly above, and whether the
+    // chaser directly below is breathing down your neck (danger zone).
+    const gapAbove = scoreAbove != null ? Math.max(0, Math.round(scoreAbove - score)) : null;
+    const gapBelow = scoreBelow != null ? Math.round(score - scoreBelow) : null;
+    const inDanger = isMe && !isCompleted && gapBelow != null && gapBelow <= 25;
 
     return (
         <motion.div
@@ -40,7 +47,9 @@ function ParticipantRow({ participant, rank, currentUserEmail, isCompleted, maxS
             initial={{ opacity: 0, y: 8 }}
             animate={{ opacity: 1, y: 0 }}
             className={`rounded-2xl p-4 border-2 transition-all ${
-                isMe ? 'border-primary/40 bg-primary/5' : 'border-border bg-surface'
+                inDanger ? 'border-streak/50 bg-streak/5'
+                : isMe ? 'border-primary/40 bg-primary/5'
+                : 'border-border bg-surface'
             }`}
         >
             <div className="flex items-center gap-3">
@@ -56,6 +65,11 @@ function ParticipantRow({ participant, rank, currentUserEmail, isCompleted, maxS
                         {participant.status === 'completed' && (
                             <CheckCircle2 className="w-3.5 h-3.5 text-primary flex-shrink-0" />
                         )}
+                        {inDanger && (
+                            <span className="inline-flex items-center gap-0.5 text-[10px] font-extrabold text-streak uppercase tracking-wide">
+                                <ShieldAlert className="w-3 h-3" /> defend
+                            </span>
+                        )}
                     </div>
                     <div className="h-2 bg-secondary rounded-full overflow-hidden">
                         <motion.div
@@ -65,6 +79,16 @@ function ParticipantRow({ participant, rank, currentUserEmail, isCompleted, maxS
                             className={`h-full rounded-full ${isMe ? 'bg-primary' : 'bg-muted-foreground/40'}`}
                         />
                     </div>
+                    {!isCompleted && isMe && gapAbove != null && gapAbove > 0 && (
+                        <p className="text-[11px] font-bold text-chart-3 mt-1 flex items-center gap-1">
+                            <TrendingUp className="w-3 h-3" /> {gapAbove} pts to overtake the spot above
+                        </p>
+                    )}
+                    {!isCompleted && isMe && gapAbove === 0 && rank > 1 && (
+                        <p className="text-[11px] font-bold text-xp mt-1 flex items-center gap-1">
+                            <Flame className="w-3 h-3" /> dead level — one session takes the spot
+                        </p>
+                    )}
                 </div>
 
                 <div className="text-right flex-shrink-0">
@@ -137,6 +161,32 @@ export default function HoursLeaderboard({ competition, currentUserEmail, onUpda
     const myScore = me?.compete_score || 0;
     const myHours = ((me?.study_minutes || 0) / 60).toFixed(1);
 
+    // Stakes + live momentum.
+    const pot = computePot(competition);
+    const leaderScore = accepted[0]?.compete_score || 0;
+    const gapToLead = Math.max(0, Math.round(leaderScore - myScore));
+    const chaser = myRank > 0 ? accepted[myRank] : null;       // person directly below me
+    const gapToChaser = chaser ? Math.round(myScore - (chaser.compete_score || 0)) : null;
+    const isLeader = myRank === 1 && accepted.length > 1;
+    const myPrize = FLAT_XP[Math.min(Math.max(myRank - 1, 0), FLAT_XP.length - 1)];
+
+    // One charged line that reframes the standings as a call to act.
+    let pressure = null;
+    if (!isCompleted && accepted.length > 1 && me) {
+        if (isLeader) {
+            pressure = gapToChaser != null && gapToChaser <= 25
+                ? { tone: "streak", icon: ShieldAlert, text: `${chaser?.name?.split(' ')[0]} is only ${gapToChaser} pts back — your lead is slipping.` }
+                : { tone: "xp", icon: Crown, text: `You're on top by ${gapToChaser ?? 0} pts. Hold the line — ${myPrize} XP on it.` };
+        } else {
+            pressure = { tone: "chart-3", icon: TrendingUp, text: `${gapToLead} pts off 1st. One focused session can flip this.` };
+        }
+    }
+    const PRESS = {
+        xp: "bg-xp/10 text-xp",
+        streak: "bg-streak/10 text-streak",
+        "chart-3": "bg-chart-3/10 text-chart-3",
+    };
+
     return (
         <div className="space-y-4">
             {/* Header */}
@@ -174,17 +224,44 @@ export default function HoursLeaderboard({ competition, currentUserEmail, onUpda
                             <p className="font-display font-black text-2xl">{myHours}h</p>
                         </div>
                     </div>
-                    {!isCompleted && daysLeft !== null && (
-                        <div className="mt-3 pt-3 border-t border-white/20 text-center">
-                            <p className="text-white/80 text-xs">
-                                {isPastDeadline
-                                    ? `Competition ended ${Math.abs(daysLeft)} day${Math.abs(daysLeft) !== 1 ? 's' : ''} ago`
-                                    : `${daysLeft} day${daysLeft !== 1 ? 's' : ''} left · study smart — effort, accuracy & consistency all count`
-                                }
-                            </p>
+                    {!isCompleted && competition.goal_target_date && (
+                        <div className="mt-3 pt-3 border-t border-white/20">
+                            <Countdown targetDate={competition.goal_target_date} variant="banner" />
                         </div>
                     )}
                 </div>
+            )}
+
+            {/* The Pot — total XP on the line */}
+            {!isCompleted && pot.total > 0 && (
+                <div className="flex items-center gap-3 rounded-2xl bg-xp/5 border-2 border-xp/25 px-4 py-3">
+                    <div className="w-10 h-10 rounded-xl bg-xp/15 flex items-center justify-center flex-shrink-0">
+                        <Coins className="w-5 h-5 text-xp" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                        <p className="stat-label">XP on the line</p>
+                        <p className="font-display font-black text-foreground text-lg leading-none">
+                            {pot.total.toLocaleString()} XP
+                            <span className="text-xs font-bold text-muted-foreground ml-1.5">winner takes the top cut</span>
+                        </p>
+                    </div>
+                    {pot.wagerPot > 0 && (
+                        <Badge className="bg-xp/15 text-xp border-0 text-xs flex-shrink-0">{pot.wagerPot} in bets</Badge>
+                    )}
+                </div>
+            )}
+
+            {/* Live pressure line */}
+            {pressure && (
+                <motion.div
+                    key={pressure.text}
+                    initial={{ opacity: 0, y: -6 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    className={`flex items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-bold ${PRESS[pressure.tone]}`}
+                >
+                    <pressure.icon className="w-4 h-4 flex-shrink-0" />
+                    {pressure.text}
+                </motion.div>
             )}
 
             {/* Flat XP prize tiers */}
@@ -219,6 +296,8 @@ export default function HoursLeaderboard({ competition, currentUserEmail, onUpda
                                 currentUserEmail={currentUserEmail}
                                 isCompleted={isCompleted}
                                 maxScore={maxScore}
+                                scoreAbove={i > 0 ? (accepted[i - 1].compete_score || 0) : null}
+                                scoreBelow={i < accepted.length - 1 ? (accepted[i + 1].compete_score || 0) : null}
                             />
                         ))}
                     </AnimatePresence>

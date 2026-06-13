@@ -4,12 +4,13 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
     Trophy, Swords, Users, Crown, Activity, ClipboardList, Settings as SettingsIcon,
-    LogIn, Loader2, Clock, ChevronRight, ArrowRight, TrendingUp
+    LogIn, Loader2, Clock, ChevronRight, ArrowRight, TrendingUp, Coins, RotateCcw
 } from "lucide-react";
 import { base44 } from "@/api/base44Client";
 import { useToast } from "@/components/ui/use-toast";
 import GoalCompetitionDetail from "@/components/competition/GoalCompetitionDetail";
-import { joinGoalCompetition } from "@/api/functionsShim";
+import { joinGoalCompetition, createGoalCompetition } from "@/api/functionsShim";
+import { Countdown, computePot } from "@/components/competition/arenaHelpers";
 import HelpButton from "@/components/shared/HelpButton";
 import EmptyState from "@/components/shared/EmptyState";
 import { getSeasonRankFromXP } from "@/components/shared/xpSystem";
@@ -46,6 +47,7 @@ function CompCard({ comp, currentUserEmail, onClick }) {
     const rival = isLeading ? ranked[1] : ranked[0];
     const gap = rival ? Math.abs(Math.round(rankVal(me) - rankVal(rival))) : 0;
     const overdue = comp.goal_target_date && isPast(parseISO(comp.goal_target_date)) && !isCompleted;
+    const pot = computePot(comp);
 
     // Token-tinted shell based on state
     const shell = isCompleted
@@ -80,8 +82,14 @@ function CompCard({ comp, currentUserEmail, onClick }) {
 
             <div className="mb-3 pr-20">
                 <h3 className="font-display font-extrabold text-foreground text-base leading-tight truncate">{comp.goal_title}</h3>
-                <p className="text-xs text-muted-foreground mt-1 inline-flex items-center gap-1">
+                <p className="text-xs text-muted-foreground mt-1 inline-flex items-center gap-1 flex-wrap">
                     by {comp.creator_name} <span className="text-muted-foreground/40">·</span> <Users className="w-3 h-3" /> {accepted.length}
+                    {!isCompleted && pot.total > 0 && (
+                        <>
+                            <span className="text-muted-foreground/40">·</span>
+                            <span className="inline-flex items-center gap-0.5 font-bold text-xp"><Coins className="w-3 h-3" /> {pot.total} XP</span>
+                        </>
+                    )}
                 </p>
             </div>
 
@@ -145,9 +153,15 @@ function CompCard({ comp, currentUserEmail, onClick }) {
             )}
 
             {comp.goal_target_date && (
-                <div className="mt-2.5 flex items-center gap-1 text-xs text-muted-foreground">
-                    <Clock className="w-3 h-3" />
-                    {format(parseISO(comp.goal_target_date), 'MMM d, yyyy')}
+                <div className="mt-2.5">
+                    {isCompleted ? (
+                        <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                            <Clock className="w-3 h-3" />
+                            {format(parseISO(comp.goal_target_date), 'MMM d, yyyy')}
+                        </div>
+                    ) : (
+                        <Countdown targetDate={comp.goal_target_date} variant="chip" />
+                    )}
                 </div>
             )}
 
@@ -167,6 +181,7 @@ export default function Competitions() {
     const [joiningCode, setJoiningCode] = useState(false);
     const [joinSetupChoice, setJoinSetupChoice] = useState(null);
     const [pendingJoinCode, setPendingJoinCode] = useState(null);
+    const [rematchingEmail, setRematchingEmail] = useState(null);
     const { toast } = useToast();
 
     useEffect(() => { loadData(); }, []);
@@ -218,6 +233,33 @@ export default function Competitions() {
         } catch (e) {
             toast({ title: "Error", description: e.message, variant: "destructive" });
         } finally { setJoiningCode(false); }
+    };
+
+    // Rematch: re-run the most recent battle YOU created against this rival.
+    const handleRematch = async (rival) => {
+        // Find my most recent settled comp where this rival took part.
+        const mine = competitions
+            .filter(c => c.creator_email === user?.email
+                && (c.participants || []).some(p => p.email === rival.email))
+            .sort((a, b) => new Date(b.completed_at || b.updated_date || 0) - new Date(a.completed_at || a.updated_date || 0));
+        const base = mine[0];
+        if (!base?.goal_id) {
+            toast({ title: "Start it from a goal", description: `Open a goal and tap “Compete with friends” to challenge ${rival.name?.split(' ')[0]} again.` });
+            return;
+        }
+        setRematchingEmail(rival.email);
+        try {
+            const res = await createGoalCompetition({ goal_id: base.goal_id, invite_emails: [rival.email] });
+            const data = res?.data ?? res;
+            if (data?.error) {
+                toast({ title: "Couldn't start rematch", description: data.error, variant: "destructive" });
+            } else {
+                toast({ title: `Rematch on! 🔥`, description: `${rival.name?.split(' ')[0]} has been challenged on “${base.goal_title}”.` });
+                await loadData();
+            }
+        } catch (e) {
+            toast({ title: "Error", description: e.message, variant: "destructive" });
+        } finally { setRematchingEmail(null); }
     };
 
     // ─── Derived stats ────────────────────────────────────────────────────────
@@ -489,7 +531,7 @@ export default function Competitions() {
                                 const ahead = r.wins > r.losses;
                                 const even = r.wins === r.losses;
                                 return (
-                                    <div key={r.email} className="card-soft p-4">
+                                    <div key={r.email} className="card-soft p-4 flex flex-col">
                                         <div className="flex items-center gap-2 mb-2">
                                             <div className="w-8 h-8 rounded-lg bg-secondary flex items-center justify-center text-xs font-bold text-foreground flex-shrink-0">{(r.name || '?').slice(0, 2).toUpperCase()}</div>
                                             <p className="font-bold text-foreground text-sm truncate">{r.name?.split(' ')[0]}</p>
@@ -502,6 +544,16 @@ export default function Competitions() {
                                         <p className={`text-xs font-bold mt-1 ${ahead ? 'text-primary' : even ? 'text-muted-foreground' : 'text-streak'}`}>
                                             {ahead ? 'You lead' : even ? 'Dead even' : 'They lead'}
                                         </p>
+                                        <button
+                                            onClick={() => handleRematch(r)}
+                                            disabled={rematchingEmail === r.email}
+                                            className="mt-3 inline-flex items-center justify-center gap-1.5 rounded-xl bg-streak/10 hover:bg-streak/20 text-streak font-bold text-xs py-2 transition-colors disabled:opacity-60"
+                                        >
+                                            {rematchingEmail === r.email
+                                                ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                                : <RotateCcw className="w-3.5 h-3.5" />}
+                                            {even || ahead ? 'Rematch' : 'Run it back'}
+                                        </button>
                                     </div>
                                 );
                             })}

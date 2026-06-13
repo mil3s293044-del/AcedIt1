@@ -7,10 +7,10 @@ import {
     ChevronLeft, Copy, Check, Trophy, Timer,
     TrendingUp, Users, Crown, Zap
 } from "lucide-react";
-import { format, parseISO } from "date-fns";
 import { useToast } from "@/components/ui/use-toast";
 import HoursLeaderboard from "./HoursLeaderboard";
 import ScorePredictionBetting from "./ScorePredictionBetting";
+import { Countdown, Confetti, useCountUp } from "./arenaHelpers";
 
 export default function GoalCompetitionDetail({ competition, currentUserEmail, onBack, onUpdate }) {
     const { toast } = useToast();
@@ -21,6 +21,7 @@ export default function GoalCompetitionDetail({ competition, currentUserEmail, o
     const isCompleted = competition.status === 'completed';
     const isWinner = competition.winner_email === currentUserEmail;
     const me = competition.participants?.find(p => p.email === currentUserEmail);
+    const bonusXP = useCountUp(me?.bonus_xp_awarded || 0, 1100);
 
     const handleCopyCode = () => {
         navigator.clipboard.writeText(competition.invite_code);
@@ -31,6 +32,9 @@ export default function GoalCompetitionDetail({ competition, currentUserEmail, o
 
     return (
         <div className="space-y-5">
+            {/* Win celebration */}
+            <Confetti active={isCompleted && isWinner} />
+
             {/* Header */}
             <div className="flex items-center gap-3">
                 <Button variant="ghost" size="sm" onClick={onBack} className="rounded-xl">
@@ -38,10 +42,17 @@ export default function GoalCompetitionDetail({ competition, currentUserEmail, o
                 </Button>
                 <div className="flex-1 min-w-0">
                     <h2 className="font-display font-extrabold text-foreground text-lg truncate">{competition.goal_title}</h2>
-                    <p className="text-xs text-muted-foreground">
-                        by {competition.creator_name} · {accepted.length} participant{accepted.length !== 1 ? 's' : ''}
-                        {competition.goal_target_date && ` · ends ${format(parseISO(competition.goal_target_date), 'MMM d')}`}
-                    </p>
+                    <div className="flex items-center gap-2 flex-wrap">
+                        <p className="text-xs text-muted-foreground">
+                            by {competition.creator_name} · {accepted.length} participant{accepted.length !== 1 ? 's' : ''}
+                        </p>
+                        {!isCompleted && competition.goal_target_date && (
+                            <>
+                                <span className="text-muted-foreground/40 text-xs">·</span>
+                                <Countdown targetDate={competition.goal_target_date} variant="chip" />
+                            </>
+                        )}
+                    </div>
                 </div>
                 {!isCompleted && (
                     <Button variant="outline" size="sm" onClick={handleCopyCode}
@@ -55,20 +66,38 @@ export default function GoalCompetitionDetail({ competition, currentUserEmail, o
             {/* Winner banner */}
             <AnimatePresence>
                 {isCompleted && (
-                    <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }}
-                        className={`rounded-2xl p-5 text-center ${
+                    <motion.div
+                        initial={{ opacity: 0, scale: 0.9, y: 8 }}
+                        animate={{ opacity: 1, scale: 1, y: 0 }}
+                        transition={{ type: "spring", stiffness: 320, damping: 22 }}
+                        className={`rounded-2xl p-6 text-center ${
                             isWinner
                                 ? 'bg-gradient-to-br from-xp to-streak text-white shadow-soft'
                                 : 'card-soft border-chart-4/25 bg-chart-4/5'
                         }`}>
-                        <div className="text-4xl mb-2">{isWinner ? '🏆' : '🎖️'}</div>
-                        <p className={`font-display font-extrabold text-lg ${isWinner ? 'text-white' : 'text-foreground'}`}>
-                            {isWinner ? 'You won!' : `${competition.winner_name} won!`}
+                        <motion.div
+                            initial={{ scale: 0, rotate: -25 }}
+                            animate={{ scale: 1, rotate: 0 }}
+                            transition={{ type: "spring", stiffness: 260, damping: 14, delay: 0.15 }}
+                            className="text-5xl mb-2"
+                        >
+                            {isWinner ? '🏆' : '🎖️'}
+                        </motion.div>
+                        <p className={`font-display font-black text-2xl ${isWinner ? 'text-white' : 'text-foreground'}`}>
+                            {isWinner ? 'Champion!' : `${competition.winner_name} took it`}
                         </p>
-                        {me?.bonus_xp_awarded > 0 && (
-                            <p className={`text-sm mt-1 flex items-center justify-center gap-1 font-bold ${isWinner ? 'text-white/90' : 'text-chart-4'}`}>
-                                <Zap className="w-4 h-4" />+{me.bonus_xp_awarded} XP awarded
+                        {me?.final_rank && (
+                            <p className={`text-sm font-bold mt-0.5 ${isWinner ? 'text-white/80' : 'text-muted-foreground'}`}>
+                                You finished #{me.final_rank} of {accepted.length}
                             </p>
+                        )}
+                        {me?.bonus_xp_awarded > 0 && (
+                            <div className={`inline-flex items-center gap-1.5 mt-3 px-4 py-2 rounded-full font-display font-black text-lg ${isWinner ? 'bg-white/20 text-white' : 'bg-chart-4/15 text-chart-4'}`}>
+                                <Zap className="w-5 h-5" />+{bonusXP} XP
+                            </div>
+                        )}
+                        {!isWinner && (
+                            <p className="text-xs text-muted-foreground mt-3">Run it back — challenge them again from the arena.</p>
                         )}
                     </motion.div>
                 )}
