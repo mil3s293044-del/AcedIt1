@@ -45,6 +45,7 @@ export const FEATURES = {
   ACTIVE_RECALL:    'active_recall',     // free: blocked, premium: 8/day
   SPACED_REP:       'spaced_repetition', // free: blocked, premium: unlimited (no AI cost)
   ADVANCED_ANALYTICS: 'advanced_analytics', // free: blocked, premium: unlimited (no AI cost)
+  STUDY_COACH:      'study_coach',       // Ace companion — premium-only, 30 msgs/day (cheap DeepSeek model)
 };
 
 // ─── Limits config ─────────────────────────────────────────────────────────
@@ -74,6 +75,7 @@ export const PREMIUM_DAILY_CAPS = {
   [FEATURES.ROADMAP_AI_GEN]:   1,
   [FEATURES.BLURTING]:         5,
   [FEATURES.ACTIVE_RECALL]:    8,
+  [FEATURES.STUDY_COACH]:      30,
 };
 
 export const WEEKLY_COST_CAP_CENTS  = 250;     // $2.50 hard ceiling
@@ -92,6 +94,7 @@ const COUNTER_KEY = {
   [FEATURES.ROADMAP_AI_GEN]:   'goal',
   [FEATURES.BLURTING]:         'blurting',
   [FEATURES.ACTIVE_RECALL]:    'active_recall',
+  [FEATURES.STUDY_COACH]:      'coach',
 };
 
 // ─── Tier check ────────────────────────────────────────────────────────────

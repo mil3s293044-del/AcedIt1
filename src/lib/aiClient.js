@@ -139,3 +139,71 @@ export async function invokeLLMStream(params, onText, options = {}) {
   }
   return fullText;
 }
+
+// ─── Ace study companion ────────────────────────────────────────────────────
+// Streams a reply from the premium-only "Ace" chat (cheap DeepSeek-backed
+// model on the server). Same SSE wire format as invokeLLMStream.
+//   messages: [{ role: 'user' | 'assistant', content: string }, ...]
+//   context:  { name, subjects[], streak, xp, level, goals[], upcomingAssessments[] }
+//   onText:   (delta, soFar) => void
+// Returns the full assistant reply. Throws TierBlockedError if not premium /
+// caps hit (upgradeRequired flag set).
+export async function streamAce(messages, context, onText, options = {}) {
+  const { signal } = options;
+  const authHeaders = await getAuthHeader();
+
+  const response = await fetch('/local-ai/studyCoachChat', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...authHeaders },
+    body: JSON.stringify({ messages: messages || [], context: context || {} }),
+    signal,
+  });
+
+  if (!response.ok || !response.body) {
+    const errText = await response.text().catch(() => '');
+    throw new Error(`Ace request failed (${response.status}): ${errText}`);
+  }
+
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = '';
+  let fullText = '';
+
+  while (true) {
+    const { value, done } = await reader.read();
+    if (done) break;
+
+    buffer += decoder.decode(value, { stream: true });
+    const events = buffer.split('\n\n');
+    buffer = events.pop() ?? '';
+
+    for (const raw of events) {
+      if (!raw.trim()) continue;
+      let eventType = 'message';
+      let dataStr = '';
+      for (const line of raw.split('\n')) {
+        if (line.startsWith('event: ')) eventType = line.slice(7).trim();
+        else if (line.startsWith('data: ')) dataStr += line.slice(6);
+      }
+      if (!dataStr) continue;
+      let payload;
+      try { payload = JSON.parse(dataStr); } catch { continue; }
+
+      if (eventType === 'text' && payload?.text) {
+        fullText += payload.text;
+        onText?.(payload.text, fullText);
+      } else if (eventType === 'error') {
+        if (payload?.upgradeRequired) {
+          throw new TierBlockedError(payload.message || 'Upgrade to Premium to chat with Ace.', {
+            upgradeRequired: true,
+            status: 402,
+          });
+        }
+        throw new Error(payload?.message || 'Ace stream error');
+      } else if (eventType === 'done') {
+        return fullText;
+      }
+    }
+  }
+  return fullText;
+}

@@ -16,6 +16,7 @@ import StreakCelebration from "@/components/ranked/StreakCelebration";
 import TopNav from "@/components/layout/TopNav";
 import BottomNav from "@/components/layout/BottomNav";
 import SideRail from "@/components/layout/SideRail";
+import AceCompanion from "@/components/ace/AceCompanion";
 
 const FloatingTimer = React.memo(({ currentTime, timerPosition, isDragging, handleMouseDown, timerRef, formatTime }) => (
     <motion.div
@@ -308,6 +309,8 @@ export default function Layout({ children, currentPageName }) {
             />
             <XPFeedback />
             <StreakCelebration />
+
+            <AceCompanion userProfile={userProfile} />
 
             {showOnboarding && (
                 <OnboardingModal
