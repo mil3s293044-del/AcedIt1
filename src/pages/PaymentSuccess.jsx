@@ -4,6 +4,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { CheckCircle, Sparkles, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { base44 } from "@/api/base44Client";
+import { trackPurchase } from "@/lib/analytics";
 
 export default function PaymentSuccess() {
     const [status, setStatus] = useState("verifying"); // verifying | success | error
@@ -53,7 +54,12 @@ export default function PaymentSuccess() {
                     await base44.entities.UserProfile.create({ ...premiumData, created_by: user.email });
                 }
 
-                // 4. Show success briefly, then hard-redirect so entire app re-initialises fresh
+                // 4. Fire the Purchase conversion to the marketing pixels.
+                //    Stripe returns amount_total in cents; fall back to 0 if absent.
+                const purchaseValue = result.amount_total ? result.amount_total / 100 : (result.amount || 0);
+                trackPurchase(purchaseValue, result.currency ? result.currency.toUpperCase() : "AUD");
+
+                // 5. Show success briefly, then hard-redirect so entire app re-initialises fresh
                 setStatus("success");
                 setTimeout(() => {
                     window.location.href = "/Dashboard";

@@ -4,12 +4,19 @@ import { useAuth } from './AuthContext';
 import { base44 } from '@/api/base44Client';
 import { shouldUseSupabase } from '@/api/runtimeConfig';
 import { pagesConfig } from '@/pages.config';
+import { trackPageView } from '@/lib/analytics';
 
 export default function NavigationTracker() {
     const location = useLocation();
     const { isAuthenticated } = useAuth();
     const { Pages, mainPage } = pagesConfig;
     const mainPageKey = mainPage ?? Object.keys(Pages)[0];
+
+    // Marketing page-view: fire on every route change (logged in or out) so
+    // ad pixels see SPA navigations, not just the first hard load.
+    useEffect(() => {
+        trackPageView(location.pathname);
+    }, [location.pathname]);
 
     // Log user activity when navigating to a page
     useEffect(() => {

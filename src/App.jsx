@@ -14,6 +14,8 @@ import Onboarding from './pages/Onboarding';
 import Login from './pages/Login';
 import ForgotPassword from './pages/ForgotPassword';
 import ResetPassword from './pages/ResetPassword';
+import Privacy from './pages/Privacy';
+import Terms from './pages/Terms';
 import { AuthProvider, useAuth } from '@/lib/AuthContext';
 import UserNotRegisteredError from '@/components/UserNotRegisteredError';
 
@@ -36,6 +38,16 @@ const AuthenticatedApp = () => {
         <div className="w-8 h-8 border-4 border-slate-200 border-t-slate-800 rounded-full animate-spin"></div>
       </div>
     );
+  }
+
+  // Legal pages are fully public — they must render for logged-out visitors
+  // AND ad-network crawlers, regardless of auth state, so they sit ahead of
+  // every auth check below.
+  if (location.pathname === '/privacy') {
+    return <Privacy />;
+  }
+  if (location.pathname === '/terms') {
+    return <Terms />;
   }
 
   // Unauthenticated visitors at `/` get the public landing page

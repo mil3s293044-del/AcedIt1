@@ -3898,6 +3898,109 @@ app.post("/local-ai/fn/sendSupportTicket", async (req, res) => {
   }
 });
 
+// ─── captureLead (PUBLIC — no auth) ─────────────────────────────────────────
+// Top-of-funnel email capture from the marketing landing page. Anonymous
+// visitors drop their email for a lead magnet; we upsert into marketing_leads
+// (refreshing attribution on re-submit) and send the lead-magnet email via
+// Resend. Deliberately unauthenticated — callers are cold visitors, not users.
+const LEAD_MAGNET_FROM = "AcedIt <hello@acedit.au>";
+
+app.post("/local-ai/fn/captureLead", async (req, res) => {
+  if (!supabaseAdmin) return res.status(500).json({ error: "Supabase admin not configured" });
+
+  try {
+    const { email, source, pillar, lead_magnet, utm, hp } = req.body || {};
+
+    // Honeypot: real users never fill `hp`. Bots do — silently accept and drop.
+    if (hp) return res.json({ success: true });
+
+    const cleanEmail = (email || "").trim().toLowerCase();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanEmail)) {
+      return res.status(400).json({ error: "Please enter a valid email address." });
+    }
+
+    // Upsert on lowercased email so re-submits refresh attribution instead of
+    // erroring. (Unique index is on lower(email).)
+    const row = {
+      email: cleanEmail,
+      source: source || "landing",
+      pillar: pillar || null,
+      lead_magnet: lead_magnet || "vce_study_roadmap",
+      utm: utm && typeof utm === "object" ? utm : {},
+      status: "new",
+      updated_at: new Date().toISOString(),
+    };
+
+    const { error: upsertErr } = await supabaseAdmin
+      .from("marketing_leads")
+      .upsert(row, { onConflict: "email", ignoreDuplicates: false });
+    // onConflict uses the email column; the unique index is on lower(email) and
+    // we already lowercased, so this dedupes correctly.
+    if (upsertErr) {
+      // Don't hard-fail the visitor on a storage hiccup — still try to email.
+      console.error("[captureLead] upsert error:", upsertErr.message);
+    }
+
+    let emailed = false;
+    if (resend) {
+      const firstName = cleanEmail.split("@")[0];
+      const html = `
+        <table cellpadding="0" cellspacing="0" border="0" style="width:100%;background:#f4f4f5;padding:24px 0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif">
+          <tr><td align="center">
+            <table cellpadding="0" cellspacing="0" border="0" style="width:560px;max-width:100%;background:#ffffff;border-radius:12px;overflow:hidden;border:1px solid #e4e4e7">
+              <tr><td style="padding:32px 28px 8px;text-align:center">
+                <div style="font-size:22px;font-weight:700;color:#58CC02;letter-spacing:-0.5px">AcedIt</div>
+              </td></tr>
+              <tr><td style="padding:8px 28px 24px">
+                <p style="margin:0 0 12px;font-size:16px;color:#18181b">Hey ${escapeHtml(firstName)},</p>
+                <p style="margin:0 0 16px;font-size:15px;line-height:1.6;color:#27272a">Here's your free VCE study roadmap — the simple weekly rhythm top students use so they always know what to study next:</p>
+                <table cellpadding="0" cellspacing="0" border="0" style="width:100%;margin:0 0 20px">
+                  <tr><td style="padding:16px 18px;background:#f0fdf0;border:1px solid #bbf7bb;border-radius:8px;font-size:14px;line-height:1.7;color:#27272a">
+                    <strong>1.</strong> Pick the 3 topics that scare you most this week.<br>
+                    <strong>2.</strong> For each, do active recall — quiz yourself, don't re-read.<br>
+                    <strong>3.</strong> Write one timed practice response and get it marked.<br>
+                    <strong>4.</strong> Review what you got wrong the next day. Repeat.
+                  </td></tr>
+                </table>
+                <p style="margin:0 0 20px;font-size:15px;line-height:1.6;color:#27272a">AcedIt does all four for you automatically — across all 34 VCE subjects, with VCAA-style marking that tells you your real score in seconds.</p>
+                <table cellpadding="0" cellspacing="0" border="0" style="margin:0 auto"><tr><td style="border-radius:10px;background:#58CC02">
+                  <a href="https://acedit.au" style="display:inline-block;padding:13px 28px;font-size:15px;font-weight:700;color:#ffffff;text-decoration:none">Start your free week →</a>
+                </td></tr></table>
+              </td></tr>
+              <tr><td style="padding:16px 28px 24px;background:#fafafa;border-top:1px solid #e4e4e7;font-size:12px;color:#a1a1aa;text-align:center">
+                You're getting this because you asked for the roadmap at acedit.au.
+              </td></tr>
+            </table>
+          </td></tr>
+        </table>`;
+
+      try {
+        const r = await resend.emails.send({
+          from: LEAD_MAGNET_FROM,
+          to: cleanEmail,
+          subject: "Your free VCE study roadmap 📘",
+          html,
+        });
+        emailed = !r.error;
+        if (!r.error) {
+          await supabaseAdmin
+            .from("marketing_leads")
+            .update({ emailed_at: new Date().toISOString(), status: "nurturing" })
+            .eq("email", cleanEmail);
+        }
+      } catch (e) {
+        console.error("[captureLead] email send error:", e?.message || e);
+      }
+    }
+
+    console.log(`[captureLead] email=${cleanEmail} pillar=${pillar || "-"} source=${source || "-"} emailed=${emailed}`);
+    return res.json({ success: true, emailed });
+  } catch (err) {
+    console.error("[captureLead] error:", err);
+    return res.status(500).json({ error: err?.message || "Failed to capture lead" });
+  }
+});
+
 // ════════════════════════════════════════════════════════════════════════════
 // Stripe cluster — Phase 3b ports (4 functions)
 // ════════════════════════════════════════════════════════════════════════════

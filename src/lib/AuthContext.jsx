@@ -8,6 +8,11 @@ import { createAxiosClient } from '@base44/sdk/dist/utils/axios-client';
 
 // Supabase imports
 import { supabase } from '@/api/supabaseClient';
+import { getAttribution } from '@/lib/attribution';
+import { trackSignup } from '@/lib/analytics';
+
+// Native (Capacitor) OAuth deep-link helpers — no-ops on web.
+import { isNative, nativeGoogleSignIn, initNativeAuthListener } from '@/lib/nativeAuth';
 
 const AuthContext = createContext();
 
@@ -108,9 +113,17 @@ async function applyOnboardingFromStorage(userEmail) {
   };
   updates.onboarding_tasks = onboardingTasks;
 
-  // Store year level inside `extra` jsonb so we don't need a migration.
-  if (answers.yearLevel) {
-    updates.extra = { year_level: answers.yearLevel };
+  // Store year level + first-touch marketing attribution inside `extra` jsonb
+  // so we know which campaign pillar drove this signup (no migration needed).
+  const attribution = getAttribution();
+  const hasAttribution = !!attribution.pillar || Object.keys(attribution.utm || {}).length > 0;
+  if (answers.yearLevel || hasAttribution) {
+    updates.extra = {
+      ...(answers.yearLevel ? { year_level: answers.yearLevel } : {}),
+      ...(hasAttribution
+        ? { attribution: { pillar: attribution.pillar, utm: attribution.utm, landing_path: attribution.landing_path } }
+        : {}),
+    };
   }
 
   try {
@@ -118,6 +131,10 @@ async function applyOnboardingFromStorage(userEmail) {
   } catch (e) {
     console.error('[onboarding] profile update failed:', e);
   }
+
+  // Reaching here means a brand-new profile was found and onboarding applied —
+  // i.e. a genuine new signup. Fire the conversion to the marketing pixels.
+  try { trackSignup({ pillar: attribution.pillar || undefined }); } catch (_) {}
 
   // Create user_subjects rows. For custom subjects (is_custom: true) we first
   // create a private vce_subjects row, then point user_subjects at it via
@@ -196,6 +213,13 @@ export const AuthProvider = ({ children }) => {
   const [recoveryInProgress, setRecoveryInProgress] = useState(false);
 
   const useSupabase = shouldUseSupabase();
+
+  // Native only: listen for the OAuth deep-link callback and exchange the code
+  // for a session. No-op on web. onAuthStateChange (below) handles the rest.
+  useEffect(() => {
+    const teardown = initNativeAuthListener();
+    return teardown;
+  }, []);
 
   useEffect(() => {
     let unsub = null;
@@ -384,6 +408,17 @@ export const AuthProvider = ({ children }) => {
 
   const navigateToLogin = async () => {
     if (useSupabase) {
+      // Native app: OAuth can't full-page-redirect to capacitor://localhost.
+      // Open Google in the system browser and catch the deep-link callback.
+      if (isNative()) {
+        try {
+          await nativeGoogleSignIn();
+        } catch (error) {
+          console.error('Native OAuth init failed:', error);
+          setAuthError({ type: 'unknown', message: error.message });
+        }
+        return;
+      }
       // Always return to the app root after OAuth, never the current path.
       // Logging in from /login or /onboarding used to redirect back to that
       // same path — but those have no authenticated route, so the user hit a

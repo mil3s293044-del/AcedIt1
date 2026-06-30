@@ -30,6 +30,7 @@
 
 import { supabase } from '@/api/supabaseClient';
 import { FEATURES as TIER_FEATURES } from '@/lib/tierAccess';
+import { apiUrl } from '@/lib/apiBase';
 
 export const FEATURES = TIER_FEATURES;
 
@@ -57,7 +58,7 @@ async function getAuthHeader() {
 // whether response_json_schema was passed).
 export async function invokeLLM(params) {
   const authHeaders = await getAuthHeader();
-  const r = await fetch('/local-ai/invokeAI', {
+  const r = await fetch(apiUrl('/local-ai/invokeAI'), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', ...authHeaders },
     body: JSON.stringify(params || {}),
@@ -84,7 +85,7 @@ export async function invokeLLMStream(params, onText, options = {}) {
   const { signal } = options;
   const authHeaders = await getAuthHeader();
 
-  const response = await fetch('/local-ai/invokeAIStream', {
+  const response = await fetch(apiUrl('/local-ai/invokeAIStream'), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', ...authHeaders },
     body: JSON.stringify(params || {}),
@@ -152,7 +153,7 @@ export async function streamAce(messages, context, onText, options = {}) {
   const { signal } = options;
   const authHeaders = await getAuthHeader();
 
-  const response = await fetch('/local-ai/studyCoachChat', {
+  const response = await fetch(apiUrl('/local-ai/studyCoachChat'), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', ...authHeaders },
     body: JSON.stringify({ messages: messages || [], context: context || {} }),

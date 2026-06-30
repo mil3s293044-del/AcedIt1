@@ -30,6 +30,7 @@
 import { createClient } from '@base44/sdk';
 import { appParams } from '@/lib/app-params';
 import { shouldUseSupabase } from './runtimeConfig.js';
+import { apiUrl } from '@/lib/apiBase';
 
 const { appId, token, functionsVersion, appBaseUrl } = appParams;
 
@@ -196,7 +197,7 @@ const integrationsProxy = new Proxy(realBase44.integrations, {
             return async ({ file }) => {
               const fd = new FormData();
               fd.append('file', file);
-              const r = await fetch('/local-ai/uploadFile', { method: 'POST', body: fd });
+              const r = await fetch(apiUrl('/local-ai/uploadFile'), { method: 'POST', body: fd });
               if (!r.ok) {
                 const text = await r.text().catch(() => '');
                 throw new Error(`Upload failed (${r.status}): ${text}`);

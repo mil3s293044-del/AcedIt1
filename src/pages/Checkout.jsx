@@ -231,7 +231,10 @@ export default function Checkout() {
                                 </div>
 
                                 <p className="text-xs text-gray-500 text-center">
-                                    By continuing, you agree to our Terms of Service and Privacy Policy. 
+                                    By continuing, you agree to our{" "}
+                                    <a href="/terms" target="_blank" rel="noopener noreferrer" className="underline hover:text-gray-700">Terms of Service</a>{" "}
+                                    and{" "}
+                                    <a href="/privacy" target="_blank" rel="noopener noreferrer" className="underline hover:text-gray-700">Privacy Policy</a>.
                                     Your subscription will automatically renew monthly.
                                 </p>
                             </CardContent>

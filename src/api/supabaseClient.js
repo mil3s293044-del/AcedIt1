@@ -11,6 +11,7 @@
 // ════════════════════════════════════════════════════════════════════════════
 
 import { createClient, processLock } from '@supabase/supabase-js';
+import { apiUrl } from '@/lib/apiBase';
 
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
@@ -274,6 +275,8 @@ const PORTED_FUNCTIONS = {
   resolveScoreWager:        '/local-ai/fn/resolveScoreWager',
   // Support (Phase 3b-7):
   sendSupportTicket:        '/local-ai/fn/sendSupportTicket',
+  // Marketing — public top-of-funnel email capture (no auth required):
+  captureLead:              '/local-ai/fn/captureLead',
   // Stripe (Phase 3b-8):
   stripeCheckout:           '/local-ai/fn/stripeCheckout',
   stripePortal:             '/local-ai/fn/stripePortal',
@@ -295,7 +298,7 @@ const functionsApi = {
       if (session?.access_token) {
         headers['Authorization'] = `Bearer ${session.access_token}`;
       }
-      const res = await fetch(url, {
+      const res = await fetch(apiUrl(url), {
         method: 'POST',
         headers,
         body: JSON.stringify(payload ?? {}),

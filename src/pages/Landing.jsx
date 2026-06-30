@@ -1,6 +1,8 @@
 import React, { useEffect, useState } from "react";
 import { motion, useScroll, useReducedMotion } from "framer-motion";
 import { useAuth } from "@/lib/AuthContext";
+import { trackStartTrial } from "@/lib/analytics";
+import EmailCapture from "@/components/marketing/EmailCapture";
 import { Button } from "@/components/ui/button";
 import {
   Accordion,
@@ -85,7 +87,7 @@ export default function Landing() {
   // wizard (which collects year + subjects + goals, sells Premium, then
   // hands off to sign-in). Existing users use the "Login" link which sends
   // them to /login (email+password OR Google).
-  const startTrial = () => { window.location.assign("/onboarding"); };
+  const startTrial = () => { trackStartTrial(); window.location.assign("/onboarding"); };
   const goToLogin = () => { window.location.assign("/login"); };
 
   const scrollToId = (id) => {
@@ -940,6 +942,15 @@ export default function Landing() {
       </section>
 
       {/* ============================================================== */}
+      {/* LEAD CAPTURE — for visitors not ready to start a trial yet       */}
+      {/* ============================================================== */}
+      <section className="px-6 py-16">
+        <motion.div {...fadeUp} className="max-w-2xl mx-auto rounded-3xl bg-[#F7F8FA] border border-black/5 p-8 md:p-10">
+          <EmailCapture source="landing_roadmap" leadMagnet="vce_study_roadmap" />
+        </motion.div>
+      </section>
+
+      {/* ============================================================== */}
       {/* FOOTER                                                           */}
       {/* ============================================================== */}
       <footer className="border-t border-black/5 py-12 px-6">
@@ -958,6 +969,8 @@ export default function Landing() {
             <button onClick={() => scrollToId("features")} className="hover:text-[#0D1626] cursor-pointer">Features</button>
             <button onClick={() => scrollToId("pricing")} className="hover:text-[#0D1626] cursor-pointer">Pricing</button>
             <button onClick={goToLogin} className="hover:text-[#0D1626] cursor-pointer">Login</button>
+            <a href="/privacy" className="hover:text-[#0D1626] cursor-pointer">Privacy</a>
+            <a href="/terms" className="hover:text-[#0D1626] cursor-pointer">Terms</a>
             <a href="mailto:hello@acedit.au" className="hover:text-[#0D1626] cursor-pointer">Contact</a>
           </div>
           <div className="text-xs text-[#0D1626]/40">
