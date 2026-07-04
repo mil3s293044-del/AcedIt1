@@ -3947,27 +3947,65 @@ app.post("/local-ai/fn/captureLead", async (req, res) => {
       const html = `
         <table cellpadding="0" cellspacing="0" border="0" style="width:100%;background:#f4f4f5;padding:24px 0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif">
           <tr><td align="center">
-            <table cellpadding="0" cellspacing="0" border="0" style="width:560px;max-width:100%;background:#ffffff;border-radius:12px;overflow:hidden;border:1px solid #e4e4e7">
-              <tr><td style="padding:32px 28px 8px;text-align:center">
-                <div style="font-size:22px;font-weight:700;color:#58CC02;letter-spacing:-0.5px">AcedIt</div>
+            <table cellpadding="0" cellspacing="0" border="0" style="width:600px;max-width:100%;background:#ffffff;border-radius:14px;overflow:hidden;border:1px solid #e4e4e7">
+
+              <!-- Header band -->
+              <tr><td style="padding:28px 32px 24px;background:#0D1626;text-align:center">
+                <div style="font-size:24px;font-weight:800;color:#58CC02;letter-spacing:-0.5px">AcedIt</div>
+                <div style="font-size:13px;color:#8b93a7;margin-top:4px">Your free VCE study roadmap</div>
               </td></tr>
-              <tr><td style="padding:8px 28px 24px">
-                <p style="margin:0 0 12px;font-size:16px;color:#18181b">Hey ${escapeHtml(firstName)},</p>
-                <p style="margin:0 0 16px;font-size:15px;line-height:1.6;color:#27272a">Here's your free VCE study roadmap — the simple weekly rhythm top students use so they always know what to study next:</p>
-                <table cellpadding="0" cellspacing="0" border="0" style="width:100%;margin:0 0 20px">
-                  <tr><td style="padding:16px 18px;background:#f0fdf0;border:1px solid #bbf7bb;border-radius:8px;font-size:14px;line-height:1.7;color:#27272a">
-                    <strong>1.</strong> Pick the 3 topics that scare you most this week.<br>
-                    <strong>2.</strong> For each, do active recall — quiz yourself, don't re-read.<br>
-                    <strong>3.</strong> Write one timed practice response and get it marked.<br>
-                    <strong>4.</strong> Review what you got wrong the next day. Repeat.
-                  </td></tr>
+
+              <tr><td style="padding:28px 32px 8px">
+                <p style="margin:0 0 14px;font-size:16px;color:#18181b">Hey ${escapeHtml(firstName)},</p>
+                <p style="margin:0 0 16px;font-size:15px;line-height:1.6;color:#27272a">Most VCE students study for hours and still forget half of it by the exam. The problem usually isn't effort — it's the method. Here's the roadmap that flips that. Steal all of it.</p>
+
+                <!-- The one rule -->
+                <table cellpadding="0" cellspacing="0" border="0" style="width:100%;margin:0 0 22px">
+                  <tr>
+                    <td style="width:4px;background:#58CC02;border-radius:2px"></td>
+                    <td style="padding:14px 18px;background:#f0fdf0;border-radius:0 8px 8px 0;font-size:15px;line-height:1.6;color:#14532d">
+                      <strong>The one rule everything hangs on:</strong> test yourself <em>before</em> you feel ready. Re-reading your notes feels productive, but you keep about 29% of it. Quizzing yourself from memory (active recall) nearly doubles that to ~57%.
+                    </td>
+                  </tr>
                 </table>
-                <p style="margin:0 0 20px;font-size:15px;line-height:1.6;color:#27272a">AcedIt does all four for you automatically — across all 34 VCE subjects, with VCAA-style marking that tells you your real score in seconds.</p>
-                <table cellpadding="0" cellspacing="0" border="0" style="margin:0 auto"><tr><td style="border-radius:10px;background:#58CC02">
-                  <a href="https://acedit.au" style="display:inline-block;padding:13px 28px;font-size:15px;font-weight:700;color:#ffffff;text-decoration:none">Start your free week →</a>
+
+                <!-- Weekly rhythm -->
+                <p style="margin:0 0 10px;font-size:13px;font-weight:700;letter-spacing:0.4px;text-transform:uppercase;color:#71717a">Your weekly rhythm</p>
+                <table cellpadding="0" cellspacing="0" border="0" style="width:100%;margin:0 0 22px;border:1px solid #e4e4e7;border-radius:10px;overflow:hidden">
+                  <tr>
+                    <td style="padding:12px 16px;background:#fafafa;border-bottom:1px solid #eee;font-size:14px;line-height:1.55;color:#27272a"><strong style="color:#58CC02">Mon–Thu · Active recall</strong><br>Close the book. Write everything you remember about one topic ("blurting"), then check what you missed. The gaps <em>are</em> your study list.</td>
+                  </tr>
+                  <tr>
+                    <td style="padding:12px 16px;background:#ffffff;border-bottom:1px solid #eee;font-size:14px;line-height:1.55;color:#27272a"><strong style="color:#58CC02">Friday · Timed practice</strong><br>One past exam or SAC question per subject, under real exam conditions. No notes.</td>
+                  </tr>
+                  <tr>
+                    <td style="padding:12px 16px;background:#fafafa;border-bottom:1px solid #eee;font-size:14px;line-height:1.55;color:#27272a"><strong style="color:#58CC02">Saturday · Mark like an examiner</strong><br>Grade your answers against the VCAA criteria — not how you feel about them. Write down the exact marks you dropped and why.</td>
+                  </tr>
+                  <tr>
+                    <td style="padding:12px 16px;background:#ffffff;font-size:14px;line-height:1.55;color:#27272a"><strong style="color:#58CC02">Sunday · Spaced repetition</strong><br>Re-test only the things you got wrong this week. That's where all your marks are hiding.</td>
+                  </tr>
+                </table>
+
+                <!-- 3 rules -->
+                <p style="margin:0 0 10px;font-size:13px;font-weight:700;letter-spacing:0.4px;text-transform:uppercase;color:#71717a">3 rules that beat "just study more"</p>
+                <table cellpadding="0" cellspacing="0" border="0" style="width:100%;margin:0 0 24px">
+                  <tr><td style="padding:0 0 8px;font-size:14px;line-height:1.55;color:#27272a"><strong>1.</strong> Test before you feel ready — feeling familiar with notes is a trap.</td></tr>
+                  <tr><td style="padding:0 0 8px;font-size:14px;line-height:1.55;color:#27272a"><strong>2.</strong> Mark your work like an examiner, not a friend.</td></tr>
+                  <tr><td style="padding:0;font-size:14px;line-height:1.55;color:#27272a"><strong>3.</strong> Revisit your mistakes the next day — that's when they actually stick.</td></tr>
+                </table>
+
+                <!-- Bridge to product -->
+                <p style="margin:0 0 20px;font-size:15px;line-height:1.6;color:#27272a">Doing all of this by hand is a grind. <strong>That's the whole reason we built AcedIt</strong> — it generates your recall quizzes, marks your essays and SACs like a VCAA examiner in seconds, and shows you the exact topics you're weak on, across all 34 subjects.</p>
+
+                <table cellpadding="0" cellspacing="0" border="0" style="margin:0 auto 6px"><tr><td style="border-radius:10px;background:#58CC02">
+                  <a href="https://acedit.au" style="display:inline-block;padding:14px 32px;font-size:15px;font-weight:700;color:#ffffff;text-decoration:none">Try it free for a week →</a>
                 </td></tr></table>
+                <p style="margin:0 0 8px;font-size:12px;color:#a1a1aa;text-align:center">No card needed to start · then $5/week · cancel anytime</p>
+
+                <p style="margin:18px 0 0;font-size:14px;line-height:1.6;color:#52525b"><strong>P.S.</strong> The students who improve most aren't the ones who study longest — they're the ones who find their weak spots fastest. That's the entire game.</p>
               </td></tr>
-              <tr><td style="padding:16px 28px 24px;background:#fafafa;border-top:1px solid #e4e4e7;font-size:12px;color:#a1a1aa;text-align:center">
+
+              <tr><td style="padding:16px 32px 24px;background:#fafafa;border-top:1px solid #e4e4e7;font-size:12px;color:#a1a1aa;text-align:center">
                 You're getting this because you asked for the roadmap at acedit.au.
               </td></tr>
             </table>

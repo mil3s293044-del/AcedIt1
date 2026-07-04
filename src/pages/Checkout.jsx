@@ -100,12 +100,12 @@ export default function Checkout() {
                                 {/* Price */}
                                 <div className="flex items-baseline justify-between">
                                     <div>
-                                        <p className="text-gray-600 text-sm mb-1">Monthly Subscription</p>
+                                        <p className="text-gray-600 text-sm mb-1">Weekly Subscription</p>
                                         <div className="flex items-baseline gap-2">
-                                            <span className="text-5xl font-bold text-gray-900">$10</span>
+                                            <span className="text-5xl font-bold text-gray-900">$5</span>
                                             <span className="text-xl text-gray-600">AUD</span>
                                         </div>
-                                        <p className="text-sm text-gray-600 mt-1">per month</p>
+                                        <p className="text-sm text-gray-600 mt-1">per week</p>
                                     </div>
                                     <div className="w-16 h-16 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-2xl flex items-center justify-center">
                                         <Crown className="w-8 h-8 text-white" />
@@ -129,7 +129,7 @@ export default function Checkout() {
                                 <div className="pt-4 border-t space-y-2">
                                     <div className="flex justify-between text-sm">
                                         <span className="text-gray-600">Subtotal</span>
-                                        <span className="font-semibold text-gray-900">$10.00 AUD</span>
+                                        <span className="font-semibold text-gray-900">$5.00 AUD</span>
                                     </div>
                                     <div className="flex justify-between text-sm">
                                         <span className="text-gray-600">Tax (GST)</span>
@@ -137,7 +137,7 @@ export default function Checkout() {
                                     </div>
                                     <div className="flex justify-between text-lg font-bold pt-2 border-t">
                                         <span className="text-gray-900">Total due today</span>
-                                        <span className="text-indigo-600">$10.00 AUD</span>
+                                        <span className="text-indigo-600">$5.00 AUD</span>
                                     </div>
                                 </div>
                             </CardContent>

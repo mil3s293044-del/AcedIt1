@@ -172,8 +172,8 @@ export default function Premium() {
                                         <Crown className="w-8 h-8 text-white" />
                                     </div>
                                     <div className="text-left">
-                                        <h3 className="text-3xl font-bold text-gray-900">$10 AUD</h3>
-                                        <p className="text-gray-600">per month</p>
+                                        <h3 className="text-3xl font-bold text-gray-900">$5 AUD</h3>
+                                        <p className="text-gray-600">per week</p>
                                     </div>
                                 </div>
                                 <p className="text-gray-700 mb-6">Cancel anytime • Instant access</p>

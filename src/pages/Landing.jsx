@@ -787,19 +787,21 @@ export default function Landing() {
                   Free
                 </div>
                 <div className="text-white/55 text-sm mt-2">
-                  then $9.99 / month
+                  then $5 / week
                 </div>
               </div>
             </div>
 
             <div className="grid sm:grid-cols-2 gap-x-6 gap-y-3 mb-8">
               {[
-                "Unlimited AI practice questions",
-                "AI marks SACs against VCAA criteria",
-                "All 8 AI study tools",
-                "Spaced-repetition flashcards",
-                "Friend competitions & wagers",
-                "Full analytics dashboard",
+                "AI marks essays & SACs like a VCAA examiner",
+                "All 34 VCE subjects, each with its own tutor",
+                "Ace — your 24/7 AI study companion",
+                "Unlimited quizzes, flashcards & practice",
+                "Active recall, blurting & spaced repetition",
+                "Compete: weekly leagues, XP battles & wagers",
+                "A study roadmap that plans your week",
+                "Full progress & analytics dashboard",
               ].map((f) => (
                 <div key={f} className="flex items-start gap-2 text-sm text-white/85">
                   <Check className="w-4 h-4 mt-0.5 text-primary flex-shrink-0" />
@@ -843,7 +845,7 @@ export default function Landing() {
             transition={{ ...fadeUp.transition, delay: 0.2 }}
             className="mt-8 text-xs text-white/45"
           >
-            Melbourne private tutors charge $60–$120/hr. Acedit is $9.99/month.
+            Melbourne private tutors charge $60–$120/hr. Acedit is $5 a week.
           </motion.p>
         </div>
       </section>
@@ -879,7 +881,7 @@ export default function Landing() {
                 },
                 {
                   q: "Is this worth it for my kid? (Parent question)",
-                  a: "Most Melbourne private tutors charge $60–$120 per hour. Acedit is $9.99 per month. If your kid uses it twice, it’s already cheaper than one tutor session.",
+                  a: "Most Melbourne private tutors charge $60–$120 per hour. Acedit is $5 a week. A whole month still costs less than one tutor session.",
                 },
                 {
                   q: "How do I cancel?",
@@ -971,7 +973,7 @@ export default function Landing() {
             <button onClick={goToLogin} className="hover:text-[#0D1626] cursor-pointer">Login</button>
             <a href="/privacy" className="hover:text-[#0D1626] cursor-pointer">Privacy</a>
             <a href="/terms" className="hover:text-[#0D1626] cursor-pointer">Terms</a>
-            <a href="mailto:hello@acedit.au" className="hover:text-[#0D1626] cursor-pointer">Contact</a>
+            <a href="mailto:admin@acedit.com.au" className="hover:text-[#0D1626] cursor-pointer">Contact</a>
           </div>
           <div className="text-xs text-[#0D1626]/40">
             © {new Date().getFullYear()} Acedit. Made for VCE.
