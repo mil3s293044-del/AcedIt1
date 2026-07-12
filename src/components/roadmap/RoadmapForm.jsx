@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { base44 } from "@/api/base44Client";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -253,6 +253,46 @@ export default function RoadmapForm({ onGenerated, userProfile }) {
     const [generatingStep, setGeneratingStep] = useState("");
     const { toast } = useToast();
 
+    // ── Generation progress estimate ────────────────────────────────────────
+    // The roadmap is one big non-streaming AI call, so there's no real
+    // progress signal. We estimate from how long this user's past generations
+    // took (running average in localStorage, default 45s) and show an honest
+    // countdown — the bar never claims 100% until the roadmap actually lands.
+    const GEN_AVG_KEY = "acedit_roadmap_gen_ms";
+    const genStartRef = useRef(null);
+    const [genElapsedMs, setGenElapsedMs] = useState(0);
+    const [genEstimateMs, setGenEstimateMs] = useState(45000);
+    useEffect(() => {
+        if (!isGenerating) { setGenElapsedMs(0); return; }
+        genStartRef.current = Date.now();
+        let est = 45000;
+        try {
+            const saved = Number(localStorage.getItem(GEN_AVG_KEY));
+            if (saved > 5000 && saved < 300000) est = saved;
+        } catch { /* private mode — keep default */ }
+        setGenEstimateMs(est);
+        const id = setInterval(() => setGenElapsedMs(Date.now() - genStartRef.current), 500);
+        return () => clearInterval(id);
+    }, [isGenerating]);
+
+    // Fraction of the estimate elapsed; bar runs linearly to ~88% over the
+    // estimate, then crawls asymptotically toward 96% if it runs long.
+    const genFrac = genEstimateMs > 0 ? genElapsedMs / genEstimateMs : 0;
+    const genPct = genFrac <= 1
+        ? Math.round(genFrac * 88)
+        : Math.min(96, Math.round(88 + (1 - Math.exp(-(genFrac - 1) * 1.5)) * 8));
+    const genRemainingS = Math.ceil((genEstimateMs - genElapsedMs) / 1000);
+    const isSavingStep = generatingStep === "Saving your roadmap...";
+    const genRemainingLabel = isSavingStep
+        ? "almost done"
+        : genRemainingS > 0 ? `~${genRemainingS}s left` : "almost there…";
+    const genStageMessage = isSavingStep
+        ? "Saving your roadmap…"
+        : genFrac < 0.3 ? "Analysing your topics & weak areas…"
+        : genFrac < 0.6 ? "Structuring your day-by-day journey…"
+        : genFrac < 0.9 ? "Writing your day 1 plan…"
+        : "Polishing the details…";
+
     const availableComponents = COMPONENTS_FOR[form.assessment_category] || [];
     const showComponents = availableComponents.length > 0;
 
@@ -386,6 +426,17 @@ const result = await base44.integrations.Core.InvokeLLM({
                     }
                 }
             });
+
+            // Update the running average so future countdowns are accurate
+            // (weighted toward history so one slow outlier doesn't skew it).
+            try {
+                const actual = Date.now() - (genStartRef.current || Date.now());
+                if (actual > 5000) {
+                    const prev = Number(localStorage.getItem(GEN_AVG_KEY)) || 0;
+                    const next = prev > 0 ? Math.round(prev * 0.6 + actual * 0.4) : actual;
+                    localStorage.setItem(GEN_AVG_KEY, String(next));
+                }
+            } catch { /* private mode — skip */ }
 
             setGeneratingStep("Saving your roadmap...");
             const assessmentTypeLabel = form.assessment_components.length > 0
@@ -642,10 +693,23 @@ const roadmap = await base44.entities.StudyRoadmap.create({
                     </div>
                 </div>
 
-                {isGenerating && generatingStep && (
-                    <div className="flex items-center gap-2 text-sm text-teal-700 bg-teal-50 rounded-lg p-3">
-                        <Search className="w-4 h-4 animate-pulse flex-shrink-0" />
-                        <span>{generatingStep}</span>
+                {isGenerating && (
+                    <div className="bg-teal-50 rounded-lg p-3 space-y-2">
+                        <div className="flex items-center justify-between gap-2 text-sm text-teal-700">
+                            <span className="flex items-center gap-2 min-w-0">
+                                <Search className="w-4 h-4 animate-pulse flex-shrink-0" />
+                                <span className="truncate">{genStageMessage}</span>
+                            </span>
+                            <span className="text-xs font-semibold tabular-nums flex-shrink-0 text-teal-600">
+                                {genRemainingLabel}
+                            </span>
+                        </div>
+                        <div className="h-1.5 bg-teal-100 rounded-full overflow-hidden">
+                            <div
+                                className="h-full bg-teal-500 rounded-full transition-all duration-500 ease-out"
+                                style={{ width: `${isSavingStep ? 98 : genPct}%` }}
+                            />
+                        </div>
                     </div>
                 )}
 
