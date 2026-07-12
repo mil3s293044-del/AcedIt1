@@ -569,11 +569,21 @@ async function loadUserProfile(userEmail) {
   return data || null;
 }
 
+// Owner/allowlisted accounts get unlimited AI access (demos, content recording,
+// support). Comma-separated emails; defaults to the owner account. Override with
+// the UNLIMITED_ACCESS_EMAILS env var to add/remove without a code change.
+const UNLIMITED_EMAILS = (process.env.UNLIMITED_ACCESS_EMAILS || "mil3s293044@gmail.com")
+  .split(",").map((s) => s.trim().toLowerCase()).filter(Boolean);
+
 function checkTierAccess(profile, feature) {
   // Dev-only bypass — set VITE_TIER_BYPASS=true in .env.local to disable all
   // caps for testing. The frontend has its own copy of this check so the UI
   // doesn't show "limit reached" warnings either.
   if (process.env.VITE_TIER_BYPASS === "true") return { allowed: true };
+  // Owner/allowlisted accounts skip every cap.
+  if (profile?.created_by && UNLIMITED_EMAILS.includes(profile.created_by.toLowerCase())) {
+    return { allowed: true };
+  }
   if (!profile) return { allowed: false, status: 401, reason: "Sign in to use AI features." };
   if (tierIsPremium(profile)) {
     if ((profile.weekly_ai_cost_cents ?? 0) >= TIER_WEEKLY_CAP_CENTS) {

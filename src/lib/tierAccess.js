@@ -202,9 +202,20 @@ function checkPremiumTier(profile, feature) {
 // the AI tools freely. Server-side has its own check on the same env var.
 const TIER_BYPASS = import.meta.env.VITE_TIER_BYPASS === "true";
 
+// Owner/allowlisted accounts get unlimited AI access (demos, content recording,
+// support). Comma-separated emails; defaults to the owner account. Override with
+// VITE_UNLIMITED_ACCESS_EMAILS. The server enforces the same allowlist.
+const UNLIMITED_EMAILS = (import.meta.env.VITE_UNLIMITED_ACCESS_EMAILS || 'mil3s293044@gmail.com')
+  .split(',').map((s) => s.trim().toLowerCase()).filter(Boolean);
+
+export function isUnlimitedAccount(profile) {
+  const email = (profile?.created_by || '').toLowerCase();
+  return !!email && UNLIMITED_EMAILS.includes(email);
+}
+
 // ─── Public entry point ────────────────────────────────────────────────────
 export function canUseFeature(profile, feature) {
-  if (TIER_BYPASS) return { allowed: true };
+  if (TIER_BYPASS || isUnlimitedAccount(profile)) return { allowed: true };
   if (isPremium(profile)) return checkPremiumTier(profile, feature);
   return checkFreeTier(profile, feature);
 }
