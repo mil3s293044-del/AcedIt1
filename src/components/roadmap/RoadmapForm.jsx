@@ -76,7 +76,10 @@ async function detectWeakAreas(subjectName) {
 async function suggestTopicsForSubject(subjectName) {
     try {
         const result = await base44.integrations.Core.InvokeLLM({
-            feature: "roadmap_ai_gen",
+            // Helper call (topic suggestions) — must NOT consume the roadmap
+            // creation credit. Only the actual roadmap generation charges
+            // roadmap_ai_gen; this uncapped feature still tracks cost.
+            feature: "roadmap_helper",
             prompt: `List the key content topics a VCE student needs to master for "${subjectName}" based on the VCAA study design. Return 6-10 specific, concise topic names only (no descriptions). Focus on the most commonly assessed content areas. Return ONLY JSON with a single key "topics" containing an array of strings.`,
             response_json_schema: { type: "object", properties: { topics: { type: "array", items: { type: "string" } } } }
         });

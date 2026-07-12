@@ -145,7 +145,10 @@ export default function RoadmapDisplay({ roadmap: initialRoadmap, userProfile, o
             const prompt = buildDayNPrompt({ roadmap, dayNum, journeyEntry, priorDays, priorRatings });
 
             const result = await base44.integrations.Core.InvokeLLM({
-                feature: "roadmap_ai_gen",
+                // Per-day expansion of an already-created roadmap — must NOT
+                // consume a fresh roadmap creation credit. Only the initial
+                // creation charges roadmap_ai_gen; this still tracks cost.
+                feature: "roadmap_helper",
                 prompt,
                 response_json_schema: {
                     type: "object",
