@@ -21,6 +21,7 @@ import HelpButton from '@/components/shared/HelpButton';
 import RequirePremium from '@/components/shared/RequirePremium';
 import TierUsagePill from '@/components/shared/TierUsagePill';
 import { FEATURES } from '@/lib/tierAccess';
+import { AIToolSidePanelContext } from '../components/ai_tools/sidePanelContext';
 
 // Each tool gets a single accent token from the design system. No more
 // rainbow gradients — calmer to scan, fits the new visual language. Tones
@@ -296,6 +297,40 @@ function AIToolsInner() {
     autoHidRef.current = true;
   };
 
+  // ── Sidebar generation panel (essay marker & friends) ────────────────────
+  // Tools can portal their generation output into the sidebar slot below,
+  // replacing the tips/examples card while a generation is showing. When the
+  // panel closes, the tips/examples come back (expanded).
+  const [sidePanelActive, setSidePanelActive] = useState(false);
+  const [sidePanelNode, setSidePanelNode] = useState(null);
+  const [isLgScreen, setIsLgScreen] = useState(
+    () => typeof window !== 'undefined' && window.matchMedia('(min-width: 1024px)').matches
+  );
+  useEffect(() => {
+    const mq = window.matchMedia('(min-width: 1024px)');
+    const onChange = (e) => setIsLgScreen(e.matches);
+    mq.addEventListener('change', onChange);
+    return () => mq.removeEventListener('change', onChange);
+  }, []);
+  // Leaving the tool view always clears the panel.
+  useEffect(() => { if (!selectedTool) setSidePanelActive(false); }, [selectedTool]);
+  // When the panel closes, bring the tips & examples back (expanded).
+  const prevPanelActiveRef = useRef(false);
+  useEffect(() => {
+    if (prevPanelActiveRef.current && !sidePanelActive && selectedTool) {
+      setTipsCollapsed(false);
+      sessionStorage.setItem(`ai-tips-${selectedTool}`, '0');
+      autoHidRef.current = true;
+    }
+    prevPanelActiveRef.current = sidePanelActive;
+  }, [sidePanelActive, selectedTool]);
+  const sidePanelCtx = {
+    // Only expose the portal target on large screens — on mobile the sidebar
+    // is display:none, so tools fall back to rendering inline below the form.
+    node: isLgScreen ? sidePanelNode : null,
+    setActive: setSidePanelActive,
+  };
+
   // Suggest other tools — same category first, then any others to fill 3 slots.
   const relatedTools = currentTool
     ? (() => {
@@ -317,6 +352,7 @@ function AIToolsInner() {
   if (selectedTool && currentTool) {
     const accent = ACCENT_CLASSES[currentTool.accent] || ACCENT_CLASSES.primary;
     return (
+      <AIToolSidePanelContext.Provider value={sidePanelCtx}>
       <div className={isFullscreen
           ? "fixed inset-0 z-50 bg-background overflow-y-auto"
           : "min-h-screen bg-background"
@@ -461,10 +497,16 @@ function AIToolsInner() {
               </div>
             </div>
 
-            {/* Sidebar: tips stay sticky alongside the form (auto-hide on use) */}
+            {/* Sidebar: tips stay sticky alongside the form (auto-hide on use).
+                While a generation is running/showing, tools portal their output
+                into the slot below and the tips/examples step aside. */}
             <aside className="hidden lg:block">
               <div className="sticky top-6 space-y-4">
-                {!tipsCollapsed ? (
+                {/* Generation panel slot — always mounted so the portal target
+                    exists before the first generation starts. */}
+                <div ref={setSidePanelNode} />
+
+                {!sidePanelActive && (!tipsCollapsed ? (
                   <div className="card-soft p-5">
                     <div className="flex items-center justify-between mb-3 gap-2">
                       <div className="flex items-center gap-2 min-w-0">
@@ -498,7 +540,7 @@ function AIToolsInner() {
                     <Eye className="w-3.5 h-3.5 flex-shrink-0" />
                     <span className="font-bold">Show tips & examples</span>
                   </button>
-                )}
+                ))}
 
                 <div className="card-soft p-4">
                   <p className="stat-label mb-2">Powered by</p>
@@ -512,6 +554,7 @@ function AIToolsInner() {
           </div>
         </div>
       </div>
+      </AIToolSidePanelContext.Provider>
     );
   }
 

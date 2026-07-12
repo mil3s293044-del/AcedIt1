@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from "react";
+import { createPortal } from "react-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -7,8 +8,9 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import {
     Sparkles, Lightbulb, Save, Trash2, Eye, History, FolderOpen, ChevronDown,
     Square, GraduationCap, BookOpen, PenTool,
-    Scale, MessageCircle, FileText, RefreshCw
+    Scale, MessageCircle, FileText, RefreshCw, X
 } from "lucide-react";
+import { useAIToolSidePanel } from "./sidePanelContext";
 import { base44 } from "@/api/base44Client";
 import { useToast } from "@/components/ui/use-toast";
 import { recordStudyAndGetStreak } from "@/components/shared/streakHelpers";
@@ -269,6 +271,88 @@ Provide expert VCE English guidance following the 2024–2027 Study Design. Use 
         }
     };
 
+    // ── Sidebar generation panel ──────────────────────────────────────────
+    // Inside the AITools page on large screens, the generation output portals
+    // into the page sidebar (replacing tips/examples while it's showing).
+    // Mobile / standalone use falls back to rendering inline below the form.
+    const sidePanel = useAIToolSidePanel();
+    const panelVisible = isGenerating || !!aiResponse;
+    const inSidebar = !!sidePanel?.node;
+    const setPanelActive = sidePanel?.setActive;
+    useEffect(() => {
+        setPanelActive?.(panelVisible);
+    }, [panelVisible, setPanelActive]);
+    // Clear the sidebar takeover if the tool unmounts mid-generation.
+    useEffect(() => () => setPanelActive?.(false), [setPanelActive]);
+
+    const handleClosePanel = () => {
+        abortRef.current?.abort();
+        setAiResponse("");
+    };
+
+    const resultPanel = (
+        <AnimatePresence>
+            {panelVisible && (
+                <motion.div
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0 }}
+                    className="card-soft overflow-hidden"
+                >
+                    {/* Header — compact in the sidebar, roomy inline */}
+                    <div className={`flex items-center gap-2 border-b border-border bg-surface flex-shrink-0 ${inSidebar ? "px-4 py-3" : "gap-3 px-5 py-4"}`}>
+                        <div className="w-1 h-8 bg-primary rounded-full flex-shrink-0" />
+                        <div className="flex-1 min-w-0">
+                            <p className="font-display font-extrabold text-foreground text-sm leading-tight truncate">Expert VCE Feedback</p>
+                            <p className="text-xs text-muted-foreground mt-0.5 truncate">{currentSection.name}</p>
+                        </div>
+                        {!inSidebar && <span className="pill bg-primary/10 text-primary flex-shrink-0">VCE English</span>}
+                        <div className="flex items-center gap-1.5 flex-shrink-0 ml-1">
+                            <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => { setAiResponse(""); setUserInput(""); }}
+                                disabled={isGenerating}
+                                title="Start over"
+                            >
+                                <RefreshCw className="w-3.5 h-3.5" />
+                                {!inSidebar && <span className="hidden sm:inline">New</span>}
+                            </Button>
+                            <Button
+                                size="sm"
+                                onClick={handleSave}
+                                disabled={isGenerating || isSaving || !aiResponse}
+                            >
+                                <Save className="w-3.5 h-3.5" />
+                                {!inSidebar && <span className="hidden sm:inline">{isSaving ? "…" : "Save"}</span>}
+                            </Button>
+                            <button
+                                onClick={handleClosePanel}
+                                className="p-1.5 text-muted-foreground hover:text-foreground rounded-lg hover:bg-secondary transition-colors cursor-pointer"
+                                title="Close — brings tips & examples back"
+                                aria-label="Close feedback panel"
+                            >
+                                <X className="w-4 h-4" />
+                            </button>
+                        </div>
+                    </div>
+
+                    {/* Body — streams in like ChatGPT */}
+                    <div className={`overflow-y-auto bg-surface text-sm text-foreground/90 leading-relaxed ${inSidebar ? "px-4 py-4 max-h-[70vh]" : "px-6 py-5 max-h-[600px]"}`}>
+                        {aiResponse ? (
+                            <MarkdownMath isStreaming={isGenerating}>{aiResponse}</MarkdownMath>
+                        ) : (
+                            <div className="flex items-center gap-2 text-sm text-muted-foreground py-3">
+                                <Sparkles className="w-4 h-4 animate-pulse text-primary" />
+                                Thinking…
+                            </div>
+                        )}
+                    </div>
+                </motion.div>
+            )}
+        </AnimatePresence>
+    );
+
     return (
         <div className="space-y-5">
             {/* Section Tabs */}
@@ -464,59 +548,10 @@ Provide expert VCE English guidance following the 2024–2027 Study Design. Use 
                 </div>
             </div>
 
-            {/* Inline result panel — same shape as EssayPlanner / NoteSummarizer */}
-            <AnimatePresence>
-                {(aiResponse || isGenerating) && (
-                    <motion.div
-                        initial={{ opacity: 0, y: 10 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        exit={{ opacity: 0 }}
-                        className="card-soft overflow-hidden"
-                    >
-                        {/* Header */}
-                        <div className="flex items-center gap-3 px-5 py-4 border-b border-border bg-surface flex-shrink-0">
-                            <div className="w-1 h-8 bg-primary rounded-full flex-shrink-0" />
-                            <div className="flex-1 min-w-0">
-                                <p className="font-display font-extrabold text-foreground text-sm leading-tight truncate">Expert VCE Feedback</p>
-                                <p className="text-xs text-muted-foreground mt-0.5 truncate">{currentSection.name}</p>
-                            </div>
-                            <span className="pill bg-primary/10 text-primary flex-shrink-0">VCE English</span>
-                            <div className="flex items-center gap-1.5 flex-shrink-0 ml-1">
-                                <Button
-                                    size="sm"
-                                    variant="outline"
-                                    onClick={() => { setAiResponse(""); setUserInput(""); }}
-                                    disabled={isGenerating}
-                                    title="Start over"
-                                >
-                                    <RefreshCw className="w-3.5 h-3.5" />
-                                    <span className="hidden sm:inline">New</span>
-                                </Button>
-                                <Button
-                                    size="sm"
-                                    onClick={handleSave}
-                                    disabled={isGenerating || isSaving || !aiResponse}
-                                >
-                                    <Save className="w-3.5 h-3.5" />
-                                    <span className="hidden sm:inline">{isSaving ? "…" : "Save"}</span>
-                                </Button>
-                            </div>
-                        </div>
-
-                        {/* Body — streams in like ChatGPT */}
-                        <div className="overflow-y-auto bg-surface text-sm text-foreground/90 leading-relaxed px-6 py-5 max-h-[600px]">
-                            {aiResponse ? (
-                                <MarkdownMath isStreaming={isGenerating}>{aiResponse}</MarkdownMath>
-                            ) : (
-                                <div className="flex items-center gap-2 text-sm text-muted-foreground py-3">
-                                    <Sparkles className="w-4 h-4 animate-pulse text-primary" />
-                                    Thinking…
-                                </div>
-                            )}
-                        </div>
-                    </motion.div>
-                )}
-            </AnimatePresence>
+            {/* Generation output — portals into the page sidebar on large
+                screens (replacing the tips/examples card while showing);
+                renders inline below the form on mobile / standalone. */}
+            {inSidebar ? createPortal(resultPanel, sidePanel.node) : resultPanel}
 
             {/* History */}
             {savedResults.length > 0 && (
