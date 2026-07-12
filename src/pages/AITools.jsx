@@ -401,8 +401,11 @@ function AIToolsInner() {
           </div>
         </div>
 
-        <div className="px-4 sm:px-6 lg:px-8 py-6 w-full max-w-6xl mx-auto">
-          <div className="grid grid-cols-1 lg:grid-cols-[1fr_320px] gap-6">
+        {/* While a generation panel is showing, the right column expands from
+            the narrow 320px tips rail to ~half the screen so the output is
+            comfortably readable. Both class sets are static strings (JIT). */}
+        <div className={`px-4 sm:px-6 lg:px-8 py-6 w-full mx-auto ${sidePanelActive ? 'max-w-[1400px]' : 'max-w-6xl'}`}>
+          <div className={`grid grid-cols-1 gap-6 ${sidePanelActive ? 'lg:grid-cols-[1fr_1.2fr]' : 'lg:grid-cols-[1fr_320px]'}`}>
             {/* Main column: tool + below-tool discovery row */}
             <div className="space-y-6 min-w-0">
               <div onMouseDownCapture={handleToolInteraction} onKeyDownCapture={handleToolInteraction}>

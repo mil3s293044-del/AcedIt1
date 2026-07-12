@@ -299,8 +299,8 @@ Provide expert VCE English guidance following the 2024–2027 Study Design. Use 
                     exit={{ opacity: 0 }}
                     className="card-soft overflow-hidden"
                 >
-                    {/* Header — compact in the sidebar, roomy inline */}
-                    <div className={`flex items-center gap-2 border-b border-border bg-surface flex-shrink-0 ${inSidebar ? "px-4 py-3" : "gap-3 px-5 py-4"}`}>
+                    {/* Header */}
+                    <div className="flex items-center gap-3 px-5 py-4 border-b border-border bg-surface flex-shrink-0">
                         <div className="w-1 h-8 bg-primary rounded-full flex-shrink-0" />
                         <div className="flex-1 min-w-0">
                             <p className="font-display font-extrabold text-foreground text-sm leading-tight truncate">Expert VCE Feedback</p>
@@ -316,7 +316,7 @@ Provide expert VCE English guidance following the 2024–2027 Study Design. Use 
                                 title="Start over"
                             >
                                 <RefreshCw className="w-3.5 h-3.5" />
-                                {!inSidebar && <span className="hidden sm:inline">New</span>}
+                                <span className="hidden sm:inline">New</span>
                             </Button>
                             <Button
                                 size="sm"
@@ -324,7 +324,7 @@ Provide expert VCE English guidance following the 2024–2027 Study Design. Use 
                                 disabled={isGenerating || isSaving || !aiResponse}
                             >
                                 <Save className="w-3.5 h-3.5" />
-                                {!inSidebar && <span className="hidden sm:inline">{isSaving ? "…" : "Save"}</span>}
+                                <span className="hidden sm:inline">{isSaving ? "…" : "Save"}</span>
                             </Button>
                             <button
                                 onClick={handleClosePanel}
@@ -338,7 +338,7 @@ Provide expert VCE English guidance following the 2024–2027 Study Design. Use 
                     </div>
 
                     {/* Body — streams in like ChatGPT */}
-                    <div className={`overflow-y-auto bg-surface text-sm text-foreground/90 leading-relaxed ${inSidebar ? "px-4 py-4 max-h-[70vh]" : "px-6 py-5 max-h-[600px]"}`}>
+                    <div className={`overflow-y-auto bg-surface text-sm text-foreground/90 leading-relaxed px-6 py-5 ${inSidebar ? "max-h-[75vh]" : "max-h-[600px]"}`}>
                         {aiResponse ? (
                             <MarkdownMath isStreaming={isGenerating}>{aiResponse}</MarkdownMath>
                         ) : (
