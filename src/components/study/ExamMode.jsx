@@ -1,5 +1,10 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import { base44 } from "@/api/base44Client";
+import { useToast } from "@/components/ui/use-toast";
+import { FEATURES, checkLiveTier } from "@/lib/tierAccess";
+import { getExaminerPrompt, getLatexRules } from "@/lib/subjectExaminerPrompts";
+import { recordStudyAndGetStreak } from "@/components/shared/streakHelpers";
+import { fireXPFeedback } from "@/components/ranked/XPFeedback";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -48,6 +53,13 @@ const TIME_OPTIONS = [
 
 const COUNT_OPTIONS = [10, 20, 30, 50];
 
+// Static class strings for AI marking verdicts (Tailwind JIT-safe).
+const AI_VERDICT_CLASSES = {
+  correct:   { box: "bg-primary/5 border-primary/20",  text: "text-primary",  label: "Full marks" },
+  partial:   { box: "bg-xp/5 border-xp/20",            text: "text-xp",       label: "Partial credit" },
+  incorrect: { box: "bg-streak/5 border-streak/20",    text: "text-streak",   label: "Marks lost" },
+};
+
 // Static lookup for source pill colours in question header / hero stats
 const SOURCE_PILL = {
   Flashcards: "bg-chart-3/10 text-chart-3",
@@ -95,6 +107,8 @@ export default function ExamMode({ userSubjects }) {
   const [showQuestionMap, setShowQuestionMap] = useState(false);
   const hasSubmitted = useRef(false);
 
+  const [isAIMarking, setIsAIMarking] = useState(false);
+  const { toast } = useToast();
   const [config, setConfig] = useState({
     subject: "all",
     questionCount: 20,
@@ -189,6 +203,98 @@ export default function ExamMode({ userSubjects }) {
     hasSubmitted.current = true;
     setSubmittedAt(Date.now());
     setPhase("results");
+    // A finished mock counts as real study: record streak + mini_test XP
+    // (self-marks arriving later don't change the award — idempotent key).
+    recordStudyAndGetStreak().catch(() => {});
+    const { score, total, pending } = computeScore();
+    if (user?.email && total - pending > 0) {
+      base44.functions.
+      invoke("awardXP", {
+        source: "mini_test",
+        event_key: `mini_test_${user.email}_${examStartTime || Date.now()}`,
+        score
+      }).
+      then((res) => fireXPFeedback(res?.data ?? res, "mini_test")).
+      catch(() => {});
+    }
+  };
+
+  // AI-mark every open question that has a typed answer. Verdicts auto-fill
+  // the self-mark (full marks -> correct, otherwise incorrect) but the manual
+  // buttons stay as an override.
+  const handleAIMark = async () => {
+    const openQs = examQuestions.filter(
+      (q) => q.type === "open" && (answers[q.id]?.typed || "").trim().length > 0
+    );
+    if (!openQs.length) {
+      toast({ title: "Nothing to mark", description: "No written answers found in this mock." });
+      return;
+    }
+    const access = await checkLiveTier(FEATURES.QUIZ_AI_MARK);
+    if (!access.allowed) {
+      toast({
+        title: access.upgradeRequired ? "Premium feature" : "Daily limit reached",
+        description: `${access.reason} You can still self-mark below.`,
+        variant: "destructive"
+      });
+      return;
+    }
+    setIsAIMarking(true);
+    try {
+      const subjects = [...new Set(openQs.map((q) => q.subject))];
+      const header = subjects.length === 1 ? getExaminerPrompt(subjects[0]) : getLatexRules();
+      const response = await base44.integrations.Core.InvokeLLM({
+        feature: "quiz_ai_mark",
+        prompt: `${header}
+
+Mark these VCE mock-exam short answers against their model answers, using VCAA marking conventions. Be strict but fair: "correct" only if the response would earn full marks, "partial" if it would earn some marks, "incorrect" otherwise. Give one or two sentences of feedback each — name exactly what earns or loses the marks.
+
+${openQs.map((q, i) => `Q${i + 1} [${q.subject}]:
+Question: ${q.question}
+Model Answer: ${q.modelAnswer || "Not provided — judge on accuracy and command-term depth"}
+Student Answer: ${answers[q.id].typed}`).join("\n---\n")}
+
+Return exactly ${openQs.length} results, in order.`,
+        response_json_schema: {
+          type: "object",
+          properties: {
+            results: {
+              type: "array",
+              items: {
+                type: "object",
+                properties: {
+                  verdict: { type: "string", enum: ["correct", "partial", "incorrect"] },
+                  feedback: { type: "string" }
+                },
+                required: ["verdict", "feedback"]
+              }
+            }
+          },
+          required: ["results"]
+        }
+      });
+      const marked = response?.results || [];
+      if (!marked.length) throw new Error("The examiner returned no results — try again.");
+      setAnswers((prev) => {
+        const next = { ...prev };
+        openQs.forEach((q, i) => {
+          const r = marked[i];
+          if (!r) return;
+          next[q.id] = {
+            ...next[q.id],
+            selfMark: r.verdict === "correct",
+            aiVerdict: r.verdict,
+            aiFeedback: r.feedback
+          };
+        });
+        return next;
+      });
+      toast({ title: "✅ Marked by the examiner", description: `${marked.length} answer${marked.length === 1 ? "" : "s"} assessed to VCAA standards.` });
+    } catch (e) {
+      toast({ title: "AI marking unavailable", description: e.message || "You can still self-mark below.", variant: "destructive" });
+    } finally {
+      setIsAIMarking(false);
+    }
   };
 
   const handleSelectMCQ = (qId, idx) => {
@@ -579,7 +685,7 @@ export default function ExamMode({ userSubjects }) {
                         <p className="text-foreground/80 font-semibold text-lg">{grade.label}</p>
                         {results.pending > 0 &&
             <p className="text-muted-foreground text-xs mt-2 bg-surface/70 rounded-full px-3 py-1 inline-block">
-                                {results.pending} open question{results.pending > 1 ? "s" : ""} need self-marking below
+                                {results.pending} open question{results.pending > 1 ? "s" : ""} to mark below — try the AI examiner
                             </p>
             }
                         <div className="grid grid-cols-3 gap-4 mt-6 pt-6 border-t border-border">
@@ -653,13 +759,22 @@ export default function ExamMode({ userSubjects }) {
 
                 {/* Question Review */}
                 <div className="card-soft overflow-hidden">
-                    <div className="px-6 py-4 border-b border-border flex items-center justify-between">
+                    <div className="px-6 py-4 border-b border-border flex items-center justify-between gap-3">
                         <h3 className="font-bold text-foreground text-sm uppercase tracking-wider flex items-center gap-2">
                             <Target className="w-4 h-4 text-chart-3" /> Review Answers
                         </h3>
-                        {results.pending > 0 &&
-            <span className="pill bg-xp/10 text-xp">{results.pending} to mark</span>
-            }
+                        <div className="flex items-center gap-2">
+                            {results.pending > 0 &&
+              <span className="pill bg-xp/10 text-xp hidden sm:inline-block">{results.pending} to mark</span>
+              }
+                            {examQuestions.some((q) => q.type === "open" && (answers[q.id]?.typed || "").trim()) &&
+              <Button onClick={handleAIMark} disabled={isAIMarking} size="sm"
+                className="rounded-xl bg-chart-4 hover:bg-chart-4/90 text-white font-bold gap-1.5 text-xs">
+                                    {isAIMarking ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5" />}
+                                    {isAIMarking ? "Marking…" : "AI examiner marking"}
+                                </Button>
+              }
+                        </div>
                     </div>
                     <div className="divide-y divide-border max-h-[600px] overflow-y-auto">
                         {examQuestions.map((eq, i) => {
@@ -703,6 +818,14 @@ export default function ExamMode({ userSubjects }) {
                         <div className="bg-chart-4/5 rounded-xl p-3 border border-chart-4/20">
                                                             <p className="text-xs text-chart-4 mb-1 font-semibold uppercase tracking-wide">Model Answer</p>
                                                             <p className="text-sm text-foreground">{eq.modelAnswer}</p>
+                                                        </div>
+                        }
+                                                    {a.aiVerdict &&
+                        <div className={`rounded-xl p-3 border ${AI_VERDICT_CLASSES[a.aiVerdict].box}`}>
+                                                            <p className={`text-xs mb-1 font-semibold uppercase tracking-wide flex items-center gap-1.5 ${AI_VERDICT_CLASSES[a.aiVerdict].text}`}>
+                                                                <Sparkles className="w-3 h-3" /> Examiner: {AI_VERDICT_CLASSES[a.aiVerdict].label}
+                                                            </p>
+                                                            <p className="text-sm text-foreground">{a.aiFeedback}</p>
                                                         </div>
                         }
                                                     <div className="flex gap-2">
