@@ -282,6 +282,7 @@ const PORTED_FUNCTIONS = {
   placeDuelSideBet:         '/local-ai/fn/placeDuelSideBet',
   createStudyBet:           '/local-ai/fn/createStudyBet',
   getArenaState:            '/local-ai/fn/getArenaState',
+  getMyStakes:              '/local-ai/fn/getMyStakes',
   // Support (Phase 3b-7):
   sendSupportTicket:        '/local-ai/fn/sendSupportTicket',
   // Marketing — public top-of-funnel email capture (no auth required):

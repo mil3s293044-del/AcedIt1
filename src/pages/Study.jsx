@@ -12,8 +12,11 @@ import {
     Flame,
     Sparkles,
     Timer,
-    Layers
+    Layers,
+    Swords
 } from "lucide-react";
+import { useStakes } from "@/components/arena/useStakes";
+import { METRICS as DUEL_METRICS, firstName as rivalFirstName } from "@/components/arena/arenaMeta";
 import { Button } from "@/components/ui/button";
 import { format, isToday, startOfWeek, parseISO, differenceInDays } from "date-fns";
 
@@ -93,6 +96,13 @@ export default function Study() {
     const [flashcards, setFlashcards] = useState([]);
     const [assessments, setAssessments] = useState([]);
     const [activeTab, setActiveTab] = useState("pomodoro");
+
+    // Deep links: /Study?tab=spaced_repetition etc. — duel shortcuts land on
+    // the exact technique that scores their yardstick.
+    useEffect(() => {
+        const t = new URLSearchParams(window.location.search).get('tab');
+        if (t && TECHNIQUES.some(x => x.id === t)) setActiveTab(t);
+    }, []);
     const [isLoading, setIsLoading] = useState(true);
     const [authError, setAuthError] = useState(false);
 
@@ -331,7 +341,7 @@ export default function Study() {
     const hour = new Date().getHours();
     const hasStudiedAnything = recentSessions.length > 0 || studySessions.length > 0;
 
-    const coachLine = getCoachLine({
+    const baseCoachLine = getCoachLine({
         name: firstName,
         hour,
         todayMins,
@@ -342,8 +352,62 @@ export default function Study() {
         urgentDays: nextDeadline?.days ?? null,
     });
 
+    // ─── Live stakes feed the coach ────────────────────────────────────────────
+    // When a duel is in its final 24 hours, the coach talks stakes — the most
+    // urgent duel wins the mic.
+    const { stakes } = useStakes();
+    const duelUrgency = useMemo(() => {
+        const me = stakes?.me;
+        if (!me) return null;
+        const info = (stakes.duels || [])
+            .filter(d => d.status === "active" && d.live_scores)
+            .map(d => {
+                const isChallenger = d.challenger_email === me;
+                const rivalEmail = isChallenger ? d.opponent_email : d.challenger_email;
+                const mine = d.live_scores[me] || 0;
+                const theirs = d.live_scores[rivalEmail] || 0;
+                return {
+                    duel: d,
+                    rival: rivalFirstName(isChallenger ? d.opponent_name : d.challenger_name),
+                    mine, theirs,
+                    gap: Math.abs(mine - theirs),
+                    unit: DUEL_METRICS[d.metric]?.unit || "XP",
+                    hoursLeft: Math.max(0, Math.round((new Date(d.ends_at) - Date.now()) / 3600000)),
+                };
+            })
+            .sort((a, b) => a.hoursLeft - b.hoursLeft);
+        return info[0] || null;
+    }, [stakes]);
+
+    let duelCoachLine = null;
+    if (duelUrgency && duelUrgency.hoursLeft <= 24) {
+        const { rival, mine, theirs, gap, unit, hoursLeft } = duelUrgency;
+        const hrs = hoursLeft <= 1 ? "under an hour" : `${hoursLeft}h`;
+        if (mine < theirs) duelCoachLine = `${rival} leads by ${gap} ${unit} with ${hrs} left — one good session flips it.`;
+        else if (mine === theirs) duelCoachLine = `Dead level with ${rival}, ${hrs} on the clock — the next session decides it.`;
+        else duelCoachLine = `You lead ${rival} by ${gap} ${unit} with ${hrs} left — keep the pot in sight.`;
+    }
+    const coachLine = duelCoachLine || baseCoachLine;
+
     // ─── Featured "Suggested today" panel ──────────────────────────────────────
     const featured = useMemo(() => {
+        // A duel entering its final day outranks everything except an exam —
+        // and it points at the technique that actually scores its yardstick.
+        const duelTab = { flashcards: "spaced_repetition", study_minutes: "pomodoro", xp: "pomodoro" };
+        if (duelUrgency && duelUrgency.hoursLeft <= 24 && duelUrgency.mine <= duelUrgency.theirs
+            && duelTab[duelUrgency.duel.metric] && !(nextDeadline && nextDeadline.days <= 1)) {
+            return {
+                label: "Duel on the line",
+                title: `Your duel with ${duelUrgency.rival} ends in ${duelUrgency.hoursLeft <= 1 ? "under an hour" : `${duelUrgency.hoursLeft}h`}.`,
+                sub: duelUrgency.mine === duelUrgency.theirs
+                    ? "It's dead level. The next session takes the pot."
+                    : `${duelUrgency.gap} ${duelUrgency.unit} between you and the pot.`,
+                cta: "Defend your ante",
+                tab: duelTab[duelUrgency.duel.metric],
+                accent: "chart-4",
+                icon: Swords,
+            };
+        }
         if (nextDeadline && nextDeadline.days <= 7) {
             return {
                 label: nextDeadline.days === 0 ? "Exam today" : `Exam in ${nextDeadline.days} day${nextDeadline.days === 1 ? '' : 's'}`,
@@ -408,7 +472,7 @@ export default function Study() {
             accent: "primary",
             icon: Sparkles,
         };
-    }, [nextDeadline, dueFlashcardCount, todayMins, dominantRecentTechnique]);
+    }, [nextDeadline, dueFlashcardCount, todayMins, dominantRecentTechnique, duelUrgency]);
 
     // Diverse "suggested today" options — one per technique, each with a
     // dynamic, context-aware one-liner. The smart top pick (featured.tab) gets

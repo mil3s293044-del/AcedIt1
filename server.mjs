@@ -4100,6 +4100,110 @@ app.post("/local-ai/fn/createStudyBet", async (req, res) => {
   }
 });
 
+// Shared arena core: my duels (lifecycle + live scores) and my back-yourself
+// bets (settle-on-hit / expire) with idempotent lazy settlement. Used by both
+// getArenaState (full Compete page) and getMyStakes (global stakes strip) so
+// there is exactly one settlement path.
+async function loadMyArenaCore(me, authHeader) {
+  const nowIso = new Date().toISOString();
+  const freshlySettled = [];
+  const since = new Date(Date.now() - 30 * 24 * 3600 * 1000).toISOString();
+
+  const { data: mineRaw, error: duelErr } = await supabaseAdmin
+    .from("study_duels").select("*")
+    .or(`challenger_email.eq.${me},opponent_email.eq.${me}`)
+    .gte("created_date", since)
+    .order("created_date", { ascending: false }).limit(30);
+  if (duelErr) {
+    // Table missing → migration 0021 not applied yet. Degrade gracefully.
+    if (/study_duels/.test(duelErr.message || "")) return { setup_required: true };
+    throw duelErr;
+  }
+
+  // Lazy lifecycle: expire stale invites (48h), settle finished duels.
+  const duels = [];
+  for (const duel of mineRaw || []) {
+    if (duel.status === "pending" && new Date(duel.created_date) < new Date(Date.now() - 48 * 3600 * 1000)) {
+      await supabaseAdmin.from("study_duels").update({ status: "expired" }).eq("id", duel.id).eq("status", "pending");
+      await creditXPWithAudit(duel.challenger_email, duel.ante_xp, `duel_refund_${duel.id}_challenger`, "duel_refund", { duel_id: duel.id, reason: "expired" });
+      duels.push({ ...duel, status: "expired" });
+    } else if (duel.status === "active" && duel.ends_at && duel.ends_at <= nowIso) {
+      const settled = await settleDuelNow(duel, authHeader);
+      duels.push(settled);
+      freshlySettled.push({ type: "duel", id: settled.id, winner_email: settled.winner_email, pot: settled.ante_xp * 2 });
+    } else {
+      duels.push(duel);
+    }
+  }
+
+  // Live scores for my still-active duels.
+  await Promise.all(duels.filter((d) => d.status === "active").map(async (d) => {
+    const [cs, os] = await Promise.all([
+      computeMetricValue(d.challenger_email, d.metric, d.starts_at, nowIso),
+      computeMetricValue(d.opponent_email, d.metric, d.starts_at, nowIso),
+    ]);
+    d.live_scores = { [d.challenger_email]: cs, [d.opponent_email]: os };
+  }));
+
+  // Back-yourself bets: settle wins the moment the target is hit, losses
+  // once time runs out; report live progress for the rest.
+  const { data: betsRaw } = await supabaseAdmin
+    .from("study_bets").select("*").eq("created_by", me)
+    .gte("created_date", since).order("created_date", { ascending: false }).limit(20);
+  const bets = [];
+  for (const bet of betsRaw || []) {
+    if (bet.status !== "active") { bets.push(bet); continue; }
+    const value = await computeMetricValue(me, bet.metric, bet.starts_at, nowIso);
+    if (value >= bet.target) {
+      const payout = Math.floor(bet.stake_xp * (Number(bet.multiplier) || STUDY_BET_MULT));
+      await supabaseAdmin.from("study_bets")
+        .update({ status: "won", settled_at: nowIso, final_value: value })
+        .eq("id", bet.id).eq("status", "active");
+      try {
+        await callLocalFn("awardXP", {
+          source: "bet_win",
+          event_key: `studybet_win_${bet.id}`,
+          flat_xp: payout,
+          target_email: me,
+        }, authHeader);
+      } catch (e) { console.error("[arenaCore] study bet payout failed:", e?.message); }
+      bets.push({ ...bet, status: "won", final_value: value, progress: value });
+      freshlySettled.push({ type: "study_bet", id: bet.id, won: true, payout });
+    } else if (bet.ends_at <= nowIso) {
+      await supabaseAdmin.from("study_bets")
+        .update({ status: "lost", settled_at: nowIso, final_value: value })
+        .eq("id", bet.id).eq("status", "active");
+      bets.push({ ...bet, status: "lost", final_value: value, progress: value });
+      freshlySettled.push({ type: "study_bet", id: bet.id, won: false });
+    } else {
+      bets.push({ ...bet, progress: value });
+    }
+  }
+
+  return { duels, bets, freshlySettled };
+}
+
+// ─── getMyStakes — slim feed for the always-on stakes strip ────────────────
+app.post("/local-ai/fn/getMyStakes", async (req, res) => {
+  const user = await authenticateRequest(req);
+  if (!user) return res.status(401).json({ error: "Unauthorized" });
+  if (!supabaseAdmin) return res.status(500).json({ error: "Supabase admin not configured" });
+  try {
+    const core = await loadMyArenaCore(user.email, req.headers.authorization || "");
+    if (core.setup_required) return res.json({ setup_required: true, duels: [], bets: [] });
+    return res.json({
+      success: true,
+      me: user.email,
+      duels: core.duels.filter((d) => d.status === "active" || d.status === "pending"),
+      bets: core.bets.filter((b) => b.status === "active"),
+      freshly_settled: core.freshlySettled,
+    });
+  } catch (err) {
+    console.error("[getMyStakes] error:", err);
+    return res.status(500).json({ error: err?.message || String(err) });
+  }
+});
+
 // ─── getArenaState — one call renders the whole arena ──────────────────────
 // Returns my duels + spectatable friends' duels (with live scores), my
 // back-yourself bets (with live progress), balance, and a momentum ticker.
@@ -4111,8 +4215,12 @@ app.post("/local-ai/fn/getArenaState", async (req, res) => {
   try {
     const me = user.email;
     const authHeader = req.headers.authorization || "";
-    const nowIso = new Date().toISOString();
-    const freshlySettled = [];
+
+    const core = await loadMyArenaCore(me, authHeader);
+    if (core.setup_required) {
+      return res.json({ setup_required: true, duels: [], spectator_duels: [], bets: [], ticker: [], balance: null });
+    }
+    const { duels, bets, freshlySettled } = core;
 
     // Friends (accepted, either direction) for spectatable duels.
     const [{ data: fA }, { data: fB }] = await Promise.all([
@@ -4124,20 +4232,6 @@ app.post("/local-ai/fn/getArenaState", async (req, res) => {
       ...(fB || []).map((f) => f.requester_email),
     ].filter(Boolean);
 
-    // My duels (any status, last 30 days) + friends' live duels.
-    const since = new Date(Date.now() - 30 * 24 * 3600 * 1000).toISOString();
-    const { data: mineRaw, error: duelErr } = await supabaseAdmin
-      .from("study_duels").select("*")
-      .or(`challenger_email.eq.${me},opponent_email.eq.${me}`)
-      .gte("created_date", since)
-      .order("created_date", { ascending: false }).limit(30);
-    if (duelErr) {
-      // Table missing → migration 0021 not applied yet. Degrade gracefully.
-      if (/study_duels/.test(duelErr.message || "")) {
-        return res.json({ setup_required: true, duels: [], spectator_duels: [], bets: [], ticker: [], balance: null });
-      }
-      throw duelErr;
-    }
     let spectatorDuels = [];
     if (friendEmails.length) {
       const list = friendEmails.map((e) => `challenger_email.eq.${e},opponent_email.eq.${e}`).join(",");
@@ -4148,66 +4242,16 @@ app.post("/local-ai/fn/getArenaState", async (req, res) => {
       );
     }
 
-    // Lazy lifecycle: expire stale invites (48h), settle finished duels.
-    const duels = [];
-    for (const duel of mineRaw || []) {
-      if (duel.status === "pending" && new Date(duel.created_date) < new Date(Date.now() - 48 * 3600 * 1000)) {
-        await supabaseAdmin.from("study_duels").update({ status: "expired" }).eq("id", duel.id).eq("status", "pending");
-        await creditXPWithAudit(duel.challenger_email, duel.ante_xp, `duel_refund_${duel.id}_challenger`, "duel_refund", { duel_id: duel.id, reason: "expired" });
-        duels.push({ ...duel, status: "expired" });
-      } else if (duel.status === "active" && duel.ends_at && duel.ends_at <= nowIso) {
-        const settled = await settleDuelNow(duel, authHeader);
-        duels.push(settled);
-        freshlySettled.push({ type: "duel", id: settled.id, winner_email: settled.winner_email, pot: settled.ante_xp * 2 });
-      } else {
-        duels.push(duel);
-      }
-    }
-
-    // Live scores for every still-active duel I can see.
-    const liveDuels = [...duels, ...spectatorDuels].filter((d) => d.status === "active");
-    await Promise.all(liveDuels.map(async (d) => {
+    // Live scores for spectator duels (my own are computed in the core).
+    const nowIso = new Date().toISOString();
+    await Promise.all(spectatorDuels.filter((d) => d.status === "active").map(async (d) => {
       const [cs, os] = await Promise.all([
         computeMetricValue(d.challenger_email, d.metric, d.starts_at, nowIso),
         computeMetricValue(d.opponent_email, d.metric, d.starts_at, nowIso),
       ]);
       d.live_scores = { [d.challenger_email]: cs, [d.opponent_email]: os };
     }));
-
-    // Back-yourself bets: settle wins the moment the target is hit, losses
-    // once time runs out; report live progress for the rest.
-    const { data: betsRaw } = await supabaseAdmin
-      .from("study_bets").select("*").eq("created_by", me)
-      .gte("created_date", since).order("created_date", { ascending: false }).limit(20);
-    const bets = [];
-    for (const bet of betsRaw || []) {
-      if (bet.status !== "active") { bets.push(bet); continue; }
-      const value = await computeMetricValue(me, bet.metric, bet.starts_at, nowIso);
-      if (value >= bet.target) {
-        const payout = Math.floor(bet.stake_xp * (Number(bet.multiplier) || STUDY_BET_MULT));
-        await supabaseAdmin.from("study_bets")
-          .update({ status: "won", settled_at: nowIso, final_value: value })
-          .eq("id", bet.id).eq("status", "active");
-        try {
-          await callLocalFn("awardXP", {
-            source: "bet_win",
-            event_key: `studybet_win_${bet.id}`,
-            flat_xp: payout,
-            target_email: me,
-          }, authHeader);
-        } catch (e) { console.error("[getArenaState] study bet payout failed:", e?.message); }
-        bets.push({ ...bet, status: "won", final_value: value, progress: value });
-        freshlySettled.push({ type: "study_bet", id: bet.id, won: true, payout });
-      } else if (bet.ends_at <= nowIso) {
-        await supabaseAdmin.from("study_bets")
-          .update({ status: "lost", settled_at: nowIso, final_value: value })
-          .eq("id", bet.id).eq("status", "active");
-        bets.push({ ...bet, status: "lost", final_value: value, progress: value });
-        freshlySettled.push({ type: "study_bet", id: bet.id, won: false });
-      } else {
-        bets.push({ ...bet, progress: value });
-      }
-    }
+    const liveDuels = [...duels, ...spectatorDuels].filter((d) => d.status === "active");
 
     // Momentum ticker: recent study events from everyone in a live duel.
     let ticker = [];

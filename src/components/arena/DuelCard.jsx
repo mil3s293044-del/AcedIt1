@@ -5,11 +5,21 @@
  */
 import React, { useState } from "react";
 import { motion } from "framer-motion";
+import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
-import { Swords, Zap, Trophy, Loader2, TrendingUp } from "lucide-react";
+import { Swords, Zap, Trophy, Loader2, TrendingUp, ArrowRight } from "lucide-react";
 import { base44 } from "@/api/base44Client";
 import { useToast } from "@/components/ui/use-toast";
 import { METRICS, SIDE_BET_OPTIONS, SIDE_BET_MULT, timeLeft, firstName } from "./arenaMeta";
+
+// The fastest study surface for each yardstick — the duel tells you how to
+// fight it.
+const METRIC_ROUTE = {
+    xp:            { to: "/Study",                      label: "Stack XP with a study session" },
+    flashcards:    { to: "/Study?tab=spaced_repetition", label: "Clear flashcards" },
+    study_minutes: { to: "/Study?tab=pomodoro",          label: "Start a pomodoro" },
+    quiz_marks:    { to: "/Quizzes",                     label: "Take a quiz" },
+};
 
 // Static class strings (Tailwind JIT-safe).
 const SIDE_CLASSES = {
@@ -124,6 +134,17 @@ export default function DuelCard({ duel, currentUserEmail, spectator = false, ba
                         pct={(oScore / maxScore) * 100}
                     />
                 </div>
+
+                {/* Fight-it shortcut — participants only, while live */}
+                {!spectator && duel.status === "active" && METRIC_ROUTE[duel.metric] && (
+                    <Link to={METRIC_ROUTE[duel.metric].to}
+                        className={`mt-3 flex items-center justify-between rounded-xl px-3 py-2.5 text-xs font-bold border-2 transition-all group ${
+                            t?.urgent ? "border-streak/40 bg-streak/5 text-streak hover:bg-streak/10" : "border-primary/30 bg-primary/5 text-primary hover:bg-primary/10"
+                        }`}>
+                        <span>⚡ {METRIC_ROUTE[duel.metric].label}</span>
+                        <ArrowRight className="w-3.5 h-3.5 group-hover:translate-x-0.5 transition-transform" />
+                    </Link>
+                )}
 
                 {/* Settled result */}
                 {duel.status === "settled" && (

@@ -13,6 +13,7 @@ import { base44 } from "@/api/base44Client";
 import UpgradeModal from "@/components/shared/UpgradeModal";
 import XPFeedback from "@/components/ranked/XPFeedback";
 import StreakCelebration from "@/components/ranked/StreakCelebration";
+import StakesStrip from "@/components/arena/StakesStrip";
 import TopNav from "@/components/layout/TopNav";
 import BottomNav from "@/components/layout/BottomNav";
 import SideRail from "@/components/layout/SideRail";
@@ -267,6 +268,7 @@ export default function Layout({ children, currentPageName }) {
             </AnimatePresence>
 
             <main className="text-gray-900 w-full pb-20 md:pb-0 md:pl-16">
+                <StakesStrip />
                 {children}
             </main>
 
