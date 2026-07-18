@@ -972,39 +972,10 @@ Return valid JSON only.`,
                         quiz={selectedQuiz}
                         mode={quizMode}
                         timeLimitMs={quizTimeLimitMs}
-                        onComplete={async (results) => {
-                            // "Retry wrong" runs are pure practice — don't save an
-                            // attempt or award XP (would skew stats / be farmable).
-                            if (selectedQuiz._isRetry) { await loadData(); return; }
-                            try {
-                                await base44.entities.QuizAttempt.create({
-                                    quiz_id: selectedQuiz.id,
-                                    quiz_title: selectedQuiz.title,
-                                    quiz_category: selectedQuiz.category || "subject_content",
-                                    score: results.score,
-                                    questions_total: results.total,
-                                    questions_correct: results.correct,
-                                    time_taken: results.timeTaken,
-                                    user_answers: results.userAnswers,
-                                    date: new Date().toISOString().split('T')[0]
-                                });
-
-                                // Award XP: 2 XP per mark/correct answer
-                                const eventKey = `quiz_${selectedQuiz.id}_${Date.now()}`;
-                                await base44.functions.invoke('awardXP', {
-                                    source: 'quiz',
-                                    event_key: eventKey,
-                                    quiz_score: results.score,
-                                    questions_total: results.total,
-                                    questions_correct: results.correct,
-                                    total_marks: results.totalMarks || 0,
-                                    time_taken_secs: results.timeTaken,
-                                });
-
-                                await loadData();
-                            } catch (error) {
-                                console.error("Error saving quiz attempt:", error);
-                            }
+                        onComplete={async () => {
+                            // QuizPlayer owns attempt-saving and the XP award
+                            // (idempotent via event_key) — this only refreshes.
+                            await loadData();
                         }}
                         onExit={async () => {
                             setIsPlaying(false);

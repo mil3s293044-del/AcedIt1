@@ -17,6 +17,7 @@ import { base44 } from "@/api/base44Client";
 import { useToast } from "@/components/ui/use-toast";
 import { isPremium } from "@/components/shared/subscriptionHelpers";
 import HelpButton from "@/components/shared/HelpButton";
+import FriendsLeaderboard from "@/components/friends/FriendsLeaderboard";
 
 // ── Coach voice (chill + motivational, social) ────────────────────────────
 function getCoachLine({ name, hour, friendCount, pendingCount, sharedCount }) {
@@ -659,9 +660,10 @@ export default function Friends() {
                 {/* ── Main Tabs ──────────────────────────────────────── */}
                 <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.15 }}>
                     <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-5">
-                        <TabsList className="grid w-full grid-cols-4 h-auto p-1.5 rounded-2xl bg-surface border-2 border-border shadow-soft">
+                        <TabsList className="grid w-full grid-cols-5 h-auto p-1.5 rounded-2xl bg-surface border-2 border-border shadow-soft">
                             {[
                                 { value: "friends", label: "Friends", icon: Users },
+                                { value: "ladder", label: "Ladder", icon: Trophy },
                                 { value: "requests", label: "Requests", icon: Inbox, count: pendingRequests.length },
                                 { value: "shared", label: "Shared", icon: Sparkles, count: totalShared },
                                 { value: "sent", label: "Sent", icon: Send },
@@ -729,6 +731,33 @@ export default function Friends() {
                                         </motion.div>
                                     ))}
                                 </div>
+                            )}
+                        </TabsContent>
+
+                        {/* Ladder Tab — season-XP ranking of you + friends */}
+                        <TabsContent value="ladder" className="mt-4">
+                            {isLoading ? (
+                                <div className="space-y-3">
+                                    {[1, 2, 3].map(i => <FriendSkeleton key={i} />)}
+                                </div>
+                            ) : friends.length === 0 ? (
+                                <div className="text-center py-16">
+                                    <div className="w-16 h-16 bg-xp/10 rounded-3xl flex items-center justify-center mx-auto mb-4">
+                                        <Trophy className="w-8 h-8 text-xp" />
+                                    </div>
+                                    <h3 className="font-bold text-foreground text-lg mb-1">The ladder needs rivals</h3>
+                                    <p className="text-muted-foreground text-sm mb-4">Add a friend and see who tops the season.</p>
+                                    <Button onClick={() => setShowAddFriend(true)}
+                                        className="bg-xp hover:bg-xp/90 text-white rounded-2xl gap-2">
+                                        <UserPlus className="w-4 h-4" /> Add a Friend
+                                    </Button>
+                                </div>
+                            ) : (
+                                <FriendsLeaderboard
+                                    friends={friends}
+                                    currentUserEmail={user?.email}
+                                    currentUserName={userProfile?.display_name || user?.full_name || user?.email}
+                                />
                             )}
                         </TabsContent>
 

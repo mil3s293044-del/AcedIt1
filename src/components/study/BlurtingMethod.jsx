@@ -11,7 +11,7 @@ import { format } from "date-fns";
 import { useToast } from "@/components/ui/use-toast";
 import { base44 } from "@/api/base44Client";
 import { FEATURES, checkLiveTier } from "@/lib/tierAccess";
-import { enhancePromptWithVCEExpert } from "@/components/shared/vceExpertPrompt";
+import { getExaminerPrompt } from "@/lib/subjectExaminerPrompts";
 
 // Static class lookup for AI score pill — Tailwind JIT cannot see interpolated tokens.
 const SCORE_PILL = {
@@ -180,7 +180,9 @@ export default function BlurtingMethod({ onSessionComplete }) {
             }
             const response = await base44.integrations.Core.InvokeLLM({
                 feature: "blurting",
-                prompt: enhancePromptWithVCEExpert(`Evaluate this ${selectedSubject} "blurting" attempt against the source material (${sourceFiles.length} file(s)) using VCE Study Design criteria.
+                prompt: `${getExaminerPrompt(selectedSubject)}
+
+Evaluate this ${selectedSubject} "blurting" attempt against the source material (${sourceFiles.length} file(s)) using VCE Study Design criteria.
 
 Student's Blurted Text:
 ${blurtedText}
@@ -192,7 +194,7 @@ Assess according to VCAA standards:
 4. Accuracy Issues: Any errors that would lose marks in VCAA assessment?
 5. Suggestions: VCE-specific improvements using appropriate metalanguage for SAC/exam prep
 
-Reference Study Design requirements in your feedback.`),
+Reference Study Design requirements in your feedback.`,
                 file_urls: directFiles.length ? directFiles.map(f => f.url) : undefined,
                 response_json_schema: {
                     type: "object",

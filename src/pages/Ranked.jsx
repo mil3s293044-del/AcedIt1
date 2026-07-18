@@ -11,14 +11,12 @@ import AchievementsGallery from '../components/ranked/AchievementsGallery';
 import CompeteScoreCard from '../components/ranked/CompeteScoreCard';
 import { base44 } from "@/api/base44Client";
 import HelpButton from "@/components/shared/HelpButton";
+import { getStreakMultiplier as getStreakMultiplierValue } from "@/components/shared/streakHelpers";
 
+// Display formatting only — the actual ladder lives in streakHelpers so the
+// number shown always matches the multiplier the server applies.
 function getStreakMultiplier(days) {
-    if (days >= 30) return '2.5×';
-    if (days >= 21) return '2.0×';
-    if (days >= 14) return '1.75×';
-    if (days >= 7)  return '1.5×';
-    if (days >= 3)  return '1.2×';
-    return '1.0×';
+    return `${getStreakMultiplierValue(days)}×`;
 }
 
 const TABS = [

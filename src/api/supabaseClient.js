@@ -273,6 +273,9 @@ const PORTED_FUNCTIONS = {
   updateCompetitionProgress:'/local-ai/fn/updateCompetitionProgress',
   settleHoursCompetition:   '/local-ai/fn/settleHoursCompetition',
   resolveScoreWager:        '/local-ai/fn/resolveScoreWager',
+  // PvP over/under bets — escrow + settlement live server-side:
+  placeProgressBet:         '/local-ai/fn/placeProgressBet',
+  submitPredictionResult:   '/local-ai/fn/submitPredictionResult',
   // Support (Phase 3b-7):
   sendSupportTicket:        '/local-ai/fn/sendSupportTicket',
   // Marketing — public top-of-funnel email capture (no auth required):

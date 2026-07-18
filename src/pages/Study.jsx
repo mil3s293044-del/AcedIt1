@@ -42,7 +42,7 @@ const TECHNIQUES = [
     { id: "spaced_repetition", name: "Spaced Repetition", icon: RefreshCw,     tile: "bg-chart-3/10",  text: "text-chart-3",  accent: "chart-3",  blurb: "Flashcards on a schedule that hits memory at the right moment.",               goodFor: "Locking facts in for the long haul." },
     { id: "active_recall",     name: "Active Recall",     icon: Brain,         tile: "bg-chart-4/10",  text: "text-chart-4",  accent: "chart-4",  blurb: "Quiz yourself instead of re-reading notes.",                                   goodFor: "Testing what you actually know vs. what feels familiar." },
     { id: "blurting",          name: "Blurting",          icon: PenTool,       tile: "bg-xp/10",       text: "text-xp",       accent: "xp",       blurb: "Brain-dump everything you remember on a topic, then check.",                   goodFor: "Spotting blind spots before exams hit them first." },
-    { id: "exam",              name: "Revision Mode",     icon: GraduationCap, tile: "bg-streak/10",   text: "text-streak",   accent: "streak",   blurb: "Practice papers and exam-style questions under pressure.",                     goodFor: "Building exam stamina and timing under real conditions." },
+    { id: "exam",              name: "Revision Mode",     icon: GraduationCap, tile: "bg-streak/10",   text: "text-streak",   accent: "streak",   blurb: "A timed mock exam built from your own cards and quizzes.",                     goodFor: "Building exam stamina and timing under real conditions." },
 ];
 
 const ACCENT_THEME = {
@@ -348,7 +348,7 @@ export default function Study() {
             return {
                 label: nextDeadline.days === 0 ? "Exam today" : `Exam in ${nextDeadline.days} day${nextDeadline.days === 1 ? '' : 's'}`,
                 title: `${nextDeadline.title} is coming up`,
-                sub: "Open Revision Mode and run a practice paper.",
+                sub: "Open Revision Mode and run a timed mock from your own material.",
                 cta: "Open Revision Mode",
                 tab: "exam",
                 accent: "streak",
@@ -419,7 +419,7 @@ export default function Study() {
             case "spaced_repetition": return dueFlashcardCount > 0 ? `${dueFlashcardCount} cards due now.` : "Keep your flashcards fresh.";
             case "active_recall":     return "Quiz yourself — beats re-reading.";
             case "blurting":          return "Brain-dump a topic, spot the gaps.";
-            case "exam":              return nextDeadline && nextDeadline.days <= 14 ? `Exam in ${nextDeadline.days}d — run a paper.` : "Practice under exam conditions.";
+            case "exam":              return nextDeadline && nextDeadline.days <= 14 ? `Exam in ${nextDeadline.days}d — run a timed mock.` : "Practice under exam conditions.";
             default:                  return "";
         }
     };

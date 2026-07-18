@@ -12,7 +12,7 @@ import ReactMarkdown from 'react-markdown';
 import { useToast } from "@/components/ui/use-toast";
 import { base44 } from "@/api/base44Client";
 import { FEATURES, checkLiveTier } from "@/lib/tierAccess";
-import { enhancePromptWithVCEExpert } from "@/components/shared/vceExpertPrompt";
+import { getExaminerPrompt } from "@/lib/subjectExaminerPrompts";
 import { recordStudyAndGetStreak } from "@/components/shared/streakHelpers";
 
 // Static class lookups so Tailwind JIT can see every utility.
@@ -304,7 +304,9 @@ export default function ActiveRecall({ onSessionComplete, userSubjects: initialU
             }
             const response = await base44.integrations.Core.InvokeLLM({
                 feature: "active_recall",
-                prompt: enhancePromptWithVCEExpert(`Based on the uploaded study material (${sourceFiles.length} file(s)), create 8-12 active recall questions for ${selectedSubject}${topic ? ` focusing on ${topic}` : ''} that align with VCE Study Design and VCAA assessment criteria.${documentContext}
+                prompt: `${getExaminerPrompt(selectedSubject)}
+
+Based on the uploaded study material (${sourceFiles.length} file(s)), create 8-12 active recall questions for ${selectedSubject}${topic ? ` focusing on ${topic}` : ''} that align with VCE Study Design and VCAA assessment criteria.${documentContext}
 
 CRITICAL - Use proper VCE command terms:
 - IDENTIFY/STATE questions (require brief facts only)
@@ -317,7 +319,7 @@ Questions should:
 - Test understanding at different VCAA cognitive levels
 - Use VCE-appropriate metalanguage
 - Be specific to the document content
-- Help identify gaps in Study Design requirements`),
+- Help identify gaps in Study Design requirements`,
                 file_urls: directFiles.length ? directFiles.map(f => f.url) : undefined,
                 response_json_schema: {
                     type: "object",
@@ -445,7 +447,9 @@ Questions should:
             const allAnswers = userAnswers.map((ans, idx) => `Question ${idx + 1}: ${questions[idx]}\nYour Answer: ${ans}`).join("\n\n");
             const response = await base44.integrations.Core.InvokeLLM({
                 feature: "active_recall",
-                prompt: enhancePromptWithVCEExpert(`Mark the following ${selectedSubject} student answers according to VCAA standards and the provided source material.${documentContext}
+                prompt: `${getExaminerPrompt(selectedSubject)}
+
+Mark the following ${selectedSubject} student answers according to VCAA standards and the provided source material.${documentContext}
 
 Student Answers:
 ${allAnswers}
@@ -454,7 +458,7 @@ For each answer:
 1. Verdict (Correct, Partially Correct, Incorrect) based on VCAA marking criteria
 2. Feedback: Did the student match the command term requirement?
 3. What would gain/lose marks in a real VCAA exam?
-4. Model Answer showing the expected depth per command term used`),
+4. Model Answer showing the expected depth per command term used`,
                 file_urls: directFiles.length ? directFiles.map(f => f.url) : undefined,
                 response_json_schema: {
                     type: "object",

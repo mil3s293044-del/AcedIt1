@@ -132,11 +132,17 @@ async function authenticateRequest(req) {
 // from updateGoalProgress / completeGoalChallenge, or invokeAI from the
 // goal-AI generators). Forward the caller's auth header so JWT-protected
 // endpoints see the same user.
+// Per-process secret proving a request originated from this server (via
+// callLocalFn). Lets trusted fn-to-fn calls award XP to a target_email other
+// than the caller — e.g. settling competitions/bets pays the actual winners.
+const INTERNAL_FN_KEY = randomUUID();
+
 async function callLocalFn(name, payload, authHeader) {
   const r = await fetch(`http://localhost:${PORT}/local-ai/fn/${name}`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
+      "x-internal-fn-key": INTERNAL_FN_KEY,
       ...(authHeader ? { Authorization: authHeader } : {}),
     },
     body: JSON.stringify(payload || {}),
@@ -1040,6 +1046,8 @@ app.post("/local-ai/fn/updateStreak", async (req, res) => {
     const currentStreak = profile.streak_days || 0;
     const peakStreak = profile.peak_streak || 0;
 
+    const shields = profile.streak_shields || 0;
+
     // Idempotent: if we already counted today, return current state unchanged.
     if (lastStreakDate === todayStr) {
       return res.json({
@@ -1048,19 +1056,41 @@ app.post("/local-ai/fn/updateStreak", async (req, res) => {
         is_new_day: false,
         multiplier: getStreakMultiplier(currentStreak),
         peak_streak: peakStreak,
+        streak_shields: shields,
       });
     }
 
     const yesterdayStr = getPreviousDateStr(todayStr);
+    const dayBeforeYesterdayStr = getPreviousDateStr(yesterdayStr);
     const isConsecutive = lastStreakDate === yesterdayStr;
-    const newStreak = isConsecutive ? currentStreak + 1 : 1;
+    // Shield save: exactly one missed day and a shield in the bank → the
+    // streak survives. Gaps of 2+ days still reset (shields cover a slip,
+    // not an absence).
+    const missedExactlyOneDay = lastStreakDate === dayBeforeYesterdayStr;
+    const shieldUsed = !isConsecutive && missedExactlyOneDay && shields > 0 && currentStreak > 0;
+
+    const newStreak = (isConsecutive || shieldUsed) ? currentStreak + 1 : 1;
     const newPeak = Math.max(peakStreak, newStreak);
 
-    // Write streak update to UserProfile
-    const { error: updateErr } = await supabaseAdmin
+    // Earn a shield at every 7-day milestone (streak must be genuinely
+    // consecutive that day), capped at 2 in the bank.
+    let newShields = shieldUsed ? shields - 1 : shields;
+    const shieldEarned = newStreak > 0 && newStreak % 7 === 0 && newShields < 2;
+    if (shieldEarned) newShields += 1;
+
+    // Write streak update to UserProfile. If migration 0020 (streak_shields)
+    // hasn't been applied yet, retry without the column so streaks never break.
+    let { error: updateErr } = await supabaseAdmin
       .from("user_profiles")
-      .update({ streak_days: newStreak, peak_streak: newPeak, last_streak_date: todayStr })
+      .update({ streak_days: newStreak, peak_streak: newPeak, last_streak_date: todayStr, streak_shields: newShields })
       .eq("id", profile.id);
+    if (updateErr && /streak_shields/.test(updateErr.message || "")) {
+      console.warn("[updateStreak] streak_shields column missing — run migration 0020");
+      ({ error: updateErr } = await supabaseAdmin
+        .from("user_profiles")
+        .update({ streak_days: newStreak, peak_streak: newPeak, last_streak_date: todayStr })
+        .eq("id", profile.id));
+    }
     if (updateErr) throw updateErr;
 
     // Mirror to Leaderboard (best-effort — non-fatal)
@@ -1089,6 +1119,9 @@ app.post("/local-ai/fn/updateStreak", async (req, res) => {
       multiplier: getStreakMultiplier(newStreak),
       peak_streak: newPeak,
       hit_milestone: milestones.includes(newStreak),
+      streak_shields: newShields,
+      shield_used: shieldUsed,
+      shield_earned: shieldEarned,
     });
   } catch (err) {
     console.error("[updateStreak] error:", err);
@@ -1226,8 +1259,9 @@ function calcStudySessionXP(duration_minutes) {
 function calcStreakXP(streak_days) {
   return Math.min(100, 15 + streak_days * 2);
 }
+// Multipliers must match resolveScoreWager (exact ×3 / close ×1.5).
 function calcWagerXP(wagered_xp, accuracy) {
-  if (accuracy === "exact") return Math.round(wagered_xp * 3.5);
+  if (accuracy === "exact") return Math.round(wagered_xp * 3);
   if (accuracy === "close") return Math.round(wagered_xp * 1.5);
   return 0;
 }
@@ -1249,6 +1283,7 @@ const DAILY_CAPS = {
   friend_win:         200,
   competition_bonus:  500,
   wager:              300,
+  bet_win:            2000,
   season_reward:      2000,
   loading_quiz:       50,
 };
@@ -1279,7 +1314,11 @@ app.post("/local-ai/fn/awardXP", async (req, res) => {
     if (!source) return res.status(400).json({ error: "source required" });
     if (!event_key) return res.status(400).json({ error: "event_key required for idempotency" });
 
-    const userEmail = user.email;
+    // target_email is honoured ONLY for server-internal calls (callLocalFn) —
+    // that's how settlement functions pay users other than the caller. A
+    // client passing target_email is ignored and awards to itself.
+    const isInternalCall = req.headers["x-internal-fn-key"] === INTERNAL_FN_KEY;
+    const userEmail = (isInternalCall && body.target_email) ? body.target_email : user.email;
 
     // ── Idempotency check ───────────────────────────────────────────────
     const { data: existing } = await supabaseAdmin
@@ -1376,6 +1415,7 @@ app.post("/local-ai/fn/awardXP", async (req, res) => {
       case "competition_bonus":
       case "season_reward":
       case "loading_quiz":
+      case "bet_win":
         rawXP = flat_xp || 0;
         break;
       case "wager":
@@ -1387,7 +1427,7 @@ app.post("/local-ai/fn/awardXP", async (req, res) => {
 
     // ── Apply streak multiplier (1.0×–2.0×, clamped) ────────────────────
     const safeMultiplier = Math.max(1.0, Math.min(2.0, streak_multiplier || 1.0));
-    if (safeMultiplier > 1.0 && !["streak", "weekly_streak", "wager", "competition_bonus", "season_reward", "friend_win"].includes(source)) {
+    if (safeMultiplier > 1.0 && !["streak", "weekly_streak", "wager", "bet_win", "competition_bonus", "season_reward", "friend_win"].includes(source)) {
       rawXP = Math.round(rawXP * safeMultiplier);
     }
 
@@ -3256,6 +3296,9 @@ app.post("/local-ai/fn/settleHoursCompetition", async (req, res) => {
               source: "competition_bonus",
               event_key: `comp_settle_${competition_id}_${p.email}`,
               flat_xp: bonusXP,
+              // Without this every placement bonus lands on the settling
+              // creator — awardXP credits the caller unless told otherwise.
+              target_email: p.email,
             },
             authHeader,
           );
@@ -3266,6 +3309,26 @@ app.post("/local-ai/fn/settleHoursCompetition", async (req, res) => {
     }
 
     const winner = results[0];
+
+    // Victory bonus — beating rivals head-to-head is the payoff of the social
+    // loop. Flat 100 XP (source friend_win), only when there was real
+    // competition (2+ accepted participants).
+    if (winner && scored.length >= 2) {
+      try {
+        await callLocalFn(
+          "awardXP",
+          {
+            source: "friend_win",
+            event_key: `friend_win_${competition_id}_${winner.email}`,
+            target_email: winner.email,
+          },
+          authHeader,
+        );
+      } catch (e) {
+        console.error(`[settleHoursCompetition] friend_win award error:`, e?.message);
+      }
+    }
+
     const updatedParticipants = participants.map((p) => {
       const s = scored.find((x) => x.p.email === p.email);
       const r = results.find((x) => x.email === p.email);
@@ -3435,6 +3498,243 @@ app.post("/local-ai/fn/resolveScoreWager", async (req, res) => {
     });
   } catch (err) {
     console.error("[resolveScoreWager] error:", err);
+    return res.status(500).json({ error: err?.message || String(err) });
+  }
+});
+
+// ════════════════════════════════════════════════════════════════════════════
+// Progress bets (PvP over/under) — server-side escrow + settlement
+// ════════════════════════════════════════════════════════════════════════════
+// Payout multiplier — keep in sync with WIN_MULT in ScorePredictionBetting.jsx.
+const PROGRESS_BET_WIN_MULT = 1.8;
+
+// Deduct XP from a user (bet escrow), mirrored to the leaderboard and recorded
+// as a negative xp_events row so the audit log stays the source of truth for
+// integrity restores. Idempotent per event_key. Returns false if the user
+// can't cover the amount.
+async function deductXPWithAudit(userEmail, amount, eventKey, source, metadata = {}) {
+  const { data: existing } = await supabaseAdmin
+    .from("xp_events").select("id").eq("event_key", eventKey).eq("user_email", userEmail).limit(1);
+  if (existing?.[0]) return true; // already applied
+
+  const { data: profileRows } = await supabaseAdmin
+    .from("user_profiles").select("*").eq("created_by", userEmail).limit(1);
+  const profile = profileRows?.[0];
+  if (!profile || (profile.total_xp || 0) < amount) return false;
+
+  const newXP = (profile.total_xp || 0) - amount;
+  const newSeasonXP = Math.max(0, (profile.season_xp || 0) - amount);
+  await supabaseAdmin
+    .from("user_profiles")
+    .update({ total_xp: newXP, season_xp: newSeasonXP, current_level: levelFromXP(newXP) })
+    .eq("id", profile.id);
+  try {
+    const { data: lbRows } = await supabaseAdmin
+      .from("leaderboards").select("id").eq("user_email", userEmail).limit(1);
+    if (lbRows?.[0]) {
+      await supabaseAdmin
+        .from("leaderboards")
+        .update({ total_xp: newXP, season_xp: newSeasonXP, last_updated: new Date().toISOString() })
+        .eq("id", lbRows[0].id);
+    }
+  } catch (e) {
+    console.warn(`[${source}] leaderboard mirror failed:`, e?.message);
+  }
+  try {
+    await supabaseAdmin.from("xp_events").insert({
+      created_by: userEmail,
+      event_key: eventKey,
+      user_email: userEmail,
+      source,
+      xp_awarded: -amount,
+      raw_xp: -amount,
+      capped: false,
+      integrity_flags: [],
+      total_xp_after: newXP,
+      season_xp_after: newSeasonXP,
+      level_before: profile.current_level || 1,
+      level_after: levelFromXP(newXP),
+      leveled_up: false,
+      metadata,
+    });
+  } catch (e) {
+    console.warn(`[${source}] xp_events audit insert failed:`, e?.message);
+  }
+  return true;
+}
+
+// ─── placeProgressBet ──────────────────────────────────────────────────────
+// Place an over/under bet on a rival's predicted score. The stake is escrowed
+// (deducted server-side) at placement — no client-side XP writes.
+app.post("/local-ai/fn/placeProgressBet", async (req, res) => {
+  const user = await authenticateRequest(req);
+  if (!user) return res.status(401).json({ error: "Unauthorized" });
+  if (!supabaseAdmin) return res.status(500).json({ error: "Supabase admin not configured" });
+
+  try {
+    const { competition_id, target_email, direction, wagered_xp } = req.body || {};
+    if (!competition_id || !target_email) {
+      return res.status(400).json({ error: "competition_id and target_email required" });
+    }
+    if (!["over", "under"].includes(direction)) {
+      return res.status(400).json({ error: "direction must be 'over' or 'under'" });
+    }
+    if (!Number.isInteger(wagered_xp) || wagered_xp < 10 || wagered_xp > 500) {
+      return res.status(400).json({ error: "wagered_xp must be an integer between 10 and 500" });
+    }
+    const userEmail = user.email;
+    if (target_email === userEmail) {
+      return res.status(400).json({ error: "You can't bet on your own prediction" });
+    }
+
+    const { data: comp, error: compErr } = await supabaseAdmin
+      .from("goal_competitions").select("*").eq("id", competition_id).maybeSingle();
+    if (compErr) throw compErr;
+    if (!comp) return res.status(404).json({ error: "Competition not found" });
+
+    const participants = comp.participants || [];
+    const me = participants.find(
+      (p) => p.email === userEmail && (p.status === "accepted" || p.status === "completed"),
+    );
+    if (!me) return res.status(403).json({ error: "Only participants can bet" });
+
+    const target = participants.find((p) => p.email === target_email);
+    if (!target || target.self_line == null) {
+      return res.status(400).json({ error: "That rival hasn't set a prediction yet" });
+    }
+    if (target.result_submitted) {
+      return res.status(400).json({ error: "That prediction is already settled" });
+    }
+
+    const bets = comp.progress_bets || [];
+    if (bets.some((b) => b.bettor_email === userEmail && b.target_email === target_email && b.status === "open")) {
+      return res.status(400).json({ error: "You already have an open bet on this rival" });
+    }
+
+    const bet = {
+      id: `bet_${randomUUID()}`,
+      bettor_email: userEmail,
+      bettor_name: me.name || "",
+      target_email,
+      target_name: target.name || "",
+      line: target.self_line,
+      direction,
+      wagered_xp,
+      status: "open",
+      xp_outcome: null,
+      created_at: new Date().toISOString(),
+    };
+
+    // Escrow first — if the user can't cover the stake, no bet.
+    const escrowed = await deductXPWithAudit(
+      userEmail, wagered_xp, `bet_escrow_${bet.id}`, "bet_escrow",
+      { competition_id, target_email, direction },
+    );
+    if (!escrowed) {
+      return res.status(400).json({ error: "Not enough XP to cover that stake" });
+    }
+
+    const { error: updErr } = await supabaseAdmin
+      .from("goal_competitions")
+      .update({ progress_bets: [...bets, bet] })
+      .eq("id", competition_id);
+    if (updErr) throw updErr;
+
+    return res.json({ success: true, bet });
+  } catch (err) {
+    console.error("[placeProgressBet] error:", err);
+    return res.status(500).json({ error: err?.message || String(err) });
+  }
+});
+
+// ─── submitPredictionResult ────────────────────────────────────────────────
+// The predicted participant enters their actual score; all open bets on them
+// settle here. Winners are paid through awardXP (source bet_win) so payouts
+// hit the audit log, caps, and leaderboard mirror like every other award.
+app.post("/local-ai/fn/submitPredictionResult", async (req, res) => {
+  const user = await authenticateRequest(req);
+  if (!user) return res.status(401).json({ error: "Unauthorized" });
+  if (!supabaseAdmin) return res.status(500).json({ error: "Supabase admin not configured" });
+
+  try {
+    const { competition_id, actual_result } = req.body || {};
+    if (!competition_id || actual_result === undefined || actual_result === null) {
+      return res.status(400).json({ error: "competition_id and actual_result required" });
+    }
+    if (typeof actual_result !== "number" || actual_result < 0 || actual_result > 100) {
+      return res.status(400).json({ error: "actual_result must be 0-100" });
+    }
+    const userEmail = user.email;
+    const authHeader = req.headers.authorization || "";
+
+    const { data: comp, error: compErr } = await supabaseAdmin
+      .from("goal_competitions").select("*").eq("id", competition_id).maybeSingle();
+    if (compErr) throw compErr;
+    if (!comp) return res.status(404).json({ error: "Competition not found" });
+
+    const participants = comp.participants || [];
+    const me = participants.find((p) => p.email === userEmail);
+    if (!me || me.self_line == null) {
+      return res.status(400).json({ error: "You haven't set a prediction in this competition" });
+    }
+    if (me.result_submitted) {
+      return res.status(400).json({ error: "Result already submitted" });
+    }
+
+    const updatedParticipants = participants.map((p) =>
+      p.email === userEmail
+        ? { ...p, actual_result, result_submitted: true, result_submitted_at: new Date().toISOString() }
+        : p,
+    );
+
+    const bets = comp.progress_bets || [];
+    const settled = [];
+    const updatedBets = bets.map((bet) => {
+      if (bet.status !== "open" || bet.target_email !== userEmail) return bet;
+      const won = bet.direction === "over" ? actual_result > bet.line : actual_result < bet.line;
+      const xp_outcome = won
+        ? Math.floor(bet.wagered_xp * PROGRESS_BET_WIN_MULT)
+        : -bet.wagered_xp;
+      const resolved = { ...bet, status: won ? "won" : "lost", xp_outcome, resolved_at: new Date().toISOString() };
+      settled.push(resolved);
+      return resolved;
+    });
+
+    const { error: updErr } = await supabaseAdmin
+      .from("goal_competitions")
+      .update({ participants: updatedParticipants, progress_bets: updatedBets })
+      .eq("id", competition_id);
+    if (updErr) throw updErr;
+
+    // Pay each winner. Stakes were escrowed at placement, so the win credit is
+    // the full 1.8× return. Losses need no action — the stake is already gone.
+    for (const bet of settled) {
+      if (bet.status !== "won") continue;
+      try {
+        await callLocalFn(
+          "awardXP",
+          {
+            source: "bet_win",
+            event_key: `bet_win_${bet.id}`,
+            flat_xp: bet.xp_outcome,
+            target_email: bet.bettor_email,
+          },
+          authHeader,
+        );
+      } catch (e) {
+        console.error(`[submitPredictionResult] payout error for ${bet.bettor_email}:`, e?.message);
+      }
+    }
+
+    return res.json({
+      success: true,
+      actual_result,
+      settled_count: settled.length,
+      won: settled.filter((b) => b.status === "won").length,
+      lost: settled.filter((b) => b.status === "lost").length,
+    });
+  } catch (err) {
+    console.error("[submitPredictionResult] error:", err);
     return res.status(500).json({ error: err?.message || String(err) });
   }
 });

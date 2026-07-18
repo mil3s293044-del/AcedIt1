@@ -121,50 +121,19 @@ function SubmitResult({ competition, currentUserEmail, onUpdate }) {
     const handleSubmit = async () => {
         setSaving(true);
         try {
-            const updatedParticipants = (competition.participants || []).map(p =>
-                p.email === currentUserEmail
-                    ? { ...p, actual_result: result, result_submitted: true, result_submitted_at: new Date().toISOString() }
-                    : p
-            );
-
-            const bets = competition.progress_bets || [];
-            const updatedBets = bets.map(bet => {
-                if (bet.status !== 'open' || bet.target_email !== currentUserEmail) return bet;
-                const won = bet.direction === 'over' ? result > bet.line : result < bet.line;
-                const xp_outcome = won ? Math.floor(bet.wagered_xp * WIN_MULT) : -bet.wagered_xp;
-                return { ...bet, status: won ? 'won' : 'lost', xp_outcome, resolved_at: new Date().toISOString() };
+            // Settlement runs server-side: winners are paid through the XP
+            // engine (audit log + caps + leaderboard mirror), not client writes.
+            const res = await base44.functions.invoke('submitPredictionResult', {
+                competition_id: competition.id,
+                actual_result: result,
             });
-
-            await base44.entities.GoalCompetition.update(competition.id, {
-                participants: updatedParticipants,
-                progress_bets: updatedBets
+            const data = res?.data ?? res;
+            toast({
+                title: "Result submitted! 🎯",
+                description: data?.settled_count
+                    ? `${data.settled_count} bet${data.settled_count === 1 ? '' : 's'} settled.`
+                    : "Locked in.",
             });
-
-            const resolved = updatedBets.filter((b, i) => b.status !== 'open' && bets[i]?.status === 'open');
-            for (const bet of resolved) {
-                if (bet.status !== 'won') continue;
-                try {
-                    const profiles = await base44.entities.UserProfile.filter({ created_by: bet.bettor_email });
-                    if (profiles[0]) {
-                        const returnAmount = Math.floor(bet.wagered_xp * WIN_MULT);
-                        const newTotal = (profiles[0].total_xp || 0) + returnAmount;
-                        const newSeason = (profiles[0].season_xp || 0) + returnAmount;
-                        await base44.entities.UserProfile.update(profiles[0].id, { total_xp: newTotal, season_xp: newSeason });
-                        try {
-                            const lbEntries = await base44.entities.Leaderboard.filter({ user_email: bet.bettor_email });
-                            if (lbEntries[0]) {
-                                await base44.entities.Leaderboard.update(lbEntries[0].id, {
-                                    total_xp: newTotal,
-                                    season_xp: newSeason,
-                                    last_updated: new Date().toISOString()
-                                });
-                            }
-                        } catch (_) {}
-                    }
-                } catch (_) {}
-            }
-
-            toast({ title: "Result submitted! 🎯", description: "Bets involving you have been settled." });
             onUpdate?.();
         } catch (e) {
             toast({ title: "Error", description: e.message, variant: "destructive" });
@@ -227,45 +196,19 @@ function BetPanel({ target, competition, currentUserEmail, onUpdate }) {
     const handleBet = async () => {
         setPlacing(true);
         try {
-            const myName = (competition.participants || []).find(p => p.email === currentUserEmail)?.name || '';
-            const newBet = {
-                id: `bet_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
-                bettor_email: currentUserEmail,
-                bettor_name: myName,
+            // Escrow + bet creation happen server-side — the stake is checked
+            // against the real balance and recorded in the XP audit log.
+            await base44.functions.invoke('placeProgressBet', {
+                competition_id: competition.id,
                 target_email: target.email,
-                target_name: target.name,
-                line: target.self_line,
                 direction,
                 wagered_xp: wageredXP,
-                status: 'open',
-                xp_outcome: null,
-                created_at: new Date().toISOString()
-            };
-            const updatedBets = [...(competition.progress_bets || []), newBet];
-            await base44.entities.GoalCompetition.update(competition.id, { progress_bets: updatedBets });
-
-            const bettorProfiles = await base44.entities.UserProfile.filter({ created_by: currentUserEmail });
-            if (bettorProfiles[0]) {
-                const newTotal = Math.max(0, (bettorProfiles[0].total_xp || 0) - wageredXP);
-                const newSeason = Math.max(0, (bettorProfiles[0].season_xp || 0) - wageredXP);
-                await base44.entities.UserProfile.update(bettorProfiles[0].id, { total_xp: newTotal, season_xp: newSeason });
-                try {
-                    const lbEntries = await base44.entities.Leaderboard.filter({ user_email: currentUserEmail });
-                    if (lbEntries[0]) {
-                        await base44.entities.Leaderboard.update(lbEntries[0].id, {
-                            total_xp: newTotal,
-                            season_xp: newSeason,
-                            last_updated: new Date().toISOString()
-                        });
-                    }
-                } catch (_) {}
-            }
-
+            });
             toast({ title: `${direction === 'over' ? '📈 OVER' : '📉 UNDER'} bet placed!`, description: `${wageredXP} XP wagered on ${target.name.split(' ')[0]}` });
             setOpen(false);
             onUpdate?.();
         } catch (e) {
-            toast({ title: "Failed", description: e.message, variant: "destructive" });
+            toast({ title: "Bet not placed", description: e.message, variant: "destructive" });
         } finally {
             setPlacing(false);
         }

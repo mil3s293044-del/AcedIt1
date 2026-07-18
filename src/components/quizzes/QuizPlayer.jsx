@@ -24,6 +24,7 @@ import MarkdownMath from "@/components/shared/MarkdownMath";
 import MathText from "@/components/shared/LatexRenderer";
 import { getLatexRules } from "@/lib/subjectExaminerPrompts";
 import { FEATURES, checkLiveTier } from "@/lib/tierAccess";
+import { fireXPFeedback } from "../ranked/XPFeedback";
 
 // ─── Static class lookup tables (no dynamic Tailwind interpolation) ──────────
 const CHOICE_STATE = {
@@ -375,10 +376,6 @@ export default function QuizPlayer({ quiz, onComplete, onExit, mode = "standard"
             setShowFeedback(true);
             setSubmittedQuestions(prev => new Set([...prev, currentQuestionIndex]));
             correct ? playCorrectSound() : playIncorrectSound();
-            // Fire instant XP animation on correct answer
-            if (correct) {
-                window.dispatchEvent(new CustomEvent('xp_awarded', { detail: { xp: 2, source: 'quiz' } }));
-            }
             // Snappy when right (you nailed it), a touch longer when wrong so
             // there's time to see the correct answer highlighted.
             setTimeout(() => handleNext(), correct ? 750 : 1500);
@@ -417,6 +414,41 @@ export default function QuizPlayer({ quiz, onComplete, onExit, mode = "standard"
         await generateAIFeedback(timeTaken);
     };
 
+    // Real XP award through the server engine (idempotent via event_key so a
+    // re-render or double-call can't double-pay). Retry runs earn nothing —
+    // they're pure practice and would be farmable otherwise.
+    const awardQuizXP = async ({ score, questionsCorrect, totalMarks, timeTaken }) => {
+        if (quiz._isRetry) return;
+        try {
+            const res = await base44.functions.invoke('awardXP', {
+                source: 'quiz',
+                event_key: `quiz_${quiz.id}_${startTime}`,
+                quiz_score: score,
+                questions_total: totalQ,
+                questions_correct: questionsCorrect,
+                total_marks: totalMarks,
+                time_taken_secs: timeTaken,
+            });
+            fireXPFeedback(res?.data ?? res, 'quiz');
+        } catch (e) {
+            console.error('Quiz XP award failed:', e);
+        }
+    };
+
+    // When AI marking is unavailable (tier cap hit, or the call failed) the
+    // attempt still counts: save it with the auto-markable (MCQ) score and pay
+    // real XP on those marks. awardQuizXP's event_key keeps this un-doublable.
+    const saveMcqOnlyAttempt = async (timeTaken) => {
+        const mcqQuestions = shuffledQuiz.questions.filter(q => q.type === 'mcq');
+        const mcqCorrect = shuffledQuiz.questions.filter((q, i) => q.type === 'mcq' && userAnswers[i] !== undefined && parseInt(userAnswers[i]) === q.correct_answer).length;
+        const fallbackScore = mcqQuestions.length > 0 ? Math.round((mcqCorrect / mcqQuestions.length) * 100) : 0;
+        try {
+            const created = await base44.entities.QuizAttempt.create({ quiz_id: quiz.id, quiz_title: quiz.title, quiz_category: quiz.category, score: fallbackScore, questions_total: totalQ, questions_correct: mcqCorrect, time_taken: timeTaken, xp_earned: mcqCorrect * 2, user_answers: userAnswers, date: new Date().toISOString().split('T')[0] });
+            if (created?.id) setCreatedAttemptId(created.id);
+        } catch (e) {}
+        await awardQuizXP({ score: fallbackScore, questionsCorrect: mcqCorrect, totalMarks: mcqCorrect, timeTaken });
+    };
+
     const generateAIFeedback = async (timeTaken) => {
         // Tier gate first — if user has hit the cap, skip AI marking with a
         // clean message. Quiz results are still shown; just no AI feedback.
@@ -427,6 +459,7 @@ export default function QuizPlayer({ quiz, onComplete, onExit, mode = "standard"
                 description: `${access.reason} Your answers are still saved.`,
                 variant: "destructive",
             });
+            await saveMcqOnlyAttempt(timeTaken);
             return;
         }
 
@@ -520,12 +553,8 @@ Return exactly ${questionsForAnalysis.length} items.`,
                 return q?.type === 'mcq' ? fb.marks === 1 : fb.marks >= (q?.marks || 5) * 0.8;
             }).length;
 
-            // Award 2 XP per correct mark after AI marking
             const totalMarksAwarded = mappedFeedback.reduce((sum, fb) => sum + (fb.marks || 0), 0);
             const xpEarned = totalMarksAwarded * 2;
-            if (xpEarned > 0) {
-                window.dispatchEvent(new CustomEvent('xp_awarded', { detail: { xp: xpEarned, source: 'quiz_marked' } }));
-            }
 
             try {
                 const created = await base44.entities.QuizAttempt.create({ quiz_id: quiz.id, quiz_title: quiz.title, quiz_category: quiz.category, score: finalScore, questions_total: totalQ, questions_correct: questionsCorrect, time_taken: timeTaken, xp_earned: xpEarned, user_answers: userAnswers, date: new Date().toISOString().split('T')[0] });
@@ -533,10 +562,14 @@ Return exactly ${questionsForAnalysis.length} items.`,
                 if (created?.id) setCreatedAttemptId(created.id);
             } catch (e) {}
 
+            // Real XP through the server engine + celebration popup.
+            await awardQuizXP({ score: finalScore, questionsCorrect, totalMarks: totalMarksAwarded, timeTaken });
+
             toast({ title: "✅ Quiz marked!", description: `AI analysed all ${mappedFeedback.length} questions.` });
         } catch (error) {
             setAiFeedback([]);
             toast({ title: "AI Marking Failed", description: error.message || "Could not analyse answers.", variant: "destructive" });
+            await saveMcqOnlyAttempt(timeTaken);
         } finally {
             setIsGeneratingFeedback(false);
         }

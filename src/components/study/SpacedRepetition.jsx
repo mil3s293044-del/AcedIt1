@@ -171,6 +171,13 @@ const calculateNextReview = (quality, card) => {
     };
 };
 
+// Human-readable interval for the rating-button previews ("1d", "2w", "3mo").
+const formatIntervalShort = (days) => {
+    if (days < 7) return `${days}d`;
+    if (days < 30) return `${Math.round(days / 7)}w`;
+    return `${Math.round(days / 30)}mo`;
+};
+
 // ─── Rating button config ────────────────────────────────────────────────────
 // Static class strings (Tailwind JIT-safe) — overdue/hard → streak,
 // hard/energy → xp, good (default recall) → chart-3 (blue), easy (mastered) → primary.
@@ -755,6 +762,9 @@ The documents provided may be PowerPoint slides, Word documents, or text files. 
                                                     <span className="absolute top-1.5 right-2 text-[10px] font-black opacity-40">{r.quality}</span>
                                                     <span>{r.label}</span>
                                                     <span className="text-xs font-normal opacity-70">{r.sublabel}</span>
+                                                    <span className="text-[10px] font-semibold opacity-50 tabular-nums">
+                                                        {formatIntervalShort(calculateNextReview(r.quality, currentCard).interval_days)}
+                                                    </span>
                                                 </button>
                                             ))}
                                         </div>

@@ -7,7 +7,7 @@
  */
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Flame } from 'lucide-react';
+import { Flame, Shield, ShieldCheck } from 'lucide-react';
 
 const MILESTONE_MESSAGES = {
     3:   { msg: "3 day streak", sub: "You're building a habit." },
@@ -50,7 +50,7 @@ export default function StreakCelebration() {
 
     useEffect(() => {
         if (!event) return;
-        const t = setTimeout(() => setEvent(null), event.hit_milestone ? 4000 : 2600);
+        const t = setTimeout(() => setEvent(null), (event.hit_milestone || event.shield_used || event.shield_earned) ? 4000 : 2600);
         return () => clearTimeout(t);
     }, [event]);
 
@@ -137,6 +137,28 @@ export default function StreakCelebration() {
                             >
                                 <div className="font-bold text-lg">{milestone.msg}</div>
                                 <div className="text-sm opacity-85 mt-0.5">{milestone.sub}</div>
+                            </motion.div>
+                        )}
+
+                        {/* Shield used — the streak survived a missed day */}
+                        {event.shield_used && (
+                            <motion.div
+                                className="flex items-center gap-1.5 bg-white/25 rounded-full px-4 py-1.5 text-sm font-bold mt-1"
+                                initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: 0.35 }}
+                            >
+                                <ShieldCheck className="w-4 h-4" />
+                                Shield used — your streak survived
+                            </motion.div>
+                        )}
+
+                        {/* Shield earned at a 7-day milestone */}
+                        {event.shield_earned && (
+                            <motion.div
+                                className="flex items-center gap-1.5 bg-white/25 rounded-full px-4 py-1.5 text-sm font-bold mt-1"
+                                initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: 0.45 }}
+                            >
+                                <Shield className="w-4 h-4" />
+                                Streak Shield earned — covers one missed day
                             </motion.div>
                         )}
 

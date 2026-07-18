@@ -1,6 +1,6 @@
 import React from "react";
 import { motion } from "framer-motion";
-import { Flame, Zap, TrendingUp, Lock, Check, Crown } from "lucide-react";
+import { Flame, Zap, TrendingUp, Lock, Check, Crown, Shield } from "lucide-react";
 
 // Pre-resolved Tailwind class strings — required so the JIT can detect them at build time.
 const ACCENT_CLASSES = {
@@ -35,13 +35,13 @@ const ACCENT_CLASSES = {
 };
 
 const STREAK_TIERS = [
+    // Tiers mirror the real ladder in streakHelpers/server updateStreak —
+    // what's shown here is exactly what awardXP applies (capped at 2.0×).
     { days: 0,  multiplier: 1.0,  label: "No Streak",    icon: Flame,  accent: "muted-foreground" },
-    { days: 3,  multiplier: 1.2,  label: "Warming Up",   icon: Flame,  accent: "xp" },
-    { days: 7,  multiplier: 1.5,  label: "On Fire",      icon: Flame,  accent: "xp" },
-    { days: 14, multiplier: 1.75, label: "Blazing",      icon: Flame,  accent: "streak" },
-    { days: 21, multiplier: 2.0,  label: "Unstoppable",  icon: Zap,    accent: "streak" },
-    { days: 30, multiplier: 2.5,  label: "Legendary",    icon: Crown,  accent: "chart-4" },
-    { days: 60, multiplier: 3.0,  label: "God Mode",     icon: Crown,  accent: "chart-4" },
+    { days: 3,  multiplier: 1.1,  label: "Warming Up",   icon: Flame,  accent: "xp" },
+    { days: 7,  multiplier: 1.25, label: "On Fire",      icon: Flame,  accent: "xp" },
+    { days: 14, multiplier: 1.5,  label: "Blazing",      icon: Zap,    accent: "streak" },
+    { days: 30, multiplier: 2.0,  label: "Legendary",    icon: Crown,  accent: "chart-4" },
 ];
 
 function getCurrentTier(days) {
@@ -56,7 +56,7 @@ function getNextTier(days) {
     return STREAK_TIERS.find(t => t.days > days) || null;
 }
 
-export default function StreakMultiplier({ streakDays = 0, compact = false }) {
+export default function StreakMultiplier({ streakDays = 0, shields = 0, compact = false }) {
     const current = getCurrentTier(streakDays);
     const next = getNextTier(streakDays);
     const daysToNext = next ? next.days - streakDays : 0;
@@ -108,6 +108,24 @@ export default function StreakMultiplier({ streakDays = 0, compact = false }) {
                             +{Math.round((current.multiplier - 1) * 100)}% XP bonus
                         </span>
                     )}
+                </div>
+
+                {/* Streak shields — insurance against one missed day */}
+                <div className="mt-3 bg-chart-3/[0.07] border border-chart-3/20 rounded-xl px-4 py-3 flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                        <Shield className={`w-5 h-5 ${shields > 0 ? 'text-chart-3' : 'text-muted-foreground/50'}`} />
+                        <span className="text-sm font-bold text-foreground">
+                            {shields} shield{shields === 1 ? '' : 's'}
+                        </span>
+                        <span className="flex items-center gap-1">
+                            {[0, 1].map(i => (
+                                <span key={i} className={`w-2 h-2 rounded-full ${i < shields ? 'bg-chart-3' : 'bg-secondary'}`} />
+                            ))}
+                        </span>
+                    </div>
+                    <span className="text-xs text-muted-foreground">
+                        {shields >= 2 ? 'Bank full — you\'re covered' : 'Earn one each 7-day milestone'}
+                    </span>
                 </div>
 
                 {next && (
