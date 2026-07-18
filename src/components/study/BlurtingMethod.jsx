@@ -210,11 +210,8 @@ Reference Study Design requirements in your feedback.`,
                 }
             });
             setAiFeedback(response);
-            // Award XP based on completeness percentage: up to 50 XP
-            const xpEarned = Math.round((response.completeness_percentage / 100) * 50);
-            if (xpEarned > 0) {
-                window.dispatchEvent(new CustomEvent('xp_awarded', { detail: { xp: xpEarned, source: 'blurting' } }));
-            }
+            // Real XP arrives via onSessionComplete → awardXP; no cosmetic
+            // popups here (they'd show amounts the engine never granted).
             toast({ title: "Feedback ready!" });
         } catch (error) {
             toast({ title: "Feedback failed", description: error.message || "Could not generate feedback.", variant: "destructive" });

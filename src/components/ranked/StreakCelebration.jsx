@@ -151,6 +151,16 @@ export default function StreakCelebration() {
                             </motion.div>
                         )}
 
+                        {/* Weekly bonus XP — every 7th consecutive day */}
+                        {event.weekly_bonus_xp > 0 && (
+                            <motion.div
+                                className="flex items-center gap-1.5 bg-white/25 rounded-full px-4 py-1.5 text-sm font-bold mt-1"
+                                initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: 0.4 }}
+                            >
+                                +{event.weekly_bonus_xp} XP weekly streak bonus
+                            </motion.div>
+                        )}
+
                         {/* Shield earned at a 7-day milestone */}
                         {event.shield_earned && (
                             <motion.div

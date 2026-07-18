@@ -1110,6 +1110,27 @@ app.post("/local-ai/fn/updateStreak", async (req, res) => {
       console.warn("[updateStreak] leaderboard mirror failed:", e?.message);
     }
 
+    // Weekly streak bonus — +75 XP on every 7th consecutive day. The source
+    // existed in the XP engine but nothing ever fired it. event_key includes
+    // the date so a rebuilt streak can earn again at the same count.
+    let weeklyBonusXP = 0;
+    if (newStreak % 7 === 0) {
+      try {
+        const bonus = await callLocalFn(
+          "awardXP",
+          {
+            source: "weekly_streak",
+            event_key: `weekly_streak_${userEmail}_${newStreak}_${todayStr}`,
+            streak_days: newStreak,
+          },
+          req.headers.authorization || "",
+        );
+        weeklyBonusXP = bonus?.xp_awarded || 0;
+      } catch (e) {
+        console.warn("[updateStreak] weekly_streak bonus failed:", e?.message);
+      }
+    }
+
     const milestones = [3, 7, 14, 30, 60, 100, 150, 200, 365];
     return res.json({
       success: true,
@@ -1122,6 +1143,7 @@ app.post("/local-ai/fn/updateStreak", async (req, res) => {
       streak_shields: newShields,
       shield_used: shieldUsed,
       shield_earned: shieldEarned,
+      weekly_bonus_xp: weeklyBonusXP,
     });
   } catch (err) {
     console.error("[updateStreak] error:", err);

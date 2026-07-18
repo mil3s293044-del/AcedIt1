@@ -480,15 +480,8 @@ For each answer:
                 }
             });
             setMarkingResults(response.results);
-            // Award XP: 10 per Correct, 5 per Partially Correct
-            const xpEarned = response.results.reduce((sum, r) => {
-                if (r.verdict === "Correct") return sum + 10;
-                if (r.verdict === "Partially Correct") return sum + 5;
-                return sum;
-            }, 0);
-            if (xpEarned > 0) {
-                window.dispatchEvent(new CustomEvent('xp_awarded', { detail: { xp: xpEarned, source: 'active_recall' } }));
-            }
+            // Real XP arrives via onSessionComplete → awardXP; no cosmetic
+            // popups here (they'd show amounts the engine never granted).
             toast({ title: "Feedback ready!", description: "Expand each question to see your results." });
         } catch (error) {
             toast({ title: "Feedback failed", description: error.message || "Could not generate feedback.", variant: "destructive" });

@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -180,7 +180,7 @@ function SubmitResult({ competition, currentUserEmail, onUpdate }) {
 }
 
 // ── Bet on a participant's prediction ────────────────────────────────────────
-function BetPanel({ target, competition, currentUserEmail, onUpdate }) {
+function BetPanel({ target, competition, currentUserEmail, onUpdate, balance }) {
     const { toast } = useToast();
     const [direction, setDirection] = useState("over");
     const [wageredXP, setWageredXP] = useState(50);
@@ -277,17 +277,33 @@ function BetPanel({ target, competition, currentUserEmail, onUpdate }) {
 
                         {/* XP stake chips */}
                         <div>
-                            <p className="text-xs text-muted-foreground mb-2 font-semibold">Stake (held in escrow)</p>
-                            <div className="flex gap-2 flex-wrap">
-                                {XP_OPTS.map(amt => (
-                                    <button key={amt} onClick={() => setWageredXP(amt)}
-                                        className={`px-3.5 py-2 rounded-xl text-sm font-bold border-2 transition-all ${
-                                            wageredXP === amt
-                                                ? 'bg-chart-3 border-chart-3 text-white shadow-soft'
-                                                : 'bg-surface border-border text-foreground hover:border-chart-3/40'
-                                        }`}>{amt} XP</button>
-                                ))}
+                            <div className="flex items-center justify-between mb-2">
+                                <p className="text-xs text-muted-foreground font-semibold">Stake (held in escrow)</p>
+                                {balance != null && (
+                                    <p className="text-xs font-bold text-xp flex items-center gap-1">
+                                        <Zap className="w-3 h-3" /> {balance.toLocaleString()} XP available
+                                    </p>
+                                )}
                             </div>
+                            <div className="flex gap-2 flex-wrap">
+                                {XP_OPTS.map(amt => {
+                                    const unaffordable = balance != null && amt > balance;
+                                    return (
+                                        <button key={amt} onClick={() => setWageredXP(amt)}
+                                            disabled={unaffordable}
+                                            className={`px-3.5 py-2 rounded-xl text-sm font-bold border-2 transition-all disabled:opacity-40 disabled:cursor-not-allowed ${
+                                                wageredXP === amt
+                                                    ? 'bg-chart-3 border-chart-3 text-white shadow-soft'
+                                                    : 'bg-surface border-border text-foreground hover:border-chart-3/40'
+                                            }`}>{amt} XP</button>
+                                    );
+                                })}
+                            </div>
+                            {balance != null && balance < XP_OPTS[0] && (
+                                <p className="text-xs text-muted-foreground mt-2">
+                                    Earn a little more XP to place a bet — the smallest stake is {XP_OPTS[0]} XP.
+                                </p>
+                            )}
                         </div>
 
                         {/* Summary */}
@@ -301,7 +317,8 @@ function BetPanel({ target, competition, currentUserEmail, onUpdate }) {
                             </div>
                         </div>
 
-                        <Button onClick={handleBet} disabled={placing} className="w-full bg-gradient-to-r from-chart-4 to-chart-3 text-white font-bold rounded-xl py-5">
+                        <Button onClick={handleBet} disabled={placing || (balance != null && wageredXP > balance)}
+                            className="w-full bg-gradient-to-r from-chart-4 to-chart-3 text-white font-bold rounded-xl py-5">
                             {placing ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Zap className="w-4 h-4 mr-2" />}
                             {placing ? 'Placing…' : `Bet ${wageredXP} XP`}
                         </Button>
@@ -317,6 +334,16 @@ export default function ScorePredictionBetting({ competition, currentUserEmail, 
     const me = (competition.participants || []).find(p => p.email === currentUserEmail);
     const deadline = competition.goal_target_date;
     const isPastDeadline = deadline && new Date() > new Date(deadline);
+
+    // Spendable XP for stake affordability — refreshed when bets change.
+    const [balance, setBalance] = useState(null);
+    useEffect(() => {
+        let cancelled = false;
+        base44.entities.UserProfile.filter({ created_by: currentUserEmail })
+            .then(rows => { if (!cancelled) setBalance(rows?.[0]?.total_xp ?? null); })
+            .catch(() => {});
+        return () => { cancelled = true; };
+    }, [currentUserEmail, competition.progress_bets?.length]);
 
     const accepted = (competition.participants || []).filter(
         p => (p.status === 'accepted' || p.status === 'completed') && p.self_line != null
@@ -359,6 +386,7 @@ export default function ScorePredictionBetting({ competition, currentUserEmail, 
                             competition={competition}
                             currentUserEmail={currentUserEmail}
                             onUpdate={onUpdate}
+                            balance={balance}
                         />
                     ))}
                 </div>
