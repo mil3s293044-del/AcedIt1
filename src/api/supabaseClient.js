@@ -276,6 +276,12 @@ const PORTED_FUNCTIONS = {
   // PvP over/under bets — escrow + settlement live server-side:
   placeProgressBet:         '/local-ai/fn/placeProgressBet',
   submitPredictionResult:   '/local-ai/fn/submitPredictionResult',
+  // The Arena — study duels + back-yourself bets:
+  createDuel:               '/local-ai/fn/createDuel',
+  respondDuel:              '/local-ai/fn/respondDuel',
+  placeDuelSideBet:         '/local-ai/fn/placeDuelSideBet',
+  createStudyBet:           '/local-ai/fn/createStudyBet',
+  getArenaState:            '/local-ai/fn/getArenaState',
   // Support (Phase 3b-7):
   sendSupportTicket:        '/local-ai/fn/sendSupportTicket',
   // Marketing — public top-of-funnel email capture (no auth required):

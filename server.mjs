@@ -1306,6 +1306,7 @@ const DAILY_CAPS = {
   competition_bonus:  500,
   wager:              300,
   bet_win:            2000,
+  duel_win:           2000,
   season_reward:      2000,
   loading_quiz:       50,
 };
@@ -1438,6 +1439,7 @@ app.post("/local-ai/fn/awardXP", async (req, res) => {
       case "season_reward":
       case "loading_quiz":
       case "bet_win":
+      case "duel_win":
         rawXP = flat_xp || 0;
         break;
       case "wager":
@@ -1449,7 +1451,7 @@ app.post("/local-ai/fn/awardXP", async (req, res) => {
 
     // ── Apply streak multiplier (1.0×–2.0×, clamped) ────────────────────
     const safeMultiplier = Math.max(1.0, Math.min(2.0, streak_multiplier || 1.0));
-    if (safeMultiplier > 1.0 && !["streak", "weekly_streak", "wager", "bet_win", "competition_bonus", "season_reward", "friend_win"].includes(source)) {
+    if (safeMultiplier > 1.0 && !["streak", "weekly_streak", "wager", "bet_win", "duel_win", "competition_bonus", "season_reward", "friend_win"].includes(source)) {
       rawXP = Math.round(rawXP * safeMultiplier);
     }
 
@@ -3757,6 +3759,497 @@ app.post("/local-ai/fn/submitPredictionResult", async (req, res) => {
     });
   } catch (err) {
     console.error("[submitPredictionResult] error:", err);
+    return res.status(500).json({ error: err?.message || String(err) });
+  }
+});
+
+// ════════════════════════════════════════════════════════════════════════════
+// The Arena — study duels + back-yourself bets (migration 0021)
+// ════════════════════════════════════════════════════════════════════════════
+// Everything settles server-side from xp_events — the audited, capped,
+// velocity-limited log the XP engine writes. No self-reporting anywhere.
+
+const DUEL_WINDOWS = [24, 72, 168];
+const DUEL_ANTE_MIN = 25, DUEL_ANTE_MAX = 500;
+const SIDE_BET_MIN = 25, SIDE_BET_MAX = 200;
+const SIDE_BET_WIN_MULT = 1.8;
+const STUDY_BET_MULT = 1.5;
+// Minimum targets per metric so a bet can't be trivially safe.
+const STUDY_BET_MIN_TARGET = { xp: 100, quiz_marks: 10, flashcards: 20, study_minutes: 30 };
+// Only genuinely-studied XP counts toward duels — never winnings or bonuses.
+const ARENA_STUDY_SOURCES = [
+  "quiz", "flashcard", "study_session", "active_recall", "blurting",
+  "focus_session", "practice_questions", "mini_test", "loading_quiz", "challenge",
+];
+const ARENA_MINUTE_SOURCES = ["study_session", "active_recall", "blurting", "focus_session"];
+const ARENA_METRICS = ["xp", "quiz_marks", "flashcards", "study_minutes"];
+
+// Credit XP outside the award engine — refunds only (escrow returns on
+// declined/expired/tied duels). Idempotent per event_key, mirrored to the
+// leaderboard, logged to xp_events so integrity restores stay exact.
+async function creditXPWithAudit(userEmail, amount, eventKey, source, metadata = {}) {
+  const { data: existing } = await supabaseAdmin
+    .from("xp_events").select("id").eq("event_key", eventKey).eq("user_email", userEmail).limit(1);
+  if (existing?.[0]) return;
+
+  const { data: profileRows } = await supabaseAdmin
+    .from("user_profiles").select("*").eq("created_by", userEmail).limit(1);
+  const profile = profileRows?.[0];
+  if (!profile) return;
+
+  const newXP = (profile.total_xp || 0) + amount;
+  const newSeasonXP = (profile.season_xp || 0) + amount;
+  await supabaseAdmin
+    .from("user_profiles")
+    .update({ total_xp: newXP, season_xp: newSeasonXP, current_level: levelFromXP(newXP) })
+    .eq("id", profile.id);
+  try {
+    const { data: lbRows } = await supabaseAdmin
+      .from("leaderboards").select("id").eq("user_email", userEmail).limit(1);
+    if (lbRows?.[0]) {
+      await supabaseAdmin.from("leaderboards")
+        .update({ total_xp: newXP, season_xp: newSeasonXP, last_updated: new Date().toISOString() })
+        .eq("id", lbRows[0].id);
+    }
+  } catch (e) { console.warn(`[${source}] leaderboard mirror failed:`, e?.message); }
+  try {
+    await supabaseAdmin.from("xp_events").insert({
+      created_by: userEmail,
+      event_key: eventKey,
+      user_email: userEmail,
+      source,
+      xp_awarded: amount,
+      raw_xp: amount,
+      capped: false,
+      integrity_flags: [],
+      total_xp_after: newXP,
+      season_xp_after: newSeasonXP,
+      level_before: profile.current_level || 1,
+      level_after: levelFromXP(newXP),
+      leveled_up: false,
+      metadata,
+    });
+  } catch (e) { console.warn(`[${source}] xp_events audit insert failed:`, e?.message); }
+}
+
+// Measure one student's study output between two instants, from xp_events.
+async function computeMetricValue(email, metric, startIso, endIso) {
+  const { data: events } = await supabaseAdmin
+    .from("xp_events")
+    .select("source, xp_awarded, metadata")
+    .eq("user_email", email)
+    .gte("created_date", startIso)
+    .lte("created_date", endIso)
+    .limit(2000);
+  let total = 0;
+  for (const e of events || []) {
+    if (metric === "xp") {
+      if ((e.xp_awarded || 0) > 0 && ARENA_STUDY_SOURCES.includes(e.source)) total += e.xp_awarded;
+    } else if (metric === "quiz_marks" && e.source === "quiz") {
+      total += Number(e.metadata?.total_marks) || Number(e.metadata?.questions_correct) || 0;
+    } else if (metric === "flashcards" && e.source === "flashcard") {
+      total += Number(e.metadata?.cards_reviewed) || 0;
+    } else if (metric === "study_minutes" && ARENA_MINUTE_SOURCES.includes(e.source)) {
+      total += Number(e.metadata?.duration_minutes) || 0;
+    }
+  }
+  return Math.round(total);
+}
+
+// Settle a duel that has run past ends_at. Winner takes the whole pot through
+// awardXP (source duel_win); ties refund both antes. Side bets ride the result.
+async function settleDuelNow(duel, authHeader) {
+  const [challengerScore, opponentScore] = await Promise.all([
+    computeMetricValue(duel.challenger_email, duel.metric, duel.starts_at, duel.ends_at),
+    computeMetricValue(duel.opponent_email, duel.metric, duel.starts_at, duel.ends_at),
+  ]);
+  const tie = challengerScore === opponentScore;
+  const winnerEmail = tie ? null :
+    (challengerScore > opponentScore ? duel.challenger_email : duel.opponent_email);
+  const pot = duel.ante_xp * 2;
+
+  if (tie) {
+    await creditXPWithAudit(duel.challenger_email, duel.ante_xp, `duel_refund_${duel.id}_challenger`, "duel_refund", { duel_id: duel.id });
+    await creditXPWithAudit(duel.opponent_email, duel.ante_xp, `duel_refund_${duel.id}_opponent`, "duel_refund", { duel_id: duel.id });
+  } else {
+    try {
+      await callLocalFn("awardXP", {
+        source: "duel_win",
+        event_key: `duel_win_${duel.id}`,
+        flat_xp: pot,
+        target_email: winnerEmail,
+      }, authHeader);
+    } catch (e) { console.error("[settleDuel] pot payout failed:", e?.message); }
+  }
+
+  const settledSideBets = (duel.side_bets || []).map((bet) => {
+    if (bet.status !== "open") return bet;
+    if (tie) return { ...bet, status: "refunded", xp_outcome: 0 };
+    const won = bet.backed_email === winnerEmail;
+    return {
+      ...bet,
+      status: won ? "won" : "lost",
+      xp_outcome: won ? Math.floor(bet.wagered_xp * SIDE_BET_WIN_MULT) : -bet.wagered_xp,
+      resolved_at: new Date().toISOString(),
+    };
+  });
+  for (const bet of settledSideBets) {
+    if (bet.status === "refunded" && (duel.side_bets || []).find((b) => b.id === bet.id)?.status === "open") {
+      await creditXPWithAudit(bet.bettor_email, bet.wagered_xp, `duel_sidebet_refund_${bet.id}`, "duel_refund", { duel_id: duel.id });
+    } else if (bet.status === "won" && bet.xp_outcome > 0) {
+      try {
+        await callLocalFn("awardXP", {
+          source: "bet_win",
+          event_key: `duel_sidebet_win_${bet.id}`,
+          flat_xp: bet.xp_outcome,
+          target_email: bet.bettor_email,
+        }, authHeader);
+      } catch (e) { console.error("[settleDuel] side bet payout failed:", e?.message); }
+    }
+  }
+
+  const update = {
+    status: "settled",
+    settled_at: new Date().toISOString(),
+    winner_email: winnerEmail,
+    final_scores: { [duel.challenger_email]: challengerScore, [duel.opponent_email]: opponentScore },
+    side_bets: settledSideBets,
+  };
+  await supabaseAdmin.from("study_duels").update(update).eq("id", duel.id).eq("status", "active");
+  return { ...duel, ...update };
+}
+
+// ─── createDuel ────────────────────────────────────────────────────────────
+app.post("/local-ai/fn/createDuel", async (req, res) => {
+  const user = await authenticateRequest(req);
+  if (!user) return res.status(401).json({ error: "Unauthorized" });
+  if (!supabaseAdmin) return res.status(500).json({ error: "Supabase admin not configured" });
+  try {
+    const { opponent_email, opponent_name, challenger_name, metric, window_hours, ante_xp } = req.body || {};
+    if (!opponent_email || opponent_email === user.email) {
+      return res.status(400).json({ error: "Pick a rival to challenge" });
+    }
+    if (!ARENA_METRICS.includes(metric)) return res.status(400).json({ error: "Unknown yardstick" });
+    if (!DUEL_WINDOWS.includes(window_hours)) return res.status(400).json({ error: "Window must be 24, 72 or 168 hours" });
+    if (!Number.isInteger(ante_xp) || ante_xp < DUEL_ANTE_MIN || ante_xp > DUEL_ANTE_MAX) {
+      return res.status(400).json({ error: `Ante must be ${DUEL_ANTE_MIN}-${DUEL_ANTE_MAX} XP` });
+    }
+
+    const { data: dupes } = await supabaseAdmin
+      .from("study_duels").select("id")
+      .in("status", ["pending", "active"])
+      .or(`and(challenger_email.eq.${user.email},opponent_email.eq.${opponent_email}),and(challenger_email.eq.${opponent_email},opponent_email.eq.${user.email})`)
+      .limit(1);
+    if (dupes?.[0]) return res.status(400).json({ error: "You already have a live duel with this rival" });
+
+    const duelId = randomUUID();
+    const escrowed = await deductXPWithAudit(
+      user.email, ante_xp, `duel_ante_${duelId}_challenger`, "duel_ante",
+      { duel_id: duelId, opponent_email },
+    );
+    if (!escrowed) return res.status(400).json({ error: "Not enough XP to cover that ante" });
+
+    const { data: created, error: insErr } = await supabaseAdmin
+      .from("study_duels")
+      .insert({
+        id: duelId,
+        created_by: user.email,
+        challenger_email: user.email,
+        challenger_name: challenger_name || user.email,
+        opponent_email,
+        opponent_name: opponent_name || opponent_email,
+        metric, window_hours, ante_xp,
+        status: "pending",
+      })
+      .select().single();
+    if (insErr) throw insErr;
+    return res.json({ success: true, duel: created });
+  } catch (err) {
+    console.error("[createDuel] error:", err);
+    return res.status(500).json({ error: err?.message || String(err) });
+  }
+});
+
+// ─── respondDuel ───────────────────────────────────────────────────────────
+app.post("/local-ai/fn/respondDuel", async (req, res) => {
+  const user = await authenticateRequest(req);
+  if (!user) return res.status(401).json({ error: "Unauthorized" });
+  if (!supabaseAdmin) return res.status(500).json({ error: "Supabase admin not configured" });
+  try {
+    const { duel_id, accept } = req.body || {};
+    const { data: duel } = await supabaseAdmin
+      .from("study_duels").select("*").eq("id", duel_id).maybeSingle();
+    if (!duel) return res.status(404).json({ error: "Duel not found" });
+    if (duel.opponent_email !== user.email) return res.status(403).json({ error: "This challenge isn't yours to answer" });
+    if (duel.status !== "pending") return res.status(400).json({ error: "Challenge already answered" });
+
+    if (!accept) {
+      await supabaseAdmin.from("study_duels").update({ status: "declined" }).eq("id", duel_id).eq("status", "pending");
+      await creditXPWithAudit(duel.challenger_email, duel.ante_xp, `duel_refund_${duel_id}_challenger`, "duel_refund", { duel_id, reason: "declined" });
+      return res.json({ success: true, status: "declined" });
+    }
+
+    const escrowed = await deductXPWithAudit(
+      user.email, duel.ante_xp, `duel_ante_${duel_id}_opponent`, "duel_ante", { duel_id },
+    );
+    if (!escrowed) return res.status(400).json({ error: "Not enough XP to cover the ante" });
+
+    const startsAt = new Date();
+    const endsAt = new Date(startsAt.getTime() + duel.window_hours * 3600 * 1000);
+    const { data: updated } = await supabaseAdmin
+      .from("study_duels")
+      .update({ status: "active", starts_at: startsAt.toISOString(), ends_at: endsAt.toISOString() })
+      .eq("id", duel_id).eq("status", "pending")
+      .select().single();
+    return res.json({ success: true, duel: updated });
+  } catch (err) {
+    console.error("[respondDuel] error:", err);
+    return res.status(500).json({ error: err?.message || String(err) });
+  }
+});
+
+// ─── placeDuelSideBet ──────────────────────────────────────────────────────
+app.post("/local-ai/fn/placeDuelSideBet", async (req, res) => {
+  const user = await authenticateRequest(req);
+  if (!user) return res.status(401).json({ error: "Unauthorized" });
+  if (!supabaseAdmin) return res.status(500).json({ error: "Supabase admin not configured" });
+  try {
+    const { duel_id, backed_email, wagered_xp, bettor_name } = req.body || {};
+    if (!Number.isInteger(wagered_xp) || wagered_xp < SIDE_BET_MIN || wagered_xp > SIDE_BET_MAX) {
+      return res.status(400).json({ error: `Side bets are ${SIDE_BET_MIN}-${SIDE_BET_MAX} XP` });
+    }
+    const { data: duel } = await supabaseAdmin
+      .from("study_duels").select("*").eq("id", duel_id).maybeSingle();
+    if (!duel) return res.status(404).json({ error: "Duel not found" });
+    if (duel.status !== "active") return res.status(400).json({ error: "That duel isn't live" });
+    if ([duel.challenger_email, duel.opponent_email].includes(user.email)) {
+      return res.status(400).json({ error: "Duelists can't side-bet their own match" });
+    }
+    if (![duel.challenger_email, duel.opponent_email].includes(backed_email)) {
+      return res.status(400).json({ error: "Back one of the two duelists" });
+    }
+    if ((duel.side_bets || []).some((b) => b.bettor_email === user.email && b.status === "open")) {
+      return res.status(400).json({ error: "You already have a bet on this duel" });
+    }
+
+    const betId = randomUUID();
+    const escrowed = await deductXPWithAudit(
+      user.email, wagered_xp, `duel_sidebet_escrow_${betId}`, "bet_escrow", { duel_id, backed_email },
+    );
+    if (!escrowed) return res.status(400).json({ error: "Not enough XP to cover that stake" });
+
+    const bet = {
+      id: betId,
+      bettor_email: user.email,
+      bettor_name: bettor_name || user.email,
+      backed_email,
+      wagered_xp,
+      status: "open",
+      xp_outcome: null,
+      created_at: new Date().toISOString(),
+    };
+    await supabaseAdmin
+      .from("study_duels")
+      .update({ side_bets: [...(duel.side_bets || []), bet] })
+      .eq("id", duel_id).eq("status", "active");
+    return res.json({ success: true, bet });
+  } catch (err) {
+    console.error("[placeDuelSideBet] error:", err);
+    return res.status(500).json({ error: err?.message || String(err) });
+  }
+});
+
+// ─── createStudyBet — back yourself, auto-verified ─────────────────────────
+app.post("/local-ai/fn/createStudyBet", async (req, res) => {
+  const user = await authenticateRequest(req);
+  if (!user) return res.status(401).json({ error: "Unauthorized" });
+  if (!supabaseAdmin) return res.status(500).json({ error: "Supabase admin not configured" });
+  try {
+    const { metric, target, window_hours, stake_xp } = req.body || {};
+    if (!ARENA_METRICS.includes(metric)) return res.status(400).json({ error: "Unknown yardstick" });
+    if (!DUEL_WINDOWS.includes(window_hours)) return res.status(400).json({ error: "Window must be 24, 72 or 168 hours" });
+    if (!Number.isInteger(target) || target < STUDY_BET_MIN_TARGET[metric]) {
+      return res.status(400).json({ error: `Aim for at least ${STUDY_BET_MIN_TARGET[metric]} — make it a real challenge` });
+    }
+    if (!Number.isInteger(stake_xp) || stake_xp < 25 || stake_xp > 500) {
+      return res.status(400).json({ error: "Stake must be 25-500 XP" });
+    }
+    const { data: active } = await supabaseAdmin
+      .from("study_bets").select("id").eq("created_by", user.email).eq("status", "active");
+    if ((active || []).length >= 3) return res.status(400).json({ error: "Three live bets is the max — finish one first" });
+
+    const betId = randomUUID();
+    const escrowed = await deductXPWithAudit(
+      user.email, stake_xp, `studybet_escrow_${betId}`, "bet_escrow", { study_bet_id: betId, metric, target },
+    );
+    if (!escrowed) return res.status(400).json({ error: "Not enough XP to cover that stake" });
+
+    const endsAt = new Date(Date.now() + window_hours * 3600 * 1000);
+    const { data: created, error: insErr } = await supabaseAdmin
+      .from("study_bets")
+      .insert({
+        id: betId, created_by: user.email, metric, target, stake_xp,
+        multiplier: STUDY_BET_MULT, ends_at: endsAt.toISOString(),
+      })
+      .select().single();
+    if (insErr) throw insErr;
+    return res.json({ success: true, bet: created });
+  } catch (err) {
+    console.error("[createStudyBet] error:", err);
+    return res.status(500).json({ error: err?.message || String(err) });
+  }
+});
+
+// ─── getArenaState — one call renders the whole arena ──────────────────────
+// Returns my duels + spectatable friends' duels (with live scores), my
+// back-yourself bets (with live progress), balance, and a momentum ticker.
+// Also the lazy settlement engine: anything past due settles right here.
+app.post("/local-ai/fn/getArenaState", async (req, res) => {
+  const user = await authenticateRequest(req);
+  if (!user) return res.status(401).json({ error: "Unauthorized" });
+  if (!supabaseAdmin) return res.status(500).json({ error: "Supabase admin not configured" });
+  try {
+    const me = user.email;
+    const authHeader = req.headers.authorization || "";
+    const nowIso = new Date().toISOString();
+    const freshlySettled = [];
+
+    // Friends (accepted, either direction) for spectatable duels.
+    const [{ data: fA }, { data: fB }] = await Promise.all([
+      supabaseAdmin.from("friendships").select("recipient_email").eq("requester_email", me).eq("status", "accepted"),
+      supabaseAdmin.from("friendships").select("requester_email").eq("recipient_email", me).eq("status", "accepted"),
+    ]);
+    const friendEmails = [
+      ...(fA || []).map((f) => f.recipient_email),
+      ...(fB || []).map((f) => f.requester_email),
+    ].filter(Boolean);
+
+    // My duels (any status, last 30 days) + friends' live duels.
+    const since = new Date(Date.now() - 30 * 24 * 3600 * 1000).toISOString();
+    const { data: mineRaw, error: duelErr } = await supabaseAdmin
+      .from("study_duels").select("*")
+      .or(`challenger_email.eq.${me},opponent_email.eq.${me}`)
+      .gte("created_date", since)
+      .order("created_date", { ascending: false }).limit(30);
+    if (duelErr) {
+      // Table missing → migration 0021 not applied yet. Degrade gracefully.
+      if (/study_duels/.test(duelErr.message || "")) {
+        return res.json({ setup_required: true, duels: [], spectator_duels: [], bets: [], ticker: [], balance: null });
+      }
+      throw duelErr;
+    }
+    let spectatorDuels = [];
+    if (friendEmails.length) {
+      const list = friendEmails.map((e) => `challenger_email.eq.${e},opponent_email.eq.${e}`).join(",");
+      const { data: specRaw } = await supabaseAdmin
+        .from("study_duels").select("*").eq("status", "active").or(list).limit(20);
+      spectatorDuels = (specRaw || []).filter(
+        (d) => d.challenger_email !== me && d.opponent_email !== me,
+      );
+    }
+
+    // Lazy lifecycle: expire stale invites (48h), settle finished duels.
+    const duels = [];
+    for (const duel of mineRaw || []) {
+      if (duel.status === "pending" && new Date(duel.created_date) < new Date(Date.now() - 48 * 3600 * 1000)) {
+        await supabaseAdmin.from("study_duels").update({ status: "expired" }).eq("id", duel.id).eq("status", "pending");
+        await creditXPWithAudit(duel.challenger_email, duel.ante_xp, `duel_refund_${duel.id}_challenger`, "duel_refund", { duel_id: duel.id, reason: "expired" });
+        duels.push({ ...duel, status: "expired" });
+      } else if (duel.status === "active" && duel.ends_at && duel.ends_at <= nowIso) {
+        const settled = await settleDuelNow(duel, authHeader);
+        duels.push(settled);
+        freshlySettled.push({ type: "duel", id: settled.id, winner_email: settled.winner_email, pot: settled.ante_xp * 2 });
+      } else {
+        duels.push(duel);
+      }
+    }
+
+    // Live scores for every still-active duel I can see.
+    const liveDuels = [...duels, ...spectatorDuels].filter((d) => d.status === "active");
+    await Promise.all(liveDuels.map(async (d) => {
+      const [cs, os] = await Promise.all([
+        computeMetricValue(d.challenger_email, d.metric, d.starts_at, nowIso),
+        computeMetricValue(d.opponent_email, d.metric, d.starts_at, nowIso),
+      ]);
+      d.live_scores = { [d.challenger_email]: cs, [d.opponent_email]: os };
+    }));
+
+    // Back-yourself bets: settle wins the moment the target is hit, losses
+    // once time runs out; report live progress for the rest.
+    const { data: betsRaw } = await supabaseAdmin
+      .from("study_bets").select("*").eq("created_by", me)
+      .gte("created_date", since).order("created_date", { ascending: false }).limit(20);
+    const bets = [];
+    for (const bet of betsRaw || []) {
+      if (bet.status !== "active") { bets.push(bet); continue; }
+      const value = await computeMetricValue(me, bet.metric, bet.starts_at, nowIso);
+      if (value >= bet.target) {
+        const payout = Math.floor(bet.stake_xp * (Number(bet.multiplier) || STUDY_BET_MULT));
+        await supabaseAdmin.from("study_bets")
+          .update({ status: "won", settled_at: nowIso, final_value: value })
+          .eq("id", bet.id).eq("status", "active");
+        try {
+          await callLocalFn("awardXP", {
+            source: "bet_win",
+            event_key: `studybet_win_${bet.id}`,
+            flat_xp: payout,
+            target_email: me,
+          }, authHeader);
+        } catch (e) { console.error("[getArenaState] study bet payout failed:", e?.message); }
+        bets.push({ ...bet, status: "won", final_value: value, progress: value });
+        freshlySettled.push({ type: "study_bet", id: bet.id, won: true, payout });
+      } else if (bet.ends_at <= nowIso) {
+        await supabaseAdmin.from("study_bets")
+          .update({ status: "lost", settled_at: nowIso, final_value: value })
+          .eq("id", bet.id).eq("status", "active");
+        bets.push({ ...bet, status: "lost", final_value: value, progress: value });
+        freshlySettled.push({ type: "study_bet", id: bet.id, won: false });
+      } else {
+        bets.push({ ...bet, progress: value });
+      }
+    }
+
+    // Momentum ticker: recent study events from everyone in a live duel.
+    let ticker = [];
+    if (liveDuels.length) {
+      const names = {};
+      liveDuels.forEach((d) => {
+        names[d.challenger_email] = d.challenger_name;
+        names[d.opponent_email] = d.opponent_name;
+      });
+      const emails = Object.keys(names);
+      const earliest = liveDuels.map((d) => d.starts_at).sort()[0];
+      const { data: ev } = await supabaseAdmin
+        .from("xp_events")
+        .select("user_email, source, xp_awarded, created_date")
+        .in("user_email", emails)
+        .in("source", ARENA_STUDY_SOURCES)
+        .gte("created_date", earliest)
+        .order("created_date", { ascending: false })
+        .limit(8);
+      ticker = (ev || []).map((e) => ({
+        name: names[e.user_email] || e.user_email,
+        email: e.user_email,
+        source: e.source,
+        xp: e.xp_awarded,
+        at: e.created_date,
+      }));
+    }
+
+    const { data: profileRows } = await supabaseAdmin
+      .from("user_profiles").select("total_xp").eq("created_by", me).limit(1);
+
+    return res.json({
+      success: true,
+      duels,
+      spectator_duels: spectatorDuels,
+      bets,
+      ticker,
+      balance: profileRows?.[0]?.total_xp ?? null,
+      freshly_settled: freshlySettled,
+    });
+  } catch (err) {
+    console.error("[getArenaState] error:", err);
     return res.status(500).json({ error: err?.message || String(err) });
   }
 });

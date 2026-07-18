@@ -9,6 +9,7 @@ import {
 import { base44 } from "@/api/base44Client";
 import { useToast } from "@/components/ui/use-toast";
 import GoalCompetitionDetail from "@/components/competition/GoalCompetitionDetail";
+import Arena from "@/components/arena/Arena";
 import { joinGoalCompetition, createGoalCompetition } from "@/api/functionsShim";
 import { Countdown, computePot } from "@/components/competition/arenaHelpers";
 import HelpButton from "@/components/shared/HelpButton";
@@ -487,6 +488,15 @@ export default function Competitions() {
                             )}
                         </div>
                     </div>
+                </motion.section>
+
+                {/* ── THE ARENA — duels, side bets, back-yourself ──────── */}
+                <motion.section
+                    initial={{ opacity: 0, y: 12 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: 0.08 }}
+                >
+                    <Arena />
                 </motion.section>
 
                 {/* ── FOCUS PANEL ─────────────────────────────────────── */}
