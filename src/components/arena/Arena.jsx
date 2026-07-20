@@ -28,7 +28,9 @@ function agoLabel(iso) {
     return `${Math.round(mins / 60)}h ago`;
 }
 
-export default function Arena() {
+// view: "all" (legacy single-scroll), "matches" (duels only), "bets"
+// (back-yourself only) — the Compete tabs render one slice each.
+export default function Arena({ view = "all" }) {
     const { toast } = useToast();
     const [user, setUser] = useState(null);
     const [state, setState] = useState(null);
@@ -117,13 +119,20 @@ export default function Arena() {
     const recent = duels.filter(d => d.status === "settled").slice(0, 3);
     const spectating = state.spectator_duels || [];
 
+    // Bets-only slice: just the commitment bets, nothing else competing for
+    // attention.
+    if (view === "bets") {
+        return (
+            <BackYourself bets={state.bets || []} balance={state.balance} currentUserEmail={me} onUpdate={refresh} />
+        );
+    }
+
+    const showBets = view === "all";
+
     return (
         <div className="space-y-6">
             {/* Section header + challenge CTA */}
-            <div className="flex items-center justify-between gap-3">
-                <h2 className="font-display font-extrabold text-xl text-foreground flex items-center gap-2">
-                    <Swords className="w-6 h-6 text-chart-4" /> The Arena
-                </h2>
+            <div className="flex items-center justify-end gap-3">
                 <Button onClick={() => setChallengeOpen(true)}
                     className="rounded-2xl bg-gradient-to-r from-chart-4 to-chart-3 text-white font-bold gap-2 btn-3d">
                     <Swords className="w-4 h-4" /> Challenge a rival
@@ -219,8 +228,10 @@ export default function Arena() {
                 </div>
             )}
 
-            {/* Back-yourself bets */}
-            <BackYourself bets={state.bets || []} balance={state.balance} currentUserEmail={me} onUpdate={refresh} />
+            {/* Back-yourself bets (only in the legacy single-scroll view) */}
+            {showBets && (
+                <BackYourself bets={state.bets || []} balance={state.balance} currentUserEmail={me} onUpdate={refresh} />
+            )}
 
             {/* Recent results */}
             {recent.length > 0 && (

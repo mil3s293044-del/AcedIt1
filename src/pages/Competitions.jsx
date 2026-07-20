@@ -4,12 +4,13 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
     Trophy, Swords, Users, Crown, Activity, ClipboardList, Settings as SettingsIcon,
-    LogIn, Loader2, Clock, ChevronRight, ArrowRight, TrendingUp, Coins, RotateCcw
+    LogIn, Loader2, Clock, ChevronRight, ArrowRight, TrendingUp, Coins, RotateCcw, Target
 } from "lucide-react";
 import { base44 } from "@/api/base44Client";
 import { useToast } from "@/components/ui/use-toast";
 import GoalCompetitionDetail from "@/components/competition/GoalCompetitionDetail";
 import Arena from "@/components/arena/Arena";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { joinGoalCompetition, createGoalCompetition } from "@/api/functionsShim";
 import { Countdown, computePot } from "@/components/competition/arenaHelpers";
 import HelpButton from "@/components/shared/HelpButton";
@@ -179,6 +180,7 @@ export default function Competitions() {
     const [isLoading, setIsLoading] = useState(true);
     const [selectedComp, setSelectedComp] = useState(null);
     const [inviteCode, setInviteCode] = useState("");
+    const [competeTab, setCompeteTab] = useState("duels");
     const [joiningCode, setJoiningCode] = useState(false);
     const [joinSetupChoice, setJoinSetupChoice] = useState(null);
     const [pendingJoinCode, setPendingJoinCode] = useState(null);
@@ -430,74 +432,79 @@ export default function Competitions() {
                     </h1>
                 </motion.section>
 
-                {/* ── ARENA HERO — bold competitive banner ─────────────── */}
+                {/* ── SEASON STRIP — one compact line, not a billboard ──── */}
                 <motion.section
                     initial={{ opacity: 0, y: 12 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ delay: 0.05 }}
                 >
-                    <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-chart-4 via-chart-4 to-chart-3 p-6 lg:p-8 text-white shadow-soft">
-                        <Swords className="absolute -top-8 -right-8 w-48 h-48 text-white/10 pointer-events-none" />
-                        <div className="relative">
-                            <div className="flex items-center gap-2 mb-1.5 flex-wrap">
-                                <p className="text-xs font-bold uppercase tracking-widest text-white/70">Your arena</p>
+                    <div className="rounded-2xl bg-gradient-to-r from-chart-4 to-chart-3 text-white shadow-soft px-5 py-4">
+                        <div className="flex flex-wrap items-center gap-x-6 gap-y-2">
+                            <div className="flex items-center gap-3 min-w-0">
+                                <Swords className="w-6 h-6 text-white/80 flex-shrink-0" />
+                                <div className="min-w-0">
+                                    <p className="font-display font-black text-lg leading-tight truncate">{seasonRank?.name || 'Unranked'}</p>
+                                    <p className="text-xs text-white/75">
+                                        {seasonXp.toLocaleString()} season XP{seasonRank?.maxXP && seasonRank.maxXP !== Infinity ? ` · ${(seasonRank.maxXP - seasonXp).toLocaleString()} to next tier` : ''}
+                                    </p>
+                                </div>
+                            </div>
+                            <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 ml-auto text-xs font-bold">
+                                <span className="tabular-nums">{stats.recentWins}W – {Math.max(0, stats.completed.length - stats.recentWins)}L · {winRate}%</span>
                                 {stats.winStreak > 1 && (
-                                    <span className="inline-flex items-center gap-1 text-xs font-extrabold bg-surface/20 rounded-full px-2.5 py-0.5">🔥 {stats.winStreak} win streak</span>
+                                    <span className="bg-surface/20 rounded-full px-2.5 py-0.5">🔥 {stats.winStreak} win streak</span>
+                                )}
+                                {stats.active.length > 0 && (
+                                    <span className="inline-flex items-center gap-1.5">
+                                        <Crown className="w-3.5 h-3.5" /> Leading {stats.leading} · behind in {stats.behind}
+                                    </span>
                                 )}
                             </div>
-                            <h2 className="font-display font-black leading-none mb-1.5" style={{ fontSize: 'clamp(2rem, 6vw, 3.5rem)' }}>
-                                {seasonRank?.name || 'Unranked'}
-                            </h2>
-                            <p className="text-sm text-white/80 mb-5">
-                                {seasonXp.toLocaleString()} season XP{seasonRank?.maxXP && seasonRank.maxXP !== Infinity ? ` · ${(seasonRank.maxXP - seasonXp).toLocaleString()} to next tier` : ''}
-                            </p>
-
-                            {/* Bold stat tiles */}
-                            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-5">
-                                {[
-                                    { label: 'Wins', val: stats.recentWins },
-                                    { label: 'Losses', val: Math.max(0, stats.completed.length - stats.recentWins) },
-                                    { label: 'Win rate', val: `${winRate}%` },
-                                    { label: 'Live battles', val: stats.active.length },
-                                ].map(s => (
-                                    <div key={s.label} className="bg-surface/15 rounded-2xl p-3.5 text-center">
-                                        <p className="font-display font-black text-3xl leading-none tabular-nums">{s.val}</p>
-                                        <p className="text-[11px] font-bold text-white/75 mt-1.5 uppercase tracking-wide">{s.label}</p>
-                                    </div>
-                                ))}
-                            </div>
-
-                            {/* Tier progress */}
-                            {seasonRank?.maxXP && seasonRank.maxXP !== Infinity && (
-                                <div className="h-2 bg-surface/20 rounded-full overflow-hidden">
-                                    <motion.div
-                                        initial={{ width: 0 }}
-                                        animate={{ width: `${Math.min(100, ((seasonXp - seasonRank.minXP) / (seasonRank.maxXP - seasonRank.minXP)) * 100)}%` }}
-                                        transition={{ duration: 0.9, delay: 0.4 }}
-                                        className="h-full rounded-full bg-surface"
-                                    />
-                                </div>
-                            )}
-
-                            {/* Leading / catching-up live status */}
-                            {stats.active.length > 0 && (
-                                <div className="flex items-center gap-4 mt-4 text-xs font-bold">
-                                    <span className="inline-flex items-center gap-1.5"><Crown className="w-3.5 h-3.5" /> Leading {stats.leading}</span>
-                                    <span className="inline-flex items-center gap-1.5 text-white/80"><Activity className="w-3.5 h-3.5" /> Catching up {stats.behind}</span>
-                                </div>
-                            )}
                         </div>
+                        {seasonRank?.maxXP && seasonRank.maxXP !== Infinity && (
+                            <div className="h-1.5 bg-surface/20 rounded-full overflow-hidden mt-3">
+                                <motion.div
+                                    initial={{ width: 0 }}
+                                    animate={{ width: `${Math.min(100, ((seasonXp - seasonRank.minXP) / (seasonRank.maxXP - seasonRank.minXP)) * 100)}%` }}
+                                    transition={{ duration: 0.9, delay: 0.4 }}
+                                    className="h-full rounded-full bg-surface"
+                                />
+                            </div>
+                        )}
                     </div>
                 </motion.section>
 
-                {/* ── THE ARENA — duels, side bets, back-yourself ──────── */}
-                <motion.section
-                    initial={{ opacity: 0, y: 12 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: 0.08 }}
-                >
-                    <Arena />
-                </motion.section>
+                {/* ── ONE PAGE, THREE CLEAR MODES ──────────────────────── */}
+                <Tabs value={competeTab} onValueChange={setCompeteTab} className="space-y-5">
+                    <TabsList className="grid w-full grid-cols-3 h-auto p-1.5 rounded-2xl bg-surface border-2 border-border shadow-soft">
+                        {[
+                            { value: "duels", label: "Duels", icon: Swords },
+                            { value: "bets", label: "Back yourself", icon: Target },
+                            { value: "battles", label: "Group battles", icon: Trophy, count: stats.active.length },
+                        ].map(tab => (
+                            <TabsTrigger key={tab.value} value={tab.value}
+                                className="flex items-center justify-center gap-1.5 py-2.5 px-2 rounded-xl text-xs lg:text-sm font-bold text-muted-foreground data-[state=active]:bg-foreground data-[state=active]:text-background data-[state=active]:shadow-soft transition-all">
+                                <tab.icon className="w-3.5 h-3.5" />
+                                <span>{tab.label}</span>
+                                {tab.count > 0 && (
+                                    <span className="bg-primary text-white text-xs rounded-full w-4 h-4 flex items-center justify-center font-bold">{tab.count}</span>
+                                )}
+                            </TabsTrigger>
+                        ))}
+                    </TabsList>
+
+                    {/* Duels — challenges, live matches, spectating */}
+                    <TabsContent value="duels" className="mt-4">
+                        <Arena view="matches" />
+                    </TabsContent>
+
+                    {/* Back yourself — solo commitment bets */}
+                    <TabsContent value="bets" className="mt-4">
+                        <Arena view="bets" />
+                    </TabsContent>
+
+                    {/* Group battles — goal competitions */}
+                    <TabsContent value="battles" className="mt-4 space-y-6">
 
                 {/* ── FOCUS PANEL ─────────────────────────────────────── */}
                 {focus && (
@@ -656,6 +663,8 @@ export default function Competitions() {
                         )}
                     </div>
                 )}
+                    </TabsContent>
+                </Tabs>
             </div>
 
             {/* Join setup dialog */}
