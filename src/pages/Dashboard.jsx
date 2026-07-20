@@ -1,12 +1,11 @@
 import React, { useState, useEffect, useCallback, useMemo } from "react";
 import { base44 } from "@/api/base44Client";
 import { motion, AnimatePresence } from "framer-motion";
-import {
-    Clock, BookOpen, Target, ChevronRight, ArrowRight,
+import { BookOpen, Target, ArrowRight,
     GraduationCap, Zap, Flame, Brain, FileQuestion,
     Sparkles, Trophy, Play, Layers, Timer, Users,
     Map, Swords, BarChart3, Star, CheckCircle2, AlertTriangle,
-    TrendingUp, Crown, Medal
+    TrendingUp, Crown, Medal, Shield
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { format, startOfWeek, differenceInDays, parseISO, isToday, isYesterday } from "date-fns";
@@ -15,6 +14,7 @@ import { Link } from "react-router-dom";
 import HelpButton from "@/components/shared/HelpButton";
 import StudyIntentModal from "@/components/dashboard/StudyIntentModal";
 import { reconcileUserXP } from "@/lib/reconcileXP";
+import { getStreakMultiplier as getStreakMultiplierValue } from "@/components/shared/streakHelpers";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 const fmtTime = (m) => {
@@ -28,26 +28,25 @@ const fmtTime = (m) => {
 
 const fmtXP = (n) => (n || 0).toLocaleString();
 
+// Mirrors the real ladder in streakHelpers/server — what's shown is exactly
+// what awardXP applies (capped at 2.0×).
 function getStreakMultiplier(days) {
-    if (days >= 30) return "2.5×";
-    if (days >= 21) return "2.0×";
-    if (days >= 14) return "1.75×";
-    if (days >= 7)  return "1.5×";
-    if (days >= 3)  return "1.2×";
-    return "1.0×";
+    return `${getStreakMultiplierValue(days)}×`;
 }
 
 function getNextStreakMilestone(days) {
     const tiers = [
-        { at: 3,   mult: "1.2×" },
-        { at: 7,   mult: "1.5×" },
-        { at: 14,  mult: "1.75×" },
-        { at: 21,  mult: "2.0×" },
-        { at: 30,  mult: "2.5×" },
+        { at: 3,   mult: "1.1×" },
+        { at: 7,   mult: "1.25×" },
+        { at: 14,  mult: "1.5×" },
+        { at: 30,  mult: "2.0×" },
     ];
     for (const t of tiers) if (days < t.at) return { ...t, away: t.at - days };
     return null;
 }
+
+// Daily XP goal — the daily loop. 100 XP is roughly one solid session.
+const DAILY_XP_GOAL = 100;
 
 // Coach voice — chill, supportive, motivational. Specific not generic.
 function getCoachLine({ name, hour, streakDays, todayMins, studiedYesterday, dueFlashcards, urgentDays }) {
@@ -205,13 +204,14 @@ export default function Dashboard() {
     const [plannerReminders, setPlannerReminders] = useState([]);
     const [leaderboard, setLeaderboard] = useState([]);
     const [isLoading, setIsLoading] = useState(true);
+    const [todayXP, setTodayXP] = useState(0);
     const [showStudyIntent, setShowStudyIntent] = useState(false);
 
     const loadData = useCallback(async (userEmail) => {
         try {
             const today = format(new Date(), 'yyyy-MM-dd');
             const in14 = format(new Date(Date.now() + 14 * 24 * 60 * 60 * 1000), 'yyyy-MM-dd');
-            const [profileData, sessionsData, techniquesData, quizData, assessmentData, flashcardData, plannerData, lbData] = await Promise.all([
+            const [profileData, sessionsData, techniquesData, quizData, assessmentData, flashcardData, plannerData, lbData, xpEventsData] = await Promise.all([
                 base44.entities.UserProfile.filter({ created_by: userEmail }).catch(() => []),
                 base44.entities.StudySession.filter({ created_by: userEmail }, "-date", 30).catch(() => []),
                 base44.entities.StudyTechnique.filter({ created_by: userEmail }, "-date").catch(() => []),
@@ -220,6 +220,7 @@ export default function Dashboard() {
                 base44.entities.Flashcard.filter({ created_by: userEmail, is_active: true }, "next_review_date").catch(() => []),
                 base44.entities.StudyPlan.filter({ created_by: userEmail, is_completed: false, date: { $gte: today, $lte: in14 } }, "date", 8).catch(() => []),
                 base44.entities.Leaderboard.list('-total_xp', 200).catch(() => []),
+                base44.entities.XPEvent.filter({ user_email: userEmail }, "-created_date", 100).catch(() => []),
             ]);
 
             let profile = profileData[0] || null;
@@ -245,6 +246,12 @@ export default function Dashboard() {
             }
 
             setUserProfile(profile);
+            // Today's earned XP — powers the daily goal ring. Positive events
+            // only (escrow deductions shouldn't shrink the day's effort).
+            const todayStr = format(new Date(), 'yyyy-MM-dd');
+            setTodayXP((xpEventsData || [])
+                .filter(e => (e.xp_awarded || 0) > 0 && (e.created_date || '').slice(0, 10) === todayStr)
+                .reduce((sum, e) => sum + e.xp_awarded, 0));
             setStudySessions(sessionsData || []);
             setStudyTechniques(techniquesData || []);
             setQuizAttempts(quizData || []);
@@ -401,6 +408,22 @@ export default function Dashboard() {
     });
     const streakBlurb = getStreakBlurb(streakDays);
     const multiplier = getStreakMultiplier(streakDays);
+
+    // Last 7 calendar days with a studied-or-not flag — feeds the streak hero.
+    const last7Days = useMemo(() => {
+        const studiedDates = new Set(
+            [...studySessions, ...studyTechniques].map(s => (s.date || '').slice(0, 10)).filter(Boolean)
+        );
+        return Array.from({ length: 7 }, (_, i) => {
+            const d = new Date(Date.now() - (6 - i) * 24 * 3600 * 1000);
+            const key = format(d, 'yyyy-MM-dd');
+            return {
+                label: format(d, 'EEEEE'),
+                studied: studiedDates.has(key),
+                isToday: i === 6,
+            };
+        });
+    }, [studySessions, studyTechniques]);
     const milestone = getNextStreakMilestone(streakDays);
     const move = getTodaysMove({
         todayMins: todaysStudyTime,
@@ -499,6 +522,31 @@ export default function Dashboard() {
                                                 {streakBlurb}
                                             </p>
                                         )}
+
+                                        {/* Last 7 days — did the flame get fed? */}
+                                        <div className="flex items-center gap-1.5 mt-4">
+                                            {last7Days.map((d, i) => (
+                                                <div key={i} className="flex flex-col items-center gap-1">
+                                                    <div className={`w-7 h-7 rounded-lg flex items-center justify-center ${
+                                                        d.studied ? 'bg-streak text-white' : d.isToday ? 'bg-surface border-2 border-dashed border-streak/40' : 'bg-streak/10'
+                                                    }`}>
+                                                        {d.studied ? <Flame className="w-3.5 h-3.5" fill="currentColor" /> : null}
+                                                    </div>
+                                                    <span className={`text-[10px] font-bold ${d.isToday ? 'text-streak' : 'text-muted-foreground/50'}`}>{d.label}</span>
+                                                </div>
+                                            ))}
+                                        </div>
+
+                                        {/* Shields — insurance against one missed day */}
+                                        <div className="inline-flex items-center gap-1.5 mt-3 bg-surface rounded-full px-3 py-1.5 border border-chart-3/20">
+                                            <Shield className={`w-3.5 h-3.5 ${(userProfile?.streak_shields || 0) > 0 ? 'text-chart-3' : 'text-muted-foreground/40'}`} />
+                                            <span className="text-xs font-bold text-foreground">
+                                                {userProfile?.streak_shields || 0} shield{(userProfile?.streak_shields || 0) === 1 ? '' : 's'}
+                                            </span>
+                                            <span className="text-xs text-muted-foreground hidden sm:inline">
+                                                · earn one each 7-day milestone
+                                            </span>
+                                        </div>
                                     </div>
                                     <div className="sm:col-span-2 grid grid-cols-2 sm:grid-cols-1 gap-3">
                                         <div className="bg-surface rounded-xl p-3 border border-streak/10 shadow-soft">
@@ -523,7 +571,7 @@ export default function Dashboard() {
                                         ) : (
                                             <div className="bg-surface rounded-xl p-3 border border-border/60 shadow-soft">
                                                 <p className="stat-label">Status</p>
-                                                <p className="font-bold text-streak text-sm mt-0.5">Maxed at 2.5×</p>
+                                                <p className="font-bold text-streak text-sm mt-0.5">Maxed at 2.0×</p>
                                             </div>
                                         )}
                                     </div>
@@ -545,26 +593,51 @@ export default function Dashboard() {
                         )}
                     </div>
 
-                    {/* Today snapshot */}
+                    {/* Today snapshot — the daily XP goal is the loop */}
                     <div className="lg:col-span-1">
                         <div className="rounded-2xl bg-primary/5 border border-primary/15 shadow-soft p-6 h-full flex flex-col">
-                            <div className="flex items-center gap-2 mb-2">
-                                <Clock className="w-4 h-4 text-primary" />
-                                <p className="stat-label text-primary/80">Today</p>
+                            <div className="flex items-center justify-between mb-3">
+                                <div className="flex items-center gap-2">
+                                    <Zap className="w-4 h-4 text-primary" />
+                                    <p className="stat-label text-primary/80">Daily goal</p>
+                                </div>
+                                {todayXP >= DAILY_XP_GOAL && (
+                                    <span className="pill bg-primary/15 text-primary">Hit! 🎉</span>
+                                )}
                             </div>
-                            <p className="font-display font-extrabold text-foreground leading-none" style={{ fontSize: 'clamp(2.25rem, 5.5vw, 3rem)' }}>
-                                {fmtTime(todaysStudyTime)}
+
+                            {/* XP goal ring */}
+                            <div className="relative w-36 h-36 mx-auto">
+                                <svg viewBox="0 0 100 100" className="w-full h-full -rotate-90">
+                                    <circle cx="50" cy="50" r="42" fill="none" strokeWidth="9"
+                                        className="stroke-primary/10" />
+                                    <motion.circle cx="50" cy="50" r="42" fill="none" strokeWidth="9"
+                                        strokeLinecap="round"
+                                        className={todayXP >= DAILY_XP_GOAL ? "stroke-primary" : "stroke-xp"}
+                                        strokeDasharray={2 * Math.PI * 42}
+                                        initial={{ strokeDashoffset: 2 * Math.PI * 42 }}
+                                        animate={{ strokeDashoffset: (2 * Math.PI * 42) * (1 - Math.min(1, todayXP / DAILY_XP_GOAL)) }}
+                                        transition={{ duration: 1.1, delay: 0.3, ease: "easeOut" }}
+                                    />
+                                </svg>
+                                <div className="absolute inset-0 flex flex-col items-center justify-center">
+                                    <p className="font-display font-extrabold text-foreground text-3xl leading-none tabular-nums">{fmtXP(todayXP)}</p>
+                                    <p className="text-xs font-bold text-muted-foreground mt-1">/ {DAILY_XP_GOAL} XP</p>
+                                </div>
+                            </div>
+                            <p className="text-xs text-muted-foreground text-center mt-2 leading-snug">
+                                {todayXP >= DAILY_XP_GOAL
+                                    ? "Goal smashed — everything from here is bonus."
+                                    : todayXP > 0
+                                        ? `${DAILY_XP_GOAL - todayXP} XP to go — one session covers it.`
+                                        : "Nothing banked yet — let's change that."}
                             </p>
-                            <p className="text-xs text-muted-foreground mt-2 leading-snug">
-                                {todaysStudyTime === 0
-                                    ? "Nothing logged yet — let's change that."
-                                    : todaysStudyTime >= 90
-                                        ? "Solid day so far. Keep cooking."
-                                        : todaysStudyTime >= 30
-                                            ? "Good start — stack another?"
-                                            : "Just getting started."}
-                            </p>
+
                             <div className="space-y-2.5 mt-4 pt-4 border-t border-primary/10">
+                                <div className="flex items-baseline justify-between">
+                                    <p className="text-xs font-bold text-muted-foreground">Time today</p>
+                                    <p className="text-xs font-bold text-foreground">{fmtTime(todaysStudyTime)}</p>
+                                </div>
                                 <div>
                                     <div className="flex items-baseline justify-between mb-1">
                                         <p className="text-xs font-bold text-muted-foreground">This week</p>
