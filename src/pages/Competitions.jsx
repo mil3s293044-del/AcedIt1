@@ -442,7 +442,7 @@ export default function Competitions() {
                             <div className="flex items-center gap-2 mb-1.5 flex-wrap">
                                 <p className="text-xs font-bold uppercase tracking-widest text-white/70">Your arena</p>
                                 {stats.winStreak > 1 && (
-                                    <span className="inline-flex items-center gap-1 text-xs font-extrabold bg-white/20 rounded-full px-2.5 py-0.5">🔥 {stats.winStreak} win streak</span>
+                                    <span className="inline-flex items-center gap-1 text-xs font-extrabold bg-surface/20 rounded-full px-2.5 py-0.5">🔥 {stats.winStreak} win streak</span>
                                 )}
                             </div>
                             <h2 className="font-display font-black leading-none mb-1.5" style={{ fontSize: 'clamp(2rem, 6vw, 3.5rem)' }}>
@@ -460,7 +460,7 @@ export default function Competitions() {
                                     { label: 'Win rate', val: `${winRate}%` },
                                     { label: 'Live battles', val: stats.active.length },
                                 ].map(s => (
-                                    <div key={s.label} className="bg-white/15 rounded-2xl p-3.5 text-center">
+                                    <div key={s.label} className="bg-surface/15 rounded-2xl p-3.5 text-center">
                                         <p className="font-display font-black text-3xl leading-none tabular-nums">{s.val}</p>
                                         <p className="text-[11px] font-bold text-white/75 mt-1.5 uppercase tracking-wide">{s.label}</p>
                                     </div>
@@ -469,12 +469,12 @@ export default function Competitions() {
 
                             {/* Tier progress */}
                             {seasonRank?.maxXP && seasonRank.maxXP !== Infinity && (
-                                <div className="h-2 bg-white/20 rounded-full overflow-hidden">
+                                <div className="h-2 bg-surface/20 rounded-full overflow-hidden">
                                     <motion.div
                                         initial={{ width: 0 }}
                                         animate={{ width: `${Math.min(100, ((seasonXp - seasonRank.minXP) / (seasonRank.maxXP - seasonRank.minXP)) * 100)}%` }}
                                         transition={{ duration: 0.9, delay: 0.4 }}
-                                        className="h-full rounded-full bg-white"
+                                        className="h-full rounded-full bg-surface"
                                     />
                                 </div>
                             )}

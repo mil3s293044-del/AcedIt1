@@ -68,11 +68,12 @@ export default function MotivationalQuotes() {
                             <div className="w-8 h-8 bg-gradient-to-br from-amber-500 to-orange-600 rounded-lg flex items-center justify-center">
                                 <Quote className="w-4 h-4 text-white" />
                             </div>
-                            <h3 className="font-semibold text-gray-900">Daily Motivation</h3>
+                            <h3 className="font-semibold text-foreground">Daily Motivation</h3>
                         </div>
                         <Button 
                             variant="ghost" 
-                            size="icon" 
+                            size="icon"
+                            aria-label="Next quote"
                             onClick={nextQuote}
                             className="hover:bg-amber-100/50 text-amber-700"
                         >
@@ -88,7 +89,7 @@ export default function MotivationalQuotes() {
                             exit={{ opacity: 0, y: -10 }}
                             transition={{ duration: 0.3 }}
                         >
-                            <blockquote className="text-base font-medium text-gray-900 mb-3 italic leading-relaxed">
+                            <blockquote className="text-base font-medium text-foreground mb-3 italic leading-relaxed">
                                 "{quote.text}"
                             </blockquote>
                             <cite className="text-sm text-amber-700 font-semibold not-italic">

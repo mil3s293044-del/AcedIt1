@@ -36,7 +36,7 @@ export default function TimePicker({ value, onChange, className }) {
                     ))}
                 </SelectContent>
             </Select>
-            <span className="flex items-center text-gray-500 font-medium">:</span>
+            <span className="flex items-center text-muted-foreground font-medium">:</span>
             <Select value={minute} onValueChange={setMinute}>
                 <SelectTrigger className="w-20">
                     <SelectValue />

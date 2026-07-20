@@ -462,12 +462,12 @@ ${sourceText ? `\nEXTRACTED CONTENT:${sourceText}` : ""}`;
             <Dialog open={showPreview} onOpenChange={setShowPreview}>
                 <DialogContent className="max-w-4xl max-h-[88vh] overflow-y-auto">
                     <DialogHeader><DialogTitle>Preview · {title || subject || "Cheat Sheet"}</DialogTitle></DialogHeader>
-                    <div className="bg-white text-[#0D1626] rounded-lg border border-border shadow-soft p-6">
+                    <div className="bg-surface text-[#0D1626] rounded-lg border border-border shadow-soft p-6">
                         <h1 className="text-lg font-extrabold mb-3">{title || subject || "Cheat Sheet"}</h1>
                         <div className="columns-1 sm:columns-2 gap-6 text-[12px] leading-snug">
                             {sections.map((sec) => (
                                 <div key={sec.name} className="break-inside-avoid mb-3">
-                                    <p className="text-[13px] font-bold text-chart-3 border-b border-gray-200 pb-0.5 mb-1">{sec.name}</p>
+                                    <p className="text-[13px] font-bold text-chart-3 border-b border-border pb-0.5 mb-1">{sec.name}</p>
                                     {sec.items.map((it) => (
                                         <div key={it.id} className="flex gap-1.5 mb-1">
                                             <span className="text-primary flex-shrink-0">•</span>

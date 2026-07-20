@@ -128,12 +128,12 @@ export default function TechniqueAnalytics({ data }) {
                                 <CardContent className="space-y-4">
                                     <div>
                                         <div className="flex items-center justify-between text-sm mb-2">
-                                            <span className="text-gray-600">{stat.isQuiz ? 'Quizzes Taken' : 'Sessions'}</span>
-                                            <span className="font-bold text-gray-900">{stat.sessions}</span>
+                                            <span className="text-muted-foreground">{stat.isQuiz ? 'Quizzes Taken' : 'Sessions'}</span>
+                                            <span className="font-bold text-foreground">{stat.sessions}</span>
                                         </div>
                                         <div className="flex items-center justify-between text-sm mb-2">
-                                            <span className="text-gray-600">Study Time</span>
-                                            <span className="font-bold text-gray-900">
+                                            <span className="text-muted-foreground">Study Time</span>
+                                            <span className="font-bold text-foreground">
                                                 {stat.totalMinutes >= 60 
                                                     ? `${Math.round(stat.totalMinutes / 60 * 10) / 10}h` 
                                                     : `${stat.totalMinutes}m`}
@@ -141,14 +141,14 @@ export default function TechniqueAnalytics({ data }) {
                                         </div>
                                         {!stat.isQuiz && (
                                             <div className="flex items-center justify-between text-sm mb-2">
-                                                <span className="text-gray-600">Subjects</span>
-                                                <span className="font-bold text-gray-900">{stat.subjects}</span>
+                                                <span className="text-muted-foreground">Subjects</span>
+                                                <span className="font-bold text-foreground">{stat.subjects}</span>
                                             </div>
                                         )}
                                     </div>
                                     <div>
                                         <div className="flex items-center justify-between text-sm mb-2">
-                                            <span className="text-gray-600">
+                                            <span className="text-muted-foreground">
                                                 {stat.key === 'spaced_repetition' || stat.key === 'quizzes' ? 'Avg Score' : 'Performance'}
                                             </span>
                                             <span className="font-bold" style={{ color: TECHNIQUE_COLORS[stat.key] }}>
@@ -239,7 +239,7 @@ export default function TechniqueAnalytics({ data }) {
                                 </PieChart>
                             </ResponsiveContainer>
                         ) : (
-                            <div className="h-[300px] flex items-center justify-center text-gray-500">
+                            <div className="h-[300px] flex items-center justify-center text-muted-foreground">
                                 No data available for this period
                             </div>
                         )}
@@ -260,11 +260,11 @@ export default function TechniqueAnalytics({ data }) {
                         .sort((a, b) => b.totalMinutes - a.totalMinutes)
                         .slice(0, 3)
                         .map((stat, index) => (
-                            <div key={stat.key} className="flex items-center gap-3 p-3 bg-white rounded-lg">
+                            <div key={stat.key} className="flex items-center gap-3 p-3 bg-surface rounded-lg">
                                 <Badge className="text-lg font-bold">{index + 1}</Badge>
                                 <div className="flex-1">
-                                    <p className="font-semibold text-gray-900">{stat.name}</p>
-                                    <p className="text-sm text-gray-600">
+                                    <p className="font-semibold text-foreground">{stat.name}</p>
+                                    <p className="text-sm text-muted-foreground">
                                         {stat.sessions} sessions • {Math.round(stat.totalMinutes / 60)}h total
                                     </p>
                                 </div>

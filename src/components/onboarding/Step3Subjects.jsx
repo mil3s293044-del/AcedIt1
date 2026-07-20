@@ -56,15 +56,15 @@ export default function Step3Subjects({ data, onNext, onBack, saving }) {
 
     return (
         <div className="max-w-2xl mx-auto px-6 py-10">
-            <button onClick={onBack} className="flex items-center gap-1 text-sm text-gray-400 hover:text-gray-600 mb-6">
+            <button onClick={onBack} className="flex items-center gap-1 text-sm text-muted-foreground/60 hover:text-muted-foreground mb-6">
                 <ChevronLeft className="w-4 h-4" /> Back
             </button>
-            <h2 className="text-2xl font-bold text-gray-900 mb-1">What subjects are you studying?</h2>
-            <p className="text-gray-500 text-sm mb-6">We'll use these to personalise your AI tools, quizzes, and weak topic tracking. You can change these later in Settings.</p>
+            <h2 className="text-2xl font-bold text-foreground mb-1">What subjects are you studying?</h2>
+            <p className="text-muted-foreground text-sm mb-6">We'll use these to personalise your AI tools, quizzes, and weak topic tracking. You can change these later in Settings.</p>
 
             {/* Search */}
             <div className="relative mb-4">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground/60" />
                 <Input
                     className="pl-9 text-sm"
                     placeholder="Search subjects..."
@@ -74,7 +74,7 @@ export default function Step3Subjects({ data, onNext, onBack, saving }) {
             </div>
 
             {loading ? (
-                <div className="flex items-center justify-center py-12 text-gray-400 text-sm">Loading subjects...</div>
+                <div className="flex items-center justify-center py-12 text-muted-foreground/60 text-sm">Loading subjects...</div>
             ) : (
                 <div className="flex flex-wrap gap-2 mb-6">
                     {filteredSubjects.map(name => {

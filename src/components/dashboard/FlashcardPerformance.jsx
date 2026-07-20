@@ -130,7 +130,7 @@ export default function FlashcardPerformance({ user }) {
             <Card className="shadow-lg border-2 border-purple-100">
                 <CardContent className="p-8 text-center">
                     <div className="animate-spin w-8 h-8 border-4 border-purple-600 border-t-transparent rounded-full mx-auto"></div>
-                    <p className="text-gray-600 mt-4 text-sm">Loading performance...</p>
+                    <p className="text-muted-foreground mt-4 text-sm">Loading performance...</p>
                 </CardContent>
             </Card>
         );
@@ -146,8 +146,8 @@ export default function FlashcardPerformance({ user }) {
                     </CardTitle>
                 </CardHeader>
                 <CardContent className="text-center py-8">
-                    <Brain className="w-12 h-12 text-gray-300 mx-auto mb-3" />
-                    <p className="text-gray-600 mb-4">No flashcards yet</p>
+                    <Brain className="w-12 h-12 text-muted-foreground/40 mx-auto mb-3" />
+                    <p className="text-muted-foreground mb-4">No flashcards yet</p>
                     <Link to={createPageUrl("Study")}>
                         <Button className="bg-gradient-to-r from-purple-600 to-indigo-600">
                             Create Flashcards
@@ -174,19 +174,19 @@ export default function FlashcardPerformance({ user }) {
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                     <div className="text-center p-4 bg-purple-50 rounded-lg">
                         <div className="text-2xl font-bold text-purple-600">{performance.totalCards}</div>
-                        <div className="text-xs text-gray-600">Total Cards</div>
+                        <div className="text-xs text-muted-foreground">Total Cards</div>
                     </div>
                     <div className="text-center p-4 bg-blue-50 rounded-lg">
                         <div className="text-2xl font-bold text-blue-600">{performance.cardsReviewed}</div>
-                        <div className="text-xs text-gray-600">Reviewed</div>
+                        <div className="text-xs text-muted-foreground">Reviewed</div>
                     </div>
                     <div className="text-center p-4 bg-green-50 rounded-lg">
                         <div className="text-2xl font-bold text-green-600">{performance.averageSuccessRate}%</div>
-                        <div className="text-xs text-gray-600">Success Rate</div>
+                        <div className="text-xs text-muted-foreground">Success Rate</div>
                     </div>
                     <div className="text-center p-4 bg-orange-50 rounded-lg">
                         <div className="text-2xl font-bold text-orange-600">{performance.dueToday}</div>
-                        <div className="text-xs text-gray-600">Due Today</div>
+                        <div className="text-xs text-muted-foreground">Due Today</div>
                     </div>
                 </div>
 
@@ -216,7 +216,7 @@ export default function FlashcardPerformance({ user }) {
                     <div>
                         <div className="flex items-center gap-2 mb-3">
                             <TrendingUp className="w-5 h-5 text-green-600" />
-                            <h3 className="font-semibold text-gray-900">Your Strengths</h3>
+                            <h3 className="font-semibold text-foreground">Your Strengths</h3>
                         </div>
                         <div className="space-y-2">
                             {performance.strengths.map((strength, index) => (
@@ -229,8 +229,8 @@ export default function FlashcardPerformance({ user }) {
                                 >
                                     <div className="flex items-center gap-2">
                                         <div className="w-2 h-2 bg-green-500 rounded-full" />
-                                        <span className="font-medium text-gray-900">{strength.name}</span>
-                                        <Badge variant="outline" className="text-xs bg-white">
+                                        <span className="font-medium text-foreground">{strength.name}</span>
+                                        <Badge variant="outline" className="text-xs bg-surface">
                                             {strength.totalCards} cards
                                         </Badge>
                                     </div>
@@ -248,7 +248,7 @@ export default function FlashcardPerformance({ user }) {
                     <div>
                         <div className="flex items-center gap-2 mb-3">
                             <AlertCircle className="w-5 h-5 text-orange-600" />
-                            <h3 className="font-semibold text-gray-900">Areas to Focus On</h3>
+                            <h3 className="font-semibold text-foreground">Areas to Focus On</h3>
                         </div>
                         <div className="space-y-2">
                             {performance.weaknesses.map((weakness, index) => (
@@ -261,8 +261,8 @@ export default function FlashcardPerformance({ user }) {
                                 >
                                     <div className="flex items-center gap-2">
                                         <div className="w-2 h-2 bg-orange-500 rounded-full" />
-                                        <span className="font-medium text-gray-900">{weakness.name}</span>
-                                        <Badge variant="outline" className="text-xs bg-white">
+                                        <span className="font-medium text-foreground">{weakness.name}</span>
+                                        <Badge variant="outline" className="text-xs bg-surface">
                                             {weakness.totalCards} cards
                                         </Badge>
                                     </div>

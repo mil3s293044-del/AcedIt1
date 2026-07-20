@@ -13,10 +13,10 @@ const StatsCard = React.memo(({ title, value, subtitle, icon: Icon, color, gradi
                 <CardContent className={`p-6 bg-gradient-to-br ${gradient}`}>
                     <div className="flex items-start justify-between">
                         <div className="flex-1">
-                            <p className="text-sm font-medium text-gray-600 mb-1">{title}</p>
-                            <p className="text-3xl font-black text-gray-900">{value}</p>
+                            <p className="text-sm font-medium text-muted-foreground mb-1">{title}</p>
+                            <p className="text-3xl font-black text-foreground">{value}</p>
                             {subtitle && (
-                                <p className="text-sm text-gray-500 mt-1">{subtitle}</p>
+                                <p className="text-sm text-muted-foreground mt-1">{subtitle}</p>
                             )}
                         </div>
                         <div className={`w-12 h-12 ${color} rounded-xl flex items-center justify-center flex-shrink-0`}>

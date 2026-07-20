@@ -165,7 +165,7 @@ export default function HelpButton({ page, className = "" }) {
             <button
                 onClick={() => setOpen(true)}
                 aria-label="Help"
-                className={`inline-flex items-center justify-center w-8 h-8 rounded-full bg-white/80 border border-gray-200 text-gray-500 hover:text-indigo-600 hover:border-indigo-300 hover:bg-indigo-50 shadow-sm transition-all duration-200 hover:scale-110 ${className}`}
+                className={`inline-flex items-center justify-center w-8 h-8 rounded-full bg-surface/80 border border-border text-muted-foreground hover:text-indigo-600 hover:border-indigo-300 hover:bg-indigo-50 shadow-sm transition-all duration-200 hover:scale-110 ${className}`}
             >
                 <HelpCircle className="w-4 h-4" />
             </button>
@@ -188,7 +188,7 @@ export default function HelpButton({ page, className = "" }) {
                             animate={{ opacity: 1, x: 0 }}
                             exit={{ opacity: 0, x: 60 }}
                             transition={{ type: "spring", damping: 28, stiffness: 280 }}
-                            className="fixed right-0 top-0 bottom-0 z-50 w-full max-w-sm bg-white shadow-2xl flex flex-col"
+                            className="fixed right-0 top-0 bottom-0 z-50 w-full max-w-sm bg-surface shadow-2xl flex flex-col"
                         >
                             {/* Header */}
                             <div className="flex items-center justify-between p-5 border-b bg-gradient-to-r from-indigo-50 to-purple-50">
@@ -198,12 +198,12 @@ export default function HelpButton({ page, className = "" }) {
                                     </div>
                                     <div>
                                         <p className="text-xs text-indigo-500 font-semibold uppercase tracking-wide">How to use</p>
-                                        <h2 className="text-lg font-black text-gray-900">{content.title}</h2>
+                                        <h2 className="text-lg font-black text-foreground">{content.title}</h2>
                                     </div>
                                 </div>
                                 <button
                                     onClick={() => setOpen(false)}
-                                    className="w-8 h-8 rounded-full hover:bg-gray-100 flex items-center justify-center text-gray-400 hover:text-gray-700 transition-colors"
+                                    className="w-8 h-8 rounded-full hover:bg-secondary flex items-center justify-center text-muted-foreground/60 hover:text-muted-foreground transition-colors"
                                 >
                                     <X className="w-4 h-4" />
                                 </button>
@@ -222,11 +222,11 @@ export default function HelpButton({ page, className = "" }) {
                                         initial={{ opacity: 0, y: 8 }}
                                         animate={{ opacity: 1, y: 0 }}
                                         transition={{ delay: i * 0.05 }}
-                                        className="flex gap-3 p-3 rounded-xl hover:bg-gray-50 transition-colors"
+                                        className="flex gap-3 p-3 rounded-xl hover:bg-secondary/50 transition-colors"
                                     >
                                         <div className="flex-1">
-                                            <p className="font-bold text-gray-900 text-sm mb-0.5">{section.heading}</p>
-                                            <p className="text-sm text-gray-600 leading-relaxed">{section.body}</p>
+                                            <p className="font-bold text-foreground text-sm mb-0.5">{section.heading}</p>
+                                            <p className="text-sm text-muted-foreground leading-relaxed">{section.body}</p>
                                         </div>
                                     </motion.div>
                                 ))}
@@ -234,7 +234,7 @@ export default function HelpButton({ page, className = "" }) {
 
                             {/* Footer */}
                             <div className="p-4 border-t text-center">
-                                <p className="text-xs text-gray-400">Still stuck? Go to <strong className="text-gray-600">Support</strong> to contact us.</p>
+                                <p className="text-xs text-muted-foreground/60">Still stuck? Go to <strong className="text-muted-foreground">Support</strong> to contact us.</p>
                             </div>
                         </motion.div>
                     </>

@@ -247,7 +247,7 @@ Format as clear, numbered recommendations.`;
                     <Button
                         onClick={handleGenerateAI}
                         disabled={isGenerating}
-                        className="bg-white text-purple-600 hover:bg-white/90 font-semibold"
+                        className="bg-surface text-purple-600 hover:bg-surface/90 font-semibold"
                         size="lg"
                     >
                         {isGenerating ? (
@@ -275,7 +275,7 @@ Format as clear, numbered recommendations.`;
                         </CardTitle>
                     </CardHeader>
                     <CardContent>
-                        <div className="prose prose-sm max-w-none bg-white rounded-lg p-6">
+                        <div className="prose prose-sm max-w-none bg-surface rounded-lg p-6">
                             <div className="whitespace-pre-wrap">{aiRecommendations}</div>
                         </div>
                     </CardContent>
@@ -300,7 +300,7 @@ Format as clear, numbered recommendations.`;
                                 <CardTitle className="text-lg">{rec.title}</CardTitle>
                             </CardHeader>
                             <CardContent className="space-y-4">
-                                <p className="text-gray-600">{rec.description}</p>
+                                <p className="text-muted-foreground">{rec.description}</p>
                                 <div className="p-3 bg-gradient-to-r from-indigo-50 to-purple-50 rounded-lg border border-indigo-100">
                                     <p className="text-sm font-semibold text-indigo-900 mb-1">Action Step:</p>
                                     <p className="text-sm text-indigo-700">{rec.action}</p>
@@ -320,42 +320,42 @@ Format as clear, numbered recommendations.`;
                     </CardTitle>
                 </CardHeader>
                 <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div className="p-4 bg-white rounded-lg">
-                        <h4 className="font-semibold text-gray-900 mb-2 flex items-center gap-2">
+                    <div className="p-4 bg-surface rounded-lg">
+                        <h4 className="font-semibold text-foreground mb-2 flex items-center gap-2">
                             <span className="text-2xl">🧠</span>
                             Spaced Repetition
                         </h4>
-                        <p className="text-sm text-gray-600">
+                        <p className="text-sm text-muted-foreground">
                             Review material at increasing intervals (1 day, 3 days, 1 week, 1 month) for optimal retention.
                         </p>
                     </div>
                     
-                    <div className="p-4 bg-white rounded-lg">
-                        <h4 className="font-semibold text-gray-900 mb-2 flex items-center gap-2">
+                    <div className="p-4 bg-surface rounded-lg">
+                        <h4 className="font-semibold text-foreground mb-2 flex items-center gap-2">
                             <span className="text-2xl">⏰</span>
                             Pomodoro Technique
                         </h4>
-                        <p className="text-sm text-gray-600">
+                        <p className="text-sm text-muted-foreground">
                             Work in 25-minute focused bursts with 5-minute breaks. This maintains concentration and prevents burnout.
                         </p>
                     </div>
 
-                    <div className="p-4 bg-white rounded-lg">
-                        <h4 className="font-semibold text-gray-900 mb-2 flex items-center gap-2">
+                    <div className="p-4 bg-surface rounded-lg">
+                        <h4 className="font-semibold text-foreground mb-2 flex items-center gap-2">
                             <span className="text-2xl">✍️</span>
                             Active Recall
                         </h4>
-                        <p className="text-sm text-gray-600">
+                        <p className="text-sm text-muted-foreground">
                             Test yourself without looking at notes. This strengthens memory more than passive reading.
                         </p>
                     </div>
 
-                    <div className="p-4 bg-white rounded-lg">
-                        <h4 className="font-semibold text-gray-900 mb-2 flex items-center gap-2">
+                    <div className="p-4 bg-surface rounded-lg">
+                        <h4 className="font-semibold text-foreground mb-2 flex items-center gap-2">
                             <span className="text-2xl">🎯</span>
                             Interleaving
                         </h4>
-                        <p className="text-sm text-gray-600">
+                        <p className="text-sm text-muted-foreground">
                             Mix different subjects or topics in one session rather than blocking similar content together.
                         </p>
                     </div>

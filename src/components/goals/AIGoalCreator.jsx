@@ -233,11 +233,11 @@ export default function AIGoalCreator({ userSubjects, onGoalCreated, onCancel })
                         </CardHeader>
                         <CardContent className="space-y-6">
                             {/* XP Rewards */}
-                            <div className="grid grid-cols-2 gap-4 p-4 bg-white rounded-lg border">
+                            <div className="grid grid-cols-2 gap-4 p-4 bg-surface rounded-lg border">
                                 <div className="text-center">
                                     <div className="flex items-center justify-center gap-2 mb-1">
                                         <Zap className="w-4 h-4 text-yellow-500" />
-                                        <p className="text-sm text-gray-600">Sub-Goals XP</p>
+                                        <p className="text-sm text-muted-foreground">Sub-Goals XP</p>
                                     </div>
                                     <p className="text-2xl font-bold text-purple-600">
                                         {generatedGoal.sub_goals.reduce((sum, sg) => sum + sg.xp_reward, 0)} XP
@@ -246,7 +246,7 @@ export default function AIGoalCreator({ userSubjects, onGoalCreated, onCancel })
                                 <div className="text-center">
                                     <div className="flex items-center justify-center gap-2 mb-1">
                                         <Trophy className="w-4 h-4 text-yellow-500" />
-                                        <p className="text-sm text-gray-600">Completion Bonus</p>
+                                        <p className="text-sm text-muted-foreground">Completion Bonus</p>
                                     </div>
                                     <p className="text-2xl font-bold text-amber-600">
                                         {generatedGoal.total_xp_reward} XP
@@ -256,7 +256,7 @@ export default function AIGoalCreator({ userSubjects, onGoalCreated, onCancel })
 
                             {/* Sub-Goals */}
                             <div className="space-y-3">
-                                <h4 className="font-semibold text-gray-900 flex items-center gap-2">
+                                <h4 className="font-semibold text-foreground flex items-center gap-2">
                                     <Target className="w-5 h-5 text-purple-600" />
                                     Sub-Goals ({generatedGoal.sub_goals.length})
                                 </h4>
@@ -266,13 +266,13 @@ export default function AIGoalCreator({ userSubjects, onGoalCreated, onCancel })
                                         initial={{ opacity: 0, x: -20 }}
                                         animate={{ opacity: 1, x: 0 }}
                                         transition={{ delay: index * 0.1 }}
-                                        className="flex items-center gap-3 p-3 bg-white rounded-lg border hover:shadow-sm transition-shadow"
+                                        className="flex items-center gap-3 p-3 bg-surface rounded-lg border hover:shadow-sm transition-shadow"
                                     >
                                         <div className="w-8 h-8 rounded-full bg-purple-100 flex items-center justify-center flex-shrink-0">
                                             <span className="text-sm font-semibold text-purple-600">{index + 1}</span>
                                         </div>
                                         <div className="flex-1 min-w-0">
-                                            <p className="text-sm font-medium text-gray-900">{subGoal.title}</p>
+                                            <p className="text-sm font-medium text-foreground">{subGoal.title}</p>
                                         </div>
                                         <Badge variant="secondary" className="flex items-center gap-1">
                                             <Zap className="w-3 h-3" />
@@ -285,10 +285,10 @@ export default function AIGoalCreator({ userSubjects, onGoalCreated, onCancel })
                             {/* Tips */}
                             {generatedGoal.tips && generatedGoal.tips.length > 0 && (
                                 <div className="space-y-2">
-                                    <h4 className="font-semibold text-gray-900">Success Tips</h4>
+                                    <h4 className="font-semibold text-foreground">Success Tips</h4>
                                     <ul className="space-y-2">
                                         {generatedGoal.tips.map((tip, index) => (
-                                            <li key={index} className="flex gap-2 text-sm text-gray-700">
+                                            <li key={index} className="flex gap-2 text-sm text-muted-foreground">
                                                 <CheckCircle2 className="w-4 h-4 text-green-500 flex-shrink-0 mt-0.5" />
                                                 <span>{tip}</span>
                                             </li>

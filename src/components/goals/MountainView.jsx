@@ -22,7 +22,7 @@ const MilestoneEditModal = ({ milestone, onSave, onCancel }) => {
 
     return (
         <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-            <motion.div initial={{opacity: 0, scale: 0.9}} animate={{opacity: 1, scale: 1}} className="bg-white rounded-lg p-6 w-full max-w-md space-y-4">
+            <motion.div initial={{opacity: 0, scale: 0.9}} animate={{opacity: 1, scale: 1}} className="bg-surface rounded-lg p-6 w-full max-w-md space-y-4">
                 <h3 className="text-lg font-bold">Edit Milestone</h3>
                 <div>
                     <label className="text-sm font-medium">Title</label>
@@ -171,8 +171,8 @@ export default function MountainView({ goalLabel, goalValue, milestones, onMiles
                   onClick={() => handleSelectMilestone(milestone)}
                   whileHover={{ scale: 1.1 }}
                 >
-                  <MapPin className={`w-6 h-6 transition-colors ${milestone.is_completed ? 'text-green-500' : 'text-gray-600'} ${selectedMilestone?.id === milestone.id ? 'text-blue-600' : ''}`} />
-                  <div className="absolute bottom-full mb-2 w-48 text-center left-1/2 -translate-x-1/2 p-2 bg-white/80 rounded-lg shadow-lg text-xs font-semibold opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
+                  <MapPin className={`w-6 h-6 transition-colors ${milestone.is_completed ? 'text-green-500' : 'text-muted-foreground'} ${selectedMilestone?.id === milestone.id ? 'text-blue-600' : ''}`} />
+                  <div className="absolute bottom-full mb-2 w-48 text-center left-1/2 -translate-x-1/2 p-2 bg-surface/80 rounded-lg shadow-lg text-xs font-semibold opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
                     {milestone.title}
                   </div>
                 </motion.div>
@@ -201,10 +201,10 @@ export default function MountainView({ goalLabel, goalValue, milestones, onMiles
                 Checkpoint Tasks
                 {localMilestone && (
                     <div className="flex gap-1">
-                        <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setIsEditingMilestone(true)}>
+                        <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setIsEditingMilestone(true)} aria-label="Edit milestone">
                             <Edit className="w-4 h-4" />
                         </Button>
-                        <Button variant="ghost" size="icon" className="h-8 w-8" onClick={handleDeleteMilestone}>
+                        <Button variant="ghost" size="icon" className="h-8 w-8" onClick={handleDeleteMilestone} aria-label="Delete milestone">
                             <Trash2 className="w-4 h-4 text-red-500" />
                         </Button>
                     </div>
@@ -215,18 +215,18 @@ export default function MountainView({ goalLabel, goalValue, milestones, onMiles
             {localMilestone ? (
               <div className="space-y-4">
                 <h3 className="font-semibold text-lg">{localMilestone.title}</h3>
-                <p className="text-sm text-gray-600">{localMilestone.description}</p>
+                <p className="text-sm text-muted-foreground">{localMilestone.description}</p>
                 
                 <div className="space-y-2 max-h-64 overflow-y-auto pr-2">
                     {(localMilestone.action_items || []).map((task, index) => (
                         <div key={index} className="flex items-center gap-2 group">
-                            <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => handleToggleTask(index)}>
-                                {task.completed ? <CheckSquare className="w-5 h-5 text-green-500" /> : <Square className="w-5 h-5 text-gray-400" />}
+                            <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => handleToggleTask(index)} aria-label="Toggle task completion">
+                                {task.completed ? <CheckSquare className="w-5 h-5 text-green-500" /> : <Square className="w-5 h-5 text-muted-foreground/60" />}
                             </Button>
-                            <span className={`flex-1 text-sm ${task.completed ? 'line-through text-gray-500' : ''}`}>
+                            <span className={`flex-1 text-sm ${task.completed ? 'line-through text-muted-foreground' : ''}`}>
                                 {task.task}
                             </span>
-                             <Button variant="ghost" size="icon" className="h-8 w-8 opacity-0 group-hover:opacity-100" onClick={() => handleDeleteTask(index)}>
+                             <Button variant="ghost" size="icon" className="h-8 w-8 opacity-0 group-hover:opacity-100" onClick={() => handleDeleteTask(index)} aria-label="Delete task">
                                 <Trash2 className="w-4 h-4 text-red-500"/>
                             </Button>
                         </div>
@@ -245,9 +245,9 @@ export default function MountainView({ goalLabel, goalValue, milestones, onMiles
               </div>
             ) : (
               <div className="text-center py-12">
-                <MapPin className="w-16 h-16 mx-auto text-gray-300 mb-4" />
-                <h3 className="text-lg font-semibold text-gray-800">Select a checkpoint</h3>
-                <p className="text-sm text-gray-500">Click on a pin on the mountain to see its tasks.</p>
+                <MapPin className="w-16 h-16 mx-auto text-muted-foreground/40 mb-4" />
+                <h3 className="text-lg font-semibold text-foreground">Select a checkpoint</h3>
+                <p className="text-sm text-muted-foreground">Click on a pin on the mountain to see its tasks.</p>
               </div>
             )}
           </CardContent>

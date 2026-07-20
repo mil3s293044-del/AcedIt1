@@ -6,7 +6,7 @@ import { useAuth } from "@/lib/AuthContext";
 export default function Suspended() {
     const { logout } = useAuth();
     return (
-        <div className="min-h-screen bg-white flex flex-col items-center justify-center px-6 py-12">
+        <div className="min-h-screen bg-surface flex flex-col items-center justify-center px-6 py-12">
             <div className="flex items-center gap-3 mb-10">
                 <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{ backgroundColor: "#534AB7" }}>
                     <GraduationCap className="w-6 h-6 text-white" />
@@ -21,8 +21,8 @@ export default function Suspended() {
                     </div>
                 </div>
 
-                <h1 className="text-2xl font-extrabold text-gray-900 mb-3">Account Suspended</h1>
-                <p className="text-gray-500 text-sm mb-6 leading-relaxed">
+                <h1 className="text-2xl font-extrabold text-foreground mb-3">Account Suspended</h1>
+                <p className="text-muted-foreground text-sm mb-6 leading-relaxed">
                     Your account has been suspended due to a violation of our Terms of Service.
                     If you believe this is an error, please contact our support team.
                 </p>
@@ -35,7 +35,7 @@ export default function Suspended() {
 
                 <button
                     onClick={() => logout(true)}
-                    className="mt-4 text-sm text-gray-400 hover:text-gray-600 underline"
+                    className="mt-4 text-sm text-muted-foreground/60 hover:text-muted-foreground underline"
                 >
                     Sign out
                 </button>

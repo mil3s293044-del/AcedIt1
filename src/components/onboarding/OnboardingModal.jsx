@@ -76,15 +76,15 @@ export default function OnboardingModal({ userProfile, onComplete }) {
     const progressPct = ((step - 1) / (TOTAL_STEPS - 1)) * 100;
 
     return (
-        <div className="fixed inset-0 z-[9999] bg-white flex flex-col overflow-hidden">
+        <div className="fixed inset-0 z-[9999] bg-surface flex flex-col overflow-hidden">
             {/* Progress bar */}
             {step < 8 && (
                 <div className="flex-shrink-0 px-6 pt-5 pb-3">
                     <div className="flex items-center justify-between mb-2">
-                        <span className="text-xs text-gray-400 font-medium">Step {step} of {TOTAL_STEPS - 1}</span>
-                        <span className="text-xs text-gray-400">{Math.round(progressPct)}% complete</span>
+                        <span className="text-xs text-muted-foreground/60 font-medium">Step {step} of {TOTAL_STEPS - 1}</span>
+                        <span className="text-xs text-muted-foreground/60">{Math.round(progressPct)}% complete</span>
                     </div>
-                    <div className="w-full h-1.5 bg-gray-100 rounded-full overflow-hidden">
+                    <div className="w-full h-1.5 bg-secondary rounded-full overflow-hidden">
                         <motion.div
                             className="h-full rounded-full"
                             style={{ backgroundColor: "#534AB7" }}

@@ -153,11 +153,11 @@ export default function WeakTopics({ data, subjects }) {
                     <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
                         <Target className="w-8 h-8 text-green-600" />
                     </div>
-                    <h3 className="text-2xl font-bold text-gray-900 mb-2">Great Job! 🎉</h3>
-                    <p className="text-gray-600 text-lg mb-4">
+                    <h3 className="text-2xl font-bold text-foreground mb-2">Great Job! 🎉</h3>
+                    <p className="text-muted-foreground text-lg mb-4">
                         No weak topics identified. You're performing well across all subjects!
                     </p>
-                    <p className="text-sm text-gray-500">
+                    <p className="text-sm text-muted-foreground">
                         Keep up the consistent study habits and continue reviewing regularly.
                     </p>
                 </CardContent>
@@ -175,10 +175,10 @@ export default function WeakTopics({ data, subjects }) {
                             <AlertCircle className="w-8 h-8 text-orange-600" />
                         </div>
                         <div className="flex-1">
-                            <h3 className="text-2xl font-bold text-gray-900 mb-1">
+                            <h3 className="text-2xl font-bold text-foreground mb-1">
                                 {weakTopics.length} Topics Need Attention
                             </h3>
-                            <p className="text-gray-600">
+                            <p className="text-muted-foreground">
                                 Focus on these areas to improve your overall performance
                             </p>
                         </div>
@@ -186,7 +186,7 @@ export default function WeakTopics({ data, subjects }) {
                             <div className="text-3xl font-bold text-orange-600">
                                 {weakTopics.filter(t => t.severity === 'high').length}
                             </div>
-                            <div className="text-sm text-gray-600">High Priority</div>
+                            <div className="text-sm text-muted-foreground">High Priority</div>
                         </div>
                     </div>
                 </CardContent>
@@ -203,7 +203,7 @@ export default function WeakTopics({ data, subjects }) {
                                     <Badge className={getSeverityColor(topic.severity)} variant="outline">
                                         {getSeverityIcon(topic.severity)} {topic.severity.toUpperCase()} PRIORITY
                                     </Badge>
-                                    <TypeIcon className="w-5 h-5 text-gray-400" />
+                                    <TypeIcon className="w-5 h-5 text-muted-foreground/60" />
                                 </div>
                                 <CardTitle className="text-lg flex items-center gap-2">
                                     <TrendingDown className="w-5 h-5 text-red-500" />
@@ -216,14 +216,14 @@ export default function WeakTopics({ data, subjects }) {
                             <CardContent className="space-y-4">
                                 <div>
                                     <div className="flex items-center justify-between text-sm mb-2">
-                                        <span className="text-gray-600">Performance Score</span>
+                                        <span className="text-muted-foreground">Performance Score</span>
                                         <span className="font-bold text-red-600">{topic.score}%</span>
                                     </div>
                                     <Progress value={topic.score} className="h-2" />
                                 </div>
 
-                                <div className="p-3 bg-gray-50 rounded-lg">
-                                    <p className="text-sm text-gray-700">
+                                <div className="p-3 bg-secondary/50 rounded-lg">
+                                    <p className="text-sm text-muted-foreground">
                                         <span className="font-semibold">Issue:</span> {topic.reason}
                                     </p>
                                 </div>
@@ -257,37 +257,37 @@ export default function WeakTopics({ data, subjects }) {
                     </CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-3">
-                    <div className="flex items-start gap-3 p-3 bg-white rounded-lg">
+                    <div className="flex items-start gap-3 p-3 bg-surface rounded-lg">
                         <div className="w-6 h-6 bg-red-100 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5">
                             <span className="text-xs font-bold text-red-600">1</span>
                         </div>
                         <div>
-                            <p className="font-semibold text-gray-900">Focus on High Priority Topics First</p>
-                            <p className="text-sm text-gray-600">
+                            <p className="font-semibold text-foreground">Focus on High Priority Topics First</p>
+                            <p className="text-sm text-muted-foreground">
                                 Start with the {weakTopics.filter(t => t.severity === 'high').length} high-priority topics. Dedicate at least 30 minutes per topic.
                             </p>
                         </div>
                     </div>
 
-                    <div className="flex items-start gap-3 p-3 bg-white rounded-lg">
+                    <div className="flex items-start gap-3 p-3 bg-surface rounded-lg">
                         <div className="w-6 h-6 bg-blue-100 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5">
                             <span className="text-xs font-bold text-blue-600">2</span>
                         </div>
                         <div>
-                            <p className="font-semibold text-gray-900">Use Active Learning Techniques</p>
-                            <p className="text-sm text-gray-600">
+                            <p className="font-semibold text-foreground">Use Active Learning Techniques</p>
+                            <p className="text-sm text-muted-foreground">
                                 Try the Active Recall or Blurting Method for these topics to identify knowledge gaps.
                             </p>
                         </div>
                     </div>
 
-                    <div className="flex items-start gap-3 p-3 bg-white rounded-lg">
+                    <div className="flex items-start gap-3 p-3 bg-surface rounded-lg">
                         <div className="w-6 h-6 bg-green-100 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5">
                             <span className="text-xs font-bold text-green-600">3</span>
                         </div>
                         <div>
-                            <p className="font-semibold text-gray-900">Review and Test Regularly</p>
-                            <p className="text-sm text-gray-600">
+                            <p className="font-semibold text-foreground">Review and Test Regularly</p>
+                            <p className="text-sm text-muted-foreground">
                                 Create flashcards and take practice quizzes to reinforce your understanding.
                             </p>
                         </div>

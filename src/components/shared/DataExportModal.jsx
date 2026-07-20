@@ -226,24 +226,24 @@ export default function DataExportModal({ open, onClose }) {
                         Export Your Data
                     </DialogTitle>
                 </DialogHeader>
-                <p className="text-sm text-gray-500 -mt-2">Download your study data as CSV (spreadsheet) or PDF (report).</p>
+                <p className="text-sm text-muted-foreground -mt-2">Download your study data as CSV (spreadsheet) or PDF (report).</p>
                 <div className="space-y-2 mt-2 max-h-[60vh] overflow-y-auto pr-1">
                     {EXPORTS.map(({ id, label, icon: Icon, color, desc }) => (
                         <motion.div key={id} initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }}
-                            className="flex items-center justify-between p-3 rounded-xl border border-gray-100 bg-gray-50/60 hover:bg-white hover:shadow-sm transition-all">
+                            className="flex items-center justify-between p-3 rounded-xl border border-border bg-secondary/50/60 hover:bg-surface hover:shadow-sm transition-all">
                             <div className="flex items-center gap-3">
                                 <div className={`w-9 h-9 rounded-lg ${color} flex items-center justify-center`}>
                                     <Icon className="w-4.5 h-4.5" />
                                 </div>
                                 <div>
-                                    <p className="font-semibold text-sm text-gray-800">{label}</p>
-                                    <p className="text-xs text-gray-400">{desc}</p>
+                                    <p className="font-semibold text-sm text-foreground">{label}</p>
+                                    <p className="text-xs text-muted-foreground/60">{desc}</p>
                                 </div>
                             </div>
                             <div className="flex gap-1.5">
                                 {id !== "full_report" && (
                                     <Button size="sm" variant="outline" disabled={!!loading[id]} onClick={() => exportData(id, "csv")}
-                                        className="h-8 text-xs gap-1 border-gray-200">
+                                        className="h-8 text-xs gap-1 border-border">
                                         {loading[id] === "csv" ? <Loader2 className="w-3 h-3 animate-spin" /> : <Table className="w-3 h-3" />}
                                         CSV
                                     </Button>
@@ -257,7 +257,7 @@ export default function DataExportModal({ open, onClose }) {
                         </motion.div>
                     ))}
                 </div>
-                <p className="text-xs text-gray-400 text-center mt-1">Data is exported directly from your account — no server needed.</p>
+                <p className="text-xs text-muted-foreground/60 text-center mt-1">Data is exported directly from your account — no server needed.</p>
             </DialogContent>
         </Dialog>
     );

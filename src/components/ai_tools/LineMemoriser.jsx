@@ -221,15 +221,15 @@ export default function LineMemoriser() {
             <div className="space-y-5">
                 {savedSessions.length > 0 && (
                     <div className="card-soft overflow-hidden">
-                        <div className="px-5 py-4 border-b border-gray-100">
+                        <div className="px-5 py-4 border-b border-border">
                             <div className="flex items-center gap-2">
                                 <BookOpen className="w-4 h-4 text-pink-500" />
-                                <h3 className="font-bold text-gray-900 text-sm">Continue Memorising</h3>
+                                <h3 className="font-bold text-foreground text-sm">Continue Memorising</h3>
                             </div>
                         </div>
                         <div className="p-3 space-y-2">
                             {savedSessions.map(session => (
-                                <div key={session.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-xl">
+                                <div key={session.id} className="flex items-center justify-between p-3 bg-secondary/50 rounded-xl">
                                     <div className="flex-1 min-w-0">
                                         <p className="text-sm font-semibold text-foreground truncate">{session.title}</p>
                                         <div className="flex items-center gap-3 mt-1">
@@ -287,9 +287,9 @@ export default function LineMemoriser() {
                             className="w-full">
                             <Play className="w-4 h-4 mr-2" />Start Memorising
                         </Button>
-                        <div className="grid grid-cols-3 gap-3 pt-2 border-t border-gray-100">
+                        <div className="grid grid-cols-3 gap-3 pt-2 border-t border-border">
                             {[['📚', 'Break into sentences'], ['🔄', 'Spaced repetition'], ['🎯', 'Test full recall']].map(([icon, text]) => (
-                                <div key={text} className="text-center p-3 bg-gray-50 rounded-xl">
+                                <div key={text} className="text-center p-3 bg-secondary/50 rounded-xl">
                                     <div className="text-xl mb-1">{icon}</div>
                                     <p className="text-xs text-muted-foreground">{text}</p>
                                 </div>
@@ -306,7 +306,7 @@ export default function LineMemoriser() {
             <Dialog open={showMorePracticeDialog} onOpenChange={setShowMorePracticeDialog}>
                 <DialogContent>
                     <DialogHeader><DialogTitle className="flex items-center gap-2"><Trophy className="w-5 h-5 text-amber-500" />Nicely done!</DialogTitle></DialogHeader>
-                    <p className="text-gray-600 text-sm">3 successful attempts! Do you want more practice or move on?</p>
+                    <p className="text-muted-foreground text-sm">3 successful attempts! Do you want more practice or move on?</p>
                     <DialogFooter className="gap-2">
                         <Button variant="outline" onClick={() => handleMorePractice(true)}><Coffee className="w-4 h-4 mr-2" />More Practice</Button>
                         <Button onClick={() => handleMorePractice(false)} className="bg-green-600 hover:bg-green-700"><ArrowRight className="w-4 h-4 mr-2" />Move On</Button>
@@ -331,7 +331,7 @@ export default function LineMemoriser() {
             <Dialog open={showSaveProgressDialog} onOpenChange={setShowSaveProgressDialog}>
                 <DialogContent>
                     <DialogHeader><DialogTitle>Save Progress?</DialogTitle></DialogHeader>
-                    <p className="text-gray-600 text-sm">Save your progress to continue later?</p>
+                    <p className="text-muted-foreground text-sm">Save your progress to continue later?</p>
                     <DialogFooter className="gap-2">
                         <Button variant="outline" onClick={() => { setShowSaveProgressDialog(false); if (pendingExit) { setPendingExit(false); resetSession(); } }} className="text-red-600 border-red-200 hover:bg-red-50">Don't Save</Button>
                         <Button onClick={async () => { await saveCurrentSession(); setShowSaveProgressDialog(false); if (pendingExit) { setPendingExit(false); resetSession(); } }} className="bg-blue-600 hover:bg-blue-700"><Save className="w-4 h-4 mr-2" />Save & Exit</Button>
@@ -368,7 +368,7 @@ export default function LineMemoriser() {
 
             {/* Main */}
             <div className="card-soft overflow-hidden">
-                <div className="flex items-center justify-between px-5 py-3 border-b border-gray-100 bg-gray-50">
+                <div className="flex items-center justify-between px-5 py-3 border-b border-border bg-secondary/50">
                     <div className="flex items-center gap-2">
                         {mode === MODES.LEARNING && <><Brain className="w-4 h-4 text-pink-500" /><span className="text-sm font-bold text-foreground">{isChaining ? `Chain: Lines 1–${currentSentenceIndex + 1}` : `Line ${currentSentenceIndex + 1} of ${sentences.length}`}</span></>}
                         {mode === MODES.CHUNK_TEST && <><Target className="w-4 h-4 text-orange-500" /><span className="text-sm font-bold text-foreground">Chunk Test</span></>}
@@ -387,7 +387,7 @@ export default function LineMemoriser() {
                     <AnimatePresence>
                         {showSentence && (
                             <motion.div initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }}
-                                className="p-5 bg-gray-50 rounded-2xl border-2 border-dashed border-gray-200">
+                                className="p-5 bg-secondary/50 rounded-2xl border-2 border-dashed border-border">
                                 <p className="text-base leading-relaxed text-foreground text-center font-medium">{getCurrentDisplayText()}</p>
                                 {mode === MODES.LEARNING && (
                                     <div className="flex justify-center mt-3">
@@ -402,7 +402,7 @@ export default function LineMemoriser() {
 
                     <Textarea
                         placeholder={mode === MODES.FINAL_TEST ? "Recite the entire passage from memory..." : mode === MODES.CHUNK_TEST ? "Recite this chunk from memory..." : isChaining ? "Recite all lines from the beginning..." : "Recite this line from memory..."}
-                        value={userInput} onChange={e => setUserInput(e.target.value)} className="min-h-28 resize-none border-gray-200 focus:border-pink-400"
+                        value={userInput} onChange={e => setUserInput(e.target.value)} className="min-h-28 resize-none border-border focus:border-pink-400"
                         onKeyDown={e => { if (e.key === 'Enter' && e.ctrlKey) { e.preventDefault(); if (userInput.trim()) { if (mode === MODES.CHUNK_TEST) handleChunkTest(); else if (mode === MODES.FINAL_TEST) handleFinalTest(); else checkAnswer(); } } }}
                     />
 
@@ -436,9 +436,9 @@ export default function LineMemoriser() {
                         <p className="text-green-700 mb-6">You've mastered the entire passage!</p>
                         <div className="grid grid-cols-3 gap-3 mb-6">
                             {[[sentences.length, 'Lines Mastered'], [totalCorrect, 'Correct Attempts'], [`${sessionStartTime ? Math.floor((Date.now() - sessionStartTime) / 60000) : 0}m`, 'Time Taken']].map(([v, l]) => (
-                                <div key={l} className="bg-white rounded-xl p-3 border border-green-200">
+                                <div key={l} className="bg-surface rounded-xl p-3 border border-green-200">
                                     <div className="text-xl font-black text-green-600">{v}</div>
-                                    <div className="text-xs text-gray-600 mt-0.5">{l}</div>
+                                    <div className="text-xs text-muted-foreground mt-0.5">{l}</div>
                                 </div>
                             ))}
                         </div>

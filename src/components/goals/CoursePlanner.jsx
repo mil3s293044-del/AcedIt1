@@ -272,7 +272,7 @@ export default function CoursePlanner() {
                         <CardContent className="space-y-6">
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                 <div>
-                                    <label className="text-sm font-medium text-gray-700 mb-2 block">Course Name</label>
+                                    <label className="text-sm font-medium text-muted-foreground mb-2 block">Course Name</label>
                                     <Input
                                         value={editedCourse.name}
                                         onChange={(e) => setEditedCourse({ ...editedCourse, name: e.target.value })}
@@ -280,7 +280,7 @@ export default function CoursePlanner() {
                                     />
                                 </div>
                                 <div>
-                                    <label className="text-sm font-medium text-gray-700 mb-2 block">University</label>
+                                    <label className="text-sm font-medium text-muted-foreground mb-2 block">University</label>
                                     <Input
                                         value={editedCourse.university}
                                         onChange={(e) => setEditedCourse({ ...editedCourse, university: e.target.value })}
@@ -291,7 +291,7 @@ export default function CoursePlanner() {
 
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                 <div>
-                                    <label className="text-sm font-medium text-gray-700 mb-2 block">Field of Study</label>
+                                    <label className="text-sm font-medium text-muted-foreground mb-2 block">Field of Study</label>
                                     <Input
                                         value={editedCourse.field_of_study || ''}
                                         onChange={(e) => setEditedCourse({ ...editedCourse, field_of_study: e.target.value })}
@@ -299,7 +299,7 @@ export default function CoursePlanner() {
                                     />
                                 </div>
                                 <div>
-                                    <label className="text-sm font-medium text-gray-700 mb-2 block">Indicative ATAR</label>
+                                    <label className="text-sm font-medium text-muted-foreground mb-2 block">Indicative ATAR</label>
                                     <Input
                                         type="number"
                                         value={editedCourse.indicative_atar}
@@ -312,7 +312,7 @@ export default function CoursePlanner() {
                             </div>
 
                             <div>
-                                <label className="text-sm font-medium text-gray-700 mb-2 block">Duration (years)</label>
+                                <label className="text-sm font-medium text-muted-foreground mb-2 block">Duration (years)</label>
                                 <Input
                                     type="number"
                                     value={editedCourse.duration_years || ''}
@@ -323,7 +323,7 @@ export default function CoursePlanner() {
                             </div>
 
                             <div>
-                                <label className="text-sm font-medium text-gray-700 mb-2 block">Description</label>
+                                <label className="text-sm font-medium text-muted-foreground mb-2 block">Description</label>
                                 <Textarea
                                     value={editedCourse.description || ''}
                                     onChange={(e) => setEditedCourse({ ...editedCourse, description: e.target.value })}
@@ -333,7 +333,7 @@ export default function CoursePlanner() {
                             </div>
 
                             <div>
-                                <label className="text-sm font-medium text-gray-700 mb-2 block">Prerequisites (one per line)</label>
+                                <label className="text-sm font-medium text-muted-foreground mb-2 block">Prerequisites (one per line)</label>
                                 <Textarea
                                     value={(editedCourse.prerequisites || []).join('\n')}
                                     onChange={(e) => setEditedCourse({ 
@@ -346,7 +346,7 @@ export default function CoursePlanner() {
                             </div>
 
                             <div>
-                                <label className="text-sm font-medium text-gray-700 mb-2 block">Career Outcomes (one per line)</label>
+                                <label className="text-sm font-medium text-muted-foreground mb-2 block">Career Outcomes (one per line)</label>
                                 <Textarea
                                     value={(editedCourse.career_outcomes || []).join('\n')}
                                     onChange={(e) => setEditedCourse({ 
@@ -359,7 +359,7 @@ export default function CoursePlanner() {
                             </div>
 
                             <div>
-                                <label className="text-sm font-medium text-gray-700 mb-2 block">Image URL (optional)</label>
+                                <label className="text-sm font-medium text-muted-foreground mb-2 block">Image URL (optional)</label>
                                 <Input
                                     value={editedCourse.image_url || ''}
                                     onChange={(e) => setEditedCourse({ ...editedCourse, image_url: e.target.value })}
@@ -397,10 +397,10 @@ export default function CoursePlanner() {
                             </div>
                         )}
 
-                        <CardHeader className="border-b border-gray-100 pb-6">
+                        <CardHeader className="border-b border-border pb-6">
                             <div className="flex items-start justify-between">
                                 <div className="flex-1">
-                                    <CardTitle className="text-3xl font-bold text-gray-900 mb-3">
+                                    <CardTitle className="text-3xl font-bold text-foreground mb-3">
                                         {selectedCourse.name}
                                     </CardTitle>
                                     <div className="flex flex-wrap gap-2 mb-4">
@@ -436,11 +436,11 @@ export default function CoursePlanner() {
                         <CardContent className="p-8 space-y-8">
                             {selectedCourse.description && (
                                 <div>
-                                    <h3 className="text-xl font-bold text-gray-900 mb-3 flex items-center gap-2">
+                                    <h3 className="text-xl font-bold text-foreground mb-3 flex items-center gap-2">
                                         <BookOpen className="w-5 h-5 text-purple-600" />
                                         Overview
                                     </h3>
-                                    <p className="text-gray-700 leading-relaxed">
+                                    <p className="text-muted-foreground leading-relaxed">
                                         {selectedCourse.description}
                                     </p>
                                 </div>
@@ -448,13 +448,13 @@ export default function CoursePlanner() {
 
                             {selectedCourse.prerequisites && selectedCourse.prerequisites.length > 0 && (
                                 <div>
-                                    <h3 className="text-xl font-bold text-gray-900 mb-3 flex items-center gap-2">
+                                    <h3 className="text-xl font-bold text-foreground mb-3 flex items-center gap-2">
                                         <CheckCircle2 className="w-5 h-5 text-green-600" />
                                         Prerequisites
                                     </h3>
                                     <ul className="space-y-2">
                                         {selectedCourse.prerequisites.map((prereq, idx) => (
-                                            <li key={idx} className="flex items-start gap-3 text-gray-700">
+                                            <li key={idx} className="flex items-start gap-3 text-muted-foreground">
                                                 <span className="text-green-500 mt-0.5">✓</span>
                                                 {prereq}
                                             </li>
@@ -465,7 +465,7 @@ export default function CoursePlanner() {
 
                             {selectedCourse.career_outcomes && selectedCourse.career_outcomes.length > 0 && (
                                 <div>
-                                    <h3 className="text-xl font-bold text-gray-900 mb-3 flex items-center gap-2">
+                                    <h3 className="text-xl font-bold text-foreground mb-3 flex items-center gap-2">
                                         <Target className="w-5 h-5 text-blue-600" />
                                         Career Outcomes
                                     </h3>
@@ -476,7 +476,7 @@ export default function CoursePlanner() {
                                                 className="flex items-center gap-2 p-3 bg-blue-50 rounded-lg border border-blue-100"
                                             >
                                                 <TrendingUp className="w-4 h-4 text-blue-600" />
-                                                <span className="text-gray-700">{career}</span>
+                                                <span className="text-muted-foreground">{career}</span>
                                             </div>
                                         ))}
                                     </div>
@@ -499,14 +499,14 @@ export default function CoursePlanner() {
                 <div className="inline-flex items-center justify-center w-16 h-16 bg-gradient-to-br from-purple-500 to-indigo-600 rounded-2xl shadow-xl mb-4">
                     <GraduationCap className="w-8 h-8 text-white" />
                 </div>
-                <h2 className="text-3xl font-bold text-gray-900 mb-2">University Course Explorer</h2>
-                <p className="text-gray-600">Discover your perfect university course and plan your future</p>
+                <h2 className="text-3xl font-bold text-foreground mb-2">University Course Explorer</h2>
+                <p className="text-muted-foreground">Discover your perfect university course and plan your future</p>
             </motion.div>
 
             <Card className="shadow-lg border-2 border-purple-100">
                 <CardContent className="p-6 space-y-4">
                     <div className="relative">
-                        <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
+                        <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground/60 w-5 h-5" />
                         <Input
                             placeholder="Search courses, universities, or fields..."
                             value={searchQuery}
@@ -558,16 +558,16 @@ export default function CoursePlanner() {
             {isLoading ? (
                 <div className="text-center py-12">
                     <div className="animate-spin w-12 h-12 border-4 border-purple-600 border-t-transparent rounded-full mx-auto"></div>
-                    <p className="text-gray-600 mt-4">Loading courses...</p>
+                    <p className="text-muted-foreground mt-4">Loading courses...</p>
                 </div>
             ) : filteredCourses.length === 0 ? (
                 <Card className="shadow-lg">
                     <CardContent className="p-12 text-center">
-                        <div className="w-20 h-20 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                            <Search className="w-10 h-10 text-gray-400" />
+                        <div className="w-20 h-20 bg-secondary rounded-full flex items-center justify-center mx-auto mb-4">
+                            <Search className="w-10 h-10 text-muted-foreground/60" />
                         </div>
-                        <h3 className="text-xl font-semibold text-gray-900 mb-2">No courses found</h3>
-                        <p className="text-gray-600">Try adjusting your search criteria or filters</p>
+                        <h3 className="text-xl font-semibold text-foreground mb-2">No courses found</h3>
+                        <p className="text-muted-foreground">Try adjusting your search criteria or filters</p>
                     </CardContent>
                 </Card>
             ) : (
@@ -618,7 +618,7 @@ export default function CoursePlanner() {
                                 </CardHeader>
 
                                 <CardContent className="pt-0">
-                                    <p className="text-sm text-gray-600 line-clamp-3">
+                                    <p className="text-sm text-muted-foreground line-clamp-3">
                                         {course.description}
                                     </p>
                                 </CardContent>

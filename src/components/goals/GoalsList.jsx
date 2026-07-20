@@ -315,7 +315,7 @@ export default function GoalsList({ userSubjects, onSelectGoal, onCreateGoal }) 
                             filter === f.id ? "bg-chart-3 text-white shadow-soft" : "bg-secondary text-muted-foreground hover:bg-secondary/80"
                         }`}>
                         {f.label}
-                        <span className={`text-xs ${filter === f.id ? 'bg-white/20 text-white' : 'bg-secondary text-muted-foreground'} px-1.5 py-0.5 rounded-full font-black`}>
+                        <span className={`text-xs ${filter === f.id ? 'bg-surface/20 text-white' : 'bg-secondary text-muted-foreground'} px-1.5 py-0.5 rounded-full font-black`}>
                             {f.count}
                         </span>
                     </button>

@@ -4,6 +4,7 @@ import { queryClientInstance } from '@/lib/query-client'
 import NavigationTracker from '@/lib/NavigationTracker'
 import { pagesConfig } from './pages.config'
 import { BrowserRouter as Router, Route, Routes, useLocation, Navigate } from 'react-router-dom';
+import { MotionConfig } from 'framer-motion';
 import PageNotFound from './lib/PageNotFound';
 import StudyRoadmap from './pages/StudyRoadmap';
 import Paywall from './pages/Paywall';
@@ -130,11 +131,14 @@ function App() {
   return (
     <AuthProvider>
       <QueryClientProvider client={queryClientInstance}>
-        <Router>
-          <NavigationTracker />
-          <AuthenticatedApp />
-        </Router>
-        <Toaster />
+        {/* Respect OS-level reduced-motion for every framer-motion animation */}
+        <MotionConfig reducedMotion="user">
+          <Router>
+            <NavigationTracker />
+            <AuthenticatedApp />
+          </Router>
+          <Toaster />
+        </MotionConfig>
       </QueryClientProvider>
     </AuthProvider>
   )

@@ -239,7 +239,7 @@ export default function Landing() {
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.7, ease: [0.22, 1, 0.36, 1] }}
-            className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-white/10 border border-white/15 backdrop-blur-md mb-7"
+            className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-surface/10 border border-white/15 backdrop-blur-md mb-7"
           >
             <Sparkles className="w-3.5 h-3.5 text-primary" />
             <span className="text-xs font-semibold text-white/90 tracking-wide">
@@ -300,7 +300,7 @@ export default function Landing() {
             </div>
             <button
               onClick={() => scrollToId("how")}
-              className="h-14 px-7 rounded-2xl text-white/90 font-semibold border border-white/20 bg-white/5 backdrop-blur-md hover:bg-white/10 transition cursor-pointer"
+              className="h-14 px-7 rounded-2xl text-white/90 font-semibold border border-white/20 bg-surface/5 backdrop-blur-md hover:bg-surface/10 transition cursor-pointer"
             >
               See how it works
             </button>
@@ -322,7 +322,7 @@ export default function Landing() {
       {/* ============================================================== */}
       <section
         aria-label="VCE subjects covered"
-        className="relative border-y border-black/5 bg-white py-7 overflow-hidden"
+        className="relative border-y border-black/5 bg-surface py-7 overflow-hidden"
       >
         <div
           className="absolute inset-y-0 left-0 w-24 z-10 pointer-events-none"
@@ -411,7 +411,7 @@ export default function Landing() {
       {/* ============================================================== */}
       {/* HOW IT WORKS                                                     */}
       {/* ============================================================== */}
-      <section id="how" className="relative py-24 px-6 bg-white">
+      <section id="how" className="relative py-24 px-6 bg-surface">
         <div className="max-w-7xl mx-auto">
           <motion.div {...fadeUp} className="max-w-2xl mb-16">
             <p className="text-xs font-bold tracking-[0.2em] text-primary uppercase mb-4">
@@ -464,7 +464,7 @@ export default function Landing() {
                     >
                       {step.num}
                     </span>
-                    <div className="w-12 h-12 rounded-2xl bg-white shadow-soft flex items-center justify-center">
+                    <div className="w-12 h-12 rounded-2xl bg-surface shadow-soft flex items-center justify-center">
                       <step.icon className="w-5 h-5 text-[#0D1626]" />
                     </div>
                   </div>
@@ -529,7 +529,7 @@ export default function Landing() {
               </div>
               {/* Mock chat preview */}
               <div className="relative z-10 mt-8 space-y-2.5 max-w-md">
-                <div className="bg-white/5 border border-white/10 rounded-2xl px-4 py-3 text-sm text-white/80 backdrop-blur-sm">
+                <div className="bg-surface/5 border border-white/10 rounded-2xl px-4 py-3 text-sm text-white/80 backdrop-blur-sm">
                   Mark this paragraph for English Analysis…
                 </div>
                 <div className="bg-primary/15 border border-primary/30 rounded-2xl px-4 py-3 text-sm text-white/90 backdrop-blur-sm">
@@ -565,8 +565,8 @@ export default function Landing() {
                 <div className="text-xs text-white/80 mb-2 font-semibold">
                   Today&rsquo;s XP — 240 / 300
                 </div>
-                <div className="h-2 rounded-full bg-white/20 overflow-hidden">
-                  <div className="h-full w-[80%] bg-white rounded-full" />
+                <div className="h-2 rounded-full bg-surface/20 overflow-hidden">
+                  <div className="h-full w-[80%] bg-surface rounded-full" />
                 </div>
                 <p className="mt-4 text-xs text-white/80 leading-relaxed">
                   Daily goals that turn study into a game your brain actually
@@ -579,7 +579,7 @@ export default function Landing() {
             <motion.div
               {...fadeUp}
               transition={{ ...fadeUp.transition, delay: 0.1 }}
-              className="md:col-span-2 rounded-3xl bg-white border border-black/5 p-8 relative overflow-hidden flex flex-col justify-between min-h-[300px]"
+              className="md:col-span-2 rounded-3xl bg-surface border border-black/5 p-8 relative overflow-hidden flex flex-col justify-between min-h-[300px]"
             >
               <div>
                 <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-[hsl(217_91%_60%)]/10 border border-[hsl(217_91%_60%)]/20 mb-4">
@@ -614,7 +614,7 @@ export default function Landing() {
             <motion.div
               {...fadeUp}
               transition={{ ...fadeUp.transition, delay: 0.15 }}
-              className="md:col-span-4 rounded-3xl bg-white border border-black/5 p-8 md:p-10 relative overflow-hidden flex flex-col md:flex-row items-start md:items-center justify-between gap-6 min-h-[300px]"
+              className="md:col-span-4 rounded-3xl bg-surface border border-black/5 p-8 md:p-10 relative overflow-hidden flex flex-col md:flex-row items-start md:items-center justify-between gap-6 min-h-[300px]"
             >
               <div className="flex-1">
                 <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-[hsl(280_65%_60%)]/10 border border-[hsl(280_65%_60%)]/20 mb-4">
@@ -670,7 +670,7 @@ export default function Landing() {
       {/* ============================================================== */}
       {/* SOCIAL PROOF                                                     */}
       {/* ============================================================== */}
-      <section className="relative py-24 px-6 bg-white">
+      <section className="relative py-24 px-6 bg-surface">
         <div className="max-w-7xl mx-auto">
           <motion.div {...fadeUp} className="max-w-2xl mb-14">
             <p className="text-xs font-bold tracking-[0.2em] text-primary uppercase mb-4">
@@ -761,7 +761,7 @@ export default function Landing() {
           <motion.div
             {...fadeUp}
             transition={{ ...fadeUp.transition, delay: 0.15 }}
-            className="relative rounded-3xl bg-white/[0.04] border border-white/10 backdrop-blur-md p-8 md:p-10 text-left shadow-[0_0_60px_rgba(88,204,2,0.08)]"
+            className="relative rounded-3xl bg-surface/[0.04] border border-white/10 backdrop-blur-md p-8 md:p-10 text-left shadow-[0_0_60px_rgba(88,204,2,0.08)]"
           >
             {/* Top gradient hairline */}
             <div
@@ -934,7 +934,7 @@ export default function Landing() {
             </p>
             <Button
               onClick={startTrial}
-              className="bg-white hover:bg-white/95 text-[#0D1626] font-bold rounded-2xl h-14 px-8 text-base shadow-soft-lg group cursor-pointer"
+              className="bg-surface hover:bg-surface/95 text-[#0D1626] font-bold rounded-2xl h-14 px-8 text-base shadow-soft-lg group cursor-pointer"
             >
               Start your free week
               <ArrowRight className="w-4 h-4 ml-2 group-hover:translate-x-0.5 transition-transform" />

@@ -24,21 +24,21 @@ export default function Step5Goals({ data, onNext, onBack, saving }) {
 
     return (
         <div className="max-w-lg mx-auto px-6 py-10">
-            <button onClick={onBack} className="flex items-center gap-1 text-sm text-gray-400 hover:text-gray-600 mb-6">
+            <button onClick={onBack} className="flex items-center gap-1 text-sm text-muted-foreground/60 hover:text-muted-foreground mb-6">
                 <ChevronLeft className="w-4 h-4" /> Back
             </button>
-            <h2 className="text-2xl font-bold text-gray-900 mb-1">What does success look like for you this year?</h2>
-            <p className="text-gray-500 text-sm mb-6">Write your own or choose one that fits — the more specific, the more it will drive you.</p>
+            <h2 className="text-2xl font-bold text-foreground mb-1">What does success look like for you this year?</h2>
+            <p className="text-muted-foreground text-sm mb-6">Write your own or choose one that fits — the more specific, the more it will drive you.</p>
 
             {/* Preset goals */}
             <div className="mb-4">
-                <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Quick select</p>
+                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">Quick select</p>
                 <div className="flex flex-wrap gap-2">
                     {PRESET_GOALS.map((g, i) => (
                         <button
                             key={i}
                             onClick={() => setGoal(g)}
-                            className="text-xs px-3 py-1.5 rounded-full border border-gray-200 bg-gray-50 hover:border-purple-300 hover:bg-purple-50 text-gray-600 hover:text-purple-700 transition-all text-left"
+                            className="text-xs px-3 py-1.5 rounded-full border border-border bg-secondary/50 hover:border-purple-300 hover:bg-purple-50 text-muted-foreground hover:text-purple-700 transition-all text-left"
                         >
                             {g.length > 50 ? g.slice(0, 50) + "…" : g}
                         </button>
@@ -48,14 +48,14 @@ export default function Step5Goals({ data, onNext, onBack, saving }) {
 
             {/* Goal text area */}
             <div className="mb-4">
-                <Label className="text-sm font-medium text-gray-700">Your goal (edit or write your own) <span className="text-red-500">*</span></Label>
+                <Label className="text-sm font-medium text-muted-foreground">Your goal (edit or write your own) <span className="text-red-500">*</span></Label>
                 <Textarea
                     className="mt-1.5 min-h-[100px]"
                     placeholder="e.g. I want to get into nursing at Melbourne Uni, improve my Biology study score, and feel in control of my study instead of always stressed"
                     value={qualitative_goal}
                     onChange={e => setGoal(e.target.value)}
                 />
-                <p className="text-xs text-gray-400 mt-1">{qualitative_goal.length}/20 characters minimum</p>
+                <p className="text-xs text-muted-foreground/60 mt-1">{qualitative_goal.length}/20 characters minimum</p>
             </div>
 
             {/* Research callout */}
@@ -66,14 +66,14 @@ export default function Step5Goals({ data, onNext, onBack, saving }) {
 
             {/* Dream course */}
             <div className="mb-8">
-                <Label className="text-sm font-medium text-gray-700">Dream course or career (optional)</Label>
+                <Label className="text-sm font-medium text-muted-foreground">Dream course or career (optional)</Label>
                 <Input
                     className="mt-1.5"
                     placeholder="e.g. Bachelor of Commerce at Monash, or Physiotherapist"
                     value={dream_course}
                     onChange={e => setDreamCourse(e.target.value)}
                 />
-                <p className="text-xs text-gray-400 mt-1">This appears on your dashboard every time you open the app.</p>
+                <p className="text-xs text-muted-foreground/60 mt-1">This appears on your dashboard every time you open the app.</p>
             </div>
 
             <Button

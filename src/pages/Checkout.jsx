@@ -89,7 +89,7 @@ export default function Checkout() {
                         transition={{ duration: 0.4, delay: 0.1 }}
                         className="space-y-6"
                     >
-                        <Card className="border-2 border-indigo-200 shadow-xl bg-white">
+                        <Card className="border-2 border-indigo-200 shadow-xl bg-surface">
                             <CardHeader className="border-b">
                                 <CardTitle className="flex items-center gap-2 text-2xl">
                                     <Crown className="w-6 h-6 text-indigo-600" />
@@ -100,12 +100,12 @@ export default function Checkout() {
                                 {/* Price */}
                                 <div className="flex items-baseline justify-between">
                                     <div>
-                                        <p className="text-gray-600 text-sm mb-1">Weekly Subscription</p>
+                                        <p className="text-muted-foreground text-sm mb-1">Weekly Subscription</p>
                                         <div className="flex items-baseline gap-2">
-                                            <span className="text-5xl font-bold text-gray-900">$5</span>
-                                            <span className="text-xl text-gray-600">AUD</span>
+                                            <span className="text-5xl font-bold text-foreground">$5</span>
+                                            <span className="text-xl text-muted-foreground">AUD</span>
                                         </div>
-                                        <p className="text-sm text-gray-600 mt-1">per week</p>
+                                        <p className="text-sm text-muted-foreground mt-1">per week</p>
                                     </div>
                                     <div className="w-16 h-16 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-2xl flex items-center justify-center">
                                         <Crown className="w-8 h-8 text-white" />
@@ -114,12 +114,12 @@ export default function Checkout() {
 
                                 {/* Benefits */}
                                 <div>
-                                    <p className="font-semibold text-gray-900 mb-3">What's Included:</p>
+                                    <p className="font-semibold text-foreground mb-3">What's Included:</p>
                                     <div className="space-y-2">
                                         {premiumFeatures.map((feature, i) => (
                                             <div key={i} className="flex items-center gap-2">
                                                 <Check className="w-5 h-5 text-green-600 flex-shrink-0" />
-                                                <span className="text-gray-700 text-sm">{feature}</span>
+                                                <span className="text-muted-foreground text-sm">{feature}</span>
                                             </div>
                                         ))}
                                     </div>
@@ -128,15 +128,15 @@ export default function Checkout() {
                                 {/* Billing Info */}
                                 <div className="pt-4 border-t space-y-2">
                                     <div className="flex justify-between text-sm">
-                                        <span className="text-gray-600">Subtotal</span>
-                                        <span className="font-semibold text-gray-900">$5.00 AUD</span>
+                                        <span className="text-muted-foreground">Subtotal</span>
+                                        <span className="font-semibold text-foreground">$5.00 AUD</span>
                                     </div>
                                     <div className="flex justify-between text-sm">
-                                        <span className="text-gray-600">Tax (GST)</span>
-                                        <span className="font-semibold text-gray-900">$0.00</span>
+                                        <span className="text-muted-foreground">Tax (GST)</span>
+                                        <span className="font-semibold text-foreground">$0.00</span>
                                     </div>
                                     <div className="flex justify-between text-lg font-bold pt-2 border-t">
-                                        <span className="text-gray-900">Total due today</span>
+                                        <span className="text-foreground">Total due today</span>
                                         <span className="text-indigo-600">$5.00 AUD</span>
                                     </div>
                                 </div>
@@ -165,7 +165,7 @@ export default function Checkout() {
                         animate={{ opacity: 1, x: 0 }}
                         transition={{ duration: 0.4, delay: 0.2 }}
                     >
-                        <Card className="border-2 border-gray-200 shadow-xl bg-white sticky top-8">
+                        <Card className="border-2 border-border shadow-xl bg-surface sticky top-8">
                             <CardHeader className="border-b bg-gradient-to-r from-indigo-50 to-purple-50">
                                 <CardTitle className="flex items-center gap-2">
                                     <CreditCard className="w-5 h-5 text-indigo-600" />
@@ -174,15 +174,15 @@ export default function Checkout() {
                             </CardHeader>
                             <CardContent className="p-6 space-y-6">
                                 {/* User Info */}
-                                <div className="p-4 bg-gray-50 rounded-lg">
-                                    <p className="text-sm text-gray-600 mb-1">Subscribing as:</p>
-                                    <p className="font-semibold text-gray-900">Your Account</p>
-                                    <p className="text-sm text-gray-600">Subscription will be linked to your account</p>
+                                <div className="p-4 bg-secondary/50 rounded-lg">
+                                    <p className="text-sm text-muted-foreground mb-1">Subscribing as:</p>
+                                    <p className="font-semibold text-foreground">Your Account</p>
+                                    <p className="text-sm text-muted-foreground">Subscription will be linked to your account</p>
                                 </div>
 
                                 {/* Payment Provider */}
                                 <div className="space-y-3">
-                                    <p className="text-sm font-medium text-gray-700">Payment processed by:</p>
+                                    <p className="text-sm font-medium text-muted-foreground">Payment processed by:</p>
                                     <div className="flex items-center gap-3 p-4 border-2 border-indigo-200 rounded-lg bg-indigo-50">
                                         <div className="w-12 h-12 bg-indigo-600 rounded-lg flex items-center justify-center">
                                             <Lock className="w-6 h-6 text-white" />
@@ -216,25 +216,25 @@ export default function Checkout() {
 
                                 {/* Security Info */}
                                 <div className="space-y-3 pt-4 border-t">
-                                    <div className="flex items-center gap-2 text-sm text-gray-600">
+                                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
                                         <Shield className="w-4 h-4 text-green-600" />
                                         <span>256-bit SSL encrypted payment</span>
                                     </div>
-                                    <div className="flex items-center gap-2 text-sm text-gray-600">
+                                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
                                         <Lock className="w-4 h-4 text-green-600" />
                                         <span>PCI-DSS compliant processing</span>
                                     </div>
-                                    <div className="flex items-center gap-2 text-sm text-gray-600">
+                                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
                                         <Check className="w-4 h-4 text-green-600" />
                                         <span>Cancel anytime, no commitments</span>
                                     </div>
                                 </div>
 
-                                <p className="text-xs text-gray-500 text-center">
+                                <p className="text-xs text-muted-foreground text-center">
                                     By continuing, you agree to our{" "}
-                                    <a href="/terms" target="_blank" rel="noopener noreferrer" className="underline hover:text-gray-700">Terms of Service</a>{" "}
+                                    <a href="/terms" target="_blank" rel="noopener noreferrer" className="underline hover:text-muted-foreground">Terms of Service</a>{" "}
                                     and{" "}
-                                    <a href="/privacy" target="_blank" rel="noopener noreferrer" className="underline hover:text-gray-700">Privacy Policy</a>.
+                                    <a href="/privacy" target="_blank" rel="noopener noreferrer" className="underline hover:text-muted-foreground">Privacy Policy</a>.
                                     Your subscription will automatically renew monthly.
                                 </p>
                             </CardContent>

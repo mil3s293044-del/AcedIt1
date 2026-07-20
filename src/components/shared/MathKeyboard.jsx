@@ -182,7 +182,7 @@ const MathKeyboard = ({ onInput, onBackspace, onClear, getCurrentValue }) => {
                                 key={keyIndex}
                                 variant="outline"
                                 onClick={() => handleKeyPress(key)}
-                                className="h-14 min-w-[60px] px-3 font-normal bg-white hover:bg-gray-50 text-gray-800 border-gray-300 hover:border-purple-400 active:bg-purple-50 transition-all"
+                                className="h-14 min-w-[60px] px-3 font-normal bg-surface hover:bg-secondary/50 text-foreground border-border hover:border-purple-400 active:bg-purple-50 transition-all"
                             >
                                 <span className="text-lg font-normal">
                                     {key.label}
@@ -200,7 +200,7 @@ const MathKeyboard = ({ onInput, onBackspace, onClear, getCurrentValue }) => {
             <div className="space-y-5">
                 {Object.entries(sections).map(([sectionName, keys]) => (
                     <div key={sectionName} className="space-y-2">
-                        <h4 className="text-xs font-bold text-gray-600 uppercase tracking-wider px-1">
+                        <h4 className="text-xs font-bold text-muted-foreground uppercase tracking-wider px-1">
                             {sectionName === 'operations' ? '📐 Operations' : 
                              sectionName === 'exponents' ? '⚡ Exponents & Roots' :
                              sectionName === 'trigonometry' ? '📊 Trigonometry' :
@@ -215,7 +215,7 @@ const MathKeyboard = ({ onInput, onBackspace, onClear, getCurrentValue }) => {
                                     key={keyIndex}
                                     onClick={() => handleKeyPress(key)}
                                     variant="outline"
-                                    className="h-12 px-4 text-base font-semibold bg-white hover:bg-gray-50 text-gray-800 border-gray-300 hover:border-purple-400 active:bg-purple-50 transition-all shadow-sm"
+                                    className="h-12 px-4 text-base font-semibold bg-surface hover:bg-secondary/50 text-foreground border-border hover:border-purple-400 active:bg-purple-50 transition-all shadow-sm"
                                 >
                                     {key.label}
                                 </Button>
@@ -229,18 +229,18 @@ const MathKeyboard = ({ onInput, onBackspace, onClear, getCurrentValue }) => {
 
     return (
         <>
-            <Card className="bg-gradient-to-br from-gray-50 via-white to-gray-50 border-gray-200 shadow-xl">
+            <Card className="bg-gradient-to-br from-gray-50 via-white to-gray-50 border-border shadow-xl">
                 <Tabs value={activeTab} onValueChange={(val) => { setActiveTab(val); setShiftActive(false); }} className="p-4">
-                    <TabsList className="grid w-full grid-cols-2 mb-4 bg-gray-100/80 p-1.5 h-12 rounded-xl">
+                    <TabsList className="grid w-full grid-cols-2 mb-4 bg-secondary/80 p-1.5 h-12 rounded-xl">
                         <TabsTrigger 
                             value="functions" 
-                            className="text-base font-bold data-[state=active]:bg-white data-[state=active]:shadow-md rounded-lg transition-all"
+                            className="text-base font-bold data-[state=active]:bg-surface data-[state=active]:shadow-md rounded-lg transition-all"
                         >
                             Functions
                         </TabsTrigger>
                         <TabsTrigger 
                             value="letters" 
-                            className="text-base font-bold data-[state=active]:bg-white data-[state=active]:shadow-md rounded-lg transition-all"
+                            className="text-base font-bold data-[state=active]:bg-surface data-[state=active]:shadow-md rounded-lg transition-all"
                         >
                             Letters
                         </TabsTrigger>
@@ -263,7 +263,7 @@ const MathKeyboard = ({ onInput, onBackspace, onClear, getCurrentValue }) => {
                     </DialogHeader>
                     <div className="py-4 space-y-4">
                         <div>
-                            <label className="text-sm font-medium text-gray-700 mb-1.5 block">Variable</label>
+                            <label className="text-sm font-medium text-muted-foreground mb-1.5 block">Variable</label>
                             <Input
                                 type="text"
                                 value={limitVar}
@@ -273,7 +273,7 @@ const MathKeyboard = ({ onInput, onBackspace, onClear, getCurrentValue }) => {
                             />
                         </div>
                         <div>
-                            <label className="text-sm font-medium text-gray-700 mb-1.5 block">Approaches</label>
+                            <label className="text-sm font-medium text-muted-foreground mb-1.5 block">Approaches</label>
                             <Input
                                 type="text"
                                 value={limitApproach}
@@ -301,7 +301,7 @@ const MathKeyboard = ({ onInput, onBackspace, onClear, getCurrentValue }) => {
                         <DialogTitle>Logarithm with Custom Base</DialogTitle>
                     </DialogHeader>
                     <div className="py-4">
-                        <label className="text-sm font-medium text-gray-700 mb-1.5 block">Base</label>
+                        <label className="text-sm font-medium text-muted-foreground mb-1.5 block">Base</label>
                         <Input
                             type="text"
                             value={logBase}
@@ -330,7 +330,7 @@ const MathKeyboard = ({ onInput, onBackspace, onClear, getCurrentValue }) => {
                     </DialogHeader>
                     <div className="py-4 space-y-4">
                         <div>
-                            <label className="text-sm font-medium text-gray-700 mb-1.5 block">Variable</label>
+                            <label className="text-sm font-medium text-muted-foreground mb-1.5 block">Variable</label>
                             <Input
                                 type="text"
                                 value={sumVar}
@@ -340,7 +340,7 @@ const MathKeyboard = ({ onInput, onBackspace, onClear, getCurrentValue }) => {
                             />
                         </div>
                         <div>
-                            <label className="text-sm font-medium text-gray-700 mb-1.5 block">Starting Value</label>
+                            <label className="text-sm font-medium text-muted-foreground mb-1.5 block">Starting Value</label>
                             <Input
                                 type="text"
                                 value={sumStart}
@@ -350,7 +350,7 @@ const MathKeyboard = ({ onInput, onBackspace, onClear, getCurrentValue }) => {
                             />
                         </div>
                         <div>
-                            <label className="text-sm font-medium text-gray-700 mb-1.5 block">Ending Value</label>
+                            <label className="text-sm font-medium text-muted-foreground mb-1.5 block">Ending Value</label>
                             <Input
                                 type="text"
                                 value={sumEnd}
@@ -379,7 +379,7 @@ const MathKeyboard = ({ onInput, onBackspace, onClear, getCurrentValue }) => {
                     </DialogHeader>
                     <div className="py-4 space-y-4">
                         <div>
-                            <label className="text-sm font-medium text-gray-700 mb-1.5 block">Rows</label>
+                            <label className="text-sm font-medium text-muted-foreground mb-1.5 block">Rows</label>
                             <Select value={matrixRows.toString()} onValueChange={(val) => setMatrixRows(parseInt(val))}>
                                 <SelectTrigger className="text-base">
                                     <SelectValue />
@@ -392,7 +392,7 @@ const MathKeyboard = ({ onInput, onBackspace, onClear, getCurrentValue }) => {
                             </Select>
                         </div>
                         <div>
-                            <label className="text-sm font-medium text-gray-700 mb-1.5 block">Columns</label>
+                            <label className="text-sm font-medium text-muted-foreground mb-1.5 block">Columns</label>
                             <Select value={matrixCols.toString()} onValueChange={(val) => setMatrixCols(parseInt(val))}>
                                 <SelectTrigger className="text-base">
                                     <SelectValue />
@@ -404,7 +404,7 @@ const MathKeyboard = ({ onInput, onBackspace, onClear, getCurrentValue }) => {
                                 </SelectContent>
                             </Select>
                         </div>
-                        <p className="text-xs text-gray-600">Creates a {matrixRows}×{matrixCols} matrix</p>
+                        <p className="text-xs text-muted-foreground">Creates a {matrixRows}×{matrixCols} matrix</p>
                     </div>
                     <DialogFooter>
                         <Button variant="outline" onClick={() => setShowMatrixDialog(false)}>Cancel</Button>

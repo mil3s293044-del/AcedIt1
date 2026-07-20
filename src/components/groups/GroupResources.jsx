@@ -274,7 +274,7 @@ export default function GroupResources({ group, user }) {
             case "flashcard_deck": return "bg-purple-100 text-purple-800";
             case "quiz": return "bg-blue-100 text-blue-800";
             case "ai_result": return "bg-pink-100 text-pink-800";
-            default: return "bg-gray-100 text-gray-800";
+            default: return "bg-secondary text-foreground";
         }
     };
 
@@ -283,7 +283,7 @@ export default function GroupResources({ group, user }) {
             <Card className="shadow-xl">
                 <CardContent className="p-12 text-center">
                     <div className="w-12 h-12 border-4 border-indigo-200 border-t-indigo-600 rounded-full animate-spin mx-auto mb-4"></div>
-                    <p className="text-gray-600">Loading resources...</p>
+                    <p className="text-muted-foreground">Loading resources...</p>
                 </CardContent>
             </Card>
         );
@@ -294,8 +294,8 @@ export default function GroupResources({ group, user }) {
             {/* Header */}
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
                 <div>
-                    <h2 className="text-2xl font-bold text-gray-900">Shared Resources</h2>
-                    <p className="text-gray-600 text-sm">Share and access study materials with your group</p>
+                    <h2 className="text-2xl font-bold text-foreground">Shared Resources</h2>
+                    <p className="text-muted-foreground text-sm">Share and access study materials with your group</p>
                 </div>
                 <div className="flex gap-2">
                     <Select value={filterType} onValueChange={setFilterType}>
@@ -342,9 +342,9 @@ export default function GroupResources({ group, user }) {
             {filteredResources.length === 0 ? (
                 <Card className="shadow-lg">
                     <CardContent className="p-12 text-center">
-                        <Share2 className="w-16 h-16 text-gray-300 mx-auto mb-4" />
-                        <h3 className="text-xl font-semibold text-gray-900 mb-2">No resources yet</h3>
-                        <p className="text-gray-600 mb-6">Be the first to share study materials with your group!</p>
+                        <Share2 className="w-16 h-16 text-muted-foreground/40 mx-auto mb-4" />
+                        <h3 className="text-xl font-semibold text-foreground mb-2">No resources yet</h3>
+                        <p className="text-muted-foreground mb-6">Be the first to share study materials with your group!</p>
                     </CardContent>
                 </Card>
             ) : (
@@ -375,11 +375,11 @@ export default function GroupResources({ group, user }) {
                                             )}
                                         </div>
                                         <CardTitle className="text-lg line-clamp-2">{resource.title}</CardTitle>
-                                        <p className="text-sm text-gray-600 line-clamp-2">{resource.description}</p>
+                                        <p className="text-sm text-muted-foreground line-clamp-2">{resource.description}</p>
                                     </CardHeader>
                                     <CardContent>
                                         <div className="space-y-3">
-                                            <div className="flex items-center justify-between text-sm text-gray-600">
+                                            <div className="flex items-center justify-between text-sm text-muted-foreground">
                                                 <span>By {resource.shared_by_name}</span>
                                                 <span>{format(new Date(resource.created_date), 'MMM d')}</span>
                                             </div>
@@ -388,7 +388,7 @@ export default function GroupResources({ group, user }) {
                                                     {resource.subject_name}
                                                 </Badge>
                                             )}
-                                            <div className="flex items-center gap-4 text-xs text-gray-500">
+                                            <div className="flex items-center gap-4 text-xs text-muted-foreground">
                                                 <span className="flex items-center gap-1">
                                                     <Eye className="w-3 h-3" />
                                                     {resource.views_count || 0}

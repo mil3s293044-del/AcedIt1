@@ -482,9 +482,9 @@ const roadmap = await base44.entities.StudyRoadmap.create({
         return (
             <Card className="shadow-lg">
                 <CardContent className="p-8 text-center">
-                    <BookOpen className="w-12 h-12 text-gray-300 mx-auto mb-3" />
-                    <p className="font-semibold text-gray-700 mb-1">No subjects added yet</p>
-                    <p className="text-sm text-gray-500 mb-4">
+                    <BookOpen className="w-12 h-12 text-muted-foreground/40 mx-auto mb-3" />
+                    <p className="font-semibold text-muted-foreground mb-1">No subjects added yet</p>
+                    <p className="text-sm text-muted-foreground mb-4">
                         You haven't added any subjects yet — go to Subjects to add them first.
                     </p>
                     <a href={createPageUrl("Subjects")}>
@@ -551,8 +551,8 @@ const roadmap = await base44.entities.StudyRoadmap.create({
                 <div className="border border-teal-200 rounded-xl p-4 space-y-2 bg-teal-50/40">
                     <div className="flex items-start justify-between gap-2">
                         <div>
-                            <p className="text-sm font-semibold text-gray-800">Key Topics</p>
-                            <p className="text-xs text-gray-500 mt-0.5">
+                            <p className="text-sm font-semibold text-foreground">Key Topics</p>
+                            <p className="text-xs text-muted-foreground mt-0.5">
                                 {form.subject
                                     ? "Auto-populated from the VCAA study design — remove, edit, or add your own."
                                     : "Select a subject above to auto-populate topics, or add them manually."}
@@ -577,10 +577,10 @@ const roadmap = await base44.entities.StudyRoadmap.create({
                 </div>
 
                 {/* STEP 1 — Assessment category */}
-                <div className="border border-gray-200 rounded-xl p-4 space-y-3 bg-gray-50">
-                    <p className="text-sm font-semibold text-gray-800">Step 1 — Assessment type <span className="text-red-500">*</span></p>
+                <div className="border border-border rounded-xl p-4 space-y-3 bg-secondary/50">
+                    <p className="text-sm font-semibold text-foreground">Step 1 — Assessment type <span className="text-red-500">*</span></p>
                     <Select value={form.assessment_category} onValueChange={handleCategoryChange}>
-                        <SelectTrigger className="bg-white">
+                        <SelectTrigger className="bg-surface">
                             <SelectValue placeholder="Select assessment type" />
                         </SelectTrigger>
                         <SelectContent>
@@ -590,11 +590,11 @@ const roadmap = await base44.entities.StudyRoadmap.create({
 
                     {/* STEP 2 — Component checklist (SAC / Exam only) */}
                     {showComponents && (
-                        <div className="pt-2 space-y-2 border-t border-gray-200">
-                            <p className="text-sm font-semibold text-gray-800 pt-1">
+                        <div className="pt-2 space-y-2 border-t border-border">
+                            <p className="text-sm font-semibold text-foreground pt-1">
                                 Step 2 — Which components does this {form.assessment_category} include? <span className="text-red-500">*</span>
                             </p>
-                            <p className="text-xs text-gray-500">Tick all that apply — the roadmap will interleave preparation for every component.</p>
+                            <p className="text-xs text-muted-foreground">Tick all that apply — the roadmap will interleave preparation for every component.</p>
 
                             {availableComponents.map(comp => {
                                 const checked = form.assessment_components.includes(comp);
@@ -606,7 +606,7 @@ const roadmap = await base44.entities.StudyRoadmap.create({
                                                 checked={checked}
                                                 onCheckedChange={() => toggleComponent(comp)}
                                             />
-                                            <label htmlFor={comp} className="text-sm font-medium text-gray-700 cursor-pointer select-none">
+                                            <label htmlFor={comp} className="text-sm font-medium text-muted-foreground cursor-pointer select-none">
                                                 {comp}
                                             </label>
                                         </div>
@@ -618,9 +618,9 @@ const roadmap = await base44.entities.StudyRoadmap.create({
                                                     placeholder="Marks (optional)"
                                                     value={form.mark_breakdown[comp] || ""}
                                                     onChange={e => setMarkBreakdown(comp, e.target.value)}
-                                                    className="w-40 h-8 text-sm bg-white"
+                                                    className="w-40 h-8 text-sm bg-surface"
                                                 />
-                                                <span className="text-xs text-gray-400">marks allocated</span>
+                                                <span className="text-xs text-muted-foreground/60">marks allocated</span>
                                             </div>
                                         )}
                                     </div>
@@ -648,7 +648,7 @@ const roadmap = await base44.entities.StudyRoadmap.create({
                                 variant="outline"
                                 className="w-full mt-1.5 justify-start text-left font-normal"
                             >
-                                <CalendarIcon className="w-4 h-4 mr-2 text-gray-400" />
+                                <CalendarIcon className="w-4 h-4 mr-2 text-muted-foreground/60" />
                                 {form.assessment_date
                                     ? <>
                                         {format(form.assessment_date, "EEEE d MMMM yyyy")}
@@ -656,7 +656,7 @@ const roadmap = await base44.entities.StudyRoadmap.create({
                                             {daysUntil === 1 ? "Tomorrow" : `${daysUntil} days away`}
                                         </span>
                                       </>
-                                    : <span className="text-gray-400">Pick your assessment date</span>}
+                                    : <span className="text-muted-foreground/60">Pick your assessment date</span>}
                             </Button>
                         </PopoverTrigger>
                         <PopoverContent className="w-auto p-0" align="start">
@@ -686,7 +686,7 @@ const roadmap = await base44.entities.StudyRoadmap.create({
                         max={100}
                         step={5}
                     />
-                    <div className="flex justify-between text-xs text-gray-400 mt-1.5">
+                    <div className="flex justify-between text-xs text-muted-foreground/60 mt-1.5">
                         <span>0% — I know nothing</span>
                         <span>50% — Some basics</span>
                         <span>100% — Confident</span>
@@ -726,7 +726,7 @@ const roadmap = await base44.entities.StudyRoadmap.create({
                     )}
                 </Button>
 
-                <p className="text-xs text-gray-400 text-center">
+                <p className="text-xs text-muted-foreground/60 text-center">
                     Weak area data is pre-loaded when you select a subject
                 </p>
             </CardContent>

@@ -121,8 +121,8 @@ export default function Premium() {
                         <div className="w-20 h-20 bg-gradient-to-br from-green-500 to-emerald-600 rounded-full flex items-center justify-center mx-auto mb-4">
                             <Crown className="w-10 h-10 text-white" />
                         </div>
-                        <h2 className="text-2xl font-bold text-gray-900 mb-2">You're Already Premium!</h2>
-                        <p className="text-gray-600 mb-6">You have access to all premium features.</p>
+                        <h2 className="text-2xl font-bold text-foreground mb-2">You're Already Premium!</h2>
+                        <p className="text-muted-foreground mb-6">You have access to all premium features.</p>
                         <Link to={createPageUrl("Dashboard")}>
                             <Button className="w-full">
                                 Go to Dashboard
@@ -148,13 +148,13 @@ export default function Premium() {
                         <Star className="w-4 h-4" />
                         <span className="text-sm font-semibold">Limited Time Offer</span>
                     </div>
-                    <h1 className="text-5xl lg:text-6xl font-bold text-gray-900 mb-4">
+                    <h1 className="text-5xl lg:text-6xl font-bold text-foreground mb-4">
                         Upgrade to{" "}
                         <span className="bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent">
                             Premium
                         </span>
                     </h1>
-                    <p className="text-xl text-gray-600 max-w-2xl mx-auto mb-8">
+                    <p className="text-xl text-muted-foreground max-w-2xl mx-auto mb-8">
                         Unlock unlimited AI-powered study tools and achieve your academic goals faster
                     </p>
 
@@ -165,18 +165,18 @@ export default function Premium() {
                         transition={{ delay: 0.2 }}
                         className="inline-block"
                     >
-                        <Card className="border-4 border-indigo-500 shadow-2xl bg-white">
+                        <Card className="border-4 border-indigo-500 shadow-2xl bg-surface">
                             <CardContent className="p-8">
                                 <div className="flex items-center justify-center gap-3 mb-4">
                                     <div className="w-16 h-16 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-2xl flex items-center justify-center">
                                         <Crown className="w-8 h-8 text-white" />
                                     </div>
                                     <div className="text-left">
-                                        <h3 className="text-3xl font-bold text-gray-900">$5 AUD</h3>
-                                        <p className="text-gray-600">per week</p>
+                                        <h3 className="text-3xl font-bold text-foreground">$5 AUD</h3>
+                                        <p className="text-muted-foreground">per week</p>
                                     </div>
                                 </div>
-                                <p className="text-gray-700 mb-6">Cancel anytime • Instant access</p>
+                                <p className="text-muted-foreground mb-6">Cancel anytime • Instant access</p>
                                 <Button
                                     onClick={handleUpgrade}
                                     size="lg"
@@ -186,7 +186,7 @@ export default function Premium() {
                                     Upgrade Now
                                     <ArrowRight className="w-5 h-5 ml-2" />
                                 </Button>
-                                <p className="text-xs text-gray-500 mt-3">
+                                <p className="text-xs text-muted-foreground mt-3">
                                     Secure payment via Stripe
                                 </p>
                             </CardContent>
@@ -201,7 +201,7 @@ export default function Premium() {
                     transition={{ delay: 0.3 }}
                     className="mb-12"
                 >
-                    <h2 className="text-3xl font-bold text-center text-gray-900 mb-8">
+                    <h2 className="text-3xl font-bold text-center text-foreground mb-8">
                         Everything You Need to Excel
                     </h2>
                     <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -214,15 +214,15 @@ export default function Premium() {
                                     animate={{ opacity: 1, y: 0 }}
                                     transition={{ delay: 0.4 + index * 0.1 }}
                                 >
-                                    <Card className="h-full hover:shadow-xl transition-all duration-300 border-2 border-gray-100 hover:border-indigo-200 bg-white">
+                                    <Card className="h-full hover:shadow-xl transition-all duration-300 border-2 border-border hover:border-indigo-200 bg-surface">
                                         <CardContent className="p-6">
                                             <div className={`w-12 h-12 bg-gradient-to-br ${feature.color} rounded-xl flex items-center justify-center mb-4`}>
                                                 <Icon className="w-6 h-6 text-white" />
                                             </div>
-                                            <h3 className="text-xl font-bold text-gray-900 mb-2">
+                                            <h3 className="text-xl font-bold text-foreground mb-2">
                                                 {feature.title}
                                             </h3>
-                                            <p className="text-gray-600 text-sm">
+                                            <p className="text-muted-foreground text-sm">
                                                 {feature.description}
                                             </p>
                                         </CardContent>
@@ -240,20 +240,20 @@ export default function Premium() {
                     transition={{ delay: 0.6 }}
                     className="mb-12"
                 >
-                    <h2 className="text-3xl font-bold text-center text-gray-900 mb-8">
+                    <h2 className="text-3xl font-bold text-center text-foreground mb-8">
                         Free vs Premium
                     </h2>
-                    <Card className="max-w-4xl mx-auto shadow-xl bg-white">
+                    <Card className="max-w-4xl mx-auto shadow-xl bg-surface">
                         <CardContent className="p-8">
                             <div className="overflow-x-auto">
                                 <table className="w-full">
                                     <thead>
                                         <tr className="border-b-2">
-                                            <th className="text-left py-4 px-4 font-bold text-gray-900 text-lg">Feature</th>
+                                            <th className="text-left py-4 px-4 font-bold text-foreground text-lg">Feature</th>
                                             <th className="text-center py-4 px-4">
                                                 <div className="flex flex-col items-center">
-                                                    <Lock className="w-5 h-5 text-gray-400 mb-2" />
-                                                    <span className="font-bold text-gray-900">Free</span>
+                                                    <Lock className="w-5 h-5 text-muted-foreground/60 mb-2" />
+                                                    <span className="font-bold text-foreground">Free</span>
                                                 </div>
                                             </th>
                                             <th className="text-center py-4 px-4">
@@ -268,17 +268,17 @@ export default function Premium() {
                                     </thead>
                                     <tbody>
                                         {comparisonFeatures.map((feature, i) => (
-                                            <tr key={i} className="border-b hover:bg-gray-50 transition-colors">
-                                                <td className="py-4 px-4 font-medium text-gray-900">{feature.name}</td>
+                                            <tr key={i} className="border-b hover:bg-secondary/50 transition-colors">
+                                                <td className="py-4 px-4 font-medium text-foreground">{feature.name}</td>
                                                 <td className="py-4 px-4 text-center">
                                                     {typeof feature.free === 'boolean' ? (
                                                         feature.free ? (
                                                             <Check className="w-5 h-5 text-green-600 mx-auto" />
                                                         ) : (
-                                                            <span className="text-2xl text-gray-300">—</span>
+                                                            <span className="text-2xl text-muted-foreground/40">—</span>
                                                         )
                                                     ) : (
-                                                        <span className="text-sm text-gray-600">{feature.free}</span>
+                                                        <span className="text-sm text-muted-foreground">{feature.free}</span>
                                                     )}
                                                 </td>
                                                 <td className="py-4 px-4 text-center">
@@ -286,7 +286,7 @@ export default function Premium() {
                                                         feature.premium ? (
                                                             <Check className="w-6 h-6 text-green-600 mx-auto" />
                                                         ) : (
-                                                            <span className="text-2xl text-gray-300">—</span>
+                                                            <span className="text-2xl text-muted-foreground/40">—</span>
                                                         )
                                                     ) : (
                                                         <span className="text-sm font-bold bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent">

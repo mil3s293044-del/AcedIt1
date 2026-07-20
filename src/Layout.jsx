@@ -35,7 +35,7 @@ const FloatingTimer = React.memo(({ currentTime, timerPosition, isDragging, hand
         onMouseDown={handleMouseDown}
         className="touch-none"
     >
-        <Card className={`bg-white/95 backdrop-blur-sm border-2 ${isDragging ? 'border-purple-400 shadow-2xl' : 'border-purple-200 shadow-lg hover:shadow-xl'} transition-all select-none`}>
+        <Card className={`bg-surface/95 backdrop-blur-sm border-2 ${isDragging ? 'border-purple-400 shadow-2xl' : 'border-purple-200 shadow-lg hover:shadow-xl'} transition-all select-none`}>
             <CardContent className="p-3 timer-content">
                 <div className="flex items-center gap-3">
                     <div className="flex items-center gap-2">
@@ -48,7 +48,7 @@ const FloatingTimer = React.memo(({ currentTime, timerPosition, isDragging, hand
                     </div>
                     <Link to={createPageUrl("Study")} className="flex-1" onClick={(e) => e.stopPropagation()}>
                         <div>
-                            <div className="font-mono font-bold text-lg text-gray-900">
+                            <div className="font-mono font-bold text-lg text-foreground">
                                 {formatTime(currentTime.timeLeft)}
                             </div>
                             <div className="text-xs text-gray-600">
@@ -250,7 +250,7 @@ export default function Layout({ children, currentPageName }) {
     const showFloatingTimer = currentTime?.timeLeft > 0 && !location.pathname.includes(createPageUrl("Study"));
 
     return (
-        <div className="min-h-screen bg-gradient-to-br from-slate-50 via-violet-50/30 to-indigo-50/40 relative">
+        <div className="min-h-screen bg-background relative">
             <SideRail />
             <TopNav />
 
@@ -267,7 +267,7 @@ export default function Layout({ children, currentPageName }) {
                 )}
             </AnimatePresence>
 
-            <main className="text-gray-900 w-full pb-20 md:pb-0 md:pl-16">
+            <main className="text-foreground w-full pb-20 md:pb-0 md:pl-16">
                 <StakesStrip />
                 {children}
             </main>

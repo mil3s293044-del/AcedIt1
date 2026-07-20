@@ -716,7 +716,7 @@ export default function Friends() {
                                                     className="rounded-xl border-chart-4/30 text-chart-4 hover:bg-chart-4/10 gap-1.5 text-xs">
                                                     <Gift className="w-3.5 h-3.5" /> Share
                                                 </Button>
-                                                <Button size="icon" variant="ghost"
+                                                <Button size="icon" variant="ghost" aria-label="Remove friend"
                                                     onClick={() => handleRemoveFriend(friend.email)}
                                                     className="rounded-xl text-muted-foreground/60 hover:text-streak hover:bg-streak/10 w-8 h-8">
                                                     <UserMinus className="w-3.5 h-3.5" />

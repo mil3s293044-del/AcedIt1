@@ -325,37 +325,37 @@ Make it genuinely educational and accurate for VCE Year 12 level.`;
 
             {/* History */}
             {savedResults.length > 0 && (
-                <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
+                <div className="bg-surface rounded-2xl border border-border shadow-sm overflow-hidden">
                     <button
                         onClick={() => setShowHistory(!showHistory)}
-                        className="w-full flex items-center justify-between px-5 py-4 hover:bg-gray-50 transition-colors"
+                        className="w-full flex items-center justify-between px-5 py-4 hover:bg-secondary/50 transition-colors"
                     >
                         <div className="flex items-center gap-2">
-                            <FolderOpen className="w-4 h-4 text-gray-400" />
-                            <span className="font-semibold text-gray-700 text-sm">Saved Explanations</span>
-                            <Badge className="bg-gray-100 text-gray-600 border-0 text-xs">{savedResults.length}</Badge>
+                            <FolderOpen className="w-4 h-4 text-muted-foreground/60" />
+                            <span className="font-semibold text-muted-foreground text-sm">Saved Explanations</span>
+                            <Badge className="bg-secondary text-muted-foreground border-0 text-xs">{savedResults.length}</Badge>
                         </div>
-                        <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform ${showHistory ? 'rotate-180' : ''}`} />
+                        <ChevronDown className={`w-4 h-4 text-muted-foreground/60 transition-transform ${showHistory ? 'rotate-180' : ''}`} />
                     </button>
                     <AnimatePresence>
                         {showHistory && (
-                            <motion.div initial={{ height: 0 }} animate={{ height: 'auto' }} exit={{ height: 0 }} className="overflow-hidden border-t border-gray-100">
+                            <motion.div initial={{ height: 0 }} animate={{ height: 'auto' }} exit={{ height: 0 }} className="overflow-hidden border-t border-border">
                                 <div className="p-3 space-y-2 max-h-64 overflow-y-auto">
                                     {savedResults.map(r => (
-                                        <div key={r.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-xl hover:bg-gray-100 transition-colors">
+                                        <div key={r.id} className="flex items-center justify-between p-3 bg-secondary/50 rounded-xl hover:bg-secondary transition-colors">
                                             <div className="flex-1 min-w-0">
-                                                <p className="text-sm font-semibold text-gray-800 truncate">{r.title || r.topic}</p>
+                                                <p className="text-sm font-semibold text-foreground truncate">{r.title || r.topic}</p>
                                                 <div className="flex items-center gap-2 mt-0.5">
-                                                    <span className="text-xs text-gray-400">{r.subject_name}</span>
-                                                    <span className="text-xs text-gray-300">•</span>
-                                                    <span className="text-xs text-gray-400">{r.date_created}</span>
+                                                    <span className="text-xs text-muted-foreground/60">{r.subject_name}</span>
+                                                    <span className="text-xs text-muted-foreground/40">•</span>
+                                                    <span className="text-xs text-muted-foreground/60">{r.date_created}</span>
                                                 </div>
                                             </div>
                                             <div className="flex gap-1 ml-2">
-                                                <button onClick={() => setViewingResult(r)} className="p-1.5 text-gray-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-lg transition-colors">
+                                                <button onClick={() => setViewingResult(r)} className="p-1.5 text-muted-foreground/60 hover:text-emerald-600 hover:bg-emerald-50 rounded-lg transition-colors">
                                                     <Eye className="w-3.5 h-3.5" />
                                                 </button>
-                                                <button onClick={() => handleDelete(r.id)} className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors">
+                                                <button onClick={() => handleDelete(r.id)} className="p-1.5 text-muted-foreground/60 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors">
                                                     <Trash2 className="w-3.5 h-3.5" />
                                                 </button>
                                             </div>

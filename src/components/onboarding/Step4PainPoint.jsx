@@ -40,11 +40,11 @@ export default function Step4PainPoint({ data, onNext, onBack, saving }) {
 
     return (
         <div className="max-w-2xl mx-auto px-6 py-10">
-            <button onClick={onBack} className="flex items-center gap-1 text-sm text-gray-400 hover:text-gray-600 mb-6">
+            <button onClick={onBack} className="flex items-center gap-1 text-sm text-muted-foreground/60 hover:text-muted-foreground mb-6">
                 <ChevronLeft className="w-4 h-4" /> Back
             </button>
-            <h2 className="text-2xl font-bold text-gray-900 mb-1">What's your biggest study challenge right now?</h2>
-            <p className="text-gray-500 text-sm mb-1">Be honest — this helps us show you the features that'll make the biggest difference.</p>
+            <h2 className="text-2xl font-bold text-foreground mb-1">What's your biggest study challenge right now?</h2>
+            <p className="text-muted-foreground text-sm mb-1">Be honest — this helps us show you the features that'll make the biggest difference.</p>
             <p className="text-xs text-purple-600 font-medium mb-6">Pick up to 3 — we'll personalise everything around these.</p>
 
             <div className="grid grid-cols-2 gap-3 mb-6">
@@ -63,7 +63,7 @@ export default function Step4PainPoint({ data, onNext, onBack, saving }) {
                             }}
                         >
                             <span className="text-2xl block mb-2">{opt.emoji}</span>
-                            <span className="text-sm font-semibold text-gray-800">{opt.label}</span>
+                            <span className="text-sm font-semibold text-foreground">{opt.label}</span>
                         </button>
                     );
                 })}

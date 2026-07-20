@@ -314,7 +314,7 @@ export default function Subscription() {
                 {!isPremium && (
                     <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }}
                         className="rounded-3xl bg-primary text-primary-foreground p-8 text-center">
-                        <div className="w-14 h-14 rounded-2xl bg-white/20 flex items-center justify-center mx-auto mb-4">
+                        <div className="w-14 h-14 rounded-2xl bg-surface/20 flex items-center justify-center mx-auto mb-4">
                             <Crown className="w-7 h-7 text-white" />
                         </div>
                         <h3 className="font-display font-extrabold text-2xl mb-2">Ready to ace it?</h3>
@@ -322,7 +322,7 @@ export default function Subscription() {
                             Upgrade today for unlimited access to every AI study tool, advanced techniques and analytics.
                         </p>
                         <Button onClick={() => navigate(createPageUrl("Checkout"))} size="lg"
-                            className="bg-white text-primary hover:bg-white/90 rounded-xl font-display font-extrabold btn-3d">
+                            className="bg-surface text-primary hover:bg-surface/90 rounded-xl font-display font-extrabold btn-3d">
                             <Crown className="w-5 h-5 mr-2" /> Upgrade to Premium
                         </Button>
                         <p className="text-primary-foreground/80 text-xs mt-4">Cancel anytime · Secure payment via Stripe · Instant access</p>

@@ -30,7 +30,7 @@ const availableShortcuts = [
     { id: "goals", title: "Goals & Planning", url: createPageUrl("Goals"), icon: Target, color: "text-indigo-600" },
     { id: "guides", title: "Study Guides", url: createPageUrl("Guides"), icon: BookOpen, color: "text-emerald-600" },
     { id: "subjects", title: "Subjects", url: createPageUrl("Subjects"), icon: GraduationCap, color: "text-blue-700" },
-    { id: "dashboard", title: "Dashboard", url: createPageUrl("Dashboard"), icon: BarChart3, color: "text-gray-600" },
+    { id: "dashboard", title: "Dashboard", url: createPageUrl("Dashboard"), icon: BarChart3, color: "text-muted-foreground" },
     { id: "planner", title: "Study Planner", url: createPageUrl("Goals?tab=planner"), icon: Calendar, color: "text-violet-600" }
 ];
 
@@ -56,16 +56,17 @@ export default function AppShortcuts() {
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.4 }}
         >
-            <Card className="bg-gradient-to-br from-gray-50 to-slate-50 border-gray-200/50">
+            <Card className="bg-gradient-to-br from-gray-50 to-slate-50 border-border/50">
                 <CardHeader>
                     <div className="flex items-center justify-between">
-                        <CardTitle className="flex items-center gap-2 text-gray-900">
+                        <CardTitle className="flex items-center gap-2 text-foreground">
                             <Zap className="w-5 h-5" />
                             Quick Shortcuts
                         </CardTitle>
                         <Button
                             variant="ghost"
                             size="icon"
+                            aria-label="Edit shortcuts"
                             onClick={() => setIsEditing(!isEditing)}
                         >
                             {isEditing ? <X className="w-4 h-4" /> : <Settings className="w-4 h-4" />}
@@ -75,10 +76,10 @@ export default function AppShortcuts() {
                 <CardContent>
                     {isEditing ? (
                         <div className="space-y-4">
-                            <p className="text-sm text-gray-600">Choose your two favorite shortcuts:</p>
+                            <p className="text-sm text-muted-foreground">Choose your two favorite shortcuts:</p>
                             {shortcuts.map((shortcut, index) => (
                                 <div key={index} className="space-y-2">
-                                    <label className="text-sm font-medium text-gray-700">
+                                    <label className="text-sm font-medium text-muted-foreground">
                                         Shortcut {index + 1}
                                     </label>
                                     <Select
@@ -110,9 +111,9 @@ export default function AppShortcuts() {
                                         whileTap={{ scale: 0.98 }}
                                     >
                                         <Link to={shortcut.url}>
-                                            <div className="flex items-center gap-3 p-4 bg-white rounded-lg border border-gray-200 hover:border-blue-300 hover:shadow-md transition-all cursor-pointer">
+                                            <div className="flex items-center gap-3 p-4 bg-surface rounded-lg border border-border hover:border-blue-300 hover:shadow-md transition-all cursor-pointer">
                                                 <Icon className={`w-5 h-5 ${shortcut.color}`} />
-                                                <span className="font-medium text-gray-900">{shortcut.title}</span>
+                                                <span className="font-medium text-foreground">{shortcut.title}</span>
                                             </div>
                                         </Link>
                                     </motion.div>

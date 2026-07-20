@@ -169,9 +169,9 @@ export default function TrendsAnalytics({ data, timeRange }) {
                                 {consistency >= 70 ? "Great!" : "Needs Work"}
                             </Badge>
                         </div>
-                        <h3 className="text-sm font-medium text-gray-600 mb-1">Study Consistency</h3>
-                        <p className="text-3xl font-bold text-gray-900">{consistency}%</p>
-                        <p className="text-sm text-gray-500 mt-1">
+                        <h3 className="text-sm font-medium text-muted-foreground mb-1">Study Consistency</h3>
+                        <p className="text-3xl font-bold text-foreground">{consistency}%</p>
+                        <p className="text-sm text-muted-foreground mt-1">
                             {daysStudied} out of {totalDays} days
                         </p>
                     </CardContent>
@@ -191,11 +191,11 @@ export default function TrendsAnalytics({ data, timeRange }) {
                                 {perfTrend?.improving ? "Improving" : "Declining"}
                             </Badge>
                         </div>
-                        <h3 className="text-sm font-medium text-gray-600 mb-1">Performance Trend</h3>
-                        <p className="text-3xl font-bold text-gray-900">
+                        <h3 className="text-sm font-medium text-muted-foreground mb-1">Performance Trend</h3>
+                        <p className="text-3xl font-bold text-foreground">
                             {perfTrend?.change > 0 ? '+' : ''}{perfTrend?.change || 0}%
                         </p>
-                        <p className="text-sm text-gray-500 mt-1">
+                        <p className="text-sm text-muted-foreground mt-1">
                             {perfTrend ? `${perfTrend.firstAvg}% → ${perfTrend.secondAvg}%` : 'Not enough data'}
                         </p>
                     </CardContent>
@@ -211,11 +211,11 @@ export default function TrendsAnalytics({ data, timeRange }) {
                                 {timeRange === 'week' ? 'This Week' : timeRange === 'month' ? 'This Month' : 'Period'}
                             </Badge>
                         </div>
-                        <h3 className="text-sm font-medium text-gray-600 mb-1">Total Sessions</h3>
-                        <p className="text-3xl font-bold text-gray-900">
+                        <h3 className="text-sm font-medium text-muted-foreground mb-1">Total Sessions</h3>
+                        <p className="text-3xl font-bold text-foreground">
                             {data.techniques.length + data.activeRecall.length + data.blurting.length}
                         </p>
-                        <p className="text-sm text-gray-500 mt-1">
+                        <p className="text-sm text-muted-foreground mt-1">
                             Across all techniques
                         </p>
                     </CardContent>
@@ -290,7 +290,7 @@ export default function TrendsAnalytics({ data, timeRange }) {
                                     : 0;
                                 
                                 return (
-                                    <div key={technique.name} className="p-4 bg-gray-50 rounded-xl">
+                                    <div key={technique.name} className="p-4 bg-secondary/50 rounded-xl">
                                         <div className="flex items-center justify-between mb-2">
                                             <div className="flex items-center gap-3">
                                                 <div 
@@ -300,16 +300,16 @@ export default function TrendsAnalytics({ data, timeRange }) {
                                                     <Icon className="w-5 h-5" style={{ color: technique.color }} />
                                                 </div>
                                                 <div>
-                                                    <p className="font-medium text-gray-900">{technique.name}</p>
-                                                    <p className="text-xs text-gray-500">{technique.sessions} sessions</p>
+                                                    <p className="font-medium text-foreground">{technique.name}</p>
+                                                    <p className="text-xs text-muted-foreground">{technique.sessions} sessions</p>
                                                 </div>
                                             </div>
                                             <div className="text-right">
-                                                <p className="font-bold text-gray-900">{formatDuration(technique.minutes)}</p>
-                                                <p className="text-xs text-gray-500">{percentage}% of total</p>
+                                                <p className="font-bold text-foreground">{formatDuration(technique.minutes)}</p>
+                                                <p className="text-xs text-muted-foreground">{percentage}% of total</p>
                                             </div>
                                         </div>
-                                        <div className="h-2 bg-gray-200 rounded-full overflow-hidden">
+                                        <div className="h-2 bg-secondary rounded-full overflow-hidden">
                                             <div 
                                                 className="h-full rounded-full transition-all duration-500"
                                                 style={{ 
@@ -429,11 +429,11 @@ export default function TrendsAnalytics({ data, timeRange }) {
                 </CardHeader>
                 <CardContent className="space-y-3">
                     {/* Study Consistency */}
-                    <div className="flex items-start gap-3 p-3 bg-white rounded-lg">
+                    <div className="flex items-start gap-3 p-3 bg-surface rounded-lg">
                         <div className="w-2 h-2 bg-blue-500 rounded-full mt-2"></div>
                         <div>
-                            <p className="font-semibold text-gray-900">Study Consistency</p>
-                            <p className="text-sm text-gray-600">
+                            <p className="font-semibold text-foreground">Study Consistency</p>
+                            <p className="text-sm text-muted-foreground">
                                 {consistency >= 70 
                                     ? "Excellent! You're maintaining a consistent study schedule."
                                     : consistency >= 50
@@ -445,11 +445,11 @@ export default function TrendsAnalytics({ data, timeRange }) {
 
                     {/* Performance Trend */}
                     {perfTrend && (
-                        <div className="flex items-start gap-3 p-3 bg-white rounded-lg">
+                        <div className="flex items-start gap-3 p-3 bg-surface rounded-lg">
                             <div className={`w-2 h-2 rounded-full mt-2 ${perfTrend.improving ? 'bg-green-500' : 'bg-orange-500'}`}></div>
                             <div>
-                                <p className="font-semibold text-gray-900">Performance</p>
-                                <p className="text-sm text-gray-600">
+                                <p className="font-semibold text-foreground">Performance</p>
+                                <p className="text-sm text-muted-foreground">
                                     {perfTrend.improving
                                         ? `Great work! Your quiz scores have improved by ${perfTrend.change}%. Keep up the momentum!`
                                         : `Your scores have dropped by ${Math.abs(perfTrend.change)}%. Consider reviewing weak topics and adjusting your study methods.`}
@@ -494,11 +494,11 @@ export default function TrendsAnalytics({ data, timeRange }) {
                         if (highestPercent <= 50 && lowestPercent >= 10) return null;
 
                         return (
-                            <div className="flex items-start gap-3 p-3 bg-white rounded-lg">
+                            <div className="flex items-start gap-3 p-3 bg-surface rounded-lg">
                                 <div className="w-2 h-2 bg-purple-500 rounded-full mt-2"></div>
                                 <div>
-                                    <p className="font-semibold text-gray-900">Balance Your Subjects</p>
-                                    <p className="text-sm text-gray-600">
+                                    <p className="font-semibold text-foreground">Balance Your Subjects</p>
+                                    <p className="text-sm text-muted-foreground">
                                         {highestPercent > 50 
                                             ? `You're spending ${highestPercent}% of your time on ${highest[0]}. Consider distributing your study time more evenly across subjects.`
                                             : `${lowest[0]} is getting very little attention (only ${lowestPercent}% of your study time). Try to allocate more sessions to this subject.`

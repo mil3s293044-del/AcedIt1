@@ -67,8 +67,8 @@ export default function MathInput({ value, onChange, className, placeholder, row
         <div className="relative space-y-2">
             {/* LaTeX formatted display */}
             <div
-                className={`w-full overflow-auto border rounded-lg p-4 bg-white min-h-[200px] ${
-                    focused ? 'ring-2 ring-purple-500 border-purple-500' : 'border-gray-300'
+                className={`w-full overflow-auto border rounded-lg p-4 bg-surface min-h-[200px] ${
+                    focused ? 'ring-2 ring-purple-500 border-purple-500' : 'border-border'
                 } ${className}`}
             >
                 {value ? (
@@ -89,7 +89,7 @@ export default function MathInput({ value, onChange, className, placeholder, row
                         })}
                     </div>
                 ) : (
-                    <span className="text-gray-400 text-lg">{placeholder || "Your equation appears here"}</span>
+                    <span className="text-muted-foreground/60 text-lg">{placeholder || "Your equation appears here"}</span>
                 )}
             </div>
             

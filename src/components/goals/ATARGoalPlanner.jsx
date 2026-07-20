@@ -251,7 +251,7 @@ Each milestone should be:
                         </div>
                      ) : (
                          <div className="flex items-center justify-between">
-                            <p className="text-lg">Your Target ATAR: <Badge className="text-lg bg-white text-red-800">{userProfile?.goal_atar}</Badge></p>
+                            <p className="text-lg">Your Target ATAR: <Badge className="text-lg bg-surface text-red-800">{userProfile?.goal_atar}</Badge></p>
                              <Button 
                                 onClick={handleGenerateATARPlan} 
                                 disabled={isGeneratingPlan}
@@ -277,11 +277,11 @@ Each milestone should be:
             ) : (
                 <Card className="text-center py-12">
                     <CardContent>
-                        <Target className="w-16 h-16 mx-auto text-gray-300 mb-4" />
-                        <h3 className="text-xl font-semibold text-gray-900 mb-2">
+                        <Target className="w-16 h-16 mx-auto text-muted-foreground/40 mb-4" />
+                        <h3 className="text-xl font-semibold text-foreground mb-2">
                             Set Your ATAR Goal
                         </h3>
-                        <p className="text-gray-600 mb-6">
+                        <p className="text-muted-foreground mb-6">
                            Once your goal is set, click 'Generate AI Plan' to create your Mountain to Success.
                         </p>
                     </CardContent>

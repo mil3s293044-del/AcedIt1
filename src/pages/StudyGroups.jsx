@@ -318,7 +318,7 @@ export default function StudyGroups() {
                 <Card className="max-w-md w-full">
                     <CardContent className="p-8 text-center">
                         <div className="w-16 h-16 border-4 border-indigo-200 border-t-indigo-600 rounded-full animate-spin mx-auto mb-4"></div>
-                        <p className="text-gray-600">Loading study groups...</p>
+                        <p className="text-muted-foreground">Loading study groups...</p>
                     </CardContent>
                 </Card>
             </div>
@@ -386,10 +386,10 @@ export default function StudyGroups() {
                                     <CardTitle className="text-2xl mb-2">{selectedGroup.name}</CardTitle>
                                     <p className="text-indigo-100">{selectedGroup.description}</p>
                                     <div className="flex gap-2 mt-3 flex-wrap">
-                                        <Badge className="bg-white/20 text-white border-white/30">
+                                        <Badge className="bg-surface/20 text-white border-white/30">
                                             {selectedGroup.subject}
                                         </Badge>
-                                        <Badge className="bg-white/20 text-white border-white/30">
+                                        <Badge className="bg-surface/20 text-white border-white/30">
                                             <Users className="w-3 h-3 mr-1" />
                                             {selectedGroup.member_emails?.length || 0} members
                                         </Badge>
@@ -406,7 +406,7 @@ export default function StudyGroups() {
                                         variant="outline"
                                         size="sm"
                                         onClick={() => copyJoinCode(selectedGroup.join_code)}
-                                        className="bg-white/20 border-white/30 text-white hover:bg-white/30"
+                                        className="bg-surface/20 border-white/30 text-white hover:bg-surface/30"
                                     >
                                         {copiedCode ? (
                                             <>
@@ -427,7 +427,7 @@ export default function StudyGroups() {
                     </Card>
 
                     <Tabs defaultValue="chat" className="space-y-6">
-                        <TabsList className="grid w-full grid-cols-2 bg-white border-2 border-indigo-200">
+                        <TabsList className="grid w-full grid-cols-2 bg-surface border-2 border-indigo-200">
                             <TabsTrigger value="chat" className="data-[state=active]:bg-indigo-600 data-[state=active]:text-white">
                                 <MessageCircle className="w-4 h-4 mr-2" />
                                 Chat
@@ -459,7 +459,7 @@ export default function StudyGroups() {
                         </DialogHeader>
                         <div className="space-y-4 py-4">
                             {friends.length === 0 ? (
-                                <div className="text-center py-8 text-gray-500">
+                                <div className="text-center py-8 text-muted-foreground">
                                     <Users className="w-12 h-12 mx-auto mb-3 opacity-50" />
                                     <p>No friends yet.</p>
                                     <p className="text-sm mt-2">Add friends in the Friends tab!</p>
@@ -485,13 +485,13 @@ export default function StudyGroups() {
                                                     />
                                                     <Label htmlFor={`friend-${friend.email}`} className="flex-1 cursor-pointer">
                                                         <p className="font-medium text-sm">{friend.name}</p>
-                                                        <p className="text-xs text-gray-500">@{friend.username}</p>
+                                                        <p className="text-xs text-muted-foreground">@{friend.username}</p>
                                                     </Label>
                                                 </div>
                                             ))}
                                     </div>
                                     {friends.filter(f => !(selectedGroup.member_emails || []).includes(f.email)).length === 0 && (
-                                        <p className="text-sm text-gray-500 text-center py-4">All your friends are already in this group!</p>
+                                        <p className="text-sm text-muted-foreground text-center py-4">All your friends are already in this group!</p>
                                     )}
                                 </div>
                             )}
@@ -526,10 +526,10 @@ export default function StudyGroups() {
                     animate={{ opacity: 1, y: 0 }}
                     className="text-center mb-8"
                 >
-                    <h1 className="text-3xl lg:text-4xl font-bold text-gray-900 mb-2">
+                    <h1 className="text-3xl lg:text-4xl font-bold text-foreground mb-2">
                         Study Groups 👥
                     </h1>
-                    <p className="text-gray-600 text-lg">
+                    <p className="text-muted-foreground text-lg">
                         Collaborate with peers, share resources, and study together
                     </p>
                 </motion.div>
@@ -555,9 +555,9 @@ export default function StudyGroups() {
                 {groups.length === 0 ? (
                     <Card className="shadow-lg">
                         <CardContent className="p-12 text-center">
-                            <Users className="w-16 h-16 text-gray-300 mx-auto mb-4" />
-                            <h3 className="text-xl font-semibold text-gray-900 mb-2">No groups yet</h3>
-                            <p className="text-gray-600 mb-6">Create or join a study group to get started</p>
+                            <Users className="w-16 h-16 text-muted-foreground/40 mx-auto mb-4" />
+                            <h3 className="text-xl font-semibold text-foreground mb-2">No groups yet</h3>
+                            <p className="text-muted-foreground mb-6">Create or join a study group to get started</p>
                             <Button onClick={() => setIsCreatingGroup(true)} className="bg-gradient-to-r from-indigo-600 to-purple-600">
                                 <Plus className="w-4 h-4 mr-2" />
                                 Create First Group
@@ -584,7 +584,7 @@ export default function StudyGroups() {
                                                 <Crown className="w-4 h-4 text-yellow-500" />
                                             )}
                                         </CardTitle>
-                                        <p className="text-sm text-gray-600 line-clamp-2">{group.description}</p>
+                                        <p className="text-sm text-muted-foreground line-clamp-2">{group.description}</p>
                                     </CardHeader>
                                     <CardContent>
                                         <div className="space-y-2">
@@ -592,7 +592,7 @@ export default function StudyGroups() {
                                                 {group.subject}
                                             </Badge>
                                             <div className="flex items-center justify-between text-sm">
-                                                <span className="text-gray-600">Members</span>
+                                                <span className="text-muted-foreground">Members</span>
                                                 <Badge variant="outline">
                                                     {group.member_emails?.length || 0}
                                                 </Badge>

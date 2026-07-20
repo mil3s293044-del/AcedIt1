@@ -87,7 +87,7 @@ export function Countdown({ targetDate, variant = "chip", className = "" }) {
         const bannerCls =
             tone === "streak" ? "bg-streak/15 text-streak"
             : tone === "xp" ? "bg-xp/15 text-xp"
-            : "bg-white/15 text-white";
+            : "bg-surface/15 text-white";
         return (
             <div className={`flex items-center justify-center gap-2 rounded-xl px-3 py-2 ${bannerCls} ${className}`}>
                 {c.urgent

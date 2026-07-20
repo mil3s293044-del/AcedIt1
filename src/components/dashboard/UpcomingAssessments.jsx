@@ -105,7 +105,7 @@ export default function UpcomingAssessments({ user }) {
                     </CardTitle>
                 </CardHeader>
                 <CardContent>
-                    <div className="animate-pulse h-24 bg-gray-200 rounded-lg" />
+                    <div className="animate-pulse h-24 bg-secondary rounded-lg" />
                 </CardContent>
             </Card>
         );
@@ -153,20 +153,20 @@ export default function UpcomingAssessments({ user }) {
                         animate={{ opacity: 1, x: 0 }}
                         transition={{ delay: index * 0.05 }}
                         onClick={() => handleFlashcardClick(deck.deck_id)}
-                        className="flex items-center gap-3 p-3 bg-white/80 backdrop-blur-sm rounded-lg border border-purple-200 cursor-pointer hover:shadow-md hover:border-purple-300 transition-all group"
+                        className="flex items-center gap-3 p-3 bg-surface/80 backdrop-blur-sm rounded-lg border border-purple-200 cursor-pointer hover:shadow-md hover:border-purple-300 transition-all group"
                     >
                         <div className="w-10 h-10 bg-gradient-to-br from-purple-100 to-blue-100 rounded-lg flex items-center justify-center flex-shrink-0 group-hover:scale-110 transition-transform">
                             <Brain className="w-5 h-5 text-purple-600" />
                         </div>
                         <div className="flex-1 min-w-0">
-                            <p className="font-semibold text-sm text-gray-900 truncate leading-tight">
+                            <p className="font-semibold text-sm text-foreground truncate leading-tight">
                                 {deck.subject} • {deck.topic}
                             </p>
                             <div className="flex items-center gap-2 mt-1">
                                 <Badge className="bg-purple-100 text-purple-700 text-xs px-2 py-0.5">
                                     {deck.cards.length} card{deck.cards.length !== 1 ? 's' : ''}
                                 </Badge>
-                                <span className="text-xs text-gray-600">Review now</span>
+                                <span className="text-xs text-muted-foreground">Review now</span>
                             </div>
                         </div>
                     </motion.div>
@@ -194,7 +194,7 @@ export default function UpcomingAssessments({ user }) {
                                     <Badge className={`${colors.badgeBg} ${colors.badgeText} text-xs px-2 py-0.5 border-0`}>
                                         {assessment.assessment_type}
                                     </Badge>
-                                    <span className="text-xs text-gray-600">
+                                    <span className="text-xs text-muted-foreground">
                                         {assessment.subject_name} • {getDaysUntil(assessment.due_date)}
                                     </span>
                                 </div>
@@ -205,7 +205,7 @@ export default function UpcomingAssessments({ user }) {
                 
                 {assessments.length > 5 && (
                     <div className="text-center pt-2">
-                        <p className="text-sm text-gray-600 font-medium">
+                        <p className="text-sm text-muted-foreground font-medium">
                             +{assessments.length - 5} more assessment{assessments.length - 5 !== 1 ? 's' : ''}
                         </p>
                     </div>

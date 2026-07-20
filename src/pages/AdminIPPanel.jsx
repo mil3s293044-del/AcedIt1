@@ -101,7 +101,7 @@ export default function AdminIPPanel() {
 
     if (!user) {
         return (
-            <div className="p-8 text-center text-gray-500">
+            <div className="p-8 text-center text-muted-foreground">
                 Admin access required.
             </div>
         );
@@ -114,7 +114,7 @@ export default function AdminIPPanel() {
             <div className="flex items-center justify-between">
                 <div className="flex items-center gap-3">
                     <Shield className="w-7 h-7 text-red-600" />
-                    <h1 className="text-2xl font-bold text-gray-900">IP Security Panel</h1>
+                    <h1 className="text-2xl font-bold text-foreground">IP Security Panel</h1>
                 </div>
                 <Button variant="outline" onClick={loadData} disabled={loading}>
                     <RefreshCw className={`w-4 h-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
@@ -129,22 +129,22 @@ export default function AdminIPPanel() {
                 </CardHeader>
                 <CardContent>
                     {loading ? (
-                        <p className="text-gray-500 text-sm">Loading...</p>
+                        <p className="text-muted-foreground text-sm">Loading...</p>
                     ) : ipStats.length === 0 ? (
-                        <p className="text-gray-500 text-sm">No calls logged today.</p>
+                        <p className="text-muted-foreground text-sm">No calls logged today.</p>
                     ) : (
                         <div className="space-y-2">
                             {ipStats.slice(0, 50).map(entry => {
                                 const isBlocked = blockedSet.has(entry.ip);
                                 return (
-                                    <div key={entry.ip} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg border">
+                                    <div key={entry.ip} className="flex items-center justify-between p-3 bg-secondary/50 rounded-lg border">
                                         <div className="flex items-center gap-3">
-                                            <span className="font-mono text-sm font-semibold text-gray-800">{entry.ip}</span>
+                                            <span className="font-mono text-sm font-semibold text-foreground">{entry.ip}</span>
                                             {isBlocked && <Badge className="bg-red-100 text-red-700 border-red-200">Blocked</Badge>}
-                                            <span className="text-xs text-gray-500">{entry.users.length} user(s)</span>
+                                            <span className="text-xs text-muted-foreground">{entry.users.length} user(s)</span>
                                         </div>
                                         <div className="flex items-center gap-3">
-                                            <Badge className={entry.count >= 50 ? "bg-red-100 text-red-800" : entry.count >= 20 ? "bg-orange-100 text-orange-800" : "bg-gray-100 text-gray-700"}>
+                                            <Badge className={entry.count >= 50 ? "bg-red-100 text-red-800" : entry.count >= 20 ? "bg-orange-100 text-orange-800" : "bg-secondary text-muted-foreground"}>
                                                 {entry.count} calls
                                             </Badge>
                                             {!isBlocked ? (
@@ -175,7 +175,7 @@ export default function AdminIPPanel() {
                 </CardHeader>
                 <CardContent>
                     {blockedIPs.filter(b => b.is_blocked_ip).length === 0 ? (
-                        <p className="text-gray-500 text-sm">No IPs are currently blocked.</p>
+                        <p className="text-muted-foreground text-sm">No IPs are currently blocked.</p>
                     ) : (
                         <div className="space-y-2">
                             {blockedIPs.filter(b => b.is_blocked_ip).map(record => (
@@ -184,7 +184,7 @@ export default function AdminIPPanel() {
                                         <span className="font-mono text-sm font-semibold text-red-800">{record.ip_address}</span>
                                         <div className="flex items-center gap-2 mt-1">
                                             {record.is_permanent && <Badge className="bg-red-200 text-red-900 text-xs">Permanent</Badge>}
-                                            <span className="text-xs text-gray-500">{record.block_reason} — {record.blocked_at ? new Date(record.blocked_at).toLocaleString() : ''}</span>
+                                            <span className="text-xs text-muted-foreground">{record.block_reason} — {record.blocked_at ? new Date(record.blocked_at).toLocaleString() : ''}</span>
                                         </div>
                                     </div>
                                     <Button size="sm" variant="outline" onClick={() => unblockIP(record)}>

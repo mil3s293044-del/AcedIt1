@@ -178,19 +178,19 @@ export default function GuideQuizPlayer({ guide, onComplete }) {
                                                 )}
                                                 <div className="flex-1">
                                                     <h3 className="font-semibold mb-2">Question {index + 1}</h3>
-                                                    <p className="text-gray-700 mb-3">{question.question}</p>
+                                                    <p className="text-muted-foreground mb-3">{question.question}</p>
                                                 </div>
                                             </div>
                                             
                                             {question.type === 'mcq' ? (
                                                 <div className="space-y-2">
-                                                    <p className="text-sm font-medium text-gray-600">Your Answer:</p>
+                                                    <p className="text-sm font-medium text-muted-foreground">Your Answer:</p>
                                                     <div className="grid gap-2">
                                                         {question.options?.map((option, optIndex) => (
                                                             <div key={optIndex} className={`p-2 rounded border text-sm ${
                                                                 optIndex === question.correct_answer ? 'bg-green-100 border-green-300 font-medium' :
                                                                 userAnswer !== undefined && parseInt(userAnswer) === optIndex ? 'bg-red-100 border-red-300' :
-                                                                'bg-gray-50 border-gray-200'
+                                                                'bg-secondary/50 border-border'
                                                             }`}>
                                                                 <span className="font-medium">{String.fromCharCode(65 + optIndex)}.</span> {option}
                                                                 {optIndex === question.correct_answer && <Badge className="ml-2 bg-green-600">Correct</Badge>}
@@ -209,8 +209,8 @@ export default function GuideQuizPlayer({ guide, onComplete }) {
                                             ) : (
                                                 <div className="space-y-3">
                                                     <div>
-                                                        <p className="text-sm font-medium text-gray-600 mb-1">Your Answer:</p>
-                                                        <div className="bg-gray-50 p-3 rounded border">
+                                                        <p className="text-sm font-medium text-muted-foreground mb-1">Your Answer:</p>
+                                                        <div className="bg-secondary/50 p-3 rounded border">
                                                             <p className="text-sm">{userAnswer || "No answer provided"}</p>
                                                         </div>
                                                     </div>
@@ -275,7 +275,7 @@ export default function GuideQuizPlayer({ guide, onComplete }) {
                                     const isSelected = userAnswers[currentQuestionIndex]?.toString() === index.toString();
                                     const isCorrectAnswer = index === currentQuestion.correct_answer;
                                     
-                                    let bgColor = "border-gray-200 hover:border-blue-300 hover:bg-blue-50/50";
+                                    let bgColor = "border-border hover:border-blue-300 hover:bg-blue-50/50";
                                     if (showFeedback) {
                                         if (isCorrectAnswer) {
                                             bgColor = "border-green-500 bg-green-100";
@@ -300,7 +300,7 @@ export default function GuideQuizPlayer({ guide, onComplete }) {
                             </RadioGroup>
                         ) : (
                             <div className="space-y-2">
-                                <Label className="text-sm font-medium text-gray-600">Your Answer:</Label>
+                                <Label className="text-sm font-medium text-muted-foreground">Your Answer:</Label>
                                 <Textarea
                                     placeholder="Write your answer here..."
                                     value={userAnswers[currentQuestionIndex] || ""}

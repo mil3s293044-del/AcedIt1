@@ -34,7 +34,7 @@ export default function StreakCalendar({ streaks = [], isLoading }) {
                         <div className="grid grid-cols-7 gap-2">
                             {/* This loading state is for a 14-day grid, kept as per original structure */}
                             {Array(14).fill(0).map((_, i) => (
-                                <div key={i} className="w-8 h-8 bg-gray-200 rounded-lg animate-pulse" />
+                                <div key={i} className="w-8 h-8 bg-secondary rounded-lg animate-pulse" />
                             ))}
                         </div>
                     ) : (
@@ -49,11 +49,11 @@ export default function StreakCalendar({ streaks = [], isLoading }) {
                             <div className="flex items-center justify-between text-sm mt-4">
                                 <div className="flex items-center gap-2">
                                     <div className="w-3 h-3 bg-green-500 rounded-sm" />
-                                    <span className="text-gray-600">Completed</span>
+                                    <span className="text-muted-foreground">Completed</span>
                                 </div>
                                 <div className="flex items-center gap-2">
-                                    <div className="w-3 h-3 bg-gray-100 rounded-sm" />
-                                    <span className="text-gray-600">No activity</span>
+                                    <div className="w-3 h-3 bg-secondary rounded-sm" />
+                                    <span className="text-muted-foreground">No activity</span>
                                 </div>
                             </div>
                         </>

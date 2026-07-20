@@ -99,30 +99,30 @@ export default function CreateCompetitionDialog({ open, onClose, goal, onCreated
                     </div>
 
                     <div>
-                        <p className="text-sm font-semibold text-gray-700 mb-2 flex items-center gap-2">
+                        <p className="text-sm font-semibold text-muted-foreground mb-2 flex items-center gap-2">
                             <Users className="w-4 h-4" /> Invite Friends
                         </p>
                         <div className="relative mb-2">
-                            <Search className="absolute left-3 top-2.5 w-4 h-4 text-gray-400" />
+                            <Search className="absolute left-3 top-2.5 w-4 h-4 text-muted-foreground/60" />
                             <Input placeholder="Search friends..." value={search} onChange={e => setSearch(e.target.value)} className="pl-9" />
                         </div>
                         <ScrollArea className="h-48 border rounded-xl">
                             {loading ? (
                                 <div className="flex items-center justify-center h-full">
-                                    <Loader2 className="w-6 h-6 animate-spin text-gray-400" />
+                                    <Loader2 className="w-6 h-6 animate-spin text-muted-foreground/60" />
                                 </div>
                             ) : filtered.length === 0 ? (
-                                <div className="text-center py-8 text-gray-500 text-sm">
+                                <div className="text-center py-8 text-muted-foreground text-sm">
                                     {friends.length === 0 ? "Add friends first to compete!" : "No matching friends"}
                                 </div>
                             ) : (
                                 <div className="p-2 space-y-1">
                                     {filtered.map(f => (
-                                        <div key={f.email} className="flex items-center gap-3 p-2 rounded-lg hover:bg-gray-50 cursor-pointer" onClick={() => toggle(f.email)}>
+                                        <div key={f.email} className="flex items-center gap-3 p-2 rounded-lg hover:bg-secondary/50 cursor-pointer" onClick={() => toggle(f.email)}>
                                             <Checkbox checked={selectedEmails.includes(f.email)} onCheckedChange={() => toggle(f.email)} />
                                             <div>
                                                 <p className="text-sm font-medium">{f.name}</p>
-                                                <p className="text-xs text-gray-500">{f.email}</p>
+                                                <p className="text-xs text-muted-foreground">{f.email}</p>
                                             </div>
                                         </div>
                                     ))}

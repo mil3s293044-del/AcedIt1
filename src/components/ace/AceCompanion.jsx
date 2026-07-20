@@ -186,7 +186,7 @@ export default function AceCompanion({ userProfile }) {
                                     <p className="font-display font-extrabold text-foreground leading-tight">Ace</p>
                                     <p className="text-xs text-muted-foreground leading-tight">Your study companion</p>
                                 </div>
-                                <Button variant="ghost" size="icon" onClick={() => setOpen(false)} className="rounded-xl">
+                                <Button variant="ghost" size="icon" onClick={() => setOpen(false)} className="rounded-xl" aria-label="Close chat">
                                     <X className="w-5 h-5" />
                                 </Button>
                             </div>

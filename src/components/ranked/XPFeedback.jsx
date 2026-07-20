@@ -214,7 +214,7 @@ function XPPopup({ xp, source, streak, taunt }) {
                     <motion.div
                         animate={{ scale: [1, 1.3, 1], rotate: [0, -12, 12, 0] }}
                         transition={{ duration: 0.5, delay: 0.05 }}
-                        className={`w-11 h-11 rounded-xl flex items-center justify-center flex-shrink-0 ${gradient ? 'bg-white/20' : 'bg-xp/15'}`}
+                        className={`w-11 h-11 rounded-xl flex items-center justify-center flex-shrink-0 ${gradient ? 'bg-surface/20' : 'bg-xp/15'}`}
                     >
                         <Icon className={`w-5 h-5 ${gradient ? 'text-white' : 'text-xp'}`} strokeWidth={2.5} />
                     </motion.div>
@@ -258,13 +258,13 @@ function LevelUpBanner({ level, rankUp, rank }) {
             <motion.div
                 animate={{ rotate: 360 }}
                 transition={{ duration: 8, repeat: Infinity, ease: "linear" }}
-                className="absolute -top-6 -right-6 w-20 h-20 bg-white/5 rounded-full"
+                className="absolute -top-6 -right-6 w-20 h-20 bg-surface/5 rounded-full"
             />
             <div className="relative flex items-center gap-3">
                 <motion.div
                     animate={{ rotate: [0, -15, 15, -8, 8, 0], scale: [1, 1.3, 1.1, 1.2, 1] }}
                     transition={{ duration: 0.7 }}
-                    className="w-11 h-11 bg-white/20 rounded-xl flex items-center justify-center flex-shrink-0"
+                    className="w-11 h-11 bg-surface/20 rounded-xl flex items-center justify-center flex-shrink-0"
                 >
                     <Star className="w-6 h-6 text-yellow-300 fill-yellow-300" />
                 </motion.div>
@@ -287,7 +287,7 @@ function RankUpBanner({ rank }) {
                 <motion.div
                     animate={{ scale: [1, 1.4, 0.9, 1.15, 1], rotate: [0, 20, -15, 8, 0] }}
                     transition={{ duration: 0.7 }}
-                    className="w-11 h-11 bg-white/20 rounded-xl flex items-center justify-center flex-shrink-0 text-2xl"
+                    className="w-11 h-11 bg-surface/20 rounded-xl flex items-center justify-center flex-shrink-0 text-2xl"
                 >
                     {rank.emoji}
                 </motion.div>

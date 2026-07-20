@@ -126,7 +126,7 @@ export default function StudyGoalsProgress({ user, userProfile }) {
             <Card className="shadow-lg border-2 border-purple-100">
                 <CardContent className="p-8 text-center">
                     <div className="animate-spin w-8 h-8 border-4 border-purple-600 border-t-transparent rounded-full mx-auto"></div>
-                    <p className="text-gray-600 mt-4 text-sm">Loading progress...</p>
+                    <p className="text-muted-foreground mt-4 text-sm">Loading progress...</p>
                 </CardContent>
             </Card>
         );
@@ -134,12 +134,12 @@ export default function StudyGoalsProgress({ user, userProfile }) {
 
     if (hasError) {
         return (
-            <Card className="shadow-lg border-2 border-gray-100">
+            <Card className="shadow-lg border-2 border-border">
                 <CardContent className="p-8 text-center">
-                    <div className="w-12 h-12 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-3">
-                        <Target className="w-6 h-6 text-gray-400" />
+                    <div className="w-12 h-12 bg-secondary rounded-full flex items-center justify-center mx-auto mb-3">
+                        <Target className="w-6 h-6 text-muted-foreground/60" />
                     </div>
-                    <p className="text-gray-600 text-sm">Unable to load progress data</p>
+                    <p className="text-muted-foreground text-sm">Unable to load progress data</p>
                 </CardContent>
             </Card>
         );
@@ -169,8 +169,9 @@ export default function StudyGoalsProgress({ user, userProfile }) {
                                 <Button
                                     variant="ghost"
                                     size="icon"
+                                    aria-label="Edit study goal"
                                     onClick={() => setShowEditGoal(true)}
-                                    className="h-8 w-8 text-gray-600 hover:text-purple-600"
+                                    className="h-8 w-8 text-muted-foreground hover:text-purple-600"
                                 >
                                     <Edit className="w-4 h-4" />
                                 </Button>
@@ -180,8 +181,8 @@ export default function StudyGoalsProgress({ user, userProfile }) {
                     <CardContent className="space-y-4">
                         <div>
                             <div className="flex items-baseline justify-between mb-2">
-                                <span className="text-sm text-gray-600">This Week's Progress</span>
-                                <span className="text-lg font-bold text-gray-900">
+                                <span className="text-sm text-muted-foreground">This Week's Progress</span>
+                                <span className="text-lg font-bold text-foreground">
                                     {weeklyProgress.current}h / {weeklyProgress.goal}h
                                 </span>
                             </div>
@@ -247,13 +248,13 @@ export default function StudyGoalsProgress({ user, userProfile }) {
                                         className={`p-3 rounded-lg border-2 ${
                                             isUrgent 
                                                 ? 'bg-red-50 border-red-200' 
-                                                : 'bg-gray-50 border-gray-200'
+                                                : 'bg-secondary/50 border-border'
                                         }`}
                                     >
                                         <div className="flex items-start justify-between">
                                             <div className="flex-1">
-                                                <p className="font-semibold text-gray-900">{assessment.title}</p>
-                                                <p className="text-sm text-gray-600">{assessment.subject_name}</p>
+                                                <p className="font-semibold text-foreground">{assessment.title}</p>
+                                                <p className="text-sm text-muted-foreground">{assessment.subject_name}</p>
                                             </div>
                                             <Badge 
                                                 className={isUrgent ? 'bg-red-100 text-red-800' : 'bg-blue-100 text-blue-800'}
@@ -293,7 +294,7 @@ export default function StudyGoalsProgress({ user, userProfile }) {
                                 onChange={(e) => setNewWeeklyGoal(parseInt(e.target.value) || 1)}
                                 className="text-lg"
                             />
-                            <p className="text-xs text-gray-500 mt-2">
+                            <p className="text-xs text-muted-foreground mt-2">
                                 Recommended: 15-30 hours per week for VCE students
                             </p>
                         </div>

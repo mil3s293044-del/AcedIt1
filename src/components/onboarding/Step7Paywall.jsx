@@ -42,21 +42,21 @@ export default function Step7Paywall({ data, onBack, onSkip }) {
 
     return (
         <div className="max-w-lg mx-auto px-6 py-10">
-            <button onClick={onBack} className="flex items-center gap-1 text-sm text-gray-400 hover:text-gray-600 mb-6">
+            <button onClick={onBack} className="flex items-center gap-1 text-sm text-muted-foreground/60 hover:text-muted-foreground mb-6">
                 <ChevronLeft className="w-4 h-4" /> Back
             </button>
-            <h2 className="text-2xl font-bold text-gray-900 mb-1">One last step — subscribe to get started</h2>
-            <p className="text-gray-500 text-sm mb-2">$5/week. Cancel anytime.</p>
+            <h2 className="text-2xl font-bold text-foreground mb-1">One last step — subscribe to get started</h2>
+            <p className="text-muted-foreground text-sm mb-2">$5/week. Cancel anytime.</p>
 
 
             {/* Plan card */}
             <div className="border-2 rounded-2xl p-6 mb-6" style={{ borderColor: "#534AB7" }}>
-                <p className="font-bold text-xl text-gray-900 mb-1">Acedit Premium</p>
+                <p className="font-bold text-xl text-foreground mb-1">Acedit Premium</p>
                 <div className="flex items-baseline gap-1 mb-1">
-                    <span className="text-4xl font-extrabold text-gray-900">$5</span>
-                    <span className="text-gray-500 text-sm">/week</span>
+                    <span className="text-4xl font-extrabold text-foreground">$5</span>
+                    <span className="text-muted-foreground text-sm">/week</span>
                 </div>
-                <p className="text-xs text-gray-400 mb-5">Cancel anytime. No lock-in contract.</p>
+                <p className="text-xs text-muted-foreground/60 mb-5">Cancel anytime. No lock-in contract.</p>
 
                 {/* Value anchor */}
                 <div className="rounded-xl p-3 mb-5" style={{ backgroundColor: "#F0EEFF" }}>
@@ -70,7 +70,7 @@ export default function Step7Paywall({ data, onBack, onSkip }) {
                     {FEATURES.map((f, i) => (
                         <div key={i} className="flex items-start gap-2">
                             <Check className="w-4 h-4 mt-0.5 flex-shrink-0" style={{ color: "#534AB7" }} />
-                            <span className="text-xs text-gray-700">{f}</span>
+                            <span className="text-xs text-muted-foreground">{f}</span>
                         </div>
                     ))}
                 </div>
@@ -92,16 +92,16 @@ export default function Step7Paywall({ data, onBack, onSkip }) {
                 <div className="mt-4 text-center">
                     <button
                         onClick={onSkip}
-                        className="text-sm text-gray-500 hover:text-gray-700 underline underline-offset-2"
+                        className="text-sm text-muted-foreground hover:text-muted-foreground underline underline-offset-2"
                     >
                         Continue with free plan →
                     </button>
-                    <p className="text-xs text-gray-400 mt-2">Free plan includes 500 AI credits, flashcards, active recall, and blurting method. Upgrade anytime from your profile.</p>
+                    <p className="text-xs text-muted-foreground/60 mt-2">Free plan includes 500 AI credits, flashcards, active recall, and blurting method. Upgrade anytime from your profile.</p>
                 </div>
             </div>
 
             {/* Trust signals */}
-            <div className="grid grid-cols-2 gap-2 mb-6 text-xs text-gray-500">
+            <div className="grid grid-cols-2 gap-2 mb-6 text-xs text-muted-foreground">
                 {["Secure Stripe checkout", "Cancel anytime", "No lock-in contract", "Instant access"].map((t, i) => (
                     <div key={i} className="flex items-center gap-1"><Check className="w-3 h-3 text-green-500" /> {t}</div>
                 ))}

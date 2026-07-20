@@ -38,12 +38,12 @@ export default function WeeklyProgress({ sessions = [], isLoading }) {
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.1 }}
         >
-            <Card className="bg-white/70 backdrop-blur-sm border-gray-200/50 hover:shadow-lg transition-all duration-300">
+            <Card className="bg-surface/70 backdrop-blur-sm border-border/50 hover:shadow-lg transition-all duration-300">
                 <CardHeader>
                     <CardTitle className="flex items-center gap-2">
                         <BarChart3 className="w-5 h-5 text-blue-600" />
                         Weekly Progress
-                        <span className="ml-auto text-sm font-normal text-gray-500">
+                        <span className="ml-auto text-sm font-normal text-muted-foreground">
                             {Math.round(totalWeekMinutes / 60)}h this week
                         </span>
                     </CardTitle>
@@ -51,7 +51,7 @@ export default function WeeklyProgress({ sessions = [], isLoading }) {
                 <CardContent>
                     {isLoading ? (
                         <div className="h-64 flex items-center justify-center">
-                            <div className="animate-pulse text-gray-400">Loading chart...</div>
+                            <div className="animate-pulse text-muted-foreground/60">Loading chart...</div>
                         </div>
                     ) : (
                         <div className="h-64">
@@ -72,7 +72,7 @@ export default function WeeklyProgress({ sessions = [], isLoading }) {
                                         content={({ active, payload, label }) => {
                                             if (active && payload && payload.length) {
                                                 return (
-                                                    <div className="bg-white p-3 rounded-lg shadow-lg border border-gray-200">
+                                                    <div className="bg-surface p-3 rounded-lg shadow-lg border border-border">
                                                         <p className="font-medium">{label}</p>
                                                         <p className="text-blue-600">
                                                             {Math.round(payload[0].value)} minutes

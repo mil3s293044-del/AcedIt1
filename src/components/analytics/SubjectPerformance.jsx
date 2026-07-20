@@ -116,9 +116,9 @@ export default function SubjectPerformance({ data }) {
         return (
             <Card>
                 <CardContent className="p-12 text-center">
-                    <BookOpen className="w-16 h-16 text-gray-300 mx-auto mb-4" />
-                    <h3 className="text-xl font-semibold text-gray-900 mb-2">No Subjects Added</h3>
-                    <p className="text-gray-600">Add subjects in the Subjects section to see performance analytics</p>
+                    <BookOpen className="w-16 h-16 text-muted-foreground/40 mx-auto mb-4" />
+                    <h3 className="text-xl font-semibold text-foreground mb-2">No Subjects Added</h3>
+                    <p className="text-muted-foreground">Add subjects in the Subjects section to see performance analytics</p>
                 </CardContent>
             </Card>
         );
@@ -134,7 +134,7 @@ export default function SubjectPerformance({ data }) {
                 <Button 
                     variant="ghost" 
                     onClick={() => setSelectedSubject(null)}
-                    className="gap-2 text-gray-600 hover:text-gray-900"
+                    className="gap-2 text-muted-foreground hover:text-foreground"
                 >
                     <ArrowLeft className="w-4 h-4" />
                     Back to All Subjects
@@ -146,7 +146,7 @@ export default function SubjectPerformance({ data }) {
                             <div>
                                 <CardTitle className="text-2xl">{subject.name}</CardTitle>
                                 {subject.targetScore && (
-                                    <p className="text-gray-500 mt-1">Target Study Score: {subject.targetScore}/50</p>
+                                    <p className="text-muted-foreground mt-1">Target Study Score: {subject.targetScore}/50</p>
                                 )}
                             </div>
                         </div>
@@ -155,36 +155,36 @@ export default function SubjectPerformance({ data }) {
                         <div className="grid grid-cols-2 md:grid-cols-4 gap-6 mb-8">
                             <div className="text-center p-4 bg-blue-50 rounded-xl">
                                 <Clock className="w-6 h-6 text-blue-600 mx-auto mb-2" />
-                                <p className="text-2xl font-bold text-gray-900">{formatDuration(subject.totalMinutes)}</p>
-                                <p className="text-sm text-gray-600">Total Study Time</p>
+                                <p className="text-2xl font-bold text-foreground">{formatDuration(subject.totalMinutes)}</p>
+                                <p className="text-sm text-muted-foreground">Total Study Time</p>
                             </div>
                             <div className="text-center p-4 bg-purple-50 rounded-xl">
                                 <Target className="w-6 h-6 text-purple-600 mx-auto mb-2" />
-                                <p className="text-2xl font-bold text-gray-900">{subject.sessions}</p>
-                                <p className="text-sm text-gray-600">Study Sessions</p>
+                                <p className="text-2xl font-bold text-foreground">{subject.sessions}</p>
+                                <p className="text-sm text-muted-foreground">Study Sessions</p>
                             </div>
                             <div className="text-center p-4 bg-green-50 rounded-xl">
                                 <Calendar className="w-6 h-6 text-green-600 mx-auto mb-2" />
-                                <p className="text-2xl font-bold text-gray-900">{subject.uniqueDays}</p>
-                                <p className="text-sm text-gray-600">Days Studied</p>
+                                <p className="text-2xl font-bold text-foreground">{subject.uniqueDays}</p>
+                                <p className="text-sm text-muted-foreground">Days Studied</p>
                             </div>
                             <div className="text-center p-4 bg-orange-50 rounded-xl">
                                 <TrendingUp className="w-6 h-6 text-orange-600 mx-auto mb-2" />
-                                <p className="text-2xl font-bold text-gray-900">
+                                <p className="text-2xl font-bold text-foreground">
                                     {subject.avgQuizScore !== null ? `${subject.avgQuizScore}%` : '-'}
                                 </p>
-                                <p className="text-sm text-gray-600">Avg Quiz Score</p>
+                                <p className="text-sm text-muted-foreground">Avg Quiz Score</p>
                             </div>
                         </div>
 
                         {/* Quiz History */}
                         {subject.quizDates.length > 0 && (
                             <div className="mb-6">
-                                <h4 className="font-semibold text-gray-900 mb-3">Quiz Performance</h4>
+                                <h4 className="font-semibold text-foreground mb-3">Quiz Performance</h4>
                                 <div className="space-y-2">
                                     {subject.quizDates.slice(-5).reverse().map((quiz, idx) => (
-                                        <div key={idx} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-                                            <span className="text-sm text-gray-600">
+                                        <div key={idx} className="flex items-center justify-between p-3 bg-secondary/50 rounded-lg">
+                                            <span className="text-sm text-muted-foreground">
                                                 {format(new Date(quiz.date), 'MMM d, yyyy')}
                                             </span>
                                             <span className={`font-semibold ${
@@ -203,11 +203,11 @@ export default function SubjectPerformance({ data }) {
                         {/* Flashcards */}
                         {subject.flashcards > 0 && (
                             <div>
-                                <h4 className="font-semibold text-gray-900 mb-3">Flashcards</h4>
+                                <h4 className="font-semibold text-foreground mb-3">Flashcards</h4>
                                 <div className="flex items-center gap-4 p-4 bg-purple-50 rounded-lg">
                                     <div className="flex-1">
                                         <div className="flex justify-between text-sm mb-2">
-                                            <span className="text-gray-600">Mastered</span>
+                                            <span className="text-muted-foreground">Mastered</span>
                                             <span className="font-semibold">{subject.flashcardsMastered} / {subject.flashcards}</span>
                                         </div>
                                         <div className="h-2 bg-purple-100 rounded-full overflow-hidden">
@@ -241,22 +241,22 @@ export default function SubjectPerformance({ data }) {
                         <CardContent className="p-5">
                             <div className="flex items-start justify-between mb-4">
                                 <div className="flex-1 min-w-0">
-                                    <h3 className="font-semibold text-gray-900 truncate">{subject.name}</h3>
+                                    <h3 className="font-semibold text-foreground truncate">{subject.name}</h3>
                                     {subject.targetScore && (
-                                        <p className="text-xs text-gray-500">Target: {subject.targetScore}/50</p>
+                                        <p className="text-xs text-muted-foreground">Target: {subject.targetScore}/50</p>
                                     )}
                                 </div>
-                                <ChevronRight className="w-5 h-5 text-gray-400 group-hover:text-gray-600 transition-colors flex-shrink-0" />
+                                <ChevronRight className="w-5 h-5 text-muted-foreground/60 group-hover:text-muted-foreground transition-colors flex-shrink-0" />
                             </div>
                             
                             <div className="grid grid-cols-2 gap-3">
                                 <div>
-                                    <p className="text-xl font-bold text-gray-900">{formatDuration(subject.totalMinutes)}</p>
-                                    <p className="text-xs text-gray-500">Study Time</p>
+                                    <p className="text-xl font-bold text-foreground">{formatDuration(subject.totalMinutes)}</p>
+                                    <p className="text-xs text-muted-foreground">Study Time</p>
                                 </div>
                                 <div>
-                                    <p className="text-xl font-bold text-gray-900">{subject.sessions}</p>
-                                    <p className="text-xs text-gray-500">Sessions</p>
+                                    <p className="text-xl font-bold text-foreground">{subject.sessions}</p>
+                                    <p className="text-xs text-muted-foreground">Sessions</p>
                                 </div>
                             </div>
                         </CardContent>

@@ -53,7 +53,7 @@ export default function ToDoList({ user, userProfile, onUpdate }) {
                         </div>
                         <div>
                             <span className="text-xl">Welcome! Let's Get You Set Up</span>
-                            <p className="text-sm font-normal text-gray-600 mt-1">Complete these steps to personalize your experience</p>
+                            <p className="text-sm font-normal text-muted-foreground mt-1">Complete these steps to personalize your experience</p>
                         </div>
                     </CardTitle>
                 </CardHeader>
@@ -75,7 +75,7 @@ export default function ToDoList({ user, userProfile, onUpdate }) {
                                     className={`flex items-center gap-4 p-4 rounded-xl transition-all ${
                                         task.isCompleted 
                                             ? 'bg-green-50 border border-green-200' 
-                                            : 'bg-white border border-gray-200 hover:border-purple-300 hover:shadow-md'
+                                            : 'bg-surface border border-border hover:border-purple-300 hover:shadow-md'
                                     }`}
                                 >
                                     <div className={`w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 ${
@@ -90,10 +90,10 @@ export default function ToDoList({ user, userProfile, onUpdate }) {
                                         )}
                                     </div>
                                     <div className="flex-1 min-w-0">
-                                        <p className={`font-semibold ${task.isCompleted ? 'text-green-700 line-through' : 'text-gray-900'}`}>
+                                        <p className={`font-semibold ${task.isCompleted ? 'text-green-700 line-through' : 'text-foreground'}`}>
                                             {task.title}
                                         </p>
-                                        <p className="text-sm text-gray-500">{task.description}</p>
+                                        <p className="text-sm text-muted-foreground">{task.description}</p>
                                     </div>
                                     {!task.isCompleted && task.link && (
                                         <Button asChild className="bg-purple-600 hover:bg-purple-700 flex-shrink-0">

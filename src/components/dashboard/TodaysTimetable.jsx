@@ -83,7 +83,7 @@ export default function TodaysTimetable({ user }) {
 
     if (isLoading) {
         return (
-            <Card className="bg-white/70 backdrop-blur-sm border-gray-200/50">
+            <Card className="bg-surface/70 backdrop-blur-sm border-border/50">
                 <CardHeader>
                     <CardTitle className="flex items-center gap-2">
                         <Calendar className="w-5 h-5 text-blue-600" />
@@ -93,7 +93,7 @@ export default function TodaysTimetable({ user }) {
                 <CardContent>
                     <div className="animate-pulse space-y-3">
                         {Array(3).fill(0).map((_, i) => (
-                            <div key={i} className="h-16 bg-gray-200 rounded-lg" />
+                            <div key={i} className="h-16 bg-secondary rounded-lg" />
                         ))}
                     </div>
                 </CardContent>
@@ -106,7 +106,7 @@ export default function TodaysTimetable({ user }) {
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
         >
-            <Card className="bg-white/70 backdrop-blur-sm border-gray-200/50 hover:shadow-lg transition-all duration-300">
+            <Card className="bg-surface/70 backdrop-blur-sm border-border/50 hover:shadow-lg transition-all duration-300">
                 <CardHeader>
                     <div className="flex items-center justify-between">
                         <CardTitle className="flex items-center gap-2">
@@ -122,7 +122,7 @@ export default function TodaysTimetable({ user }) {
                 </CardHeader>
                 <CardContent>
                     {todayActivities.length === 0 ? (
-                        <div className="text-center py-8 text-gray-500">
+                        <div className="text-center py-8 text-muted-foreground">
                             <Clock className="w-12 h-12 mx-auto mb-4 opacity-50" />
                             <p className="mb-2">No schedule set for today</p>
                             <Link to={createPageUrl("Goals?tab=planner")}>
@@ -184,14 +184,14 @@ export default function TodaysTimetable({ user }) {
                                         key={activity.id} 
                                         className={`flex items-center justify-between p-3 rounded-lg border transition-all duration-200 ${
                                             activity.is_completed 
-                                                ? 'bg-gray-50 border-gray-200 opacity-75' 
-                                                : 'bg-white border-gray-200 hover:shadow-sm'
+                                                ? 'bg-secondary/50 border-border opacity-75' 
+                                                : 'bg-surface border-border hover:shadow-sm'
                                         }`}
                                     >
                                         <div className="flex items-center gap-3">
                                             <button
                                                 onClick={() => toggleActivityComplete(activity)}
-                                                className="text-gray-400 hover:text-green-600 transition-colors"
+                                                className="text-muted-foreground/60 hover:text-green-600 transition-colors"
                                             >
                                                 {activity.is_completed ? (
                                                     <CheckCircle2 className="w-5 h-5 text-green-600" />
@@ -200,10 +200,10 @@ export default function TodaysTimetable({ user }) {
                                                 )}
                                             </button>
                                             <div>
-                                                <h4 className={`font-medium ${activity.is_completed ? 'line-through text-gray-500' : 'text-gray-900'}`}>
+                                                <h4 className={`font-medium ${activity.is_completed ? 'line-through text-muted-foreground' : 'text-foreground'}`}>
                                                     {activity.title}
                                                 </h4>
-                                                <p className="text-sm text-gray-500">
+                                                <p className="text-sm text-muted-foreground">
                                                     {activity.start_time} - {activity.end_time}
                                                     {activity.subject_name && ` • ${activity.subject_name}`}
                                                 </p>

@@ -100,13 +100,13 @@ export default function ProfileSettings() {
 
     if (isLoading) {
         return (
-            <Card className="bg-white/70 dark:bg-slate-800/50 backdrop-blur-sm border-gray-200/50 dark:border-slate-700/50">
+            <Card className="bg-surface/70 dark:bg-slate-800/50 backdrop-blur-sm border-border/50 dark:border-slate-700/50">
                 <CardHeader>
                     <CardTitle className="flex items-center gap-2"><UserIcon className="w-5 h-5"/> Profile</CardTitle>
                 </CardHeader>
                 <CardContent className="animate-pulse">
-                    <div className="h-8 bg-gray-200 dark:bg-slate-700 rounded w-3/4"></div>
-                    <div className="h-6 bg-gray-200 dark:bg-slate-700 rounded w-1/2 mt-4"></div>
+                    <div className="h-8 bg-secondary dark:bg-slate-700 rounded w-3/4"></div>
+                    <div className="h-6 bg-secondary dark:bg-slate-700 rounded w-1/2 mt-4"></div>
                 </CardContent>
             </Card>
         )
@@ -115,17 +115,17 @@ export default function ProfileSettings() {
     const RankIcon = rank.icon;
 
     return (
-        <Card className="bg-white/70 dark:bg-slate-800/50 backdrop-blur-sm border-gray-200/50 dark:border-slate-700/50">
+        <Card className="bg-surface/70 dark:bg-slate-800/50 backdrop-blur-sm border-border/50 dark:border-slate-700/50">
             <CardHeader>
                 <CardTitle className="flex items-center gap-2"><UserIcon className="w-5 h-5"/> Profile</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
                 <div>
-                    <p className="text-sm text-gray-500 dark:text-gray-400">Username</p>
+                    <p className="text-sm text-muted-foreground dark:text-muted-foreground/60">Username</p>
                     <p className="font-semibold text-lg">{user?.full_name}</p>
                 </div>
                 <div>
-                    <p className="text-sm text-gray-500 dark:text-gray-400">Current Rank</p>
+                    <p className="text-sm text-muted-foreground dark:text-muted-foreground/60">Current Rank</p>
                     <div className="flex items-center gap-2">
                         <RankIcon className={`w-5 h-5 text-${rank.color}-600`} />
                         <p className="font-semibold text-lg">{rank.name}</p>
@@ -137,7 +137,7 @@ export default function ProfileSettings() {
                             {isAnonymous ? <EyeOff className="w-4 h-4"/> : <Globe className="w-4 h-4"/>}
                             <div>
                                 <div>Anonymous on Global Leaderboard</div>
-                                <div className="text-xs text-gray-500 dark:text-gray-400 font-normal">
+                                <div className="text-xs text-muted-foreground dark:text-muted-foreground/60 font-normal">
                                     Hide your name from the global leaderboard
                                 </div>
                             </div>

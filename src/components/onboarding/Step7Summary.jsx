@@ -50,12 +50,12 @@ Write it in second person ("You're a..."). Be specific, warm, and motivating. Ma
 
     return (
         <div className="max-w-lg mx-auto px-6 py-10">
-            <button onClick={onBack} className="flex items-center gap-1 text-sm text-gray-400 hover:text-gray-600 mb-6">
+            <button onClick={onBack} className="flex items-center gap-1 text-sm text-muted-foreground/60 hover:text-muted-foreground mb-6">
                 <ChevronLeft className="w-4 h-4" /> Back
             </button>
 
-            <h2 className="text-2xl font-bold text-gray-900 mb-1">{firstName}, here's your AcedIt starting point</h2>
-            <p className="text-gray-500 text-sm mb-8">Everything we'll personalise around you.</p>
+            <h2 className="text-2xl font-bold text-foreground mb-1">{firstName}, here's your AcedIt starting point</h2>
+            <p className="text-muted-foreground text-sm mb-8">Everything we'll personalise around you.</p>
 
             <motion.div
                 initial={{ opacity: 0, y: 16 }}
@@ -65,8 +65,8 @@ Write it in second person ("You're a..."). Be specific, warm, and motivating. Ma
             >
                 {/* Subjects */}
                 {(data?.enrolled_subjects || []).length > 0 && (
-                    <div className="border border-gray-100 rounded-xl p-4 bg-gray-50">
-                        <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">Your subjects</p>
+                    <div className="border border-border rounded-xl p-4 bg-secondary/50">
+                        <p className="text-xs font-semibold text-muted-foreground/60 uppercase tracking-wide mb-2">Your subjects</p>
                         <div className="flex flex-wrap gap-2">
                             {data.enrolled_subjects.map((s, i) => (
                                 <span key={i} className="text-xs font-medium px-2.5 py-1 rounded-full" style={{ backgroundColor: "#F0EEFF", color: "#534AB7" }}>{s}</span>
@@ -77,11 +77,11 @@ Write it in second person ("You're a..."). Be specific, warm, and motivating. Ma
 
                 {/* Challenges */}
                 {challengeLabels.length > 0 && (
-                    <div className="border border-gray-100 rounded-xl p-4 bg-gray-50">
-                        <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">Your biggest challenges</p>
+                    <div className="border border-border rounded-xl p-4 bg-secondary/50">
+                        <p className="text-xs font-semibold text-muted-foreground/60 uppercase tracking-wide mb-2">Your biggest challenges</p>
                         <div className="space-y-1">
                             {challengeLabels.map((c, i) => (
-                                <p key={i} className="text-sm text-gray-700">• {c}</p>
+                                <p key={i} className="text-sm text-muted-foreground">• {c}</p>
                             ))}
                         </div>
                     </div>
@@ -89,17 +89,17 @@ Write it in second person ("You're a..."). Be specific, warm, and motivating. Ma
 
                 {/* Goal */}
                 {data?.qualitative_goal && (
-                    <div className="border border-gray-100 rounded-xl p-4 bg-gray-50">
-                        <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-1">Your goal</p>
-                        <p className="text-sm text-gray-700">{data.qualitative_goal}</p>
+                    <div className="border border-border rounded-xl p-4 bg-secondary/50">
+                        <p className="text-xs font-semibold text-muted-foreground/60 uppercase tracking-wide mb-1">Your goal</p>
+                        <p className="text-sm text-muted-foreground">{data.qualitative_goal}</p>
                     </div>
                 )}
 
                 {/* Dream course */}
                 {data?.dream_course && (
-                    <div className="border border-gray-100 rounded-xl p-4 bg-gray-50">
-                        <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-1">Dream course / career</p>
-                        <p className="text-sm text-gray-700">{data.dream_course}</p>
+                    <div className="border border-border rounded-xl p-4 bg-secondary/50">
+                        <p className="text-xs font-semibold text-muted-foreground/60 uppercase tracking-wide mb-1">Dream course / career</p>
+                        <p className="text-sm text-muted-foreground">{data.dream_course}</p>
                     </div>
                 )}
 
@@ -115,7 +115,7 @@ Write it in second person ("You're a..."). Be specific, warm, and motivating. Ma
                     )}
                 </div>
 
-                <p className="text-center text-sm font-semibold text-gray-500 pt-2">Your personalised study tools are ready.</p>
+                <p className="text-center text-sm font-semibold text-muted-foreground pt-2">Your personalised study tools are ready.</p>
             </motion.div>
 
             <Button

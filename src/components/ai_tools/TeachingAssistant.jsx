@@ -271,11 +271,11 @@ Respond in markdown.`;
             <div className="card-soft overflow-hidden">
                 <div className="p-5 space-y-4">
                     <Tabs value={mode} onValueChange={setMode}>
-                        <TabsList className="grid w-full grid-cols-2 bg-gray-100">
-                            <TabsTrigger value="concept" className="data-[state=active]:bg-white data-[state=active]:shadow-sm">
+                        <TabsList className="grid w-full grid-cols-2 bg-secondary">
+                            <TabsTrigger value="concept" className="data-[state=active]:bg-surface data-[state=active]:shadow-sm">
                                 <Brain className="w-3.5 h-3.5 mr-1.5" />Learn a Concept
                             </TabsTrigger>
-                            <TabsTrigger value="document" className="data-[state=active]:bg-white data-[state=active]:shadow-sm">
+                            <TabsTrigger value="document" className="data-[state=active]:bg-surface data-[state=active]:shadow-sm">
                                 <Upload className="w-3.5 h-3.5 mr-1.5" />Study My Notes
                             </TabsTrigger>
                         </TabsList>
@@ -312,10 +312,10 @@ Respond in markdown.`;
                             </div>
                             <div>
                                 <label className="stat-label block mb-1.5">Upload Notes</label>
-                                <Button asChild variant="outline" className="w-full h-12 border-dashed border-2 border-gray-300 hover:border-amber-300 hover:bg-amber-50">
+                                <Button asChild variant="outline" className="w-full h-12 border-dashed border-2 border-border hover:border-amber-300 hover:bg-amber-50">
                                     <label className="cursor-pointer flex items-center gap-2">
                                         <Upload className="w-4 h-4 text-muted-foreground/70" />
-                                        <span className="text-sm text-gray-600">{uploadedFile ? uploadedFile.name : 'Choose PDF, DOCX, or PPTX'}</span>
+                                        <span className="text-sm text-muted-foreground">{uploadedFile ? uploadedFile.name : 'Choose PDF, DOCX, or PPTX'}</span>
                                         <input type="file" className="hidden" accept=".pdf,.txt,.docx,.pptx" onChange={e => setUploadedFile(e.target.files?.[0])} />
                                     </label>
                                 </Button>
@@ -332,20 +332,20 @@ Respond in markdown.`;
 
             {savedSessions.length > 0 && (
                 <div className="card-soft overflow-hidden">
-                    <button onClick={() => setShowHistory(!showHistory)} className="w-full flex items-center justify-between px-5 py-4 hover:bg-gray-50 transition-colors">
+                    <button onClick={() => setShowHistory(!showHistory)} className="w-full flex items-center justify-between px-5 py-4 hover:bg-secondary/50 transition-colors">
                         <div className="flex items-center gap-2">
                             <FolderOpen className="w-4 h-4 text-muted-foreground/70" />
                             <span className="font-semibold text-foreground text-sm">Previous Sessions</span>
-                            <Badge className="bg-gray-100 text-gray-600 border-0 text-xs">{savedSessions.length}</Badge>
+                            <Badge className="bg-secondary text-muted-foreground border-0 text-xs">{savedSessions.length}</Badge>
                         </div>
                         <ChevronDown className={`w-4 h-4 text-muted-foreground/70 transition-transform ${showHistory ? 'rotate-180' : ''}`} />
                     </button>
                     <AnimatePresence>
                         {showHistory && (
-                            <motion.div initial={{ height: 0 }} animate={{ height: 'auto' }} exit={{ height: 0 }} className="overflow-hidden border-t border-gray-100">
+                            <motion.div initial={{ height: 0 }} animate={{ height: 'auto' }} exit={{ height: 0 }} className="overflow-hidden border-t border-border">
                                 <div className="p-3 space-y-2 max-h-64 overflow-y-auto">
                                     {savedSessions.map(s => (
-                                        <div key={s.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-xl">
+                                        <div key={s.id} className="flex items-center justify-between p-3 bg-secondary/50 rounded-xl">
                                             <div className="flex-1 min-w-0">
                                                 <p className="text-sm font-semibold text-foreground truncate">{s.topic}</p>
                                                 <p className="text-xs text-muted-foreground/70">{s.subject_name} • {s.date_created}</p>
@@ -390,10 +390,10 @@ Respond in markdown.`;
                             <GraduationCap className="w-5 h-5 text-amber-600" />
                         </div>
                         <div>
-                            <p className="font-bold text-gray-900 text-sm">{topic}</p>
+                            <p className="font-bold text-foreground text-sm">{topic}</p>
                             <div className="flex items-center gap-2">
                                 <Badge className="bg-amber-100 text-amber-700 border-0 text-xs">{subject}</Badge>
-                                <Badge className="bg-gray-100 text-gray-600 border-0 text-xs">{messages.length} messages</Badge>
+                                <Badge className="bg-secondary text-muted-foreground border-0 text-xs">{messages.length} messages</Badge>
                             </div>
                         </div>
                     </div>
@@ -406,12 +406,12 @@ Respond in markdown.`;
 
             {/* Chat */}
             <div className="card-soft overflow-hidden">
-                <div ref={chatContainerRef} className="h-[420px] overflow-y-auto p-4 space-y-3 bg-gray-50">
+                <div ref={chatContainerRef} className="h-[420px] overflow-y-auto p-4 space-y-3 bg-secondary/50">
                     {messages.map((msg, i) => (
                         <motion.div key={i} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-                            <div className={`max-w-[82%] rounded-2xl px-4 py-3 ${msg.role === 'user' ? 'bg-amber-600 text-white' : 'bg-white border border-gray-200 shadow-sm'}`}>
+                            <div className={`max-w-[82%] rounded-2xl px-4 py-3 ${msg.role === 'user' ? 'bg-amber-600 text-white' : 'bg-surface border border-border shadow-sm'}`}>
                                 {msg.role === 'assistant' ? (
-                                    <div className="prose prose-sm max-w-none prose-headings:text-gray-900 prose-p:text-foreground prose-p:my-1 prose-li:text-foreground prose-strong:text-gray-900">
+                                    <div className="prose prose-sm max-w-none prose-headings:text-foreground prose-p:text-foreground prose-p:my-1 prose-li:text-foreground prose-strong:text-foreground">
                                         <MarkdownMath isStreaming={!!msg.streaming}>{msg.content}</MarkdownMath>
                                     </div>
                                 ) : <p className="text-sm leading-relaxed">{msg.content}</p>}
@@ -420,7 +420,7 @@ Respond in markdown.`;
                     ))}
                     {isAIThinking && (
                         <div className="flex justify-start">
-                            <div className="bg-white border border-gray-200 rounded-2xl px-4 py-3 flex items-center gap-2">
+                            <div className="bg-surface border border-border rounded-2xl px-4 py-3 flex items-center gap-2">
                                 <div className="flex gap-1">{[0,1,2].map(i => <motion.div key={i} className="w-2 h-2 bg-amber-400 rounded-full" animate={{ y: [0, -6, 0] }} transition={{ duration: 0.6, repeat: Infinity, delay: i * 0.15 }} />)}</div>
                                 <span className="text-xs text-muted-foreground/70">AI is thinking...</span>
                             </div>
@@ -428,12 +428,12 @@ Respond in markdown.`;
                     )}
                     <div ref={messagesEndRef} />
                 </div>
-                <div className="border-t border-gray-200 p-3 bg-white">
+                <div className="border-t border-border p-3 bg-surface">
                     <div className="flex gap-2">
                         <Textarea value={userInput} onChange={e => setUserInput(e.target.value)}
                             onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSendMessage(); } }}
                             placeholder="Type your answer or ask a question... (Enter to send)"
-                            rows={2} disabled={isAIThinking} className="resize-none border-gray-200 focus:border-amber-400 text-sm flex-1" />
+                            rows={2} disabled={isAIThinking} className="resize-none border-border focus:border-amber-400 text-sm flex-1" />
                         {isAIThinking ? (
                             <Button onClick={handleStopMessage} variant="destructive" className="self-end h-10" title="Stop generating">
                                 <Square className="w-4 h-4" />

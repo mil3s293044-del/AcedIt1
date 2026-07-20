@@ -43,21 +43,21 @@ export default function Step6FeatureTour({ onNext, onBack, data }) {
 
     return (
         <div className="max-w-2xl mx-auto px-6 py-10">
-            <button onClick={onBack} className="flex items-center gap-1 text-sm text-gray-400 hover:text-gray-600 mb-6">
+            <button onClick={onBack} className="flex items-center gap-1 text-sm text-muted-foreground/60 hover:text-muted-foreground mb-6">
                 <ChevronLeft className="w-4 h-4" /> Back
             </button>
-            <h2 className="text-2xl font-bold text-gray-900 mb-1">Here's exactly how AcedIt fixes what {name} just told us</h2>
-            <p className="text-gray-500 text-sm mb-8">Every feature is built on peer-reviewed learning science.</p>
+            <h2 className="text-2xl font-bold text-foreground mb-1">Here's exactly how AcedIt fixes what {name} just told us</h2>
+            <p className="text-muted-foreground text-sm mb-8">Every feature is built on peer-reviewed learning science.</p>
 
             <div className="space-y-3 mb-8">
                 {features.map((f, i) => (
-                    <div key={i} className="flex items-start gap-4 p-4 rounded-xl border border-gray-100 bg-gray-50">
+                    <div key={i} className="flex items-start gap-4 p-4 rounded-xl border border-border bg-secondary/50">
                         <div className="w-10 h-10 rounded-xl flex items-center justify-center text-xl flex-shrink-0" style={{ backgroundColor: f.color + "20" }}>
                             {f.emoji}
                         </div>
                         <div className="flex-1 min-w-0">
-                            <p className="font-semibold text-gray-900 text-sm mb-0.5">{f.name}</p>
-                            <p className="text-xs text-gray-500">{f.desc}</p>
+                            <p className="font-semibold text-foreground text-sm mb-0.5">{f.name}</p>
+                            <p className="text-xs text-muted-foreground">{f.desc}</p>
                         </div>
                         <span className="text-xs font-medium px-2 py-1 rounded-full flex-shrink-0 mt-0.5" style={{ backgroundColor: "#F0EEFF", color: "#534AB7" }}>
                             {f.badge}

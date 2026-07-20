@@ -763,7 +763,7 @@ For each answer:
             {/* Summary bar */}
             <div className="bg-chart-4 rounded-3xl p-6 text-white">
                 <div className="flex items-center gap-3 mb-4">
-                    <div className="w-10 h-10 bg-white/20 rounded-2xl flex items-center justify-center">
+                    <div className="w-10 h-10 bg-surface/20 rounded-2xl flex items-center justify-center">
                         <CheckCircle className="w-5 h-5 text-white" />
                     </div>
                     <div>
@@ -773,15 +773,15 @@ For each answer:
                 </div>
                 {scoreStats && (
                     <div className="grid grid-cols-3 gap-3">
-                        <div className="bg-white/15 rounded-xl p-3 text-center">
+                        <div className="bg-surface/15 rounded-xl p-3 text-center">
                             <p className="text-2xl font-bold">{scoreStats.correct}</p>
                             <p className="text-xs text-white/80">Correct</p>
                         </div>
-                        <div className="bg-white/15 rounded-xl p-3 text-center">
+                        <div className="bg-surface/15 rounded-xl p-3 text-center">
                             <p className="text-2xl font-bold">{scoreStats.partial}</p>
                             <p className="text-xs text-white/80">Partial</p>
                         </div>
-                        <div className="bg-white/15 rounded-xl p-3 text-center">
+                        <div className="bg-surface/15 rounded-xl p-3 text-center">
                             <p className="text-2xl font-bold">{scoreStats.incorrect}</p>
                             <p className="text-xs text-white/80">Incorrect</p>
                         </div>
@@ -881,7 +881,7 @@ For each answer:
                             <Brain className="w-4 h-4" />
                             Active Recall — Focus Mode
                         </div>
-                        <Button onClick={() => { exitFullscreen(); setIsFocusMode(false); }} variant="ghost" className="text-white/60 hover:text-white hover:bg-white/10 gap-2">
+                        <Button onClick={() => { exitFullscreen(); setIsFocusMode(false); }} variant="ghost" className="text-white/60 hover:text-white hover:bg-surface/10 gap-2">
                             <X className="w-4 h-4" /> Exit Focus
                         </Button>
                     </div>

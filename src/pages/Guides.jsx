@@ -170,7 +170,7 @@ export default function Guides() {
                     <h1 className="text-4xl lg:text-5xl font-bold bg-gradient-to-r from-indigo-600 via-purple-600 to-pink-600 bg-clip-text text-transparent mb-4">
                         Study Guides
                     </h1>
-                    <p className="text-gray-600 text-lg max-w-2xl mx-auto leading-relaxed">
+                    <p className="text-muted-foreground text-lg max-w-2xl mx-auto leading-relaxed">
                         Comprehensive guides to help you master your VCE journey, from study techniques to exam strategies.
                     </p>
                 </motion.div>
@@ -186,7 +186,7 @@ export default function Guides() {
                         <CardContent className="p-6">
                             <div className="flex flex-col lg:flex-row gap-4 mb-4">
                                 <div className="flex-1 relative">
-                                    <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
+                                    <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground/60 w-5 h-5" />
                                     <Input
                                         placeholder="Search guides by title or tags..."
                                         value={searchQuery}
@@ -246,7 +246,7 @@ export default function Guides() {
                             </div>
                             {(searchQuery || categoryFilter !== "all" || difficultyFilter !== "all") && (
                                 <div className="mt-4 flex items-center gap-2">
-                                    <span className="text-sm text-gray-600">Active filters:</span>
+                                    <span className="text-sm text-muted-foreground">Active filters:</span>
                                     {searchQuery && (
                                         <Badge variant="secondary" className="bg-purple-100 text-purple-800">
                                             Search: "{searchQuery}"
@@ -292,7 +292,7 @@ export default function Guides() {
                             <div className="w-10 h-10 bg-gradient-to-br from-yellow-400 to-orange-500 rounded-xl flex items-center justify-center shadow-lg">
                                 <Star className="w-5 h-5 text-white" />
                             </div>
-                            <h2 className="text-2xl font-bold text-gray-900">Featured Guides</h2>
+                            <h2 className="text-2xl font-bold text-foreground">Featured Guides</h2>
                         </div>
                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                             {featuredGuides.map((guide, index) => (
@@ -323,7 +323,7 @@ export default function Guides() {
                         <div className="w-10 h-10 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-xl flex items-center justify-center shadow-lg">
                             <Sparkles className="w-5 h-5 text-white" />
                         </div>
-                        <h2 className="text-2xl font-bold text-gray-900">All Guides</h2>
+                        <h2 className="text-2xl font-bold text-foreground">All Guides</h2>
                         <Badge variant="secondary" className="ml-auto bg-purple-100 text-purple-800">
                             {filteredGuides.length} guide{filteredGuides.length !== 1 ? 's' : ''}
                         </Badge>
@@ -332,14 +332,14 @@ export default function Guides() {
                     {isLoading ? (
                         <div className="text-center py-12">
                             <div className="w-16 h-16 border-4 border-purple-200 border-t-purple-600 rounded-full animate-spin mx-auto mb-4"></div>
-                            <p className="text-gray-600">Loading guides...</p>
+                            <p className="text-muted-foreground">Loading guides...</p>
                         </div>
                     ) : filteredGuides.length === 0 ? (
                         <Card className="shadow-xl">
                             <CardContent className="p-12 text-center">
-                                <BookOpen className="w-16 h-16 text-gray-300 mx-auto mb-4" />
-                                <h3 className="text-xl font-semibold text-gray-900 mb-2">No guides found</h3>
-                                <p className="text-gray-600">Try adjusting your filters or search query.</p>
+                                <BookOpen className="w-16 h-16 text-muted-foreground/40 mx-auto mb-4" />
+                                <h3 className="text-xl font-semibold text-foreground mb-2">No guides found</h3>
+                                <p className="text-muted-foreground">Try adjusting your filters or search query.</p>
                             </CardContent>
                         </Card>
                     ) : (

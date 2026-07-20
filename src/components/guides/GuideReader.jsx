@@ -119,11 +119,11 @@ export default function GuideReader({ guide, onClose }) {
                     </div>
                 )}
 
-                <CardHeader className="border-b border-gray-100 pb-6">
+                <CardHeader className="border-b border-border pb-6">
                     {isEditing ? (
                         <div className="space-y-4">
                             <div>
-                                <label className="text-sm font-medium text-gray-700 mb-2 block">Title</label>
+                                <label className="text-sm font-medium text-muted-foreground mb-2 block">Title</label>
                                 <Input
                                     value={editedGuide.title}
                                     onChange={(e) => setEditedGuide({ ...editedGuide, title: e.target.value })}
@@ -132,7 +132,7 @@ export default function GuideReader({ guide, onClose }) {
                             </div>
                             <div className="grid grid-cols-2 gap-4">
                                 <div>
-                                    <label className="text-sm font-medium text-gray-700 mb-2 block">Category</label>
+                                    <label className="text-sm font-medium text-muted-foreground mb-2 block">Category</label>
                                     <Select
                                         value={editedGuide.category}
                                         onValueChange={(value) => setEditedGuide({ ...editedGuide, category: value })}
@@ -150,7 +150,7 @@ export default function GuideReader({ guide, onClose }) {
                                     </Select>
                                 </div>
                                 <div>
-                                    <label className="text-sm font-medium text-gray-700 mb-2 block">Difficulty</label>
+                                    <label className="text-sm font-medium text-muted-foreground mb-2 block">Difficulty</label>
                                     <Select
                                         value={editedGuide.difficulty_level}
                                         onValueChange={(value) => setEditedGuide({ ...editedGuide, difficulty_level: value })}
@@ -167,7 +167,7 @@ export default function GuideReader({ guide, onClose }) {
                                 </div>
                             </div>
                             <div>
-                                <label className="text-sm font-medium text-gray-700 mb-2 block">Subject (optional)</label>
+                                <label className="text-sm font-medium text-muted-foreground mb-2 block">Subject (optional)</label>
                                 <Input
                                     value={editedGuide.subject || ''}
                                     onChange={(e) => setEditedGuide({ ...editedGuide, subject: e.target.value })}
@@ -182,7 +182,7 @@ export default function GuideReader({ guide, onClose }) {
                                     <CategoryIcon className="w-6 h-6 text-white" />
                                 </div>
                                 <div>
-                                    <CardTitle className="text-3xl font-bold text-gray-900 mb-2">{guide.title}</CardTitle>
+                                    <CardTitle className="text-3xl font-bold text-foreground mb-2">{guide.title}</CardTitle>
                                     <div className="flex flex-wrap gap-2">
                                         <Badge variant="outline" className="border-2 border-purple-200 text-purple-800">
                                             {guide.category.replace('_', ' ')}
@@ -195,7 +195,7 @@ export default function GuideReader({ guide, onClose }) {
                                                 {guide.subject}
                                             </Badge>
                                         )}
-                                        <Badge variant="outline" className="border-2 border-gray-200 text-gray-600 flex items-center gap-1">
+                                        <Badge variant="outline" className="border-2 border-border text-muted-foreground flex items-center gap-1">
                                             <Clock className="w-3 h-3" />
                                             {guide.estimated_read_time || 5} min read
                                         </Badge>
@@ -210,7 +210,7 @@ export default function GuideReader({ guide, onClose }) {
                     {isEditing ? (
                         <div className="space-y-6">
                             <div>
-                                <label className="text-sm font-medium text-gray-700 mb-2 block">Content (Markdown)</label>
+                                <label className="text-sm font-medium text-muted-foreground mb-2 block">Content (Markdown)</label>
                                 <Textarea
                                     value={editedGuide.content || ''}
                                     onChange={(e) => setEditedGuide({ ...editedGuide, content: e.target.value })}
@@ -224,7 +224,7 @@ export default function GuideReader({ guide, onClose }) {
                         <>
                             {guide.key_points && guide.key_points.length > 0 && (
                                 <div className="mb-8 p-6 bg-gradient-to-r from-purple-50 to-indigo-50 rounded-2xl border-2 border-purple-100">
-                                    <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
+                                    <h3 className="text-lg font-semibold text-foreground mb-4 flex items-center gap-2">
                                         <CheckCircle2 className="w-5 h-5 text-purple-600" />
                                         Key Takeaways
                                     </h3>
@@ -232,7 +232,7 @@ export default function GuideReader({ guide, onClose }) {
                                         {guide.key_points.map((point, idx) => (
                                             <li key={idx} className="flex items-start gap-3">
                                                 <span className="text-purple-500 text-lg mt-0.5">✓</span>
-                                                <span className="text-gray-700 leading-relaxed">{point}</span>
+                                                <span className="text-muted-foreground leading-relaxed">{point}</span>
                                             </li>
                                         ))}
                                     </ul>
@@ -245,32 +245,32 @@ export default function GuideReader({ guide, onClose }) {
                                 <div className="space-y-8">
                                     {guide.sections.map((section, idx) => (
                                         <div key={idx} className="scroll-mt-20">
-                                            <h2 className="text-2xl font-bold text-gray-900 mb-4 flex items-center gap-2">
+                                            <h2 className="text-2xl font-bold text-foreground mb-4 flex items-center gap-2">
                                                 <span className="w-8 h-8 bg-gradient-to-br from-purple-500 to-indigo-600 rounded-lg flex items-center justify-center text-white text-sm font-bold">
                                                     {idx + 1}
                                                 </span>
                                                 {section.heading}
                                             </h2>
-                                            <div className="prose prose-lg max-w-none text-gray-700 leading-relaxed">
+                                            <div className="prose prose-lg max-w-none text-muted-foreground leading-relaxed">
                                                 <ReactMarkdown>{section.content}</ReactMarkdown>
                                             </div>
                                         </div>
                                     ))}
                                 </div>
                             ) : guide.content ? (
-                                <div className="prose prose-lg max-w-none text-gray-700 leading-relaxed">
+                                <div className="prose prose-lg max-w-none text-muted-foreground leading-relaxed">
                                     <ReactMarkdown>{guide.content}</ReactMarkdown>
                                 </div>
                             ) : (
-                                <p className="text-gray-500 text-center py-8">No content available for this guide.</p>
+                                <p className="text-muted-foreground text-center py-8">No content available for this guide.</p>
                             )}
 
                             {guide.quiz_questions && guide.quiz_questions.length > 0 && (
                                 <div className="mt-12 p-8 bg-gradient-to-r from-blue-50 to-cyan-50 rounded-2xl border-2 border-blue-200">
                                     <div className="flex items-center justify-between">
                                         <div>
-                                            <h3 className="text-xl font-bold text-gray-900 mb-2">Test Your Knowledge</h3>
-                                            <p className="text-gray-600">
+                                            <h3 className="text-xl font-bold text-foreground mb-2">Test Your Knowledge</h3>
+                                            <p className="text-muted-foreground">
                                                 Take a quiz with {guide.quiz_questions.length} questions to reinforce what you've learned.
                                             </p>
                                         </div>

@@ -102,7 +102,7 @@ export default function StreakCelebration() {
                             {[0, 1].map((i) => (
                                 <motion.span
                                     key={i}
-                                    className="absolute rounded-full bg-white/30"
+                                    className="absolute rounded-full bg-surface/30"
                                     style={{ width: 80, height: 80 }}
                                     initial={{ scale: 0.6, opacity: 0.5 }}
                                     animate={{ scale: [0.6, 1.8], opacity: [0.5, 0] }}
@@ -143,7 +143,7 @@ export default function StreakCelebration() {
                         {/* Shield used — the streak survived a missed day */}
                         {event.shield_used && (
                             <motion.div
-                                className="flex items-center gap-1.5 bg-white/25 rounded-full px-4 py-1.5 text-sm font-bold mt-1"
+                                className="flex items-center gap-1.5 bg-surface/25 rounded-full px-4 py-1.5 text-sm font-bold mt-1"
                                 initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: 0.35 }}
                             >
                                 <ShieldCheck className="w-4 h-4" />
@@ -154,7 +154,7 @@ export default function StreakCelebration() {
                         {/* Weekly bonus XP — every 7th consecutive day */}
                         {event.weekly_bonus_xp > 0 && (
                             <motion.div
-                                className="flex items-center gap-1.5 bg-white/25 rounded-full px-4 py-1.5 text-sm font-bold mt-1"
+                                className="flex items-center gap-1.5 bg-surface/25 rounded-full px-4 py-1.5 text-sm font-bold mt-1"
                                 initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: 0.4 }}
                             >
                                 +{event.weekly_bonus_xp} XP weekly streak bonus
@@ -164,7 +164,7 @@ export default function StreakCelebration() {
                         {/* Shield earned at a 7-day milestone */}
                         {event.shield_earned && (
                             <motion.div
-                                className="flex items-center gap-1.5 bg-white/25 rounded-full px-4 py-1.5 text-sm font-bold mt-1"
+                                className="flex items-center gap-1.5 bg-surface/25 rounded-full px-4 py-1.5 text-sm font-bold mt-1"
                                 initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: 0.45 }}
                             >
                                 <Shield className="w-4 h-4" />
@@ -175,7 +175,7 @@ export default function StreakCelebration() {
                         {/* Multiplier badge */}
                         {event.multiplier > 1.0 && (
                             <motion.div
-                                className="flex items-center gap-1.5 bg-white/20 rounded-full px-4 py-1.5 text-sm font-bold mt-1"
+                                className="flex items-center gap-1.5 bg-surface/20 rounded-full px-4 py-1.5 text-sm font-bold mt-1"
                                 initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.5 }}
                             >
                                 <Flame className="w-4 h-4" fill="currentColor" />

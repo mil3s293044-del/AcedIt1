@@ -63,7 +63,7 @@ export default function SubjectFolderGridView({ userSubjects, onSelectSubject, o
           initial={{ y: 20, opacity: 0 }}
           animate={{ y: 0, opacity: 1 }}
           transition={{ delay: 0.3 }}
-          className="text-base lg:text-lg text-gray-600 max-w-2xl mx-auto font-medium px-4"
+          className="text-base lg:text-lg text-muted-foreground max-w-2xl mx-auto font-medium px-4"
         >
           Select a subject to manage goals and track progress
         </motion.p>
@@ -112,7 +112,7 @@ export default function SubjectFolderGridView({ userSubjects, onSelectSubject, o
                       y: [0, -20, 0]
                     }}
                     transition={{ duration: 6, repeat: Infinity, ease: "easeInOut" }}
-                    className="absolute top-0 right-0 w-40 h-40 bg-white rounded-full blur-3xl"
+                    className="absolute top-0 right-0 w-40 h-40 bg-surface rounded-full blur-3xl"
                   />
                   <motion.div
                     animate={{
@@ -122,7 +122,7 @@ export default function SubjectFolderGridView({ userSubjects, onSelectSubject, o
                       y: [0, 30, 0]
                     }}
                     transition={{ duration: 8, repeat: Infinity, ease: "easeInOut", delay: 1 }}
-                    className="absolute bottom-0 left-0 w-32 h-32 bg-white rounded-full blur-3xl"
+                    className="absolute bottom-0 left-0 w-32 h-32 bg-surface rounded-full blur-3xl"
                   />
 
                   <CardContent className="relative p-8 flex flex-col flex-1 text-white z-10">
@@ -242,10 +242,10 @@ export default function SubjectFolderGridView({ userSubjects, onSelectSubject, o
             transition={{ duration: 2, repeat: Infinity }}
             className="w-24 h-24 bg-gradient-to-br from-gray-100 to-gray-200 rounded-3xl flex items-center justify-center mx-auto mb-6"
           >
-            <BookOpen className="w-12 h-12 text-gray-400" />
+            <BookOpen className="w-12 h-12 text-muted-foreground/60" />
           </motion.div>
-          <h3 className="text-2xl font-bold text-gray-700 mb-3">No subjects found</h3>
-          <p className="text-gray-600 mb-6">Add subjects to get started with goal tracking!</p>
+          <h3 className="text-2xl font-bold text-muted-foreground mb-3">No subjects found</h3>
+          <p className="text-muted-foreground mb-6">Add subjects to get started with goal tracking!</p>
           <Button 
             onClick={onBack}
             className="bg-gradient-to-r from-indigo-600 to-purple-600 text-white"
@@ -262,7 +262,7 @@ export default function SubjectFolderGridView({ userSubjects, onSelectSubject, o
           variant="outline"
           size="lg"
           onClick={onBack}
-          className="gap-2 hover:bg-white/80 text-gray-700 border-2 border-gray-300 font-semibold backdrop-blur-sm"
+          className="gap-2 hover:bg-surface/80 text-muted-foreground border-2 border-border font-semibold backdrop-blur-sm"
         >
           <ArrowLeft className="w-5 h-5" />
           Back to Goals Overview

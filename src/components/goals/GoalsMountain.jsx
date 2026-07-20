@@ -163,7 +163,7 @@ export default function GoalsMountain({ initialSubjectCode }) {
         return (
             <div className="flex items-center justify-center py-12">
                 <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-purple-600"></div>
-                <p className="ml-4 text-gray-600">Loading your goals...</p>
+                <p className="ml-4 text-muted-foreground">Loading your goals...</p>
             </div>
         );
     }
@@ -223,7 +223,7 @@ export default function GoalsMountain({ initialSubjectCode }) {
 
                 {/* Center Split Line Effect */}
                 <motion.div
-                    className="absolute top-0 left-1/2 w-1 h-full bg-white/20 blur-sm"
+                    className="absolute top-0 left-1/2 w-1 h-full bg-surface/20 blur-sm"
                     initial={false}
                     animate={{ 
                         scaleY: isDoorsOpen ? 0 : 1,
@@ -244,7 +244,7 @@ export default function GoalsMountain({ initialSubjectCode }) {
                     >
                         {/* Decorative Elements */}
                         <motion.div 
-                            className="absolute top-10 left-10 w-20 h-20 rounded-full bg-white/10 blur-2xl"
+                            className="absolute top-10 left-10 w-20 h-20 rounded-full bg-surface/10 blur-2xl"
                             animate={{ 
                                 scale: [1, 1.2, 1],
                                 opacity: [0.3, 0.5, 0.3]
@@ -252,7 +252,7 @@ export default function GoalsMountain({ initialSubjectCode }) {
                             transition={{ duration: 4, repeat: Infinity }}
                         />
                         <motion.div 
-                            className="absolute bottom-10 right-10 w-32 h-32 rounded-full bg-white/10 blur-3xl"
+                            className="absolute bottom-10 right-10 w-32 h-32 rounded-full bg-surface/10 blur-3xl"
                             animate={{ 
                                 scale: [1, 1.3, 1],
                                 opacity: [0.3, 0.5, 0.3]
@@ -277,8 +277,8 @@ export default function GoalsMountain({ initialSubjectCode }) {
                                 transition={{ duration: 6, repeat: Infinity }}
                             >
                                 <div className="relative">
-                                    <div className="absolute inset-0 bg-white/20 rounded-3xl blur-xl"></div>
-                                    <div className="relative bg-white/10 backdrop-blur-sm rounded-3xl p-6 border border-white/20">
+                                    <div className="absolute inset-0 bg-surface/20 rounded-3xl blur-xl"></div>
+                                    <div className="relative bg-surface/10 backdrop-blur-sm rounded-3xl p-6 border border-white/20">
                                         <Trophy className="w-16 h-16" />
                                     </div>
                                 </div>
@@ -305,8 +305,8 @@ export default function GoalsMountain({ initialSubjectCode }) {
                             >
                                 {/* ATAR Goal */}
                                 <div className="relative group">
-                                    <div className="absolute inset-0 bg-white/10 rounded-2xl blur-xl group-hover:blur-2xl transition-all"></div>
-                                    <div className="relative bg-white/10 backdrop-blur-md rounded-2xl p-8 border border-white/20 min-w-[200px]">
+                                    <div className="absolute inset-0 bg-surface/10 rounded-2xl blur-xl group-hover:blur-2xl transition-all"></div>
+                                    <div className="relative bg-surface/10 backdrop-blur-md rounded-2xl p-8 border border-white/20 min-w-[200px]">
                                         <div className="flex items-center justify-center gap-2 mb-3">
                                             <TrendingUp className="w-5 h-5 text-emerald-300" />
                                             <h2 className="text-sm font-bold tracking-wider uppercase text-white/80">Target ATAR</h2>
@@ -322,8 +322,8 @@ export default function GoalsMountain({ initialSubjectCode }) {
 
                                 {/* Course Goal */}
                                 <div className="relative group max-w-md">
-                                    <div className="absolute inset-0 bg-white/10 rounded-2xl blur-xl group-hover:blur-2xl transition-all"></div>
-                                    <div className="relative bg-white/10 backdrop-blur-md rounded-2xl p-8 border border-white/20">
+                                    <div className="absolute inset-0 bg-surface/10 rounded-2xl blur-xl group-hover:blur-2xl transition-all"></div>
+                                    <div className="relative bg-surface/10 backdrop-blur-md rounded-2xl p-8 border border-white/20">
                                         <div className="flex items-center justify-center gap-2 mb-4">
                                             <GraduationCap className="w-5 h-5 text-blue-300" />
                                             <h2 className="text-sm font-bold tracking-wider uppercase text-white/80">Target Course</h2>
@@ -351,7 +351,7 @@ export default function GoalsMountain({ initialSubjectCode }) {
                                 <Button
                                     variant="secondary"
                                     size="lg"
-                                    className="bg-white/20 border-white/30 backdrop-blur-md hover:bg-white/30 text-white font-semibold shadow-xl hover:shadow-2xl transition-all group"
+                                    className="bg-surface/20 border-white/30 backdrop-blur-md hover:bg-surface/30 text-white font-semibold shadow-xl hover:shadow-2xl transition-all group"
                                     onClick={(e) => {
                                         e.stopPropagation();
                                         setIsEditingGoals(true);
@@ -364,7 +364,7 @@ export default function GoalsMountain({ initialSubjectCode }) {
                                 <Button
                                     variant="secondary"
                                     size="lg"
-                                    className="bg-white/20 border-white/30 backdrop-blur-md hover:bg-white/30 text-white font-semibold shadow-xl hover:shadow-2xl transition-all group"
+                                    className="bg-surface/20 border-white/30 backdrop-blur-md hover:bg-surface/30 text-white font-semibold shadow-xl hover:shadow-2xl transition-all group"
                                     onClick={(e) => {
                                         e.stopPropagation();
                                         window.open('https://atar-calculator.deakin.edu.au/', '_blank');
@@ -377,7 +377,7 @@ export default function GoalsMountain({ initialSubjectCode }) {
 
                                 <Button
                                     size="lg"
-                                    className="bg-white text-indigo-600 hover:bg-white/90 font-bold shadow-xl hover:shadow-2xl transition-all group"
+                                    className="bg-surface text-indigo-600 hover:bg-surface/90 font-bold shadow-xl hover:shadow-2xl transition-all group"
                                     onClick={(e) => {
                                         e.stopPropagation();
                                         setIsDoorsOpen(true);
@@ -418,14 +418,14 @@ export default function GoalsMountain({ initialSubjectCode }) {
                             animate={{ opacity: 1, scale: 1, y: 0 }}
                             exit={{ opacity: 0, scale: 0.95, y: 20 }}
                             transition={{ type: "spring", damping: 25, stiffness: 300 }}
-                            className="bg-white rounded-3xl shadow-2xl w-full max-w-lg overflow-hidden"
+                            className="bg-surface rounded-3xl shadow-2xl w-full max-w-lg overflow-hidden"
                             onClick={(e) => e.stopPropagation()}
                         >
                             {/* Header */}
                             <div className="bg-gradient-to-r from-indigo-600 via-purple-600 to-pink-600 p-6">
                                 <div className="flex items-center justify-between">
                                     <div className="flex items-center gap-3">
-                                        <div className="w-12 h-12 bg-white/20 backdrop-blur-sm rounded-2xl flex items-center justify-center">
+                                        <div className="w-12 h-12 bg-surface/20 backdrop-blur-sm rounded-2xl flex items-center justify-center">
                                             <Target className="w-6 h-6 text-white" />
                                         </div>
                                         <h3 className="text-2xl font-bold text-white">Edit Your Goals</h3>
@@ -433,8 +433,9 @@ export default function GoalsMountain({ initialSubjectCode }) {
                                     <Button
                                         variant="ghost"
                                         size="icon"
+                                        aria-label="Close dialog"
                                         onClick={() => setIsEditingGoals(false)}
-                                        className="text-white/80 hover:text-white hover:bg-white/20 rounded-xl"
+                                        className="text-white/80 hover:text-white hover:bg-surface/20 rounded-xl"
                                     >
                                         <X className="w-5 h-5" />
                                     </Button>
@@ -444,7 +445,7 @@ export default function GoalsMountain({ initialSubjectCode }) {
                             {/* Content */}
                             <div className="p-6 space-y-6">
                                 <div className="space-y-2">
-                                    <Label className="text-sm font-semibold text-gray-700 flex items-center gap-2">
+                                    <Label className="text-sm font-semibold text-muted-foreground flex items-center gap-2">
                                         <TrendingUp className="w-4 h-4 text-indigo-600" />
                                         Target ATAR
                                     </Label>
@@ -461,7 +462,7 @@ export default function GoalsMountain({ initialSubjectCode }) {
                                 </div>
                                 
                                 <div className="space-y-2">
-                                    <Label className="text-sm font-semibold text-gray-700 flex items-center gap-2">
+                                    <Label className="text-sm font-semibold text-muted-foreground flex items-center gap-2">
                                         <GraduationCap className="w-4 h-4 text-indigo-600" />
                                         Target Course
                                     </Label>
@@ -474,7 +475,7 @@ export default function GoalsMountain({ initialSubjectCode }) {
                                 </div>
                                 
                                 <div className="space-y-2">
-                                    <Label className="text-sm font-semibold text-gray-700 flex items-center gap-2">
+                                    <Label className="text-sm font-semibold text-muted-foreground flex items-center gap-2">
                                         <UniversityIcon className="w-4 h-4 text-indigo-600" />
                                         Preferred University
                                     </Label>
@@ -488,7 +489,7 @@ export default function GoalsMountain({ initialSubjectCode }) {
                             </div>
 
                             {/* Footer */}
-                            <div className="flex justify-end gap-3 p-6 bg-gray-50 border-t">
+                            <div className="flex justify-end gap-3 p-6 bg-secondary/50 border-t">
                                 <Button 
                                     variant="outline" 
                                     onClick={() => setIsEditingGoals(false)}
@@ -521,7 +522,7 @@ export default function GoalsMountain({ initialSubjectCode }) {
                         <Button
                             onClick={() => setIsDoorsOpen(false)}
                             size="lg"
-                            className="rounded-full shadow-2xl bg-white text-indigo-600 hover:bg-gray-50 font-bold border-2 border-indigo-200 hover:border-indigo-300 transition-all group"
+                            className="rounded-full shadow-2xl bg-surface text-indigo-600 hover:bg-secondary/50 font-bold border-2 border-indigo-200 hover:border-indigo-300 transition-all group"
                         >
                             <Lock className="w-5 h-5 mr-2 group-hover:scale-110 transition-transform" />
                             Close Planning

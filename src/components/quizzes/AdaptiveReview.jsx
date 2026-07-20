@@ -188,7 +188,7 @@ Give ONE short, directed hint (2-3 sentences max) that steers them toward the ri
                                         style = OPTION_STYLES.selected;
                                     }
                                     const badgeStyle = isSel && !isSubmitted[currentIdx]
-                                        ? 'bg-white/20 text-white'
+                                        ? 'bg-surface/20 text-white'
                                         : isSubmitted[currentIdx] && isCorrectAnswer
                                             ? 'bg-primary text-white'
                                             : isSubmitted[currentIdx] && isSel

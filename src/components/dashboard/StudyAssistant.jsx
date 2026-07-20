@@ -39,7 +39,7 @@ const MessageBubble = ({ message, isUser }) => (
             className={`max-w-[80%] rounded-2xl px-4 py-3 ${
                 isUser
                     ? 'bg-blue-600 text-white'
-                    : 'bg-gray-100 text-gray-900 border border-gray-200'
+                    : 'bg-secondary text-foreground border border-border'
             }`}
         >
             {isUser ? (
@@ -74,7 +74,7 @@ const MessageBubble = ({ message, isUser }) => (
         </div>
         {isUser && (
             <div className="w-8 h-8 bg-gray-300 rounded-full flex items-center justify-center flex-shrink-0">
-                <UserIcon className="w-4 h-4 text-gray-600" />
+                <UserIcon className="w-4 h-4 text-muted-foreground" />
             </div>
         )}
     </motion.div>
@@ -92,7 +92,7 @@ const SuggestedPrompts = ({ onSelect }) => {
 
     return (
         <div className="space-y-2">
-            <p className="text-xs text-gray-500 font-medium">Suggested questions:</p>
+            <p className="text-xs text-muted-foreground font-medium">Suggested questions:</p>
             <div className="grid grid-cols-1 gap-2">
                 {prompts.map((prompt, idx) => {
                     const Icon = prompt.icon;
@@ -100,10 +100,10 @@ const SuggestedPrompts = ({ onSelect }) => {
                         <button
                             key={idx}
                             onClick={() => onSelect(prompt.text)}
-                            className="flex items-center gap-2 p-2 text-left text-sm bg-gray-50 hover:bg-gray-100 rounded-lg transition-colors"
+                            className="flex items-center gap-2 p-2 text-left text-sm bg-secondary/50 hover:bg-secondary rounded-lg transition-colors"
                         >
                             <Icon className="w-4 h-4 text-purple-600" />
-                            <span className="text-gray-700">{prompt.text}</span>
+                            <span className="text-muted-foreground">{prompt.text}</span>
                             <Badge variant="outline" className="ml-auto text-xs">{prompt.category}</Badge>
                         </button>
                     );
@@ -331,13 +331,13 @@ export default function StudyAssistant({ user, userProfile }) {
                 animate={{ opacity: 1, y: 0 }}
                 className="fixed bottom-6 right-6 z-40 w-96"
             >
-                <Card className="shadow-xl border-0 bg-white/95 backdrop-blur-sm">
+                <Card className="shadow-xl border-0 bg-surface/95 backdrop-blur-sm">
                     <CardContent className="p-6 text-center">
                         <div className="w-12 h-12 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-3">
                             <X className="w-6 h-6 text-red-600" />
                         </div>
-                        <p className="text-gray-700 font-medium mb-2">Chat Unavailable</p>
-                        <p className="text-sm text-gray-600 mb-4">Unable to connect to AI assistant.</p>
+                        <p className="text-muted-foreground font-medium mb-2">Chat Unavailable</p>
+                        <p className="text-sm text-muted-foreground mb-4">Unable to connect to AI assistant.</p>
                         <div className="flex gap-2">
                             <Button variant="outline" onClick={() => setIsMinimized(true)} className="flex-1">
                                 Close
@@ -361,7 +361,7 @@ export default function StudyAssistant({ user, userProfile }) {
         return (
             <Dialog open={isExpanded} onOpenChange={setIsExpanded}>
                 <DialogContent className="max-w-4xl h-[80vh] flex flex-col p-0">
-                    <DialogHeader className="p-6 pb-4 flex-shrink-0 border-b border-gray-200">
+                    <DialogHeader className="p-6 pb-4 flex-shrink-0 border-b border-border">
                         <DialogTitle className="flex items-center justify-between">
                             <div className="flex items-center gap-2">
                                 <div className="w-8 h-8 bg-gradient-to-r from-purple-500 to-blue-500 rounded-full flex items-center justify-center">
@@ -370,7 +370,7 @@ export default function StudyAssistant({ user, userProfile }) {
                                 AI Study Assistant
                                 <Badge className="ml-2 bg-green-100 text-green-800">Online</Badge>
                             </div>
-                            <Button variant="ghost" size="icon" onClick={clearChat} className="text-gray-500 hover:text-red-600">
+                            <Button variant="ghost" size="icon" onClick={clearChat} className="text-muted-foreground hover:text-red-600" aria-label="Clear chat">
                                 <Trash2 className="w-4 h-4" />
                             </Button>
                         </DialogTitle>
@@ -383,7 +383,7 @@ export default function StudyAssistant({ user, userProfile }) {
                                     <div className="flex items-center justify-center py-8">
                                         <div className="text-center">
                                             <Loader2 className="w-8 h-8 animate-spin text-purple-600 mx-auto mb-2" />
-                                            <p className="text-gray-600">Connecting to assistant...</p>
+                                            <p className="text-muted-foreground">Connecting to assistant...</p>
                                         </div>
                                     </div>
                                 ) : messages.length === 0 ? (
@@ -393,7 +393,7 @@ export default function StudyAssistant({ user, userProfile }) {
                                                 <Sparkles className="w-8 h-8 text-white" />
                                             </div>
                                             <h3 className="text-lg font-semibold mb-2">Your AI Study Assistant</h3>
-                                            <p className="text-gray-600 mb-6">I'm here to help you with study planning, VCE advice, app guidance, and account updates.</p>
+                                            <p className="text-muted-foreground mb-6">I'm here to help you with study planning, VCE advice, app guidance, and account updates.</p>
                                             <SuggestedPrompts onSelect={handleSuggestedPrompt} />
                                         </div>
                                     </div>
@@ -408,9 +408,9 @@ export default function StudyAssistant({ user, userProfile }) {
                                         ))}
                                         {isLoading && (
                                             <div className="flex justify-start mb-4">
-                                                <div className="flex items-center gap-2 bg-gray-100 rounded-full px-4 py-2">
+                                                <div className="flex items-center gap-2 bg-secondary rounded-full px-4 py-2">
                                                     <Loader2 className="w-4 h-4 animate-spin" />
-                                                    <span className="text-sm text-gray-600">Assistant is thinking...</span>
+                                                    <span className="text-sm text-muted-foreground">Assistant is thinking...</span>
                                                 </div>
                                             </div>
                                         )}
@@ -420,7 +420,7 @@ export default function StudyAssistant({ user, userProfile }) {
                             </div>
                         </ScrollArea>
 
-                        <div className="flex-shrink-0 border-t border-gray-200 p-6">
+                        <div className="flex-shrink-0 border-t border-border p-6">
                             <form onSubmit={handleSubmit} className="flex gap-2">
                                 <Input
                                     value={inputMessage}
@@ -447,7 +447,7 @@ export default function StudyAssistant({ user, userProfile }) {
             animate={{ opacity: 1, y: 0 }}
             className="fixed bottom-6 right-6 z-40 w-96"
         >
-            <Card className="shadow-xl border-0 bg-white/95 backdrop-blur-sm max-h-[70vh] flex flex-col">
+            <Card className="shadow-xl border-0 bg-surface/95 backdrop-blur-sm max-h-[70vh] flex flex-col">
                 <CardHeader className="pb-3 flex-shrink-0">
                     <div className="flex items-center justify-between">
                         <CardTitle className="flex items-center gap-2 text-base">
@@ -458,10 +458,10 @@ export default function StudyAssistant({ user, userProfile }) {
                             <Badge className="ml-2 bg-green-100 text-green-800 text-xs">Online</Badge>
                         </CardTitle>
                         <div className="flex items-center gap-1">
-                            <Button variant="ghost" size="icon" onClick={() => setIsExpanded(true)} className="h-8 w-8">
+                            <Button variant="ghost" size="icon" onClick={() => setIsExpanded(true)} className="h-8 w-8" aria-label="Expand assistant">
                                 <Maximize2 className="w-4 h-4" />
                             </Button>
-                            <Button variant="ghost" size="icon" onClick={() => setIsMinimized(true)} className="h-8 w-8">
+                            <Button variant="ghost" size="icon" onClick={() => setIsMinimized(true)} className="h-8 w-8" aria-label="Minimize assistant">
                                 <X className="w-4 h-4" />
                             </Button>
                         </div>
@@ -473,14 +473,14 @@ export default function StudyAssistant({ user, userProfile }) {
                         {isLoading && messages.length === 0 ? (
                             <div className="text-center py-8">
                                 <Loader2 className="w-8 h-8 animate-spin text-purple-600 mx-auto mb-2" />
-                                <p className="text-sm text-gray-600">Starting chat...</p>
+                                <p className="text-sm text-muted-foreground">Starting chat...</p>
                             </div>
                         ) : messages.length === 0 ? (
                             <div className="text-center py-4">
                                 <div className="w-12 h-12 bg-gradient-to-r from-purple-500 to-blue-500 rounded-full flex items-center justify-center mx-auto mb-3">
                                     <Sparkles className="w-6 h-6 text-white" />
                                 </div>
-                                <p className="text-sm text-gray-600 mb-4">I'm here to help with your studies!</p>
+                                <p className="text-sm text-muted-foreground mb-4">I'm here to help with your studies!</p>
                                 <SuggestedPrompts onSelect={handleSuggestedPrompt} />
                             </div>
                         ) : (
@@ -494,9 +494,9 @@ export default function StudyAssistant({ user, userProfile }) {
                                 ))}
                                 {isLoading && (
                                     <div className="flex justify-start mb-4">
-                                        <div className="flex items-center gap-2 bg-gray-100 rounded-full px-3 py-1">
+                                        <div className="flex items-center gap-2 bg-secondary rounded-full px-3 py-1">
                                             <Loader2 className="w-3 h-3 animate-spin" />
-                                            <span className="text-xs text-gray-600">Thinking...</span>
+                                            <span className="text-xs text-muted-foreground">Thinking...</span>
                                         </div>
                                     </div>
                                 )}

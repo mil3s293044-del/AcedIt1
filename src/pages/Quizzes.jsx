@@ -949,7 +949,7 @@ Return valid JSON only.`,
         // SAC: cover the entire viewport (side rail + top strip hidden) so the
         // student is locked into the exam. Standard: normal page chrome.
         const wrapperCls = isSAC
-            ? "fixed inset-0 z-50 bg-white overflow-y-auto"
+            ? "fixed inset-0 z-50 bg-surface overflow-y-auto"
             : "min-h-screen bg-background";
         return (
             <div className={wrapperCls}>

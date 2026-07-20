@@ -45,7 +45,7 @@ export default function StudyAnalytics({ sessions = [], userProfile, isLoading }
         return (
             <Card className="shadow-lg rounded-2xl animate-pulse">
                 <CardContent className="p-6">
-                    <div className="h-32 bg-gray-200 rounded" />
+                    <div className="h-32 bg-secondary rounded" />
                 </CardContent>
             </Card>
         );
@@ -67,7 +67,7 @@ export default function StudyAnalytics({ sessions = [], userProfile, isLoading }
             <CardContent className="space-y-6">
                 {/* Daily Activity Chart */}
                 <div>
-                    <h3 className="text-sm font-semibold text-gray-700 mb-4">This Week</h3>
+                    <h3 className="text-sm font-semibold text-muted-foreground mb-4">This Week</h3>
                     <div className="flex items-end justify-between gap-2 h-32">
                         {analytics.weeklyData.map((day, index) => {
                             const maxMinutes = Math.max(...analytics.weeklyData.map(d => d.minutes), 1);
@@ -87,8 +87,8 @@ export default function StudyAnalytics({ sessions = [], userProfile, isLoading }
                                         )}
                                     </div>
                                     <div className="text-center">
-                                        <div className="text-xs font-medium text-gray-600">{day.day}</div>
-                                        <div className="text-xs text-gray-500">{day.hours}h</div>
+                                        <div className="text-xs font-medium text-muted-foreground">{day.day}</div>
+                                        <div className="text-xs text-muted-foreground">{day.hours}h</div>
                                     </div>
                                 </div>
                             );
@@ -103,8 +103,8 @@ export default function StudyAnalytics({ sessions = [], userProfile, isLoading }
                             <Clock className="w-5 h-5 text-white" />
                         </div>
                         <div>
-                            <p className="text-sm text-gray-600">Total Study Time</p>
-                            <p className="text-2xl font-bold text-gray-900">
+                            <p className="text-sm text-muted-foreground">Total Study Time</p>
+                            <p className="text-2xl font-bold text-foreground">
                                 {Math.round(analytics.totalMinutes / 60)}h
                             </p>
                         </div>

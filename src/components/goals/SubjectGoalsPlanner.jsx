@@ -258,10 +258,10 @@ Return a JSON object with a "milestones" array.`,
                     <div className="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-4">
                         <Target className="w-8 h-8 text-blue-600" />
                     </div>
-                    <h2 className="text-2xl font-bold text-gray-900 mb-2">
+                    <h2 className="text-2xl font-bold text-foreground mb-2">
                         No Subjects Selected
                     </h2>
-                    <p className="text-gray-600 mb-6">
+                    <p className="text-muted-foreground mb-6">
                         To set subject goals, you need to select your subjects first. Head to the Subjects page and add your subjects to "My Subjects".
                     </p>
                     <Button
@@ -286,7 +286,7 @@ Return a JSON object with a "milestones" array.`,
                 </CardHeader>
                 <CardContent className="space-y-4">
                     {userSubjects.length === 0 ? (
-                        <p className="text-gray-600">Please add your subjects first.</p>
+                        <p className="text-muted-foreground">Please add your subjects first.</p>
                     ) : (
                         <>
                             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -312,7 +312,7 @@ Return a JSON object with a "milestones" array.`,
             </Card>
 
             <div className="space-y-4">
-                <h2 className="text-xl font-semibold text-gray-800 flex items-center gap-2">
+                <h2 className="text-xl font-semibold text-foreground flex items-center gap-2">
                     <Sparkles className="w-5 h-5 text-yellow-500" />
                     Your Personalized Study Plans
                 </h2>
@@ -323,7 +323,7 @@ Return a JSON object with a "milestones" array.`,
                         const yearLevelDisplay = subject.year_level || "Year 12 Units 3&4";
 
                         return (
-                            <Card key={subject.subject_code} className="bg-white border-gray-200">
+                            <Card key={subject.subject_code} className="bg-surface border-border">
                                 <CardHeader>
                                     <div className="flex justify-between items-start">
                                         <div>
@@ -394,11 +394,11 @@ Return a JSON object with a "milestones" array.`,
                                     </CardContent>
                                 ) : (
                                     <CardContent className="text-center py-6">
-                                        <Target className="w-12 h-12 mx-auto text-gray-300 mb-2" />
-                                        <h3 className="text-md font-semibold text-gray-900 mb-1">
+                                        <Target className="w-12 h-12 mx-auto text-muted-foreground/40 mb-2" />
+                                        <h3 className="text-md font-semibold text-foreground mb-1">
                                             No plan generated for {subject.subject_name}
                                         </h3>
-                                        <p className="text-gray-600 text-sm">
+                                        <p className="text-muted-foreground text-sm">
                                             Set a target score and click 'Generate Plan' above.
                                         </p>
                                     </CardContent>

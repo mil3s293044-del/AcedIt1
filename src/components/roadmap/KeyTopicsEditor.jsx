@@ -8,7 +8,7 @@ const PRIORITY_CYCLE = { High: "Medium", Medium: "Low", Low: "High" };
 const PRIORITY_STYLE = {
     High: "bg-red-100 text-red-700 border-red-200 hover:bg-red-200",
     Medium: "bg-amber-100 text-amber-700 border-amber-200 hover:bg-amber-200",
-    Low: "bg-gray-100 text-gray-600 border-gray-200 hover:bg-gray-200",
+    Low: "bg-secondary text-muted-foreground border-border hover:bg-secondary",
 };
 
 export default function KeyTopicsEditor({ topics, onChange, loading }) {
@@ -54,9 +54,9 @@ export default function KeyTopicsEditor({ topics, onChange, loading }) {
             {topics.length > 0 ? (
                 <div className="space-y-1.5">
                     {topics.map((topic, i) => (
-                        <div key={i} className="flex items-center gap-2 bg-white border border-gray-200 rounded-lg px-2.5 py-2">
+                        <div key={i} className="flex items-center gap-2 bg-surface border border-border rounded-lg px-2.5 py-2">
                             <div className="flex-1 min-w-0">
-                                <span className="text-sm text-gray-800 font-medium">{topic.name}</span>
+                                <span className="text-sm text-foreground font-medium">{topic.name}</span>
                                 {topic.has_prior_data && (
                                     <span className="ml-2 inline-flex items-center gap-1 text-xs text-teal-600 bg-teal-50 rounded px-1.5 py-0.5">
                                         <Brain className="w-3 h-3" /> Prior data
@@ -74,7 +74,7 @@ export default function KeyTopicsEditor({ topics, onChange, loading }) {
                             <button
                                 type="button"
                                 onClick={() => removeTopic(i)}
-                                className="text-gray-400 hover:text-red-500 transition-colors flex-shrink-0"
+                                className="text-muted-foreground/60 hover:text-red-500 transition-colors flex-shrink-0"
                             >
                                 <X className="w-4 h-4" />
                             </button>
@@ -82,7 +82,7 @@ export default function KeyTopicsEditor({ topics, onChange, loading }) {
                     ))}
                 </div>
             ) : (
-                <div className="flex items-center gap-2 text-xs text-gray-400 bg-gray-50 rounded-lg px-3 py-2.5 border border-dashed border-gray-200">
+                <div className="flex items-center gap-2 text-xs text-muted-foreground/60 bg-secondary/50 rounded-lg px-3 py-2.5 border border-dashed border-border">
                     <BookOpen className="w-3 h-3 flex-shrink-0" />
                     No topics added yet — add topics manually or select a subject to auto-populate.
                 </div>
@@ -90,7 +90,7 @@ export default function KeyTopicsEditor({ topics, onChange, loading }) {
 
             {/* Priority legend */}
             {topics.length > 0 && (
-                <p className="text-xs text-gray-400">Click a priority badge to cycle: <span className="text-red-600 font-medium">High</span> → <span className="text-amber-600 font-medium">Medium</span> → <span className="text-gray-500 font-medium">Low</span>. High priority topics appear earlier and get more sessions.</p>
+                <p className="text-xs text-muted-foreground/60">Click a priority badge to cycle: <span className="text-red-600 font-medium">High</span> → <span className="text-amber-600 font-medium">Medium</span> → <span className="text-muted-foreground font-medium">Low</span>. High priority topics appear earlier and get more sessions.</p>
             )}
 
             {/* Add topic input */}

@@ -184,7 +184,7 @@ export default function AIToolsHistory() {
                         <h1 className="text-4xl lg:text-5xl font-bold bg-gradient-to-r from-purple-600 via-indigo-600 to-blue-600 bg-clip-text text-transparent mb-4">
                             AI Tools History
                         </h1>
-                        <p className="text-gray-600 text-lg max-w-2xl mx-auto leading-relaxed">
+                        <p className="text-muted-foreground text-lg max-w-2xl mx-auto leading-relaxed">
                             View and manage all your saved AI-generated content in one place.
                         </p>
                     </div>
@@ -201,7 +201,7 @@ export default function AIToolsHistory() {
                         <CardContent className="p-6">
                             <div className="flex flex-col lg:flex-row gap-4">
                                 <div className="flex-1 relative">
-                                    <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
+                                    <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground/60 w-5 h-5" />
                                     <Input
                                         placeholder="Search by topic, title or subject..."
                                         value={searchTerm}
@@ -256,14 +256,14 @@ export default function AIToolsHistory() {
                 {isLoading ? (
                     <div className="text-center py-12">
                         <div className="w-16 h-16 border-4 border-purple-200 border-t-purple-600 rounded-full animate-spin mx-auto mb-4"></div>
-                        <p className="text-gray-600">Loading your history...</p>
+                        <p className="text-muted-foreground">Loading your history...</p>
                     </div>
                 ) : filteredResults.length === 0 ? (
                     <Card className="shadow-xl">
                         <CardContent className="p-12 text-center">
-                            <FolderOpen className="w-16 h-16 text-gray-300 mx-auto mb-4" />
-                            <h3 className="text-xl font-semibold text-gray-900 mb-2">No saved results found</h3>
-                            <p className="text-gray-600 mb-6">
+                            <FolderOpen className="w-16 h-16 text-muted-foreground/40 mx-auto mb-4" />
+                            <h3 className="text-xl font-semibold text-foreground mb-2">No saved results found</h3>
+                            <p className="text-muted-foreground mb-6">
                                 {searchTerm || filterType !== 'all' || filterSubject !== 'all'
                                     ? 'Try adjusting your filters'
                                     : 'Start using AI tools to see your saved results here'}
@@ -296,7 +296,7 @@ export default function AIToolsHistory() {
                                                 className="w-1 h-8 rounded-full"
                                                 style={{ backgroundColor: subjectColor }}
                                             />
-                                            <h3 className="text-2xl font-bold text-gray-900">{subjectName}</h3>
+                                            <h3 className="text-2xl font-bold text-foreground">{subjectName}</h3>
                                             <Badge variant="outline" className="text-purple-800 bg-purple-100">
                                                 {subjectResults.length} result{subjectResults.length !== 1 ? 's' : ''}
                                             </Badge>
@@ -319,10 +319,10 @@ export default function AIToolsHistory() {
                                                                         <div className={`w-7 h-7 bg-gradient-to-br ${toolBgColor} rounded-lg flex items-center justify-center shadow-sm flex-shrink-0`}>
                                                                             <Icon className="w-4 h-4 text-white" />
                                                                         </div>
-                                                                        <span className="text-sm font-semibold text-gray-700">{toolNames[result.tool_type]}</span>
+                                                                        <span className="text-sm font-semibold text-muted-foreground">{toolNames[result.tool_type]}</span>
                                                                     </div>
-                                                                    <h4 className="font-bold text-gray-900 text-lg mb-1">{result.topic}</h4>
-                                                                    <div className="flex items-center gap-2 text-xs text-gray-600">
+                                                                    <h4 className="font-bold text-foreground text-lg mb-1">{result.topic}</h4>
+                                                                    <div className="flex items-center gap-2 text-xs text-muted-foreground">
                                                                         <Calendar className="w-3 h-3" />
                                                                         {result.date_created}
                                                                     </div>
@@ -358,13 +358,13 @@ export default function AIToolsHistory() {
                                                                 </div>
                                                             </div>
                                                             {/* Preview */}
-                                                            <div className="prose prose-sm max-w-none bg-white/70 p-4 rounded-lg border border-purple-100 flex-grow">
+                                                            <div className="prose prose-sm max-w-none bg-surface/70 p-4 rounded-lg border border-purple-100 flex-grow">
                                                                 {result.tool_type === 'question_generator' ? (
                                                                     <div>
-                                                                        <p className="font-medium text-gray-800 mb-2">
+                                                                        <p className="font-medium text-foreground mb-2">
                                                                             {JSON.parse(result.content).length} questions generated
                                                                         </p>
-                                                                        <p className="text-gray-600 text-sm line-clamp-2">
+                                                                        <p className="text-muted-foreground text-sm line-clamp-2">
                                                                             Q1: {JSON.parse(result.content)[0]?.question}
                                                                         </p>
                                                                     </div>
@@ -399,8 +399,8 @@ export default function AIToolsHistory() {
                     <div className="py-4">
                         {friends.length === 0 ? (
                             <div className="text-center py-8">
-                                <Users className="w-12 h-12 text-gray-300 mx-auto mb-3" />
-                                <p className="text-gray-600 mb-4">No friends to share with yet</p>
+                                <Users className="w-12 h-12 text-muted-foreground/40 mx-auto mb-3" />
+                                <p className="text-muted-foreground mb-4">No friends to share with yet</p>
                                 <Link to={createPageUrl('Friends')}>
                                     <Button className="bg-blue-600">
                                         <Users className="w-4 h-4 mr-2" />
@@ -420,7 +420,7 @@ export default function AIToolsHistory() {
                                         <Users className="w-4 h-4 mr-2" />
                                         <div className="text-left flex-1">
                                             <div className="font-semibold">{friend.name}</div>
-                                            <div className="text-xs text-gray-500">@{friend.username}</div>
+                                            <div className="text-xs text-muted-foreground">@{friend.username}</div>
                                         </div>
                                     </Button>
                                 ))}
@@ -444,7 +444,7 @@ export default function AIToolsHistory() {
                                 </>
                             )}
                         </DialogTitle>
-                        <div className="flex items-center gap-2 text-sm text-gray-600 mt-2">
+                        <div className="flex items-center gap-2 text-sm text-muted-foreground mt-2">
                             {viewingResult?.subject_name && <Badge className="bg-purple-100 text-purple-800">{viewingResult.subject_name}</Badge>}
                             <span>•</span>
                             <span>{viewingResult?.date_created}</span>
@@ -458,9 +458,9 @@ export default function AIToolsHistory() {
                                 {JSON.parse(viewingResult.content).map((item, index) => (
                                     <Card key={index} className="border-2 border-purple-100">
                                         <CardContent className="p-4">
-                                            <p className="font-semibold text-gray-800 mb-2">Q{index + 1}: {item.question}</p>
+                                            <p className="font-semibold text-foreground mb-2">Q{index + 1}: {item.question}</p>
                                             <div className="mt-2 p-3 bg-gradient-to-br from-purple-50 to-indigo-50 rounded-lg border border-purple-100">
-                                                <p className="text-sm font-medium text-gray-700">{item.answer}</p>
+                                                <p className="text-sm font-medium text-muted-foreground">{item.answer}</p>
                                             </div>
                                         </CardContent>
                                     </Card>

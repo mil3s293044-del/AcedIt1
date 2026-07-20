@@ -189,7 +189,7 @@ export default function GroupDecks({ group, user }) {
             <Card className="shadow-xl">
                 <CardContent className="p-12 text-center">
                     <div className="w-12 h-12 border-4 border-purple-200 border-t-purple-600 rounded-full animate-spin mx-auto mb-4"></div>
-                    <p className="text-gray-600">Loading decks...</p>
+                    <p className="text-muted-foreground">Loading decks...</p>
                 </CardContent>
             </Card>
         );
@@ -210,19 +210,19 @@ export default function GroupDecks({ group, user }) {
                 </Button>
 
                 <Card className="shadow-xl border-2 border-purple-100">
-                    <CardHeader className="border-b border-gray-100">
+                    <CardHeader className="border-b border-border">
                         <div className="flex items-start justify-between">
                             <div className="flex-1">
                                 <CardTitle className="text-2xl mb-2 flex items-center gap-2">
                                     {selectedDeck.deck_name}
                                     {isCreator && <Crown className="w-5 h-5 text-yellow-500" />}
                                     {selectedDeck.is_locked ? (
-                                        <Lock className="w-4 h-4 text-gray-400" />
+                                        <Lock className="w-4 h-4 text-muted-foreground/60" />
                                     ) : (
                                         <Unlock className="w-4 h-4 text-green-500" />
                                     )}
                                 </CardTitle>
-                                <p className="text-gray-600 mb-3">{selectedDeck.topic}</p>
+                                <p className="text-muted-foreground mb-3">{selectedDeck.topic}</p>
                                 <div className="flex flex-wrap gap-2">
                                     <Badge className="bg-purple-100 text-purple-800">
                                         {selectedDeck.cards?.length || 0} cards
@@ -258,8 +258,8 @@ export default function GroupDecks({ group, user }) {
                         <div className="space-y-3">
                             {selectedDeck.cards?.length === 0 ? (
                                 <div className="text-center py-12">
-                                    <Brain className="w-12 h-12 text-gray-300 mx-auto mb-3" />
-                                    <p className="text-gray-600">No cards yet</p>
+                                    <Brain className="w-12 h-12 text-muted-foreground/40 mx-auto mb-3" />
+                                    <p className="text-muted-foreground">No cards yet</p>
                                     {canEdit && (
                                         <Button
                                             onClick={() => setIsAddingCard(true)}
@@ -284,12 +284,12 @@ export default function GroupDecks({ group, user }) {
                                                 <div className="flex items-start justify-between gap-4">
                                                     <div className="flex-1">
                                                         <div className="mb-2">
-                                                            <p className="text-sm text-gray-600 mb-1">Question:</p>
-                                                            <p className="font-medium text-gray-900">{card.question}</p>
+                                                            <p className="text-sm text-muted-foreground mb-1">Question:</p>
+                                                            <p className="font-medium text-foreground">{card.question}</p>
                                                         </div>
                                                         <div className="mb-2">
-                                                            <p className="text-sm text-gray-600 mb-1">Answer:</p>
-                                                            <p className="text-gray-700">{card.answer}</p>
+                                                            <p className="text-sm text-muted-foreground mb-1">Answer:</p>
+                                                            <p className="text-muted-foreground">{card.answer}</p>
                                                         </div>
                                                         <Badge variant="outline" className="text-xs">
                                                             Added by {card.added_by_name}
@@ -299,6 +299,7 @@ export default function GroupDecks({ group, user }) {
                                                         <Button
                                                             variant="ghost"
                                                             size="icon"
+                                                            aria-label="Delete card"
                                                             onClick={() => handleDeleteCard(index)}
                                                             className="text-red-600 hover:text-red-700 hover:bg-red-50"
                                                         >
@@ -373,9 +374,9 @@ export default function GroupDecks({ group, user }) {
             {decks.length === 0 ? (
                 <Card className="shadow-xl">
                     <CardContent className="p-12 text-center">
-                        <Brain className="w-16 h-16 text-gray-300 mx-auto mb-4" />
-                        <h3 className="text-xl font-semibold text-gray-900 mb-2">No decks yet</h3>
-                        <p className="text-gray-600 mb-6">Create a collaborative deck to study together</p>
+                        <Brain className="w-16 h-16 text-muted-foreground/40 mx-auto mb-4" />
+                        <h3 className="text-xl font-semibold text-foreground mb-2">No decks yet</h3>
+                        <p className="text-muted-foreground mb-6">Create a collaborative deck to study together</p>
                         <Button onClick={() => setIsCreatingDeck(true)} className="bg-gradient-to-r from-purple-600 to-pink-600">
                             <Plus className="w-4 h-4 mr-2" />
                             Create First Deck
@@ -402,18 +403,18 @@ export default function GroupDecks({ group, user }) {
                                             <Crown className="w-4 h-4 text-yellow-500" />
                                         )}
                                     </CardTitle>
-                                    <p className="text-sm text-gray-600">{deck.topic}</p>
+                                    <p className="text-sm text-muted-foreground">{deck.topic}</p>
                                 </CardHeader>
                                 <CardContent>
                                     <div className="space-y-2">
                                         <div className="flex items-center justify-between text-sm">
-                                            <span className="text-gray-600">Cards</span>
+                                            <span className="text-muted-foreground">Cards</span>
                                             <Badge variant="outline">
                                                 {deck.cards?.length || 0}
                                             </Badge>
                                         </div>
                                         <div className="flex items-center justify-between text-sm">
-                                            <span className="text-gray-600">Contributors</span>
+                                            <span className="text-muted-foreground">Contributors</span>
                                             <Badge variant="outline">
                                                 <Users className="w-3 h-3 mr-1" />
                                                 {deck.contributors?.length || 0}
@@ -460,7 +461,7 @@ export default function GroupDecks({ group, user }) {
                             <Input
                                 value={newDeck.subject_name}
                                 disabled
-                                className="bg-gray-50"
+                                className="bg-secondary/50"
                             />
                         </div>
                     </div>

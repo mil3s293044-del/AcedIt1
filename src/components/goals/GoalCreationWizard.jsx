@@ -454,7 +454,7 @@ Navigation should be one of: Study, Quizzes, AITools.`,
                                         className="border-0 shadow-none focus-visible:ring-0 bg-transparent"
                                     />
                                     {subGoals.length > 1 && (
-                                        <Button variant="ghost" size="icon" onClick={() => removeSubGoal(sg.id)} className="flex-shrink-0 text-muted-foreground/60 hover:text-streak w-8 h-8">
+                                        <Button variant="ghost" size="icon" aria-label="Remove sub-goal" onClick={() => removeSubGoal(sg.id)} className="flex-shrink-0 text-muted-foreground/60 hover:text-streak w-8 h-8">
                                             <Trash2 className="w-4 h-4" />
                                         </Button>
                                     )}

@@ -288,7 +288,7 @@ Return a JSON object with a key "course_milestones", which is an array. Each mil
                     <Card>
                         <CardHeader>
                             <CardTitle>{selectedCourse.name}</CardTitle>
-                            <p className="text-sm text-gray-600">{selectedCourse.university}</p>
+                            <p className="text-sm text-muted-foreground">{selectedCourse.university}</p>
                         </CardHeader>
                         <CardContent className="space-y-4">
                             <p className="text-2xl font-bold">ATAR: {selectedCourse.indicative_atar || 'N/A'}</p>
@@ -351,7 +351,7 @@ Return a JSON object with a key "course_milestones", which is an array. Each mil
                         <div className="flex items-center justify-between">
                             <div>
                                 <p className="text-lg font-medium">{userProfile?.goal_course_name}</p>
-                                <p className="text-sm text-gray-600">{userProfile?.goal_university}</p>
+                                <p className="text-sm text-muted-foreground">{userProfile?.goal_university}</p>
                             </div>
                             <Button onClick={handleGenerateCoursePlan} disabled={isGeneratingPlan} variant="outline" className="border-green-200">
                                 <Sparkles className="w-4 h-4 mr-2" />
@@ -373,11 +373,11 @@ Return a JSON object with a key "course_milestones", which is an array. Each mil
             ) : (
                 <Card className="text-center py-12">
                     <CardContent>
-                        <Target className="w-16 h-16 mx-auto text-gray-300 mb-4" />
-                        <h3 className="text-xl font-semibold text-gray-900 mb-2">
+                        <Target className="w-16 h-16 mx-auto text-muted-foreground/40 mb-4" />
+                        <h3 className="text-xl font-semibold text-foreground mb-2">
                             Set Your Course Goal
                         </h3>
-                        <p className="text-gray-600 mb-6">
+                        <p className="text-muted-foreground mb-6">
                             Once your goal is set, click 'Generate AI Plan' to create your Mountain to Success.
                         </p>
                     </CardContent>

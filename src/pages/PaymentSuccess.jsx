@@ -80,8 +80,8 @@ export default function PaymentSuccess() {
                 <Card className="max-w-md w-full">
                     <CardContent className="p-8 text-center">
                         <Loader2 className="w-12 h-12 animate-spin text-blue-600 mx-auto mb-4" />
-                        <h2 className="text-xl font-bold text-gray-900 mb-2">Activating Your Subscription</h2>
-                        <p className="text-gray-600">Please wait while we confirm your payment...</p>
+                        <h2 className="text-xl font-bold text-foreground mb-2">Activating Your Subscription</h2>
+                        <p className="text-muted-foreground">Please wait while we confirm your payment...</p>
                     </CardContent>
                 </Card>
             </div>
@@ -128,7 +128,7 @@ export default function PaymentSuccess() {
                             initial={{ scale: 0 }}
                             animate={{ scale: 1 }}
                             transition={{ delay: 0.2, type: "spring", stiffness: 200 }}
-                            className="w-24 h-24 bg-white rounded-full flex items-center justify-center mx-auto mb-6 shadow-xl"
+                            className="w-24 h-24 bg-surface rounded-full flex items-center justify-center mx-auto mb-6 shadow-xl"
                         >
                             <CheckCircle className="w-16 h-16 text-green-600" />
                         </motion.div>
@@ -138,10 +138,10 @@ export default function PaymentSuccess() {
                     <CardContent className="p-8 text-center space-y-4">
                         <div className="bg-gradient-to-br from-purple-50 to-blue-50 rounded-xl p-6 border-2 border-purple-200">
                             <Sparkles className="w-10 h-10 text-purple-600 mx-auto mb-3" />
-                            <h3 className="text-lg font-bold text-gray-900 mb-1">You now have full premium access!</h3>
-                            <p className="text-gray-600 text-sm">Redirecting you to your subscription page...</p>
+                            <h3 className="text-lg font-bold text-foreground mb-1">You now have full premium access!</h3>
+                            <p className="text-muted-foreground text-sm">Redirecting you to your subscription page...</p>
                         </div>
-                        <Loader2 className="w-5 h-5 animate-spin text-gray-400 mx-auto" />
+                        <Loader2 className="w-5 h-5 animate-spin text-muted-foreground/60 mx-auto" />
                     </CardContent>
                 </Card>
             </motion.div>

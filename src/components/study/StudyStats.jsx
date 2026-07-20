@@ -121,19 +121,19 @@ export default function StudyStats({ userProfile, recentSessions = [], isLoading
                     </CardHeader>
                     <CardContent className="space-y-4">
                         <div className="grid grid-cols-2 gap-4">
-                            <div className="text-center p-3 bg-white rounded-lg border border-blue-200/50">
+                            <div className="text-center p-3 bg-surface rounded-lg border border-blue-200/50">
                                 <div className="text-2xl font-bold text-blue-900">{stats.totalHours}h</div>
                                 <div className="text-xs text-blue-700">Total Hours</div>
                             </div>
-                            <div className="text-center p-3 bg-white rounded-lg border border-blue-200/50">
+                            <div className="text-center p-3 bg-surface rounded-lg border border-blue-200/50">
                                 <div className="text-2xl font-bold text-blue-900">{Math.floor(stats.weekMinutes / 60)}h</div>
                                 <div className="text-xs text-blue-700">This Week</div>
                             </div>
-                            <div className="text-center p-3 bg-white rounded-lg border border-blue-200/50">
+                            <div className="text-center p-3 bg-surface rounded-lg border border-blue-200/50">
                                 <div className="text-2xl font-bold text-blue-900">{stats.dailyAverage}m</div>
                                 <div className="text-xs text-blue-700">Daily Avg</div>
                             </div>
-                            <div className="text-center p-3 bg-white rounded-lg border border-blue-200/50">
+                            <div className="text-center p-3 bg-surface rounded-lg border border-blue-200/50">
                                 <div className="text-2xl font-bold text-blue-900">{stats.totalSessions}</div>
                                 <div className="text-xs text-blue-700">Sessions</div>
                             </div>
@@ -142,7 +142,7 @@ export default function StudyStats({ userProfile, recentSessions = [], isLoading
                         {stats.mostUsedTechnique && (
                             <div className="text-center">
                                 <p className="text-sm text-blue-700 mb-2">Favorite Technique:</p>
-                                <Badge className={techniqueColors[stats.mostUsedTechnique] || 'bg-gray-100 text-gray-800'}>
+                                <Badge className={techniqueColors[stats.mostUsedTechnique] || 'bg-secondary text-foreground'}>
                                     {stats.mostUsedTechnique.replace(/_/g,  ' ')}
                                 </Badge>
                             </div>
@@ -157,7 +157,7 @@ export default function StudyStats({ userProfile, recentSessions = [], isLoading
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: 0.2 }}
             >
-                <Card className="bg-white/70 backdrop-blur-sm border-gray-200/50">
+                <Card className="bg-surface/70 backdrop-blur-sm border-border/50">
                     <CardHeader>
                         <CardTitle className="flex items-center gap-2">
                             <Clock className="w-5 h-5 text-green-600" />
@@ -169,17 +169,17 @@ export default function StudyStats({ userProfile, recentSessions = [], isLoading
                             <div className="space-y-3">
                                 {Array(3).fill(0).map((_, i) => (
                                     <div key={i} className="animate-pulse flex items-center gap-3">
-                                        <div className="w-8 h-8 bg-gray-200 rounded-lg" />
+                                        <div className="w-8 h-8 bg-secondary rounded-lg" />
                                         <div className="flex-1">
-                                            <div className="h-4 bg-gray-200 rounded w-3/4 mb-1" />
-                                            <div className="h-3 bg-gray-200 rounded w-1/2" />
+                                            <div className="h-4 bg-secondary rounded w-3/4 mb-1" />
+                                            <div className="h-3 bg-secondary rounded w-1/2" />
                                         </div>
                                     </div>
                                 ))}
                             </div>
                         ) : recentSessions.length === 0 ? (
-                            <div className="text-center py-6 text-gray-500">
-                                <Clock className="w-10 h-10 mx-auto mb-3 text-gray-300" />
+                            <div className="text-center py-6 text-muted-foreground">
+                                <Clock className="w-10 h-10 mx-auto mb-3 text-muted-foreground/40" />
                                 <p className="text-sm">No study sessions yet</p>
                                 <p className="text-xs">Start your first session above!</p>
                             </div>
@@ -194,22 +194,22 @@ export default function StudyStats({ userProfile, recentSessions = [], isLoading
                                             initial={{ opacity: 0, x: -20 }}
                                             animate={{ opacity: 1, x: 0 }}
                                             transition={{ delay: index * 0.1 }}
-                                            className="flex items-center gap-3 p-3 rounded-lg hover:bg-gray-50/50 transition-colors"
+                                            className="flex items-center gap-3 p-3 rounded-lg hover:bg-secondary/30 transition-colors"
                                         >
                                             <div className="w-8 h-8 bg-gradient-to-br from-gray-100 to-gray-200 rounded-lg flex items-center justify-center">
-                                                <TechniqueIcon className="w-4 h-4 text-gray-600" />
+                                                <TechniqueIcon className="w-4 h-4 text-muted-foreground" />
                                             </div>
                                             <div className="flex-1">
                                                 <div className="flex items-center gap-2 mb-1">
-                                                    <span className="font-medium text-gray-900 text-sm">{session.subject}</span>
+                                                    <span className="font-medium text-foreground text-sm">{session.subject}</span>
                                                     <Badge 
                                                         variant="secondary" 
-                                                        className={`text-xs ${techniqueColors[session.technique_name] || 'bg-gray-100 text-gray-800'}`}
+                                                        className={`text-xs ${techniqueColors[session.technique_name] || 'bg-secondary text-foreground'}`}
                                                     >
                                                         {(session.technique_name || '').replace(/_/g, ' ')}
                                                     </Badge>
                                                 </div>
-                                                <div className="text-xs text-gray-500">
+                                                <div className="text-xs text-muted-foreground">
                                                     {session.session_duration}min • {format(new Date(session.date), "MMM d")}
                                                 </div>
                                             </div>

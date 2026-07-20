@@ -37,7 +37,7 @@ export default function GuideCard({ guide, onSelect, isFeatured = false }) {
             className="h-full cursor-pointer"
             onClick={() => onSelect(guide)}
         >
-            <Card className={`h-full bg-white hover:shadow-2xl transition-all duration-500 border-2 overflow-hidden ${isFeatured ? 'border-yellow-300 shadow-lg' : 'border-purple-100'}`}>
+            <Card className={`h-full bg-surface hover:shadow-2xl transition-all duration-500 border-2 overflow-hidden ${isFeatured ? 'border-yellow-300 shadow-lg' : 'border-purple-100'}`}>
                 {/* Cover Image */}
                 {guide.cover_image_url && (
                     <div className="relative h-48 overflow-hidden">
@@ -88,7 +88,7 @@ export default function GuideCard({ guide, onSelect, isFeatured = false }) {
                                 {guide.subject}
                             </Badge>
                         )}
-                        <Badge variant="outline" className="border-2 border-gray-200 text-gray-600 flex items-center gap-1">
+                        <Badge variant="outline" className="border-2 border-border text-muted-foreground flex items-center gap-1">
                             <Clock className="w-3 h-3" />
                             {guide.estimated_read_time || 5} min
                         </Badge>
@@ -99,7 +99,7 @@ export default function GuideCard({ guide, onSelect, isFeatured = false }) {
                     {guide.key_points && guide.key_points.length > 0 && (
                         <div className="space-y-1 mb-3">
                             {guide.key_points.slice(0, 3).map((point, idx) => (
-                                <div key={idx} className="flex items-start gap-2 text-sm text-gray-600">
+                                <div key={idx} className="flex items-start gap-2 text-sm text-muted-foreground">
                                     <span className="text-purple-500 mt-0.5">✓</span>
                                     <span className="line-clamp-1">{point}</span>
                                 </div>
@@ -115,7 +115,7 @@ export default function GuideCard({ guide, onSelect, isFeatured = false }) {
                                 </Badge>
                             ))}
                             {guide.tags.length > 3 && (
-                                <Badge variant="secondary" className="text-xs bg-gray-50 text-gray-600">
+                                <Badge variant="secondary" className="text-xs bg-secondary/50 text-muted-foreground">
                                     +{guide.tags.length - 3}
                                 </Badge>
                             )}

@@ -731,7 +731,7 @@ Return exactly ${questionsForAnalysis.length} items.`,
                                 return (
                                     <button key={index} onClick={() => setCurrentFeedbackIndex(index)}
                                         className={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-left transition-all border ${isActive ? 'bg-chart-3 text-white border-chart-3 shadow-soft' : `${itemClass} hover:opacity-80`}`}>
-                                        <span className={`w-6 h-6 rounded-lg flex items-center justify-center text-xs font-bold flex-shrink-0 ${isActive ? 'bg-white/20' : 'bg-surface/70'}`}>{index + 1}</span>
+                                        <span className={`w-6 h-6 rounded-lg flex items-center justify-center text-xs font-bold flex-shrink-0 ${isActive ? 'bg-surface/20' : 'bg-surface/70'}`}>{index + 1}</span>
                                         <span className="text-xs font-medium flex-1 truncate">{q.type === 'mcq' ? 'MCQ' : 'Short Answer'}</span>
                                         {badge && <span className="text-xs font-bold inline-flex items-center">{badge}</span>}
                                     </button>
@@ -981,7 +981,7 @@ Return exactly ${questionsForAnalysis.length} items.`,
                 <div className="bg-chart-3 rounded-2xl p-4 flex items-center justify-between gap-4 shadow-soft">
                     <div className="flex items-center gap-3 min-w-0">
                         <button onClick={() => { if (Object.keys(userAnswers).length > 0) setShowSaveProgressDialog(true); else onExit(); }}
-                            className="w-8 h-8 bg-white/15 hover:bg-white/25 rounded-xl flex items-center justify-center transition-colors flex-shrink-0">
+                            className="w-8 h-8 bg-surface/15 hover:bg-surface/25 rounded-xl flex items-center justify-center transition-colors flex-shrink-0">
                             <X className="w-4 h-4 text-white" />
                         </button>
                         <div className="min-w-0">
@@ -995,7 +995,7 @@ Return exactly ${questionsForAnalysis.length} items.`,
                             <div className={`flex items-center gap-1.5 text-sm font-mono font-bold px-2.5 py-1 rounded-lg ${
                                 remainingMs <= 60000   ? "bg-streak/30 text-white animate-pulse"
                                 : remainingMs <= 300000 ? "bg-xp/30 text-white"
-                                : "bg-white/15 text-white/95"
+                                : "bg-surface/15 text-white/95"
                             }`}>
                                 <Clock className="w-4 h-4" />
                                 {formatElapsed(remainingMs)}
@@ -1007,7 +1007,7 @@ Return exactly ${questionsForAnalysis.length} items.`,
                             </div>
                         )}
                         <button onClick={() => setShowQuestionMap(v => !v)}
-                            className="w-8 h-8 bg-white/15 hover:bg-white/25 rounded-xl flex items-center justify-center transition-colors">
+                            className="w-8 h-8 bg-surface/15 hover:bg-surface/25 rounded-xl flex items-center justify-center transition-colors">
                             <Layers className="w-4 h-4 text-white" />
                         </button>
                     </div>

@@ -96,7 +96,7 @@ export default function SubjectDetail({
           <Button
             variant="outline"
             onClick={onBack}
-            className="backdrop-blur-sm bg-white/80 hover:bg-white border-2 font-semibold"
+            className="backdrop-blur-sm bg-surface/80 hover:bg-surface border-2 font-semibold"
             style={{
               borderColor: `${subjectColor}40`,
               color: subjectColor
@@ -113,7 +113,7 @@ export default function SubjectDetail({
           animate={{ scale: 1, opacity: 1 }}
           transition={{ type: "spring", duration: 0.6 }}
         >
-          <Card className="relative overflow-hidden border-0 shadow-2xl backdrop-blur-xl bg-white/70">
+          <Card className="relative overflow-hidden border-0 shadow-2xl backdrop-blur-xl bg-surface/70">
             {/* Decorative gradient bars */}
             <div className="absolute top-0 left-0 right-0 h-2 flex">
               <motion.div
@@ -191,7 +191,7 @@ export default function SubjectDetail({
                                 style={{ color: subjectColor }}>
                             {selectedSubject.goal_study_score}
                           </span>
-                          <span className="text-3xl font-bold text-gray-500 mb-2">/50</span>
+                          <span className="text-3xl font-bold text-muted-foreground mb-2">/50</span>
                         </div>
                       </motion.div>
                     )}
@@ -227,7 +227,7 @@ export default function SubjectDetail({
                       <p className="text-3xl font-black mb-1" style={{ color: subjectColor }}>
                         {stat.value}
                       </p>
-                      <p className="text-sm font-semibold text-gray-600">{stat.label}</p>
+                      <p className="text-sm font-semibold text-muted-foreground">{stat.label}</p>
                     </motion.div>
                   ))}
                 </motion.div>
@@ -246,7 +246,7 @@ export default function SubjectDetail({
             className="lg:col-span-2 space-y-6"
           >
             {/* Goals Section */}
-            <Card className="border-0 shadow-xl backdrop-blur-xl bg-white/80">
+            <Card className="border-0 shadow-xl backdrop-blur-xl bg-surface/80">
               <div
                 className="p-6 border-b-2 rounded-t-xl"
                 style={{
@@ -268,7 +268,7 @@ export default function SubjectDetail({
                       <h2 className="text-3xl font-black" style={{ color: subjectColor }}>
                         Goals
                       </h2>
-                      <p className="text-sm font-semibold text-gray-600 mt-1">
+                      <p className="text-sm font-semibold text-muted-foreground mt-1">
                         {completedGoals} of {goals.length} completed • {Math.round(goalCompletionRate)}%
                       </p>
                     </div>
@@ -312,7 +312,7 @@ export default function SubjectDetail({
                     <h3 className="text-2xl font-bold mb-2" style={{ color: subjectColor }}>
                       No Goals Yet
                     </h3>
-                    <p className="text-gray-600 mb-6 max-w-md mx-auto">
+                    <p className="text-muted-foreground mb-6 max-w-md mx-auto">
                       Start setting goals to track your progress and stay motivated!
                     </p>
                     <Button
@@ -364,7 +364,7 @@ export default function SubjectDetail({
                     </div>
                     <Progress
                       value={goalCompletionRate}
-                      className="h-3 mt-3 bg-white/20 rounded-full"
+                      className="h-3 mt-3 bg-surface/20 rounded-full"
                     />
                   </div>
                   <div className="pt-5 border-t border-white/20">
@@ -382,7 +382,7 @@ export default function SubjectDetail({
             </Card>
 
             {/* Recent Sessions */}
-            <Card className="border-0 shadow-xl backdrop-blur-xl bg-white/80">
+            <Card className="border-0 shadow-xl backdrop-blur-xl bg-surface/80">
               <div
                 className="p-4 border-b-2"
                 style={{
@@ -449,9 +449,9 @@ export default function SubjectDetail({
                               {session.technique_name?.replace('_', ' ')}
                             </p>
                             {session.topic && (
-                              <p className="text-xs text-gray-600 mb-1 truncate">{session.topic}</p>
+                              <p className="text-xs text-muted-foreground mb-1 truncate">{session.topic}</p>
                             )}
-                            <div className="flex items-center gap-2 text-xs text-gray-500 font-medium">
+                            <div className="flex items-center gap-2 text-xs text-muted-foreground font-medium">
                               <span>{session.session_duration}m</span>
                               {session.date && (
                                 <>

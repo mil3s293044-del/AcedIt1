@@ -81,8 +81,8 @@ export default function CreditsDisplay() {
 
     if (isLoading) {
         return (
-            <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-white/90 backdrop-blur-sm border border-gray-200 shadow-lg">
-                <Loader2 className="w-4 h-4 animate-spin text-gray-400" />
+            <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-surface/90 backdrop-blur-sm border border-border shadow-lg">
+                <Loader2 className="w-4 h-4 animate-spin text-muted-foreground/60" />
             </div>
         );
     }
@@ -126,7 +126,7 @@ export default function CreditsDisplay() {
             <PopoverTrigger asChild>
                 {isDashboard ? (
                     <button className="flex items-center gap-3 cursor-pointer hover:opacity-80 transition-opacity w-full">
-                        <div className="w-10 h-10 bg-white/20 rounded-xl flex items-center justify-center">
+                        <div className="w-10 h-10 bg-surface/20 rounded-xl flex items-center justify-center">
                             {isPremium ? (
                                 <Crown className="w-5 h-5 text-white" />
                             ) : (
@@ -177,14 +177,14 @@ export default function CreditsDisplay() {
                 <div className="space-y-3">
                     <div className="flex items-center gap-2 pb-2 border-b">
                         <Coins className="w-5 h-5 text-yellow-600" />
-                        <h4 className="font-bold text-gray-900">AI Credits</h4>
+                        <h4 className="font-bold text-foreground">AI Credits</h4>
                     </div>
                     
                     {isPremium ? (
                         <div className="text-center py-4">
                             <Infinity className="w-12 h-12 text-yellow-600 mx-auto mb-2" />
-                            <p className="font-bold text-gray-900 text-lg">Unlimited Credits</p>
-                            <p className="text-sm text-gray-600 mt-1">You have Premium access</p>
+                            <p className="font-bold text-foreground text-lg">Unlimited Credits</p>
+                            <p className="text-sm text-muted-foreground mt-1">You have Premium access</p>
                         </div>
                     ) : (
                         <>
@@ -193,7 +193,7 @@ export default function CreditsDisplay() {
                                     <div className="text-4xl font-bold text-yellow-600 mb-1">
                                         {credits}
                                     </div>
-                                    <p className="text-sm text-gray-700">Credits Available</p>
+                                    <p className="text-sm text-muted-foreground">Credits Available</p>
                                 </div>
                             </div>
                             
@@ -209,10 +209,10 @@ export default function CreditsDisplay() {
                                 </div>
                             )}
                             
-                            <div className="text-xs text-gray-600 space-y-1 pt-2 border-t">
+                            <div className="text-xs text-muted-foreground space-y-1 pt-2 border-t">
                                 <p>• Flashcards: 100 credits</p>
                                 <p>• Quizzes: 100 credits</p>
-                                <p className="pt-1 text-gray-500">Resets to 500 every 2 weeks (Max: 500)</p>
+                                <p className="pt-1 text-muted-foreground">Resets to 500 every 2 weeks (Max: 500)</p>
                             </div>
                         </>
                     )}

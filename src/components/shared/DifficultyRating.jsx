@@ -70,12 +70,12 @@ export default function DifficultyRating({ subjectName, onDone }) {
         <div className="space-y-3">
             <div className="flex items-center gap-2">
                 <Flame className="w-4 h-4 text-orange-500" />
-                <p className="text-sm font-semibold text-gray-800">How difficult was this for you?</p>
+                <p className="text-sm font-semibold text-foreground">How difficult was this for you?</p>
             </div>
             <div className="flex flex-wrap gap-2">
                 {LEVELS.map((lvl) => (
                     <button key={lvl.value} onClick={() => setSelected(lvl.value)}
-                        className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl border-2 text-xs font-bold transition-all ${selected === lvl.value ? lvl.color + " ring-2 ring-offset-1 ring-current scale-105" : "border-gray-200 bg-white text-gray-500 hover:border-gray-300"}`}>
+                        className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl border-2 text-xs font-bold transition-all ${selected === lvl.value ? lvl.color + " ring-2 ring-offset-1 ring-current scale-105" : "border-border bg-surface text-muted-foreground hover:border-border"}`}>
                         <span>{lvl.emoji}</span> {lvl.label}
                     </button>
                 ))}

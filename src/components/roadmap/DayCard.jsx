@@ -46,7 +46,7 @@ export default function DayCard({ day, topicLabel, isConsolidation, rating, mast
         ? "border-orange-300 bg-orange-50/20"
         : rating
         ? "border-green-200 bg-green-50/10"
-        : "border-gray-200 bg-white";
+        : "border-border bg-surface";
 
     return (
         <Card className={`border-2 transition-all ${borderClass}`}>
@@ -71,7 +71,7 @@ export default function DayCard({ day, topicLabel, isConsolidation, rating, mast
                     <div className="flex-1 min-w-0">
                         {/* Topic label — specific to subject/topic */}
                         <div className="flex items-center gap-2 flex-wrap mb-0.5">
-                            <p className="font-bold text-gray-900 text-sm leading-tight">{topicLabel}</p>
+                            <p className="font-bold text-foreground text-sm leading-tight">{topicLabel}</p>
                             {isConsolidation && (
                                 <Badge className="bg-orange-100 text-orange-700 border-0 text-xs flex items-center gap-1">
                                     <RefreshCw className="w-3 h-3" /> Consolidation
@@ -85,14 +85,14 @@ export default function DayCard({ day, topicLabel, isConsolidation, rating, mast
                                 Generated based on your Day {generatedBasedOnDay} performance
                             </p>
                         )}
-                        <p className="text-xs text-gray-500 truncate mt-0.5">{day.focus}</p>
+                        <p className="text-xs text-muted-foreground truncate mt-0.5">{day.focus}</p>
                     </div>
 
                     <div className="flex items-center gap-2 flex-shrink-0">
-                        <span className="text-xs text-gray-400 hidden sm:block">{day.total_time}</span>
+                        <span className="text-xs text-muted-foreground/60 hidden sm:block">{day.total_time}</span>
                         {isExpanded
-                            ? <ChevronDown className="w-4 h-4 text-gray-400" />
-                            : <ChevronRight className="w-4 h-4 text-gray-400" />}
+                            ? <ChevronDown className="w-4 h-4 text-muted-foreground/60" />
+                            : <ChevronRight className="w-4 h-4 text-muted-foreground/60" />}
                     </div>
                 </button>
 
@@ -104,9 +104,9 @@ export default function DayCard({ day, topicLabel, isConsolidation, rating, mast
                             exit={{ height: 0 }}
                             className="overflow-hidden"
                         >
-                            <div className="px-4 pb-4 space-y-3 border-t border-gray-100 pt-3">
+                            <div className="px-4 pb-4 space-y-3 border-t border-border pt-3">
                                 {/* Pomodoro tip */}
-                                <div className="flex items-center gap-2 text-xs text-gray-400 bg-gray-50 rounded-lg px-3 py-2">
+                                <div className="flex items-center gap-2 text-xs text-muted-foreground/60 bg-secondary/50 rounded-lg px-3 py-2">
                                     <Timer className="w-3.5 h-3.5 flex-shrink-0 text-teal-500" />
                                     <span>Use your{" "}
                                         <a href={createPageUrl("Study")} onClick={e => e.stopPropagation()} className="text-teal-600 hover:underline font-medium">Pomodoro Timer</a>
@@ -119,7 +119,7 @@ export default function DayCard({ day, topicLabel, isConsolidation, rating, mast
                                         tool.name !== "Pomodoro Timer" &&
                                         (day.day_number === 1 || (tool.name !== "Goals Section" && tool.name !== "Study Planner"))
                                     ).map((tool, i) => (
-                                        <div key={i} className="flex items-start gap-3 bg-gray-50 rounded-xl p-3">
+                                        <div key={i} className="flex items-start gap-3 bg-secondary/50 rounded-xl p-3">
                                             <span className="text-xl flex-shrink-0 mt-0.5">{TOOL_EMOJI[tool.name] || "📚"}</span>
                                             <div className="flex-1 min-w-0">
                                                 <div className="flex items-center gap-2 flex-wrap">
@@ -133,23 +133,23 @@ export default function DayCard({ day, topicLabel, isConsolidation, rating, mast
                                                     {tool.component && tool.component !== "General" && (
                                                         <Badge className="bg-purple-100 text-purple-700 border-0 text-xs">{tool.component}</Badge>
                                                     )}
-                                                    <Badge className="bg-white border text-gray-500 text-xs flex items-center gap-1 px-1.5 py-0.5">
+                                                    <Badge className="bg-surface border text-muted-foreground text-xs flex items-center gap-1 px-1.5 py-0.5">
                                                         <Clock className="w-3 h-3" />{tool.duration}
                                                     </Badge>
                                                 </div>
-                                                <p className="text-xs text-gray-600 mt-0.5 leading-relaxed">{tool.reason}</p>
+                                                <p className="text-xs text-muted-foreground mt-0.5 leading-relaxed">{tool.reason}</p>
                                             </div>
                                         </div>
                                     ))}
                                 </div>
 
-                                <div className="text-xs text-gray-400 text-right">
-                                    Total: <span className="font-semibold text-gray-600">{day.total_time}</span>
+                                <div className="text-xs text-muted-foreground/60 text-right">
+                                    Total: <span className="font-semibold text-muted-foreground">{day.total_time}</span>
                                 </div>
 
                                 {/* Confidence Check-in */}
-                                <div className="border-t border-gray-100 pt-3">
-                                    <p className="text-xs font-semibold text-gray-500 mb-2">
+                                <div className="border-t border-border pt-3">
+                                    <p className="text-xs font-semibold text-muted-foreground mb-2">
                                         {rating ? "Your confidence for this day:" : "How confident do you feel after completing this session?"}
                                     </p>
                                     <div className="flex gap-1 sm:gap-2">
@@ -164,12 +164,12 @@ export default function DayCard({ day, topicLabel, isConsolidation, rating, mast
                                                     rating === level.value
                                                         ? "bg-teal-100 ring-2 ring-teal-400"
                                                         : hoveredRating === level.value
-                                                        ? "bg-gray-100"
+                                                        ? "bg-secondary"
                                                         : ""
                                                 }`}
                                             >
                                                 <span className="text-xl">{level.emoji}</span>
-                                                <span className="text-xs text-gray-400 hidden sm:block">{level.label}</span>
+                                                <span className="text-xs text-muted-foreground/60 hidden sm:block">{level.label}</span>
                                             </button>
                                         ))}
                                     </div>
@@ -184,7 +184,7 @@ export default function DayCard({ day, topicLabel, isConsolidation, rating, mast
                                         </p>
                                     )}
                                     {!rating && (
-                                        <p className="text-xs text-gray-400 mt-2">
+                                        <p className="text-xs text-muted-foreground/60 mt-2">
                                             Submit your rating to unlock the next day's personalised session.
                                         </p>
                                     )}

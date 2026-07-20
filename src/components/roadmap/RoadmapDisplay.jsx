@@ -246,9 +246,9 @@ export default function RoadmapDisplay({ roadmap: initialRoadmap, userProfile, o
                             <Badge className="bg-indigo-100 text-indigo-800 border-0">{roadmap.subject}</Badge>
                         </div>
                         <div className="flex items-center gap-2">
-                            <span className="text-xs text-gray-500">Readiness</span>
+                            <span className="text-xs text-muted-foreground">Readiness</span>
                             <div className="flex items-center gap-1.5">
-                                <div className="w-20 h-2 bg-gray-200 rounded-full overflow-hidden">
+                                <div className="w-20 h-2 bg-secondary rounded-full overflow-hidden">
                                     <div className="h-full bg-gradient-to-r from-teal-500 to-emerald-500 rounded-full transition-all" style={{ width: `${roadmap.readiness_score || 0}%` }} />
                                 </div>
                                 <span className="text-sm font-bold text-teal-700">{roadmap.readiness_score || 0}/100</span>
@@ -306,7 +306,7 @@ export default function RoadmapDisplay({ roadmap: initialRoadmap, userProfile, o
                 <Card>
                     <CardContent className="p-4 flex items-start gap-3">
                         <BookOpen className="w-5 h-5 text-teal-600 flex-shrink-0 mt-0.5" />
-                        <p className="text-gray-700 text-sm leading-relaxed">{roadmap.intro}</p>
+                        <p className="text-muted-foreground text-sm leading-relaxed">{roadmap.intro}</p>
                     </CardContent>
                 </Card>
             )}
@@ -315,7 +315,7 @@ export default function RoadmapDisplay({ roadmap: initialRoadmap, userProfile, o
             {displayEntries.length > 0 && (
                 <Card>
                     <CardContent className="p-4">
-                        <p className="text-xs font-semibold text-gray-500 mb-3 uppercase tracking-wide">Your Mastery Journey</p>
+                        <p className="text-xs font-semibold text-muted-foreground mb-3 uppercase tracking-wide">Your Mastery Journey</p>
                         <div className="flex flex-wrap gap-2">
                             {displayEntries.map((entry) => {
                                 const r = getRating(entry.day_number);
@@ -327,19 +327,19 @@ export default function RoadmapDisplay({ roadmap: initialRoadmap, userProfile, o
                                             color === "green" ? "bg-green-500" :
                                             color === "yellow" ? "bg-yellow-400" :
                                             color === "red" ? "bg-red-500" :
-                                            isGenerated ? "bg-teal-400" : "bg-gray-200"
+                                            isGenerated ? "bg-teal-400" : "bg-secondary"
                                         }`} />
-                                        <span className="text-xs text-gray-600 hidden sm:block max-w-[160px] truncate">{entry.topic_label}</span>
-                                        <span className="text-xs text-gray-400 sm:hidden">D{entry.day_number}</span>
+                                        <span className="text-xs text-muted-foreground hidden sm:block max-w-[160px] truncate">{entry.topic_label}</span>
+                                        <span className="text-xs text-muted-foreground/60 sm:hidden">D{entry.day_number}</span>
                                     </div>
                                 );
                             })}
                         </div>
-                        <div className="flex gap-3 mt-3 text-xs text-gray-400">
+                        <div className="flex gap-3 mt-3 text-xs text-muted-foreground/60">
                             <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-full bg-green-500 inline-block" /> Mastered</span>
                             <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-full bg-yellow-400 inline-block" /> In Progress</span>
                             <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-full bg-red-500 inline-block" /> Needs Work</span>
-                            <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-full bg-gray-200 inline-block" /> Not Yet Unlocked</span>
+                            <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-full bg-secondary inline-block" /> Not Yet Unlocked</span>
                         </div>
                     </CardContent>
                 </Card>
@@ -350,10 +350,10 @@ export default function RoadmapDisplay({ roadmap: initialRoadmap, userProfile, o
                 <Card className="border-teal-200 bg-teal-50/40">
                     <CardContent className="p-4">
                         <div className="flex items-center justify-between mb-2">
-                            <p className="text-xs font-semibold text-gray-600 uppercase tracking-wide">Topic Coverage</p>
+                            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Topic Coverage</p>
                             <span className="text-sm font-bold text-teal-700">{coveredCount} of {keyTopics.length} topics covered</span>
                         </div>
-                        <div className="w-full bg-gray-200 rounded-full h-2 mb-3">
+                        <div className="w-full bg-secondary rounded-full h-2 mb-3">
                             <div className="h-2 bg-gradient-to-r from-teal-500 to-emerald-500 rounded-full transition-all" style={{ width: keyTopics.length > 0 ? `${Math.round((coveredCount / keyTopics.length) * 100)}%` : "0%" }} />
                         </div>
                         <div className="flex flex-wrap gap-1.5">
@@ -361,7 +361,7 @@ export default function RoadmapDisplay({ roadmap: initialRoadmap, userProfile, o
                                 <span key={i} className={`text-xs px-2 py-0.5 rounded-full border font-medium ${
                                     coveredTopicNames.has(t.name) ? "bg-green-100 text-green-700 border-green-200" :
                                     t.priority === "High" ? "bg-red-50 text-red-600 border-red-200" :
-                                    "bg-gray-100 text-gray-500 border-gray-200"
+                                    "bg-secondary text-muted-foreground border-border"
                                 }`}>
                                     {coveredTopicNames.has(t.name) ? "✓ " : ""}{t.name}
                                 </span>
@@ -415,12 +415,12 @@ export default function RoadmapDisplay({ roadmap: initialRoadmap, userProfile, o
                     // Premium lock
                     if (isPremiumLocked) {
                         return (
-                            <Card key={dayNum} className="border-gray-200 bg-gray-50 opacity-60">
+                            <Card key={dayNum} className="border-border bg-secondary/50 opacity-60">
                                 <CardContent className="p-4 flex items-center gap-3">
-                                    <Lock className="w-5 h-5 text-gray-400 flex-shrink-0" />
+                                    <Lock className="w-5 h-5 text-muted-foreground/60 flex-shrink-0" />
                                     <div>
-                                        <p className="font-semibold text-gray-500 text-sm">{entry.topic_label}</p>
-                                        <p className="text-xs text-gray-400">Unlock with Premium</p>
+                                        <p className="font-semibold text-muted-foreground text-sm">{entry.topic_label}</p>
+                                        <p className="text-xs text-muted-foreground/60">Unlock with Premium</p>
                                     </div>
                                 </CardContent>
                             </Card>
@@ -451,12 +451,12 @@ export default function RoadmapDisplay({ roadmap: initialRoadmap, userProfile, o
                                 : `Day ${dayNum} unlocks on ${format(unlockDate, "EEEE d MMM")} — complete each day before the next unlocks.`
                             : `Day ${dayNum} unlocks after you complete and rate Day ${dayNum - 1}.`;
                         return (
-                            <Card key={dayNum} className="border-gray-200 bg-gray-50">
+                            <Card key={dayNum} className="border-border bg-secondary/50">
                                 <CardContent className="p-4 flex items-center gap-3">
-                                    <CalendarClock className="w-5 h-5 text-gray-400 flex-shrink-0" />
+                                    <CalendarClock className="w-5 h-5 text-muted-foreground/60 flex-shrink-0" />
                                     <div>
-                                        <p className="font-semibold text-gray-600 text-sm">{entry.topic_label}</p>
-                                        <p className="text-xs text-gray-400">{unlockText}</p>
+                                        <p className="font-semibold text-muted-foreground text-sm">{entry.topic_label}</p>
+                                        <p className="text-xs text-muted-foreground/60">{unlockText}</p>
                                     </div>
                                 </CardContent>
                             </Card>

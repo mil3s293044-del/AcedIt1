@@ -600,6 +600,7 @@ export default function PomodoroTimer({ onSessionComplete, userSubjects: initial
                                 <Button
                                     variant="ghost"
                                     size="icon"
+                                    aria-label="Open timer settings"
                                     onClick={() => setShowSettings(true)}
                                     className="w-10 h-10 rounded-xl text-muted-foreground hover:text-foreground hover:bg-secondary"
                                 >

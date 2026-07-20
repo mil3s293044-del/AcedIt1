@@ -187,6 +187,7 @@ const QuizCard = React.memo(({ quiz, onPlay, onRetryWrong, onDelete, onReshuffle
                             <Button
                                 variant="ghost"
                                 size="icon"
+                                aria-label="Generate new questions"
                                 onClick={() => onReshuffle(quiz)}
                                 className="h-10 w-10 rounded-xl text-muted-foreground hover:text-chart-4 hover:bg-chart-4/10 transition-colors"
                                 title="Generate new questions from source"
@@ -198,6 +199,7 @@ const QuizCard = React.memo(({ quiz, onPlay, onRetryWrong, onDelete, onReshuffle
                         <Button
                             variant="ghost"
                             size="icon"
+                            aria-label="Delete quiz"
                             onClick={() => onDelete(quiz.id)}
                             className="h-10 w-10 rounded-xl text-muted-foreground hover:text-streak hover:bg-streak/10 transition-colors"
                         >

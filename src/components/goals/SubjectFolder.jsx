@@ -597,7 +597,7 @@ export default function SubjectFolder({ userSubjects: initialUserSubjects, user,
               <Button
                 variant="ghost"
                 onClick={() => setSelectedSubject(null)}
-                className="mb-6 hover:bg-white/50 text-gray-900">
+                className="mb-6 hover:bg-surface/50 text-foreground">
 
                 <ArrowLeft className="w-4 h-4 mr-2" />
                 Back to All Subjects
@@ -652,10 +652,10 @@ export default function SubjectFolder({ userSubjects: initialUserSubjects, user,
 
                           {selectedSubject.subject_code}
                         </Badge>
-                        <h1 className="text-4xl lg:text-5xl font-black mb-3 leading-tight text-gray-900">
+                        <h1 className="text-4xl lg:text-5xl font-black mb-3 leading-tight text-foreground">
                           {selectedSubject.subject_name}
                         </h1>
-                        <p className="text-gray-700 text-lg mb-6">
+                        <p className="text-muted-foreground text-lg mb-6">
                           {selectedSubject.year_level}
                         </p>
 
@@ -673,21 +673,21 @@ export default function SubjectFolder({ userSubjects: initialUserSubjects, user,
                         <div className="flex items-center justify-between mb-3">
                         <div className="flex items-center gap-2">
                         <Trophy className="w-5 h-5" style={{ color: selectedSubject.color || '#3B82F6' }} />
-                        <span className="text-xs font-semibold text-gray-600 uppercase tracking-wide">Target Score</span>
+                        <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Target Score</span>
                         </div>
-                        <Edit className="w-3.5 h-3.5 text-gray-400" />
+                        <Edit className="w-3.5 h-3.5 text-muted-foreground/60" />
                         </div>
                         {selectedSubject.goal_study_score ? (
                         <div className="space-y-2">
                         <div className="flex items-baseline gap-1">
-                        <span className="text-4xl font-black text-gray-900">{selectedSubject.goal_study_score}</span>
+                        <span className="text-4xl font-black text-foreground">{selectedSubject.goal_study_score}</span>
                         </div>
-                        <div className="text-xs text-gray-600">
+                        <div className="text-xs text-muted-foreground">
                         Top <span className="font-bold" style={{ color: selectedSubject.color || '#3B82F6' }}>{(100 - getPercentileForScore(selectedSubject.goal_study_score)).toFixed(1)}%</span> · {getPercentileForScore(selectedSubject.goal_study_score).toFixed(0)}th percentile
                         </div>
                         </div>
                         ) : (
-                        <p className="text-sm text-gray-400">Tap to set target</p>
+                        <p className="text-sm text-muted-foreground/60">Tap to set target</p>
                         )}
                         </div>
                       </motion.div>
@@ -708,8 +708,8 @@ export default function SubjectFolder({ userSubjects: initialUserSubjects, user,
                         }}>
 
                         <Clock className="w-8 h-8 mb-3" style={{ color: selectedSubject.color || '#3B82F6' }} />
-                        <p className="text-3xl font-black mb-1 text-gray-900">{Math.round(totalStudyTime / 60)}h</p>
-                        <p className="text-sm text-gray-600">Total Study Time</p>
+                        <p className="text-3xl font-black mb-1 text-foreground">{Math.round(totalStudyTime / 60)}h</p>
+                        <p className="text-sm text-muted-foreground">Total Study Time</p>
                       </div>
 
                       <div
@@ -720,8 +720,8 @@ export default function SubjectFolder({ userSubjects: initialUserSubjects, user,
                         }}>
 
                         <Flame className="w-8 h-8 mb-3" style={{ color: selectedSubject.color || '#3B82F6' }} />
-                        <p className="text-3xl font-black mb-1 text-gray-900">{studySessions.length}</p>
-                        <p className="text-sm text-gray-600">Study Sessions</p>
+                        <p className="text-3xl font-black mb-1 text-foreground">{studySessions.length}</p>
+                        <p className="text-sm text-muted-foreground">Study Sessions</p>
                       </div>
 
                       <div
@@ -732,8 +732,8 @@ export default function SubjectFolder({ userSubjects: initialUserSubjects, user,
                         }}>
 
                         <Target className="w-8 h-8 mb-3" style={{ color: selectedSubject.color || '#3B82F6' }} />
-                        <p className="text-3xl font-black mb-1 text-gray-900">{completedGoals}/{goals.length}</p>
-                        <p className="text-sm text-gray-600">Goals Completed</p>
+                        <p className="text-3xl font-black mb-1 text-foreground">{completedGoals}/{goals.length}</p>
+                        <p className="text-sm text-muted-foreground">Goals Completed</p>
                       </div>
 
                       <div
@@ -744,8 +744,8 @@ export default function SubjectFolder({ userSubjects: initialUserSubjects, user,
                         }}>
 
                         <FileText className="w-8 h-8 mb-3" style={{ color: selectedSubject.color || '#3B82F6' }} />
-                        <p className="text-3xl font-black mb-1 text-gray-900">{completedAssessments}/{assessments.length}</p>
-                        <p className="text-sm text-gray-600">Tasks Done</p>
+                        <p className="text-3xl font-black mb-1 text-foreground">{completedAssessments}/{assessments.length}</p>
+                        <p className="text-sm text-muted-foreground">Tasks Done</p>
                       </div>
                     </motion.div>
                   </div>
@@ -755,7 +755,7 @@ export default function SubjectFolder({ userSubjects: initialUserSubjects, user,
 
             {/* Main Content Tabs */}
             <Tabs defaultValue="goals" className="space-y-4 lg:space-y-6">
-              <TabsList className="grid w-full grid-cols-3 h-12 bg-white rounded-xl shadow-md border">
+              <TabsList className="grid w-full grid-cols-3 h-12 bg-surface rounded-xl shadow-md border">
                 <TabsTrigger value="goals" className="text-base">Goals</TabsTrigger>
                 <TabsTrigger value="assessments" className="text-base">Assessments</TabsTrigger>
                 <TabsTrigger value="stats" className="text-base">Stats & Activity</TabsTrigger>
@@ -779,7 +779,7 @@ export default function SubjectFolder({ userSubjects: initialUserSubjects, user,
                           </div>
                           <div>
                             <CardTitle className="text-2xl">Goals</CardTitle>
-                            <p className="text-sm text-gray-600 mt-1">
+                            <p className="text-sm text-muted-foreground mt-1">
                               {completedGoals} of {goals.length} completed • {Math.round(goalCompletionRate)}%
                             </p>
                           </div>
@@ -804,8 +804,8 @@ export default function SubjectFolder({ userSubjects: initialUserSubjects, user,
                           <div className="w-20 h-20 bg-gradient-to-br from-indigo-100 to-purple-100 rounded-full flex items-center justify-center mx-auto mb-6">
                             <Target className="w-10 h-10 text-indigo-600" />
                           </div>
-                          <h3 className="text-xl font-bold text-gray-900 mb-2">No Goals Yet</h3>
-                          <p className="text-gray-600 mb-6 max-w-md mx-auto">
+                          <h3 className="text-xl font-bold text-foreground mb-2">No Goals Yet</h3>
+                          <p className="text-muted-foreground mb-6 max-w-md mx-auto">
                             Start setting goals to track your progress and stay motivated!
                           </p>
                           <Button
@@ -833,18 +833,19 @@ export default function SubjectFolder({ userSubjects: initialUserSubjects, user,
                           transition={{ delay: index * 0.05 }}
                           layout>
 
-                          <Card className={`group hover:shadow-lg transition-all ${goal.is_completed ? 'bg-gradient-to-br from-emerald-50 to-teal-50 border-emerald-200' : 'bg-white hover:border-indigo-300'}`}>
+                          <Card className={`group hover:shadow-lg transition-all ${goal.is_completed ? 'bg-gradient-to-br from-emerald-50 to-teal-50 border-emerald-200' : 'bg-surface hover:border-indigo-300'}`}>
                             <CardContent className="p-5">
                               <div className="flex items-start gap-4">
                                 {!hasSubGoals ? (
                                   <Button
                                     variant="ghost"
                                     size="icon"
+                                    aria-label="Toggle goal completion"
                                     onClick={() => handleToggleGoalCompletion(goal)}
                                     className={`flex-shrink-0 h-10 w-10 rounded-full transition-all ${
                                       goal.is_completed ?
                                         'bg-emerald-500 hover:bg-emerald-600 text-white' :
-                                        'border-2 border-gray-300 hover:border-indigo-500 hover:bg-indigo-50'}`
+                                        'border-2 border-border hover:border-indigo-500 hover:bg-indigo-50'}`
                                     }>
                                     {goal.is_completed && <CheckCircle2 className="w-6 h-6" />}
                                   </Button>
@@ -857,16 +858,16 @@ export default function SubjectFolder({ userSubjects: initialUserSubjects, user,
                                 )}
 
                                 <div className="flex-1 min-w-0">
-                                  <h4 className={`font-bold text-lg mb-1 ${goal.is_completed ? 'line-through text-gray-500' : 'text-gray-900'}`}>
+                                  <h4 className={`font-bold text-lg mb-1 ${goal.is_completed ? 'line-through text-muted-foreground' : 'text-foreground'}`}>
                                     {goal.title}
                                   </h4>
                                   {goal.description &&
-                                    <p className="text-sm text-gray-600 mb-3">{goal.description}</p>
+                                    <p className="text-sm text-muted-foreground mb-3">{goal.description}</p>
                                   }
 
                                   <div className="flex items-center gap-2 flex-wrap">
                                     {goal.target_date &&
-                                      <Badge variant="outline" className="bg-white/80">
+                                      <Badge variant="outline" className="bg-surface/80">
                                         <Calendar className="w-3 h-3 mr-1" />
                                         {format(new Date(goal.target_date), 'MMM d, yyyy')}
                                       </Badge>
@@ -911,7 +912,7 @@ export default function SubjectFolder({ userSubjects: initialUserSubjects, user,
                                                   ) : (
                                                     <Circle className="w-5 h-5 text-indigo-400" />
                                                   )}
-                                                  <span className={`font-semibold ${subGoal.completed ? 'line-through text-gray-400' : 'text-indigo-900'}`}>
+                                                  <span className={`font-semibold ${subGoal.completed ? 'line-through text-muted-foreground/60' : 'text-indigo-900'}`}>
                                                     {subGoal.title}
                                                   </span>
                                                 </div>
@@ -926,20 +927,20 @@ export default function SubjectFolder({ userSubjects: initialUserSubjects, user,
                                                     return (
                                                       <div
                                                         key={subSubGoal.id}
-                                                        className="flex items-start gap-3 p-2 rounded-lg hover:bg-white cursor-pointer border border-indigo-100 transition-all group bg-white/50"
+                                                        className="flex items-start gap-3 p-2 rounded-lg hover:bg-surface cursor-pointer border border-indigo-100 transition-all group bg-surface/50"
                                                         onClick={() => handleSubGoalClick(goal, subSubGoal)}
                                                       >
                                                         <div className="flex-shrink-0 mt-0.5">
                                                           {subSubGoal.completed ? (
                                                             <CheckCircle2 className="w-4 h-4 text-emerald-500" />
                                                           ) : (
-                                                            <div className="w-4 h-4 rounded-full border-2 border-gray-300 group-hover:border-indigo-400" />
+                                                            <div className="w-4 h-4 rounded-full border-2 border-border group-hover:border-indigo-400" />
                                                           )}
                                                         </div>
 
                                                         <div className="flex-1 min-w-0 space-y-1.5">
                                                           <div className="flex items-start justify-between gap-2">
-                                                            <span className={`text-xs font-medium ${subSubGoal.completed ? 'line-through text-gray-400' : 'text-gray-700'}`}>
+                                                            <span className={`text-xs font-medium ${subSubGoal.completed ? 'line-through text-muted-foreground/60' : 'text-muted-foreground'}`}>
                                                               {subSubGoal.title}
                                                             </span>
                                                             {subSubGoal.xp_reward > 0 && (
@@ -953,7 +954,7 @@ export default function SubjectFolder({ userSubjects: initialUserSubjects, user,
                                                           {subSubGoal.type && subSubGoal.target > 0 && (
                                                             <div className="space-y-1">
                                                               <div className="flex items-center justify-between text-xs">
-                                                                <span className="text-gray-500">
+                                                                <span className="text-muted-foreground">
                                                                   {subSubGoal.current_progress?.toFixed(subSubGoal.type === 'study_hours' ? 1 : 0) || 0} / {subSubGoal.target}
                                                                   {subSubGoal.type === 'study_hours' ? ' hrs' : 
                                                                    subSubGoal.type === 'quiz_score' ? '%' :
@@ -988,13 +989,13 @@ export default function SubjectFolder({ userSubjects: initialUserSubjects, user,
                                                   {subGoal.completed ? (
                                                     <CheckCircle2 className="w-5 h-5 text-emerald-500" />
                                                   ) : (
-                                                    <div className="w-5 h-5 rounded-full border-2 border-gray-300 group-hover:border-indigo-400" />
+                                                    <div className="w-5 h-5 rounded-full border-2 border-border group-hover:border-indigo-400" />
                                                   )}
                                                 </div>
 
                                                 <div className="flex-1 min-w-0 space-y-2">
                                                   <div className="flex items-start justify-between gap-2">
-                                                    <span className={`text-sm font-medium ${subGoal.completed ? 'line-through text-gray-400' : 'text-gray-700 group-hover:text-indigo-700'}`}>
+                                                    <span className={`text-sm font-medium ${subGoal.completed ? 'line-through text-muted-foreground/60' : 'text-muted-foreground group-hover:text-indigo-700'}`}>
                                                       {subGoal.title}
                                                     </span>
                                                     {subGoal.xp_reward > 0 && (
@@ -1007,7 +1008,7 @@ export default function SubjectFolder({ userSubjects: initialUserSubjects, user,
                                                   {subGoal.type && subGoal.target > 0 && (
                                                     <div className="space-y-1">
                                                       <div className="flex items-center justify-between text-xs">
-                                                        <span className="text-gray-500">
+                                                        <span className="text-muted-foreground">
                                                           {subGoal.current_progress?.toFixed(subGoal.type === 'study_hours' ? 1 : 0) || 0} / {subGoal.target}
                                                           {subGoal.type === 'study_hours' ? ' hours' : 
                                                            subGoal.type === 'quiz_score' ? '%' :
@@ -1042,15 +1043,17 @@ export default function SubjectFolder({ userSubjects: initialUserSubjects, user,
                                   <Button
                                     variant="ghost"
                                     size="icon"
+                                    aria-label="Edit goal"
                                     onClick={() => setEditingGoal(goal)}
-                                    className="flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity text-gray-400 hover:text-indigo-600 hover:bg-indigo-50">
+                                    className="flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground/60 hover:text-indigo-600 hover:bg-indigo-50">
                                     <Edit className="w-4 h-4" />
                                   </Button>
                                   <Button
                                     variant="ghost"
                                     size="icon"
+                                    aria-label="Delete goal"
                                     onClick={() => handleDeleteGoal(goal.id)}
-                                    className="flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity text-gray-400 hover:text-red-600 hover:bg-red-50">
+                                    className="flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground/60 hover:text-red-600 hover:bg-red-50">
                                     <Trash2 className="w-4 h-4" />
                                   </Button>
                                 </div>
@@ -1084,7 +1087,7 @@ export default function SubjectFolder({ userSubjects: initialUserSubjects, user,
                           </div>
                           <div>
                             <CardTitle className="text-2xl">Assessments</CardTitle>
-                            <p className="text-sm text-gray-600 mt-1">
+                            <p className="text-sm text-muted-foreground mt-1">
                               {completedAssessments} of {assessments.length} completed
                             </p>
                           </div>
@@ -1106,8 +1109,8 @@ export default function SubjectFolder({ userSubjects: initialUserSubjects, user,
                           <div className="w-20 h-20 bg-gradient-to-br from-blue-100 to-cyan-100 rounded-full flex items-center justify-center mx-auto mb-6">
                             <FileText className="w-10 h-10 text-blue-600" />
                           </div>
-                          <h3 className="text-xl font-bold text-gray-900 mb-2">No Assessments</h3>
-                          <p className="text-gray-600 mb-6 max-w-md mx-auto">
+                          <h3 className="text-xl font-bold text-foreground mb-2">No Assessments</h3>
+                          <p className="text-muted-foreground mb-6 max-w-md mx-auto">
                             Track your SACs, tests, and assignments here!
                           </p>
                           <Button
@@ -1130,17 +1133,18 @@ export default function SubjectFolder({ userSubjects: initialUserSubjects, user,
                                 transition={{ delay: index * 0.05 }}
                                 layout>
 
-                                <Card className={`group hover:shadow-lg transition-all ${assessment.is_completed ? 'bg-gradient-to-br from-blue-50 to-cyan-50 border-blue-200' : 'bg-white hover:border-blue-300'}`}>
+                                <Card className={`group hover:shadow-lg transition-all ${assessment.is_completed ? 'bg-gradient-to-br from-blue-50 to-cyan-50 border-blue-200' : 'bg-surface hover:border-blue-300'}`}>
                                   <CardContent className="p-5">
                                     <div className="flex items-start gap-4">
                                       <Button
                                         variant="ghost"
                                         size="icon"
+                                        aria-label="Toggle assessment completion"
                                         onClick={() => handleToggleAssessmentCompletion(assessment)}
                                         className={`flex-shrink-0 h-10 w-10 rounded-full transition-all ${
                                           assessment.is_completed ?
                                             'bg-blue-500 hover:bg-blue-600 text-white' :
-                                            'border-2 border-gray-300 hover:border-blue-500 hover:bg-blue-50'}`
+                                            'border-2 border-border hover:border-blue-500 hover:bg-blue-50'}`
                                         }>
 
                                         {assessment.is_completed && <CheckCircle2 className="w-6 h-6" />}
@@ -1152,22 +1156,22 @@ export default function SubjectFolder({ userSubjects: initialUserSubjects, user,
                                             {assessment.assessment_type}
                                           </Badge>
                                           {assessment.weight_percentage > 0 &&
-                                            <Badge variant="outline" className="bg-white/80">
+                                            <Badge variant="outline" className="bg-surface/80">
                                               {assessment.weight_percentage}%
                                             </Badge>
                                           }
                                         </div>
 
-                                        <h4 className={`font-bold text-lg mb-1 ${assessment.is_completed ? 'line-through text-gray-500' : 'text-gray-900'}`}>
+                                        <h4 className={`font-bold text-lg mb-1 ${assessment.is_completed ? 'line-through text-muted-foreground' : 'text-foreground'}`}>
                                           {assessment.title}
                                         </h4>
                                         {assessment.description &&
-                                          <p className="text-sm text-gray-600 mb-3">{assessment.description}</p>
+                                          <p className="text-sm text-muted-foreground mb-3">{assessment.description}</p>
                                         }
 
                                         <div className="flex items-center gap-4 text-sm">
                                           {assessment.due_date &&
-                                            <div className="flex items-center gap-1 text-gray-600">
+                                            <div className="flex items-center gap-1 text-muted-foreground">
                                               <Calendar className="w-4 h-4" />
                                               <span>{format(new Date(assessment.due_date), 'MMM d')}</span>
                                             </div>
@@ -1190,8 +1194,9 @@ export default function SubjectFolder({ userSubjects: initialUserSubjects, user,
                                       <Button
                                         variant="ghost"
                                         size="icon"
+                                        aria-label="Delete assessment"
                                         onClick={() => handleDeleteAssessment(assessment.id)}
-                                        className="flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity text-gray-400 hover:text-red-600 hover:bg-red-50">
+                                        className="flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground/60 hover:text-red-600 hover:bg-red-50">
 
                                         <Trash2 className="w-4 h-4" />
                                       </Button>
@@ -1233,8 +1238,8 @@ export default function SubjectFolder({ userSubjects: initialUserSubjects, user,
                             <Brain className="w-6 h-6 text-purple-600" />
                           </div>
                           <div>
-                            <p className="font-bold text-gray-900">No sessions for {selectedSubject?.subject_name || 'this subject'}</p>
-                            <p className="text-sm text-gray-500 mt-1 max-w-[260px]">Knock out a quick study session — it'll appear here.</p>
+                            <p className="font-bold text-foreground">No sessions for {selectedSubject?.subject_name || 'this subject'}</p>
+                            <p className="text-sm text-muted-foreground mt-1 max-w-[260px]">Knock out a quick study session — it'll appear here.</p>
                           </div>
                           <Link to={createPageUrl("Study")}>
                             <Button size="sm" className="gap-1.5 bg-gradient-to-r from-purple-500 to-pink-600 hover:from-purple-600 hover:to-pink-700">
@@ -1251,20 +1256,20 @@ export default function SubjectFolder({ userSubjects: initialUserSubjects, user,
                               initial={{ opacity: 0, x: 20 }}
                               animate={{ opacity: 1, x: 0 }}
                               transition={{ delay: index * 0.1 }}
-                              className="bg-gradient-to-r from-gray-50 to-white rounded-xl p-3 border border-gray-100 hover:shadow-md transition-all">
+                              className="bg-gradient-to-r from-gray-50 to-white rounded-xl p-3 border border-border hover:shadow-md transition-all">
 
                               <div className="flex items-start gap-3">
                                 <div className="w-10 h-10 bg-gradient-to-br from-purple-100 to-pink-100 rounded-lg flex items-center justify-center flex-shrink-0">
                                   <Clock className="w-5 h-5 text-purple-600" />
                                 </div>
                                 <div className="flex-1 min-w-0">
-                                  <p className="font-semibold text-sm text-gray-900 mb-1 capitalize">
+                                  <p className="font-semibold text-sm text-foreground mb-1 capitalize">
                                     {session.technique_name?.replace('_', ' ')}
                                   </p>
                                   {session.topic &&
-                                    <p className="text-xs text-gray-600 mb-1 truncate">{session.topic}</p>
+                                    <p className="text-xs text-muted-foreground mb-1 truncate">{session.topic}</p>
                                   }
-                                  <div className="flex items-center gap-2 text-xs text-gray-500">
+                                  <div className="flex items-center gap-2 text-xs text-muted-foreground">
                                     <span className="font-medium">{session.session_duration}m</span>
                                     {session.date &&
                                       <>
@@ -1302,7 +1307,7 @@ export default function SubjectFolder({ userSubjects: initialUserSubjects, user,
                           <div className="flex items-end gap-2">
                             <span className="text-4xl font-black">{Math.round(goalCompletionRate)}%</span>
                           </div>
-                          <Progress value={goalCompletionRate} className="h-2 mt-2 bg-white/20" />
+                          <Progress value={goalCompletionRate} className="h-2 mt-2 bg-surface/20" />
                         </div>
                         <div className="pt-4 border-t border-white/20">
                           <p className="text-sm opacity-90 mb-2">Study Streak</p>
@@ -1345,7 +1350,7 @@ export default function SubjectFolder({ userSubjects: initialUserSubjects, user,
                   {/* Manual Sub-goals Section */}
                   <div className="space-y-3 border-t pt-4">
                     <div className="flex items-center justify-between">
-                      <Label className="text-sm font-semibold">Your Sub-Goals <span className="text-xs text-gray-400">(optional - AI will break these down)</span></Label>
+                      <Label className="text-sm font-semibold">Your Sub-Goals <span className="text-xs text-muted-foreground/60">(optional - AI will break these down)</span></Label>
                       {newGoal.sub_goals.length > 0 && (
                         <Badge variant="outline" className="bg-purple-50 text-purple-700">
                           {newGoal.sub_goals.length}
@@ -1388,9 +1393,9 @@ export default function SubjectFolder({ userSubjects: initialUserSubjects, user,
                     </div>
                     
                     {newGoal.sub_goals.length > 0 && (
-                      <div className="space-y-1.5 p-2 bg-gray-50 rounded-lg max-h-32 overflow-y-auto">
+                      <div className="space-y-1.5 p-2 bg-secondary/50 rounded-lg max-h-32 overflow-y-auto">
                         {newGoal.sub_goals.map((sg, idx) => (
-                          <div key={idx} className="flex items-center gap-2 p-1.5 bg-white rounded border text-sm">
+                          <div key={idx} className="flex items-center gap-2 p-1.5 bg-surface rounded border text-sm">
                             <span className="w-5 h-5 rounded-full bg-purple-100 text-purple-700 text-xs font-bold flex items-center justify-center flex-shrink-0">
                               {idx + 1}
                             </span>
@@ -1398,7 +1403,8 @@ export default function SubjectFolder({ userSubjects: initialUserSubjects, user,
                             <Button
                               variant="ghost"
                               size="icon"
-                              className="h-5 w-5 text-gray-400 hover:text-red-500 flex-shrink-0"
+                              aria-label="Remove sub-goal"
+                              className="h-5 w-5 text-muted-foreground/60 hover:text-red-500 flex-shrink-0"
                               onClick={() => {
                                 setNewGoal({
                                   ...newGoal,
@@ -1416,7 +1422,7 @@ export default function SubjectFolder({ userSubjects: initialUserSubjects, user,
 
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <div className="space-y-2">
-                      <Label className="text-sm font-semibold text-gray-600">Success Criteria <span className="text-xs text-gray-400">(optional)</span></Label>
+                      <Label className="text-sm font-semibold text-muted-foreground">Success Criteria <span className="text-xs text-muted-foreground/60">(optional)</span></Label>
                       <Input
                         placeholder="e.g., Score 80%+ on practice test"
                         value={newGoal.success_criteria || ''}
@@ -1424,7 +1430,7 @@ export default function SubjectFolder({ userSubjects: initialUserSubjects, user,
                         className="h-10" />
                     </div>
                     <div className="space-y-2">
-                      <Label className="text-sm font-semibold text-gray-600">Motivation <span className="text-xs text-gray-400">(optional)</span></Label>
+                      <Label className="text-sm font-semibold text-muted-foreground">Motivation <span className="text-xs text-muted-foreground/60">(optional)</span></Label>
                       <Input
                         placeholder="Why is this important?"
                         value={newGoal.motivation || ''}
@@ -1569,18 +1575,18 @@ export default function SubjectFolder({ userSubjects: initialUserSubjects, user,
                     {editingGoal.sub_goals && editingGoal.sub_goals.length > 0 && (
                       <div className="space-y-3">
                         <Label className="text-sm font-semibold">
-                          Sub-Goals {editingGoal.is_ai_generated && <span className="text-xs text-gray-400">(AI Generated - Drag to reorder)</span>}
+                          Sub-Goals {editingGoal.is_ai_generated && <span className="text-xs text-muted-foreground/60">(AI Generated - Drag to reorder)</span>}
                         </Label>
                         <div className="space-y-2">
                           {editingGoal.sub_goals.map((sg, idx) => (
-                            <div key={sg.id} className="flex items-center gap-2 p-2 bg-gray-50 rounded-lg">
-                              <GripVertical className="w-4 h-4 text-gray-400 cursor-move" />
+                            <div key={sg.id} className="flex items-center gap-2 p-2 bg-secondary/50 rounded-lg">
+                              <GripVertical className="w-4 h-4 text-muted-foreground/60 cursor-move" />
                               {sg.completed ? (
                                 <CheckCircle2 className="w-4 h-4 text-emerald-500" />
                               ) : (
-                                <Circle className="w-4 h-4 text-gray-400" />
+                                <Circle className="w-4 h-4 text-muted-foreground/60" />
                               )}
-                              <span className={`flex-1 text-sm ${sg.completed ? 'line-through text-gray-400' : ''}`}>
+                              <span className={`flex-1 text-sm ${sg.completed ? 'line-through text-muted-foreground/60' : ''}`}>
                                 {sg.title}
                               </span>
                               {sg.xp_reward > 0 && (
@@ -1694,7 +1700,7 @@ export default function SubjectFolder({ userSubjects: initialUserSubjects, user,
                         <line x1="0" y1="65" x2="200" y2="65" stroke="#cbd5e1" strokeWidth="1" />
                       </svg>
                     </div>
-                    <div className="flex justify-between text-xs text-gray-500 mt-1">
+                    <div className="flex justify-between text-xs text-muted-foreground mt-1">
                       <span>9 (0%)</span>
                       <span>30 (50%)</span>
                       <span>50+ (100%)</span>
@@ -1765,7 +1771,7 @@ export default function SubjectFolder({ userSubjects: initialUserSubjects, user,
                   </div>
 
                   <div className="space-y-2">
-                    <Label className="text-sm font-semibold">Description <span className="text-xs text-gray-400">(optional)</span></Label>
+                    <Label className="text-sm font-semibold">Description <span className="text-xs text-muted-foreground/60">(optional)</span></Label>
                     <Textarea
                       placeholder="Topics covered, chapters, skills..."
                       value={newAssessment.description}

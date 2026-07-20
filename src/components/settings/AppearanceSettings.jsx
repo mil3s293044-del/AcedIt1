@@ -24,7 +24,7 @@ export default function AppearanceSettings() {
     };
 
     return (
-        <Card className="bg-white/70 dark:bg-slate-800/50 backdrop-blur-sm border-gray-200/50 dark:border-slate-700/50">
+        <Card className="bg-surface/70 dark:bg-slate-800/50 backdrop-blur-sm border-border/50 dark:border-slate-700/50">
             <CardHeader>
                 <CardTitle className="flex items-center gap-2"><Palette className="w-5 h-5"/> Appearance</CardTitle>
             </CardHeader>

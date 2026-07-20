@@ -22,7 +22,7 @@ const activityConfig = {
     quiz_prep: { bg: "bg-indigo-500/10", text: "text-indigo-700", border: "border-indigo-200/50", dot: "bg-indigo-500", label: "Quiz Prep" },
     exam: { bg: "bg-red-500/10", text: "text-red-700", border: "border-red-200/50", dot: "bg-red-500", label: "Exam" },
     assignment: { bg: "bg-orange-500/10", text: "text-orange-700", border: "border-orange-200/50", dot: "bg-orange-500", label: "Assignment" },
-    other: { bg: "bg-slate-500/10", text: "text-slate-700", border: "border-slate-200/50", dot: "bg-slate-500", label: "Other" }
+    other: { bg: "bg-slate-500/10", text: "text-muted-foreground", border: "border-border/50", dot: "bg-slate-500", label: "Other" }
 };
 
 export default function DayCalendar({ user, userProfile }) {
@@ -217,10 +217,10 @@ export default function DayCalendar({ user, userProfile }) {
 
     if (isLoading) {
         return (
-            <Card className="overflow-hidden bg-white/80 backdrop-blur-sm border-0 shadow-xl">
+            <Card className="overflow-hidden bg-surface/80 backdrop-blur-sm border-0 shadow-xl">
                 <CardContent className="p-8 text-center">
                     <div className="animate-spin w-8 h-8 border-3 border-purple-200 border-t-purple-600 rounded-full mx-auto"></div>
-                    <p className="text-gray-500 mt-4 text-sm">Loading schedule...</p>
+                    <p className="text-muted-foreground mt-4 text-sm">Loading schedule...</p>
                 </CardContent>
             </Card>
         );
@@ -228,14 +228,14 @@ export default function DayCalendar({ user, userProfile }) {
 
     if (!canAccessPlanner) {
         return (
-            <Card className="overflow-hidden bg-white/80 backdrop-blur-sm border-0 shadow-xl">
+            <Card className="overflow-hidden bg-surface/80 backdrop-blur-sm border-0 shadow-xl">
                 <div className="h-1.5 bg-gradient-to-r from-purple-500 to-pink-500" />
                 <CardContent className="p-8 text-center">
                     <div className="w-12 h-12 bg-purple-100 rounded-full flex items-center justify-center mx-auto mb-4">
                         <Calendar className="w-6 h-6 text-purple-600" />
                     </div>
-                    <h3 className="text-lg font-semibold text-gray-900 mb-2">Study Planner</h3>
-                    <p className="text-gray-600 text-sm">Available with Premium</p>
+                    <h3 className="text-lg font-semibold text-foreground mb-2">Study Planner</h3>
+                    <p className="text-muted-foreground text-sm">Available with Premium</p>
                 </CardContent>
             </Card>
         );
@@ -243,7 +243,7 @@ export default function DayCalendar({ user, userProfile }) {
 
     return (
         <>
-            <Card className="overflow-hidden bg-white/80 backdrop-blur-sm border-0 shadow-xl">
+            <Card className="overflow-hidden bg-surface/80 backdrop-blur-sm border-0 shadow-xl">
                 <div className="h-1.5 bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500" />
                 <CardHeader className="pb-3">
                     <div className="flex items-center justify-between">
@@ -252,8 +252,8 @@ export default function DayCalendar({ user, userProfile }) {
                                 <Calendar className="w-5 h-5 text-white" />
                             </div>
                             <div>
-                                <CardTitle className="text-lg font-bold text-gray-900">Today's Schedule</CardTitle>
-                                <p className="text-xs text-gray-500 mt-0.5">
+                                <CardTitle className="text-lg font-bold text-foreground">Today's Schedule</CardTitle>
+                                <p className="text-xs text-muted-foreground mt-0.5">
                                     {format(new Date(), 'EEEE, MMMM d')}
                                 </p>
                             </div>
@@ -270,11 +270,11 @@ export default function DayCalendar({ user, userProfile }) {
                     </div>
                     {totalCount > 0 && (
                         <div className="mt-4">
-                            <div className="flex items-center justify-between text-xs text-gray-500 mb-1.5">
+                            <div className="flex items-center justify-between text-xs text-muted-foreground mb-1.5">
                                 <span>{completedCount} of {totalCount} completed</span>
                                 <span>{Math.round((completedCount / totalCount) * 100)}%</span>
                             </div>
-                            <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden">
+                            <div className="h-1.5 bg-secondary rounded-full overflow-hidden">
                                 <motion.div 
                                     className="h-full bg-gradient-to-r from-emerald-400 to-emerald-500 rounded-full"
                                     initial={{ width: 0 }}
@@ -289,10 +289,10 @@ export default function DayCalendar({ user, userProfile }) {
                     {todayEvents.length === 0 ? (
                         <div className="text-center py-10">
                             <div className="w-16 h-16 mx-auto mb-4 bg-gradient-to-br from-gray-100 to-gray-50 rounded-2xl flex items-center justify-center">
-                                <Calendar className="w-8 h-8 text-gray-300" />
+                                <Calendar className="w-8 h-8 text-muted-foreground/40" />
                             </div>
-                            <p className="font-semibold text-gray-700 mb-1">No events today</p>
-                            <p className="text-sm text-gray-400 mb-5">Plan your study sessions</p>
+                            <p className="font-semibold text-muted-foreground mb-1">No events today</p>
+                            <p className="text-sm text-muted-foreground/60 mb-5">Plan your study sessions</p>
                             <Button
                                 onClick={() => setIsAddingEvent(true)}
                                 variant="outline"
@@ -324,7 +324,7 @@ export default function DayCalendar({ user, userProfile }) {
                                                 className={`flex-shrink-0 w-5 h-5 rounded-full border-2 flex items-center justify-center transition-all ${
                                                     event.is_completed
                                                         ? 'bg-emerald-500 border-emerald-500 shadow-sm'
-                                                        : `border-gray-300 hover:border-emerald-400 hover:bg-emerald-50`
+                                                        : `border-border hover:border-emerald-400 hover:bg-emerald-50`
                                                 }`}
                                             >
                                                 {event.is_completed && <CheckCircle2 className="w-3.5 h-3.5 text-white" />}
@@ -344,12 +344,12 @@ export default function DayCalendar({ user, userProfile }) {
                                                     )}
                                                 </div>
                                                 <p className={`font-medium text-sm truncate ${
-                                                    event.is_completed ? 'line-through text-gray-400' : 'text-gray-800'
+                                                    event.is_completed ? 'line-through text-muted-foreground/60' : 'text-foreground'
                                                 }`}>
                                                     {event.title}
                                                 </p>
                                                 {event.subject_name && (
-                                                    <p className="text-xs text-gray-500 truncate">{event.subject_name}</p>
+                                                    <p className="text-xs text-muted-foreground truncate">{event.subject_name}</p>
                                                 )}
                                             </div>
 
@@ -357,14 +357,16 @@ export default function DayCalendar({ user, userProfile }) {
                                                 <Button
                                                     variant="ghost"
                                                     size="icon"
+                                                    aria-label="Edit event"
                                                     onClick={() => setEditingEvent(event)}
-                                                    className="h-7 w-7 rounded-lg hover:bg-white/80"
+                                                    className="h-7 w-7 rounded-lg hover:bg-surface/80"
                                                 >
-                                                    <Edit className="w-3.5 h-3.5 text-gray-500" />
+                                                    <Edit className="w-3.5 h-3.5 text-muted-foreground" />
                                                 </Button>
                                                 <Button
                                                     variant="ghost"
                                                     size="icon"
+                                                    aria-label="Delete event"
                                                     onClick={() => handleDeleteEvent(event.id)}
                                                     className="h-7 w-7 rounded-lg hover:bg-red-50"
                                                 >

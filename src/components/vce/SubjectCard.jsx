@@ -42,7 +42,7 @@ const SubjectCard = React.memo(({ subject, index, onClick, onToggle, isSelected,
                             {subject.name}
                         </h3>
                     </div>
-                    <div className="absolute -right-8 -bottom-8 w-32 h-32 bg-white/10 rounded-full" />
+                    <div className="absolute -right-8 -bottom-8 w-32 h-32 bg-surface/10 rounded-full" />
                 </div>
 
                 <CardContent className="p-4 space-y-3">
@@ -57,7 +57,7 @@ const SubjectCard = React.memo(({ subject, index, onClick, onToggle, isSelected,
                         )}
                     </div>
 
-                    <p className="text-sm text-gray-600 line-clamp-2">
+                    <p className="text-sm text-muted-foreground line-clamp-2">
                         {subject.overview}
                     </p>
 
@@ -82,7 +82,7 @@ const SubjectCard = React.memo(({ subject, index, onClick, onToggle, isSelected,
                                         e.stopPropagation();
                                         if (onClick) onClick();
                                     }}
-                                    className="action-button text-gray-600 hover:text-gray-900"
+                                    className="action-button text-muted-foreground hover:text-foreground"
                                 >
                                     <Info className="w-4 h-4 mr-1" />
                                     Details

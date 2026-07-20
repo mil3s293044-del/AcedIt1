@@ -168,7 +168,7 @@ export default function GoalDetailView({ goal, onBack, onGoalUpdated }) {
         <div className="space-y-6">
             {/* Header */}
             <div className="flex items-start gap-4">
-                <Button variant="ghost" size="icon" onClick={onBack} className="flex-shrink-0 mt-1">
+                <Button variant="ghost" size="icon" onClick={onBack} className="flex-shrink-0 mt-1" aria-label="Go back">
                     <ArrowLeft className="w-5 h-5" />
                 </Button>
                 <div className="flex-1 min-w-0">

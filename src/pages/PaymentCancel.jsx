@@ -21,9 +21,9 @@ export default function PaymentCancel() {
                             initial={{ scale: 0 }}
                             animate={{ scale: 1 }}
                             transition={{ delay: 0.2, type: "spring", stiffness: 200 }}
-                            className="w-24 h-24 bg-white rounded-full flex items-center justify-center mx-auto mb-6 shadow-xl"
+                            className="w-24 h-24 bg-surface rounded-full flex items-center justify-center mx-auto mb-6 shadow-xl"
                         >
-                            <XCircle className="w-16 h-16 text-gray-600" />
+                            <XCircle className="w-16 h-16 text-muted-foreground" />
                         </motion.div>
                         
                         <motion.h1
@@ -39,22 +39,22 @@ export default function PaymentCancel() {
                             initial={{ opacity: 0, y: 20 }}
                             animate={{ opacity: 1, y: 0 }}
                             transition={{ delay: 0.4 }}
-                            className="text-xl text-gray-100"
+                            className="text-xl text-background"
                         >
                             No charges were made to your account
                         </motion.p>
                     </div>
 
                     <CardContent className="p-8 text-center space-y-6">
-                        <p className="text-gray-600 text-lg">
+                        <p className="text-muted-foreground text-lg">
                             You cancelled the payment process. Don't worry - you can upgrade anytime when you're ready!
                         </p>
 
                         <div className="bg-blue-50 rounded-xl p-6 border-2 border-blue-200">
-                            <h3 className="text-lg font-bold text-gray-900 mb-2">
+                            <h3 className="text-lg font-bold text-foreground mb-2">
                                 Still want to upgrade?
                             </h3>
-                            <p className="text-gray-600 mb-4">
+                            <p className="text-muted-foreground mb-4">
                                 Premium features are waiting for you - unlimited AI tools, advanced analytics, and personalized study plans.
                             </p>
                         </div>
@@ -75,7 +75,7 @@ export default function PaymentCancel() {
                             </Link>
                         </div>
 
-                        <p className="text-sm text-gray-500 mt-6">
+                        <p className="text-sm text-muted-foreground mt-6">
                             Questions about pricing? Contact us anytime for help.
                         </p>
                     </CardContent>

@@ -92,7 +92,7 @@ export default function GoalCompetitionDetail({ competition, currentUserEmail, o
                             </p>
                         )}
                         {me?.bonus_xp_awarded > 0 && (
-                            <div className={`inline-flex items-center gap-1.5 mt-3 px-4 py-2 rounded-full font-display font-black text-lg ${isWinner ? 'bg-white/20 text-white' : 'bg-chart-4/15 text-chart-4'}`}>
+                            <div className={`inline-flex items-center gap-1.5 mt-3 px-4 py-2 rounded-full font-display font-black text-lg ${isWinner ? 'bg-surface/20 text-white' : 'bg-chart-4/15 text-chart-4'}`}>
                                 <Zap className="w-5 h-5" />+{bonusXP} XP
                             </div>
                         )}

@@ -409,7 +409,7 @@ Return exactly ${openQs.length} results, in order.`,
                                             {sel && <Check className="absolute top-2 right-2 w-3.5 h-3.5" />}
                                             <SourceIcon className="w-6 h-6" />
                                             <span className="text-xs font-bold">{s.label}</span>
-                                            <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${sel ? "bg-white/20" : "bg-secondary text-muted-foreground"}`}>{cnt}</span>
+                                            <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${sel ? "bg-surface/20" : "bg-secondary text-muted-foreground"}`}>{cnt}</span>
                                         </button>);
 
               })}
@@ -498,7 +498,7 @@ Return exactly ${openQs.length} results, in order.`,
           className="rounded-2xl p-4 flex items-center justify-between gap-4 transition-colors duration-1000">
 
                     <div className="flex items-center gap-3 min-w-0">
-                        <div className="w-8 h-8 bg-white/10 rounded-xl flex items-center justify-center flex-shrink-0">
+                        <div className="w-8 h-8 bg-surface/10 rounded-xl flex items-center justify-center flex-shrink-0">
                             <GraduationCap className="w-4 h-4 text-white/70" />
                         </div>
                         <div className="min-w-0">
@@ -515,11 +515,11 @@ Return exactly ${openQs.length} results, in order.`,
                             </div>
             }
                         <button onClick={() => setShowQuestionMap((v) => !v)}
-            className="w-9 h-9 bg-white/10 hover:bg-white/20 rounded-xl flex items-center justify-center transition-colors">
+            className="w-9 h-9 bg-surface/10 hover:bg-surface/20 rounded-xl flex items-center justify-center transition-colors">
                             <Layers className="w-4 h-4 text-white/70" />
                         </button>
                         <Button size="sm" onClick={handleSubmitExam}
-            className={`rounded-xl font-bold gap-1.5 text-xs px-4 ${isLow ? "bg-white text-streak hover:bg-white/90" : "bg-white/15 hover:bg-white/25 text-white border border-white/20"}`}>
+            className={`rounded-xl font-bold gap-1.5 text-xs px-4 ${isLow ? "bg-surface text-streak hover:bg-surface/90" : "bg-surface/15 hover:bg-surface/25 text-white border border-white/20"}`}>
                             <Flag className="w-3.5 h-3.5" /> Submit
                         </Button>
                     </div>
@@ -594,7 +594,7 @@ Return exactly ${openQs.length} results, in order.`,
                     whileHover={{ scale: 1.005 }}
                     whileTap={{ scale: 0.998 }}
                     className={`w-full text-left px-5 py-4 rounded-2xl border-2 text-base font-medium transition-all duration-150 flex items-center gap-4 group ${sel ? "bg-streak border-streak text-white shadow-soft" : "border-border text-foreground hover:border-streak/40 hover:bg-streak/5 bg-surface"}`}>
-                                                <span className={`w-9 h-9 rounded-xl flex items-center justify-center text-sm font-black flex-shrink-0 transition-all ${sel ? "bg-white/20 text-white" : "bg-secondary text-muted-foreground group-hover:bg-streak/10 group-hover:text-streak"}`}>
+                                                <span className={`w-9 h-9 rounded-xl flex items-center justify-center text-sm font-black flex-shrink-0 transition-all ${sel ? "bg-surface/20 text-white" : "bg-secondary text-muted-foreground group-hover:bg-streak/10 group-hover:text-streak"}`}>
                                                     {String.fromCharCode(65 + i)}
                                                 </span>
                                                 <span className="flex-1">{opt}</span>

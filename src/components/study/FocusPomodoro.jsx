@@ -88,7 +88,7 @@ export default function FocusPomodoro({
                                 stroke="currentColor"
                                 strokeWidth="12"
                                 fill="none"
-                                className="text-slate-700/50"
+                                className="text-muted-foreground/50"
                             />
                             <motion.circle
                                 cx="250"

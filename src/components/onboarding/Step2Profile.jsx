@@ -18,15 +18,15 @@ export default function Step2Profile({ data, onNext, onBack, saving }) {
 
     return (
         <div className="max-w-lg mx-auto px-6 py-10">
-            <button onClick={onBack} className="flex items-center gap-1 text-sm text-gray-400 hover:text-gray-600 mb-6">
+            <button onClick={onBack} className="flex items-center gap-1 text-sm text-muted-foreground/60 hover:text-muted-foreground mb-6">
                 <ChevronLeft className="w-4 h-4" /> Back
             </button>
-            <h2 className="text-2xl font-bold text-gray-900 mb-1">First, let's personalise your experience</h2>
-            <p className="text-gray-500 text-sm mb-8">This sets up your profile and appears on your dashboard.</p>
+            <h2 className="text-2xl font-bold text-foreground mb-1">First, let's personalise your experience</h2>
+            <p className="text-muted-foreground text-sm mb-8">This sets up your profile and appears on your dashboard.</p>
 
             <div className="space-y-6">
                 <div>
-                    <Label className="text-sm font-medium text-gray-700">What should we call you? <span className="text-red-500">*</span></Label>
+                    <Label className="text-sm font-medium text-muted-foreground">What should we call you? <span className="text-red-500">*</span></Label>
                     <Input
                         className="mt-1.5"
                         placeholder="e.g. Alex"
@@ -36,18 +36,18 @@ export default function Step2Profile({ data, onNext, onBack, saving }) {
                 </div>
 
                 <div>
-                    <Label className="text-sm font-medium text-gray-700">What school do you go to?</Label>
+                    <Label className="text-sm font-medium text-muted-foreground">What school do you go to?</Label>
                     <Input
                         className="mt-1.5"
                         placeholder="e.g. Melbourne High School"
                         value={school_name}
                         onChange={e => setSchoolName(e.target.value)}
                     />
-                    <p className="text-xs text-gray-400 mt-1">Optional — used for school leaderboards</p>
+                    <p className="text-xs text-muted-foreground/60 mt-1">Optional — used for school leaderboards</p>
                 </div>
 
                 <div>
-                    <Label className="text-sm font-medium text-gray-700">What year are you in? <span className="text-red-500">*</span></Label>
+                    <Label className="text-sm font-medium text-muted-foreground">What year are you in? <span className="text-red-500">*</span></Label>
                     <Select value={year_level} onValueChange={setYearLevel}>
                         <SelectTrigger className="mt-1.5">
                             <SelectValue placeholder="Select year level" />

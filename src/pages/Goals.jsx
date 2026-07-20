@@ -85,7 +85,7 @@ function ATARPoster({ userProfile, onSaved }) {
                         </div>
                         <p className="font-display font-extrabold text-foreground text-base">Your big goal</p>
                     </div>
-                    <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setIsEditing(false)}>
+                    <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setIsEditing(false)} aria-label="Close goal editor">
                         <X className="w-4 h-4" />
                     </Button>
                 </div>

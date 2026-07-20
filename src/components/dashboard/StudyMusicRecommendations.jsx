@@ -44,7 +44,7 @@ export default function StudyMusicRecommendations() {
         red: "bg-red-100 text-red-800",
         cyan: "bg-cyan-100 text-cyan-800",
         teal: "bg-teal-100 text-teal-800",
-        gray: "bg-gray-100 text-gray-800",
+        gray: "bg-secondary text-foreground",
         amber: "bg-amber-100 text-amber-800",
         fuchsia: "bg-fuchsia-100 text-fuchsia-800"
     };
@@ -75,11 +75,12 @@ export default function StudyMusicRecommendations() {
                             <div className="w-8 h-8 bg-gradient-to-br from-pink-500 to-purple-600 rounded-lg flex items-center justify-center">
                                 <Music className="w-4 h-4 text-white" />
                             </div>
-                            <h3 className="font-semibold text-gray-900">Study Music</h3>
+                            <h3 className="font-semibold text-foreground">Study Music</h3>
                         </div>
                         <Button 
                             variant="ghost" 
-                            size="icon" 
+                            size="icon"
+                            aria-label="Shuffle playlists"
                             onClick={shuffle}
                             className="hover:bg-purple-100/50 text-purple-700"
                         >
@@ -99,20 +100,20 @@ export default function StudyMusicRecommendations() {
                                 >
                                     <button
                                         onClick={() => window.open(music.url, '_blank')}
-                                        className="w-full flex items-center gap-3 p-3 bg-white/70 hover:bg-white border border-gray-200/50 hover:border-purple-300 rounded-lg transition-all group"
+                                        className="w-full flex items-center gap-3 p-3 bg-surface/70 hover:bg-surface border border-border/50 hover:border-purple-300 rounded-lg transition-all group"
                                     >
                                         <div className="w-10 h-10 bg-gradient-to-br from-pink-500 to-purple-600 rounded-lg flex items-center justify-center group-hover:scale-110 transition-transform">
                                             <Play className="w-4 h-4 text-white" />
                                         </div>
                                         <div className="flex-1 text-left min-w-0">
-                                            <p className="font-semibold text-sm text-gray-900 truncate">{music.title}</p>
-                                            <p className="text-xs text-gray-600 truncate">{music.description}</p>
+                                            <p className="font-semibold text-sm text-foreground truncate">{music.title}</p>
+                                            <p className="text-xs text-muted-foreground truncate">{music.description}</p>
                                         </div>
                                         <div className="flex items-center gap-2 flex-shrink-0">
                                             <Badge className={`text-xs ${genreColors[music.color]}`}>
                                                 {music.genre}
                                             </Badge>
-                                            <span className="text-xs text-gray-500">{music.duration}</span>
+                                            <span className="text-xs text-muted-foreground">{music.duration}</span>
                                         </div>
                                     </button>
                                 </motion.div>
@@ -120,7 +121,7 @@ export default function StudyMusicRecommendations() {
                         </AnimatePresence>
                     </div>
                     
-                    <p className="text-xs text-center text-gray-500 mt-3">
+                    <p className="text-xs text-center text-muted-foreground mt-3">
                         Click any track to open in YouTube
                     </p>
                 </CardContent>

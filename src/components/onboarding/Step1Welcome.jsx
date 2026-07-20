@@ -31,10 +31,10 @@ export default function Step1Welcome({ onNext }) {
     return (
         <div className="max-w-2xl mx-auto px-6 py-10">
             <div className="mb-8">
-                <h1 className="text-2xl font-bold text-gray-900 leading-tight mb-3">
+                <h1 className="text-2xl font-bold text-foreground leading-tight mb-3">
                     Before we set up your account — here's why most students work harder than they need to.
                 </h1>
-                <p className="text-gray-500 text-base">
+                <p className="text-muted-foreground text-base">
                     VCE is one of the most demanding academic experiences in the world. The research shows the problem isn't effort — it's method.
                 </p>
             </div>
@@ -49,15 +49,15 @@ export default function Step1Welcome({ onNext }) {
             {/* Smaller stat cards */}
             <div className="grid grid-cols-3 gap-3 mb-8">
                 {smallStats.map((s, i) => (
-                    <div key={i} className="border border-gray-200 rounded-xl p-3 bg-gray-50">
+                    <div key={i} className="border border-border rounded-xl p-3 bg-secondary/50">
                         <div className="text-2xl font-extrabold mb-1" style={{ color: "#534AB7" }}>{s.stat}</div>
-                        <p className="text-xs font-semibold text-gray-800 mb-1">{s.label}</p>
-                        <p className="text-xs text-gray-400 leading-snug">{s.source}</p>
+                        <p className="text-xs font-semibold text-foreground mb-1">{s.label}</p>
+                        <p className="text-xs text-muted-foreground/60 leading-snug">{s.source}</p>
                     </div>
                 ))}
             </div>
 
-            <p className="text-sm text-gray-600 mb-8 text-center">
+            <p className="text-sm text-muted-foreground mb-8 text-center">
                 Acedit is built entirely on these four findings. Every feature exists to make sure your study time actually sticks.
             </p>
 

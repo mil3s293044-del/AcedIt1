@@ -86,7 +86,7 @@ export default function AILoadingProgress({
             animate={{ opacity: 1, scale: 1 }}
             className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm"
         >
-            <div className="bg-white rounded-2xl shadow-2xl p-8 max-w-md w-full mx-4">
+            <div className="bg-surface rounded-2xl shadow-2xl p-8 max-w-md w-full mx-4">
                 <div className="text-center space-y-6">
                     <div className="flex justify-center">
                         <div className="relative">
@@ -98,23 +98,23 @@ export default function AILoadingProgress({
                     </div>
 
                     <div>
-                        <h3 className="text-xl font-bold text-gray-900 mb-2">
+                        <h3 className="text-xl font-bold text-foreground mb-2">
                             {currentStage.text}
                         </h3>
-                        <p className="text-sm text-gray-600">
+                        <p className="text-sm text-muted-foreground">
                             This may take up to {estimatedTime} seconds
                         </p>
                     </div>
 
                     <div className="space-y-2">
                         <Progress value={progress} className="h-3" />
-                        <div className="flex justify-between text-xs text-gray-500">
+                        <div className="flex justify-between text-xs text-muted-foreground">
                             <span>{Math.round(progress)}% complete</span>
                             <span>{timeElapsed}s elapsed</span>
                         </div>
                     </div>
 
-                    <div className="text-xs text-gray-500 italic">
+                    <div className="text-xs text-muted-foreground italic">
                         Please wait while AI processes your request...
                     </div>
                 </div>

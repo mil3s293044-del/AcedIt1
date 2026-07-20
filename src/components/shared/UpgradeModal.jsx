@@ -100,17 +100,17 @@ export default function UpgradeModal({ isOpen, onClose, feature, requiredTier, u
                         <CardContent className="p-4">
                             <div className="flex items-center justify-between">
                                 <div>
-                                    <p className="text-sm text-gray-600 mb-1">Your Current Plan</p>
+                                    <p className="text-sm text-muted-foreground mb-1">Your Current Plan</p>
                                     <div className="flex items-center gap-2">
-                                        {currentTier === 'free' && <Lock className="w-4 h-4 text-gray-500" />}
+                                        {currentTier === 'free' && <Lock className="w-4 h-4 text-muted-foreground" />}
                                         {currentTier === 'pro' && <Zap className="w-4 h-4 text-blue-600" />}
                                         {currentTier === 'premium' && <Crown className="w-4 h-4 text-purple-600" />}
                                         <span className="font-semibold capitalize">{currentTier}</span>
                                     </div>
                                 </div>
-                                <ArrowRight className="w-5 h-5 text-gray-400" />
+                                <ArrowRight className="w-5 h-5 text-muted-foreground/60" />
                                 <div>
-                                    <p className="text-sm text-gray-600 mb-1">Required Plan</p>
+                                    <p className="text-sm text-muted-foreground mb-1">Required Plan</p>
                                     <div className="flex items-center gap-2">
                                         {requiredTier === 'pro' && <Zap className="w-4 h-4 text-blue-600" />}
                                         {requiredTier === 'premium' && <Crown className="w-4 h-4 text-purple-600" />}
@@ -123,10 +123,10 @@ export default function UpgradeModal({ isOpen, onClose, feature, requiredTier, u
 
                     {/* Benefits */}
                     <div>
-                        <h3 className="font-semibold text-gray-900 mb-3">What you'll get:</h3>
+                        <h3 className="font-semibold text-foreground mb-3">What you'll get:</h3>
                         <div className="grid gap-2">
                             {featureInfo.benefits.map((benefit, index) => (
-                                <div key={index} className="flex items-center gap-3 text-gray-700">
+                                <div key={index} className="flex items-center gap-3 text-muted-foreground">
                                     <div className="w-5 h-5 bg-green-100 rounded-full flex items-center justify-center flex-shrink-0">
                                         <span className="text-green-600 text-xs">✓</span>
                                     </div>
@@ -162,7 +162,7 @@ export default function UpgradeModal({ isOpen, onClose, feature, requiredTier, u
                     </div>
 
                     {/* Pricing Info */}
-                    <div className="text-center text-sm text-gray-500">
+                    <div className="text-center text-sm text-muted-foreground">
                         <p>
                             {requiredTier === 'premium' && 'Only $5 AUD/week for full access'}
                         </p>
