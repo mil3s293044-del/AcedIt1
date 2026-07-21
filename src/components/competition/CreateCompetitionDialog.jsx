@@ -5,7 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Trophy, Users, X, Loader2, Search, Zap } from "lucide-react";
+import { Trophy, Users, X, Loader2, Search } from "lucide-react";
 import { base44 } from "@/api/base44Client";
 import { createGoalCompetition } from "@/api/functionsShim";
 import { useToast } from "@/components/ui/use-toast";
@@ -151,7 +151,7 @@ export default function CreateCompetitionDialog({ open, onClose, goal, onCreated
                     <Button
                         onClick={handleCreate}
                         disabled={creating}
-                        className="bg-gradient-to-r from-indigo-600 to-purple-600"
+                        className="bg-chart-4 hover:bg-chart-4/90 text-white font-bold"
                     >
                         {creating ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Trophy className="w-4 h-4 mr-2" />}
                         {creating ? 'Creating...' : `Create Competition${selectedEmails.length > 0 ? ` (${selectedEmails.length})` : ''}`}

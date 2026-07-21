@@ -45,27 +45,27 @@ function MyPrediction({ competition, currentUserEmail, onUpdate }) {
 
     if (!editing && hasLine) {
         return (
-            <div className="bg-gradient-to-br from-chart-4 to-chart-3 rounded-2xl p-4 text-white">
+            <div className="bg-chart-4/5 border-2 border-chart-4/20 rounded-2xl p-4">
                 <div className="flex items-center justify-between mb-2">
-                    <p className="text-white/70 text-xs font-semibold uppercase tracking-wide">Your Score Prediction</p>
-                    <button onClick={() => setEditing(true)} className="text-white/60 hover:text-white text-xs flex items-center gap-1">
+                    <p className="stat-label text-chart-4/80">Your Score Prediction</p>
+                    <button onClick={() => setEditing(true)} className="text-muted-foreground/60 hover:text-foreground text-xs flex items-center gap-1">
                         <Edit3 className="w-3.5 h-3.5" /> Edit
                     </button>
                 </div>
                 <div className="flex items-end gap-3">
-                    <p className="font-display text-5xl font-black">{me.self_line}%</p>
+                    <p className="font-display text-5xl font-black text-chart-4">{me.self_line}%</p>
                     <div className="mb-1">
-                        {me.self_line_label && <p className="text-white/80 text-xs mb-1">"{me.self_line_label}"</p>}
+                        {me.self_line_label && <p className="text-muted-foreground text-xs mb-1">"{me.self_line_label}"</p>}
                         <div className="flex items-center gap-1.5">
-                            <Users className="w-3.5 h-3.5 text-white/60" />
-                            <span className="text-white/70 text-xs">{betCount} bet{betCount !== 1 ? 's' : ''} on you</span>
+                            <Users className="w-3.5 h-3.5 text-muted-foreground/60" />
+                            <span className="text-muted-foreground text-xs">{betCount} bet{betCount !== 1 ? 's' : ''} on you</span>
                         </div>
                     </div>
                 </div>
                 {me?.result_submitted && (
-                    <div className="mt-3 pt-3 border-t border-white/20 flex items-center gap-2">
-                        <CheckCircle2 className="w-4 h-4 text-white" />
-                        <span className="text-white text-xs font-semibold">Actual result submitted: {me.actual_result}%</span>
+                    <div className="mt-3 pt-3 border-t border-chart-4/15 flex items-center gap-2">
+                        <CheckCircle2 className="w-4 h-4 text-primary" />
+                        <span className="text-foreground text-xs font-semibold">Actual result submitted: {me.actual_result}%</span>
                     </div>
                 )}
             </div>
@@ -318,7 +318,7 @@ function BetPanel({ target, competition, currentUserEmail, onUpdate, balance }) 
                         </div>
 
                         <Button onClick={handleBet} disabled={placing || (balance != null && wageredXP > balance)}
-                            className="w-full bg-gradient-to-r from-chart-4 to-chart-3 text-white font-bold rounded-xl py-5">
+                            className="w-full bg-chart-4 hover:bg-chart-4/90 text-white font-bold rounded-xl py-5 btn-3d">
                             {placing ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Zap className="w-4 h-4 mr-2" />}
                             {placing ? 'Placing…' : `Bet ${wageredXP} XP`}
                         </Button>

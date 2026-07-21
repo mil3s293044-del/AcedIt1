@@ -4,8 +4,8 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
-    ChevronLeft, Copy, Check, Trophy, Timer,
-    TrendingUp, Users, Crown, Zap
+    ChevronLeft, Copy, Check, Timer,
+    TrendingUp, Users, Zap
 } from "lucide-react";
 import { useToast } from "@/components/ui/use-toast";
 import HoursLeaderboard from "./HoursLeaderboard";
@@ -72,7 +72,7 @@ export default function GoalCompetitionDetail({ competition, currentUserEmail, o
                         transition={{ type: "spring", stiffness: 320, damping: 22 }}
                         className={`rounded-2xl p-6 text-center ${
                             isWinner
-                                ? 'bg-gradient-to-br from-xp to-streak text-white shadow-soft'
+                                ? 'bg-xp/10 border-2 border-xp/40 shadow-soft'
                                 : 'card-soft border-chart-4/25 bg-chart-4/5'
                         }`}>
                         <motion.div
@@ -83,16 +83,16 @@ export default function GoalCompetitionDetail({ competition, currentUserEmail, o
                         >
                             {isWinner ? '🏆' : '🎖️'}
                         </motion.div>
-                        <p className={`font-display font-black text-2xl ${isWinner ? 'text-white' : 'text-foreground'}`}>
+                        <p className={`font-display font-black text-2xl ${isWinner ? 'text-xp' : 'text-foreground'}`}>
                             {isWinner ? 'Champion!' : `${competition.winner_name} took it`}
                         </p>
                         {me?.final_rank && (
-                            <p className={`text-sm font-bold mt-0.5 ${isWinner ? 'text-white/80' : 'text-muted-foreground'}`}>
+                            <p className={`text-sm font-bold mt-0.5 ${isWinner ? 'text-foreground/70' : 'text-muted-foreground'}`}>
                                 You finished #{me.final_rank} of {accepted.length}
                             </p>
                         )}
                         {me?.bonus_xp_awarded > 0 && (
-                            <div className={`inline-flex items-center gap-1.5 mt-3 px-4 py-2 rounded-full font-display font-black text-lg ${isWinner ? 'bg-surface/20 text-white' : 'bg-chart-4/15 text-chart-4'}`}>
+                            <div className={`inline-flex items-center gap-1.5 mt-3 px-4 py-2 rounded-full font-display font-black text-lg ${isWinner ? 'bg-xp/15 text-xp' : 'bg-chart-4/15 text-chart-4'}`}>
                                 <Zap className="w-5 h-5" />+{bonusXP} XP
                             </div>
                         )}

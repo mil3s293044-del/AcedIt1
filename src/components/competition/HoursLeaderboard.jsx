@@ -209,23 +209,23 @@ export default function HoursLeaderboard({ competition, currentUserEmail, onUpda
 
             {/* My stats strip */}
             {me && (
-                <div className="bg-gradient-to-br from-chart-4 to-chart-3 rounded-2xl p-4 text-white">
+                <div className="bg-chart-4/5 border-2 border-chart-4/20 rounded-2xl p-4">
                     <div className="grid grid-cols-3 gap-3">
                         <div className="text-center">
-                            <p className="text-white/70 text-xs mb-1">Your score</p>
-                            <p className="font-display font-black text-2xl tabular-nums">{myScore}</p>
+                            <p className="stat-label mb-1">Your score</p>
+                            <p className="font-display font-black text-2xl tabular-nums text-chart-4">{myScore}</p>
                         </div>
-                        <div className="text-center border-x border-white/20">
-                            <p className="text-white/70 text-xs mb-1">Your rank</p>
-                            <p className="font-display font-black text-2xl">#{myRank}</p>
+                        <div className="text-center border-x border-chart-4/15">
+                            <p className="stat-label mb-1">Your rank</p>
+                            <p className="font-display font-black text-2xl text-foreground">#{myRank}</p>
                         </div>
                         <div className="text-center">
-                            <p className="text-white/70 text-xs mb-1">Hours</p>
-                            <p className="font-display font-black text-2xl">{myHours}h</p>
+                            <p className="stat-label mb-1">Hours</p>
+                            <p className="font-display font-black text-2xl text-foreground">{myHours}h</p>
                         </div>
                     </div>
                     {!isCompleted && competition.goal_target_date && (
-                        <div className="mt-3 pt-3 border-t border-white/20">
+                        <div className="mt-3 pt-3 border-t border-chart-4/15">
                             <Countdown targetDate={competition.goal_target_date} variant="banner" />
                         </div>
                     )}
@@ -307,7 +307,7 @@ export default function HoursLeaderboard({ competition, currentUserEmail, onUpda
             {/* Settle button for creator */}
             {isCreator && !isCompleted && isPastDeadline && (
                 <Button onClick={handleSettle} disabled={settling}
-                    className="w-full bg-gradient-to-r from-xp to-streak text-white font-display font-extrabold rounded-2xl py-6 text-base shadow-soft btn-3d">
+                    className="w-full bg-xp hover:bg-xp/90 text-white font-display font-extrabold rounded-2xl py-6 text-base shadow-soft btn-3d">
                     {settling ? <Loader2 className="w-5 h-5 animate-spin mr-2" /> : <Trophy className="w-5 h-5 mr-2" />}
                     {settling ? 'Settling…' : 'Settle Competition & Award XP 🏆'}
                 </Button>

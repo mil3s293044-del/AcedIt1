@@ -146,7 +146,7 @@ export default function Arena({ view = "all" }) {
             {/* Section header + challenge CTA */}
             <div className="flex items-center justify-end gap-3">
                 <Button onClick={() => setChallengeOpen(true)}
-                    className="rounded-2xl bg-gradient-to-r from-chart-4 to-chart-3 text-white font-bold gap-2 btn-3d">
+                    className="rounded-2xl bg-chart-4 hover:bg-chart-4/90 text-white font-bold gap-2 btn-3d">
                     <Swords className="w-4 h-4" /> Challenge a rival
                 </Button>
             </div>

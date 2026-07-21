@@ -158,7 +158,7 @@ export default function CreateDuelDialog({ open, onOpenChange, currentUser, bala
                     </div>
 
                     <Button onClick={send} disabled={!rival || sending || (balance != null && ante > balance)}
-                        className="w-full bg-gradient-to-r from-chart-4 to-chart-3 text-white font-bold rounded-xl py-5 btn-3d">
+                        className="w-full bg-chart-4 hover:bg-chart-4/90 text-white font-bold rounded-xl py-5 btn-3d">
                         {sending ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Swords className="w-4 h-4 mr-2" />}
                         Send challenge
                     </Button>

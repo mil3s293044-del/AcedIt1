@@ -461,36 +461,36 @@ export default function Competitions() {
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ delay: 0.05 }}
                 >
-                    <div className="rounded-2xl bg-gradient-to-r from-chart-4 to-chart-3 text-white shadow-soft px-5 py-4">
+                    <div className="rounded-2xl bg-chart-4/5 border border-chart-4/15 shadow-soft px-5 py-4">
                         <div className="flex flex-wrap items-center gap-x-6 gap-y-2">
                             <div className="flex items-center gap-3 min-w-0">
-                                <Swords className="w-6 h-6 text-white/80 flex-shrink-0" />
+                                <Swords className="w-6 h-6 text-chart-4 flex-shrink-0" />
                                 <div className="min-w-0">
-                                    <p className="font-display font-black text-lg leading-tight truncate">{seasonRank?.name || 'Unranked'}</p>
-                                    <p className="text-xs text-white/75">
+                                    <p className="font-display font-black text-lg leading-tight truncate text-foreground">{seasonRank?.name || 'Unranked'}</p>
+                                    <p className="text-xs text-muted-foreground">
                                         {seasonXp.toLocaleString()} season XP{seasonRank?.maxXP && seasonRank.maxXP !== Infinity ? ` · ${(seasonRank.maxXP - seasonXp).toLocaleString()} to next tier` : ''}
                                     </p>
                                 </div>
                             </div>
                             <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 ml-auto text-xs font-bold">
-                                <span className="tabular-nums">{stats.recentWins}W – {Math.max(0, stats.completed.length - stats.recentWins)}L · {winRate}%</span>
+                                <span className="tabular-nums text-foreground">{stats.recentWins}W – {Math.max(0, stats.completed.length - stats.recentWins)}L · {winRate}%</span>
                                 {stats.winStreak > 1 && (
-                                    <span className="bg-surface/20 rounded-full px-2.5 py-0.5">🔥 {stats.winStreak} win streak</span>
+                                    <span className="pill bg-xp/15 text-xp">🔥 {stats.winStreak} win streak</span>
                                 )}
                                 {stats.active.length > 0 && (
-                                    <span className="inline-flex items-center gap-1.5">
-                                        <Crown className="w-3.5 h-3.5" /> Leading {stats.leading} · behind in {stats.behind}
+                                    <span className="inline-flex items-center gap-1.5 text-muted-foreground">
+                                        <Crown className="w-3.5 h-3.5 text-xp" /> Leading {stats.leading} · behind in {stats.behind}
                                     </span>
                                 )}
                             </div>
                         </div>
                         {seasonRank?.maxXP && seasonRank.maxXP !== Infinity && (
-                            <div className="h-1.5 bg-surface/20 rounded-full overflow-hidden mt-3">
+                            <div className="h-1.5 bg-chart-4/10 rounded-full overflow-hidden mt-3">
                                 <motion.div
                                     initial={{ width: 0 }}
                                     animate={{ width: `${Math.min(100, ((seasonXp - seasonRank.minXP) / (seasonRank.maxXP - seasonRank.minXP)) * 100)}%` }}
                                     transition={{ duration: 0.9, delay: 0.4 }}
-                                    className="h-full rounded-full bg-surface"
+                                    className="h-full rounded-full bg-chart-4"
                                 />
                             </div>
                         )}
