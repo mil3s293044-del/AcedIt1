@@ -6,7 +6,6 @@ import { pagesConfig } from './pages.config'
 import { BrowserRouter as Router, Route, Routes, useLocation, Navigate } from 'react-router-dom';
 import { MotionConfig } from 'framer-motion';
 import PageNotFound from './lib/PageNotFound';
-import StudyRoadmap from './pages/StudyRoadmap';
 import Paywall from './pages/Paywall';
 import Suspended from './pages/Suspended';
 import AdminIPPanel from './pages/AdminIPPanel';
@@ -116,7 +115,8 @@ const AuthenticatedApp = () => {
         />
       ))}
       <Route path="/onboarding" element={<Onboarding />} />
-      <Route path="/StudyRoadmap" element={<LayoutWrapper currentPageName="StudyRoadmap"><StudyRoadmap /></LayoutWrapper>} />
+      {/* Roadmap retired — old links land on the Planner */}
+      <Route path="/StudyRoadmap" element={<Navigate to="/Goals" replace />} />
       <Route path="/Paywall" element={<Paywall />} />
       <Route path="/Suspended" element={<Suspended />} />
       <Route path="/AdminIPPanel" element={<LayoutWrapper currentPageName="AdminIPPanel"><AdminIPPanel /></LayoutWrapper>} />

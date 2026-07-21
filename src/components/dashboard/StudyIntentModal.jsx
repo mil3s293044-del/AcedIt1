@@ -64,7 +64,7 @@ const RECOMMENDATIONS = {
             { Icon: FileQuestion,  text: "Do a practice quiz after each topic to lock in the knowledge." },
             { Icon: Clock,         text: "Take a 10-minute break every 50 minutes — your brain needs it." },
         ],
-        cta:       { label: "View my roadmap", link: "StudyRoadmap", Icon: Map },
+        cta:       { label: "Open my planner", link: "Goals", Icon: Map },
         secondary: { label: "Take a quiz",     link: "Quizzes",      Icon: FileQuestion },
     },
     free: {

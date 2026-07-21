@@ -181,6 +181,29 @@ export default function Competitions() {
     const [selectedComp, setSelectedComp] = useState(null);
     const [inviteCode, setInviteCode] = useState("");
     const [competeTab, setCompeteTab] = useState("duels");
+    const [newBattleTitle, setNewBattleTitle] = useState("");
+    const [newBattleDays, setNewBattleDays] = useState(7);
+    const [creatingBattle, setCreatingBattle] = useState(false);
+
+    const handleCreateBattle = async () => {
+        if (!newBattleTitle.trim()) return;
+        setCreatingBattle(true);
+        try {
+            const res = await createGoalCompetition({
+                standalone: true,
+                title: newBattleTitle.trim(),
+                duration_days: newBattleDays,
+            });
+            const data = res?.data ?? res;
+            toast({ title: "⚔️ Battle created!", description: data?.invite_code ? `Share code ${data.invite_code} with your friends.` : "Open it to grab the invite code." });
+            setNewBattleTitle("");
+            loadData();
+        } catch (e) {
+            toast({ title: "Battle not created", description: e.message, variant: "destructive" });
+        } finally {
+            setCreatingBattle(false);
+        }
+    };
     const [joiningCode, setJoiningCode] = useState(false);
     const [joinSetupChoice, setJoinSetupChoice] = useState(null);
     const [pendingJoinCode, setPendingJoinCode] = useState(null);
@@ -577,6 +600,44 @@ export default function Competitions() {
                         </div>
                     </motion.section>
                 )}
+
+                {/* ── START A BATTLE — standalone, no goal needed ──────── */}
+                <motion.section
+                    initial={{ opacity: 0, y: 12 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: 0.13 }}
+                    className="card-soft p-4 lg:p-5"
+                >
+                    <div className="flex items-center gap-2.5 mb-3">
+                        <div className="w-9 h-9 rounded-xl bg-chart-4/10 border border-chart-4/15 flex items-center justify-center flex-shrink-0">
+                            <Swords className="w-4 h-4 text-chart-4" />
+                        </div>
+                        <div>
+                            <p className="font-bold text-foreground text-sm">Start a battle</p>
+                            <p className="text-xs text-muted-foreground">Most study wins. Friends join with the invite code.</p>
+                        </div>
+                    </div>
+                    <div className="flex flex-col sm:flex-row gap-2">
+                        <Input
+                            placeholder="Name it — e.g. SAC week grind"
+                            value={newBattleTitle}
+                            onChange={e => setNewBattleTitle(e.target.value)}
+                            maxLength={80}
+                            className="flex-1"
+                        />
+                        <div className="flex gap-2">
+                            {[3, 7, 14].map(d => (
+                                <button key={d} onClick={() => setNewBattleDays(d)}
+                                    className={`px-3 py-2 rounded-xl text-xs font-bold border-2 transition-all ${
+                                        newBattleDays === d ? "bg-chart-4 border-chart-4 text-white" : "bg-surface border-border text-foreground hover:border-chart-4/40"
+                                    }`}>{d}d</button>
+                            ))}
+                            <Button onClick={handleCreateBattle} disabled={creatingBattle || !newBattleTitle.trim()}>
+                                {creatingBattle ? <Loader2 className="w-4 h-4 animate-spin" /> : <>Create <ArrowRight className="w-4 h-4" /></>}
+                            </Button>
+                        </div>
+                    </div>
+                </motion.section>
 
                 {/* ── JOIN CODE BAR ───────────────────────────────────── */}
                 <motion.section

@@ -3,8 +3,7 @@ import { Link, useLocation } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import {
     GraduationCap,
-    Brain, FileQuestion, Sparkles, Map,
-    Target, BarChart3, Trophy,
+    Brain, FileQuestion, Sparkles, Map, BarChart3, Trophy,
     Users, Swords,
     BookOpen, CreditCard, Settings as SettingsIcon, HelpCircle,
 } from "lucide-react";
@@ -17,13 +16,12 @@ const NAV_SECTIONS = [
             { label: "Study Session", path: "Study",        icon: Brain },
             { label: "Quizzes",       path: "Quizzes",      icon: FileQuestion },
             { label: "AI Tools",      path: "AITools",      icon: Sparkles },
-            { label: "Roadmap",       path: "StudyRoadmap", icon: Map },
+            { label: "Planner",       path: "Goals", icon: Map },
         ],
     },
     {
         label: "Progress",
         items: [
-            { label: "Goals",     path: "Goals",     icon: Target },
             { label: "Analytics", path: "Analytics", icon: BarChart3 },
             { label: "Ranked",    path: "Ranked",    icon: Trophy },
         ],

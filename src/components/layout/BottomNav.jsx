@@ -3,7 +3,7 @@ import { Link, useLocation } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import {
     Home, Brain, Sparkles, Trophy, Menu, X,
-    FileQuestion, Target, BookOpen, Users, Map,
+    FileQuestion, BookOpen, Users, Map,
     Swords, BarChart3, Settings as SettingsIcon,
     CreditCard, HelpCircle
 } from "lucide-react";
@@ -21,13 +21,12 @@ const MORE_GROUPS = [
         label: "Study",
         items: [
             { label: "Quizzes",       path: "Quizzes",      icon: FileQuestion },
-            { label: "Study Roadmap", path: "StudyRoadmap", icon: Map },
+            { label: "Planner",       path: "Goals", icon: Map },
         ],
     },
     {
         label: "Progress",
         items: [
-            { label: "Goals",     path: "Goals",     icon: Target },
             { label: "Analytics", path: "Analytics", icon: BarChart3 },
         ],
     },

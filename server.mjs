@@ -2973,32 +2973,54 @@ app.post("/local-ai/fn/createGoalCompetition", async (req, res) => {
   if (!supabaseAdmin) return res.status(500).json({ error: "Supabase admin not configured" });
 
   try {
-    const { goal_id, invite_emails = [] } = req.body || {};
-    if (!goal_id) return res.status(400).json({ error: "goal_id required" });
-
+    const { goal_id, invite_emails = [], standalone, title, subject_name: standaloneSubject, duration_days } = req.body || {};
     const userEmail = user.email;
 
-    const { data: goal, error: goalErr } = await supabaseAdmin
-      .from("goals").select("*").eq("id", goal_id).maybeSingle();
-    if (goalErr) throw goalErr;
-    if (!goal || goal.created_by !== userEmail) {
-      return res.status(404).json({ error: "Goal not found or not yours" });
-    }
+    // Standalone battles: created straight from the Compete page (the Goals
+    // section is gone) — a synthetic goal shape keeps the rest of the flow
+    // and the settlement engine identical.
+    let goal;
+    if (standalone) {
+      if (!title || !String(title).trim()) {
+        return res.status(400).json({ error: "Give the battle a name" });
+      }
+      const days = Number.isFinite(Number(duration_days)) ? Math.min(30, Math.max(1, Number(duration_days))) : 7;
+      goal = {
+        id: null,
+        title: String(title).trim().slice(0, 80),
+        description: "",
+        category: "academic",
+        target_date: new Date(Date.now() + days * 86400000).toISOString().slice(0, 10),
+        subject_code: standaloneSubject || null,
+        sub_goals: [],
+        progress: 0,
+      };
+    } else {
+      if (!goal_id) return res.status(400).json({ error: "goal_id required" });
 
-    // Reject if there's already an active/pending competition for this goal
-    const { data: existingComps } = await supabaseAdmin
-      .from("goal_competitions")
-      .select("id, status")
-      .eq("goal_id", goal_id)
-      .eq("creator_email", userEmail);
-    const activeComp = (existingComps || []).find(
-      (c) => c.status === "active" || c.status === "pending",
-    );
-    if (activeComp) {
-      return res.status(409).json({
-        error: "A competition for this goal already exists",
-        competition_id: activeComp.id,
-      });
+      const { data: goalRow, error: goalErr } = await supabaseAdmin
+        .from("goals").select("*").eq("id", goal_id).maybeSingle();
+      if (goalErr) throw goalErr;
+      if (!goalRow || goalRow.created_by !== userEmail) {
+        return res.status(404).json({ error: "Goal not found or not yours" });
+      }
+      goal = goalRow;
+
+      // Reject if there's already an active/pending competition for this goal
+      const { data: existingComps } = await supabaseAdmin
+        .from("goal_competitions")
+        .select("id, status")
+        .eq("goal_id", goal_id)
+        .eq("creator_email", userEmail);
+      const activeComp = (existingComps || []).find(
+        (c) => c.status === "active" || c.status === "pending",
+      );
+      if (activeComp) {
+        return res.status(409).json({
+          error: "A competition for this goal already exists",
+          competition_id: activeComp.id,
+        });
+      }
     }
 
     const { data: profileRows } = await supabaseAdmin

@@ -100,8 +100,8 @@ function getTodaysMove({ todayMins, streakDays, dueFlashcards, urgentDays, urgen
         return {
             label: urgentDays === 0 ? "Today's deadline" : `In ${urgentDays} day${urgentDays === 1 ? '' : 's'}`,
             title: urgentTitle ? `${urgentTitle} is coming up` : "You've got a deadline incoming",
-            sub: "Open the planner and let's get a plan together.",
-            cta: "See planner",
+            sub: "Open the planner and get the week mapped out.",
+            cta: "Open planner",
             link: "Goals",
             accent: "streak",
             icon: AlertTriangle,
@@ -764,7 +764,7 @@ export default function Dashboard() {
                                 )}
                                 {!onboardingTasks.goals_set && (
                                     <Link to={createPageUrl("Goals")}>
-                                        <Button size="sm" variant="outline"><CheckCircle2 className="w-3.5 h-3.5" /> Goals</Button>
+                                        <Button size="sm" variant="outline"><CheckCircle2 className="w-3.5 h-3.5" /> Plan</Button>
                                     </Link>
                                 )}
                             </div>
@@ -959,11 +959,10 @@ export default function Dashboard() {
                             { label: "Study",     icon: Brain,        link: "Study" },
                             { label: "Quizzes",   icon: FileQuestion, link: "Quizzes" },
                             { label: "AI Tools",  icon: Sparkles,     link: "AITools" },
-                            { label: "Goals",     icon: Target,       link: "Goals" },
                             { label: "Ranked",    icon: Trophy,       link: "Ranked" },
                             { label: "Subjects",  icon: BookOpen,     link: "Subjects" },
                             { label: "Friends",   icon: Users,        link: "Friends" },
-                            { label: "Roadmap",   icon: Map,          link: "StudyRoadmap" },
+                            { label: "Planner",   icon: Map,          link: "Goals" },
                             { label: "Compete",   icon: Swords,       link: "Competitions" },
                             { label: "Analytics", icon: BarChart3,    link: "Analytics" },
                         ].map((d) => (
