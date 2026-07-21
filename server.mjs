@@ -1556,7 +1556,13 @@ app.post("/local-ai/fn/awardXP", async (req, res) => {
         level_before: prevLevel,
         level_after: newLevel,
         leveled_up: leveledUp,
-        metadata: { challenge_type, difficulty, score_percent, score, duration_minutes },
+        // Everything the arena metrics + analytics read back — dropping a
+        // field here silently zeroes a duel yardstick.
+        metadata: {
+          challenge_type, difficulty, score_percent, score, duration_minutes,
+          total_marks: body.total_marks, questions_correct, questions_total,
+          questions_attempted, quiz_score, cards_reviewed, cards_correct,
+        },
       })
       .select()
       .single();
@@ -1653,6 +1659,15 @@ app.post("/local-ai/fn/awardXP", async (req, res) => {
     checkAndGrantAchievements(userEmail, updatedProfile).catch((e) =>
       console.warn("[achievements] hook from awardXP failed:", e?.message || e),
     );
+
+    // Battles — push this student's progress into every active competition
+    // the moment a study action completes. Fire-and-forget; battle progress
+    // no longer waits for someone to open the Compete page.
+    if (ARENA_STUDY_SOURCES.includes(source)) {
+      syncAllActiveCompetitions(userEmail).catch((e) =>
+        console.warn("[battles] sync hook from awardXP failed:", e?.message || e),
+      );
+    }
 
     return res.json({
       success: true,
@@ -3176,6 +3191,100 @@ app.post("/local-ai/fn/joinGoalCompetition", async (req, res) => {
 // ─── updateCompetitionProgress ─────────────────────────────────────────────
 // Sync current user's accumulated study minutes (since competition_start_date)
 // for the competition's subject, into the participants[].study_minutes field.
+// Recompute ONE participant's slice of a battle and write it back.
+// Race-safe pattern: the expensive computation happens first, then the
+// participants array is RE-FETCHED fresh and merged immediately before the
+// write — so two students syncing at once can no longer wipe each other's
+// progress (the old read-compute-write kept a seconds-wide clobber window).
+async function syncCompetitionSlice(userEmail, competitionId) {
+  const { data: comp, error: fetchErr } = await supabaseAdmin
+    .from("goal_competitions").select("*").eq("id", competitionId).maybeSingle();
+  if (fetchErr) throw fetchErr;
+  if (!comp) return { error: "Competition not found", status: 404 };
+
+  const me = (comp.participants || []).find((p) => p.email === userEmail);
+  if (!me) return { error: "You are not in this competition", status: 403 };
+
+  const startDate = comp.competition_start_date
+    ? new Date(comp.competition_start_date)
+    : new Date(comp.created_date);
+  const subjectFilter = comp.subject_name || comp.subject_code || null;
+
+  const matchesSubject = (record) => {
+    if (!subjectFilter) return true;
+    const f = subjectFilter.toLowerCase();
+    return (
+      (record.subject || "").toLowerCase().includes(f) ||
+      (record.subject_name || "").toLowerCase().includes(f)
+    );
+  };
+  const afterStart = (record) => {
+    const d = record.created_date ? new Date(record.created_date) : null;
+    return d ? d >= startDate : false;
+  };
+
+  const [{ data: techs }, { data: sess }] = await Promise.all([
+    supabaseAdmin.from("study_techniques").select("*").eq("created_by", userEmail),
+    supabaseAdmin.from("study_sessions").select("*").eq("created_by", userEmail),
+  ]);
+
+  const techMinutes = (techs || [])
+    .filter(afterStart).filter(matchesSubject)
+    .reduce((sum, s) => sum + (s.session_duration || 0), 0);
+  const sessMinutes = (sess || [])
+    .filter(afterStart).filter(matchesSubject)
+    .reduce((sum, s) => sum + (s.duration_minutes || 0), 0);
+  const totalMinutes = techMinutes + sessMinutes;
+
+  // Compete Score over the battle window — the ranking basis.
+  const cs = await competitionCompeteScore(userEmail, startDate.toISOString());
+
+  // Merge into the FRESHEST participants array, write immediately.
+  const { data: freshComp } = await supabaseAdmin
+    .from("goal_competitions").select("participants").eq("id", competitionId).maybeSingle();
+  const now = new Date().toISOString();
+  const updatedParticipants = (freshComp?.participants || comp.participants || []).map((p) =>
+    p.email === userEmail
+      ? {
+          ...p,
+          study_minutes: totalMinutes,
+          compete_score: cs.total,
+          score_breakdown: { effort: cs.effort, mastery: cs.mastery, consistency: cs.consistency },
+          last_hours_sync: now,
+          last_activity: now,
+        }
+      : p,
+  );
+  const { error: updErr } = await supabaseAdmin
+    .from("goal_competitions")
+    .update({ participants: updatedParticipants })
+    .eq("id", competitionId);
+  if (updErr) throw updErr;
+
+  return { totalMinutes, cs };
+}
+
+// Push a student's progress into EVERY active battle they're in — called
+// fire-and-forget after each study-source XP award so battles track the
+// moment something completes, not the next time someone opens Compete.
+async function syncAllActiveCompetitions(userEmail) {
+  try {
+    const { data: comps } = await supabaseAdmin
+      .from("goal_competitions")
+      .select("id, participants, status")
+      .eq("status", "active")
+      .contains("participants", JSON.stringify([{ email: userEmail }]))
+      .limit(10);
+    for (const c of comps || []) {
+      try { await syncCompetitionSlice(userEmail, c.id); } catch (e) {
+        console.warn(`[syncAllActiveCompetitions] ${c.id}:`, e?.message);
+      }
+    }
+  } catch (e) {
+    console.warn("[syncAllActiveCompetitions] query failed:", e?.message);
+  }
+}
+
 app.post("/local-ai/fn/updateCompetitionProgress", async (req, res) => {
   const user = await authenticateRequest(req);
   if (!user) return res.status(401).json({ error: "Unauthorized" });
@@ -3185,78 +3294,15 @@ app.post("/local-ai/fn/updateCompetitionProgress", async (req, res) => {
     const { competition_id } = req.body || {};
     if (!competition_id) return res.status(400).json({ error: "competition_id required" });
 
-    const userEmail = user.email;
-
-    const { data: comp, error: fetchErr } = await supabaseAdmin
-      .from("goal_competitions").select("*").eq("id", competition_id).maybeSingle();
-    if (fetchErr) throw fetchErr;
-    if (!comp) return res.status(404).json({ error: "Competition not found" });
-
-    const participants = comp.participants || [];
-    const me = participants.find((p) => p.email === userEmail);
-    if (!me) return res.status(403).json({ error: "You are not in this competition" });
-
-    const startDate = comp.competition_start_date
-      ? new Date(comp.competition_start_date)
-      : new Date(comp.created_date);
-    const subjectFilter = comp.subject_name || comp.subject_code || null;
-
-    const matchesSubject = (record) => {
-      if (!subjectFilter) return true;
-      const f = subjectFilter.toLowerCase();
-      return (
-        (record.subject || "").toLowerCase().includes(f) ||
-        (record.subject_name || "").toLowerCase().includes(f)
-      );
-    };
-    const afterStart = (record) => {
-      const d = record.created_date ? new Date(record.created_date) : null;
-      return d ? d >= startDate : false;
-    };
-
-    const [{ data: techs }, { data: sess }] = await Promise.all([
-      supabaseAdmin.from("study_techniques").select("*").eq("created_by", userEmail),
-      supabaseAdmin.from("study_sessions").select("*").eq("created_by", userEmail),
-    ]);
-
-    const techMinutes = (techs || [])
-      .filter(afterStart).filter(matchesSubject)
-      .reduce((sum, s) => sum + (s.session_duration || 0), 0);
-    const sessMinutes = (sess || [])
-      .filter(afterStart).filter(matchesSubject)
-      .reduce((sum, s) => sum + (s.duration_minutes || 0), 0);
-    const totalMinutes = techMinutes + sessMinutes;
-
-    // Compete Score over the battle window — the new ranking basis.
-    const cs = await competitionCompeteScore(userEmail, startDate.toISOString());
-
-    const now = new Date().toISOString();
-    const updatedParticipants = participants.map((p) =>
-      p.email === userEmail
-        ? {
-            ...p,
-            study_minutes: totalMinutes,
-            compete_score: cs.total,
-            score_breakdown: { effort: cs.effort, mastery: cs.mastery, consistency: cs.consistency },
-            last_hours_sync: now,
-            last_activity: now,
-          }
-        : p,
-    );
-
-    const { error: updErr } = await supabaseAdmin
-      .from("goal_competitions")
-      .update({ participants: updatedParticipants })
-      .eq("id", competition_id);
-    if (updErr) throw updErr;
+    const result = await syncCompetitionSlice(user.email, competition_id);
+    if (result.error) return res.status(result.status).json({ error: result.error });
+    const { totalMinutes, cs } = result;
 
     return res.json({
       success: true,
       study_minutes: totalMinutes,
       study_hours: (totalMinutes / 60).toFixed(1),
       compete_score: cs.total,
-      subject: subjectFilter,
-      since: startDate.toISOString(),
     });
   } catch (err) {
     console.error("[updateCompetitionProgress] error:", err);
@@ -3848,9 +3894,11 @@ async function computeMetricValue(email, metric, startIso, endIso) {
     } else if (metric === "quiz_marks" && e.source === "quiz") {
       total += Number(e.metadata?.total_marks) || Number(e.metadata?.questions_correct) || 0;
     } else if (metric === "flashcards" && e.source === "flashcard") {
-      total += Number(e.metadata?.cards_reviewed) || 0;
+      // Batch awards carry cards_reviewed; incremental drips are one card each.
+      total += Number(e.metadata?.cards_reviewed) || (e.metadata?.type === "flashcard_card" ? 1 : 0);
     } else if (metric === "study_minutes" && ARENA_MINUTE_SOURCES.includes(e.source)) {
-      total += Number(e.metadata?.duration_minutes) || 0;
+      // Session awards carry duration_minutes; focus drips are one minute each.
+      total += Number(e.metadata?.duration_minutes) || (e.metadata?.type === "focus_minute" ? 1 : 0);
     }
   }
   return Math.round(total);

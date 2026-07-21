@@ -64,6 +64,18 @@ export default function Arena({ view = "all" }) {
     useEffect(() => {
         base44.auth.me().then(setUser).catch(() => {});
         refresh();
+        // Any XP award can move a score or settle a bet — refetch right after
+        // the server has recorded it so the arena tracks in near-real-time.
+        let debounce = null;
+        const onXP = () => {
+            clearTimeout(debounce);
+            debounce = setTimeout(refresh, 1800);
+        };
+        window.addEventListener('xp_awarded', onXP);
+        return () => {
+            window.removeEventListener('xp_awarded', onXP);
+            clearTimeout(debounce);
+        };
     }, [refresh]);
 
     // Keep live duels fresh without hammering the server.
