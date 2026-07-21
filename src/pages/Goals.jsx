@@ -1,25 +1,25 @@
 /**
- * Planner — the simplified successor to Goals + Roadmap. One holistic page:
- * upcoming SACs drive everything (Study urgency, Revision Mode picks, coach
- * lines, Dashboard reminders all read subject_assessments), and a light
- * 7-day session plan (study_plans) keeps the week honest. The old goal
- * trees, mountains and AI roadmaps are gone — track the dates, plan the
- * sessions, go study.
+ * Planner — SAC-centred planning hub. Monday-anchored week board with
+ * multi-week navigation, recurring sessions, launchable session chips
+ * (each opens the right study tool), and a customisable AI week planner
+ * that proposes sessions for review before anything is saved.
  */
 import React, { useState, useEffect, useCallback, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
-    CalendarDays, Plus, Check, X, GraduationCap, AlertTriangle, Sparkles,
-    Loader2, ArrowRight, Edit2, Flag, BookOpen, Trash2
+    CalendarDays, Plus, Check, X, GraduationCap, Sparkles,
+    Loader2, ArrowRight, Edit2, Flag, BookOpen, Trash2, ChevronLeft,
+    ChevronRight, Repeat
 } from "lucide-react";
 import { base44 } from "@/api/base44Client";
 import { useToast } from "@/components/ui/use-toast";
-import { format, differenceInDays, parseISO, addDays } from "date-fns";
+import { format, differenceInDays, parseISO, addDays, startOfWeek, addWeeks } from "date-fns";
 import HelpButton from "@/components/shared/HelpButton";
 
 const TYPE_OPTIONS = [
@@ -28,10 +28,29 @@ const TYPE_OPTIONS = [
     { value: "test", label: "Test" },
 ];
 
-// Static countdown pill classes (Tailwind JIT-safe).
+const HOUR_OPTIONS = [2, 5, 8, 12];
+const TIME_PREFS = [
+    { value: "after_school", label: "After school" },
+    { value: "evenings", label: "Evenings" },
+    { value: "weekends", label: "Weekend-heavy" },
+];
+const REPEAT_OPTIONS = [2, 4, 8, 12];
+const MAX_WEEKS_AHEAD = 8;
+
+// ─── Static class lookups (Tailwind JIT-safe) ───────────────────────────────
 const countdownPill = (days) =>
     days <= 3 ? "bg-streak/15 text-streak" :
     days <= 7 ? "bg-xp/15 text-xp" : "bg-chart-3/10 text-chart-3";
+
+// Subject → consistent token colour (same hash trick as Friends avatars).
+const SUBJECT_CHIP = [
+    "bg-chart-3/10 border-chart-3/30 text-chart-3",
+    "bg-chart-4/10 border-chart-4/30 text-chart-4",
+    "bg-primary/10 border-primary/30 text-primary",
+    "bg-xp/10 border-xp/30 text-xp",
+    "bg-streak/10 border-streak/30 text-streak",
+];
+const subjectChipClass = (name) => SUBJECT_CHIP[(name || "?").charCodeAt(0) % SUBJECT_CHIP.length];
 
 function daysLabel(days) {
     if (days < 0) return "Past";
@@ -39,6 +58,20 @@ function daysLabel(days) {
     if (days === 1) return "Tomorrow";
     return `${days} days`;
 }
+
+// A planned session opens the tool it names — the plan is a launcher.
+function sessionLink(title) {
+    const t = (title || "").toLowerCase();
+    if (/flash|card|spaced/.test(t)) return "/Study?tab=spaced_repetition";
+    if (/mock|exam|paper|sac practice/.test(t)) return "/Study?tab=exam";
+    if (/quiz/.test(t)) return "/Quizzes";
+    if (/recall/.test(t)) return "/Study?tab=active_recall";
+    if (/blurt/.test(t)) return "/Study?tab=blurting";
+    return "/Study";
+}
+
+const REC_TAG = /\[rec:([a-z0-9-]+)\]/i;
+const recIdOf = (plan) => plan.notes?.match(REC_TAG)?.[1] || null;
 
 export default function Planner() {
     const { toast } = useToast();
@@ -49,6 +82,9 @@ export default function Planner() {
     const [plans, setPlans] = useState([]);
     const [isLoading, setIsLoading] = useState(true);
 
+    // Week navigation — Monday-anchored, -1 (last week) .. +8.
+    const [weekOffset, setWeekOffset] = useState(0);
+
     // Add-SAC form
     const [sacTitle, setSacTitle] = useState("");
     const [sacSubject, setSacSubject] = useState("");
@@ -56,28 +92,46 @@ export default function Planner() {
     const [sacDate, setSacDate] = useState("");
     const [savingSac, setSavingSac] = useState(false);
 
-    // Add-session dialog
+    // Add-session dialog (with recurrence)
     const [planDay, setPlanDay] = useState(null);
     const [planTitle, setPlanTitle] = useState("");
     const [planSubject, setPlanSubject] = useState("");
     const [planTime, setPlanTime] = useState("16:00");
+    const [repeatWeekly, setRepeatWeekly] = useState(false);
+    const [repeatWeeks, setRepeatWeeks] = useState(4);
     const [savingPlan, setSavingPlan] = useState(false);
 
-    // Target card editing
+    // Recurring delete choice
+    const [deleteTarget, setDeleteTarget] = useState(null);
+
+    // Target card
     const [editingTarget, setEditingTarget] = useState(false);
     const [targetAtar, setTargetAtar] = useState("");
     const [targetCourse, setTargetCourse] = useState("");
     const [targetUni, setTargetUni] = useState("");
 
-    const [aiPlanning, setAiPlanning] = useState(false);
+    // AI planning dialog
+    const [aiOpen, setAiOpen] = useState(false);
+    const [aiHours, setAiHours] = useState(5);
+    const [aiFocus, setAiFocus] = useState([]);
+    const [aiTimes, setAiTimes] = useState("after_school");
+    const [aiNotes, setAiNotes] = useState("");
+    const [aiProposals, setAiProposals] = useState(null); // [{...session, include}]
+    const [aiGenerating, setAiGenerating] = useState(false);
+    const [aiSaving, setAiSaving] = useState(false);
+    const [aiSacSubject, setAiSacSubject] = useState("");
+    const [aiSacTitle, setAiSacTitle] = useState("");
+    const [aiSacDate, setAiSacDate] = useState("");
 
     const loadData = useCallback(async (email) => {
         try {
+            const rangeStart = format(addWeeks(startOfWeek(new Date(), { weekStartsOn: 1 }), -1), "yyyy-MM-dd");
+            const rangeEnd = format(addWeeks(startOfWeek(new Date(), { weekStartsOn: 1 }), MAX_WEEKS_AHEAD + 1), "yyyy-MM-dd");
             const [profileData, subjectData, assessmentData, planData] = await Promise.all([
                 base44.entities.UserProfile.filter({ created_by: email }).catch(() => []),
                 base44.entities.UserSubject.filter({ created_by: email, is_active: true }).catch(() => []),
                 base44.entities.SubjectAssessment.filter({ created_by: email }, "due_date", 50).catch(() => []),
-                base44.entities.StudyPlan.filter({ created_by: email }, "date", 60).catch(() => []),
+                base44.entities.StudyPlan.filter({ created_by: email, date: { $gte: rangeStart, $lte: rangeEnd } }, "date", 200).catch(() => []),
             ]);
             const p = profileData[0] || null;
             setProfile(p);
@@ -108,20 +162,28 @@ export default function Planner() {
     const nextSac = upcoming[0] || null;
     const nextSacDays = nextSac ? differenceInDays(parseISO(nextSac.due_date), parseISO(todayStr)) : null;
 
-    // Next 7 days for the week board.
+    // Visible week (Mon–Sun).
+    const weekStart = useMemo(() => addWeeks(startOfWeek(new Date(), { weekStartsOn: 1 }), weekOffset), [weekOffset]);
     const week = useMemo(() => Array.from({ length: 7 }, (_, i) => {
-        const d = addDays(new Date(), i);
+        const d = addDays(weekStart, i);
         const key = format(d, "yyyy-MM-dd");
         return {
             key,
-            label: i === 0 ? "Today" : i === 1 ? "Tomorrow" : format(d, "EEE d"),
+            dayName: format(d, "EEE"),
+            dayNum: format(d, "d"),
+            isToday: key === todayStr,
+            isPast: key < todayStr,
             plans: plans.filter(p => p.date === key).sort((a, b) => (a.start_time || "").localeCompare(b.start_time || "")),
             sacs: upcoming.filter(a => a.due_date === key),
         };
-    }), [plans, upcoming]);
+    }), [weekStart, plans, upcoming, todayStr]);
 
+    const weekLabel = weekOffset === 0 ? "This week"
+        : weekOffset === 1 ? "Next week"
+        : `${format(weekStart, "d MMM")} – ${format(addDays(weekStart, 6), "d MMM")}`;
     const plannedThisWeek = week.reduce((n, d) => n + d.plans.length, 0);
     const doneThisWeek = week.reduce((n, d) => n + d.plans.filter(p => p.is_completed).length, 0);
+    const weekPct = plannedThisWeek > 0 ? Math.round((doneThisWeek / plannedThisWeek) * 100) : 0;
 
     const coachLine = !nextSac
         ? "No SACs tracked yet — add the next one and the whole app plans around it."
@@ -131,57 +193,66 @@ export default function Planner() {
                 ? `${nextSac.subject_name} in ${daysLabel(nextSacDays).toLowerCase()} — every session now counts double.`
                 : `${daysLabel(nextSacDays)} until ${nextSac.subject_name} ${nextSac.title}. Plenty of runway — let's use it.`;
 
-    // ─── Actions ───────────────────────────────────────────────────────────────
-    const addSac = async () => {
-        if (!sacTitle.trim() || !sacSubject || !sacDate) {
+    // ─── SAC actions ───────────────────────────────────────────────────────────
+    const addSac = async (subject = sacSubject, title = sacTitle, type = sacType, date = sacDate) => {
+        if (!title.trim() || !subject || !date) {
             toast({ title: "Almost there", description: "Subject, name and date make a SAC trackable." });
-            return;
+            return false;
         }
-        setSavingSac(true);
         try {
             await base44.entities.SubjectAssessment.create({
-                title: sacTitle.trim(),
-                subject_name: sacSubject,
-                assessment_type: sacType,
-                due_date: sacDate,
-                is_completed: false,
+                title: title.trim(), subject_name: subject, assessment_type: type,
+                due_date: date, is_completed: false,
             });
             toast({ title: "SAC tracked 🎯", description: "Study, Revision Mode and your Dashboard now plan around it." });
-            setSacTitle(""); setSacDate("");
             loadData(user.email);
+            return true;
         } catch (e) {
             toast({ title: "Couldn't save", description: e.message, variant: "destructive" });
-        } finally {
-            setSavingSac(false);
+            return false;
         }
+    };
+
+    const handleAddSac = async () => {
+        setSavingSac(true);
+        const ok = await addSac();
+        if (ok) { setSacTitle(""); setSacDate(""); }
+        setSavingSac(false);
     };
 
     const toggleSacDone = async (a) => {
         try {
             await base44.entities.SubjectAssessment.update(a.id, { is_completed: !a.is_completed });
             loadData(user.email);
-        } catch (e) { toast({ title: "Couldn't update", variant: "destructive" }); }
+        } catch { toast({ title: "Couldn't update", variant: "destructive" }); }
     };
 
     const deleteSac = async (a) => {
         try {
             await base44.entities.SubjectAssessment.delete(a.id);
             loadData(user.email);
-        } catch (e) { toast({ title: "Couldn't remove", variant: "destructive" }); }
+        } catch { toast({ title: "Couldn't remove", variant: "destructive" }); }
     };
 
+    // ─── Session actions ───────────────────────────────────────────────────────
     const addPlan = async () => {
         if (!planTitle.trim() || !planDay) return;
         setSavingPlan(true);
         try {
-            await base44.entities.StudyPlan.create({
-                title: planTitle.trim(),
-                subject_name: planSubject || null,
-                date: planDay,
-                start_time: planTime || null,
-                is_completed: false,
-            });
-            setPlanDay(null); setPlanTitle("");
+            const recId = repeatWeekly ? (crypto.randomUUID ? crypto.randomUUID().slice(0, 8) : `${Date.now()}`) : null;
+            const weeks = repeatWeekly ? repeatWeeks : 1;
+            for (let i = 0; i < weeks; i++) {
+                await base44.entities.StudyPlan.create({
+                    title: planTitle.trim(),
+                    subject_name: planSubject || null,
+                    date: format(addDays(parseISO(planDay), i * 7), "yyyy-MM-dd"),
+                    start_time: planTime || null,
+                    is_completed: false,
+                    notes: recId ? `[rec:${recId}]` : null,
+                });
+            }
+            if (repeatWeekly) toast({ title: `🔁 Weekly for ${weeks} weeks`, description: "The series is on the board — delete any one to trim it." });
+            setPlanDay(null); setPlanTitle(""); setRepeatWeekly(false);
             loadData(user.email);
         } catch (e) {
             toast({ title: "Couldn't save", description: e.message, variant: "destructive" });
@@ -194,16 +265,28 @@ export default function Planner() {
         try {
             await base44.entities.StudyPlan.update(p.id, { is_completed: !p.is_completed });
             setPlans(prev => prev.map(x => x.id === p.id ? { ...x, is_completed: !p.is_completed } : x));
-        } catch (e) { toast({ title: "Couldn't update", variant: "destructive" }); }
+        } catch { toast({ title: "Couldn't update", variant: "destructive" }); }
     };
 
-    const deletePlan = async (p) => {
+    const requestDeletePlan = (p) => {
+        if (recIdOf(p)) setDeleteTarget(p);
+        else deletePlans([p]);
+    };
+
+    const deletePlans = async (list) => {
         try {
-            await base44.entities.StudyPlan.delete(p.id);
-            setPlans(prev => prev.filter(x => x.id !== p.id));
-        } catch (e) { toast({ title: "Couldn't remove", variant: "destructive" }); }
+            for (const p of list) await base44.entities.StudyPlan.delete(p.id);
+            setPlans(prev => prev.filter(x => !list.some(d => d.id === x.id)));
+            setDeleteTarget(null);
+        } catch { toast({ title: "Couldn't remove", variant: "destructive" }); }
     };
 
+    const deleteFuture = () => {
+        const rid = recIdOf(deleteTarget);
+        deletePlans(plans.filter(p => recIdOf(p) === rid && p.date >= deleteTarget.date));
+    };
+
+    // ─── Target ────────────────────────────────────────────────────────────────
     const saveTarget = async () => {
         try {
             await base44.entities.UserProfile.update(profile.id, {
@@ -219,18 +302,38 @@ export default function Planner() {
         }
     };
 
-    // AI: fill the week with sessions weighted toward the nearest SACs.
-    const planMyWeek = async () => {
-        setAiPlanning(true);
+    // ─── AI planning ───────────────────────────────────────────────────────────
+    const openAiPlanner = () => {
+        const soon = new Set(upcoming.filter(a => differenceInDays(parseISO(a.due_date), parseISO(todayStr)) <= 14).map(a => a.subject_name));
+        setAiFocus(soon.size ? [...soon] : subjects.slice(0, 2).map(s => s.subject_name));
+        setAiProposals(null);
+        setAiOpen(true);
+    };
+
+    const toggleFocus = (name) =>
+        setAiFocus(prev => prev.includes(name) ? prev.filter(x => x !== name) : [...prev, name]);
+
+    const generatePlan = async () => {
+        setAiGenerating(true);
         try {
+            const planStart = weekStart < new Date() ? todayStr : format(weekStart, "yyyy-MM-dd");
+            const planEnd = format(addDays(weekStart, 6), "yyyy-MM-dd");
+            const timeHint = aiTimes === "after_school" ? "16:00-18:00 on school days"
+                : aiTimes === "evenings" ? "19:00-21:30"
+                : "mostly Saturday and Sunday, 10:00-17:00";
             const response = await base44.integrations.Core.InvokeLLM({
                 feature: "ai_tool",
-                prompt: `You are a VCE study coach. Today is ${todayStr}.
-Student's subjects: ${subjects.map(s => s.subject_name).join(", ") || "not set"}.
-Upcoming assessments: ${upcoming.slice(0, 6).map(a => `${a.subject_name} ${a.title} (${a.assessment_type}) on ${a.due_date}`).join("; ") || "none tracked"}.
-Existing planned sessions (skip these slots): ${week.flatMap(d => d.plans.map(p => `${p.date} ${p.start_time || ""} ${p.title}`)).join("; ") || "none"}.
+                prompt: `You are a VCE study coach planning one week of study sessions. Today is ${todayStr}.
+Plan for dates ${planStart} to ${planEnd} only.
+Total study budget: about ${aiHours} hours for the week (each session 25-60 min; derive the session count from the budget).
+Focus subjects: ${aiFocus.join(", ") || "any of the student's subjects"}.
+All subjects: ${subjects.map(s => s.subject_name).join(", ") || "not set"}.
+Upcoming assessments: ${upcoming.slice(0, 8).map(a => `${a.subject_name} ${a.title} (${a.assessment_type}) on ${a.due_date}`).join("; ") || "none tracked"}.
+Preferred study times: ${timeHint}.
+Existing sessions (avoid clashing): ${plans.filter(p => p.date >= planStart && p.date <= planEnd).map(p => `${p.date} ${p.start_time || ""} ${p.title}`).join("; ") || "none"}.
+Student notes: ${aiNotes || "none"}.
 
-Create 4-6 focused study sessions across the next 7 days (dates ${todayStr} to ${format(addDays(new Date(), 6), "yyyy-MM-dd")}). Weight sessions toward the nearest assessments. At most 2 per day. Each session: a short specific title naming the technique (e.g. "Flashcards: cell transport", "Timed mock: Methods CAS-free", "Active recall: Unit 3 AOS2"), the subject, a date, and an afternoon/evening start_time (HH:MM).`,
+Rules: weight sessions toward the nearest assessments; at most 2 sessions per day; vary techniques (flashcards, active recall, quiz, timed mock, blurting, pomodoro notes review); every title starts with the technique, e.g. "Flashcards: gene regulation", "Timed mock: Methods tech-free", "Active recall: AOS2 key knowledge". Give each a date within range and a start_time (HH:MM) respecting the preferred times. Also give duration_minutes (25-60).`,
                 response_json_schema: {
                     type: "object",
                     properties: {
@@ -243,6 +346,7 @@ Create 4-6 focused study sessions across the next 7 days (dates ${todayStr} to $
                                     subject_name: { type: "string" },
                                     date: { type: "string" },
                                     start_time: { type: "string" },
+                                    duration_minutes: { type: "number" },
                                 },
                                 required: ["title", "date"],
                             },
@@ -251,19 +355,37 @@ Create 4-6 focused study sessions across the next 7 days (dates ${todayStr} to $
                     required: ["sessions"],
                 },
             });
-            const sessions = (response?.sessions || []).filter(s => s.date >= todayStr).slice(0, 6);
-            for (const s of sessions) {
+            const proposals = (response?.sessions || [])
+                .filter(s => s.date >= planStart && s.date <= planEnd)
+                .slice(0, 12)
+                .map(s => ({ ...s, include: true }));
+            if (!proposals.length) throw new Error("The coach came back empty-handed — try again.");
+            setAiProposals(proposals);
+        } catch (e) {
+            toast({ title: "Planning unavailable", description: e.message, variant: "destructive" });
+        } finally {
+            setAiGenerating(false);
+        }
+    };
+
+    const saveProposals = async () => {
+        const chosen = (aiProposals || []).filter(p => p.include);
+        if (!chosen.length) { setAiOpen(false); return; }
+        setAiSaving(true);
+        try {
+            for (const s of chosen) {
                 await base44.entities.StudyPlan.create({
                     title: s.title, subject_name: s.subject_name || null,
                     date: s.date, start_time: s.start_time || null, is_completed: false,
                 });
             }
-            toast({ title: `✨ ${sessions.length} sessions planned`, description: "Weighted toward your nearest SACs. Adjust anything that clashes." });
+            toast({ title: `✨ ${chosen.length} sessions on the board`, description: "Adjust anything that clashes — it's your week." });
+            setAiOpen(false);
             loadData(user.email);
         } catch (e) {
-            toast({ title: "Planning unavailable", description: e.message, variant: "destructive" });
+            toast({ title: "Couldn't save", description: e.message, variant: "destructive" });
         } finally {
-            setAiPlanning(false);
+            setAiSaving(false);
         }
     };
 
@@ -294,12 +416,6 @@ Create 4-6 focused study sessions across the next 7 days (dates ${todayStr} to $
                                     </span>
                                 </>
                             )}
-                            {plannedThisWeek > 0 && (
-                                <>
-                                    <span className="text-muted-foreground/40">·</span>
-                                    <span className="font-extrabold text-primary">{doneThisWeek}/{plannedThisWeek} done this week</span>
-                                </>
-                            )}
                         </div>
                         <HelpButton page="Planner" />
                     </div>
@@ -308,36 +424,45 @@ Create 4-6 focused study sessions across the next 7 days (dates ${todayStr} to $
                     </h1>
                 </motion.section>
 
-                {/* ── HERO: next SAC + target ─────────────────────────── */}
+                {/* ── HERO: countdown banner + target ─────────────────── */}
                 <motion.section initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.05 }}
                     className="grid grid-cols-1 lg:grid-cols-3 gap-5">
-                    {/* Next SAC countdown */}
                     <div className="lg:col-span-2">
                         {nextSac ? (
-                            <div className={`relative overflow-hidden rounded-2xl border shadow-soft p-6 lg:p-7 h-full ${nextSacDays <= 3 ? "bg-streak/5 border-streak/20" : "bg-chart-3/5 border-chart-3/15"}`}>
-                                <AlertTriangle className={`absolute -top-5 -right-5 w-28 h-28 pointer-events-none ${nextSacDays <= 3 ? "text-streak/[0.07]" : "text-chart-3/[0.07]"}`} />
-                                <p className="stat-label mb-1">{nextSacDays <= 3 ? "Crunch time" : "Next up"}</p>
-                                <div className="flex items-end gap-4 flex-wrap">
-                                    <p className="font-display font-extrabold text-foreground leading-none" style={{ fontSize: "clamp(2.5rem, 7vw, 4rem)" }}>
-                                        {daysLabel(nextSacDays)}
+                            <div className={`relative overflow-hidden rounded-3xl p-6 lg:p-8 text-white shadow-soft h-full ${
+                                nextSacDays <= 3 ? "bg-gradient-to-br from-streak to-xp" : "bg-gradient-to-br from-chart-3 to-chart-4"
+                            }`}>
+                                <Flag className="absolute -top-8 -right-8 w-44 h-44 text-white/10 pointer-events-none" />
+                                <div className="relative">
+                                    <p className="text-xs font-bold uppercase tracking-widest text-white/70 mb-1">
+                                        {nextSacDays <= 3 ? "Crunch time" : "Next assessment"}
                                     </p>
-                                    <div className="mb-1.5 min-w-0">
-                                        <p className="font-bold text-foreground truncate">{nextSac.subject_name} — {nextSac.title}</p>
-                                        <p className="text-xs text-muted-foreground">{format(parseISO(nextSac.due_date), "EEEE d MMMM")}</p>
+                                    <div className="flex items-end gap-4 flex-wrap">
+                                        <p className="font-display font-black leading-none" style={{ fontSize: "clamp(3rem, 8vw, 5rem)" }}>
+                                            {daysLabel(nextSacDays)}
+                                        </p>
+                                        <div className="mb-2 min-w-0">
+                                            <p className="font-extrabold text-white truncate text-lg">{nextSac.subject_name} — {nextSac.title}</p>
+                                            <p className="text-sm text-white/75">{format(parseISO(nextSac.due_date), "EEEE d MMMM")}</p>
+                                        </div>
                                     </div>
-                                </div>
-                                <div className="flex gap-2 mt-4 flex-wrap">
-                                    <Link to="/Study?tab=exam">
-                                        <Button size="sm" className="gap-1.5"><GraduationCap className="w-3.5 h-3.5" /> Run a timed mock</Button>
-                                    </Link>
-                                    <Link to="/Study?tab=spaced_repetition">
-                                        <Button size="sm" variant="outline" className="gap-1.5 border-2"><BookOpen className="w-3.5 h-3.5" /> Review cards</Button>
-                                    </Link>
+                                    <div className="flex gap-2 mt-5 flex-wrap">
+                                        <Link to="/Study?tab=exam"
+                                            className="inline-flex items-center gap-1.5 bg-white/20 hover:bg-white/30 rounded-xl px-4 py-2 text-sm font-bold transition-colors">
+                                            <GraduationCap className="w-4 h-4" /> Run a timed mock
+                                        </Link>
+                                        <Link to="/Study?tab=spaced_repetition"
+                                            className="inline-flex items-center gap-1.5 bg-white/20 hover:bg-white/30 rounded-xl px-4 py-2 text-sm font-bold transition-colors">
+                                            <BookOpen className="w-4 h-4" /> Review cards
+                                        </Link>
+                                    </div>
                                 </div>
                             </div>
                         ) : (
-                            <div className="rounded-2xl bg-surface border border-dashed border-border p-6 lg:p-8 text-center h-full flex flex-col items-center justify-center shadow-soft">
-                                <Flag className="w-10 h-10 text-muted-foreground/30 mb-3" />
+                            <div className="rounded-3xl bg-surface border border-dashed border-border p-6 lg:p-8 text-center h-full flex flex-col items-center justify-center shadow-soft">
+                                <div className="w-14 h-14 rounded-2xl bg-chart-3/10 flex items-center justify-center mb-3">
+                                    <Flag className="w-7 h-7 text-chart-3" />
+                                </div>
                                 <h2 className="font-display font-extrabold text-foreground text-lg mb-1">What's your next SAC?</h2>
                                 <p className="text-muted-foreground text-sm max-w-sm">
                                     Add it below — Study, Revision Mode and your Dashboard all start counting down with you.
@@ -346,8 +471,8 @@ Create 4-6 focused study sessions across the next 7 days (dates ${todayStr} to $
                         )}
                     </div>
 
-                    {/* Target card — the one bit of Goals worth keeping */}
-                    <div className="rounded-2xl bg-chart-4/5 border border-chart-4/15 shadow-soft p-6 flex flex-col">
+                    {/* Target card */}
+                    <div className="rounded-3xl bg-chart-4/5 border border-chart-4/15 shadow-soft p-6 flex flex-col">
                         <div className="flex items-center justify-between mb-2">
                             <p className="stat-label text-chart-4/80">Your target</p>
                             <button onClick={() => setEditingTarget(e => !e)} aria-label="Edit target"
@@ -383,7 +508,6 @@ Create 4-6 focused study sessions across the next 7 days (dates ${todayStr} to $
                         <Flag className="w-5 h-5 text-chart-3" /> Upcoming SACs
                     </h2>
 
-                    {/* Add form — deliberately one line, zero friction */}
                     <div className="card-soft p-4 mb-4">
                         <div className="grid grid-cols-1 sm:grid-cols-[1fr,1fr,auto,auto,auto] gap-2 items-center">
                             <Select value={sacSubject} onValueChange={setSacSubject}>
@@ -402,7 +526,7 @@ Create 4-6 focused study sessions across the next 7 days (dates ${todayStr} to $
                                 ))}
                             </div>
                             <Input type="date" value={sacDate} min={todayStr} onChange={e => setSacDate(e.target.value)} className="w-auto" />
-                            <Button onClick={addSac} disabled={savingSac} className="gap-1.5">
+                            <Button onClick={handleAddSac} disabled={savingSac} className="gap-1.5">
                                 {savingSac ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />} Track it
                             </Button>
                         </div>
@@ -417,8 +541,7 @@ Create 4-6 focused study sessions across the next 7 days (dates ${todayStr} to $
                                         <motion.div key={a.id} layout initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, x: -20 }}
                                             className="card-soft flex items-center gap-3 p-3.5">
                                             <button onClick={() => toggleSacDone(a)} aria-label="Mark assessment done"
-                                                className="w-6 h-6 rounded-lg border-2 border-border hover:border-primary flex items-center justify-center flex-shrink-0 transition-colors">
-                                            </button>
+                                                className="w-6 h-6 rounded-lg border-2 border-border hover:border-primary flex items-center justify-center flex-shrink-0 transition-colors" />
                                             <div className="flex-1 min-w-0">
                                                 <p className="font-bold text-foreground text-sm truncate">{a.subject_name} — {a.title}</p>
                                                 <p className="text-xs text-muted-foreground">{format(parseISO(a.due_date), "EEE d MMM")} · {(a.assessment_type || "sac").toUpperCase()}</p>
@@ -436,54 +559,106 @@ Create 4-6 focused study sessions across the next 7 days (dates ${todayStr} to $
                     )}
                 </motion.section>
 
-                {/* ── THIS WEEK ───────────────────────────────────────── */}
+                {/* ── WEEK BOARD ──────────────────────────────────────── */}
                 <motion.section initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.15 }}>
                     <div className="flex items-center justify-between mb-3 gap-3 flex-wrap">
-                        <h2 className="font-display font-extrabold text-foreground text-lg lg:text-xl flex items-center gap-2">
-                            <CalendarDays className="w-5 h-5 text-primary" /> This week
-                        </h2>
-                        <Button onClick={planMyWeek} disabled={aiPlanning} size="sm" variant="outline" className="gap-1.5 border-2 border-chart-4/30 text-chart-4 hover:bg-chart-4/5">
-                            {aiPlanning ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5" />}
-                            {aiPlanning ? "Planning…" : "Plan my week for me"}
+                        <div className="flex items-center gap-2">
+                            <h2 className="font-display font-extrabold text-foreground text-lg lg:text-xl flex items-center gap-2">
+                                <CalendarDays className="w-5 h-5 text-primary" /> {weekLabel}
+                            </h2>
+                            <div className="flex items-center gap-1">
+                                <button onClick={() => setWeekOffset(o => Math.max(-1, o - 1))} disabled={weekOffset <= -1}
+                                    aria-label="Previous week"
+                                    className="w-8 h-8 rounded-xl border-2 border-border flex items-center justify-center text-muted-foreground hover:border-primary/40 hover:text-primary disabled:opacity-30 transition-all">
+                                    <ChevronLeft className="w-4 h-4" />
+                                </button>
+                                <button onClick={() => setWeekOffset(o => Math.min(MAX_WEEKS_AHEAD, o + 1))} disabled={weekOffset >= MAX_WEEKS_AHEAD}
+                                    aria-label="Next week"
+                                    className="w-8 h-8 rounded-xl border-2 border-border flex items-center justify-center text-muted-foreground hover:border-primary/40 hover:text-primary disabled:opacity-30 transition-all">
+                                    <ChevronRight className="w-4 h-4" />
+                                </button>
+                                {weekOffset !== 0 && (
+                                    <button onClick={() => setWeekOffset(0)}
+                                        className="ml-1 px-2.5 py-1.5 rounded-xl text-xs font-bold bg-primary/10 text-primary hover:bg-primary/20 transition-colors">
+                                        Today
+                                    </button>
+                                )}
+                            </div>
+                        </div>
+                        <Button onClick={openAiPlanner} size="sm" variant="outline" className="gap-1.5 border-2 border-chart-4/30 text-chart-4 hover:bg-chart-4/5">
+                            <Sparkles className="w-3.5 h-3.5" /> Plan this week for me
                         </Button>
                     </div>
 
+                    {/* Planned vs done scoreboard */}
+                    {plannedThisWeek > 0 && (
+                        <div className="flex items-center gap-3 mb-3">
+                            <div className="flex-1 h-2 bg-secondary rounded-full overflow-hidden">
+                                <motion.div animate={{ width: `${weekPct}%` }} transition={{ duration: 0.7, ease: "easeOut" }}
+                                    className={`h-full rounded-full ${weekPct >= 100 ? "bg-primary" : "bg-xp"}`} />
+                            </div>
+                            <p className="text-xs font-bold text-muted-foreground whitespace-nowrap">{doneThisWeek}/{plannedThisWeek} done</p>
+                        </div>
+                    )}
+
                     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-7 gap-2.5">
                         {week.map(day => (
-                            <div key={day.key} className={`rounded-2xl border p-2.5 min-h-[120px] flex flex-col gap-1.5 ${day.label === "Today" ? "bg-primary/5 border-primary/25" : "bg-surface border-border"}`}>
-                                <div className="flex items-center justify-between px-0.5">
-                                    <p className={`text-xs font-black uppercase tracking-wide ${day.label === "Today" ? "text-primary" : "text-muted-foreground/70"}`}>{day.label}</p>
-                                    <button onClick={() => { setPlanDay(day.key); setPlanTitle(""); }} aria-label={`Add session on ${day.label}`}
-                                        className="text-muted-foreground/50 hover:text-primary transition-colors">
-                                        <Plus className="w-3.5 h-3.5" />
-                                    </button>
+                            <div key={day.key}
+                                className={`rounded-2xl border-2 p-2.5 min-h-[150px] flex flex-col gap-1.5 transition-colors ${
+                                    day.isToday ? "bg-primary/5 border-primary/40" : day.isPast ? "bg-secondary/30 border-border/60 opacity-70" : "bg-surface border-border"
+                                }`}>
+                                <div className="flex items-center justify-between px-0.5 mb-0.5">
+                                    <div className="flex items-baseline gap-1.5">
+                                        <p className={`text-xs font-black uppercase tracking-wide ${day.isToday ? "text-primary" : "text-muted-foreground/70"}`}>{day.dayName}</p>
+                                        <p className={`font-display font-extrabold text-sm ${day.isToday ? "text-primary" : "text-muted-foreground/50"}`}>{day.dayNum}</p>
+                                    </div>
+                                    {!day.isPast && (
+                                        <button onClick={() => { setPlanDay(day.key); setPlanTitle(""); setRepeatWeekly(false); }} aria-label={`Add session on ${day.dayName} ${day.dayNum}`}
+                                            className="w-6 h-6 rounded-lg flex items-center justify-center text-muted-foreground/50 hover:text-primary hover:bg-primary/10 transition-all">
+                                            <Plus className="w-3.5 h-3.5" />
+                                        </button>
+                                    )}
                                 </div>
+
                                 {day.sacs.map(a => (
-                                    <div key={a.id} className="rounded-lg bg-streak/10 border border-streak/25 px-2 py-1.5">
-                                        <p className="text-[11px] font-black text-streak leading-tight">🚩 {a.subject_name} {(a.assessment_type || "SAC").toUpperCase()}</p>
+                                    <div key={a.id} className="rounded-xl bg-streak text-white px-2.5 py-2 shadow-soft">
+                                        <p className="text-[11px] font-black leading-tight">🚩 {a.subject_name}</p>
+                                        <p className="text-[10px] font-bold text-white/80 leading-tight">{(a.assessment_type || "SAC").toUpperCase()} · {a.title}</p>
                                     </div>
                                 ))}
-                                {day.plans.map(p => (
-                                    <div key={p.id} className={`group rounded-lg border px-2 py-1.5 ${p.is_completed ? "bg-primary/5 border-primary/20" : "bg-secondary/50 border-border"}`}>
-                                        <div className="flex items-start gap-1.5">
-                                            <button onClick={() => togglePlanDone(p)} aria-label="Toggle session done"
-                                                className={`w-3.5 h-3.5 mt-0.5 rounded border flex-shrink-0 flex items-center justify-center transition-colors ${p.is_completed ? "bg-primary border-primary text-white" : "border-muted-foreground/40 hover:border-primary"}`}>
-                                                {p.is_completed && <Check className="w-2.5 h-2.5" />}
-                                            </button>
-                                            <div className="min-w-0 flex-1">
-                                                <p className={`text-[11px] font-bold leading-tight ${p.is_completed ? "text-muted-foreground line-through" : "text-foreground"}`}>{p.title}</p>
-                                                <p className="text-[10px] text-muted-foreground">{p.subject_name || ""}{p.start_time ? ` · ${p.start_time}` : ""}</p>
+
+                                <AnimatePresence>
+                                    {day.plans.map(p => (
+                                        <motion.div key={p.id} layout initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.9 }}
+                                            className={`group rounded-xl border px-2 py-1.5 transition-colors ${
+                                                p.is_completed ? "bg-primary/5 border-primary/20" : subjectChipClass(p.subject_name || p.title)
+                                            }`}>
+                                            <div className="flex items-start gap-1.5">
+                                                <button onClick={() => togglePlanDone(p)} aria-label="Toggle session done"
+                                                    className={`w-3.5 h-3.5 mt-0.5 rounded border flex-shrink-0 flex items-center justify-center transition-colors ${
+                                                        p.is_completed ? "bg-primary border-primary text-white" : "border-current/40 hover:border-current"
+                                                    }`}>
+                                                    {p.is_completed && <Check className="w-2.5 h-2.5" />}
+                                                </button>
+                                                <Link to={sessionLink(p.title)} className="min-w-0 flex-1">
+                                                    <p className={`text-[11px] font-bold leading-tight ${p.is_completed ? "text-muted-foreground line-through" : "text-foreground"}`}>
+                                                        {p.title}
+                                                        {recIdOf(p) && <Repeat className="w-2.5 h-2.5 inline ml-1 opacity-50" />}
+                                                    </p>
+                                                    <p className="text-[10px] text-muted-foreground">{p.subject_name || ""}{p.start_time ? ` · ${p.start_time}` : ""}</p>
+                                                </Link>
+                                                <button onClick={() => requestDeletePlan(p)} aria-label="Remove session"
+                                                    className="opacity-0 group-hover:opacity-100 text-muted-foreground/40 hover:text-streak transition-all flex-shrink-0">
+                                                    <X className="w-3 h-3" />
+                                                </button>
                                             </div>
-                                            <button onClick={() => deletePlan(p)} aria-label="Remove session"
-                                                className="opacity-0 group-hover:opacity-100 text-muted-foreground/40 hover:text-streak transition-all flex-shrink-0">
-                                                <X className="w-3 h-3" />
-                                            </button>
-                                        </div>
-                                    </div>
-                                ))}
-                                {day.plans.length === 0 && day.sacs.length === 0 && (
-                                    <button onClick={() => { setPlanDay(day.key); setPlanTitle(""); }}
-                                        className="flex-1 rounded-lg border border-dashed border-border/60 text-[11px] text-muted-foreground/40 hover:text-muted-foreground hover:border-muted-foreground/40 transition-colors">
+                                        </motion.div>
+                                    ))}
+                                </AnimatePresence>
+
+                                {day.plans.length === 0 && day.sacs.length === 0 && !day.isPast && (
+                                    <button onClick={() => { setPlanDay(day.key); setPlanTitle(""); setRepeatWeekly(false); }}
+                                        className="flex-1 rounded-xl border border-dashed border-border/60 text-[11px] text-muted-foreground/40 hover:text-muted-foreground hover:border-muted-foreground/40 transition-colors">
                                         + plan
                                     </button>
                                 )}
@@ -493,11 +668,11 @@ Create 4-6 focused study sessions across the next 7 days (dates ${todayStr} to $
 
                     <p className="text-xs text-muted-foreground mt-3 flex items-center gap-1.5">
                         <ArrowRight className="w-3.5 h-3.5" />
-                        Planned sessions show up as Dashboard reminders — and studying them feeds your streak, duels and bets automatically.
+                        Tap a session to open the right tool — studying it feeds your streak, duels and bets automatically.
                     </p>
                 </motion.section>
 
-                {/* Add-session dialog */}
+                {/* ── Add-session dialog (with recurrence) ─────────────── */}
                 <Dialog open={!!planDay} onOpenChange={(o) => !o && setPlanDay(null)}>
                     <DialogContent className="max-w-sm rounded-3xl">
                         <DialogHeader>
@@ -514,10 +689,174 @@ Create 4-6 focused study sessions across the next 7 days (dates ${todayStr} to $
                                 </SelectContent>
                             </Select>
                             <Input type="time" value={planTime} onChange={e => setPlanTime(e.target.value)} />
+
+                            {/* Recurrence */}
+                            <div className={`rounded-2xl border-2 p-3 transition-colors ${repeatWeekly ? "border-chart-3/40 bg-chart-3/5" : "border-border"}`}>
+                                <button onClick={() => setRepeatWeekly(r => !r)} className="flex items-center gap-2 w-full">
+                                    <span className={`w-5 h-5 rounded-md border-2 flex items-center justify-center transition-colors ${repeatWeekly ? "bg-chart-3 border-chart-3 text-white" : "border-border"}`}>
+                                        {repeatWeekly && <Check className="w-3 h-3" />}
+                                    </span>
+                                    <span className="text-sm font-bold text-foreground flex items-center gap-1.5">
+                                        <Repeat className="w-3.5 h-3.5 text-chart-3" /> Repeat weekly
+                                    </span>
+                                </button>
+                                {repeatWeekly && (
+                                    <div className="flex gap-1.5 mt-2.5">
+                                        {REPEAT_OPTIONS.map(w => (
+                                            <button key={w} onClick={() => setRepeatWeeks(w)}
+                                                className={`flex-1 py-1.5 rounded-lg text-xs font-bold border-2 transition-all ${repeatWeeks === w ? "bg-chart-3 border-chart-3 text-white" : "bg-surface border-border text-muted-foreground"}`}>
+                                                {w} wks
+                                            </button>
+                                        ))}
+                                    </div>
+                                )}
+                            </div>
+
                             <Button onClick={addPlan} disabled={savingPlan || !planTitle.trim()} className="w-full gap-1.5">
-                                {savingPlan ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />} Add to plan
+                                {savingPlan ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
+                                {repeatWeekly ? `Add ${repeatWeeks} weekly sessions` : "Add to plan"}
                             </Button>
                         </div>
+                    </DialogContent>
+                </Dialog>
+
+                {/* ── Recurring-delete choice ──────────────────────────── */}
+                <Dialog open={!!deleteTarget} onOpenChange={(o) => !o && setDeleteTarget(null)}>
+                    <DialogContent className="max-w-xs rounded-3xl">
+                        <DialogHeader>
+                            <DialogTitle className="font-display text-base">Remove repeating session?</DialogTitle>
+                        </DialogHeader>
+                        <div className="space-y-2">
+                            <Button onClick={() => deletePlans([deleteTarget])} variant="outline" className="w-full border-2">Just this one</Button>
+                            <Button onClick={deleteFuture} className="w-full bg-streak hover:bg-streak/90 text-white">This and all future</Button>
+                        </div>
+                    </DialogContent>
+                </Dialog>
+
+                {/* ── AI week planner dialog ───────────────────────────── */}
+                <Dialog open={aiOpen} onOpenChange={setAiOpen}>
+                    <DialogContent className="max-w-lg rounded-3xl max-h-[85vh] overflow-y-auto">
+                        <DialogHeader>
+                            <DialogTitle className="font-display flex items-center gap-2">
+                                <Sparkles className="w-5 h-5 text-chart-4" /> Plan {weekLabel.toLowerCase()} for me
+                            </DialogTitle>
+                        </DialogHeader>
+
+                        {!aiProposals ? (
+                            <div className="space-y-4">
+                                <div>
+                                    <p className="stat-label mb-2">Hours this week</p>
+                                    <div className="flex gap-2">
+                                        {HOUR_OPTIONS.map(h => (
+                                            <button key={h} onClick={() => setAiHours(h)}
+                                                className={`flex-1 py-2 rounded-xl text-sm font-bold border-2 transition-all ${aiHours === h ? "bg-chart-4 border-chart-4 text-white shadow-soft" : "bg-surface border-border text-foreground hover:border-chart-4/40"}`}>
+                                                {h}h
+                                            </button>
+                                        ))}
+                                    </div>
+                                </div>
+
+                                <div>
+                                    <p className="stat-label mb-2">Focus subjects</p>
+                                    <div className="flex gap-2 flex-wrap">
+                                        {subjects.map(s => (
+                                            <button key={s.id} onClick={() => toggleFocus(s.subject_name)}
+                                                className={`px-3 py-1.5 rounded-xl text-xs font-bold border-2 transition-all ${aiFocus.includes(s.subject_name) ? "bg-foreground border-foreground text-background" : "bg-surface border-border text-muted-foreground hover:border-muted-foreground"}`}>
+                                                {s.subject_name}
+                                            </button>
+                                        ))}
+                                        {subjects.length === 0 && <p className="text-xs text-muted-foreground">Add subjects in Settings first.</p>}
+                                    </div>
+                                </div>
+
+                                <div>
+                                    <p className="stat-label mb-2">When you study</p>
+                                    <div className="flex gap-2">
+                                        {TIME_PREFS.map(t => (
+                                            <button key={t.value} onClick={() => setAiTimes(t.value)}
+                                                className={`flex-1 py-2 rounded-xl text-xs font-bold border-2 transition-all ${aiTimes === t.value ? "bg-foreground border-foreground text-background" : "bg-surface border-border text-muted-foreground hover:border-muted-foreground"}`}>
+                                                {t.label}
+                                            </button>
+                                        ))}
+                                    </div>
+                                </div>
+
+                                {/* Assessments in scope + quick add */}
+                                <div>
+                                    <p className="stat-label mb-2">Assessments it plans around</p>
+                                    {upcoming.length > 0 ? (
+                                        <div className="space-y-1.5 mb-2">
+                                            {upcoming.slice(0, 4).map(a => (
+                                                <div key={a.id} className="flex items-center gap-2 text-xs">
+                                                    <Flag className="w-3 h-3 text-chart-3 flex-shrink-0" />
+                                                    <span className="font-bold text-foreground truncate">{a.subject_name} — {a.title}</span>
+                                                    <span className="text-muted-foreground whitespace-nowrap ml-auto">{format(parseISO(a.due_date), "d MMM")}</span>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    ) : (
+                                        <p className="text-xs text-muted-foreground mb-2">None tracked — add one so the plan has a target:</p>
+                                    )}
+                                    <div className="grid grid-cols-[1fr,1fr,auto,auto] gap-1.5 items-center">
+                                        <Select value={aiSacSubject} onValueChange={setAiSacSubject}>
+                                            <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Subject" /></SelectTrigger>
+                                            <SelectContent>
+                                                {subjects.map(s => <SelectItem key={s.id} value={s.subject_name}>{s.subject_name}</SelectItem>)}
+                                            </SelectContent>
+                                        </Select>
+                                        <Input className="h-8 text-xs" placeholder="SAC name" value={aiSacTitle} onChange={e => setAiSacTitle(e.target.value)} />
+                                        <Input className="h-8 text-xs w-auto" type="date" min={todayStr} value={aiSacDate} onChange={e => setAiSacDate(e.target.value)} />
+                                        <Button size="sm" variant="outline" className="h-8 border-2 px-2"
+                                            onClick={async () => {
+                                                const ok = await addSac(aiSacSubject, aiSacTitle, "sac", aiSacDate);
+                                                if (ok) { setAiSacTitle(""); setAiSacDate(""); }
+                                            }}>
+                                            <Plus className="w-3.5 h-3.5" />
+                                        </Button>
+                                    </div>
+                                </div>
+
+                                <div>
+                                    <p className="stat-label mb-2">Anything else?</p>
+                                    <Textarea value={aiNotes} onChange={e => setAiNotes(e.target.value)} rows={2}
+                                        placeholder='e.g. "short sessions", "heavy on Methods", "nothing Friday night"' className="text-sm" />
+                                </div>
+
+                                <Button onClick={generatePlan} disabled={aiGenerating} className="w-full bg-chart-4 hover:bg-chart-4/90 text-white font-bold rounded-xl py-5 btn-3d">
+                                    {aiGenerating ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Sparkles className="w-4 h-4 mr-2" />}
+                                    {aiGenerating ? "Planning…" : "Draft my week"}
+                                </Button>
+                            </div>
+                        ) : (
+                            /* Proposal review — nothing saves until approved */
+                            <div className="space-y-3">
+                                <p className="text-xs text-muted-foreground">Untick anything that clashes, then add the rest. Nothing is saved yet.</p>
+                                <div className="space-y-1.5">
+                                    {aiProposals.map((s, i) => (
+                                        <button key={i}
+                                            onClick={() => setAiProposals(prev => prev.map((x, xi) => xi === i ? { ...x, include: !x.include } : x))}
+                                            className={`w-full flex items-start gap-2.5 rounded-xl border-2 px-3 py-2.5 text-left transition-all ${s.include ? "border-chart-4/40 bg-chart-4/5" : "border-border opacity-50"}`}>
+                                            <span className={`w-5 h-5 rounded-md border-2 flex items-center justify-center flex-shrink-0 mt-0.5 transition-colors ${s.include ? "bg-chart-4 border-chart-4 text-white" : "border-border"}`}>
+                                                {s.include && <Check className="w-3 h-3" />}
+                                            </span>
+                                            <span className="min-w-0 flex-1">
+                                                <span className="block text-sm font-bold text-foreground leading-tight">{s.title}</span>
+                                                <span className="block text-xs text-muted-foreground mt-0.5">
+                                                    {format(parseISO(s.date), "EEE d MMM")}{s.start_time ? ` · ${s.start_time}` : ""}{s.subject_name ? ` · ${s.subject_name}` : ""}{s.duration_minutes ? ` · ${s.duration_minutes}m` : ""}
+                                                </span>
+                                            </span>
+                                        </button>
+                                    ))}
+                                </div>
+                                <div className="flex gap-2">
+                                    <Button onClick={() => setAiProposals(null)} variant="outline" className="border-2">Adjust</Button>
+                                    <Button onClick={saveProposals} disabled={aiSaving} className="flex-1 bg-chart-4 hover:bg-chart-4/90 text-white font-bold">
+                                        {aiSaving ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Check className="w-4 h-4 mr-2" />}
+                                        Add {(aiProposals || []).filter(p => p.include).length} session{(aiProposals || []).filter(p => p.include).length === 1 ? "" : "s"}
+                                    </Button>
+                                </div>
+                            </div>
+                        )}
                     </DialogContent>
                 </Dialog>
             </div>
