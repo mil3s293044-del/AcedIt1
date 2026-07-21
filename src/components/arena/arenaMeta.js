@@ -20,6 +20,33 @@ export const SIDE_BET_OPTIONS = [25, 50, 100, 200];
 export const STUDY_BET_MULT = 1.5;
 export const SIDE_BET_MULT = 1.8;
 
+// Back-yourself multiplier ladder — bigger target, bigger payout. Thresholds
+// are 1-week anchors, scaled down for shorter windows. MUST mirror
+// STUDY_BET_LADDER / WINDOW_SCALE / studyBetMultiplier in server.mjs.
+export const STUDY_BET_LADDER = {
+    flashcards:    [[20, 1.1], [50, 1.25], [100, 1.5], [200, 1.8]],
+    xp:            [[100, 1.1], [250, 1.25], [500, 1.5], [1000, 1.8]],
+    study_minutes: [[30, 1.1], [90, 1.25], [180, 1.5], [360, 1.8]],
+    quiz_marks:    [[10, 1.1], [25, 1.25], [50, 1.5], [100, 1.8]],
+};
+export const WINDOW_SCALE = { 24: 0.4, 72: 0.7, 168: 1.0 };
+
+export function studyBetMultiplier(metric, target, windowHours) {
+    const scale = WINDOW_SCALE[windowHours] || 1.0;
+    let mult = 1.1;
+    for (const [threshold, m] of STUDY_BET_LADDER[metric] || []) {
+        if (target >= Math.round(threshold * scale)) mult = m;
+    }
+    return mult;
+}
+
+export function multiplierLabel(mult) {
+    if (mult >= 1.8) return "big swing";
+    if (mult >= 1.5) return "solid stretch";
+    if (mult >= 1.25) return "steady push";
+    return "warm-up";
+}
+
 // Minimum back-yourself targets — mirror STUDY_BET_MIN_TARGET server-side.
 export const STUDY_BET_MIN_TARGET = { xp: 100, quiz_marks: 10, flashcards: 20, study_minutes: 30 };
 

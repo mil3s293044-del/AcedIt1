@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect } from "react";
 import { Flashcard, UserSubject } from "@/entities/all";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -16,14 +16,13 @@ import { createPageUrl } from "@/utils";
 import { FEATURES, canUseFeature } from "@/lib/tierAccess";
 import AISkeleton from "../shared/AISkeleton";
 import {
-    Plus, Play, Edit, Trash2, Share2, Check, X, Sparkles, Upload,
-    Loader2, Brain, Target, AlertTriangle, Search, Clock, BarChart3,
-    Users, UserPlus, ChevronLeft, FileText, Zap, RotateCcw, Eye
+    Plus, Play, Edit, Trash2, Share2, Check, X, Sparkles,
+    Loader2, Brain, AlertTriangle, Search, Clock, BarChart3,
+    Users, UserPlus, ChevronLeft, FileText, Eye
 } from "lucide-react";
 import { base44 } from "@/api/base44Client";
 import { format } from "date-fns";
 import { moderationPresets } from "@/components/shared/contentModeration";
-import { fireXPFeedback } from "@/components/ranked/XPFeedback";
 import { recordStudyAndGetStreak } from "@/components/shared/streakHelpers";
 
 // Lucide alias — design system maps "alert" semantics to AlertTriangle.
@@ -297,6 +296,8 @@ export default function SpacedRepetition() {
     const [reviewFilter, setReviewFilter] = useState('all');
     const [reviewStartTime, setReviewStartTime] = useState(null);
     const [sessionStats, setSessionStats] = useState({ totalReviews: 0, againCount: 0, hardCount: 0, goodCount: 0, easyCount: 0 });
+    // Real XP banked this session from per-card incremental awards.
+    const sessionXPRef = React.useRef(0);
     const [isRating, setIsRating] = useState(false);
     const [isSavingDeck, setIsSavingDeck] = useState(false);
     const [isFlipped, setIsFlipped] = useState(false);
@@ -577,16 +578,28 @@ The documents provided may be PowerPoint slides, Word documents, or text files. 
         const cardsReviewed = sessionStats.totalReviews || reviewCards.length;
         try {
             if (user?.email && selectedDeck) {
+                // XP is paid per card as it happens (awardXPIncremental in
+                // handleRateCard) — no batch award here, or cards would pay twice.
                 await base44.entities.StudyTechnique.create({ technique_name: "spaced_repetition", session_duration: durationMinutes, subject: selectedDeck.subject_name, topic: selectedDeck.topic, date: format(new Date(), 'yyyy-MM-dd'), notes: `Reviewed ${cardsReviewed} flashcards`, created_by: user.email });
-                if (cardsReviewed > 0) await base44.functions.invoke('awardXP', { source: 'flashcard', event_key: `flashcard_review_${user.email}_${Date.now()}`, cards_reviewed: cardsReviewed, cards_correct: sessionStats.goodCount + sessionStats.easyCount, hard_cards: sessionStats.hardCount });
             }
         } catch (error) { console.error(error); }
         setReviewStartTime(null);
     };
 
     const handleExitReview = async () => {
+        const reviewed = sessionStats.totalReviews;
         if (reviewStartTime && currentCardIndex > 0) await handleCompleteReview();
         setReviewMode(false); setReviewStartTime(null); setSelectedDeck(null);
+        // Refresh deck cards-due counts — cards rated this session are already
+        // scheduled forward, so the front page must reflect it immediately.
+        if (user?.email) await loadDecks(user.email);
+        if (reviewed > 0) {
+            toast({
+                title: "Progress saved 👍",
+                description: `${reviewed} card${reviewed === 1 ? '' : 's'} reviewed${sessionXPRef.current > 0 ? ` · +${sessionXPRef.current} XP banked` : ''}. They're off today's due list.`,
+            });
+        }
+        sessionXPRef.current = 0;
     };
 
     const handleRateCard = async (quality) => {
@@ -615,18 +628,30 @@ The documents provided may be PowerPoint slides, Word documents, or text files. 
                 total_reviews:      newTotalReviews,
                 last_quality:       quality,
             });
-            // Fire instant XP animation for this card (good/easy = reward, again/hard = smaller)
-            const cardXP = quality >= 3 ? 1 : 0;
-            if (cardXP > 0) {
-                window.dispatchEvent(new CustomEvent('xp_awarded', { detail: { xp: cardXP, source: 'flashcard' } }));
-            }
+            // Real per-card XP through the incremental engine (idempotent per
+            // card+review-count, 80/day cap). Every card is a recorded event,
+            // so bets/duels/goals move card-by-card and nothing is lost if the
+            // student bails mid-session. Fire-and-forget — the card flow
+            // never waits on the network.
+            base44.functions.invoke('awardXPIncremental', {
+                type: 'flashcard_card',
+                event_key: `fc_${card.id}_r${newTotalReviews}`,
+                metadata: { correct: quality >= 3, card_id: card.id },
+            }).then(res => {
+                const xp = (res?.data ?? res)?.xp_awarded || 0;
+                if (xp > 0) {
+                    sessionXPRef.current += xp;
+                    window.dispatchEvent(new CustomEvent('xp_awarded', { detail: { xp, source: 'flashcard' } }));
+                }
+            }).catch(() => {});
             if (currentCardIndex < reviewCards.length - 1) {
                 setCurrentCardIndex(currentCardIndex + 1);
                 setShowAnswer(false); setIsFlipped(false);
                 setIsRating(false);
             } else {
                 await handleCompleteReview();
-                toast({ title: "Session complete! 🎉", description: `You reviewed ${reviewCards.length} cards.` });
+                toast({ title: "Session complete! 🎉", description: `You reviewed ${reviewCards.length} cards${sessionXPRef.current > 0 ? ` and banked +${sessionXPRef.current} XP` : ''}.` });
+                sessionXPRef.current = 0;
                 setReviewMode(false); await loadDecks(user.email); setSelectedDeck(null); setIsRating(false);
             }
         } catch (error) { toast({ title: "Error", variant: "destructive" }); setIsRating(false); }

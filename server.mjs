@@ -3844,6 +3844,23 @@ const SIDE_BET_WIN_MULT = 1.8;
 const STUDY_BET_MULT = 1.5;
 // Minimum targets per metric so a bet can't be trivially safe.
 const STUDY_BET_MIN_TARGET = { xp: 100, quiz_marks: 10, flashcards: 20, study_minutes: 30 };
+// Back-yourself multiplier ladder — bigger target, bigger payout. Week-window
+// anchors, scaled for shorter windows. MUST mirror arenaMeta.js.
+const STUDY_BET_LADDER = {
+  flashcards:    [[20, 1.1], [50, 1.25], [100, 1.5], [200, 1.8]],
+  xp:            [[100, 1.1], [250, 1.25], [500, 1.5], [1000, 1.8]],
+  study_minutes: [[30, 1.1], [90, 1.25], [180, 1.5], [360, 1.8]],
+  quiz_marks:    [[10, 1.1], [25, 1.25], [50, 1.5], [100, 1.8]],
+};
+const STUDY_BET_WINDOW_SCALE = { 24: 0.4, 72: 0.7, 168: 1.0 };
+function studyBetMultiplier(metric, target, windowHours) {
+  const scale = STUDY_BET_WINDOW_SCALE[windowHours] || 1.0;
+  let mult = 1.1;
+  for (const [threshold, m] of STUDY_BET_LADDER[metric] || []) {
+    if (target >= Math.round(threshold * scale)) mult = m;
+  }
+  return mult;
+}
 // Only genuinely-studied XP counts toward duels — never winnings or bonuses.
 const ARENA_STUDY_SOURCES = [
   "quiz", "flashcard", "study_session", "active_recall", "blurting",
@@ -4148,6 +4165,17 @@ app.post("/local-ai/fn/createStudyBet", async (req, res) => {
       .from("study_bets").select("id").eq("created_by", user.email).eq("status", "active");
     if ((active || []).length >= 3) return res.status(400).json({ error: "Three live bets is the max — finish one first" });
 
+    // Multiplier scales with ambition — and sandbagging gets capped: if the
+    // target is at or below what the student already did in the previous
+    // same-length window, the payout locks to 1.1× regardless of the ladder.
+    let multiplier = studyBetMultiplier(metric, target, window_hours);
+    try {
+      const nowIso = new Date().toISOString();
+      const prevStart = new Date(Date.now() - window_hours * 3600 * 1000).toISOString();
+      const baseline = await computeMetricValue(user.email, metric, prevStart, nowIso);
+      if (baseline > 0 && target <= baseline) multiplier = Math.min(multiplier, 1.1);
+    } catch (e) { console.warn("[createStudyBet] baseline check failed:", e?.message); }
+
     const betId = randomUUID();
     const escrowed = await deductXPWithAudit(
       user.email, stake_xp, `studybet_escrow_${betId}`, "bet_escrow", { study_bet_id: betId, metric, target },
@@ -4159,7 +4187,7 @@ app.post("/local-ai/fn/createStudyBet", async (req, res) => {
       .from("study_bets")
       .insert({
         id: betId, created_by: user.email, metric, target, stake_xp,
-        multiplier: STUDY_BET_MULT, ends_at: endsAt.toISOString(),
+        multiplier, ends_at: endsAt.toISOString(),
       })
       .select().single();
     if (insErr) throw insErr;

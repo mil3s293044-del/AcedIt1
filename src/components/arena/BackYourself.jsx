@@ -10,7 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Target, Zap, Loader2, Plus, Check, X } from "lucide-react";
 import { base44 } from "@/api/base44Client";
 import { useToast } from "@/components/ui/use-toast";
-import { METRICS, WINDOWS, STUDY_BET_MIN_TARGET, STUDY_BET_MULT, timeLeft } from "./arenaMeta";
+import { METRICS, WINDOWS, STUDY_BET_MULT, timeLeft, studyBetMultiplier, multiplierLabel } from "./arenaMeta";
 
 const TARGET_PRESETS = {
     xp:            [150, 300, 500, 1000],
@@ -70,15 +70,24 @@ export default function BackYourself({ bets, balance, currentUserEmail, onUpdate
     const [sending, setSending] = useState(false);
 
     const activeCount = bets.filter(b => b.status === "active").length;
-    const payout = Math.floor(stake * STUDY_BET_MULT);
+    // Ladder preview — the server has the final say (it also caps at 1.1×
+    // when the target is below the student's recent pace).
+    const previewMult = studyBetMultiplier(metric, target, windowHours);
+    const payout = Math.floor(stake * previewMult);
 
     const create = async () => {
         setSending(true);
         try {
-            await base44.functions.invoke('createStudyBet', {
+            const res = await base44.functions.invoke('createStudyBet', {
                 metric, target, window_hours: windowHours, stake_xp: stake,
             });
-            toast({ title: "🎯 You're on", description: `${target} ${METRICS[metric].unit} or bust. It settles itself the second you hit it.` });
+            const lockedMult = Number((res?.data ?? res)?.bet?.multiplier) || previewMult;
+            toast({
+                title: `🎯 Locked in at ${lockedMult}×`,
+                description: lockedMult < previewMult
+                    ? "Capped — that target is under your usual pace. Aim higher for a bigger payout."
+                    : `${target} ${METRICS[metric].unit} or bust. It settles itself the second you hit it.`,
+            });
             setOpen(false);
             onUpdate?.();
         } catch (e) {
@@ -107,7 +116,7 @@ export default function BackYourself({ bets, balance, currentUserEmail, onUpdate
                     className="w-full card-soft border-2 border-dashed border-xp/30 p-5 text-center hover:border-xp/60 transition-all">
                     <p className="font-bold text-foreground text-sm">Stake XP on your own study goal</p>
                     <p className="text-xs text-muted-foreground mt-1">
-                        Auto-tracked from your real study — hit the target and win {STUDY_BET_MULT}× back, instantly.
+                        Auto-tracked from your real study — the bolder the target, the bigger the payout (up to 1.8×), settled the second you hit it.
                     </p>
                 </button>
             ) : (
@@ -146,12 +155,17 @@ export default function BackYourself({ bets, balance, currentUserEmail, onUpdate
                             <div className="flex gap-2 flex-wrap">
                                 {TARGET_PRESETS[metric].map(v => (
                                     <button key={v} onClick={() => setTarget(v)}
-                                        className={`px-3.5 py-2 rounded-xl text-sm font-bold border-2 transition-all ${
+                                        className={`flex flex-col items-center px-3.5 py-1.5 rounded-xl border-2 transition-all ${
                                             target === v ? "bg-xp border-xp text-white shadow-soft" : "bg-surface border-border text-foreground hover:border-xp/40"
-                                        }`}>{v}</button>
+                                        }`}>
+                                        <span className="text-sm font-bold">{v}</span>
+                                        <span className={`text-[10px] font-black ${target === v ? "text-white/80" : "text-xp"}`}>
+                                            {studyBetMultiplier(metric, v, windowHours)}×
+                                        </span>
+                                    </button>
                                 ))}
                             </div>
-                            <p className="text-xs text-muted-foreground mt-1.5">Minimum {STUDY_BET_MIN_TARGET[metric]} — it has to be a real challenge.</p>
+                            <p className="text-xs text-muted-foreground mt-1.5">Bigger target, bigger multiplier. Coasting under your usual pace locks it at 1.1×.</p>
                         </div>
                         <div>
                             <p className="stat-label mb-2">By when</p>
@@ -186,11 +200,14 @@ export default function BackYourself({ bets, balance, currentUserEmail, onUpdate
                             </div>
                         </div>
                         <div className="bg-xp/5 border-2 border-xp/25 rounded-2xl p-3.5">
-                            <p className="text-sm font-black text-foreground">
-                                🎯 {target} {METRICS[metric].unit} in {WINDOWS.find(w => w.hours === windowHours)?.label}
-                            </p>
+                            <div className="flex items-center justify-between gap-2">
+                                <p className="text-sm font-black text-foreground">
+                                    🎯 {target} {METRICS[metric].unit} in {WINDOWS.find(w => w.hours === windowHours)?.label}
+                                </p>
+                                <span className="pill bg-xp/15 text-xp">{previewMult}× · {multiplierLabel(previewMult)}</span>
+                            </div>
                             <div className="flex justify-between text-xs font-semibold mt-1">
-                                <span className="text-primary">Hit it: +{payout} XP ({STUDY_BET_MULT}×)</span>
+                                <span className="text-primary">Hit it: +{payout} XP</span>
                                 <span className="text-streak">Miss: -{stake} XP</span>
                             </div>
                         </div>
