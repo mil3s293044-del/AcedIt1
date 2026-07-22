@@ -1,8 +1,7 @@
 /**
- * AI Tools — one chatbot, eight personas. The old tool grid became a unified
- * Claude/ChatGPT-style chat (UnifiedChat): pick the tool in the composer,
- * past conversations live in the left rail foldered by tool, and every send
- * still carries that tool's tier feature tag so all caps apply unchanged.
+ * AI Tools — one chatbot, eight personas, full-bleed. The chat fills the
+ * whole content area (no page gutters); tool + options live in the composer
+ * and every send carries the tool's tier feature tag (caps unchanged).
  */
 import React from "react";
 import { Link } from "react-router-dom";
@@ -12,17 +11,15 @@ import UnifiedChat from "@/components/ai_tools/UnifiedChat";
 
 function AIToolsInner() {
     return (
-        <div className="min-h-screen bg-background">
-            <div className="max-w-6xl mx-auto px-3 lg:px-8 pt-4 pb-3">
-                <div className="flex items-center justify-between mb-3 px-1">
-                    <div className="flex items-center gap-2 text-xs">
-                        <span className="font-bold text-muted-foreground uppercase tracking-wider">AI Tools</span>
-                    </div>
-                    <Link to="/AIToolsHistory"
-                        className="inline-flex items-center gap-1.5 text-xs font-bold text-muted-foreground hover:text-foreground transition-colors">
-                        <Archive className="w-3.5 h-3.5" /> Saved results
-                    </Link>
-                </div>
+        <div className="bg-background flex flex-col px-2 lg:px-4 pt-2 pb-2 h-[calc(100dvh-8.25rem)] md:h-[calc(100dvh-3.25rem)]">
+            <div className="flex items-center justify-between mb-2 px-1 flex-shrink-0">
+                <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider">AI Tools</span>
+                <Link to="/AIToolsHistory"
+                    className="inline-flex items-center gap-1.5 text-xs font-bold text-muted-foreground hover:text-foreground transition-colors">
+                    <Archive className="w-3.5 h-3.5" /> Saved results
+                </Link>
+            </div>
+            <div className="flex-1 min-h-0">
                 <UnifiedChat />
             </div>
         </div>

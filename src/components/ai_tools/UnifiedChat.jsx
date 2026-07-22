@@ -21,7 +21,7 @@ import { useToast } from "@/components/ui/use-toast";
 import { recordStudyAndGetStreak } from "@/components/shared/streakHelpers";
 import MarkdownMath from "@/components/shared/MarkdownMath";
 import { format } from "date-fns";
-import { CHAT_TOOLS, toolById } from "./chatTools";
+import { CHAT_TOOLS, toolById, defaultOptions, resolveChoices } from "./chatTools";
 
 const MAX_TURNS_IN_PROMPT = 12;
 
@@ -34,11 +34,11 @@ function agoLabel(iso) {
     return format(new Date(iso), "d MMM");
 }
 
-function buildPrompt(tool, subjectName, messages, userText) {
+function buildPrompt(tool, subjectName, toolOptions, messages, userText) {
     const transcript = messages.slice(-MAX_TURNS_IN_PROMPT)
         .map(m => `${m.role === "user" ? "Student" : "You"}: ${m.content}`)
         .join("\n\n");
-    return `${tool.system(subjectName)}
+    return `${tool.system(subjectName, toolOptions)}
 
 ${transcript ? `CONVERSATION SO FAR:\n${transcript}\n\n` : ""}Student: ${userText}
 
@@ -55,6 +55,7 @@ export default function UnifiedChat() {
 
     const [activeConvId, setActiveConvId] = useState(null);
     const [activeTool, setActiveTool] = useState(CHAT_TOOLS[0].id);
+    const [toolOptions, setToolOptions] = useState(() => defaultOptions(CHAT_TOOLS[0]));
     const [subjectName, setSubjectName] = useState("");
     const [messages, setMessages] = useState([]);
     const [input, setInput] = useState("");
@@ -88,11 +89,24 @@ export default function UnifiedChat() {
     }, [messages]);
 
     const tool = toolById(activeTool);
+    const toolLocked = messages.length > 0;
+
+    const selectTool = (id) => {
+        if (toolLocked && id !== activeTool) {
+            toast({ title: "This chat belongs to " + tool.label, description: "Start a New chat to use a different tool — it keeps each conversation focused." });
+            return;
+        }
+        if (id !== activeTool) {
+            setActiveTool(id);
+            setToolOptions(defaultOptions(toolById(id)));
+        }
+    };
 
     const newChat = () => {
         abortRef.current?.abort();
         setActiveConvId(null); convIdRef.current = null;
         setMessages([]); setInput(""); setAttachment(null); setStreaming(false);
+        setToolOptions(defaultOptions(tool));
         setSidebarOpen(false);
     };
 
@@ -101,6 +115,8 @@ export default function UnifiedChat() {
         setActiveConvId(conv.id); convIdRef.current = conv.id;
         setActiveTool(conv.tool_type && CHAT_TOOLS.some(t => t.id === conv.tool_type) ? conv.tool_type : CHAT_TOOLS[0].id);
         setSubjectName(conv.input_data?.subject || "");
+        const t = toolById(conv.tool_type);
+        setToolOptions({ ...defaultOptions(t), ...(conv.input_data?.options || {}) });
         setMessages(conv.input_data.messages);
         setStreaming(false); setSidebarOpen(false);
     };
@@ -113,6 +129,7 @@ export default function UnifiedChat() {
         } catch { toast({ title: "Couldn't delete", variant: "destructive" }); }
     };
 
+    const optsRef = useRef({});
     const persist = useCallback(async (finalMessages, usedTool, usedSubject) => {
         if (!user?.email) return;
         const flat = finalMessages.map(m => `${m.role === "user" ? "Student" : "AI"}: ${m.content}`).join("\n\n");
@@ -121,7 +138,7 @@ export default function UnifiedChat() {
             title: (finalMessages[0]?.content || "Chat").slice(0, 60),
             subject_name: usedSubject || null,
             content: flat.slice(0, 20000),
-            input_data: { tool: usedTool.id, subject: usedSubject || null, messages: finalMessages },
+            input_data: { tool: usedTool.id, subject: usedSubject || null, options: optsRef.current, messages: finalMessages },
             date_created: new Date().toISOString().split("T")[0],
         };
         try {
@@ -155,6 +172,7 @@ export default function UnifiedChat() {
         if (!text || streaming) return;
         const usedTool = tool;
         const usedSubject = subjectName;
+        const usedOptions = toolOptions;
         const fileUrl = attachment?.url;
         setInput(""); setAttachment(null);
 
@@ -171,7 +189,7 @@ export default function UnifiedChat() {
             await invokeLLMStream(
                 {
                     feature: usedTool.feature,
-                    prompt: buildPrompt(usedTool, usedSubject, history, text),
+                    prompt: buildPrompt(usedTool, usedSubject, usedOptions, history, text),
                     file_urls: fileUrl ? [fileUrl] : undefined,
                 },
                 (_d, soFar) => {
@@ -192,7 +210,7 @@ export default function UnifiedChat() {
         const finalMessages = [...history, userMsg, { role: "assistant", content: finalText || "…" }];
         setMessages(finalMessages);
         setStreaming(false);
-        if (finalText) persist(finalMessages, usedTool, usedSubject);
+        if (finalText) { optsRef.current = usedOptions; persist(finalMessages, usedTool, usedSubject); }
     };
 
     const stop = () => abortRef.current?.abort();
@@ -249,7 +267,7 @@ export default function UnifiedChat() {
     );
 
     return (
-        <div className="flex h-[calc(100vh-8.5rem)] md:h-[calc(100vh-5rem)] gap-0 md:gap-4">
+        <div className="flex h-full min-h-0 gap-0 md:gap-3">
             {/* Desktop rail */}
             <aside className="hidden md:flex flex-col w-64 flex-shrink-0 card-soft p-3">
                 {SidebarInner}
@@ -299,7 +317,7 @@ export default function UnifiedChat() {
                                 {CHAT_TOOLS.map(t => {
                                     const Icon = t.icon;
                                     return (
-                                        <button key={t.id} onClick={() => setActiveTool(t.id)}
+                                        <button key={t.id} onClick={() => selectTool(t.id)}
                                             className={`flex flex-col items-start gap-1.5 rounded-xl border-2 p-3 text-left transition-all ${
                                                 t.id === activeTool ? `${t.accentBg} border-current ${t.accentText}` : "bg-surface border-border hover:border-muted-foreground/40"
                                             }`}>
@@ -337,21 +355,52 @@ export default function UnifiedChat() {
 
                 {/* Composer */}
                 <div className="border-t border-border p-3 space-y-2">
-                    {/* Tool chips */}
+                    {/* Tool chips — locked to one tool per conversation */}
                     <div className="flex gap-1.5 overflow-x-auto pb-0.5">
                         {CHAT_TOOLS.map(t => {
                             const Icon = t.icon;
                             const selected = t.id === activeTool;
+                            const locked = toolLocked && !selected;
                             return (
-                                <button key={t.id} onClick={() => setActiveTool(t.id)}
+                                <button key={t.id} onClick={() => selectTool(t.id)}
+                                    aria-disabled={locked}
+                                    title={locked ? "Start a new chat to switch tools" : undefined}
                                     className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl text-xs font-bold border-2 whitespace-nowrap transition-all flex-shrink-0 ${
-                                        selected ? `${t.accentSolid} border-transparent text-white shadow-soft` : "bg-surface border-border text-muted-foreground hover:text-foreground"
+                                        selected ? `${t.accentSolid} border-transparent text-white shadow-soft` :
+                                        locked ? "bg-surface border-border text-muted-foreground/40 cursor-not-allowed" :
+                                        "bg-surface border-border text-muted-foreground hover:text-foreground"
                                     }`}>
                                     <Icon className="w-3.5 h-3.5" /> {t.label}
                                 </button>
                             );
                         })}
                     </div>
+
+                    {/* Per-tool options — the old sub-categories, as chips */}
+                    {(tool.options || []).length > 0 && (
+                        <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
+                            {(tool.options || []).map(group => (
+                                <div key={group.key} className="flex items-center gap-1.5">
+                                    <span className="text-[10px] font-black uppercase tracking-wide text-muted-foreground/60">{group.label}</span>
+                                    {resolveChoices(group, toolOptions).map(c => (
+                                        <button key={c.value}
+                                            onClick={() => setToolOptions(prev => {
+                                                const next = { ...prev, [group.key]: c.value };
+                                                if (group.key === "section") next.focus = "general";
+                                                return next;
+                                            })}
+                                            className={`px-2 py-1 rounded-lg text-[11px] font-bold border transition-all ${
+                                                toolOptions[group.key] === c.value
+                                                    ? `${tool.accentBg} ${tool.accentText} border-current`
+                                                    : "bg-surface border-border text-muted-foreground hover:text-foreground"
+                                            }`}>
+                                            {c.label}
+                                        </button>
+                                    ))}
+                                </div>
+                            ))}
+                        </div>
+                    )}
 
                     {attachment && (
                         <div className="inline-flex items-center gap-1.5 pill bg-secondary text-foreground">
