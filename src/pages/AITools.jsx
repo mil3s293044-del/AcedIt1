@@ -15,7 +15,7 @@ function AIToolsInner() {
     // space below the thread — the chat always fills exactly the screen.
     return (
         <div className="h-[calc(100dvh-8rem)] md:h-[calc(100dvh-3rem)] bg-background">
-            <div className="max-w-5xl mx-auto h-full px-3 lg:px-6 pt-3 flex flex-col min-h-0">
+            <div className="max-w-6xl mx-auto h-full px-3 lg:px-6 pt-3 flex flex-col min-h-0">
                 <UnifiedChat />
             </div>
         </div>

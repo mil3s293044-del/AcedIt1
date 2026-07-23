@@ -286,15 +286,25 @@ export default function UnifiedChat() {
     );
 
     return (
-        <div className="relative flex flex-col h-full min-h-0">
-            {/* ── Floating top bar — pills on the open canvas, no card chrome ── */}
+        <div className="flex h-full min-h-0 gap-4">
+            {/* ── Permanent history rail (desktop) — flat, ChatGPT-style ── */}
+            <aside className="hidden md:flex flex-col w-60 flex-shrink-0 border-r border-border pr-3 min-h-0">
+                {SidebarInner}
+                <Link to="/AIToolsHistory"
+                    className="mt-2 pt-2.5 border-t border-border inline-flex items-center gap-1.5 px-2 py-1.5 rounded-lg text-xs font-bold text-muted-foreground hover:text-foreground hover:bg-secondary/60 transition-colors">
+                    <Archive className="w-3.5 h-3.5" /> Saved results
+                </Link>
+            </aside>
+
+            <div className="relative flex flex-col flex-1 min-w-0 min-h-0">
+            {/* ── Floating top bar — mobile pills + chat context strip ── */}
             <div className="flex items-center gap-2 pb-2 flex-shrink-0">
                 <button onClick={() => setSidebarOpen(true)}
-                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-surface border border-border text-xs font-bold text-muted-foreground hover:text-foreground hover:shadow-soft transition-all">
+                    className="md:hidden inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-surface border border-border text-xs font-bold text-muted-foreground hover:text-foreground hover:shadow-soft transition-all">
                     <History className="w-3.5 h-3.5" /> View chats
                 </button>
                 <Link to="/AIToolsHistory"
-                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-surface border border-border text-xs font-bold text-muted-foreground hover:text-foreground hover:shadow-soft transition-all">
+                    className="md:hidden inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-surface border border-border text-xs font-bold text-muted-foreground hover:text-foreground hover:shadow-soft transition-all">
                     <Archive className="w-3.5 h-3.5" /> Saved results
                 </Link>
                 {messages.length > 0 && (
@@ -312,11 +322,11 @@ export default function UnifiedChat() {
                 )}
             </div>
 
-            {/* ── History drawer (all screen sizes) ── */}
+            {/* ── History drawer (mobile only — desktop has the permanent rail) ── */}
             <AnimatePresence>
                 {sidebarOpen && (
                     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-                        className="fixed inset-0 z-50 bg-foreground/40" onClick={() => setSidebarOpen(false)}>
+                        className="fixed inset-0 z-50 bg-foreground/40 md:hidden" onClick={() => setSidebarOpen(false)}>
                         <motion.div initial={{ x: -320 }} animate={{ x: 0 }} exit={{ x: -320 }} transition={{ type: "spring", stiffness: 300, damping: 30 }}
                             className="w-80 max-w-[85vw] h-full bg-surface p-3 shadow-soft-lg" onClick={e => e.stopPropagation()}>
                             {SidebarInner}
@@ -492,6 +502,7 @@ export default function UnifiedChat() {
                 <p className="text-[10px] text-muted-foreground/50 text-center pt-1.5">
                     Chats save automatically — daily AI limits apply per tool.
                 </p>
+            </div>
             </div>
         </div>
     );
