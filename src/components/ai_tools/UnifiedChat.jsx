@@ -7,13 +7,14 @@
  * tool's feature tag, so all tier caps apply unchanged.
  */
 import React, { useState, useEffect, useRef, useCallback } from "react";
+import { Link } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
     Plus, Send, Square, Trash2, ChevronDown, ChevronRight, Paperclip,
-    Loader2, History, X, MessageSquare
+    Loader2, History, X, Archive
 } from "lucide-react";
 import { base44 } from "@/api/base44Client";
 import { invokeLLMStream } from "@/lib/streamingAI";
@@ -233,7 +234,7 @@ export default function UnifiedChat() {
 
     const stop = () => abortRef.current?.abort();
 
-    // ── Sidebar content (shared desktop rail + mobile sheet) ────────────────
+    // ── History drawer content ───────────────────────────────────────────────
     const folders = CHAT_TOOLS
         .map(t => ({ tool: t, convs: conversations.filter(c => c.tool_type === t.id) }))
         .filter(f => f.convs.length > 0);
@@ -285,69 +286,74 @@ export default function UnifiedChat() {
     );
 
     return (
-        <div className="flex h-full min-h-0 gap-0 md:gap-3">
-            {/* Desktop rail */}
-            <aside className="hidden md:flex flex-col w-64 flex-shrink-0 card-soft p-3">
-                {SidebarInner}
-            </aside>
+        <div className="relative flex flex-col h-full min-h-0">
+            {/* ── Floating top bar — pills on the open canvas, no card chrome ── */}
+            <div className="flex items-center gap-2 pb-2 flex-shrink-0">
+                <button onClick={() => setSidebarOpen(true)}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-surface border border-border text-xs font-bold text-muted-foreground hover:text-foreground hover:shadow-soft transition-all">
+                    <History className="w-3.5 h-3.5" /> View chats
+                </button>
+                <Link to="/AIToolsHistory"
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-surface border border-border text-xs font-bold text-muted-foreground hover:text-foreground hover:shadow-soft transition-all">
+                    <Archive className="w-3.5 h-3.5" /> Saved results
+                </Link>
+                {messages.length > 0 && (
+                    <>
+                        <div className="hidden sm:flex items-center gap-1.5 mx-auto min-w-0">
+                            <tool.icon className={`w-3.5 h-3.5 flex-shrink-0 ${tool.accentText}`} />
+                            <p className="text-xs font-bold text-foreground truncate">{tool.label}</p>
+                            {subjectName && <span className="text-xs text-muted-foreground truncate">· {subjectName}</span>}
+                        </div>
+                        <button onClick={newChat}
+                            className="ml-auto sm:ml-0 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-surface border border-border text-xs font-bold text-muted-foreground hover:text-foreground hover:shadow-soft transition-all">
+                            <Plus className="w-3.5 h-3.5" /> New chat
+                        </button>
+                    </>
+                )}
+            </div>
 
-            {/* Mobile sheet */}
+            {/* ── History drawer (all screen sizes) ── */}
             <AnimatePresence>
                 {sidebarOpen && (
                     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-                        className="fixed inset-0 z-50 bg-foreground/40 md:hidden" onClick={() => setSidebarOpen(false)}>
-                        <motion.div initial={{ x: -280 }} animate={{ x: 0 }} exit={{ x: -280 }} transition={{ type: "spring", stiffness: 300, damping: 30 }}
-                            className="w-72 h-full bg-surface p-3 shadow-soft-lg" onClick={e => e.stopPropagation()}>
+                        className="fixed inset-0 z-50 bg-foreground/40" onClick={() => setSidebarOpen(false)}>
+                        <motion.div initial={{ x: -320 }} animate={{ x: 0 }} exit={{ x: -320 }} transition={{ type: "spring", stiffness: 300, damping: 30 }}
+                            className="w-80 max-w-[85vw] h-full bg-surface p-3 shadow-soft-lg" onClick={e => e.stopPropagation()}>
                             {SidebarInner}
                         </motion.div>
                     </motion.div>
                 )}
             </AnimatePresence>
 
-            {/* Thread + composer */}
-            <div className="flex-1 min-w-0 flex flex-col card-soft overflow-hidden">
-                {/* Thread header */}
-                <div className="flex items-center gap-2 px-4 py-2.5 border-b border-border">
-                    <button onClick={() => setSidebarOpen(true)} aria-label="Chat history"
-                        className="md:hidden w-8 h-8 rounded-lg flex items-center justify-center text-muted-foreground hover:bg-secondary">
-                        <History className="w-4 h-4" />
-                    </button>
-                    <tool.icon className={`w-4 h-4 ${tool.accentText}`} />
-                    <p className="font-bold text-foreground text-sm truncate">{tool.label}</p>
-                    {subjectName && <span className="pill bg-secondary text-muted-foreground hidden sm:inline-block">{subjectName}</span>}
-                    {messages.length > 0 && (
-                        <Button onClick={newChat} size="sm" variant="ghost" className="ml-auto text-xs gap-1 text-muted-foreground">
-                            <Plus className="w-3.5 h-3.5" /> New
-                        </Button>
-                    )}
-                </div>
-
-                {/* Messages */}
-                <div className="flex-1 overflow-y-auto px-4 py-4 space-y-4">
-                    {messages.length === 0 ? (
-                        <div className="h-full flex flex-col items-center justify-center text-center px-4">
-                            <div className={`w-14 h-14 rounded-2xl ${tool.accentBg} flex items-center justify-center mb-3`}>
-                                <tool.icon className={`w-7 h-7 ${tool.accentText}`} />
-                            </div>
-                            <h2 className="font-display font-extrabold text-foreground text-xl mb-1">{tool.label}</h2>
-                            <p className="text-sm text-muted-foreground max-w-sm mb-6">{tool.blurb}</p>
-                            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 w-full max-w-2xl">
-                                {CHAT_TOOLS.map(t => {
-                                    const Icon = t.icon;
-                                    return (
-                                        <button key={t.id} onClick={() => selectTool(t.id)}
-                                            className={`flex flex-col items-start gap-1.5 rounded-xl border-2 p-3 text-left transition-all ${
-                                                t.id === activeTool ? `${t.accentBg} border-current ${t.accentText}` : "bg-surface border-border hover:border-muted-foreground/40"
-                                            }`}>
-                                            <Icon className={`w-4 h-4 ${t.accentText}`} />
-                                            <span className={`text-xs font-bold ${t.id === activeTool ? t.accentText : "text-foreground"}`}>{t.label}</span>
-                                        </button>
-                                    );
-                                })}
-                            </div>
+            {/* ── Thread — the conversation IS the page ── */}
+            <div className="flex-1 min-h-0 overflow-y-auto">
+                {messages.length === 0 ? (
+                    <div className="h-full flex flex-col items-center justify-center text-center px-4">
+                        <div className={`w-16 h-16 rounded-2xl ${tool.accentBg} flex items-center justify-center mb-4`}>
+                            <tool.icon className={`w-8 h-8 ${tool.accentText}`} />
                         </div>
-                    ) : (
-                        messages.map((m, i) => (
+                        <h2 className="font-display font-extrabold text-foreground text-2xl sm:text-3xl mb-1.5">
+                            What are we working on?
+                        </h2>
+                        <p className="text-sm text-muted-foreground max-w-sm mb-7">{tool.blurb}</p>
+                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 w-full max-w-2xl">
+                            {CHAT_TOOLS.map(t => {
+                                const Icon = t.icon;
+                                return (
+                                    <button key={t.id} onClick={() => selectTool(t.id)}
+                                        className={`flex flex-col items-start gap-1.5 rounded-xl border-2 p-3 text-left transition-all ${
+                                            t.id === activeTool ? `${t.accentBg} border-current ${t.accentText}` : "bg-surface border-border hover:border-muted-foreground/40"
+                                        }`}>
+                                        <Icon className={`w-4 h-4 ${t.accentText}`} />
+                                        <span className={`text-xs font-bold ${t.id === activeTool ? t.accentText : "text-foreground"}`}>{t.label}</span>
+                                    </button>
+                                );
+                            })}
+                        </div>
+                    </div>
+                ) : (
+                    <div className="max-w-3xl mx-auto px-1 sm:px-2 py-4 space-y-5">
+                        {messages.map((m, i) => (
                             <div key={i} className={`flex ${m.role === "user" ? "justify-end" : "justify-start"}`}>
                                 {m.role === "user" ? (
                                     <div className={`max-w-[85%] sm:max-w-[70%] rounded-2xl rounded-br-md px-4 py-2.5 ${tool.accentSolid} text-white text-sm whitespace-pre-wrap`}>
@@ -366,84 +372,91 @@ export default function UnifiedChat() {
                                     </div>
                                 )}
                             </div>
-                        ))
-                    )}
-                    <div ref={endRef} />
-                </div>
-
-                {/* Composer */}
-                <div className="border-t border-border p-3 space-y-2">
-                    {/* Tool chips — locked to one tool per conversation */}
-                    <div className="flex gap-1.5 overflow-x-auto pb-0.5">
-                        {CHAT_TOOLS.map(t => {
-                            const Icon = t.icon;
-                            const selected = t.id === activeTool;
-                            const locked = toolLocked && !selected;
-                            return (
-                                <button key={t.id} onClick={() => selectTool(t.id)}
-                                    aria-disabled={locked}
-                                    title={locked ? "Start a new chat to switch tools" : undefined}
-                                    className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl text-xs font-bold border-2 whitespace-nowrap transition-all flex-shrink-0 ${
-                                        selected ? `${t.accentSolid} border-transparent text-white shadow-soft` :
-                                        locked ? "bg-surface border-border text-muted-foreground/40 cursor-not-allowed" :
-                                        "bg-surface border-border text-muted-foreground hover:text-foreground"
-                                    }`}>
-                                    <Icon className="w-3.5 h-3.5" /> {t.label}
-                                </button>
-                            );
-                        })}
+                        ))}
+                        <div ref={endRef} />
                     </div>
+                )}
+            </div>
 
-                    {/* Per-tool options — the old sub-categories, as chips */}
-                    {(tool.options || []).length > 0 && (
-                        <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
-                            {(tool.options || []).map(group => (
-                                <div key={group.key} className="flex items-center gap-1.5">
-                                    <span className="text-[10px] font-black uppercase tracking-wide text-muted-foreground/60">{group.label}</span>
-                                    {resolveChoices(group, toolOptions).map(c => (
-                                        <button key={c.value}
-                                            onClick={() => setToolOptions(prev => {
-                                                const next = { ...prev, [group.key]: c.value };
-                                                if (group.key === "section") next.focus = "general";
-                                                return next;
-                                            })}
-                                            className={`px-2 py-1 rounded-lg text-[11px] font-bold border transition-all ${
-                                                toolOptions[group.key] === c.value
-                                                    ? `${tool.accentBg} ${tool.accentText} border-current`
-                                                    : "bg-surface border-border text-muted-foreground hover:text-foreground"
-                                            }`}>
-                                            {c.label}
-                                        </button>
-                                    ))}
-                                </div>
-                            ))}
-                        </div>
-                    )}
-
-                    {(convFiles.length > 0 || attachment) && (
-                        <div className="flex flex-wrap items-center gap-1.5">
-                            {convFiles.map((f, i) => (
-                                <div key={`${f.url}-${i}`} className="inline-flex items-center gap-1.5 pill bg-primary/10 text-primary"
-                                    title="This document stays in the chat — the AI reads it with every message">
-                                    <Paperclip className="w-3 h-3" /> {f.name}
-                                    <button onClick={() => setConvFiles(prev => prev.filter((_, j) => j !== i))} aria-label={`Remove ${f.name} from this chat`}>
-                                        <X className="w-3 h-3" />
+            {/* ── Composer — one rounded surface pinned to the bottom ── */}
+            <div className="w-full max-w-3xl mx-auto pt-2 pb-2 flex-shrink-0">
+                {/* Per-tool options — slim centered row */}
+                {(tool.options || []).length > 0 && (
+                    <div className="flex flex-wrap items-center justify-center gap-x-3 gap-y-1.5 pb-2">
+                        {(tool.options || []).map(group => (
+                            <div key={group.key} className="flex items-center gap-1.5">
+                                <span className="text-[10px] font-black uppercase tracking-wide text-muted-foreground/60">{group.label}</span>
+                                {resolveChoices(group, toolOptions).map(c => (
+                                    <button key={c.value}
+                                        onClick={() => setToolOptions(prev => {
+                                            const next = { ...prev, [group.key]: c.value };
+                                            if (group.key === "section") next.focus = "general";
+                                            return next;
+                                        })}
+                                        className={`px-2 py-1 rounded-lg text-[11px] font-bold border transition-all ${
+                                            toolOptions[group.key] === c.value
+                                                ? `${tool.accentBg} ${tool.accentText} border-current`
+                                                : "bg-surface border-border text-muted-foreground hover:text-foreground"
+                                        }`}>
+                                        {c.label}
                                     </button>
-                                </div>
-                            ))}
-                            {attachment && (
-                                <div className="inline-flex items-center gap-1.5 pill bg-secondary text-foreground">
-                                    <Paperclip className="w-3 h-3" /> {attachment.name}
-                                    <span className="text-[10px] text-muted-foreground">sends with next message</span>
-                                    <button onClick={() => setAttachment(null)} aria-label="Remove attachment"><X className="w-3 h-3" /></button>
-                                </div>
-                            )}
-                        </div>
-                    )}
+                                ))}
+                            </div>
+                        ))}
+                    </div>
+                )}
 
-                    <div className="flex items-end gap-2">
+                {/* Documents in this chat */}
+                {(convFiles.length > 0 || attachment) && (
+                    <div className="flex flex-wrap items-center gap-1.5 pb-2">
+                        {convFiles.map((f, i) => (
+                            <div key={`${f.url}-${i}`} className="inline-flex items-center gap-1.5 pill bg-primary/10 text-primary"
+                                title="This document stays in the chat — the AI reads it with every message">
+                                <Paperclip className="w-3 h-3" /> {f.name}
+                                <button onClick={() => setConvFiles(prev => prev.filter((_, j) => j !== i))} aria-label={`Remove ${f.name} from this chat`}>
+                                    <X className="w-3 h-3" />
+                                </button>
+                            </div>
+                        ))}
+                        {attachment && (
+                            <div className="inline-flex items-center gap-1.5 pill bg-secondary text-foreground">
+                                <Paperclip className="w-3 h-3" /> {attachment.name}
+                                <span className="text-[10px] text-muted-foreground">sends with next message</span>
+                                <button onClick={() => setAttachment(null)} aria-label="Remove attachment"><X className="w-3 h-3" /></button>
+                            </div>
+                        )}
+                    </div>
+                )}
+
+                <div className="rounded-3xl border-2 border-border bg-surface shadow-soft px-4 pt-3 pb-2 transition-colors focus-within:border-primary/50">
+                    <Textarea
+                        value={input}
+                        onChange={e => {
+                            setInput(e.target.value);
+                            // Auto-grow like every modern chat: reset then fit content, capped.
+                            e.target.style.height = "auto";
+                            e.target.style.height = Math.min(e.target.scrollHeight, 160) + "px";
+                        }}
+                        onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); } }}
+                        placeholder={attachment ? `Ask about ${attachment.name} — or just hit send` : `Message ${tool.label}…`}
+                        rows={1}
+                        className="w-full min-h-[44px] max-h-40 resize-none border-0 bg-transparent p-0 shadow-none text-sm focus-visible:ring-0 focus-visible:ring-offset-0"
+                    />
+                    <div className="flex items-center gap-1.5 pt-1.5">
+                        {/* Tool + subject selectors live inside the composer, polarbear-style */}
+                        <Select value={activeTool} onValueChange={selectTool} disabled={toolLocked}>
+                            <SelectTrigger className="h-8 w-auto gap-1 rounded-lg border-0 bg-secondary/60 px-2.5 text-xs font-bold shadow-none focus:ring-0"
+                                title={toolLocked ? "This chat belongs to one tool — start a New chat to switch" : "Choose your tool"}>
+                                <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                                {CHAT_TOOLS.map(t => (
+                                    <SelectItem key={t.id} value={t.id}>{t.label}</SelectItem>
+                                ))}
+                            </SelectContent>
+                        </Select>
                         <Select value={subjectName || "none"} onValueChange={(v) => setSubjectName(v === "none" ? "" : v)}>
-                            <SelectTrigger className="w-32 sm:w-40 h-10 text-xs flex-shrink-0">
+                            <SelectTrigger className="h-8 w-auto gap-1 rounded-lg border-0 bg-secondary/60 px-2.5 text-xs font-bold shadow-none focus:ring-0 max-w-[130px] sm:max-w-none">
                                 <SelectValue placeholder="Subject" />
                             </SelectTrigger>
                             <SelectContent>
@@ -451,45 +464,34 @@ export default function UnifiedChat() {
                                 {subjects.map(s => <SelectItem key={s.id} value={s.subject_name}>{s.subject_name}</SelectItem>)}
                             </SelectContent>
                         </Select>
-                        {tool.supportsFiles && (
-                            <>
-                                <input ref={fileRef} type="file" className="hidden" accept=".pdf,.docx,.pptx,.png,.jpg,.jpeg,.txt"
-                                    onChange={e => attachFile(e.target.files?.[0])} />
-                                <Button onClick={() => fileRef.current?.click()} disabled={uploading} variant="outline" size="icon"
-                                    aria-label="Attach a file" className="h-10 w-10 rounded-xl border-2 flex-shrink-0">
-                                    {uploading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Paperclip className="w-4 h-4" />}
+                        <div className="ml-auto flex items-center gap-1.5">
+                            {tool.supportsFiles && (
+                                <>
+                                    <input ref={fileRef} type="file" className="hidden" accept=".pdf,.docx,.pptx,.png,.jpg,.jpeg,.txt"
+                                        onChange={e => attachFile(e.target.files?.[0])} />
+                                    <button onClick={() => fileRef.current?.click()} disabled={uploading} aria-label="Attach a file"
+                                        className="w-8 h-8 rounded-lg flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors">
+                                        {uploading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Paperclip className="w-4 h-4" />}
+                                    </button>
+                                </>
+                            )}
+                            {streaming ? (
+                                <Button onClick={stop} variant="outline" size="icon" aria-label="Stop generating"
+                                    className="w-9 h-9 rounded-full border-2 border-streak/40 text-streak flex-shrink-0">
+                                    <Square className="w-4 h-4" />
                                 </Button>
-                            </>
-                        )}
-                        <Textarea
-                            value={input}
-                            onChange={e => {
-                                setInput(e.target.value);
-                                // Auto-grow like every modern chat: reset then fit content, capped at max-h.
-                                e.target.style.height = "auto";
-                                e.target.style.height = Math.min(e.target.scrollHeight, 144) + "px";
-                            }}
-                            onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); } }}
-                            placeholder={attachment ? `Ask about ${attachment.name} — or just hit send` : `Message ${tool.label}…`}
-                            rows={1}
-                            className="flex-1 min-h-[40px] max-h-36 resize-none rounded-xl text-sm"
-                        />
-                        {streaming ? (
-                            <Button onClick={stop} variant="outline" size="icon" aria-label="Stop generating"
-                                className="h-10 w-10 rounded-xl border-2 border-streak/40 text-streak flex-shrink-0">
-                                <Square className="w-4 h-4" />
-                            </Button>
-                        ) : (
-                            <Button onClick={send} disabled={!input.trim() && !attachment} size="icon" aria-label="Send message"
-                                className="h-10 w-10 rounded-xl flex-shrink-0">
-                                <Send className="w-4 h-4" />
-                            </Button>
-                        )}
+                            ) : (
+                                <Button onClick={send} disabled={!input.trim() && !attachment} size="icon" aria-label="Send message"
+                                    className="w-9 h-9 rounded-full flex-shrink-0">
+                                    <Send className="w-4 h-4" />
+                                </Button>
+                            )}
+                        </div>
                     </div>
-                    <p className="text-[10px] text-muted-foreground/50 text-center flex items-center justify-center gap-1">
-                        <MessageSquare className="w-3 h-3" /> Chats save automatically — daily AI limits apply per tool.
-                    </p>
                 </div>
+                <p className="text-[10px] text-muted-foreground/50 text-center pt-1.5">
+                    Chats save automatically — daily AI limits apply per tool.
+                </p>
             </div>
         </div>
     );
