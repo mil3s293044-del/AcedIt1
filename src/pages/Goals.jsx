@@ -37,6 +37,29 @@ const TIME_PREFS = [
 const REPEAT_OPTIONS = [2, 4, 8, 12];
 const MAX_WEEKS_AHEAD = 8;
 
+// Daily intention presets — one line to aim the day at. Students can also
+// write their own.
+const PRESET_INTENTIONS = [
+    "One focused session before dinner",
+    "Start with the subject I avoid",
+    "Beat yesterday by ten minutes",
+    "Show up for 20 minutes, minimum",
+    "Finish today's plan — then switch off",
+];
+
+// Session types — the prefix keeps sessionLink() routing to the right tool.
+const SESSION_TYPES = [
+    { value: "Flashcards", emoji: "🃏" },
+    { value: "Active recall", emoji: "🧠" },
+    { value: "Quiz", emoji: "❓" },
+    { value: "Timed mock", emoji: "⏱️" },
+    { value: "Blurting", emoji: "✍️" },
+    { value: "Notes review", emoji: "📖" },
+    { value: "Homework", emoji: "📚" },
+    { value: "Other", emoji: "✨" },
+];
+const DURATION_OPTIONS = [25, 40, 60, 90];
+
 // ─── Static class lookups (Tailwind JIT-safe) ───────────────────────────────
 const countdownPill = (days) =>
     days <= 3 ? "bg-streak/15 text-streak" :
@@ -70,8 +93,18 @@ function sessionLink(title) {
     return "/Study";
 }
 
+// Session metadata lives in `notes` as tags — the study_plans table 400s on
+// unknown columns, so duration and free-text notes piggyback on the one text
+// field that already exists: "[rec:abc123][dur:40] bring the formula sheet"
 const REC_TAG = /\[rec:([a-z0-9-]+)\]/i;
+const DUR_TAG = /\[dur:(\d+)\]/i;
 const recIdOf = (plan) => plan.notes?.match(REC_TAG)?.[1] || null;
+const durationOf = (plan) => {
+    const m = plan.notes?.match(DUR_TAG);
+    return m ? Number(m[1]) : null;
+};
+const noteTextOf = (plan) =>
+    (plan.notes || "").replace(REC_TAG, "").replace(DUR_TAG, "").trim() || null;
 
 export default function Planner() {
     const { toast } = useToast();
@@ -92,11 +125,14 @@ export default function Planner() {
     const [sacDate, setSacDate] = useState("");
     const [savingSac, setSavingSac] = useState(false);
 
-    // Add-session dialog (with recurrence)
+    // Add-session dialog (type + details + recurrence)
     const [planDay, setPlanDay] = useState(null);
+    const [planType, setPlanType] = useState("");
     const [planTitle, setPlanTitle] = useState("");
     const [planSubject, setPlanSubject] = useState("");
     const [planTime, setPlanTime] = useState("16:00");
+    const [planDuration, setPlanDuration] = useState(40);
+    const [planNote, setPlanNote] = useState("");
     const [repeatWeekly, setRepeatWeekly] = useState(false);
     const [repeatWeeks, setRepeatWeeks] = useState(4);
     const [savingPlan, setSavingPlan] = useState(false);
@@ -104,11 +140,10 @@ export default function Planner() {
     // Recurring delete choice
     const [deleteTarget, setDeleteTarget] = useState(null);
 
-    // Target card
-    const [editingTarget, setEditingTarget] = useState(false);
-    const [targetAtar, setTargetAtar] = useState("");
-    const [targetCourse, setTargetCourse] = useState("");
-    const [targetUni, setTargetUni] = useState("");
+    // Daily intention card
+    const [editingIntention, setEditingIntention] = useState(false);
+    const [intentionDraft, setIntentionDraft] = useState("");
+    const [savingIntention, setSavingIntention] = useState(false);
 
     // AI planning dialog
     const [aiOpen, setAiOpen] = useState(false);
@@ -135,9 +170,6 @@ export default function Planner() {
             ]);
             const p = profileData[0] || null;
             setProfile(p);
-            setTargetAtar(p?.goal_atar || "");
-            setTargetCourse(p?.goal_course_name || "");
-            setTargetUni(p?.goal_university || "");
             const seen = new Set();
             setSubjects((subjectData || []).filter(s => !seen.has(s.subject_name) && seen.add(s.subject_name)));
             setAssessments(assessmentData || []);
@@ -241,18 +273,26 @@ export default function Planner() {
         try {
             const recId = repeatWeekly ? (crypto.randomUUID ? crypto.randomUUID().slice(0, 8) : `${Date.now()}`) : null;
             const weeks = repeatWeekly ? repeatWeeks : 1;
+            // Type prefix keeps sessionLink() routing to the right study tool
+            // ("Flashcards: gene regulation" → spaced repetition, etc.).
+            const alreadyPrefixed = planTitle.includes(":");
+            const finalTitle = planType && planType !== "Other" && !alreadyPrefixed
+                ? `${planType}: ${planTitle.trim()}`
+                : planTitle.trim();
+            const tags = `${recId ? `[rec:${recId}]` : ""}${planDuration ? `[dur:${planDuration}]` : ""}`;
+            const notes = `${tags}${planNote.trim() ? ` ${planNote.trim()}` : ""}` || null;
             for (let i = 0; i < weeks; i++) {
                 await base44.entities.StudyPlan.create({
-                    title: planTitle.trim(),
+                    title: finalTitle,
                     subject_name: planSubject || null,
                     date: format(addDays(parseISO(planDay), i * 7), "yyyy-MM-dd"),
                     start_time: planTime || null,
                     is_completed: false,
-                    notes: recId ? `[rec:${recId}]` : null,
+                    notes,
                 });
             }
             if (repeatWeekly) toast({ title: `🔁 Weekly for ${weeks} weeks`, description: "The series is on the board — delete any one to trim it." });
-            setPlanDay(null); setPlanTitle(""); setRepeatWeekly(false);
+            setPlanDay(null); setPlanTitle(""); setPlanType(""); setPlanNote(""); setRepeatWeekly(false);
             loadData(user.email);
         } catch (e) {
             toast({ title: "Couldn't save", description: e.message, variant: "destructive" });
@@ -286,19 +326,28 @@ export default function Planner() {
         deletePlans(plans.filter(p => recIdOf(p) === rid && p.date >= deleteTarget.date));
     };
 
-    // ─── Target ────────────────────────────────────────────────────────────────
-    const saveTarget = async () => {
+    // ─── Daily intention ───────────────────────────────────────────────────────
+    // One line for today, stored in profile.extra (merged, never overwritten —
+    // extra also carries year_level / attribution / xp boosts).
+    const todayIntention = profile?.extra?.daily_intention?.date === todayStr
+        ? profile.extra.daily_intention.text
+        : null;
+
+    const saveIntention = async (text) => {
+        const t = (text || "").trim();
+        if (!t || !profile) return;
+        setSavingIntention(true);
         try {
-            await base44.entities.UserProfile.update(profile.id, {
-                goal_atar: targetAtar || null,
-                goal_course_name: targetCourse || null,
-                goal_university: targetUni || null,
-            });
-            setEditingTarget(false);
-            loadData(user.email);
-            toast({ title: "Target locked in 🎓" });
+            const extra = { ...(profile.extra || {}), daily_intention: { date: todayStr, text: t.slice(0, 80) } };
+            await base44.entities.UserProfile.update(profile.id, { extra });
+            setProfile(prev => ({ ...prev, extra }));
+            setEditingIntention(false);
+            setIntentionDraft("");
+            toast({ title: "Intention set 🌱" });
         } catch (e) {
             toast({ title: "Couldn't save", description: e.message, variant: "destructive" });
+        } finally {
+            setSavingIntention(false);
         }
     };
 
@@ -377,6 +426,7 @@ Rules: weight sessions toward the nearest assessments; at most 2 sessions per da
                 await base44.entities.StudyPlan.create({
                     title: s.title, subject_name: s.subject_name || null,
                     date: s.date, start_time: s.start_time || null, is_completed: false,
+                    notes: s.duration_minutes ? `[dur:${Math.round(s.duration_minutes)}]` : null,
                 });
             }
             toast({ title: `✨ ${chosen.length} sessions on the board`, description: "Adjust anything that clashes — it's your week." });
@@ -401,7 +451,7 @@ Rules: weight sessions toward the nearest assessments; at most 2 sessions per da
 
     return (
         <div className="min-h-screen bg-background">
-            <div className="max-w-6xl mx-auto px-4 lg:px-8 py-6 lg:py-10 space-y-6 lg:space-y-8">
+            <div className="max-w-[1400px] mx-auto px-4 lg:px-8 py-6 lg:py-10 space-y-6 lg:space-y-8">
 
                 {/* ── COACH STRIP ─────────────────────────────────────── */}
                 <motion.section initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.35 }}>
@@ -471,33 +521,54 @@ Rules: weight sessions toward the nearest assessments; at most 2 sessions per da
                         )}
                     </div>
 
-                    {/* Target card */}
+                    {/* Daily intention card */}
                     <div className="rounded-3xl bg-chart-4/5 border border-chart-4/15 shadow-soft p-6 flex flex-col">
                         <div className="flex items-center justify-between mb-2">
-                            <p className="stat-label text-chart-4/80">Your target</p>
-                            <button onClick={() => setEditingTarget(e => !e)} aria-label="Edit target"
-                                className="text-muted-foreground/60 hover:text-foreground transition-colors">
-                                {editingTarget ? <X className="w-4 h-4" /> : <Edit2 className="w-4 h-4" />}
-                            </button>
+                            <p className="stat-label text-chart-4/80">Today's intention</p>
+                            {todayIntention && !editingIntention && (
+                                <button onClick={() => { setIntentionDraft(todayIntention); setEditingIntention(true); }} aria-label="Change intention"
+                                    className="text-muted-foreground/60 hover:text-foreground transition-colors">
+                                    <Edit2 className="w-4 h-4" />
+                                </button>
+                            )}
+                            {editingIntention && (
+                                <button onClick={() => { setEditingIntention(false); setIntentionDraft(""); }} aria-label="Cancel"
+                                    className="text-muted-foreground/60 hover:text-foreground transition-colors">
+                                    <X className="w-4 h-4" />
+                                </button>
+                            )}
                         </div>
-                        {editingTarget ? (
-                            <div className="space-y-2.5">
-                                <Input value={targetAtar} onChange={e => setTargetAtar(e.target.value)} placeholder="ATAR goal — e.g. 92.5" />
-                                <Input value={targetCourse} onChange={e => setTargetCourse(e.target.value)} placeholder="Dream course" />
-                                <Input value={targetUni} onChange={e => setTargetUni(e.target.value)} placeholder="University" />
-                                <Button size="sm" onClick={saveTarget} className="w-full gap-1.5"><Check className="w-3.5 h-3.5" /> Save</Button>
+
+                        {todayIntention && !editingIntention ? (
+                            <div className="flex-1 flex flex-col">
+                                <p className="font-display font-extrabold text-chart-4 leading-snug text-2xl lg:text-[1.7rem]">
+                                    “{todayIntention}”
+                                </p>
+                                <p className="text-xs text-muted-foreground mt-auto pt-3">
+                                    One line, one day. Tomorrow you set a fresh one.
+                                </p>
                             </div>
                         ) : (
-                            <>
-                                <p className="font-display font-extrabold text-chart-4 leading-none" style={{ fontSize: "clamp(2.5rem, 6vw, 3.75rem)" }}>
-                                    {profile?.goal_atar || "—"}
-                                </p>
-                                <div className="mt-2 space-y-0.5">
-                                    {profile?.goal_course_name && <p className="font-bold text-foreground text-sm">{profile.goal_course_name}</p>}
-                                    {profile?.goal_university && <p className="text-xs text-muted-foreground">at {profile.goal_university}</p>}
-                                    {!profile?.goal_atar && <p className="text-xs text-muted-foreground">Set the number you're chasing — it shows on your Dashboard too.</p>}
+                            <div className="space-y-2">
+                                <p className="text-xs text-muted-foreground mb-1">Pick one — or write your own:</p>
+                                <div className="flex flex-wrap gap-1.5">
+                                    {PRESET_INTENTIONS.map(p => (
+                                        <button key={p} onClick={() => saveIntention(p)} disabled={savingIntention}
+                                            className="px-2.5 py-1.5 rounded-xl text-xs font-bold border-2 border-chart-4/25 bg-surface text-chart-4 hover:bg-chart-4/10 transition-colors text-left">
+                                            {p}
+                                        </button>
+                                    ))}
                                 </div>
-                            </>
+                                <div className="flex gap-1.5 pt-1">
+                                    <Input value={intentionDraft} onChange={e => setIntentionDraft(e.target.value)}
+                                        onKeyDown={e => { if (e.key === "Enter") saveIntention(intentionDraft); }}
+                                        placeholder="Write your own…" maxLength={80} className="h-9 text-sm" />
+                                    <Button size="sm" onClick={() => saveIntention(intentionDraft)}
+                                        disabled={savingIntention || !intentionDraft.trim()} className="h-9 gap-1 flex-shrink-0">
+                                        {savingIntention ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />} Set
+                                    </Button>
+                                </div>
+                            </div>
                         )}
                     </div>
                 </motion.section>
@@ -601,64 +672,71 @@ Rules: weight sessions toward the nearest assessments; at most 2 sessions per da
                         </div>
                     )}
 
-                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-7 gap-2.5">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-7 gap-3">
                         {week.map(day => (
                             <div key={day.key}
-                                className={`rounded-2xl border-2 p-2.5 min-h-[150px] flex flex-col gap-1.5 transition-colors ${
+                                className={`rounded-2xl border-2 p-3 min-h-[240px] flex flex-col gap-2 transition-colors ${
                                     day.isToday ? "bg-primary/5 border-primary/40" : day.isPast ? "bg-secondary/30 border-border/60 opacity-70" : "bg-surface border-border"
                                 }`}>
                                 <div className="flex items-center justify-between px-0.5 mb-0.5">
                                     <div className="flex items-baseline gap-1.5">
                                         <p className={`text-xs font-black uppercase tracking-wide ${day.isToday ? "text-primary" : "text-muted-foreground/70"}`}>{day.dayName}</p>
-                                        <p className={`font-display font-extrabold text-sm ${day.isToday ? "text-primary" : "text-muted-foreground/50"}`}>{day.dayNum}</p>
+                                        <p className={`font-display font-extrabold text-lg ${day.isToday ? "text-primary" : "text-muted-foreground/50"}`}>{day.dayNum}</p>
                                     </div>
                                     {!day.isPast && (
-                                        <button onClick={() => { setPlanDay(day.key); setPlanTitle(""); setRepeatWeekly(false); }} aria-label={`Add session on ${day.dayName} ${day.dayNum}`}
-                                            className="w-6 h-6 rounded-lg flex items-center justify-center text-muted-foreground/50 hover:text-primary hover:bg-primary/10 transition-all">
-                                            <Plus className="w-3.5 h-3.5" />
+                                        <button onClick={() => { setPlanDay(day.key); setPlanTitle(""); setPlanType(""); setPlanNote(""); setRepeatWeekly(false); }} aria-label={`Add session on ${day.dayName} ${day.dayNum}`}
+                                            className="w-7 h-7 rounded-lg flex items-center justify-center text-muted-foreground/50 hover:text-primary hover:bg-primary/10 transition-all">
+                                            <Plus className="w-4 h-4" />
                                         </button>
                                     )}
                                 </div>
 
                                 {day.sacs.map(a => (
                                     <div key={a.id} className="rounded-xl bg-streak text-white px-2.5 py-2 shadow-soft">
-                                        <p className="text-[11px] font-black leading-tight">🚩 {a.subject_name}</p>
-                                        <p className="text-[10px] font-bold text-white/80 leading-tight">{(a.assessment_type || "SAC").toUpperCase()} · {a.title}</p>
+                                        <p className="text-xs font-black leading-tight">🚩 {a.subject_name}</p>
+                                        <p className="text-[11px] font-bold text-white/80 leading-tight">{(a.assessment_type || "SAC").toUpperCase()} · {a.title}</p>
                                     </div>
                                 ))}
 
                                 <AnimatePresence>
-                                    {day.plans.map(p => (
+                                    {day.plans.map(p => {
+                                        const dur = durationOf(p);
+                                        const note = noteTextOf(p);
+                                        return (
                                         <motion.div key={p.id} layout initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.9 }}
-                                            className={`group rounded-xl border px-2 py-1.5 transition-colors ${
+                                            className={`group rounded-xl border px-2.5 py-2 transition-colors ${
                                                 p.is_completed ? "bg-primary/5 border-primary/20" : subjectChipClass(p.subject_name || p.title)
                                             }`}>
-                                            <div className="flex items-start gap-1.5">
+                                            <div className="flex items-start gap-2">
                                                 <button onClick={() => togglePlanDone(p)} aria-label="Toggle session done"
-                                                    className={`w-3.5 h-3.5 mt-0.5 rounded border flex-shrink-0 flex items-center justify-center transition-colors ${
+                                                    className={`w-4 h-4 mt-0.5 rounded border flex-shrink-0 flex items-center justify-center transition-colors ${
                                                         p.is_completed ? "bg-primary border-primary text-white" : "border-current/40 hover:border-current"
                                                     }`}>
-                                                    {p.is_completed && <Check className="w-2.5 h-2.5" />}
+                                                    {p.is_completed && <Check className="w-3 h-3" />}
                                                 </button>
-                                                <Link to={sessionLink(p.title)} className="min-w-0 flex-1">
-                                                    <p className={`text-[11px] font-bold leading-tight ${p.is_completed ? "text-muted-foreground line-through" : "text-foreground"}`}>
+                                                <Link to={sessionLink(p.title)} className="min-w-0 flex-1" title={note || undefined}>
+                                                    <p className={`text-xs font-bold leading-tight ${p.is_completed ? "text-muted-foreground line-through" : "text-foreground"}`}>
                                                         {p.title}
                                                         {recIdOf(p) && <Repeat className="w-2.5 h-2.5 inline ml-1 opacity-50" />}
                                                     </p>
-                                                    <p className="text-[10px] text-muted-foreground">{p.subject_name || ""}{p.start_time ? ` · ${p.start_time}` : ""}</p>
+                                                    <p className="text-[11px] text-muted-foreground leading-tight mt-0.5">
+                                                        {[p.start_time, dur ? `${dur}m` : null, p.subject_name].filter(Boolean).join(" · ")}
+                                                    </p>
+                                                    {note && <p className="text-[11px] text-muted-foreground/70 italic leading-tight mt-0.5 truncate">{note}</p>}
                                                 </Link>
                                                 <button onClick={() => requestDeletePlan(p)} aria-label="Remove session"
                                                     className="opacity-0 group-hover:opacity-100 text-muted-foreground/40 hover:text-streak transition-all flex-shrink-0">
-                                                    <X className="w-3 h-3" />
+                                                    <X className="w-3.5 h-3.5" />
                                                 </button>
                                             </div>
                                         </motion.div>
-                                    ))}
+                                        );
+                                    })}
                                 </AnimatePresence>
 
                                 {day.plans.length === 0 && day.sacs.length === 0 && !day.isPast && (
-                                    <button onClick={() => { setPlanDay(day.key); setPlanTitle(""); setRepeatWeekly(false); }}
-                                        className="flex-1 rounded-xl border border-dashed border-border/60 text-[11px] text-muted-foreground/40 hover:text-muted-foreground hover:border-muted-foreground/40 transition-colors">
+                                    <button onClick={() => { setPlanDay(day.key); setPlanTitle(""); setPlanType(""); setPlanNote(""); setRepeatWeekly(false); }}
+                                        className="flex-1 rounded-xl border border-dashed border-border/60 text-xs text-muted-foreground/40 hover:text-muted-foreground hover:border-muted-foreground/40 transition-colors">
                                         + plan
                                     </button>
                                 )}
@@ -674,21 +752,69 @@ Rules: weight sessions toward the nearest assessments; at most 2 sessions per da
 
                 {/* ── Add-session dialog (with recurrence) ─────────────── */}
                 <Dialog open={!!planDay} onOpenChange={(o) => !o && setPlanDay(null)}>
-                    <DialogContent className="max-w-sm rounded-3xl">
+                    <DialogContent className="max-w-md rounded-3xl max-h-[85vh] overflow-y-auto">
                         <DialogHeader>
                             <DialogTitle className="font-display">
                                 Plan a session{planDay ? ` — ${format(parseISO(planDay), "EEE d MMM")}` : ""}
                             </DialogTitle>
                         </DialogHeader>
-                        <div className="space-y-3">
-                            <Input placeholder='What — e.g. "Flashcards: gene regulation"' value={planTitle} onChange={e => setPlanTitle(e.target.value)} maxLength={80} autoFocus />
-                            <Select value={planSubject} onValueChange={setPlanSubject}>
-                                <SelectTrigger><SelectValue placeholder="Subject (optional)" /></SelectTrigger>
-                                <SelectContent>
-                                    {subjects.map(s => <SelectItem key={s.id} value={s.subject_name}>{s.subject_name}</SelectItem>)}
-                                </SelectContent>
-                            </Select>
-                            <Input type="time" value={planTime} onChange={e => setPlanTime(e.target.value)} />
+                        <div className="space-y-3.5">
+                            {/* Session type — picks the tool the chip will launch */}
+                            <div>
+                                <p className="stat-label mb-1.5">Session type</p>
+                                <div className="grid grid-cols-4 gap-1.5">
+                                    {SESSION_TYPES.map(t => (
+                                        <button key={t.value} onClick={() => setPlanType(prev => prev === t.value ? "" : t.value)}
+                                            className={`flex flex-col items-center gap-0.5 py-2 rounded-xl text-[11px] font-bold border-2 transition-all ${
+                                                planType === t.value ? "bg-primary/10 border-primary/50 text-primary" : "bg-surface border-border text-muted-foreground hover:border-muted-foreground/40"
+                                            }`}>
+                                            <span className="text-base leading-none">{t.emoji}</span>
+                                            {t.value}
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
+
+                            <div>
+                                <p className="stat-label mb-1.5">Topic</p>
+                                <Input placeholder={planType && planType !== "Other" ? `e.g. "gene regulation" — saves as "${planType}: …"` : 'e.g. "Flashcards: gene regulation"'}
+                                    value={planTitle} onChange={e => setPlanTitle(e.target.value)} maxLength={80} autoFocus />
+                            </div>
+
+                            <div className="grid grid-cols-2 gap-2">
+                                <div>
+                                    <p className="stat-label mb-1.5">Subject</p>
+                                    <Select value={planSubject} onValueChange={setPlanSubject}>
+                                        <SelectTrigger><SelectValue placeholder="Optional" /></SelectTrigger>
+                                        <SelectContent>
+                                            {subjects.map(s => <SelectItem key={s.id} value={s.subject_name}>{s.subject_name}</SelectItem>)}
+                                        </SelectContent>
+                                    </Select>
+                                </div>
+                                <div>
+                                    <p className="stat-label mb-1.5">Start time</p>
+                                    <Input type="time" value={planTime} onChange={e => setPlanTime(e.target.value)} />
+                                </div>
+                            </div>
+
+                            <div>
+                                <p className="stat-label mb-1.5">How long</p>
+                                <div className="flex gap-1.5">
+                                    {DURATION_OPTIONS.map(d => (
+                                        <button key={d} onClick={() => setPlanDuration(d)}
+                                            className={`flex-1 py-2 rounded-xl text-xs font-bold border-2 transition-all ${
+                                                planDuration === d ? "bg-foreground border-foreground text-background" : "bg-surface border-border text-muted-foreground hover:border-muted-foreground/40"
+                                            }`}>
+                                            {d}m
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
+
+                            <div>
+                                <p className="stat-label mb-1.5">Note to self</p>
+                                <Input placeholder='Optional — e.g. "focus on q4-style problems"' value={planNote} onChange={e => setPlanNote(e.target.value)} maxLength={120} />
+                            </div>
 
                             {/* Recurrence */}
                             <div className={`rounded-2xl border-2 p-3 transition-colors ${repeatWeekly ? "border-chart-3/40 bg-chart-3/5" : "border-border"}`}>
