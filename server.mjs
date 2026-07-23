@@ -810,6 +810,26 @@ async function convertFileForClaude(file) {
     };
   }
 
+  // PPTX → extract slide text via JSZip (same approach as extractDocumentText).
+  if (mt === "application/vnd.openxmlformats-officedocument.presentationml.presentation") {
+    const zip = await JSZip.loadAsync(file.buffer);
+    const slideFiles = Object.keys(zip.files)
+      .filter((name) => name.startsWith("ppt/slides/slide") && name.endsWith(".xml"))
+      .sort();
+    const slideTexts = [];
+    for (const slidePath of slideFiles) {
+      const slideXml = await zip.files[slidePath].async("text");
+      const matches = slideXml.match(/<a:t>([^<]+)<\/a:t>/g) || [];
+      const slideText = matches.map((m) => m.replace(/<\/?a:t>/g, "")).join(" ");
+      if (slideText.trim()) slideTexts.push(slideText.trim());
+    }
+    console.log(`[local-ai] PPTX extracted: ${slideTexts.length} slides from ${file.originalName}`);
+    return {
+      type: "text",
+      text: `Contents of file "${file.originalName}" (slide by slide):\n\n${slideTexts.join("\n\n")}`,
+    };
+  }
+
   // Plain text → just include directly.
   if (mt.startsWith("text/")) {
     return {
@@ -819,7 +839,12 @@ async function convertFileForClaude(file) {
   }
 
   console.warn(`[local-ai] unsupported file type for Claude: ${mt} (${file.originalName})`);
-  return null;
+  // Explicit error block instead of a silent drop — the model can tell the
+  // user what happened rather than acting like no file exists.
+  return {
+    type: "text",
+    text: `[ATTACHMENT PROBLEM: the user attached "${file.originalName}" (${mt}), but this file type could not be read. Tell the user this file type isn't supported and suggest PDF, DOCX, PPTX, TXT, or an image instead.]`,
+  };
 }
 
 // Convert file_urls → Anthropic content blocks. Three URL shapes are supported:
@@ -838,13 +863,21 @@ async function buildFileContentBlocks(fileUrls) {
           const file = fileStore.get(id);
           if (!file) {
             console.warn(`[local-ai] missing local file for ${url}`);
-            return null;
+            // Uploads live in memory and expire on server restart. Say so —
+            // a silent drop reads to the user as "the AI ignores my files".
+            return {
+              type: "text",
+              text: `[ATTACHMENT PROBLEM: a file the user previously attached is no longer available on the server (uploads expire after a while). Tell the user you couldn't access one of their attached files and ask them to re-attach it.]`,
+            };
           }
           try {
             return await convertFileForClaude(file);
           } catch (err) {
             console.error(`[local-ai] file conversion failed for ${file.originalName}:`, err);
-            return null;
+            return {
+              type: "text",
+              text: `[ATTACHMENT PROBLEM: the user attached "${file.originalName}" but it could not be read (${err?.message || "conversion failed"}). Tell the user their file couldn't be processed and ask them to try re-attaching it, or a different format.]`,
+            };
           }
         }
 
@@ -856,7 +889,19 @@ async function buildFileContentBlocks(fileUrls) {
         return { type: "image", source: { type: "url", url } };
       }),
   );
-  return blocks.filter(Boolean);
+  const clean = blocks.filter(Boolean);
+  if (clean.length === 0) return [];
+  // Preamble so the model KNOWS these blocks are user-attached files. Without
+  // it, text-extracted documents (DOCX/PPTX/TXT) read as pasted text and the
+  // model tells users "I don't see any attached document" — the #1 cause of
+  // "file upload doesn't work" reports.
+  return [
+    {
+      type: "text",
+      text: `The user has attached ${clean.length} file(s) to this message. The blocks that follow — documents, images, and any text beginning with 'Contents of file' — ARE those attachments. Read them and ground your answer in them. Never claim no file was attached.`,
+    },
+    ...clean,
+  ];
 }
 
 // Anthropic structured outputs require `additionalProperties: false` on every
