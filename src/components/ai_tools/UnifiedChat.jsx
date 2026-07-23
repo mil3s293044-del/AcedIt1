@@ -34,13 +34,18 @@ function agoLabel(iso) {
     return format(new Date(iso), "d MMM");
 }
 
-function buildPrompt(tool, subjectName, toolOptions, messages, userText) {
+function buildPrompt(tool, subjectName, toolOptions, messages, userText, files) {
     const transcript = messages.slice(-MAX_TURNS_IN_PROMPT)
         .map(m => `${m.role === "user" ? "Student" : "You"}: ${m.content}`)
         .join("\n\n");
+    // Without this block the model treats attachments as decoration — it must
+    // be told the documents are present and to ground the answer in them.
+    const fileBlock = files?.length
+        ? `ATTACHED DOCUMENTS: The student has attached ${files.map(f => `"${f.name}"`).join(", ")}. The full content is provided to you alongside this message. Read the attached content carefully and base your answer on it together with what the student writes — quote or reference specific parts where useful.\n\n`
+        : "";
     return `${tool.system(subjectName, toolOptions)}
 
-${transcript ? `CONVERSATION SO FAR:\n${transcript}\n\n` : ""}Student: ${userText}
+${fileBlock}${transcript ? `CONVERSATION SO FAR:\n${transcript}\n\n` : ""}Student: ${userText}
 
 Respond as the ${tool.label} directly to the student. Markdown formatting.`;
 }
@@ -60,6 +65,10 @@ export default function UnifiedChat() {
     const [messages, setMessages] = useState([]);
     const [input, setInput] = useState("");
     const [attachment, setAttachment] = useState(null);
+    // Documents already sent in this conversation — re-attached to every
+    // request so follow-up questions ("what does section 2 say?") still see
+    // the document, not just the first message.
+    const [convFiles, setConvFiles] = useState([]);
     const [uploading, setUploading] = useState(false);
     const [streaming, setStreaming] = useState(false);
 
@@ -105,7 +114,7 @@ export default function UnifiedChat() {
     const newChat = () => {
         abortRef.current?.abort();
         setActiveConvId(null); convIdRef.current = null;
-        setMessages([]); setInput(""); setAttachment(null); setStreaming(false);
+        setMessages([]); setInput(""); setAttachment(null); setConvFiles([]); setStreaming(false);
         setToolOptions(defaultOptions(tool));
         setSidebarOpen(false);
     };
@@ -118,6 +127,8 @@ export default function UnifiedChat() {
         const t = toolById(conv.tool_type);
         setToolOptions({ ...defaultOptions(t), ...(conv.input_data?.options || {}) });
         setMessages(conv.input_data.messages);
+        setConvFiles(conv.input_data?.files || []);
+        setAttachment(null);
         setStreaming(false); setSidebarOpen(false);
     };
 
@@ -130,6 +141,7 @@ export default function UnifiedChat() {
     };
 
     const optsRef = useRef({});
+    const filesRef = useRef([]);
     const persist = useCallback(async (finalMessages, usedTool, usedSubject) => {
         if (!user?.email) return;
         const flat = finalMessages.map(m => `${m.role === "user" ? "Student" : "AI"}: ${m.content}`).join("\n\n");
@@ -138,7 +150,7 @@ export default function UnifiedChat() {
             title: (finalMessages[0]?.content || "Chat").slice(0, 60),
             subject_name: usedSubject || null,
             content: flat.slice(0, 20000),
-            input_data: { tool: usedTool.id, subject: usedSubject || null, options: optsRef.current, messages: finalMessages },
+            input_data: { tool: usedTool.id, subject: usedSubject || null, options: optsRef.current, files: filesRef.current, messages: finalMessages },
             date_created: new Date().toISOString().split("T")[0],
         };
         try {
@@ -169,14 +181,20 @@ export default function UnifiedChat() {
 
     const send = async () => {
         const text = input.trim();
-        if (!text || streaming) return;
+        const pending = attachment;
+        // A document on its own is a valid message — no typed text required.
+        if ((!text && !pending) || streaming) return;
         const usedTool = tool;
         const usedSubject = subjectName;
         const usedOptions = toolOptions;
-        const fileUrl = attachment?.url;
+        // Every request carries ALL of this conversation's documents, so the
+        // AI can keep answering questions about them on later turns.
+        const files = pending ? [...convFiles, { url: pending.url, name: pending.name }] : convFiles;
         setInput(""); setAttachment(null);
+        if (pending) setConvFiles(files);
 
-        const userMsg = { role: "user", content: fileUrl ? `${text}\n\n[attached: ${attachment.name}]` : text };
+        const promptText = text || `I've attached "${pending.name}". Please read it and help me with it.`;
+        const userMsg = { role: "user", content: pending ? `${text ? `${text}\n\n` : ""}📎 ${pending.name}` : text };
         const history = messages;
         setMessages(prev => [...prev, userMsg, { role: "assistant", content: "", streaming: true }]);
         setStreaming(true);
@@ -189,8 +207,8 @@ export default function UnifiedChat() {
             await invokeLLMStream(
                 {
                     feature: usedTool.feature,
-                    prompt: buildPrompt(usedTool, usedSubject, usedOptions, history, text),
-                    file_urls: fileUrl ? [fileUrl] : undefined,
+                    prompt: buildPrompt(usedTool, usedSubject, usedOptions, history, promptText, files),
+                    file_urls: files.length ? files.map(f => f.url) : undefined,
                 },
                 (_d, soFar) => {
                     finalText = soFar;
@@ -210,7 +228,7 @@ export default function UnifiedChat() {
         const finalMessages = [...history, userMsg, { role: "assistant", content: finalText || "…" }];
         setMessages(finalMessages);
         setStreaming(false);
-        if (finalText) { optsRef.current = usedOptions; persist(finalMessages, usedTool, usedSubject); }
+        if (finalText) { optsRef.current = usedOptions; filesRef.current = files; persist(finalMessages, usedTool, usedSubject); }
     };
 
     const stop = () => abortRef.current?.abort();
@@ -402,10 +420,24 @@ export default function UnifiedChat() {
                         </div>
                     )}
 
-                    {attachment && (
-                        <div className="inline-flex items-center gap-1.5 pill bg-secondary text-foreground">
-                            <Paperclip className="w-3 h-3" /> {attachment.name}
-                            <button onClick={() => setAttachment(null)} aria-label="Remove attachment"><X className="w-3 h-3" /></button>
+                    {(convFiles.length > 0 || attachment) && (
+                        <div className="flex flex-wrap items-center gap-1.5">
+                            {convFiles.map((f, i) => (
+                                <div key={`${f.url}-${i}`} className="inline-flex items-center gap-1.5 pill bg-primary/10 text-primary"
+                                    title="This document stays in the chat — the AI reads it with every message">
+                                    <Paperclip className="w-3 h-3" /> {f.name}
+                                    <button onClick={() => setConvFiles(prev => prev.filter((_, j) => j !== i))} aria-label={`Remove ${f.name} from this chat`}>
+                                        <X className="w-3 h-3" />
+                                    </button>
+                                </div>
+                            ))}
+                            {attachment && (
+                                <div className="inline-flex items-center gap-1.5 pill bg-secondary text-foreground">
+                                    <Paperclip className="w-3 h-3" /> {attachment.name}
+                                    <span className="text-[10px] text-muted-foreground">sends with next message</span>
+                                    <button onClick={() => setAttachment(null)} aria-label="Remove attachment"><X className="w-3 h-3" /></button>
+                                </div>
+                            )}
                         </div>
                     )}
 
@@ -431,9 +463,14 @@ export default function UnifiedChat() {
                         )}
                         <Textarea
                             value={input}
-                            onChange={e => setInput(e.target.value)}
+                            onChange={e => {
+                                setInput(e.target.value);
+                                // Auto-grow like every modern chat: reset then fit content, capped at max-h.
+                                e.target.style.height = "auto";
+                                e.target.style.height = Math.min(e.target.scrollHeight, 144) + "px";
+                            }}
                             onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); } }}
-                            placeholder={`Message ${tool.label}…`}
+                            placeholder={attachment ? `Ask about ${attachment.name} — or just hit send` : `Message ${tool.label}…`}
                             rows={1}
                             className="flex-1 min-h-[40px] max-h-36 resize-none rounded-xl text-sm"
                         />
@@ -443,7 +480,7 @@ export default function UnifiedChat() {
                                 <Square className="w-4 h-4" />
                             </Button>
                         ) : (
-                            <Button onClick={send} disabled={!input.trim()} size="icon" aria-label="Send message"
+                            <Button onClick={send} disabled={!input.trim() && !attachment} size="icon" aria-label="Send message"
                                 className="h-10 w-10 rounded-xl flex-shrink-0">
                                 <Send className="w-4 h-4" />
                             </Button>

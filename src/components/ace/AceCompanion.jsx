@@ -45,6 +45,35 @@ export default function AceCompanion({ userProfile }) {
     const inputRef = useRef(null);
     const abortRef = useRef(null);
 
+    // ── Draggable pill position ──────────────────────────────────────────
+    // The pill's default corner can cover other UI (e.g. a chat send button),
+    // so users can drag it anywhere. Offset from the default corner persists
+    // in localStorage; double-click snaps it back home.
+    const PILL_POS_KEY = "acedit_ace_pill_pos_v1";
+    const [pillPos, setPillPos] = useState(() => {
+        try {
+            const saved = JSON.parse(localStorage.getItem(PILL_POS_KEY));
+            if (saved && Number.isFinite(saved.x) && Number.isFinite(saved.y)) return saved;
+        } catch { /* first run / private mode */ }
+        return { x: 0, y: 0 };
+    });
+    const draggedRef = useRef(false);
+    const savePillPos = (pos) => {
+        setPillPos(pos);
+        try { localStorage.setItem(PILL_POS_KEY, JSON.stringify(pos)); } catch { /* private mode */ }
+    };
+    const onPillDragEnd = (_e, info) => {
+        // Clamp so the pill can't be flung off-screen. Offsets are relative to
+        // the bottom-right default anchor: x/y ≤ 0 moves left/up.
+        const next = {
+            x: Math.min(12, Math.max(-(window.innerWidth - 110), pillPos.x + info.offset.x)),
+            y: Math.min(12, Math.max(-(window.innerHeight - 140), pillPos.y + info.offset.y)),
+        };
+        savePillPos(next);
+        // Swallow the click that fires right after a drag release.
+        setTimeout(() => { draggedRef.current = false; }, 150);
+    };
+
     const premium = isPremium(userProfile);
 
     const context = useMemo(() => {
@@ -137,24 +166,36 @@ export default function AceCompanion({ userProfile }) {
 
     return (
         <>
-            {/* Floating action button */}
+            {/* Floating action button — draggable; position persists, double-click resets */}
             <AnimatePresence>
                 {!open && (
-                    <motion.button
+                    <motion.div
                         key="ace-fab"
-                        initial={{ opacity: 0, scale: 0.6, y: 10 }}
-                        animate={{ opacity: 1, scale: 1, y: 0 }}
-                        exit={{ opacity: 0, scale: 0.6, y: 10 }}
-                        transition={{ type: "spring", stiffness: 380, damping: 24 }}
-                        whileHover={{ scale: 1.06 }}
-                        whileTap={{ scale: 0.94 }}
-                        onClick={() => setOpen(true)}
-                        aria-label="Open Ace, your study companion"
-                        className="fixed right-4 md:right-6 bottom-24 md:bottom-6 z-40 flex items-center gap-2 pl-2 pr-4 py-2 rounded-full shadow-soft bg-surface border border-border hover:shadow-lg transition-shadow"
+                        drag
+                        dragMomentum={false}
+                        dragElastic={0.08}
+                        onDragStart={() => { draggedRef.current = true; }}
+                        onDragEnd={onPillDragEnd}
+                        style={{ x: pillPos.x, y: pillPos.y, touchAction: "none" }}
+                        className="fixed right-4 md:right-6 bottom-24 md:bottom-6 z-40 cursor-grab active:cursor-grabbing"
                     >
-                        <AceMark className="w-9 h-9" />
-                        <span className="font-display font-extrabold text-sm text-foreground">Ace</span>
-                    </motion.button>
+                        <motion.button
+                            initial={{ opacity: 0, scale: 0.6 }}
+                            animate={{ opacity: 1, scale: 1 }}
+                            exit={{ opacity: 0, scale: 0.6 }}
+                            transition={{ type: "spring", stiffness: 380, damping: 24 }}
+                            whileHover={{ scale: 1.06 }}
+                            whileTap={{ scale: 0.94 }}
+                            onClick={() => { if (!draggedRef.current) setOpen(true); }}
+                            onDoubleClick={() => savePillPos({ x: 0, y: 0 })}
+                            aria-label="Open Ace, your study companion"
+                            title="Drag me anywhere · double-click to snap back"
+                            className="flex items-center gap-2 pl-2 pr-4 py-2 rounded-full shadow-soft bg-surface border border-border hover:shadow-lg transition-shadow"
+                        >
+                            <AceMark className="w-9 h-9" />
+                            <span className="font-display font-extrabold text-sm text-foreground">Ace</span>
+                        </motion.button>
+                    </motion.div>
                 )}
             </AnimatePresence>
 
