@@ -345,7 +345,7 @@ export default function UnifiedChat() {
                 onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); } }}
                 placeholder={attachment ? `Ask about ${attachment.name} — or just hit send` : `Message ${tool.label}…`}
                 rows={1}
-                className="w-full min-h-[44px] max-h-40 resize-none border-0 bg-transparent p-0 shadow-none text-sm focus-visible:ring-0 focus-visible:ring-offset-0"
+                className="w-full min-h-[44px] max-h-40 resize-none border-0 bg-transparent py-0 pl-1 pr-0 shadow-none text-sm focus-visible:ring-0 focus-visible:ring-offset-0"
             />
             <div className="flex items-center gap-1.5 pt-1.5">
                 <Select value={activeTool} onValueChange={selectTool} disabled={toolLocked}>
