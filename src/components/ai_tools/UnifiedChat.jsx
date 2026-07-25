@@ -285,10 +285,120 @@ export default function UnifiedChat() {
         </div>
     );
 
+    // ── Shared composer pieces — rendered centre-stage on a new chat, pinned
+    // to the bottom once the conversation starts ─────────────────────────────
+    const optionsRow = (tool.options || []).length > 0 ? (
+        <div className="flex flex-wrap items-center justify-center gap-x-3 gap-y-1.5">
+            {(tool.options || []).map(group => (
+                <div key={group.key} className="flex items-center gap-1.5">
+                    <span className="text-[10px] font-black uppercase tracking-wide text-muted-foreground/60">{group.label}</span>
+                    {resolveChoices(group, toolOptions).map(c => (
+                        <button key={c.value}
+                            onClick={() => setToolOptions(prev => {
+                                const next = { ...prev, [group.key]: c.value };
+                                if (group.key === "section") next.focus = "general";
+                                return next;
+                            })}
+                            className={`px-2 py-1 rounded-lg text-[11px] font-bold border transition-all ${
+                                toolOptions[group.key] === c.value
+                                    ? `${tool.accentBg} ${tool.accentText} border-current`
+                                    : "bg-surface border-border text-muted-foreground hover:text-foreground"
+                            }`}>
+                            {c.label}
+                        </button>
+                    ))}
+                </div>
+            ))}
+        </div>
+    ) : null;
+
+    const fileChipsRow = (convFiles.length > 0 || attachment) ? (
+        <div className="flex flex-wrap items-center gap-1.5 pb-2">
+            {convFiles.map((f, i) => (
+                <div key={`${f.url}-${i}`} className="inline-flex items-center gap-1.5 pill bg-primary/10 text-primary"
+                    title="This document stays in the chat — the AI reads it with every message">
+                    <Paperclip className="w-3 h-3" /> {f.name}
+                    <button onClick={() => setConvFiles(prev => prev.filter((_, j) => j !== i))} aria-label={`Remove ${f.name} from this chat`}>
+                        <X className="w-3 h-3" />
+                    </button>
+                </div>
+            ))}
+            {attachment && (
+                <div className="inline-flex items-center gap-1.5 pill bg-secondary text-foreground">
+                    <Paperclip className="w-3 h-3" /> {attachment.name}
+                    <span className="text-[10px] text-muted-foreground">sends with next message</span>
+                    <button onClick={() => setAttachment(null)} aria-label="Remove attachment"><X className="w-3 h-3" /></button>
+                </div>
+            )}
+        </div>
+    ) : null;
+
+    const composerBox = (
+        <div className="rounded-3xl border-2 border-border bg-background shadow-soft px-4 pt-3 pb-2 transition-colors focus-within:border-primary/50">
+            <Textarea
+                value={input}
+                onChange={e => {
+                    setInput(e.target.value);
+                    e.target.style.height = "auto";
+                    e.target.style.height = Math.min(e.target.scrollHeight, 160) + "px";
+                }}
+                onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); } }}
+                placeholder={attachment ? `Ask about ${attachment.name} — or just hit send` : `Message ${tool.label}…`}
+                rows={1}
+                className="w-full min-h-[44px] max-h-40 resize-none border-0 bg-transparent p-0 shadow-none text-sm focus-visible:ring-0 focus-visible:ring-offset-0"
+            />
+            <div className="flex items-center gap-1.5 pt-1.5">
+                <Select value={activeTool} onValueChange={selectTool} disabled={toolLocked}>
+                    <SelectTrigger className="h-8 w-auto gap-1 rounded-lg border-0 bg-secondary/60 px-2.5 text-xs font-bold shadow-none focus:ring-0"
+                        title={toolLocked ? "This chat belongs to one tool — start a New chat to switch" : "Choose your tool"}>
+                        <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                        {CHAT_TOOLS.map(t => (
+                            <SelectItem key={t.id} value={t.id}>{t.label}</SelectItem>
+                        ))}
+                    </SelectContent>
+                </Select>
+                <Select value={subjectName || "none"} onValueChange={(v) => setSubjectName(v === "none" ? "" : v)}>
+                    <SelectTrigger className="h-8 w-auto gap-1 rounded-lg border-0 bg-secondary/60 px-2.5 text-xs font-bold shadow-none focus:ring-0 max-w-[130px] sm:max-w-none">
+                        <SelectValue placeholder="Subject" />
+                    </SelectTrigger>
+                    <SelectContent>
+                        <SelectItem value="none">No subject</SelectItem>
+                        {subjects.map(s => <SelectItem key={s.id} value={s.subject_name}>{s.subject_name}</SelectItem>)}
+                    </SelectContent>
+                </Select>
+                <div className="ml-auto flex items-center gap-1.5">
+                    {tool.supportsFiles && (
+                        <>
+                            <input ref={fileRef} type="file" className="hidden" accept=".pdf,.docx,.pptx,.png,.jpg,.jpeg,.txt"
+                                onChange={e => attachFile(e.target.files?.[0])} />
+                            <button onClick={() => fileRef.current?.click()} disabled={uploading} aria-label="Attach a file"
+                                className="w-8 h-8 rounded-lg flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors">
+                                {uploading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Paperclip className="w-4 h-4" />}
+                            </button>
+                        </>
+                    )}
+                    {streaming ? (
+                        <Button onClick={stop} variant="outline" size="icon" aria-label="Stop generating"
+                            className="w-9 h-9 rounded-full border-2 border-streak/40 text-streak flex-shrink-0">
+                            <Square className="w-4 h-4" />
+                        </Button>
+                    ) : (
+                        <Button onClick={send} disabled={!input.trim() && !attachment} size="icon" aria-label="Send message"
+                            className="w-9 h-9 rounded-full flex-shrink-0">
+                            <Send className="w-4 h-4" />
+                        </Button>
+                    )}
+                </div>
+            </div>
+        </div>
+    );
+
     return (
-        <div className="flex h-full min-h-0 gap-4">
-            {/* ── Permanent history rail (desktop) — flat, ChatGPT-style ── */}
-            <aside className="hidden md:flex flex-col w-60 flex-shrink-0 border-r border-border pr-3 min-h-0">
+        <div className="flex h-full min-h-0 rounded-3xl border border-border bg-surface shadow-soft overflow-hidden">
+            {/* ── Permanent history rail (desktop) — tinted, part of the panel ── */}
+            <aside className="hidden md:flex flex-col w-64 flex-shrink-0 bg-secondary/30 border-r border-border p-3 min-h-0">
                 {SidebarInner}
                 <Link to="/AIToolsHistory"
                     className="mt-2 pt-2.5 border-t border-border inline-flex items-center gap-1.5 px-2 py-1.5 rounded-lg text-xs font-bold text-muted-foreground hover:text-foreground hover:bg-secondary/60 transition-colors">
@@ -297,8 +407,8 @@ export default function UnifiedChat() {
             </aside>
 
             <div className="relative flex flex-col flex-1 min-w-0 min-h-0">
-            {/* ── Floating top bar — mobile pills + chat context strip ── */}
-            <div className="flex items-center gap-2 pb-2 flex-shrink-0">
+            {/* ── Context strip — mobile pills; on desktop only shows in-chat ── */}
+            <div className={`flex items-center gap-2 px-3 sm:px-4 py-2 border-b border-border flex-shrink-0 ${messages.length === 0 ? "md:hidden" : ""}`}>
                 <button onClick={() => setSidebarOpen(true)}
                     className="md:hidden inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-surface border border-border text-xs font-bold text-muted-foreground hover:text-foreground hover:shadow-soft transition-all">
                     <History className="w-3.5 h-3.5" /> View chats
@@ -338,15 +448,23 @@ export default function UnifiedChat() {
             {/* ── Thread — the conversation IS the page ── */}
             <div className="flex-1 min-h-0 overflow-y-auto">
                 {messages.length === 0 ? (
-                    <div className="h-full flex flex-col items-center justify-center text-center px-4">
+                    <div className="min-h-full flex flex-col items-center justify-center text-center px-4 py-8">
                         <div className={`w-16 h-16 rounded-2xl ${tool.accentBg} flex items-center justify-center mb-4`}>
                             <tool.icon className={`w-8 h-8 ${tool.accentText}`} />
                         </div>
                         <h2 className="font-display font-extrabold text-foreground text-2xl sm:text-3xl mb-1.5">
                             What are we working on?
                         </h2>
-                        <p className="text-sm text-muted-foreground max-w-sm mb-7">{tool.blurb}</p>
-                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 w-full max-w-2xl">
+                        <p className="text-sm text-muted-foreground max-w-sm mb-6">{tool.blurb}</p>
+
+                        {/* The composer IS the call to action — centre stage on a new chat */}
+                        <div className="w-full max-w-2xl text-left">
+                            {fileChipsRow}
+                            {composerBox}
+                            {optionsRow && <div className="pt-2.5">{optionsRow}</div>}
+                        </div>
+
+                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 w-full max-w-2xl mt-7">
                             {CHAT_TOOLS.map(t => {
                                 const Icon = t.icon;
                                 return (
@@ -362,7 +480,7 @@ export default function UnifiedChat() {
                         </div>
                     </div>
                 ) : (
-                    <div className="max-w-3xl mx-auto px-1 sm:px-2 py-4 space-y-5">
+                    <div className="max-w-3xl mx-auto px-3 sm:px-5 py-5 space-y-5">
                         {messages.map((m, i) => (
                             <div key={i} className={`flex ${m.role === "user" ? "justify-end" : "justify-start"}`}>
                                 {m.role === "user" ? (
@@ -388,121 +506,19 @@ export default function UnifiedChat() {
                 )}
             </div>
 
-            {/* ── Composer — one rounded surface pinned to the bottom ── */}
-            <div className="w-full max-w-3xl mx-auto pt-2 pb-2 flex-shrink-0">
-                {/* Per-tool options — slim centered row */}
-                {(tool.options || []).length > 0 && (
-                    <div className="flex flex-wrap items-center justify-center gap-x-3 gap-y-1.5 pb-2">
-                        {(tool.options || []).map(group => (
-                            <div key={group.key} className="flex items-center gap-1.5">
-                                <span className="text-[10px] font-black uppercase tracking-wide text-muted-foreground/60">{group.label}</span>
-                                {resolveChoices(group, toolOptions).map(c => (
-                                    <button key={c.value}
-                                        onClick={() => setToolOptions(prev => {
-                                            const next = { ...prev, [group.key]: c.value };
-                                            if (group.key === "section") next.focus = "general";
-                                            return next;
-                                        })}
-                                        className={`px-2 py-1 rounded-lg text-[11px] font-bold border transition-all ${
-                                            toolOptions[group.key] === c.value
-                                                ? `${tool.accentBg} ${tool.accentText} border-current`
-                                                : "bg-surface border-border text-muted-foreground hover:text-foreground"
-                                        }`}>
-                                        {c.label}
-                                    </button>
-                                ))}
-                            </div>
-                        ))}
-                    </div>
-                )}
-
-                {/* Documents in this chat */}
-                {(convFiles.length > 0 || attachment) && (
-                    <div className="flex flex-wrap items-center gap-1.5 pb-2">
-                        {convFiles.map((f, i) => (
-                            <div key={`${f.url}-${i}`} className="inline-flex items-center gap-1.5 pill bg-primary/10 text-primary"
-                                title="This document stays in the chat — the AI reads it with every message">
-                                <Paperclip className="w-3 h-3" /> {f.name}
-                                <button onClick={() => setConvFiles(prev => prev.filter((_, j) => j !== i))} aria-label={`Remove ${f.name} from this chat`}>
-                                    <X className="w-3 h-3" />
-                                </button>
-                            </div>
-                        ))}
-                        {attachment && (
-                            <div className="inline-flex items-center gap-1.5 pill bg-secondary text-foreground">
-                                <Paperclip className="w-3 h-3" /> {attachment.name}
-                                <span className="text-[10px] text-muted-foreground">sends with next message</span>
-                                <button onClick={() => setAttachment(null)} aria-label="Remove attachment"><X className="w-3 h-3" /></button>
-                            </div>
-                        )}
-                    </div>
-                )}
-
-                <div className="rounded-3xl border-2 border-border bg-surface shadow-soft px-4 pt-3 pb-2 transition-colors focus-within:border-primary/50">
-                    <Textarea
-                        value={input}
-                        onChange={e => {
-                            setInput(e.target.value);
-                            // Auto-grow like every modern chat: reset then fit content, capped.
-                            e.target.style.height = "auto";
-                            e.target.style.height = Math.min(e.target.scrollHeight, 160) + "px";
-                        }}
-                        onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); } }}
-                        placeholder={attachment ? `Ask about ${attachment.name} — or just hit send` : `Message ${tool.label}…`}
-                        rows={1}
-                        className="w-full min-h-[44px] max-h-40 resize-none border-0 bg-transparent p-0 shadow-none text-sm focus-visible:ring-0 focus-visible:ring-offset-0"
-                    />
-                    <div className="flex items-center gap-1.5 pt-1.5">
-                        {/* Tool + subject selectors live inside the composer, polarbear-style */}
-                        <Select value={activeTool} onValueChange={selectTool} disabled={toolLocked}>
-                            <SelectTrigger className="h-8 w-auto gap-1 rounded-lg border-0 bg-secondary/60 px-2.5 text-xs font-bold shadow-none focus:ring-0"
-                                title={toolLocked ? "This chat belongs to one tool — start a New chat to switch" : "Choose your tool"}>
-                                <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                                {CHAT_TOOLS.map(t => (
-                                    <SelectItem key={t.id} value={t.id}>{t.label}</SelectItem>
-                                ))}
-                            </SelectContent>
-                        </Select>
-                        <Select value={subjectName || "none"} onValueChange={(v) => setSubjectName(v === "none" ? "" : v)}>
-                            <SelectTrigger className="h-8 w-auto gap-1 rounded-lg border-0 bg-secondary/60 px-2.5 text-xs font-bold shadow-none focus:ring-0 max-w-[130px] sm:max-w-none">
-                                <SelectValue placeholder="Subject" />
-                            </SelectTrigger>
-                            <SelectContent>
-                                <SelectItem value="none">No subject</SelectItem>
-                                {subjects.map(s => <SelectItem key={s.id} value={s.subject_name}>{s.subject_name}</SelectItem>)}
-                            </SelectContent>
-                        </Select>
-                        <div className="ml-auto flex items-center gap-1.5">
-                            {tool.supportsFiles && (
-                                <>
-                                    <input ref={fileRef} type="file" className="hidden" accept=".pdf,.docx,.pptx,.png,.jpg,.jpeg,.txt"
-                                        onChange={e => attachFile(e.target.files?.[0])} />
-                                    <button onClick={() => fileRef.current?.click()} disabled={uploading} aria-label="Attach a file"
-                                        className="w-8 h-8 rounded-lg flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors">
-                                        {uploading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Paperclip className="w-4 h-4" />}
-                                    </button>
-                                </>
-                            )}
-                            {streaming ? (
-                                <Button onClick={stop} variant="outline" size="icon" aria-label="Stop generating"
-                                    className="w-9 h-9 rounded-full border-2 border-streak/40 text-streak flex-shrink-0">
-                                    <Square className="w-4 h-4" />
-                                </Button>
-                            ) : (
-                                <Button onClick={send} disabled={!input.trim() && !attachment} size="icon" aria-label="Send message"
-                                    className="w-9 h-9 rounded-full flex-shrink-0">
-                                    <Send className="w-4 h-4" />
-                                </Button>
-                            )}
-                        </div>
+            {/* ── Composer — pinned to the bottom only once a chat is running ── */}
+            {messages.length > 0 && (
+                <div className="w-full px-3 sm:px-5 pb-3 pt-1 flex-shrink-0">
+                    <div className="max-w-3xl mx-auto">
+                        {optionsRow && <div className="pb-2">{optionsRow}</div>}
+                        {fileChipsRow}
+                        {composerBox}
+                        <p className="text-[10px] text-muted-foreground/50 text-center pt-1.5">
+                            Chats save automatically — daily AI limits apply per tool.
+                        </p>
                     </div>
                 </div>
-                <p className="text-[10px] text-muted-foreground/50 text-center pt-1.5">
-                    Chats save automatically — daily AI limits apply per tool.
-                </p>
-            </div>
+            )}
             </div>
         </div>
     );

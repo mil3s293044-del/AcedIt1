@@ -136,7 +136,7 @@ export default function StakesPill() {
                 animate={{ opacity: 1, y: 0, scale: 1 }}
                 exit={{ opacity: 0, y: 20, scale: 0.95 }}
                 transition={{ type: "spring", stiffness: 300, damping: 24 }}
-                className="fixed bottom-24 md:bottom-6 left-4 z-40 max-w-[calc(100vw-2rem)]"
+                className="fixed bottom-24 md:bottom-6 left-4 md:left-20 z-40 max-w-[calc(100vw-2rem)]"
             >
                 <div className={`flex items-center gap-2 rounded-full border-2 shadow-soft-lg pl-4 pr-2 py-2 ${tone}`}>
                     <Link to="/Competitions" className="min-w-0">{content}</Link>
