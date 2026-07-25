@@ -3,7 +3,8 @@ import { motion } from "framer-motion";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Shield, School, Sparkles, Flame, Trophy, Award } from 'lucide-react';
 
-import LeagueView from '../components/ranked/LeagueView';
+import MockAtarCard from '../components/ranked/MockAtarCard';
+import GlobalLeaderboard from '../components/ranked/GlobalLeaderboard';
 import GamifiedMyRank from '../components/ranked/GamifiedMyRank';
 import SchoolLeaderboard from '../components/ranked/SchoolLeaderboard';
 import PerksSystem from '../components/ranked/PerksSystem';
@@ -20,7 +21,7 @@ function getStreakMultiplier(days) {
 }
 
 const TABS = [
-    { value: 'league',       icon: Shield,   label: 'League',       short: 'League' },
+    { value: 'rankings',     icon: Shield,   label: 'Rankings',     short: 'Ranks'  },
     { value: 'achievements', icon: Award,    label: 'Achievements', short: 'Awards' },
     { value: 'profile',      icon: Trophy,   label: 'My Profile',   short: 'Me'     },
     { value: 'perks',        icon: Sparkles, label: 'Perks',        short: 'Perks'  },
@@ -64,7 +65,7 @@ export default function RankedPage() {
                                 Ranked
                             </h1>
                             <p className="text-muted-foreground text-sm mt-0.5">
-                                Weekly leaderboard. Resets every Monday.
+                                Grind your mock ATAR. Climb the boards.
                             </p>
                         </div>
                     </div>
@@ -82,8 +83,11 @@ export default function RankedPage() {
                     )}
                 </motion.section>
 
+                {/* ── MOCK ATAR — the personal centrepiece ─────────────── */}
+                <MockAtarCard />
+
                 {/* ── TABS ──────────────────────────────────────────────── */}
-                <Tabs defaultValue="league" className="space-y-5">
+                <Tabs defaultValue="rankings" className="space-y-5">
                     <TabsList className="grid w-full grid-cols-5 h-auto p-1.5 rounded-2xl bg-surface border border-border/60 shadow-soft">
                         {TABS.map(({ value, icon: Icon, label, short }) => (
                             <TabsTrigger
@@ -98,9 +102,9 @@ export default function RankedPage() {
                         ))}
                     </TabsList>
 
-                    <TabsContent value="league" className="space-y-5">
+                    <TabsContent value="rankings" className="space-y-5">
                         <CompeteScoreCard />
-                        <LeagueView />
+                        <GlobalLeaderboard />
                     </TabsContent>
                     <TabsContent value="achievements"><AchievementsGallery /></TabsContent>
                     <TabsContent value="profile"><GamifiedMyRank /></TabsContent>
