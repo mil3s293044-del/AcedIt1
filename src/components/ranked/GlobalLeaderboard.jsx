@@ -2,6 +2,7 @@ import React, { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import { Zap, Clock, Loader2, Flame, Crown } from "lucide-react";
 import { base44 } from "@/api/base44Client";
+import { clubOf } from "@/lib/mockAtarMath";
 
 /**
  * Global rankings by total XP and study hours — podium for the top three,
@@ -36,10 +37,11 @@ function displayName(r) {
 
 function AtarBadge({ value, className = "" }) {
     if (value == null) return null;
+    const club = clubOf(Number(value));
     return (
-        <span className={`pill bg-chart-4/10 text-chart-4 flex-shrink-0 ${className}`}
-            title="Mock ATAR — a game score from practice in AcedIt, not a real prediction">
-            {Number(value).toFixed(2)}
+        <span className={`pill flex-shrink-0 ${club ? club.badge : "bg-chart-4/10 text-chart-4"} ${className}`}
+            title={`Mock ATAR${club ? ` — ${club.name}` : ""} · a game score from practice in AcedIt, not a real prediction`}>
+            {club && <span className="mr-0.5">{club.emoji}</span>}{Number(value).toFixed(2)}
         </span>
     );
 }

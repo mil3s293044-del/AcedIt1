@@ -5142,7 +5142,23 @@ app.post("/local-ai/fn/computeMockAtar", async (req, res) => {
       });
     }
 
-    return res.json({ success: true, atar, scores });
+    // Weekly trajectory snapshot in profile.extra (merged — extra also holds
+    // year_level / attribution / intentions). Max 26 points (~6 months).
+    let history = Array.isArray(profile?.extra?.mock_atar_history)
+      ? [...profile.extra.mock_atar_history] : [];
+    const lastSnap = history[history.length - 1];
+    if (atar != null && profile?.id &&
+        (!lastSnap || Date.now() - new Date(lastSnap.d).getTime() >= 6 * 86400000)) {
+      history.push({ d: new Date().toISOString().slice(0, 10), a: atar });
+      history = history.slice(-26);
+      try {
+        await supabaseAdmin.from("user_profiles")
+          .update({ extra: { ...(profile.extra || {}), mock_atar_history: history } })
+          .eq("id", profile.id);
+      } catch (e) { console.warn("[computeMockAtar] history save failed:", e?.message); }
+    }
+
+    return res.json({ success: true, atar, scores, streak, totalXP, history });
   } catch (err) {
     console.error("[computeMockAtar] error:", err);
     return res.status(500).json({ error: err?.message || "Failed to compute mock ATAR" });
