@@ -2,9 +2,9 @@
  * XPFeedback v3 — Hyper-gamified XP popup, level-ups & rank-ups
  * Trigger: window.dispatchEvent(new CustomEvent('xp_awarded', { detail: { xp, source, leveled_up, rank_up, alltime_rank, level_after, friend_comparison } }))
  */
-import React, { useState, useEffect, useCallback, useRef } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Zap, Star, TrendingUp, Flame, Crown, Sparkles, Trophy, Target, ChevronUp, Timer, Layers, BrainCircuit, Lightbulb, PencilLine, Coins, Medal } from "lucide-react";
+import { Zap, Star, Flame, Sparkles, Trophy, Target, Timer, Layers, BrainCircuit, Lightbulb, PencilLine, Coins, Medal } from "lucide-react";
 
 const SOURCE_LABELS = {
     study_session:      "Focus Session",
@@ -108,7 +108,9 @@ export default function XPFeedback() {
 
     const addPopup = useCallback((detail) => {
         const id = ++nextId;
-        const isSpecial = detail.leveled_up || detail.rank_up;
+        // Meme ranks retired — ATAR bands are the identity now; only
+        // level-ups stay special here.
+        const isSpecial = detail.leveled_up;
         const duration = isSpecial ? 5000 : detail.xp >= 100 ? 3500 : 2800;
 
         // Fire confetti on level-up or large XP
@@ -151,9 +153,7 @@ export default function XPFeedback() {
                             transition={{ type: "spring", stiffness: 320, damping: 13, mass: 0.7 }}
                         >
                             {p.leveled_up ? (
-                                <LevelUpBanner level={p.level_after} rankUp={p.rank_up} rank={p.alltime_rank} />
-                            ) : p.rank_up ? (
-                                <RankUpBanner rank={p.alltime_rank} />
+                                <LevelUpBanner level={p.level_after} rankUp={false} rank={p.alltime_rank} />
                             ) : (
                                 <XPPopup xp={p.xp} source={p.source} streak={p.streak} taunt={p.taunt} />
                             )}

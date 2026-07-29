@@ -475,11 +475,11 @@ export default function Dashboard() {
                                     </span>
                                 </>
                             )}
-                            {rankInfo?.myRank && (
+                            {userProfile?.acedit_atar != null && (
                                 <>
                                     <span className="text-muted-foreground/40">·</span>
-                                    <span className="inline-flex items-center gap-1 font-extrabold text-xp">
-                                        <Trophy className="w-3.5 h-3.5" /> #{rankInfo.myRank}
+                                    <span className="inline-flex items-center gap-1 font-extrabold text-chart-4">
+                                        <GraduationCap className="w-3.5 h-3.5" /> {Number(userProfile.acedit_atar).toFixed(2)} ATAR
                                     </span>
                                 </>
                             )}

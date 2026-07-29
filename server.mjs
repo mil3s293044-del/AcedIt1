@@ -1712,6 +1712,8 @@ app.post("/local-ai/fn/awardXP", async (req, res) => {
       syncAllActiveCompetitions(userEmail).catch((e) =>
         console.warn("[battles] sync hook from awardXP failed:", e?.message || e),
       );
+      // AcedIt ATAR — throttled recompute (30-min internal throttle).
+      refreshAcedItATAR(userEmail).catch(() => {});
     }
 
     return res.json({
@@ -4437,6 +4439,202 @@ app.post("/local-ai/fn/getArenaState", async (req, res) => {
     });
   } catch (err) {
     console.error("[getArenaState] error:", err);
+    return res.status(500).json({ error: err?.message || String(err) });
+  }
+});
+
+// ════════════════════════════════════════════════════════════════════════════
+// AcedIt ATAR — trailing-28-day study-quality score (migration 0022)
+// ════════════════════════════════════════════════════════════════════════════
+// 0-99.95 on the familiar scale, computed from the audited xp_events log.
+// NOT a VCAA prediction — it measures how the student is studying. Mastery
+// 30% / consistency 30% / effort 25% / breadth 15%, absolute curve (no
+// cohort percentile — too few users for that to be stable).
+
+const ATAR_WINDOW_DAYS = 28;
+const ATAR_REFRESH_MINUTES = 30;
+
+export function atarBand(atar) {
+  if (atar == null) return null;
+  if (atar >= 99) return "The 99 Club";
+  if (atar >= 95) return "State Contender";
+  if (atar >= 90) return "Elite";
+  if (atar >= 80) return "Strong";
+  if (atar >= 70) return "Solid";
+  if (atar >= 60) return "On Track";
+  if (atar >= 50) return "Building";
+  return "Foundation";
+}
+
+async function computeAcedItATAR(email) {
+  const since = new Date(Date.now() - ATAR_WINDOW_DAYS * 86400000).toISOString();
+  const { data: events } = await supabaseAdmin
+    .from("xp_events")
+    .select("source, xp_awarded, metadata, created_date")
+    .eq("user_email", email)
+    .gte("created_date", since)
+    .limit(4000);
+
+  const studyEvents = (events || []).filter(
+    (e) => (e.xp_awarded || 0) > 0 && ARENA_STUDY_SOURCES.includes(e.source),
+  );
+
+  // ── Consistency (30%): distinct study days, target 20 of 28 ─────────────
+  const days = new Set(studyEvents.map((e) => (e.created_date || "").slice(0, 10)));
+  // Too little signal → unranked (stops day-one users seeing a scary "30").
+  if (days.size < 3) return { atar: null, components: null };
+  const consistency = Math.min(1, days.size / 20);
+
+  // ── Effort (25%): study minutes, log-scaled diminishing returns ─────────
+  let minutes = 0;
+  for (const e of studyEvents) {
+    minutes += Number(e.metadata?.duration_minutes) || (e.metadata?.type === "focus_minute" ? 1 : 0);
+  }
+  // ~1200 min in 28 days (≈43 min/day) earns full effort marks.
+  const effort = Math.min(1, Math.log1p(minutes) / Math.log1p(1200));
+
+  // ── Mastery (30%): quiz accuracy + flashcard retention ──────────────────
+  let quizWeighted = 0, quizWeight = 0;
+  let cardsCorrect = 0, cardsTotal = 0;
+  for (const e of studyEvents) {
+    if (e.source === "quiz" || e.source === "mini_test") {
+      const score = Number(e.metadata?.quiz_score ?? e.metadata?.score);
+      const weight = Number(e.metadata?.questions_total) || 5;
+      if (Number.isFinite(score) && score >= 0 && score <= 100) {
+        quizWeighted += score * weight;
+        quizWeight += weight;
+      }
+    } else if (e.source === "flashcard") {
+      const reviewed = Number(e.metadata?.cards_reviewed) || (e.metadata?.type === "flashcard_card" ? 1 : 0);
+      const correct = e.metadata?.cards_correct != null
+        ? Number(e.metadata.cards_correct)
+        : (e.metadata?.type === "flashcard_card" ? (e.metadata?.correct ? 1 : 0) : 0);
+      cardsTotal += reviewed;
+      cardsCorrect += Math.min(correct, reviewed);
+    }
+  }
+  const quizAcc = quizWeight > 0 ? (quizWeighted / quizWeight) / 100 : null;
+  const cardAcc = cardsTotal > 0 ? cardsCorrect / cardsTotal : null;
+  let mastery;
+  if (quizAcc != null && cardAcc != null) mastery = 0.6 * quizAcc + 0.4 * cardAcc;
+  else mastery = quizAcc ?? cardAcc ?? 0;
+  // Thin evidence scales down — one lucky quiz can't carry the component.
+  const masterySample = Math.min(1, (quizWeight + cardsTotal) / 20);
+  mastery *= masterySample;
+
+  // ── Breadth (15%): technique variety ────────────────────────────────────
+  const families = new Set(studyEvents.map((e) =>
+    ["study_session", "focus_session"].includes(e.source) ? "focus" :
+    ["quiz", "practice_questions", "loading_quiz"].includes(e.source) ? "quiz" :
+    e.source === "mini_test" ? "mock" : e.source,
+  ));
+  const breadth = Math.min(1, families.size / 5);
+
+  const composite =
+    0.30 * mastery + 0.30 * consistency + 0.25 * effort + 0.15 * breadth;
+  // Curve: floor 30 like the real scale, 99.95 cap, gentle top-end squeeze.
+  const raw = 30 + 69.95 * Math.pow(Math.max(0, Math.min(1, composite)), 0.8);
+  const atar = Math.min(99.95, Math.round(raw / 0.05) * 0.05);
+
+  return {
+    atar: Number(atar.toFixed(2)),
+    components: {
+      mastery: Number((mastery * 100).toFixed(0)),
+      consistency: Number((consistency * 100).toFixed(0)),
+      effort: Number((effort * 100).toFixed(0)),
+      breadth: Number((breadth * 100).toFixed(0)),
+      study_days: days.size,
+      minutes,
+    },
+  };
+}
+
+// Recompute + persist, throttled by atar_updated_at. force=true skips the
+// throttle (used when the student opens the Ranked page).
+async function refreshAcedItATAR(email, force = false) {
+  try {
+    const { data: rows, error } = await supabaseAdmin
+      .from("user_profiles")
+      .select("id, acedit_atar, atar_updated_at")
+      .eq("created_by", email).limit(1);
+    if (error) {
+      if (/acedit_atar|atar_updated_at/.test(error.message || "")) return null; // migration 0022 pending
+      throw error;
+    }
+    const profile = rows?.[0];
+    if (!profile) return null;
+    if (!force && profile.atar_updated_at &&
+        Date.now() - new Date(profile.atar_updated_at).getTime() < ATAR_REFRESH_MINUTES * 60000) {
+      return { atar: profile.acedit_atar, cached: true };
+    }
+    const { atar, components } = await computeAcedItATAR(email);
+    await supabaseAdmin.from("user_profiles")
+      .update({ acedit_atar: atar, atar_components: components, atar_updated_at: new Date().toISOString() })
+      .eq("id", profile.id);
+    try {
+      await supabaseAdmin.from("leaderboards")
+        .update({ acedit_atar: atar }).eq("user_email", email);
+    } catch { /* mirror is best-effort */ }
+    return { atar, components };
+  } catch (e) {
+    console.warn("[acedit_atar] refresh failed:", e?.message);
+    return null;
+  }
+}
+
+// ─── getRankedBoards — the three boards + my score, one call ───────────────
+app.post("/local-ai/fn/getRankedBoards", async (req, res) => {
+  const user = await authenticateRequest(req);
+  if (!user) return res.status(401).json({ error: "Unauthorized" });
+  if (!supabaseAdmin) return res.status(500).json({ error: "Supabase admin not configured" });
+  try {
+    const me = user.email;
+    const mine = await refreshAcedItATAR(me, true);
+    if (mine === null) {
+      // Column missing → migration 0022 not applied. Degrade gracefully.
+      const { data: probe } = await supabaseAdmin
+        .from("user_profiles").select("id").eq("created_by", me).limit(1);
+      if (probe) {
+        const { error: colErr } = await supabaseAdmin
+          .from("user_profiles").select("acedit_atar").limit(1);
+        if (colErr) return res.json({ setup_required: true });
+      }
+    }
+
+    const [{ data: board }, { data: fA }, { data: fB }, { data: profileRows }] = await Promise.all([
+      supabaseAdmin.from("leaderboards")
+        .select("user_email, user_name, username, total_xp, total_study_time, streak_days, is_anonymous, acedit_atar")
+        .limit(300),
+      supabaseAdmin.from("friendships").select("recipient_email").eq("requester_email", me).eq("status", "accepted"),
+      supabaseAdmin.from("friendships").select("requester_email").eq("recipient_email", me).eq("status", "accepted"),
+      supabaseAdmin.from("user_profiles").select("created_by, school_name, acedit_atar, atar_components").eq("created_by", me).limit(1),
+    ]);
+
+    // School map for the School scope (one query, service role).
+    const emails = (board || []).map((r) => r.user_email);
+    let schoolMap = {};
+    try {
+      const { data: schools } = await supabaseAdmin
+        .from("user_profiles").select("created_by, school_name").in("created_by", emails.slice(0, 300));
+      schoolMap = Object.fromEntries((schools || []).map((p) => [p.created_by, p.school_name || null]));
+    } catch { /* scope toggle just shows global */ }
+
+    const myProfile = profileRows?.[0];
+    return res.json({
+      success: true,
+      me,
+      my_atar: myProfile?.acedit_atar ?? mine?.atar ?? null,
+      my_band: atarBand(myProfile?.acedit_atar ?? mine?.atar ?? null),
+      my_components: myProfile?.atar_components ?? mine?.components ?? null,
+      my_school: myProfile?.school_name || null,
+      friends: [
+        ...(fA || []).map((f) => f.recipient_email),
+        ...(fB || []).map((f) => f.requester_email),
+      ],
+      board: (board || []).map((r) => ({ ...r, school_name: schoolMap[r.user_email] || null, band: atarBand(r.acedit_atar) })),
+    });
+  } catch (err) {
+    console.error("[getRankedBoards] error:", err);
     return res.status(500).json({ error: err?.message || String(err) });
   }
 });

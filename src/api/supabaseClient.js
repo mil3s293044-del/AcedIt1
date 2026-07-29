@@ -283,6 +283,8 @@ const PORTED_FUNCTIONS = {
   createStudyBet:           '/local-ai/fn/createStudyBet',
   getArenaState:            '/local-ai/fn/getArenaState',
   getMyStakes:              '/local-ai/fn/getMyStakes',
+  // AcedIt ATAR + standardised ranked boards:
+  getRankedBoards:          '/local-ai/fn/getRankedBoards',
   // Support (Phase 3b-7):
   sendSupportTicket:        '/local-ai/fn/sendSupportTicket',
   // Marketing — public top-of-funnel email capture (no auth required):

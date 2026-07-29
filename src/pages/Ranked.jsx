@@ -1,116 +1,228 @@
-import React, { useState, useEffect } from "react";
+/**
+ * Ranked — standardised around the AcedIt ATAR. One score to rule the ladder
+ * (trailing-28-day study quality, 0-99.95, NOT a VCAA prediction — the UI
+ * says so), three boards only (ATAR / XP / Study time) with a
+ * Global / Friends / School scope toggle, and My Profile below. The old
+ * leagues, season tiers, meme ranks and perks are retired.
+ */
+import React, { useState, useEffect, useMemo } from "react";
 import { motion } from "framer-motion";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Shield, School, Sparkles, Flame, Trophy, Award } from 'lucide-react';
-
-import MockAtarCard from '../components/ranked/MockAtarCard';
-import GlobalLeaderboard from '../components/ranked/GlobalLeaderboard';
-import GamifiedMyRank from '../components/ranked/GamifiedMyRank';
-import SchoolLeaderboard from '../components/ranked/SchoolLeaderboard';
-import PerksSystem from '../components/ranked/PerksSystem';
-import AchievementsGallery from '../components/ranked/AchievementsGallery';
-import CompeteScoreCard from '../components/ranked/CompeteScoreCard';
+import { GraduationCap, Zap, Clock, Trophy, Info, Loader2, Flame } from "lucide-react";
 import { base44 } from "@/api/base44Client";
 import HelpButton from "@/components/shared/HelpButton";
-import { getStreakMultiplier as getStreakMultiplierValue } from "@/components/shared/streakHelpers";
+import GamifiedMyRank from "@/components/ranked/GamifiedMyRank";
+import AchievementsGallery from "@/components/ranked/AchievementsGallery";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
-// Display formatting only — the actual ladder lives in streakHelpers so the
-// number shown always matches the multiplier the server applies.
-function getStreakMultiplier(days) {
-    return `${getStreakMultiplierValue(days)}×`;
-}
+// ── Band styling (static classes) ───────────────────────────────────────────
+const BAND_STYLE = {
+    "The 99 Club":     "bg-chart-4/15 text-chart-4",
+    "State Contender": "bg-chart-4/10 text-chart-4",
+    "Elite":           "bg-primary/15 text-primary",
+    "Strong":          "bg-primary/10 text-primary",
+    "Solid":           "bg-chart-3/10 text-chart-3",
+    "On Track":        "bg-chart-3/10 text-chart-3",
+    "Building":        "bg-xp/10 text-xp",
+    "Foundation":      "bg-secondary text-muted-foreground",
+};
 
-const TABS = [
-    { value: 'rankings',     icon: Shield,   label: 'Rankings',     short: 'Ranks'  },
-    { value: 'achievements', icon: Award,    label: 'Achievements', short: 'Awards' },
-    { value: 'profile',      icon: Trophy,   label: 'My Profile',   short: 'Me'     },
-    { value: 'perks',        icon: Sparkles, label: 'Perks',        short: 'Perks'  },
-    { value: 'schools',      icon: School,   label: 'Schools',      short: 'Sch.'   },
+const COMPONENT_META = [
+    { key: "mastery",     label: "Mastery",     hint: "Quiz accuracy + card retention", bar: "bg-chart-4" },
+    { key: "consistency", label: "Consistency", hint: "Days showing up",                bar: "bg-streak" },
+    { key: "effort",      label: "Effort",      hint: "Focused minutes",                bar: "bg-xp" },
+    { key: "breadth",     label: "Breadth",     hint: "Technique variety",              bar: "bg-chart-3" },
 ];
 
-export default function RankedPage() {
-    const [totalXP, setTotalXP] = useState(0);
-    const [streakDays, setStreakDays] = useState(0);
+const BOARDS = [
+    { id: "atar", label: "ATAR", icon: GraduationCap, value: (r) => r.acedit_atar, fmt: (v) => v?.toFixed(2), sub: (r) => r.band },
+    { id: "xp",   label: "XP",   icon: Zap,           value: (r) => r.total_xp || 0, fmt: (v) => (v || 0).toLocaleString(), sub: () => null },
+    { id: "time", label: "Study time", icon: Clock,   value: (r) => r.total_study_time || 0, fmt: (v) => `${Math.floor((v || 0) / 60)}h ${(v || 0) % 60}m`, sub: () => null },
+];
+
+const SCOPES = [
+    { id: "global",  label: "Global" },
+    { id: "friends", label: "Friends" },
+    { id: "school",  label: "School" },
+];
+
+function displayName(row, me) {
+    if (row.user_email === me) return "You";
+    if (row.is_anonymous) return `Anon #${(row.user_email || "").slice(0, 4)}`;
+    return row.username || row.user_name || (row.user_email || "").split("@")[0];
+}
+
+export default function Ranked() {
+    const [data, setData] = useState(null);
+    const [loading, setLoading] = useState(true);
+    const [board, setBoard] = useState("atar");
+    const [scope, setScope] = useState("global");
 
     useEffect(() => {
-        const load = async () => {
-            const user = await base44.auth.me();
-            const profiles = await base44.entities.UserProfile.filter({ created_by: user.email }).catch(() => []);
-            const p = profiles[0];
-            if (p) { setTotalXP(p.total_xp || 0); setStreakDays(p.streak_days || 0); }
-        };
-        load();
+        base44.functions.invoke('getRankedBoards', {})
+            .then(res => setData(res?.data ?? res))
+            .catch(e => console.error("Ranked load error:", e))
+            .finally(() => setLoading(false));
     }, []);
+
+    const rows = useMemo(() => {
+        if (!data?.board) return [];
+        const meta = BOARDS.find(b => b.id === board);
+        let list = data.board.filter(r => meta.value(r) != null && (board !== "atar" || r.acedit_atar != null));
+        if (scope === "friends") list = list.filter(r => data.friends?.includes(r.user_email) || r.user_email === data.me);
+        if (scope === "school") list = list.filter(r => data.my_school && r.school_name === data.my_school);
+        return list.sort((a, b) => (meta.value(b) || 0) - (meta.value(a) || 0)).slice(0, 50);
+    }, [data, board, scope]);
+
+    const meta = BOARDS.find(b => b.id === board);
+    const myRankIdx = rows.findIndex(r => r.user_email === data?.me);
 
     return (
         <div className="min-h-screen bg-background">
-            <div className="max-w-6xl mx-auto px-4 lg:px-8 py-6 lg:py-8 space-y-6">
+            <div className="max-w-4xl mx-auto px-4 lg:px-8 py-6 lg:py-10 space-y-6">
 
-                {/* ── HERO ──────────────────────────────────────────────── */}
-                <motion.section
-                    initial={{ opacity: 0, y: 12 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ duration: 0.35 }}
-                >
-                    <div className="flex items-start justify-between mb-1">
-                        <p className="stat-label text-muted-foreground">Compete</p>
+                {/* ── COACH STRIP ─────────────────────────────────────── */}
+                <motion.section initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }}>
+                    <div className="flex items-center justify-between mb-3">
+                        <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider">Ranked</span>
                         <HelpButton page="Ranked" />
                     </div>
-                    <div className="flex items-center gap-3">
-                        <div className="w-12 h-12 rounded-2xl bg-xp/10 border border-xp/15 flex items-center justify-center flex-shrink-0">
-                            <Trophy className="w-6 h-6 text-xp" strokeWidth={2.5} />
-                        </div>
-                        <div className="min-w-0">
-                            <h1 className="font-display text-3xl lg:text-4xl font-extrabold tracking-tight text-foreground">
-                                Ranked
-                            </h1>
-                            <p className="text-muted-foreground text-sm mt-0.5">
-                                Grind your mock ATAR. Climb the boards.
-                            </p>
-                        </div>
-                    </div>
-
-                    {streakDays > 0 && (
-                        <div className="mt-4 inline-flex items-center gap-2.5 bg-streak/5 border border-streak/15 shadow-soft rounded-xl px-4 py-2.5">
-                            <Flame className="w-4 h-4 text-streak" strokeWidth={2.5} />
-                            <span className="text-sm font-bold text-foreground">
-                                {streakDays} day streak active
-                            </span>
-                            <span className="pill bg-streak/10 text-streak text-[11px] py-0.5">
-                                {getStreakMultiplier(streakDays)} XP
-                            </span>
-                        </div>
-                    )}
+                    <h1 className="font-display text-2xl sm:text-3xl lg:text-4xl font-extrabold tracking-tight text-foreground leading-[1.1]">
+                        {loading ? "Sizing up the field…"
+                            : data?.my_atar != null
+                                ? `You're sitting at ${data.my_atar.toFixed(2)} — ${data.my_band}.`
+                                : "Three study days on the board unlocks your AcedIt ATAR."}
+                    </h1>
                 </motion.section>
 
-                {/* ── MOCK ATAR — the personal centrepiece ─────────────── */}
-                <MockAtarCard />
+                {/* ── MY ATAR HERO ────────────────────────────────────── */}
+                <motion.section initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.05 }}>
+                    <div className="card-soft p-6 lg:p-7">
+                        <div className="flex flex-wrap items-start gap-6">
+                            <div>
+                                <p className="stat-label mb-1">AcedIt ATAR</p>
+                                <p className="font-display font-black text-foreground leading-none" style={{ fontSize: "clamp(3rem, 9vw, 4.5rem)" }}>
+                                    {loading ? "—" : data?.my_atar != null ? data.my_atar.toFixed(2) : "—"}
+                                </p>
+                                {data?.my_band && (
+                                    <span className={`pill mt-2 inline-block ${BAND_STYLE[data.my_band] || "bg-secondary text-muted-foreground"}`}>
+                                        {data.my_band}
+                                    </span>
+                                )}
+                            </div>
+                            <div className="flex-1 min-w-[220px] space-y-2.5">
+                                {COMPONENT_META.map(c => {
+                                    const v = data?.my_components?.[c.key] ?? 0;
+                                    return (
+                                        <div key={c.key}>
+                                            <div className="flex items-baseline justify-between mb-1">
+                                                <span className="text-xs font-bold text-foreground">{c.label}</span>
+                                                <span className="text-xs text-muted-foreground">{c.hint} · <span className="font-bold text-foreground">{v}</span></span>
+                                            </div>
+                                            <div className="h-1.5 bg-secondary rounded-full overflow-hidden">
+                                                <motion.div initial={{ width: 0 }} animate={{ width: `${v}%` }} transition={{ duration: 0.8, delay: 0.2 }}
+                                                    className={`h-full rounded-full ${c.bar}`} />
+                                            </div>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        </div>
+                        <p className="text-xs text-muted-foreground mt-4 flex items-center gap-1.5">
+                            <Info className="w-3.5 h-3.5 flex-shrink-0" />
+                            Your AcedIt ATAR measures how you've studied over the last 28 days — it's yours to move, and it's not a VCAA prediction.
+                        </p>
+                    </div>
+                </motion.section>
 
-                {/* ── TABS ──────────────────────────────────────────────── */}
-                <Tabs defaultValue="rankings" className="space-y-5">
-                    <TabsList className="grid w-full grid-cols-5 h-auto p-1.5 rounded-2xl bg-surface border border-border/60 shadow-soft">
-                        {TABS.map(({ value, icon: Icon, label, short }) => (
-                            <TabsTrigger
-                                key={value}
-                                value={value}
-                                className="flex items-center justify-center gap-1.5 py-2.5 px-2 rounded-xl text-xs lg:text-sm font-bold text-muted-foreground data-[state=active]:bg-foreground data-[state=active]:text-background data-[state=active]:shadow-soft transition-all"
-                            >
-                                <Icon className="w-4 h-4" />
-                                <span className="hidden sm:inline">{label}</span>
-                                <span className="sm:hidden">{short}</span>
-                            </TabsTrigger>
+                {/* ── THE THREE BOARDS ────────────────────────────────── */}
+                <motion.section initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }}>
+                    <Tabs value={board} onValueChange={setBoard}>
+                        <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
+                            <TabsList className="grid grid-cols-3 h-auto p-1.5 rounded-2xl bg-surface border-2 border-border shadow-soft">
+                                {BOARDS.map(b => (
+                                    <TabsTrigger key={b.id} value={b.id}
+                                        className="flex items-center gap-1.5 py-2 px-4 rounded-xl text-xs lg:text-sm font-bold text-muted-foreground data-[state=active]:bg-foreground data-[state=active]:text-background transition-all">
+                                        <b.icon className="w-3.5 h-3.5" /> {b.label}
+                                    </TabsTrigger>
+                                ))}
+                            </TabsList>
+                            <div className="flex gap-1.5">
+                                {SCOPES.map(s => (
+                                    <button key={s.id} onClick={() => setScope(s.id)}
+                                        disabled={s.id === "school" && !data?.my_school}
+                                        className={`px-3 py-1.5 rounded-xl text-xs font-bold border-2 transition-all disabled:opacity-40 ${
+                                            scope === s.id ? "bg-primary border-primary text-white" : "bg-surface border-border text-muted-foreground hover:text-foreground"
+                                        }`}>
+                                        {s.label}
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+
+                        {BOARDS.map(b => (
+                            <TabsContent key={b.id} value={b.id} className="mt-0">
+                                {loading ? (
+                                    <div className="card-soft p-10 flex items-center justify-center text-muted-foreground gap-2">
+                                        <Loader2 className="w-4 h-4 animate-spin" /> Loading the board…
+                                    </div>
+                                ) : data?.setup_required ? (
+                                    <div className="card-soft p-8 text-center text-sm text-muted-foreground">
+                                        The ATAR engine is almost ready — one database migration to run.
+                                    </div>
+                                ) : rows.length === 0 ? (
+                                    <div className="card-soft p-8 text-center">
+                                        <Trophy className="w-8 h-8 text-muted-foreground/30 mx-auto mb-2" />
+                                        <p className="text-sm text-muted-foreground">
+                                            {board === "atar"
+                                                ? "No ranked students in this scope yet — three study days gets you on the board."
+                                                : "Nothing on this board for this scope yet."}
+                                        </p>
+                                    </div>
+                                ) : (
+                                    <div className="card-soft divide-y divide-border overflow-hidden">
+                                        {rows.map((r, i) => {
+                                            const isMe = r.user_email === data.me;
+                                            return (
+                                                <div key={r.user_email}
+                                                    className={`flex items-center gap-3 px-4 py-3 ${isMe ? "bg-primary/5" : ""}`}>
+                                                    <span className={`w-8 h-8 rounded-xl flex items-center justify-center font-display font-black text-sm flex-shrink-0 ${
+                                                        i === 0 ? "bg-xp text-white" : i === 1 ? "bg-secondary text-foreground" : i === 2 ? "bg-streak/70 text-white" : "text-muted-foreground"
+                                                    }`}>
+                                                        {i + 1}
+                                                    </span>
+                                                    <div className="flex-1 min-w-0">
+                                                        <p className={`text-sm truncate ${isMe ? "font-black text-primary" : "font-bold text-foreground"}`}>
+                                                            {displayName(r, data.me)}
+                                                        </p>
+                                                        {b.sub(r) && <p className="text-[11px] text-muted-foreground">{b.sub(r)}</p>}
+                                                    </div>
+                                                    {r.streak_days > 0 && (
+                                                        <span className="hidden sm:inline-flex items-center gap-1 text-xs font-bold text-streak">
+                                                            <Flame className="w-3 h-3" /> {r.streak_days}
+                                                        </span>
+                                                    )}
+                                                    <span className="font-display font-extrabold text-foreground tabular-nums">
+                                                        {b.fmt(b.value(r))}
+                                                    </span>
+                                                </div>
+                                            );
+                                        })}
+                                        {myRankIdx === -1 && data?.my_atar != null && board === "atar" && (
+                                            <p className="px-4 py-2.5 text-xs text-muted-foreground">You're just outside the top 50 — keep climbing.</p>
+                                        )}
+                                    </div>
+                                )}
+                            </TabsContent>
                         ))}
-                    </TabsList>
+                    </Tabs>
+                </motion.section>
 
-                    <TabsContent value="rankings" className="space-y-5">
-                        <CompeteScoreCard />
-                        <GlobalLeaderboard />
-                    </TabsContent>
-                    <TabsContent value="achievements"><AchievementsGallery /></TabsContent>
-                    <TabsContent value="profile"><GamifiedMyRank /></TabsContent>
-                    <TabsContent value="perks"><PerksSystem totalXP={totalXP} /></TabsContent>
-                    <TabsContent value="schools"><SchoolLeaderboard /></TabsContent>
-                </Tabs>
+                {/* ── MY PROFILE ──────────────────────────────────────── */}
+                <motion.section initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.15 }} className="space-y-6">
+                    <h2 className="font-display font-extrabold text-foreground text-lg lg:text-xl">My profile</h2>
+                    <GamifiedMyRank />
+                    <AchievementsGallery />
+                </motion.section>
             </div>
         </div>
     );
