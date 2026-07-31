@@ -31,6 +31,7 @@ const COMPONENT_META = [
     { key: "consistency", label: "Consistency", hint: "Days showing up",                bar: "bg-streak" },
     { key: "effort",      label: "Effort",      hint: "Focused minutes",                bar: "bg-xp" },
     { key: "breadth",     label: "Breadth",     hint: "Technique variety",              bar: "bg-chart-3" },
+    { key: "planning",    label: "Planning",    hint: "Goals met + blocks kept",        bar: "bg-primary" },
 ];
 
 const BOARDS = [

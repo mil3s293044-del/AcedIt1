@@ -4448,8 +4448,8 @@ app.post("/local-ai/fn/getArenaState", async (req, res) => {
 // ════════════════════════════════════════════════════════════════════════════
 // 0-99.95 on the familiar scale, computed from the audited xp_events log.
 // NOT a VCAA prediction — it measures how the student is studying. Mastery
-// 30% / consistency 30% / effort 25% / breadth 15%, absolute curve (no
-// cohort percentile — too few users for that to be stable).
+// 28% / consistency 27% / effort 22% / breadth 13% / planning 10%, absolute
+// curve (no cohort percentile — too few users for that to be stable).
 
 const ATAR_WINDOW_DAYS = 28;
 const ATAR_REFRESH_MINUTES = 30;
@@ -4466,8 +4466,107 @@ export function atarBand(atar) {
   return "Foundation";
 }
 
+// ── Planning (10%): does the student decide what to study before doing it? ──
+// Three signals, none of which live in xp_events: goals set and then met,
+// planned blocks actually kept, and prep started before an assessment rather
+// than the night before. Each sub-signal splits its credit between engaging
+// with the tool at all and following through — so an ambitious goal that
+// slips still scores, but never as well as one that lands.
+const PLAN_LEAD_DAYS = 14;   // window before a due date that counts as prep
+const ASSESSMENT_LOOKAHEAD_DAYS = 14;
+
+async function computePlanning(email, sinceDate) {
+  const sinceDay = sinceDate.toISOString().slice(0, 10);
+  // Sessions reach further back than the ATAR window so prep for an
+  // assessment due early in the window is still visible.
+  const sessionsFrom = new Date(sinceDate.getTime() - PLAN_LEAD_DAYS * 86400000)
+    .toISOString().slice(0, 10);
+  const lookahead = new Date(Date.now() + ASSESSMENT_LOOKAHEAD_DAYS * 86400000)
+    .toISOString().slice(0, 10);
+
+  const [goalsQ, plansQ, sessionsQ, assessmentsQ] = await Promise.all([
+    supabaseAdmin.from("goals")
+      .select("created_date, is_completed, completed_at")
+      .eq("created_by", email).limit(500),
+    supabaseAdmin.from("study_plans")
+      .select("date, subject_name, is_completed")
+      .eq("created_by", email).gte("date", sinceDay).limit(500),
+    supabaseAdmin.from("study_sessions")
+      .select("date, subject")
+      .eq("created_by", email).gte("date", sessionsFrom).limit(1000),
+    supabaseAdmin.from("subject_assessments")
+      .select("due_date, subject_name")
+      .eq("created_by", email).gte("due_date", sinceDay).lte("due_date", lookahead).limit(200),
+  ]);
+
+  // ── Goals: set, then met ──────────────────────────────────────────────
+  const goals = goalsQ.data || [];
+  // Parse rather than string-compare: Postgres may hand back +00:00 or Z.
+  const inWindow = (ts) => {
+    const t = ts ? Date.parse(ts) : NaN;
+    return Number.isFinite(t) && t >= sinceDate.getTime();
+  };
+  const set = goals.filter((g) => inWindow(g.created_date)).length;
+  const met = goals.filter((g) => g.is_completed && inWindow(g.completed_at)).length;
+  // ~3 goals in 28 days is a healthy planning cadence.
+  const goalEngagement = Math.min(1, set / 3);
+  const goalFollowThrough = set > 0 ? Math.min(1, met / set) : 0;
+  const goalScore = set === 0 && met === 0 ? 0 : 0.4 * goalEngagement + 0.6 * goalFollowThrough;
+
+  // ── Planned blocks kept ───────────────────────────────────────────────
+  const sessions = sessionsQ.data || [];
+  const sessionKeys = new Set(
+    sessions.filter((s) => s.date && s.subject)
+      .map((s) => `${s.date}|${String(s.subject).toLowerCase()}`),
+  );
+  const plans = plansQ.data || [];
+  const kept = plans.filter((p) =>
+    p.is_completed ||
+    (p.date && p.subject_name && sessionKeys.has(`${p.date}|${String(p.subject_name).toLowerCase()}`)),
+  ).length;
+  // ~2 planned blocks a week over the window.
+  const planEngagement = Math.min(1, plans.length / 8);
+  const planFollowThrough = plans.length > 0 ? kept / plans.length : 0;
+  const planScore = plans.length === 0 ? 0 : 0.4 * planEngagement + 0.6 * planFollowThrough;
+
+  // ── Prep started before the due date, not on it ───────────────────────
+  const assessments = (assessmentsQ.data || []).filter((a) => a.due_date && a.subject_name);
+  let prepScore = 0;
+  if (assessments.length > 0) {
+    const perAssessment = assessments.map((a) => {
+      const due = new Date(`${a.due_date}T00:00:00Z`).getTime();
+      const from = due - PLAN_LEAD_DAYS * 86400000;
+      const subject = String(a.subject_name).toLowerCase();
+      const prepDays = new Set(
+        sessions.filter((s) => {
+          if (!s.date || !s.subject) return false;
+          if (String(s.subject).toLowerCase() !== subject) return false;
+          const t = new Date(`${s.date}T00:00:00Z`).getTime();
+          return t >= from && t < due;
+        }).map((s) => s.date),
+      );
+      // Five separate days of prep before it lands earns full marks.
+      return Math.min(1, prepDays.size / 5);
+    });
+    prepScore = perAssessment.reduce((a, b) => a + b, 0) / perAssessment.length;
+  }
+
+  const planning = 0.40 * goalScore + 0.35 * planScore + 0.25 * prepScore;
+  return {
+    planning: Math.max(0, Math.min(1, planning)),
+    detail: {
+      goals_set: set,
+      goals_met: met,
+      blocks_planned: plans.length,
+      blocks_kept: kept,
+      assessments_tracked: assessments.length,
+    },
+  };
+}
+
 async function computeAcedItATAR(email) {
-  const since = new Date(Date.now() - ATAR_WINDOW_DAYS * 86400000).toISOString();
+  const sinceDate = new Date(Date.now() - ATAR_WINDOW_DAYS * 86400000);
+  const since = sinceDate.toISOString();
   const { data: events } = await supabaseAdmin
     .from("xp_events")
     .select("source, xp_awarded, metadata, created_date")
@@ -4530,8 +4629,11 @@ async function computeAcedItATAR(email) {
   ));
   const breadth = Math.min(1, families.size / 5);
 
+  // ── Planning (10%): goals set and met, blocks kept, prep started early ──
+  const { planning, detail: planningDetail } = await computePlanning(email, sinceDate);
+
   const composite =
-    0.30 * mastery + 0.30 * consistency + 0.25 * effort + 0.15 * breadth;
+    0.28 * mastery + 0.27 * consistency + 0.22 * effort + 0.13 * breadth + 0.10 * planning;
   // Curve: floor 30 like the real scale, 99.95 cap, gentle top-end squeeze.
   const raw = 30 + 69.95 * Math.pow(Math.max(0, Math.min(1, composite)), 0.8);
   const atar = Math.min(99.95, Math.round(raw / 0.05) * 0.05);
@@ -4543,8 +4645,10 @@ async function computeAcedItATAR(email) {
       consistency: Number((consistency * 100).toFixed(0)),
       effort: Number((effort * 100).toFixed(0)),
       breadth: Number((breadth * 100).toFixed(0)),
+      planning: Number((planning * 100).toFixed(0)),
       study_days: days.size,
       minutes,
+      ...planningDetail,
     },
   };
 }
