@@ -289,8 +289,6 @@ const PORTED_FUNCTIONS = {
   sendSupportTicket:        '/local-ai/fn/sendSupportTicket',
   // Marketing — public top-of-funnel email capture (no auth required):
   captureLead:              '/local-ai/fn/captureLead',
-  // Ranked — mock ATAR game score:
-  computeMockAtar:          '/local-ai/fn/computeMockAtar',
   // Stripe (Phase 3b-8):
   stripeCheckout:           '/local-ai/fn/stripeCheckout',
   stripePortal:             '/local-ai/fn/stripePortal',
