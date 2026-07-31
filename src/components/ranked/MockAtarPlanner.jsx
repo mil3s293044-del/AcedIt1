@@ -27,7 +27,7 @@ export default function MockAtarPlanner({ open, onOpenChange, data }) {
         const unlocked = scores.filter((s) => !s.locked).sort((a, b) => a.score - b.score);
         setSubjectName((unlocked[0] || scores[0])?.subject || null);
         if (data?.atar != null) setTarget(Math.min(99.95, Math.round((data.atar + 5) * 2) / 2));
-    }, [open]); // eslint-disable-line react-hooks/exhaustive-deps
+    }, [open]);  
 
     const needed = useMemo(
         () => requiredTop4Mean(target, { streak, totalXP, unlockedCount: Math.max(1, unlockedCount) }),
@@ -46,7 +46,7 @@ export default function MockAtarPlanner({ open, onOpenChange, data }) {
         setWQuizzes(Math.max(subject.attempts || 0, 1));
         setWAccuracy(subject.accuracy ?? 70);
         setWHours(Math.round(((subject.minutes || 0) / 60) * 2) / 2);
-    }, [subjectName]); // eslint-disable-line react-hooks/exhaustive-deps
+    }, [subjectName]);  
 
     const projected = subjectScore({ accuracy: wAccuracy, attempts: wQuizzes, minutes: wHours * 60, streak });
     const hitsNeeded = projected != null && projected >= Math.min(50, needed);

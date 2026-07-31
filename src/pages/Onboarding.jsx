@@ -23,10 +23,10 @@ import { motion, AnimatePresence } from "framer-motion";
 import { useNavigate } from "react-router-dom";
 import { Link } from "react-router-dom";
 import {
-    ChevronLeft, ChevronRight, ArrowRight, Check, X, Search, Plus,
-    GraduationCap, BookOpen, Target, MapPin, Sparkles, Crown, Zap,
-    Brain, Layers, Trophy, BarChart3, FileQuestion, Clock, Map as MapIcon, Info,
-    Mail, Lock,
+    ChevronLeft, ArrowRight, Check, X, Search, Plus,
+    GraduationCap, BookOpen, MapPin, Sparkles, Crown,
+    Brain, Layers, Map as MapIcon, Info,
+    Mail,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";

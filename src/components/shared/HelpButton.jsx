@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { HelpCircle, X, ChevronRight } from "lucide-react";
+import { HelpCircle, X } from "lucide-react";
 
 // ── Help content per page ────────────────────────────────────────────────────
 export const HELP_CONTENT = {

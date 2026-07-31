@@ -37,7 +37,7 @@ export function LatexInline({ children }) {
     return (
         <InlineMath
             math={children.toString().trim()}
-            renderError={(err) => <span>{children}</span>}
+            renderError={() => <span>{children}</span>}
         />
     );
 }
@@ -49,7 +49,7 @@ export function LatexBlock({ children }) {
         <div className="my-3 overflow-x-auto text-center">
             <BlockMath
                 math={children.toString().trim()}
-                renderError={(err) => <span>{children}</span>}
+                renderError={() => <span>{children}</span>}
             />
         </div>
     );

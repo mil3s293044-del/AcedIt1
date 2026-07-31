@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState } from "react";
 import { base44 } from "@/api/base44Client";
 import { useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
@@ -11,11 +11,7 @@ import {
     ArrowLeft,
     Shield,
     Lock,
-    CreditCard,
-    Infinity,
-    Brain,
-    Target,
-    Sparkles
+    CreditCard
 } from "lucide-react";
 import { useToast } from "@/components/ui/use-toast";
 import { createPageUrl } from "@/utils";

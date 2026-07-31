@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { base44 } from "@/api/base44Client";
 import { useToast } from "@/components/ui/use-toast";
 import { FEATURES, checkLiveTier } from "@/lib/tierAccess";
@@ -12,8 +12,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import {
   GraduationCap, Clock, AlertCircle, BarChart3, Check, X,
   ChevronLeft, ChevronRight, Play, Trophy, Loader2, RefreshCw,
-  Target, Flag, Brain, Zap, BookOpen, Layers, ArrowRight,
-  CheckCircle2, Circle, TrendingUp, Award, Star, FileText,
+  Target, Flag, Brain, BookOpen, Layers, Award, Star, FileText,
   Sparkles } from
 "lucide-react";
 

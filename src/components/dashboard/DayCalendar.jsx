@@ -11,7 +11,6 @@ import { Calendar, Plus, Edit, Trash2, CheckCircle2 } from "lucide-react";
 import { format, parse } from "date-fns";
 import { useToast } from "@/components/ui/use-toast";
 import { base44 } from "@/api/base44Client";
-import TimePicker from "@/components/shared/TimePicker";
 
 const activityConfig = {
     lecture_review: { bg: "bg-blue-500/10", text: "text-blue-700", border: "border-blue-200/50", dot: "bg-blue-500", label: "Lecture Review" },

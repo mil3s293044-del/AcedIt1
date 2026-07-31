@@ -1,11 +1,10 @@
 import React, { useState } from "react";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion } from "framer-motion";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { base44 } from "@/api/base44Client";
 import { useToast } from "@/components/ui/use-toast";
-import { Download, FileText, Table, Loader2, BookOpen, Zap, Target, Brain, Calendar, CheckCircle2 } from "lucide-react";
+import { Download, FileText, Table, Loader2, BookOpen, Zap, Target, Brain, Calendar } from "lucide-react";
 import jsPDF from "jspdf";
 
 const EXPORTS = [

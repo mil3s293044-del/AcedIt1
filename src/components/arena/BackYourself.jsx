@@ -60,7 +60,7 @@ function BetCard({ bet }) {
     );
 }
 
-export default function BackYourself({ bets, balance, currentUserEmail, onUpdate }) {
+export default function BackYourself({ bets, balance, onUpdate }) {
     const { toast } = useToast();
     const [open, setOpen] = useState(false);
     const [metric, setMetric] = useState("xp");

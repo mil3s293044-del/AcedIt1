@@ -48,7 +48,7 @@ export default function EmailCapture({
       });
       trackLeadMagnet({ pillar: pillar || undefined });
       setState("done");
-    } catch (err) {
+    } catch {
       setError("Something went wrong — try again in a moment.");
       setState("error");
     }

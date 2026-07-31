@@ -113,7 +113,7 @@ const SuggestedPrompts = ({ onSelect }) => {
     );
 };
 
-export default function StudyAssistant({ user, userProfile }) {
+export default function StudyAssistant({ user }) {
     const [conversation, setConversation] = useState(null);
     const [messages, setMessages] = useState([]);
     const [inputMessage, setInputMessage] = useState('');

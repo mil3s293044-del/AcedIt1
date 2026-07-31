@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useMemo, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
-    Search, Plus, X, BookOpen, Shield, ChevronRight, Trash2, Eye,
-    GraduationCap, Layers, Star, TrendingUp, Palette, ArrowLeft, Check
+    Search, Plus, X, BookOpen, Shield, ChevronRight,
+    GraduationCap, Layers, Star, TrendingUp, Palette, Check
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";

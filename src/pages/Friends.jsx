@@ -1,21 +1,19 @@
 import React, { useState, useEffect, useMemo, useCallback } from "react";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Checkbox } from "@/components/ui/checkbox";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Textarea } from "@/components/ui/textarea";
 import {
     Users, UserPlus, UserMinus, Inbox, Check, X, Mail,
     Sparkles, Send, Loader2, FileText, Brain, Share2, Gift,
-    Search, Flame, Clock, ChevronRight, Package, ArrowRight,
+    Search, ArrowRight,
     Heart, Trophy
 } from "lucide-react";
 import { base44 } from "@/api/base44Client";
 import { useToast } from "@/components/ui/use-toast";
-import { isPremium } from "@/components/shared/subscriptionHelpers";
 import HelpButton from "@/components/shared/HelpButton";
 import FriendsLeaderboard from "@/components/friends/FriendsLeaderboard";
 
@@ -232,7 +230,7 @@ export default function Friends() {
             setFriendEmail("");
             setShowAddFriend(false);
             await loadData(user);
-        } catch (err) {
+        } catch {
             toast({ title: "Could not send request", variant: "destructive" });
         } finally {
             setIsAddingFriend(false);
@@ -306,7 +304,7 @@ export default function Friends() {
             toast({ title: `Shared ${total} item${total > 1 ? 's' : ''} with ${sharingToFriend.full_name}!` });
             setSharingToFriend(null);
             setSelectedQuizzes([]); setSelectedDecks([]); setShareMessage("");
-        } catch (err) {
+        } catch {
             toast({ title: "Share failed", variant: "destructive" });
         } finally {
             setIsSharing(false);

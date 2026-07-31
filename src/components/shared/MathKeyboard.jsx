@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
-const MathKeyboard = ({ onInput, onBackspace, onClear, getCurrentValue }) => {
+const MathKeyboard = ({ onInput }) => {
     const [activeTab, setActiveTab] = useState("functions");
     const [shiftActive, setShiftActive] = useState(false);
     const [showLimitDialog, setShowLimitDialog] = useState(false);

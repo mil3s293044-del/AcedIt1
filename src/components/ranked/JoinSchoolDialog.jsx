@@ -9,7 +9,7 @@ import { School, Search } from "lucide-react";
 
 const AU_STATES = ["VIC","NSW","QLD","WA","SA","TAS","ACT","NT"];
 
-export default function JoinSchoolDialog({ open, onClose, existingSchools, userProfile, onJoined }) {
+export default function JoinSchoolDialog({ open, onClose, existingSchools, onJoined }) {
     const [mode, setMode] = useState("search"); // "search" | "create"
     const [searchQuery, setSearchQuery] = useState("");
     const [newSchool, setNewSchool] = useState({ school_name: "", state: "VIC", city: "", logo_color: "#6366f1" });

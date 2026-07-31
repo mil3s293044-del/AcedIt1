@@ -5,21 +5,18 @@ import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import {
-    ArrowLeft, ArrowRight, CheckCircle, Clock, Wand2, Loader2,
-    X, Calculator, Check, ChevronLeft, ChevronRight, Flag,
-    BarChart3, Target, Layers, Zap, TrendingUp, AlertCircle, Brain,
-    Trophy, Star, BookOpen, Sparkles, Bookmark, BookmarkCheck
+    ArrowLeft, Clock, Wand2, Loader2,
+    X, Calculator, Check, ChevronLeft, ChevronRight, Flag, Layers, TrendingUp, Brain,
+    Trophy, Star, BookOpen, Bookmark, BookmarkCheck
 } from "lucide-react";
 import AdaptiveReview from "./AdaptiveReview";
 import DifficultyRating from "@/components/shared/DifficultyRating";
 import { useToast } from "@/components/ui/use-toast";
 import { base44 } from "@/api/base44Client";
 import { recordStudyAndGetStreak } from "@/components/shared/streakHelpers";
-import ReactMarkdown from 'react-markdown';
 import MathKeyboard from "../shared/MathKeyboard";
 import MathInput from "../shared/MathInput";
 import { Switch } from "@/components/ui/switch";
-import { LatexBlock, LatexInline, processLatexContent } from "../shared/LatexRenderer";
 import MarkdownMath from "@/components/shared/MarkdownMath";
 import MathText from "@/components/shared/LatexRenderer";
 import { getLatexRules } from "@/lib/subjectExaminerPrompts";
@@ -91,7 +88,7 @@ const playCorrectSound = () => {
             g2.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.3);
             o2.start(ctx.currentTime); o2.stop(ctx.currentTime + 0.3);
         }, 150);
-    } catch(e) {}
+    } catch {}
 };
 
 const playIncorrectSound = () => {
@@ -103,7 +100,7 @@ const playIncorrectSound = () => {
         g.gain.setValueAtTime(0.3, ctx.currentTime);
         g.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.5);
         osc.start(ctx.currentTime); osc.stop(ctx.currentTime + 0.5);
-    } catch(e) {}
+    } catch {}
 };
 
 const shuffleArray = (array) => {
@@ -311,14 +308,14 @@ export default function QuizPlayer({ quiz, onComplete, onExit, mode = "standard"
                 setSavedProgressId(result.id);
             }
             toast({ title: "Progress saved!", description: "You can continue this quiz later." });
-        } catch (error) {
+        } catch {
             toast({ title: "Save failed", description: "Could not save progress.", variant: "destructive" });
         }
     };
 
     const clearSavedProgress = async () => {
         if (savedProgressId) {
-            try { await base44.entities.QuizProgress.delete(savedProgressId); setSavedProgressId(null); } catch (e) {}
+            try { await base44.entities.QuizProgress.delete(savedProgressId); setSavedProgressId(null); } catch {}
         }
     };
 
@@ -340,7 +337,7 @@ export default function QuizPlayer({ quiz, onComplete, onExit, mode = "standard"
                     setUserAnswers(prog[0].user_answers || {});
                     setSavedProgressId(prog[0].id);
                 }
-            } catch (e) {}
+            } catch {}
         };
         loadPastAttempts();
         const handleBeforeUnload = (e) => { if (Object.keys(userAnswers).length > 0 && !showResults) { e.preventDefault(); e.returnValue = ''; } };
@@ -409,7 +406,7 @@ export default function QuizPlayer({ quiz, onComplete, onExit, mode = "standard"
                     await base44.entities.Leaderboard.update(entry.id, { total_study_time: (entry.total_study_time || 0) + Math.ceil(timeTaken / 60), total_sessions: (entry.total_sessions || 0) + 1, last_updated: new Date().toISOString() });
                 }
             }
-        } catch (e) {}
+        } catch {}
         setShowResults(true);
         await generateAIFeedback(timeTaken);
     };
@@ -445,7 +442,7 @@ export default function QuizPlayer({ quiz, onComplete, onExit, mode = "standard"
         try {
             const created = await base44.entities.QuizAttempt.create({ quiz_id: quiz.id, quiz_title: quiz.title, quiz_category: quiz.category, score: fallbackScore, questions_total: totalQ, questions_correct: mcqCorrect, time_taken: timeTaken, xp_earned: mcqCorrect * 2, user_answers: userAnswers, date: new Date().toISOString().split('T')[0] });
             if (created?.id) setCreatedAttemptId(created.id);
-        } catch (e) {}
+        } catch {}
         await awardQuizXP({ score: fallbackScore, questionsCorrect: mcqCorrect, totalMarks: mcqCorrect, timeTaken });
     };
 
@@ -489,7 +486,7 @@ export default function QuizPlayer({ quiz, onComplete, onExit, mode = "standard"
                         const textResult = await base44.functions.invoke('extractDocumentText', { file_url: sourceFileUrl });
                         sourceFileContent = `\n\nSource Document Content:\n${textResult.data?.text || ''}\n\n`;
                         sourceFileUrl = undefined;
-                    } catch (e) {}
+                    } catch {}
                 }
             }
 
@@ -560,7 +557,7 @@ Return exactly ${questionsForAnalysis.length} items.`,
                 const created = await base44.entities.QuizAttempt.create({ quiz_id: quiz.id, quiz_title: quiz.title, quiz_category: quiz.category, score: finalScore, questions_total: totalQ, questions_correct: questionsCorrect, time_taken: timeTaken, xp_earned: xpEarned, user_answers: userAnswers, date: new Date().toISOString().split('T')[0] });
                 // Stash the new attempt's id so any later self-marks update the same row.
                 if (created?.id) setCreatedAttemptId(created.id);
-            } catch (e) {}
+            } catch {}
 
             // Real XP through the server engine + celebration popup.
             await awardQuizXP({ score: finalScore, questionsCorrect, totalMarks: totalMarksAwarded, timeTaken });
@@ -1132,7 +1129,6 @@ Return exactly ${questionsForAnalysis.length} items.`,
                                                 placeholder="Write your answer here..." rows={6}
                                                 className="w-full rounded-2xl border-2 border-border focus-within:border-chart-3" />
                                             <MathKeyboard
-                                                getCurrentValue={() => getCurrentAnswer() || ""}
                                                 onInput={(value, options = {}) => {
                                                     let current = getCurrentAnswer() || "";
                                                     const textarea = mathInputRefs[currentQuestionIndex];

@@ -22,13 +22,9 @@ import {
     ArrowLeft,
     Sparkles,
     PlusCircle,
-    CheckCircle2,
-    GraduationCap,
     Trophy,
     ArrowRight,
     Clock,
-    BarChart3,
-    Target,
     Zap,
     AlertTriangle,
     Bookmark,
@@ -39,7 +35,6 @@ import {
 } from "lucide-react";
 import { format, isThisWeek, parseISO } from "date-fns";
 import { useToast } from "@/components/ui/use-toast";
-import { moderationPresets } from "@/components/shared/contentModeration";
 import AISkeleton from "../components/shared/AISkeleton";
 import { isPremium } from "@/components/shared/subscriptionHelpers";
 import HelpButton from "@/components/shared/HelpButton";

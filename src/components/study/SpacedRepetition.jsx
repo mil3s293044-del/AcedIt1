@@ -513,7 +513,7 @@ The documents provided may be PowerPoint slides, Word documents, or text files. 
             toast({ title: "Deck saved!", description: `${results.filter(Boolean).length} cards added.` });
             setIsShowingGenerated(false); setGeneratedFlashcards(null); setUploadedFiles([]);
             await loadDecks(user.email);
-        } catch (error) {
+        } catch {
             toast({ title: "Error", description: "Could not save flashcards.", variant: "destructive" });
         } finally { setIsSavingDeck(false); }
     };
@@ -523,7 +523,7 @@ The documents provided may be PowerPoint slides, Word documents, or text files. 
         try {
             const deck = decks.find(d => d.id === deckId);
             if (deck) { await Promise.all(deck.cards.map(c => Flashcard.delete(c.id))); toast({ title: "Deck deleted" }); await loadDecks(user.email); }
-        } catch (error) { toast({ title: "Error", variant: "destructive" }); }
+        } catch { toast({ title: "Error", variant: "destructive" }); }
     };
 
     const handleShareDeck = async () => {
@@ -536,7 +536,7 @@ The documents provided may be PowerPoint slides, Word documents, or text files. 
             await Promise.all(promises);
             toast({ title: "Deck shared!" });
             setSharingDeck(null); setSelectedFriends([]); setSelectedGroups([]);
-        } catch (error) { toast({ title: "Error", description: "Could not share deck.", variant: "destructive" }); }
+        } catch { toast({ title: "Error", description: "Could not share deck.", variant: "destructive" }); }
     };
 
     const handleCreateDeck = () => {
@@ -559,7 +559,7 @@ The documents provided may be PowerPoint slides, Word documents, or text files. 
             toast({ title: "Card added!" });
             setNewCard({ question: '', answer: '' });
             await loadDecks(user.email);
-        } catch (error) { toast({ title: "Error", description: "Could not add card.", variant: "destructive" }); }
+        } catch { toast({ title: "Error", description: "Could not add card.", variant: "destructive" }); }
     };
 
     const handleStartReview = (deck, filter = 'all') => {
@@ -654,7 +654,7 @@ The documents provided may be PowerPoint slides, Word documents, or text files. 
                 sessionXPRef.current = 0;
                 setReviewMode(false); await loadDecks(user.email); setSelectedDeck(null); setIsRating(false);
             }
-        } catch (error) { toast({ title: "Error", variant: "destructive" }); setIsRating(false); }
+        } catch { toast({ title: "Error", variant: "destructive" }); setIsRating(false); }
     };
 
     const handleDeleteCard = async (cardId) => {

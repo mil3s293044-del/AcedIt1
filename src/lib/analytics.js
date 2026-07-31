@@ -22,7 +22,7 @@ const GA4_ID           = import.meta.env.VITE_GA4_ID;
 let initialised = false;
 
 function loadMetaPixel(id) {
-  /* eslint-disable */
+   
   !(function (f, b, e, v, n, t, s) {
     if (f.fbq) return;
     n = f.fbq = function () {
@@ -34,13 +34,13 @@ function loadMetaPixel(id) {
     t.src = v; s = b.getElementsByTagName(e)[0];
     s.parentNode.insertBefore(t, s);
   })(window, document, "script", "https://connect.facebook.net/en_US/fbevents.js");
-  /* eslint-enable */
+   
   window.fbq("init", id);
   window.fbq("track", "PageView");
 }
 
 function loadTikTokPixel(id) {
-  /* eslint-disable */
+   
   !(function (w, d, t) {
     w.TiktokAnalyticsObject = t;
     var ttq = (w[t] = w[t] || []);
@@ -66,7 +66,7 @@ function loadTikTokPixel(id) {
     ttq.load(id);
     ttq.page();
   })(window, document, "ttq");
-  /* eslint-enable */
+   
 }
 
 function loadGA4(id) {

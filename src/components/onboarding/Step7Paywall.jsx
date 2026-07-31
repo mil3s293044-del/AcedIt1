@@ -15,7 +15,7 @@ const FEATURES = [
     "Pomodoro timer, study planner and SAC calendar",
 ];
 
-export default function Step7Paywall({ data, onBack, onSkip }) {
+export default function Step7Paywall({ onBack, onSkip }) {
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState("");
 

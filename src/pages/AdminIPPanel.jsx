@@ -84,7 +84,7 @@ export default function AdminIPPanel() {
             }
             toast({ title: `IP ${ip} permanently blocked.` });
             await loadData();
-        } catch (e) {
+        } catch {
             toast({ title: "Error blocking IP", variant: "destructive" });
         }
     };
@@ -94,7 +94,7 @@ export default function AdminIPPanel() {
             await base44.entities.BlockedIPs.update(record.id, { is_blocked_ip: false, is_permanent: false });
             toast({ title: `IP ${record.ip_address} unblocked.` });
             await loadData();
-        } catch (e) {
+        } catch {
             toast({ title: "Error unblocking IP", variant: "destructive" });
         }
     };
