@@ -5,7 +5,7 @@ export default function Privacy() {
   return (
     <LegalLayout title="Privacy Policy" lastUpdated="30 June 2026">
       <p>
-        This Privacy Policy explains how Acedit ("Acedit", "we", "us" or "our")
+        This Privacy Policy explains how AcedIt ("AcedIt", "we", "us" or "our")
         collects, uses, stores and discloses your personal information when you
         use our website at acedit.au and our study application (together, the
         "Service"). We handle personal information in accordance with the
@@ -20,7 +20,7 @@ export default function Privacy() {
 
       <LegalSection heading="Who we are">
         <p>
-          Acedit is a study application built for Victorian Certificate of
+          AcedIt is a study application built for Victorian Certificate of
           Education (VCE) students. You can contact us about privacy at{" "}
           <a href="mailto:support@acedit.au" className="text-primary underline">support@acedit.au</a>.
         </p>
@@ -77,7 +77,7 @@ export default function Privacy() {
         </ul>
         <p>
           We may also disclose information where required by law, or to protect
-          the rights, safety and property of Acedit, our users or others.
+          the rights, safety and property of AcedIt, our users or others.
         </p>
       </LegalSection>
 

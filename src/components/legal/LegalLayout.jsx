@@ -20,7 +20,7 @@ export default function LegalLayout({ title, lastUpdated, children }) {
             <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center">
               <GraduationCap className="w-4 h-4 text-white" />
             </div>
-            <span className="font-display font-extrabold text-lg">Acedit</span>
+            <span className="font-display font-extrabold text-lg">AcedIt</span>
           </a>
           <a
             href="/"
@@ -45,7 +45,7 @@ export default function LegalLayout({ title, lastUpdated, children }) {
       {/* Footer */}
       <footer className="border-t border-black/5 py-8 px-6">
         <div className="max-w-3xl mx-auto flex flex-wrap items-center justify-between gap-4 text-xs text-[#0D1626]/50">
-          <span>© {new Date().getFullYear()} Acedit. Made for VCE.</span>
+          <span>© {new Date().getFullYear()} AcedIt. Made for VCE.</span>
           <div className="flex items-center gap-5">
             <a href="/privacy" className="hover:text-[#0D1626] cursor-pointer">Privacy</a>
             <a href="/terms" className="hover:text-[#0D1626] cursor-pointer">Terms</a>

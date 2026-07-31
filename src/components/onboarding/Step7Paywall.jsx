@@ -51,7 +51,7 @@ export default function Step7Paywall({ onBack, onSkip }) {
 
             {/* Plan card */}
             <div className="border-2 rounded-2xl p-6 mb-6" style={{ borderColor: "#534AB7" }}>
-                <p className="font-bold text-xl text-foreground mb-1">Acedit Premium</p>
+                <p className="font-bold text-xl text-foreground mb-1">AcedIt Premium</p>
                 <div className="flex items-baseline gap-1 mb-1">
                     <span className="text-4xl font-extrabold text-foreground">$5</span>
                     <span className="text-muted-foreground text-sm">/week</span>
@@ -61,7 +61,7 @@ export default function Step7Paywall({ onBack, onSkip }) {
                 {/* Value anchor */}
                 <div className="rounded-xl p-3 mb-5" style={{ backgroundColor: "#F0EEFF" }}>
                     <p className="text-xs text-purple-800 leading-relaxed">
-                        Melbourne private tutors charge <strong>$60–$120 per hour</strong> (Learnmate Australia, 2025). Acedit gives you AI-powered study support for <strong>$5/week</strong> — available at 2am the night before your SAC.
+                        Melbourne private tutors charge <strong>$60–$120 per hour</strong> (Learnmate Australia, 2025). AcedIt gives you AI-powered study support for <strong>$5/week</strong> — available at 2am the night before your SAC.
                     </p>
                 </div>
 
@@ -110,7 +110,7 @@ export default function Step7Paywall({ onBack, onSkip }) {
             {/* Research close */}
             <div className="bg-green-50 border border-green-100 rounded-xl p-4">
                 <p className="text-sm font-bold text-green-800 mb-2">What the research says about students who don't burn out</p>
-                <p className="text-xs text-green-700 leading-relaxed mb-2">They don't study more hours than their peers. They use retrieval practice, spaced review, and immediate feedback loops. They know their weak topics before exams find them. And they maintain consistent daily habits rather than last-minute cramming. These are not natural talents — they are learnable systems. That is what Acedit is built to give you.</p>
+                <p className="text-xs text-green-700 leading-relaxed mb-2">They don't study more hours than their peers. They use retrieval practice, spaced review, and immediate feedback loops. They know their weak topics before exams find them. And they maintain consistent daily habits rather than last-minute cramming. These are not natural talents — they are learnable systems. That is what AcedIt is built to give you.</p>
                 <p className="text-xs text-green-500">Based on: Roediger & Karpicke (2006), Dunlosky et al. (2013), Ebbinghaus (1885), Gollwitzer (1999), Preprints.org burnout review (2025), Learnmate Australia tutoring data (2025)</p>
             </div>
         </div>

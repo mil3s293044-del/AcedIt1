@@ -58,7 +58,7 @@ export default function Step1Welcome({ onNext }) {
             </div>
 
             <p className="text-sm text-muted-foreground mb-8 text-center">
-                Acedit is built entirely on these four findings. Every feature exists to make sure your study time actually sticks.
+                AcedIt is built entirely on these four findings. Every feature exists to make sure your study time actually sticks.
             </p>
 
             <Button
