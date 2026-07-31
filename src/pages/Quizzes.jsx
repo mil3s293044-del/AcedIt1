@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo } from "react";
+import { useNavigate } from "react-router-dom";
 import { base44 } from "@/api/base44Client";
 import { motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
@@ -88,6 +89,7 @@ const FOCUS_THEME = {
 };
 
 export default function Quizzes() {
+    const navigate = useNavigate();
     const [user, setUser] = useState(null);
     const [userProfile, setUserProfile] = useState(null);
     const [quizzes, setQuizzes] = useState([]);
@@ -308,57 +310,6 @@ export default function Quizzes() {
     };
 
 
-
-    const handleAcceptSharedQuiz = async (sharedQuiz) => {
-        try {
-            await base44.entities.Quiz.create({
-                title: sharedQuiz.quiz_data.title,
-                subject: sharedQuiz.quiz_data.subject,
-                questions: sharedQuiz.quiz_data.questions,
-                difficulty: sharedQuiz.quiz_data.difficulty,
-                category: sharedQuiz.quiz_data.category
-            });
-
-            // If the subject doesn't exist in userSubjects, create it.
-            const subjectExists = userSubjects.some(s => s.subject_name === sharedQuiz.quiz_data.subject);
-            if (!subjectExists) {
-                await base44.entities.UserSubject.create({
-                    subject_name: sharedQuiz.quiz_data.subject,
-                    subject_code: sharedQuiz.quiz_data.subject.substring(0, 6).toUpperCase(),
-                    color: "#6B7280",
-                    is_active: true
-                });
-            }
-
-            await base44.entities.SharedQuiz.update(sharedQuiz.id, {
-                status: "accepted"
-            });
-
-            toast({
-                title: "Quiz accepted!",
-                description: "The quiz has been added to your collection."
-            });
-
-            await loadData();
-        } catch (error) {
-            console.error("Error accepting shared quiz:", error);
-            toast({ title: "Error", description: "Could not accept quiz.", variant: "destructive" });
-        }
-    };
-
-    const handleDeclineSharedQuiz = async (sharedQuiz) => {
-        try {
-            await base44.entities.SharedQuiz.update(sharedQuiz.id, {
-                status: "declined"
-            });
-
-            toast({ title: "Quiz declined" });
-            await loadData();
-        } catch (error) {
-            console.error("Error declining shared quiz:", error);
-            toast({ title: "Error", description: "Could not decline quiz.", variant: "destructive" });
-        }
-    };
 
     const handleGenerateQuiz = async () => {
         const effectiveSubject = aiSettings.customSubject || aiSettings.subject;
@@ -911,7 +862,9 @@ Return valid JSON only.`,
                 cta: "Review now",
                 accent: "primary",
                 icon: Sparkles,
-                action: null, // No direct action — just informational
+                // Accept/decline lives on Friends, next to the friend who sent
+                // it — this just takes you there rather than duplicating it.
+                action: () => navigate("/Friends"),
             };
         }
         // Has quizzes — quick suggestion
@@ -937,7 +890,7 @@ Return valid JSON only.`,
             icon: Wand2,
             action: () => setShowAIDialog(true),
         };
-    }, [quizzes, quizStats, pendingSharedQuizzes]);
+    }, [quizzes, quizStats, pendingSharedQuizzes, navigate]);
 
     if (isPlaying && selectedQuiz) {
         const isSAC = quizMode === "sac";

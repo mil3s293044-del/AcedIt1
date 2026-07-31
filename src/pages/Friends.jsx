@@ -313,6 +313,25 @@ export default function Friends() {
 
     const handleAcceptQuiz = async (sq) => {
         await base44.entities.Quiz.create({ title: sq.quiz_data.title, subject: sq.quiz_data.subject, questions: sq.quiz_data.questions, difficulty: sq.quiz_data.difficulty, category: sq.quiz_data.category });
+
+        // A friend can share a quiz for a subject you don't study. Without a
+        // matching UserSubject the quiz lands in your library with no subject
+        // filter chip to reach it, so provision one on the way in.
+        if (sq.quiz_data.subject) {
+            const existing = await base44.entities.UserSubject.filter({
+                created_by: user.email,
+                subject_name: sq.quiz_data.subject
+            });
+            if (!existing.length) {
+                await base44.entities.UserSubject.create({
+                    subject_name: sq.quiz_data.subject,
+                    subject_code: sq.quiz_data.subject.substring(0, 6).toUpperCase(),
+                    color: "#6B7280",
+                    is_active: true
+                });
+            }
+        }
+
         await base44.entities.SharedQuiz.update(sq.id, { status: 'accepted' });
         toast({ title: `"${sq.quiz_title}" added to your quizzes!` });
         await loadData(user);
