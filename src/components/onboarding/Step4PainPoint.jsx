@@ -45,7 +45,7 @@ export default function Step4PainPoint({ data, onNext, onBack, saving }) {
             </button>
             <h2 className="text-2xl font-bold text-foreground mb-1">What's your biggest study challenge right now?</h2>
             <p className="text-muted-foreground text-sm mb-1">Be honest — this helps us show you the features that'll make the biggest difference.</p>
-            <p className="text-xs text-purple-600 font-medium mb-6">Pick up to 3 — we'll personalise everything around these.</p>
+            <p className="text-xs text-primary font-medium mb-6">Pick up to 3 — we'll personalise everything around these.</p>
 
             <div className="grid grid-cols-2 gap-3 mb-6">
                 {OPTIONS.map(opt => {
@@ -56,8 +56,8 @@ export default function Step4PainPoint({ data, onNext, onBack, saving }) {
                             onClick={() => toggle(opt.id)}
                             className="p-4 rounded-xl border-2 text-left transition-all"
                             style={{
-                                borderColor: isSelected ? "#534AB7" : "#E5E7EB",
-                                backgroundColor: isSelected ? "#F0EEFF" : "white",
+                                
+                                backgroundColor: isSelected ? undefined : "white",
                                 transform: isSelected ? "scale(1.03)" : "scale(1)",
                                 transition: "all 0.15s ease"
                             }}
@@ -81,7 +81,7 @@ export default function Step4PainPoint({ data, onNext, onBack, saving }) {
                 onClick={() => onNext({ primary_challenge: Array.from(selected) })}
                 disabled={selected.size === 0 || saving}
                 className="w-full h-12 text-base font-semibold"
-                style={{ backgroundColor: selected.size > 0 ? "#534AB7" : undefined }}
+                
             >
                 {saving ? "Saving..." : selected.size > 0 ? `Next → ${selected.size} selected` : "Next →"}
             </Button>

@@ -67,7 +67,7 @@ export default function Step2Profile({ data, onNext, onBack, saving }) {
                 onClick={handleNext}
                 disabled={!canProceed || saving}
                 className="w-full h-12 text-base font-semibold mt-10"
-                style={{ backgroundColor: canProceed ? "#534AB7" : undefined }}
+                
             >
                 {saving ? "Saving..." : "Next →"}
             </Button>

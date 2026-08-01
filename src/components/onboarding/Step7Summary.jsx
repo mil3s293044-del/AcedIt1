@@ -69,7 +69,7 @@ Write it in second person ("You're a..."). Be specific, warm, and motivating. Ma
                         <p className="text-xs font-semibold text-muted-foreground/60 uppercase tracking-wide mb-2">Your subjects</p>
                         <div className="flex flex-wrap gap-2">
                             {data.enrolled_subjects.map((s, i) => (
-                                <span key={i} className="text-xs font-medium px-2.5 py-1 rounded-full" style={{ backgroundColor: "#F0EEFF", color: "#534AB7" }}>{s}</span>
+                                <span key={i} className="text-xs font-medium px-2.5 py-1 rounded-full" >{s}</span>
                             ))}
                         </div>
                     </div>
@@ -104,14 +104,14 @@ Write it in second person ("You're a..."). Be specific, warm, and motivating. Ma
                 )}
 
                 {/* AI persona */}
-                <div className="rounded-xl p-4" style={{ backgroundColor: "#F0EEFF" }}>
-                    <p className="text-xs font-semibold uppercase tracking-wide mb-2" style={{ color: "#534AB7" }}>Your study persona</p>
+                <div className="rounded-xl p-4" style={{ backgroundColor: undefined }}>
+                    <p className="text-xs font-semibold uppercase tracking-wide mb-2 text-primary">Your study persona</p>
                     {loading ? (
-                        <div className="flex items-center gap-2 text-purple-600 text-xs">
+                        <div className="flex items-center gap-2 text-primary text-xs">
                             <Loader2 className="w-3 h-3 animate-spin" /> Generating your personalised summary...
                         </div>
                     ) : (
-                        <p className="text-sm text-purple-900 leading-relaxed">{persona}</p>
+                        <p className="text-sm text-foreground leading-relaxed">{persona}</p>
                     )}
                 </div>
 
@@ -122,7 +122,6 @@ Write it in second person ("You're a..."). Be specific, warm, and motivating. Ma
                 onClick={onNext}
                 disabled={loading}
                 className="w-full h-12 text-base font-semibold"
-                style={{ backgroundColor: "#534AB7" }}
             >
                 Show me →
             </Button>

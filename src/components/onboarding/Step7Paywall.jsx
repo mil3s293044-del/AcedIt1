@@ -50,7 +50,7 @@ export default function Step7Paywall({ onBack, onSkip }) {
 
 
             {/* Plan card */}
-            <div className="border-2 rounded-2xl p-6 mb-6" style={{ borderColor: "#534AB7" }}>
+            <div className="border-2 border-primary rounded-2xl p-6 mb-6">
                 <p className="font-bold text-xl text-foreground mb-1">AcedIt Premium</p>
                 <div className="flex items-baseline gap-1 mb-1">
                     <span className="text-4xl font-extrabold text-foreground">$5</span>
@@ -59,8 +59,8 @@ export default function Step7Paywall({ onBack, onSkip }) {
                 <p className="text-xs text-muted-foreground/60 mb-5">Cancel anytime. No lock-in contract.</p>
 
                 {/* Value anchor */}
-                <div className="rounded-xl p-3 mb-5" style={{ backgroundColor: "#F0EEFF" }}>
-                    <p className="text-xs text-purple-800 leading-relaxed">
+                <div className="rounded-xl p-3 mb-5" style={{ backgroundColor: undefined }}>
+                    <p className="text-xs text-foreground/80 leading-relaxed">
                         Melbourne private tutors charge <strong>$60–$120 per hour</strong> (Learnmate Australia, 2025). AcedIt gives you AI-powered study support for <strong>$5/week</strong> — available at 2am the night before your SAC.
                     </p>
                 </div>
@@ -69,7 +69,7 @@ export default function Step7Paywall({ onBack, onSkip }) {
                 <div className="space-y-2 mb-6">
                     {FEATURES.map((f, i) => (
                         <div key={i} className="flex items-start gap-2">
-                            <Check className="w-4 h-4 mt-0.5 flex-shrink-0" style={{ color: "#534AB7" }} />
+                            <Check className="w-4 h-4 mt-0.5 flex-shrink-0 text-primary" />
                             <span className="text-xs text-muted-foreground">{f}</span>
                         </div>
                     ))}
@@ -81,7 +81,6 @@ export default function Step7Paywall({ onBack, onSkip }) {
                     onClick={handleSubscribe}
                     disabled={loading}
                     className="w-full h-12 text-base font-semibold"
-                    style={{ backgroundColor: "#534AB7" }}
                 >
                     {loading
                         ? <><Loader2 className="w-4 h-4 animate-spin mr-2" />Redirecting to payment...</>

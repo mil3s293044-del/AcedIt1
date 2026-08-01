@@ -2,11 +2,13 @@ import React, { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Check } from "lucide-react";
 
+// Three study days is what unlocks the AcedIt ATAR, so the first-session
+// checklist points at getting there rather than at four unrelated features.
 const CHECKLIST = [
-    "Create your first flashcard deck for a subject",
-    "Upload a PDF and generate your first AI quiz",
-    "Run one 25-minute Pomodoro session today",
-    "Invite one friend to compete with you",
+    "Run one 25-minute session today — day one of three",
+    "Upload a set of notes and generate your first AI quiz",
+    "Block out tomorrow's session in the Planner",
+    "Create a flashcard deck for the subject you're weakest at",
 ];
 
 export default function Step8Complete({ data, onComplete, saving }) {
@@ -28,7 +30,9 @@ export default function Step8Complete({ data, onComplete, saving }) {
                 You're all set{data.display_name ? `, ${data.display_name}` : ""}.
             </h2>
             <p className="text-muted-foreground text-sm mb-10">
-                Your profile is live. Your subjects are loaded. Your goal is set. Your trial has started. Let's get to work.
+                Your profile is live, your subjects are loaded and your trial has started.
+                {data.goal_atar ? ` You're aiming at ${data.goal_atar} — ` : " "}
+                three study days puts you on the board and unlocks your AcedIt ATAR.
             </p>
 
             {/* Checklist */}
@@ -41,7 +45,7 @@ export default function Step8Complete({ data, onComplete, saving }) {
                             onClick={() => toggle(i)}
                             className="w-full flex items-center gap-3 p-3 rounded-xl border border-border hover:bg-secondary/50 transition-all text-left"
                         >
-                            <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center flex-shrink-0 transition-all ${checked.has(i) ? "border-purple-600 bg-purple-600" : "border-border"}`}>
+                            <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center flex-shrink-0 transition-all ${checked.has(i) ? "border-primary bg-primary" : "border-border"}`}>
                                 {checked.has(i) && <Check className="w-3 h-3 text-white" />}
                             </div>
                             <span className={`text-sm ${checked.has(i) ? "line-through text-muted-foreground/60" : "text-muted-foreground"}`}>{item}</span>
@@ -59,7 +63,6 @@ export default function Step8Complete({ data, onComplete, saving }) {
                 onClick={() => onComplete({})}
                 disabled={saving}
                 className="w-full h-12 text-base font-semibold"
-                style={{ backgroundColor: "#534AB7" }}
             >
                 {saving ? "Setting up..." : "Go to my dashboard →"}
             </Button>
