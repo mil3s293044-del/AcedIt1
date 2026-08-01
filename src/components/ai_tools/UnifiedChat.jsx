@@ -23,6 +23,7 @@ import { recordStudyAndGetStreak } from "@/components/shared/streakHelpers";
 import MarkdownMath from "@/components/shared/MarkdownMath";
 import { format } from "date-fns";
 import { CHAT_TOOLS, toolById, defaultOptions, resolveChoices } from "./chatTools";
+import CheatSheetArtifact from "./CheatSheetArtifact";
 
 const MAX_TURNS_IN_PROMPT = 12;
 
@@ -200,6 +201,39 @@ export default function UnifiedChat() {
         setMessages(prev => [...prev, userMsg, { role: "assistant", content: "", streaming: true }]);
         setStreaming(true);
         recordStudyAndGetStreak().catch(() => {});
+
+        // ── Artifact path ────────────────────────────────────────────────────
+        // Some tool options build a real thing (a printable cheat sheet) rather
+        // than prose. Those go out as ONE non-streaming JSON call — streaming a
+        // schema response just shows the student half-formed JSON.
+        const artifactSpec = usedTool.artifact?.(usedSubject, usedOptions);
+        if (artifactSpec) {
+            let artifact = null, failure = null;
+            try {
+                const res = await base44.integrations.Core.InvokeLLM({
+                    feature: usedTool.feature,
+                    fast: true,
+                    prompt: artifactSpec.prompt(promptText, files.map(f => f.name)),
+                    file_urls: files.length ? files.map(f => f.url) : undefined,
+                    response_json_schema: artifactSpec.schema,
+                });
+                if (res?.items?.length) {
+                    artifact = { kind: artifactSpec.kind, pages: artifactSpec.pages, title: res.title || "", data: res.items };
+                } else {
+                    failure = "I couldn't pull enough out of that. Try clearer material, or tell me the topic directly.";
+                }
+            } catch (e) {
+                failure = e?.message || "That one got away — try sending again.";
+            }
+            const msg = artifact
+                ? { role: "assistant", content: artifact.title || "Here's your cheat sheet — drop anything you don't need and swap in a suggestion.", artifact }
+                : { role: "assistant", content: failure };
+            const done = [...history, userMsg, msg];
+            setMessages(done);
+            setStreaming(false);
+            if (artifact) { optsRef.current = usedOptions; filesRef.current = files; persist(done, usedTool, usedSubject); }
+            return;
+        }
 
         const controller = new AbortController();
         abortRef.current = controller;
@@ -496,6 +530,14 @@ export default function UnifiedChat() {
                                             {m.content
                                                 ? <MarkdownMath isStreaming={!!m.streaming}>{m.content}</MarkdownMath>
                                                 : <span className="inline-flex items-center gap-1.5 text-muted-foreground"><Loader2 className="w-3.5 h-3.5 animate-spin" /> Thinking…</span>}
+                                            {m.artifact?.kind === "cheat_sheet" && (
+                                                <CheatSheetArtifact
+                                                    initialItems={m.artifact.data}
+                                                    subject={subjectName}
+                                                    title={m.artifact.title}
+                                                    defaultPages={m.artifact.pages || 1}
+                                                />
+                                            )}
                                         </div>
                                     </div>
                                 )}

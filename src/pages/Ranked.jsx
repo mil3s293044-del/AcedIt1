@@ -79,7 +79,7 @@ export default function Ranked() {
 
     return (
         <div className="min-h-screen bg-background">
-            <div className="max-w-4xl mx-auto px-4 lg:px-8 py-6 lg:py-10 space-y-6">
+            <div className="max-w-6xl mx-auto px-4 lg:px-8 py-6 lg:py-10 space-y-6">
 
                 {/* ── COACH STRIP ─────────────────────────────────────── */}
                 <motion.section initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }}>

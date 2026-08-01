@@ -62,6 +62,59 @@ const MATH_STRANDS = {
     methods: "Mathematical Methods", specialist: "Specialist Mathematics",
 };
 
+// ── Artifact specs ──────────────────────────────────────────────────────────
+// A tool option can produce a structured artifact instead of prose. The chat
+// then makes ONE non-streaming call with a JSON schema (CLAUDE.md: JSON tools
+// don't stream) and hands the result to the artifact component.
+//
+// The sheet fits ~22 items per A4 page; ask for a modest buffer beyond that so
+// there are alternates to swap in. A bigger pool is what made the old
+// standalone tool crawl, so keep it tight.
+const CHEAT_SHEET_ITEMS_PER_PAGE = 22;
+const CHEAT_SHEET_PAGES = 1;
+
+const CHEAT_SHEET_ARTIFACT = (subjectName) => ({
+    kind: "cheat_sheet",
+    pages: CHEAT_SHEET_PAGES,
+    schema: {
+        type: "object",
+        properties: {
+            title: { type: "string" },
+            items: {
+                type: "array",
+                items: {
+                    type: "object",
+                    properties: {
+                        type: { type: "string", enum: ["formula", "definition", "key-point", "exam-tip"] },
+                        section: { type: "string" },
+                        content: { type: "string" },
+                        importance: { type: "number" },
+                    },
+                    required: ["type", "section", "content", "importance"],
+                },
+            },
+        },
+        required: ["items"],
+    },
+    prompt: (userText, fileNames) => {
+        const poolCount = CHEAT_SHEET_PAGES * CHEAT_SHEET_ITEMS_PER_PAGE + 12;
+        return `${subjectBlock(subjectName)}
+
+You are building a high-density EXAM CHEAT SHEET for VCE${subjectName ? ` ${subjectName}` : ""}, sized to fit ${CHEAT_SHEET_PAGES} A4 page of tight two-column notes.
+
+${fileNames?.length ? `The student has attached ${fileNames.map((n) => `"${n}"`).join(", ")} — the full content is provided alongside this message. Build the sheet from that material.\n\n` : ""}What the student asked for: ${userText}
+
+RULES
+- Return EXACTLY ${poolCount} items, no more — ranked best-first so the top ones fill the sheet and the rest are alternates.
+- importance: integer 1-5. 5 = absolutely essential, 1 = nice-to-have. Be decisive — only a handful of 5s.
+- Each item is ONE concise line — a phrase, a formula, a definition. No full paragraphs, no filler.
+- ALL maths in LaTeX: inline $...$ or display $$...$$. NEVER plain-text maths.
+- Give each item a short "section" label (e.g. "Calculus", "Definitions", "Exam tips").
+- Prioritise things a student forgets under pressure. Exclude trivial or obvious content.
+- Also return a short "title" for the sheet.`;
+    },
+});
+
 export const CHAT_TOOLS = [
     {
         id: "math_tutor",
@@ -162,6 +215,9 @@ export const CHAT_TOOLS = [
             { key: "format", label: "Output", default: "summary", choices: [{ value: "summary", label: "Summary" }, { value: "cheat_sheet", label: "Cheat sheet" }, { value: "qa", label: "Q&A recall" }] },
         ],
         system: (s, o = {}) => `${subjectBlock(s)}\n\n${COACH_TONE}\n\nROLE: Note summariser.\n\nFORMAT SIGNATURE: ${o.format === "cheat_sheet" ? "an ultra-dense cheat sheet — terse dot points under bold micro-headers, formulas/definitions only, zero filler, built to be printed" : o.format === "qa" ? "recall pairs — every key idea as **Q:** / **A:** lines ready to become flashcards, grouped under topic headers" : "a structured revision summary — bold key-idea headers, must-know terminology in a table, **Common exam traps**, and **Test yourself** (3-5 recall questions) at the end"}.`,
+        // Cheat sheet is a real artifact, not prose: ask for a ranked pool of
+        // typed items and let CheatSheetArtifact render the printable sheet.
+        artifact: (s, o = {}) => (o.format === "cheat_sheet" ? CHEAT_SHEET_ARTIFACT(s) : null),
     },
     {
         id: "study_coach",
