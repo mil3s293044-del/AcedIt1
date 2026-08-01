@@ -15,6 +15,7 @@ import HelpButton from "@/components/shared/HelpButton";
 import StudyIntentModal from "@/components/dashboard/StudyIntentModal";
 import { reconcileUserXP } from "@/lib/reconcileXP";
 import { getStreakMultiplier as getStreakMultiplierValue } from "@/components/shared/streakHelpers";
+import { atarBandOf } from "@/lib/atarBands";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 const fmtTime = (m) => {
@@ -48,41 +49,98 @@ function getNextStreakMilestone(days) {
 // Daily XP goal — the daily loop. 100 XP is roughly one solid session.
 const DAILY_XP_GOAL = 100;
 
+// Which lever actually lifts the ATAR right now. The weakest component is the
+// honest answer, and naming it beats a generic "study more" — the whole point
+// of breaking the score into parts is that each one has a different fix.
+const ATAR_LEVERS = {
+    mastery:     "Mastery is your thinnest slice — a quiz or a flashcard round does the most for it.",
+    consistency: "Consistency is your thinnest slice — showing up again tomorrow counts for more than a long session today.",
+    effort:      "Effort is your thinnest slice — one longer sitting lifts it faster than several short ones.",
+    breadth:     "Breadth is your thinnest slice — a technique you have not touched this month is the quickest lift.",
+    planning:    "Planning is your thinnest slice — setting a goal or blocking out tomorrow is the quickest lift.",
+};
+const LEVER_KEYS = ["mastery", "consistency", "effort", "breadth", "planning"];
+
+function weakestComponent(components) {
+    if (!components) return null;
+    const present = LEVER_KEYS.filter((k) => typeof components[k] === "number");
+    if (!present.length) return null;
+    return present.reduce((lo, k) => (components[k] < components[lo] ? k : lo), present[0]);
+}
+
 // Coach voice — chill, supportive, motivational. Specific not generic.
-function getCoachLine({ name, hour, streakDays, todayMins, studiedYesterday, dueFlashcards, urgentDays }) {
+// Returns a headline plus one supporting line: where you stand, then the single
+// thing worth doing about it today.
+function getCoachLine({
+    name, hour, streakDays, todayMins, studiedYesterday, dueFlashcards,
+    urgentDays, urgentTitle, atar, band, components, goalAtar, plannedToday,
+}) {
     const period = hour < 12 ? "Morning" : hour < 17 ? "Afternoon" : hour < 21 ? "Evening" : "Late night";
 
+    // ── Headline: the most pressing true thing right now ────────────────────
+    let line;
     if (urgentDays !== null && urgentDays === 0) {
-        return `${period}, ${name}. You've got something due today — let's tackle it.`;
+        line = urgentTitle
+            ? `${period}, ${name}. ${urgentTitle} is due today — let's get on it.`
+            : `${period}, ${name}. You've got something due today — let's get on it.`;
+    } else if (urgentDays !== null && urgentDays <= 3 && todayMins === 0) {
+        line = urgentTitle
+            ? `${period}, ${name}. ${urgentTitle} lands in ${urgentDays} day${urgentDays === 1 ? "" : "s"}.`
+            : `${period}, ${name}. Something lands in ${urgentDays} day${urgentDays === 1 ? "" : "s"}.`;
+    } else if (atar != null && band) {
+        // The ATAR is the flagship number — lead with it once it exists.
+        if (todayMins >= 90) line = `${period}, ${name}. ${fmtTime(todayMins)} in and sitting at ${atar.toFixed(2)}. Big day.`;
+        else if (todayMins > 0) line = `${period}, ${name}. ${fmtTime(todayMins)} down, ${atar.toFixed(2)} on the board.`;
+        else line = `${period}, ${name}. You're at ${atar.toFixed(2)} — ${band}.`;
+    } else if (streakDays >= 30 && todayMins > 0) {
+        line = `${period}, ${name}. ${streakDays} days deep and still showing up. Keep cooking.`;
+    } else if (streakDays >= 30) {
+        line = `${period}, ${name}. ${streakDays} days deep. You're built different now.`;
+    } else if (streakDays >= 7 && todayMins === 0 && hour >= 17) {
+        line = `${period}, ${name}. A quick session keeps your ${streakDays}-day streak going.`;
+    } else if (streakDays === 0 && todayMins === 0 && !studiedYesterday) {
+        line = `${period}, ${name}. Today's a great day to start a streak.`;
+    } else if (todayMins >= 90) {
+        line = `${period}, ${name}. ${fmtTime(todayMins)} in already. Big day shaping up.`;
+    } else if (todayMins >= 30) {
+        line = `${period}, ${name}. ${fmtTime(todayMins)} down. Want to stack another?`;
+    } else if (todayMins > 0) {
+        line = `${period}, ${name}. Nice start — keep building.`;
+    } else {
+        line = `${period}, ${name}. Let's make today count.`;
     }
-    if (streakDays >= 30 && todayMins > 0) {
-        return `${period}, ${name}. ${streakDays} days deep and still showing up. Keep cooking.`;
+
+    // ── Support: ONE thing worth doing about it ─────────────────────────────
+    // Kept to a single clause, or a gap plus the lever that closes it. Stacking
+    // three nudges under a headline reads like a to-do list, not a coach.
+    let sub;
+    const lever = weakestComponent(components);
+
+    if (urgentDays !== null && urgentDays <= 3) {
+        // Prep spread over the days before an assessment is exactly what the
+        // ATAR's planning component rewards, so say so while it still counts.
+        sub = urgentDays === 0
+            ? "Sessions in the days before it count toward your planning score — today still counts."
+            : `Studying it across the next ${urgentDays} day${urgentDays === 1 ? "" : "s"} lifts your planning score more than one long night.`;
+    } else if (plannedToday > 0 && todayMins === 0) {
+        // Something they already committed to beats anything we'd suggest.
+        sub = `You blocked out ${plannedToday} session${plannedToday === 1 ? "" : "s"} for today — that's the plan already made.`;
+    } else if (dueFlashcards >= 10 && todayMins === 0) {
+        sub = `${dueFlashcards} flashcards are due — a review round is the fastest win on the board.`;
+    } else if (atar == null) {
+        sub = "Three study days puts you on the board and unlocks your AcedIt ATAR.";
+    } else if (goalAtar && atar >= goalAtar) {
+        sub = `You're past your ${goalAtar} goal — hold it there and it stops being a fluke.`;
+    } else if (goalAtar) {
+        const gap = (goalAtar - atar).toFixed(2);
+        sub = lever
+            ? `${gap} off your ${goalAtar} goal. ${ATAR_LEVERS[lever]}`
+            : `${gap} off your ${goalAtar} goal.`;
+    } else if (lever) {
+        sub = ATAR_LEVERS[lever];
     }
-    if (streakDays >= 7 && todayMins === 0 && hour >= 17) {
-        return `${period}, ${name}. Quick session keeps your ${streakDays}-day streak going.`;
-    }
-    if (streakDays >= 30) {
-        return `${period}, ${name}. ${streakDays} days deep. You're built different now.`;
-    }
-    if (streakDays === 0 && todayMins === 0 && !studiedYesterday) {
-        return `${period}, ${name}. Today's a great day to start a streak.`;
-    }
-    if (todayMins >= 90) {
-        return `${period}, ${name}. ${fmtTime(todayMins)} in already. Big day shaping up.`;
-    }
-    if (todayMins >= 30) {
-        return `${period}, ${name}. ${fmtTime(todayMins)} down. Want to stack another?`;
-    }
-    if (todayMins > 0) {
-        return `${period}, ${name}. Nice start — keep building.`;
-    }
-    if (hour >= 17) {
-        return `${period}, ${name}. Even 25 minutes makes today count.`;
-    }
-    if (dueFlashcards >= 10) {
-        return `${period}, ${name}. ${dueFlashcards} flashcards waiting — quick review wins the day.`;
-    }
-    return `${period}, ${name}. Let's make today count.`;
+
+    return { line, sub };
 }
 
 function getStreakBlurb(streakDays) {
@@ -397,6 +455,11 @@ export default function Dashboard() {
     const totalReminders = assessments.length + flashcardReminders.length + plannerReminders.length;
 
     const hour = new Date().getHours();
+    const plannedToday = useMemo(() => {
+        const key = format(new Date(), "yyyy-MM-dd");
+        return plannerReminders.filter(p => p.date === key).length;
+    }, [plannerReminders]);
+
     const coachLine = getCoachLine({
         name: firstName,
         hour,
@@ -405,6 +468,12 @@ export default function Dashboard() {
         studiedYesterday,
         dueFlashcards: dueFlashcardCount,
         urgentDays: nextDeadline?.days ?? null,
+        urgentTitle: nextDeadline?.title ?? null,
+        atar: userProfile?.acedit_atar != null ? Number(userProfile.acedit_atar) : null,
+        band: atarBandOf(userProfile?.acedit_atar),
+        components: userProfile?.atar_components || null,
+        goalAtar: userProfile?.goal_atar ? Number(userProfile.goal_atar) : null,
+        plannedToday,
     });
     const streakBlurb = getStreakBlurb(streakDays);
     const multiplier = getStreakMultiplier(streakDays);
@@ -487,8 +556,13 @@ export default function Dashboard() {
                         <HelpButton page="Dashboard" />
                     </div>
                     <h1 className="font-display text-2xl sm:text-3xl lg:text-4xl font-extrabold tracking-tight text-foreground leading-[1.1]">
-                        {coachLine}
+                        {coachLine.line}
                     </h1>
+                    {coachLine.sub && (
+                        <p className="text-sm text-muted-foreground mt-2 max-w-2xl leading-relaxed">
+                            {coachLine.sub}
+                        </p>
+                    )}
                 </motion.section>
 
                 {/* ── HERO ROW: Streak (2/3) + Today snapshot (1/3) ──── */}
