@@ -76,6 +76,7 @@ const CHEAT_SHEET_PAGES = 1;
 const CHEAT_SHEET_ARTIFACT = (subjectName) => ({
     kind: "cheat_sheet",
     pages: CHEAT_SHEET_PAGES,
+    done: "Here is your cheat sheet — drop anything you do not need and swap a suggestion in.",
     schema: {
         type: "object",
         properties: {
@@ -113,6 +114,50 @@ RULES
 - Prioritise things a student forgets under pressure. Exclude trivial or obvious content.
 - Also return a short "title" for the sheet.`;
     },
+});
+
+const EXAM_QUESTIONS_ARTIFACT = (subjectName, o = {}) => ({
+    kind: "exam_questions",
+    done: "Have a go at these before you open the solutions.",
+    schema: {
+        type: "object",
+        properties: {
+            title: { type: "string" },
+            questions: {
+                type: "array",
+                items: {
+                    type: "object",
+                    properties: {
+                        question: { type: "string" },
+                        type: { type: "string" },
+                        marks: { type: "number" },
+                        options: { type: "array", items: { type: "string" } },
+                        correct_answer_index: { type: "number" },
+                        model_answer: { type: "string" },
+                        marking_criteria: { type: "string" },
+                        common_mistakes: { type: "string" },
+                        study_tip: { type: "string" },
+                    },
+                    required: ["question", "type", "marks", "model_answer", "marking_criteria"],
+                },
+            },
+        },
+        required: ["questions"],
+    },
+    prompt: (userText, fileNames) => `${subjectBlock(subjectName)}
+
+You are writing VCE${subjectName ? ` ${subjectName}` : ""} exam questions at ${o.difficulty === "exam" ? "authentic VCE exam standard" : `${o.difficulty || "exam"} standard`}.
+
+${fileNames?.length ? `The student has attached ${fileNames.map((n) => `"${n}"`).join(", ")} — the full content is provided alongside this message. Draw the questions from that material.\n\n` : ""}What the student asked for: ${userText}
+
+RULES
+- Write EXACTLY ${o.count || 5} questions unless the student clearly asked for a different number.
+- Authentic VCAA command terms and realistic mark allocations.
+- For multiple choice, give exactly 4 options and "correct_answer_index" (zero-based). For written questions, leave "options" empty.
+- "model_answer": what full marks looks like. "marking_criteria": where each mark is earned.
+- "common_mistakes": what students actually lose marks on here. "study_tip": one sharp line.
+- ALL maths in LaTeX: inline $...$ or display $$...$$. NEVER plain-text maths.
+- Also return a short "title" for the set.`,
 });
 
 export const CHAT_TOOLS = [
@@ -164,10 +209,15 @@ export const CHAT_TOOLS = [
             { key: "count", label: "How many", default: "5", choices: [{ value: "3", label: "3" }, { value: "5", label: "5" }, { value: "10", label: "10" }] },
         ],
         system: (s, o = {}) => `${subjectBlock(s)}\n\n${COACH_TONE}\n\nROLE: VCAA exam question writer. Difficulty: ${o.difficulty === "exam" ? "authentic VCE exam standard" : o.difficulty || "exam standard"}. Generate ${o.count || 5} questions unless the student asks otherwise.\n\nFORMAT SIGNATURE: "### Question n (x marks)" per question with authentic VCAA command terms and mark allocations, all questions first, then a "---" divider, then "## Marking guide" with full worked solutions and where each mark is earned. Never mix solutions in with the questions.`,
+        // A question set is a paper you work through, not prose — solutions stay
+        // folded away until asked for, and the set can be saved as a real Quiz.
+        artifact: (s, o = {}) => EXAM_QUESTIONS_ARTIFACT(s, o),
     },
     {
         id: "concept_explainer",
         label: "Concept Explainer",
+        // The old tool's "quiz me after" wrote a real Quiz you could sit later.
+        actions: (s, o = {}) => (o.quiz === "quiz" ? ["make_quiz"] : []),
         icon: Lightbulb,
         accentText: "text-xp", accentBg: "bg-xp/10", accentSolid: "bg-xp",
         feature: "ai_tool",
@@ -195,6 +245,8 @@ export const CHAT_TOOLS = [
     {
         id: "teaching_assistant",
         label: "Teach It Back",
+        // Teaching it back was always meant to end in a quiz on what you taught.
+        actions: () => ["make_quiz"],
         icon: Drama,
         accentText: "text-chart-3", accentBg: "bg-chart-3/10", accentSolid: "bg-chart-3",
         feature: "ai_chat",
@@ -206,6 +258,9 @@ export const CHAT_TOOLS = [
     {
         id: "note_summariser",
         label: "Note Summariser",
+        // Recall pairs were always destined for Spaced Repetition; the cheat
+        // sheet has its own artifact and doesn't need this.
+        actions: (s, o = {}) => (o.format === "cheat_sheet" ? [] : ["make_flashcards"]),
         icon: Sparkles,
         accentText: "text-chart-4", accentBg: "bg-chart-4/10", accentSolid: "bg-chart-4",
         feature: "ai_tool",

@@ -14,7 +14,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
     Plus, Send, Square, Trash2, ChevronDown, ChevronRight, Paperclip,
-    Loader2, History, X, Archive
+    Loader2, History, X, Archive, Wand2
 } from "lucide-react";
 import { base44 } from "@/api/base44Client";
 import { invokeLLMStream } from "@/lib/streamingAI";
@@ -24,6 +24,8 @@ import MarkdownMath from "@/components/shared/MarkdownMath";
 import { format } from "date-fns";
 import { CHAT_TOOLS, toolById, defaultOptions, resolveChoices } from "./chatTools";
 import CheatSheetArtifact from "./CheatSheetArtifact";
+import ExamQuestionsArtifact from "./ExamQuestionsArtifact";
+import { actionById } from "./chatActions";
 
 const MAX_TURNS_IN_PROMPT = 12;
 
@@ -73,6 +75,7 @@ export default function UnifiedChat() {
     const [convFiles, setConvFiles] = useState([]);
     const [uploading, setUploading] = useState(false);
     const [streaming, setStreaming] = useState(false);
+    const [runningAction, setRunningAction] = useState(null);
 
     const abortRef = useRef(null);
     const endRef = useRef(null);
@@ -217,8 +220,9 @@ export default function UnifiedChat() {
                     file_urls: files.length ? files.map(f => f.url) : undefined,
                     response_json_schema: artifactSpec.schema,
                 });
-                if (res?.items?.length) {
-                    artifact = { kind: artifactSpec.kind, pages: artifactSpec.pages, title: res.title || "", data: res.items };
+                const rows = res?.items || res?.questions;
+                if (rows?.length) {
+                    artifact = { kind: artifactSpec.kind, pages: artifactSpec.pages, title: res.title || "", data: rows };
                 } else {
                     failure = "I couldn't pull enough out of that. Try clearer material, or tell me the topic directly.";
                 }
@@ -226,7 +230,7 @@ export default function UnifiedChat() {
                 failure = e?.message || "That one got away — try sending again.";
             }
             const msg = artifact
-                ? { role: "assistant", content: artifact.title || "Here's your cheat sheet — drop anything you don't need and swap in a suggestion.", artifact }
+                ? { role: "assistant", content: artifact.title || artifactSpec.done || "", artifact }
                 : { role: "assistant", content: failure };
             const done = [...history, userMsg, msg];
             setMessages(done);
@@ -267,6 +271,35 @@ export default function UnifiedChat() {
     };
 
     const stop = () => abortRef.current?.abort();
+
+    // ── Follow-up actions ────────────────────────────────────────────────────
+    // The standalone tools didn't just render — several finished by writing
+    // something into the rest of the app (a Quiz you could sit, Flashcards for
+    // Spaced Repetition). Offered once there's a reply to work from.
+    const toolActions = (messages.length > 0 && !streaming
+        ? (typeof tool.actions === "function" ? tool.actions(subjectName, toolOptions) : tool.actions) || []
+        : []
+    ).map(id => ({ id, ...actionById(id) })).filter(a => a.prompt);
+
+    const runAction = async (id) => {
+        const action = actionById(id);
+        if (!action || runningAction) return;
+        setRunningAction(id);
+        try {
+            const res = await base44.integrations.Core.InvokeLLM({
+                feature: action.feature,
+                fast: true,
+                prompt: action.prompt(messages, subjectName),
+                response_json_schema: action.schema,
+            });
+            const done = await action.apply(res, { subject: subjectName });
+            toast(done);
+        } catch (e) {
+            toast({ title: "That didn't work", description: e?.message, variant: "destructive" });
+        } finally {
+            setRunningAction(null);
+        }
+    };
 
     // ── History drawer content ───────────────────────────────────────────────
     const folders = CHAT_TOOLS
@@ -537,6 +570,28 @@ export default function UnifiedChat() {
                                                     title={m.artifact.title}
                                                     defaultPages={m.artifact.pages || 1}
                                                 />
+                                            )}
+                                            {m.artifact?.kind === "exam_questions" && (
+                                                <ExamQuestionsArtifact
+                                                    questions={m.artifact.data}
+                                                    subject={subjectName}
+                                                    title={m.artifact.title}
+                                                />
+                                            )}
+                                            {/* Follow-ups the old standalone tools ended with —
+                                                offered on the latest reply only. */}
+                                            {!m.streaming && m.role === "assistant" && i === messages.length - 1 && toolActions.length > 0 && (
+                                                <div className="flex flex-wrap gap-2 mt-3">
+                                                    {toolActions.map(a => (
+                                                        <Button key={a.id} size="sm" variant="outline" disabled={!!runningAction}
+                                                            onClick={() => runAction(a.id)}
+                                                            className="rounded-xl gap-1.5 text-xs font-semibold">
+                                                            {runningAction === a.id
+                                                                ? <><Loader2 className="w-3.5 h-3.5 animate-spin" /> {a.busy}</>
+                                                                : <><Wand2 className="w-3.5 h-3.5" /> {a.label}</>}
+                                                        </Button>
+                                                    ))}
+                                                </div>
                                             )}
                                         </div>
                                     </div>
