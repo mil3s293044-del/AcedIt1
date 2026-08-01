@@ -25,6 +25,7 @@ import { format } from "date-fns";
 import { CHAT_TOOLS, toolById, defaultOptions, resolveChoices } from "./chatTools";
 import CheatSheetArtifact from "./CheatSheetArtifact";
 import ExamQuestionsArtifact from "./ExamQuestionsArtifact";
+import LineMemoriserArtifact from "./LineMemoriserArtifact";
 import { actionById } from "./chatActions";
 
 const MAX_TURNS_IN_PROMPT = 12;
@@ -220,7 +221,7 @@ export default function UnifiedChat() {
                     file_urls: files.length ? files.map(f => f.url) : undefined,
                     response_json_schema: artifactSpec.schema,
                 });
-                const rows = res?.items || res?.questions;
+                const rows = res?.items || res?.questions || res?.lines;
                 if (rows?.length) {
                     artifact = { kind: artifactSpec.kind, pages: artifactSpec.pages, title: res.title || "", data: rows };
                 } else {
@@ -575,6 +576,12 @@ export default function UnifiedChat() {
                                                 <ExamQuestionsArtifact
                                                     questions={m.artifact.data}
                                                     subject={subjectName}
+                                                    title={m.artifact.title}
+                                                />
+                                            )}
+                                            {m.artifact?.kind === "line_memoriser" && (
+                                                <LineMemoriserArtifact
+                                                    lines={m.artifact.data}
                                                     title={m.artifact.title}
                                                 />
                                             )}

@@ -8,7 +8,7 @@
  */
 import {
     Calculator, PenTool, FileQuestion, GraduationCap, Lightbulb,
-    FileText, Drama, Sparkles
+    FileText, Drama, Sparkles, Repeat
 } from "lucide-react";
 import { getExaminerPrompt, getLatexRules } from "@/lib/subjectExaminerPrompts";
 
@@ -160,6 +160,35 @@ RULES
 - Also return a short "title" for the set.`,
 });
 
+// Splitting is the only thing the model does here — the drill itself is local.
+// Worth the call anyway: regex on sentence-enders mangles poetry, dot-point
+// notes and quotes mid-sentence, which is most of what gets memorised.
+const LINE_MEMORISER_ARTIFACT = (subjectName, o = {}) => ({
+    kind: "line_memoriser",
+    done: "Learn it line by line — each one chains onto the last.",
+    schema: {
+        type: "object",
+        properties: {
+            title: { type: "string" },
+            lines: { type: "array", items: { type: "string" } },
+        },
+        required: ["lines"],
+    },
+    prompt: (userText, fileNames) => `${subjectBlock(subjectName)}
+
+Split the passage below into the units a student should memorise ONE AT A TIME, in order.
+
+${fileNames?.length ? `The student has attached ${fileNames.map((n) => `"${n}"`).join(", ")} — the full content is provided alongside this message. Use that as the passage.\n\n` : ""}PASSAGE (from the student): ${userText}
+
+RULES
+- Return the text VERBATIM, split into "lines". Never reword, correct, summarise or add to it — they are memorising these exact words.
+- ${o.grain === "clause" ? "Split finely: clause by clause, breaking at commas and semicolons where a natural pause falls." : o.grain === "sentence" ? "Split at sentence boundaries." : "Split at natural memorisation units — a line of verse, a sentence, or a self-contained clause."}
+- Keep poetry and song lyrics as their original lines. Never join two lines of verse.
+- Keep every unit short enough to hold in your head — if one runs past ~25 words, break it at a natural pause.
+- Preserve original punctuation and capitalisation exactly.
+- Also return a short "title" (the poem, quote, definition or text it comes from).`,
+});
+
 export const CHAT_TOOLS = [
     {
         id: "math_tutor",
@@ -273,6 +302,27 @@ export const CHAT_TOOLS = [
         // Cheat sheet is a real artifact, not prose: ask for a ranked pool of
         // typed items and let CheatSheetArtifact render the printable sheet.
         artifact: (s, o = {}) => (o.format === "cheat_sheet" ? CHEAT_SHEET_ARTIFACT(s) : null),
+    },
+    {
+        id: "line_memoriser",
+        label: "Line Memoriser",
+        icon: Repeat,
+        accentText: "text-streak", accentBg: "bg-streak/10", accentSolid: "bg-streak",
+        feature: "ai_tool",
+        blurb: "Quotes and passages, locked in line by line.",
+        supportsFiles: true,
+        options: [
+            {
+                key: "grain", label: "Split by", default: "natural",
+                choices: [
+                    { value: "natural", label: "Natural units" },
+                    { value: "sentence", label: "Sentences" },
+                    { value: "clause", label: "Clauses" },
+                ],
+            },
+        ],
+        system: (s) => `${subjectBlock(s)}\n\n${COACH_TONE}\n\nROLE: Memorisation coach. The student pastes a quote, passage, definition or set of lines and drills it line by line.\n\nFORMAT SIGNATURE: short and practical — what to memorise first, what usually trips people up in this passage, and one hook or association per hard line.`,
+        artifact: (s, o = {}) => LINE_MEMORISER_ARTIFACT(s, o),
     },
     {
         id: "study_coach",
