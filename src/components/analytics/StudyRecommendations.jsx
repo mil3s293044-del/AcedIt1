@@ -6,7 +6,7 @@ import { Sparkles, Brain, Clock, Target, TrendingUp, BookOpen, Zap, Calendar, Aw
 import { base44 } from "@/api/base44Client";
 import { useToast } from "@/components/ui/use-toast";
 
-export default function StudyRecommendations({ data, userProfile, user }) {
+export default function StudyRecommendations({ data, userProfile }) {
     const [isGenerating, setIsGenerating] = useState(false);
     const [aiRecommendations, setAiRecommendations] = useState(null);
     const { toast } = useToast();

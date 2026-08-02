@@ -6,13 +6,13 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/components/ui/use-toast';
 import { base44 } from '@/api/base44Client';
-import { Loader2, Save, FolderOpen, Trash2, Eye, RefreshCw, Brain, Zap, ChevronDown, ExternalLink, CheckCircle2, Square } from 'lucide-react';
+import { Save, FolderOpen, Trash2, Eye, RefreshCw, Brain, Zap, ChevronDown, ExternalLink, CheckCircle2, Square } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import AIFeedbackModal from './AIFeedbackModal';
 import { moderationPresets } from '@/components/shared/contentModeration';
 import { recordStudyAndGetStreak } from "@/components/shared/streakHelpers";
 import MarkdownMath from "@/components/shared/MarkdownMath";
-import { getExaminerPrompt, getLatexRules } from "@/lib/subjectExaminerPrompts";
+import { getExaminerPrompt } from "@/lib/subjectExaminerPrompts";
 import { invokeLLMStream } from "@/lib/streamingAI";
 
 const DEPTH_OPTIONS = [

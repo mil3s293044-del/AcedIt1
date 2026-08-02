@@ -7,7 +7,7 @@ import { AlertCircle, TrendingDown, BookOpen, Brain, Target } from "lucide-react
 import { Link } from "react-router-dom";
 import { createPageUrl } from "@/utils";
 
-export default function WeakTopics({ data, subjects }) {
+export default function WeakTopics({ data }) {
     // Identify weak topics from different sources
     const getWeakTopics = () => {
         const topics = [];

@@ -6,9 +6,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Button } from "@/components/ui/button";
 import {
     BarChart3, TrendingUp, Clock, Brain, Target, Calendar, Award,
-    Zap, BookOpen, Activity, Flame, ChevronRight, ArrowUpRight,
+    Zap, BookOpen, Activity, Flame, ArrowUpRight,
     ArrowDownRight, Minus, Layers, CheckCircle2, AlertTriangle,
-    Sparkles, RotateCcw, Star, FileQuestion
+    Sparkles, Star, FileQuestion
 } from "lucide-react";
 import { base44 } from "@/api/base44Client";
 import {
@@ -17,12 +17,11 @@ import {
 } from "@/entities/all";
 import {
     format, subDays, startOfWeek, endOfWeek, startOfMonth, endOfMonth,
-    eachDayOfInterval, differenceInDays
+    eachDayOfInterval
 } from "date-fns";
 import {
-    AreaChart, Area, BarChart, Bar, LineChart, Line, RadarChart, Radar,
-    PolarGrid, PolarAngleAxis, XAxis, YAxis, CartesianGrid, Tooltip,
-    ResponsiveContainer, Cell, PieChart, Pie
+    AreaChart, Area, BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip,
+    ResponsiveContainer, Cell
 } from "recharts";
 import AIPerformanceAnalyzer from "../components/analytics/AIPerformanceAnalyzer";
 import HelpButton from "@/components/shared/HelpButton";

@@ -36,7 +36,7 @@ function MyPrediction({ competition, currentUserEmail, onUpdate }) {
             toast({ title: `Prediction set: ${line}%`, description: "Friends can now bet on your score!" });
             setEditing(false);
             onUpdate?.();
-        } catch (e) {
+        } catch {
             toast({ title: "Error", variant: "destructive" });
         } finally {
             setSaving(false);

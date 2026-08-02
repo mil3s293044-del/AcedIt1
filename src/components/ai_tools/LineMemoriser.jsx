@@ -6,11 +6,11 @@ import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { useToast } from '@/components/ui/use-toast';
 import { base44 } from '@/api/base44Client';
 import ReactMarkdown from 'react-markdown';
-import { Zap, Play, RotateCcw, Eye, EyeOff, CheckCircle2, Trophy, Target, Flame, Brain, ArrowRight, BookOpen, Save, Trash2, Coffee, HelpCircle, RotateCw, RefreshCcw } from 'lucide-react';
+import { Play, RotateCcw, Eye, EyeOff, CheckCircle2, Trophy, Target, Brain, ArrowRight, BookOpen, Save, Trash2, Coffee, HelpCircle, RotateCw } from 'lucide-react';
 
 const MODES = { SETUP: 'setup', LEARNING: 'learning', CHUNK_TEST: 'chunk_test', FINAL_TEST: 'final_test', COMPLETE: 'complete' };
 

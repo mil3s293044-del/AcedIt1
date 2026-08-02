@@ -398,7 +398,7 @@ Questions should:
             await base44.entities.ActiveRecallSession.delete(sessionId);
             toast({ title: "Session deleted" });
             loadSessionHistory();
-        } catch (error) {
+        } catch {
             toast({ title: "Delete failed", variant: "destructive" });
         }
     };

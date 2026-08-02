@@ -55,7 +55,7 @@ export default function ForgotPassword() {
                         <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center">
                             <GraduationCap className="w-4 h-4 text-white" />
                         </div>
-                        <span className="font-display font-extrabold text-base text-foreground">Acedit</span>
+                        <span className="font-display font-extrabold text-base text-foreground">AcedIt</span>
                     </Link>
                     <Link to="/login" className="text-xs font-semibold text-muted-foreground hover:text-foreground transition-colors inline-flex items-center gap-1">
                         <ArrowLeft className="w-3 h-3" /> Back to sign in
@@ -80,7 +80,7 @@ export default function ForgotPassword() {
                                     Check your inbox
                                 </h1>
                                 <p className="text-sm text-muted-foreground mt-2 leading-relaxed">
-                                    If <span className="font-bold text-foreground">{email}</span> has an Acedit
+                                    If <span className="font-bold text-foreground">{email}</span> has an AcedIt
                                     account with a password, you'll get a reset link in the next minute.
                                 </p>
                             </div>

@@ -2,7 +2,7 @@ import React, { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Progress } from "@/components/ui/progress";
 import { Button } from "@/components/ui/button";
-import { Zap, Target, Flame, Brain, BookOpen, Clock, Trophy, CheckCircle2, Star, RefreshCw, Gift } from "lucide-react";
+import { Target, Flame, Brain, BookOpen, Clock, Trophy, CheckCircle2, Star, RefreshCw, Gift } from "lucide-react";
 import { base44 } from "@/api/base44Client";
 import { fireXPFeedback } from "./XPFeedback";
 
@@ -62,7 +62,7 @@ function getTimeUntilReset() {
     return `${h}h ${m}m`;
 }
 
-export default function DailyMissions({ streakDays = 0, userProfile }) {
+export default function DailyMissions({ streakDays = 0 }) {
     const [missionData, setMissionData] = useState(null);
     const [stats, setStats] = useState({});
     const [claimingId, setClaimingId] = useState(null);

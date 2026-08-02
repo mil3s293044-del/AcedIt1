@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
 import { Link } from 'react-router-dom';
 import { createPageUrl } from '@/utils';
-import { CheckCircle2, User, GraduationCap, Target, Sparkles, ArrowRight } from 'lucide-react';
+import { CheckCircle2, User, GraduationCap, Sparkles, ArrowRight } from 'lucide-react';
 
 const ALL_TASKS = [
     { id: 'username_set', title: 'Set Your Username', description: 'Create a unique username for your profile.', link: createPageUrl('Settings'), icon: User },

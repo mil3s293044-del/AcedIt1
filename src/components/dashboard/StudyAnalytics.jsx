@@ -8,7 +8,7 @@ import {
 } from "lucide-react";
 import { format, startOfWeek, addDays, isSameDay } from "date-fns";
 
-export default function StudyAnalytics({ sessions = [], userProfile, isLoading }) {
+export default function StudyAnalytics({ sessions = [], isLoading }) {
     const analytics = useMemo(() => {
         if (!sessions || sessions.length === 0) {
             return {

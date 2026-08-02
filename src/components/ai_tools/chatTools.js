@@ -8,7 +8,7 @@
  */
 import {
     Calculator, PenTool, FileQuestion, GraduationCap, Lightbulb,
-    FileText, Drama, Sparkles
+    FileText, Drama, Sparkles, Repeat
 } from "lucide-react";
 import { getExaminerPrompt, getLatexRules } from "@/lib/subjectExaminerPrompts";
 
@@ -62,6 +62,133 @@ const MATH_STRANDS = {
     methods: "Mathematical Methods", specialist: "Specialist Mathematics",
 };
 
+// ── Artifact specs ──────────────────────────────────────────────────────────
+// A tool option can produce a structured artifact instead of prose. The chat
+// then makes ONE non-streaming call with a JSON schema (CLAUDE.md: JSON tools
+// don't stream) and hands the result to the artifact component.
+//
+// The sheet fits ~22 items per A4 page; ask for a modest buffer beyond that so
+// there are alternates to swap in. A bigger pool is what made the old
+// standalone tool crawl, so keep it tight.
+const CHEAT_SHEET_ITEMS_PER_PAGE = 22;
+const CHEAT_SHEET_PAGES = 1;
+
+const CHEAT_SHEET_ARTIFACT = (subjectName) => ({
+    kind: "cheat_sheet",
+    pages: CHEAT_SHEET_PAGES,
+    done: "Here is your cheat sheet — drop anything you do not need and swap a suggestion in.",
+    schema: {
+        type: "object",
+        properties: {
+            title: { type: "string" },
+            items: {
+                type: "array",
+                items: {
+                    type: "object",
+                    properties: {
+                        type: { type: "string", enum: ["formula", "definition", "key-point", "exam-tip"] },
+                        section: { type: "string" },
+                        content: { type: "string" },
+                        importance: { type: "number" },
+                    },
+                    required: ["type", "section", "content", "importance"],
+                },
+            },
+        },
+        required: ["items"],
+    },
+    prompt: (userText, fileNames) => {
+        const poolCount = CHEAT_SHEET_PAGES * CHEAT_SHEET_ITEMS_PER_PAGE + 12;
+        return `${subjectBlock(subjectName)}
+
+You are building a high-density EXAM CHEAT SHEET for VCE${subjectName ? ` ${subjectName}` : ""}, sized to fit ${CHEAT_SHEET_PAGES} A4 page of tight two-column notes.
+
+${fileNames?.length ? `The student has attached ${fileNames.map((n) => `"${n}"`).join(", ")} — the full content is provided alongside this message. Build the sheet from that material.\n\n` : ""}What the student asked for: ${userText}
+
+RULES
+- Return EXACTLY ${poolCount} items, no more — ranked best-first so the top ones fill the sheet and the rest are alternates.
+- importance: integer 1-5. 5 = absolutely essential, 1 = nice-to-have. Be decisive — only a handful of 5s.
+- Each item is ONE concise line — a phrase, a formula, a definition. No full paragraphs, no filler.
+- ALL maths in LaTeX: inline $...$ or display $$...$$. NEVER plain-text maths.
+- Give each item a short "section" label (e.g. "Calculus", "Definitions", "Exam tips").
+- Prioritise things a student forgets under pressure. Exclude trivial or obvious content.
+- Also return a short "title" for the sheet.`;
+    },
+});
+
+const EXAM_QUESTIONS_ARTIFACT = (subjectName, o = {}) => ({
+    kind: "exam_questions",
+    done: "Have a go at these before you open the solutions.",
+    schema: {
+        type: "object",
+        properties: {
+            title: { type: "string" },
+            questions: {
+                type: "array",
+                items: {
+                    type: "object",
+                    properties: {
+                        question: { type: "string" },
+                        type: { type: "string" },
+                        marks: { type: "number" },
+                        options: { type: "array", items: { type: "string" } },
+                        correct_answer_index: { type: "number" },
+                        model_answer: { type: "string" },
+                        marking_criteria: { type: "string" },
+                        common_mistakes: { type: "string" },
+                        study_tip: { type: "string" },
+                    },
+                    required: ["question", "type", "marks", "model_answer", "marking_criteria"],
+                },
+            },
+        },
+        required: ["questions"],
+    },
+    prompt: (userText, fileNames) => `${subjectBlock(subjectName)}
+
+You are writing VCE${subjectName ? ` ${subjectName}` : ""} exam questions at ${o.difficulty === "exam" ? "authentic VCE exam standard" : `${o.difficulty || "exam"} standard`}.
+
+${fileNames?.length ? `The student has attached ${fileNames.map((n) => `"${n}"`).join(", ")} — the full content is provided alongside this message. Draw the questions from that material.\n\n` : ""}What the student asked for: ${userText}
+
+RULES
+- Write EXACTLY ${o.count || 5} questions unless the student clearly asked for a different number.
+- Authentic VCAA command terms and realistic mark allocations.
+- For multiple choice, give exactly 4 options and "correct_answer_index" (zero-based). For written questions, leave "options" empty.
+- "model_answer": what full marks looks like. "marking_criteria": where each mark is earned.
+- "common_mistakes": what students actually lose marks on here. "study_tip": one sharp line.
+- ALL maths in LaTeX: inline $...$ or display $$...$$. NEVER plain-text maths.
+- Also return a short "title" for the set.`,
+});
+
+// Splitting is the only thing the model does here — the drill itself is local.
+// Worth the call anyway: regex on sentence-enders mangles poetry, dot-point
+// notes and quotes mid-sentence, which is most of what gets memorised.
+const LINE_MEMORISER_ARTIFACT = (subjectName, o = {}) => ({
+    kind: "line_memoriser",
+    done: "Learn it line by line — each one chains onto the last.",
+    schema: {
+        type: "object",
+        properties: {
+            title: { type: "string" },
+            lines: { type: "array", items: { type: "string" } },
+        },
+        required: ["lines"],
+    },
+    prompt: (userText, fileNames) => `${subjectBlock(subjectName)}
+
+Split the passage below into the units a student should memorise ONE AT A TIME, in order.
+
+${fileNames?.length ? `The student has attached ${fileNames.map((n) => `"${n}"`).join(", ")} — the full content is provided alongside this message. Use that as the passage.\n\n` : ""}PASSAGE (from the student): ${userText}
+
+RULES
+- Return the text VERBATIM, split into "lines". Never reword, correct, summarise or add to it — they are memorising these exact words.
+- ${o.grain === "clause" ? "Split finely: clause by clause, breaking at commas and semicolons where a natural pause falls." : o.grain === "sentence" ? "Split at sentence boundaries." : "Split at natural memorisation units — a line of verse, a sentence, or a self-contained clause."}
+- Keep poetry and song lyrics as their original lines. Never join two lines of verse.
+- Keep every unit short enough to hold in your head — if one runs past ~25 words, break it at a natural pause.
+- Preserve original punctuation and capitalisation exactly.
+- Also return a short "title" (the poem, quote, definition or text it comes from).`,
+});
+
 export const CHAT_TOOLS = [
     {
         id: "math_tutor",
@@ -111,10 +238,15 @@ export const CHAT_TOOLS = [
             { key: "count", label: "How many", default: "5", choices: [{ value: "3", label: "3" }, { value: "5", label: "5" }, { value: "10", label: "10" }] },
         ],
         system: (s, o = {}) => `${subjectBlock(s)}\n\n${COACH_TONE}\n\nROLE: VCAA exam question writer. Difficulty: ${o.difficulty === "exam" ? "authentic VCE exam standard" : o.difficulty || "exam standard"}. Generate ${o.count || 5} questions unless the student asks otherwise.\n\nFORMAT SIGNATURE: "### Question n (x marks)" per question with authentic VCAA command terms and mark allocations, all questions first, then a "---" divider, then "## Marking guide" with full worked solutions and where each mark is earned. Never mix solutions in with the questions.`,
+        // A question set is a paper you work through, not prose — solutions stay
+        // folded away until asked for, and the set can be saved as a real Quiz.
+        artifact: (s, o = {}) => EXAM_QUESTIONS_ARTIFACT(s, o),
     },
     {
         id: "concept_explainer",
         label: "Concept Explainer",
+        // The old tool's "quiz me after" wrote a real Quiz you could sit later.
+        actions: (s, o = {}) => (o.quiz === "quiz" ? ["make_quiz"] : []),
         icon: Lightbulb,
         accentText: "text-xp", accentBg: "bg-xp/10", accentSolid: "bg-xp",
         feature: "ai_tool",
@@ -142,6 +274,8 @@ export const CHAT_TOOLS = [
     {
         id: "teaching_assistant",
         label: "Teach It Back",
+        // Teaching it back was always meant to end in a quiz on what you taught.
+        actions: () => ["make_quiz"],
         icon: Drama,
         accentText: "text-chart-3", accentBg: "bg-chart-3/10", accentSolid: "bg-chart-3",
         feature: "ai_chat",
@@ -153,6 +287,9 @@ export const CHAT_TOOLS = [
     {
         id: "note_summariser",
         label: "Note Summariser",
+        // Recall pairs were always destined for Spaced Repetition; the cheat
+        // sheet has its own artifact and doesn't need this.
+        actions: (s, o = {}) => (o.format === "cheat_sheet" ? [] : ["make_flashcards"]),
         icon: Sparkles,
         accentText: "text-chart-4", accentBg: "bg-chart-4/10", accentSolid: "bg-chart-4",
         feature: "ai_tool",
@@ -162,6 +299,30 @@ export const CHAT_TOOLS = [
             { key: "format", label: "Output", default: "summary", choices: [{ value: "summary", label: "Summary" }, { value: "cheat_sheet", label: "Cheat sheet" }, { value: "qa", label: "Q&A recall" }] },
         ],
         system: (s, o = {}) => `${subjectBlock(s)}\n\n${COACH_TONE}\n\nROLE: Note summariser.\n\nFORMAT SIGNATURE: ${o.format === "cheat_sheet" ? "an ultra-dense cheat sheet — terse dot points under bold micro-headers, formulas/definitions only, zero filler, built to be printed" : o.format === "qa" ? "recall pairs — every key idea as **Q:** / **A:** lines ready to become flashcards, grouped under topic headers" : "a structured revision summary — bold key-idea headers, must-know terminology in a table, **Common exam traps**, and **Test yourself** (3-5 recall questions) at the end"}.`,
+        // Cheat sheet is a real artifact, not prose: ask for a ranked pool of
+        // typed items and let CheatSheetArtifact render the printable sheet.
+        artifact: (s, o = {}) => (o.format === "cheat_sheet" ? CHEAT_SHEET_ARTIFACT(s) : null),
+    },
+    {
+        id: "line_memoriser",
+        label: "Line Memoriser",
+        icon: Repeat,
+        accentText: "text-streak", accentBg: "bg-streak/10", accentSolid: "bg-streak",
+        feature: "ai_tool",
+        blurb: "Quotes and passages, locked in line by line.",
+        supportsFiles: true,
+        options: [
+            {
+                key: "grain", label: "Split by", default: "natural",
+                choices: [
+                    { value: "natural", label: "Natural units" },
+                    { value: "sentence", label: "Sentences" },
+                    { value: "clause", label: "Clauses" },
+                ],
+            },
+        ],
+        system: (s) => `${subjectBlock(s)}\n\n${COACH_TONE}\n\nROLE: Memorisation coach. The student pastes a quote, passage, definition or set of lines and drills it line by line.\n\nFORMAT SIGNATURE: short and practical — what to memorise first, what usually trips people up in this passage, and one hook or association per hard line.`,
+        artifact: (s, o = {}) => LINE_MEMORISER_ARTIFACT(s, o),
     },
     {
         id: "study_coach",

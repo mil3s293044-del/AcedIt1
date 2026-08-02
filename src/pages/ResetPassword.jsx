@@ -107,7 +107,7 @@ export default function ResetPassword() {
                         <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center">
                             <GraduationCap className="w-4 h-4 text-white" />
                         </div>
-                        <span className="font-display font-extrabold text-base text-foreground">Acedit</span>
+                        <span className="font-display font-extrabold text-base text-foreground">AcedIt</span>
                     </Link>
                 </div>
             </header>

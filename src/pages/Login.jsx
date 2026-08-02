@@ -8,7 +8,7 @@
 import React, { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
-import { GraduationCap, Mail, Lock, ArrowRight } from "lucide-react";
+import { GraduationCap, ArrowRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useAuth } from "@/lib/AuthContext";
@@ -69,7 +69,7 @@ export default function Login() {
                         <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center">
                             <GraduationCap className="w-4 h-4 text-white" />
                         </div>
-                        <span className="font-display font-extrabold text-base text-foreground">Acedit</span>
+                        <span className="font-display font-extrabold text-base text-foreground">AcedIt</span>
                     </Link>
                     <Link to="/onboarding" className="text-xs font-semibold text-muted-foreground hover:text-foreground transition-colors">
                         New here? <span className="text-primary">Start free</span>
@@ -166,7 +166,7 @@ export default function Login() {
                     </div>
 
                     <p className="text-xs text-center text-muted-foreground mt-5">
-                        New to Acedit?{" "}
+                        New to AcedIt?{" "}
                         <Link to="/onboarding" className="font-bold text-primary hover:underline">
                             Create an account
                         </Link>

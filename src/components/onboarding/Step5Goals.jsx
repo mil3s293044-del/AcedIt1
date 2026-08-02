@@ -3,7 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { ChevronLeft } from "lucide-react";
+import { ChevronLeft, GraduationCap } from "lucide-react";
 
 const PRESET_GOALS = [
     "Get into my dream course at uni and feel in control of my study all year",
@@ -16,9 +16,14 @@ const PRESET_GOALS = [
     "Make Year 12 worth it — strong results without sacrificing my mental health",
 ];
 
+// A number to aim at. The Dashboard reads goal_atar every morning and shows how
+// far off it you are, so this is the one answer here that does daily work.
+const ATAR_TARGETS = [70, 80, 85, 90, 95];
+
 export default function Step5Goals({ data, onNext, onBack, saving }) {
     const [qualitative_goal, setGoal] = useState(data.qualitative_goal || "");
     const [dream_course, setDreamCourse] = useState(data.dream_course || "");
+    const [goal_atar, setGoalAtar] = useState(data.goal_atar || null);
 
     const canProceed = qualitative_goal.trim().length >= 20;
 
@@ -38,7 +43,7 @@ export default function Step5Goals({ data, onNext, onBack, saving }) {
                         <button
                             key={i}
                             onClick={() => setGoal(g)}
-                            className="text-xs px-3 py-1.5 rounded-full border border-border bg-secondary/50 hover:border-purple-300 hover:bg-purple-50 text-muted-foreground hover:text-purple-700 transition-all text-left"
+                            className="text-xs px-3 py-1.5 rounded-full border border-border bg-secondary/50 hover:border-primary/40 hover:bg-primary/5 text-muted-foreground hover:text-foreground transition-all text-left"
                         >
                             {g.length > 50 ? g.slice(0, 50) + "…" : g}
                         </button>
@@ -48,7 +53,7 @@ export default function Step5Goals({ data, onNext, onBack, saving }) {
 
             {/* Goal text area */}
             <div className="mb-4">
-                <Label className="text-sm font-medium text-muted-foreground">Your goal (edit or write your own) <span className="text-red-500">*</span></Label>
+                <Label className="text-sm font-medium text-muted-foreground">Your goal (edit or write your own) <span className="text-streak">*</span></Label>
                 <Textarea
                     className="mt-1.5 min-h-[100px]"
                     placeholder="e.g. I want to get into nursing at Melbourne Uni, improve my Biology study score, and feel in control of my study instead of always stressed"
@@ -59,9 +64,34 @@ export default function Step5Goals({ data, onNext, onBack, saving }) {
             </div>
 
             {/* Research callout */}
-            <div className="bg-purple-50 border border-purple-100 rounded-xl p-3 mb-6 flex gap-2">
+            <div className="bg-primary/5 border border-primary/15 rounded-xl p-3 mb-6 flex gap-2">
                 <span className="text-sm">📌</span>
-                <p className="text-xs text-purple-700 leading-relaxed">Students who write specific, personal goals are significantly more likely to follow through. This is called implementation intention — documented by Gollwitzer (1999) across 94 independent studies.</p>
+                <p className="text-xs text-foreground/80 leading-relaxed">Students who write specific, personal goals are significantly more likely to follow through. This is called implementation intention — documented by Gollwitzer (1999) across 94 independent studies.</p>
+            </div>
+
+            {/* Target ATAR — the number the Dashboard measures you against daily */}
+            <div className="mb-6">
+                <Label className="text-sm font-medium text-muted-foreground flex items-center gap-1.5">
+                    <GraduationCap className="w-4 h-4" /> What are you aiming for? (optional)
+                </Label>
+                <div className="flex flex-wrap gap-2 mt-2">
+                    {ATAR_TARGETS.map((t) => (
+                        <button
+                            key={t}
+                            onClick={() => setGoalAtar(goal_atar === t ? null : t)}
+                            className={`px-3.5 py-2 rounded-xl text-sm font-bold border-2 transition-all ${
+                                goal_atar === t
+                                    ? "bg-primary border-primary text-white"
+                                    : "bg-surface border-border text-muted-foreground hover:border-primary/40 hover:text-foreground"
+                            }`}
+                        >
+                            {t}{t === 95 ? "+" : ""}
+                        </button>
+                    ))}
+                </div>
+                <p className="text-xs text-muted-foreground/60 mt-2">
+                    Your AcedIt ATAR gets measured against this every morning, so you always know the gap. It is a study-quality score, not a VCAA prediction — and you can change it any time.
+                </p>
             </div>
 
             {/* Dream course */}
@@ -77,10 +107,13 @@ export default function Step5Goals({ data, onNext, onBack, saving }) {
             </div>
 
             <Button
-                onClick={() => onNext({ qualitative_goal: qualitative_goal.trim(), dream_course: dream_course.trim() })}
+                onClick={() => onNext({
+                    qualitative_goal: qualitative_goal.trim(),
+                    dream_course: dream_course.trim(),
+                    ...(goal_atar ? { goal_atar } : {}),
+                })}
                 disabled={!canProceed || saving}
                 className="w-full h-12 text-base font-semibold"
-                style={{ backgroundColor: canProceed ? "#534AB7" : undefined }}
             >
                 {saving ? "Saving..." : "Next →"}
             </Button>

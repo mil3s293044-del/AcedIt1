@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback, useMemo } from "react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import OnboardingModal from "@/components/onboarding/OnboardingModal";
 import { useToast } from "@/components/ui/use-toast";
@@ -69,7 +69,7 @@ const FloatingTimer = React.memo(({ currentTime, timerPosition, isDragging, hand
 
 FloatingTimer.displayName = 'FloatingTimer';
 
-export default function Layout({ children, currentPageName }) {
+export default function Layout({ children }) {
     const location = useLocation();
     const navigate = useNavigate();
     const [globalTimer, setGlobalTimer] = useState(null);

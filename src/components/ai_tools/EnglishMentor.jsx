@@ -6,7 +6,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import {
-    Sparkles, Lightbulb, Save, Trash2, Eye, History, FolderOpen, ChevronDown,
+    Sparkles, Lightbulb, Save, Trash2, Eye, History, ChevronDown,
     Square, GraduationCap, BookOpen, PenTool,
     Scale, MessageCircle, FileText, RefreshCw, X
 } from "lucide-react";

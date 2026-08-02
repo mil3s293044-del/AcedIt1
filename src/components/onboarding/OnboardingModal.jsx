@@ -87,7 +87,6 @@ export default function OnboardingModal({ userProfile, onComplete }) {
                     <div className="w-full h-1.5 bg-secondary rounded-full overflow-hidden">
                         <motion.div
                             className="h-full rounded-full"
-                            style={{ backgroundColor: "#534AB7" }}
                             animate={{ width: `${progressPct}%` }}
                             transition={{ duration: 0.4, ease: "easeInOut" }}
                         />

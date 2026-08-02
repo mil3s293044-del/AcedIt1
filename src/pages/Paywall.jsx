@@ -58,7 +58,7 @@ export default function Paywall() {
                 <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{ backgroundColor: "#534AB7" }}>
                     <GraduationCap className="w-6 h-6 text-white" />
                 </div>
-                <span className="text-xl font-bold" style={{ color: "#534AB7" }}>Acedit</span>
+                <span className="text-xl font-bold" style={{ color: "#534AB7" }}>AcedIt</span>
             </div>
 
             <h1 className="text-3xl font-extrabold text-foreground text-center mb-2">{heading}</h1>
@@ -69,14 +69,14 @@ export default function Paywall() {
                 <div className="inline-block text-xs font-bold px-3 py-1 rounded-full mb-3" style={{ backgroundColor: "#534AB7", color: "white" }}>
                     7-day free trial
                 </div>
-                <p className="font-bold text-xl text-foreground mb-1">Acedit Premium</p>
+                <p className="font-bold text-xl text-foreground mb-1">AcedIt Premium</p>
                 <p className="text-3xl font-extrabold text-foreground mb-0.5">Free for 7 days</p>
                 <p className="text-sm text-muted-foreground mb-1">then $5/week</p>
                 <p className="text-xs text-muted-foreground/60 mb-4">Cancel before day 7 and pay nothing.</p>
 
                 <div className="rounded-xl p-3 mb-5" style={{ backgroundColor: "#F0EEFF" }}>
                     <p className="text-xs text-purple-800 leading-relaxed">
-                        Melbourne private tutors charge <strong>$60–$120 per hour</strong> (Learnmate Australia, 2025). Acedit gives you AI-powered study support for <strong>$5/week</strong> — available at 2am the night before your SAC.
+                        Melbourne private tutors charge <strong>$60–$120 per hour</strong> (Learnmate Australia, 2025). AcedIt gives you AI-powered study support for <strong>$5/week</strong> — available at 2am the night before your SAC.
                     </p>
                 </div>
 
@@ -109,7 +109,7 @@ export default function Paywall() {
             {/* Research close */}
             <div className="w-full max-w-md bg-green-50 border border-green-100 rounded-xl p-4">
                 <p className="text-sm font-bold text-green-800 mb-2">What the research says about students who don't burn out</p>
-                <p className="text-xs text-green-700 leading-relaxed mb-2">They don't study more hours than their peers. They use retrieval practice, spaced review, and immediate feedback loops. They know their weak topics before exams find them. And they maintain consistent daily habits rather than last-minute cramming. These are not natural talents — they are learnable systems. That is what Acedit is built to give you.</p>
+                <p className="text-xs text-green-700 leading-relaxed mb-2">They don't study more hours than their peers. They use retrieval practice, spaced review, and immediate feedback loops. They know their weak topics before exams find them. And they maintain consistent daily habits rather than last-minute cramming. These are not natural talents — they are learnable systems. That is what AcedIt is built to give you.</p>
                 <p className="text-xs text-green-500">Based on: Roediger & Karpicke (2006), Dunlosky et al. (2013), Ebbinghaus (1885), Gollwitzer (1999), Preprints.org burnout review (2025), Learnmate Australia tutoring data (2025)</p>
             </div>
         </div>

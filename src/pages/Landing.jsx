@@ -120,7 +120,7 @@ export default function Landing() {
               <GraduationCap className="w-5 h-5 text-white" />
             </div>
             <span className={`font-display font-extrabold text-xl tracking-tight ${scrolled ? "text-[#0D1626]" : "text-white"}`}>
-              Acedit
+              AcedIt
             </span>
           </div>
           <div className="hidden md:flex items-center gap-8">
@@ -275,7 +275,7 @@ export default function Landing() {
             transition={{ duration: 0.7, delay: 0.25, ease: [0.22, 1, 0.36, 1] }}
             className="mt-7 text-lg sm:text-xl text-white/70 max-w-2xl mx-auto leading-relaxed"
           >
-            Acedit is the AI tutor trained on VCAA examiner reports — for every
+            AcedIt is the AI tutor trained on VCAA examiner reports — for every
             VCE subject. Built for the kids who actually want to nail this.
           </motion.p>
 
@@ -401,7 +401,7 @@ export default function Landing() {
             Studying VCE shouldn’t feel like guessing what they want.
             <br />
             <span className="text-[#0D1626]/50">
-              Acedit knows exactly what VCAA examiners look for — and walks you
+              AcedIt knows exactly what VCAA examiners look for — and walks you
               through it, subject by subject.
             </span>
           </motion.h2>
@@ -628,7 +628,7 @@ export default function Landing() {
                 </h3>
                 <p className="text-[#0D1626]/60 text-sm leading-relaxed max-w-md">
                   Compete on weekly XP, set score wagers, run goal challenges
-                  with your year level. The whole school can be on Acedit.
+                  with your year level. The whole school can be on AcedIt.
                 </p>
               </div>
               <div className="flex-shrink-0 w-full md:w-72 rounded-2xl bg-[#FBF7F0] p-5 border border-black/5">
@@ -778,7 +778,7 @@ export default function Landing() {
                   7-day free trial
                 </div>
                 <h3 className="font-display font-extrabold text-3xl tracking-tight mb-1">
-                  Acedit Premium
+                  AcedIt Premium
                 </h3>
                 <p className="text-white/55 text-sm">Everything, unlimited.</p>
               </div>
@@ -845,7 +845,7 @@ export default function Landing() {
             transition={{ ...fadeUp.transition, delay: 0.2 }}
             className="mt-8 text-xs text-white/45"
           >
-            Melbourne private tutors charge $60–$120/hr. Acedit is $5 a week.
+            Melbourne private tutors charge $60–$120/hr. AcedIt is $5 a week.
           </motion.p>
         </div>
       </section>
@@ -877,11 +877,11 @@ export default function Landing() {
                 },
                 {
                   q: "Will it actually help my ATAR?",
-                  a: "Acedit doesn’t take the exam for you. What it does is make every hour you study count more — by marking your work the way an examiner would and showing you the exact bits you’re missing.",
+                  a: "AcedIt doesn’t take the exam for you. What it does is make every hour you study count more — by marking your work the way an examiner would and showing you the exact bits you’re missing.",
                 },
                 {
                   q: "Is this worth it for my kid? (Parent question)",
-                  a: "Most Melbourne private tutors charge $60–$120 per hour. Acedit is $5 a week. A whole month still costs less than one tutor session.",
+                  a: "Most Melbourne private tutors charge $60–$120 per hour. AcedIt is $5 a week. A whole month still costs less than one tutor session.",
                 },
                 {
                   q: "How do I cancel?",
@@ -961,7 +961,7 @@ export default function Landing() {
             <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center">
               <GraduationCap className="w-4 h-4 text-white" />
             </div>
-            <span className="font-display font-extrabold text-lg">Acedit</span>
+            <span className="font-display font-extrabold text-lg">AcedIt</span>
             <span className="text-xs text-[#0D1626]/50 ml-2">
               VCE study, done well.
             </span>
@@ -976,7 +976,7 @@ export default function Landing() {
             <a href="mailto:admin@acedit.com.au" className="hover:text-[#0D1626] cursor-pointer">Contact</a>
           </div>
           <div className="text-xs text-[#0D1626]/40">
-            © {new Date().getFullYear()} Acedit. Made for VCE.
+            © {new Date().getFullYear()} AcedIt. Made for VCE.
           </div>
         </div>
       </footer>

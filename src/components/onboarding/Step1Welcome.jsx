@@ -40,17 +40,17 @@ export default function Step1Welcome({ onNext }) {
             </div>
 
             {/* Dominant stat card */}
-            <div className="rounded-2xl p-6 mb-4" style={{ backgroundColor: "#3D3399" }}>
+            <div className="rounded-2xl p-6 mb-4 bg-foreground">
                 <div className="text-5xl font-extrabold text-white mb-2">{bigStat.stat}</div>
-                <p className="text-base font-bold text-purple-100 mb-2">{bigStat.label}</p>
-                <p className="text-xs text-purple-300 leading-snug">{bigStat.source}</p>
+                <p className="text-base font-bold text-white/85 mb-2">{bigStat.label}</p>
+                <p className="text-xs text-white/60 leading-snug">{bigStat.source}</p>
             </div>
 
             {/* Smaller stat cards */}
             <div className="grid grid-cols-3 gap-3 mb-8">
                 {smallStats.map((s, i) => (
                     <div key={i} className="border border-border rounded-xl p-3 bg-secondary/50">
-                        <div className="text-2xl font-extrabold mb-1" style={{ color: "#534AB7" }}>{s.stat}</div>
+                        <div className="text-2xl font-extrabold mb-1 text-primary">{s.stat}</div>
                         <p className="text-xs font-semibold text-foreground mb-1">{s.label}</p>
                         <p className="text-xs text-muted-foreground/60 leading-snug">{s.source}</p>
                     </div>
@@ -58,13 +58,12 @@ export default function Step1Welcome({ onNext }) {
             </div>
 
             <p className="text-sm text-muted-foreground mb-8 text-center">
-                Acedit is built entirely on these four findings. Every feature exists to make sure your study time actually sticks.
+                AcedIt is built entirely on these four findings. Every feature exists to make sure your study time actually sticks.
             </p>
 
             <Button
                 onClick={onNext}
                 className="w-full h-12 text-base font-semibold"
-                style={{ backgroundColor: "#534AB7" }}
             >
                 Let's set up your account →
             </Button>

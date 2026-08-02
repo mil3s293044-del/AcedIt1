@@ -5,7 +5,7 @@ export default function Terms() {
   return (
     <LegalLayout title="Terms of Service" lastUpdated="30 June 2026">
       <p>
-        These Terms of Service ("Terms") govern your use of Acedit ("Acedit",
+        These Terms of Service ("Terms") govern your use of AcedIt ("AcedIt",
         "we", "us" or "our"), available at acedit.au and as a study application
         (the "Service"). By creating an account or using the Service, you agree
         to these Terms. If you do not agree, please do not use the Service.
@@ -32,7 +32,7 @@ export default function Terms() {
 
       <LegalSection heading="Subscriptions, billing and cancellation">
         <ul className="list-disc pl-6 space-y-1.5">
-          <li>Acedit offers a free trial period, after which premium features require a paid subscription.</li>
+          <li>AcedIt offers a free trial period, after which premium features require a paid subscription.</li>
           <li>Paid subscriptions are billed in advance on a recurring basis through our payment provider, Stripe, and renew automatically until cancelled.</li>
           <li>You can cancel at any time from your account settings. Cancellation stops future renewals; you keep premium access until the end of the current billing period.</li>
           <li>Prices are shown at checkout in Australian dollars and may change with notice for future billing periods.</li>
@@ -53,7 +53,7 @@ export default function Terms() {
 
       <LegalSection heading="AI study tools and academic integrity">
         <p>
-          Acedit uses artificial intelligence to generate study material,
+          AcedIt uses artificial intelligence to generate study material,
           feedback and practice content. AI output can be incomplete, inaccurate
           or out of date, and is provided as a study aid only. It is not a
           substitute for official VCAA materials, your school, or your teachers,
@@ -69,7 +69,7 @@ export default function Terms() {
       <LegalSection heading="Intellectual property">
         <p>
           The Service, including its software, design and content we provide, is
-          owned by Acedit and protected by law. We grant you a personal,
+          owned by AcedIt and protected by law. We grant you a personal,
           non-transferable, non-exclusive right to use the Service for your own
           study. Content you create remains yours, and you grant us the rights
           needed to host and display it so we can provide the Service to you.

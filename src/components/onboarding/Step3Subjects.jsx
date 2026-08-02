@@ -84,7 +84,7 @@ export default function Step3Subjects({ data, onNext, onBack, saving }) {
                                 key={name}
                                 onClick={() => toggle(name)}
                                 className="px-3 py-1.5 rounded-full text-sm font-medium border transition-all"
-                                style={isSelected ? { backgroundColor: "#534AB7", color: "white", borderColor: "#534AB7" } : { backgroundColor: "white", color: "#374151", borderColor: "#D1D5DB" }}
+                                style={isSelected ? { color: "white" } : { backgroundColor: "white", color: "#374151", borderColor: "#D1D5DB" }}
                             >
                                 {name}
                             </button>
@@ -114,7 +114,7 @@ export default function Step3Subjects({ data, onNext, onBack, saving }) {
                 onClick={handleNext}
                 disabled={selected.size === 0 || saving}
                 className="w-full h-12 text-base font-semibold mt-4"
-                style={{ backgroundColor: selected.size > 0 ? "#534AB7" : undefined }}
+                
             >
                 {saving ? "Saving..." : `Next \u2192 (${selected.size} selected)`}
             </Button>

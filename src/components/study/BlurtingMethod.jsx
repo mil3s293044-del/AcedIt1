@@ -6,7 +6,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
-import { PenTool, Play, Clock, CheckCircle, RotateCcw, Maximize, Upload, Wand2, Loader2, X, Sparkles, FolderOpen, Trash2, FileText, AlertCircle, Lightbulb, Brain, Check, ChevronRight } from "lucide-react";
+import { PenTool, Play, Clock, CheckCircle, RotateCcw, Maximize, Wand2, Loader2, X, Sparkles, FolderOpen, Trash2, FileText, AlertCircle, Lightbulb, Brain, Check, ChevronRight } from "lucide-react";
 import { format } from "date-fns";
 import { useToast } from "@/components/ui/use-toast";
 import { base44 } from "@/api/base44Client";
@@ -233,7 +233,7 @@ Reference Study Design requirements in your feedback.`,
             await base44.entities.BlurtingSession.delete(sessionId);
             toast({ title: "Session deleted" });
             loadSessionHistory();
-        } catch (error) {
+        } catch {
             toast({ title: "Delete failed", variant: "destructive" });
         }
     };

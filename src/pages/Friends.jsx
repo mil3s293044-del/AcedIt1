@@ -1,21 +1,19 @@
 import React, { useState, useEffect, useMemo, useCallback } from "react";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Checkbox } from "@/components/ui/checkbox";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Textarea } from "@/components/ui/textarea";
 import {
     Users, UserPlus, UserMinus, Inbox, Check, X, Mail,
     Sparkles, Send, Loader2, FileText, Brain, Share2, Gift,
-    Search, Flame, Clock, ChevronRight, Package, ArrowRight,
+    Search, ArrowRight,
     Heart, Trophy
 } from "lucide-react";
 import { base44 } from "@/api/base44Client";
 import { useToast } from "@/components/ui/use-toast";
-import { isPremium } from "@/components/shared/subscriptionHelpers";
 import HelpButton from "@/components/shared/HelpButton";
 import FriendsLeaderboard from "@/components/friends/FriendsLeaderboard";
 
@@ -232,7 +230,7 @@ export default function Friends() {
             setFriendEmail("");
             setShowAddFriend(false);
             await loadData(user);
-        } catch (err) {
+        } catch {
             toast({ title: "Could not send request", variant: "destructive" });
         } finally {
             setIsAddingFriend(false);
@@ -306,7 +304,7 @@ export default function Friends() {
             toast({ title: `Shared ${total} item${total > 1 ? 's' : ''} with ${sharingToFriend.full_name}!` });
             setSharingToFriend(null);
             setSelectedQuizzes([]); setSelectedDecks([]); setShareMessage("");
-        } catch (err) {
+        } catch {
             toast({ title: "Share failed", variant: "destructive" });
         } finally {
             setIsSharing(false);
@@ -315,6 +313,25 @@ export default function Friends() {
 
     const handleAcceptQuiz = async (sq) => {
         await base44.entities.Quiz.create({ title: sq.quiz_data.title, subject: sq.quiz_data.subject, questions: sq.quiz_data.questions, difficulty: sq.quiz_data.difficulty, category: sq.quiz_data.category });
+
+        // A friend can share a quiz for a subject you don't study. Without a
+        // matching UserSubject the quiz lands in your library with no subject
+        // filter chip to reach it, so provision one on the way in.
+        if (sq.quiz_data.subject) {
+            const existing = await base44.entities.UserSubject.filter({
+                created_by: user.email,
+                subject_name: sq.quiz_data.subject
+            });
+            if (!existing.length) {
+                await base44.entities.UserSubject.create({
+                    subject_name: sq.quiz_data.subject,
+                    subject_code: sq.quiz_data.subject.substring(0, 6).toUpperCase(),
+                    color: "#6B7280",
+                    is_active: true
+                });
+            }
+        }
+
         await base44.entities.SharedQuiz.update(sq.id, { status: 'accepted' });
         toast({ title: `"${sq.quiz_title}" added to your quizzes!` });
         await loadData(user);

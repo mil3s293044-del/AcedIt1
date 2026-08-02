@@ -70,7 +70,7 @@ const MetricCard = ({ label, score, maxScore, icon: Icon, description }) => {
     );
 };
 
-export default function AIPerformanceAnalyzer({ data, userProfile }) {
+export default function AIPerformanceAnalyzer({ data }) {
     const [selectedSubject, setSelectedSubject] = useState(null);
     const [analysis, setAnalysis] = useState(null);
     const [isAnalyzing, setIsAnalyzing] = useState(false);
