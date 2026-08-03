@@ -110,24 +110,15 @@ function getCoachLine({
         line = `${period}, ${name}. Let's make today count.`;
     }
 
-    // ── Support: ONE thing worth doing about it ─────────────────────────────
-    // Kept to a single clause, or a gap plus the lever that closes it. Stacking
-    // three nudges under a headline reads like a to-do list, not a coach.
+    // ── Support: where you stand, NOT what to do ────────────────────────────
+    // The Today's move card owns the instruction — it has a CTA button, which a
+    // headline can't. Anything actionable said here is said twice on one screen,
+    // so this sticks to what the Move card never shows: your score, the gap to
+    // your goal, and which of the five components is holding it back.
     let sub;
     const lever = weakestComponent(components);
 
-    if (urgentDays !== null && urgentDays <= 3) {
-        // Prep spread over the days before an assessment is exactly what the
-        // ATAR's planning component rewards, so say so while it still counts.
-        sub = urgentDays === 0
-            ? "Sessions in the days before it count toward your planning score — today still counts."
-            : `Studying it across the next ${urgentDays} day${urgentDays === 1 ? "" : "s"} lifts your planning score more than one long night.`;
-    } else if (plannedToday > 0 && todayMins === 0) {
-        // Something they already committed to beats anything we'd suggest.
-        sub = `You blocked out ${plannedToday} session${plannedToday === 1 ? "" : "s"} for today — that's the plan already made.`;
-    } else if (dueFlashcards >= 10 && todayMins === 0) {
-        sub = `${dueFlashcards} flashcards are due — a review round is the fastest win on the board.`;
-    } else if (atar == null) {
+    if (atar == null) {
         sub = "Three study days puts you on the board and unlocks your AcedIt ATAR.";
     } else if (goalAtar && atar >= goalAtar) {
         sub = `You're past your ${goalAtar} goal — hold it there and it stops being a fluke.`;
