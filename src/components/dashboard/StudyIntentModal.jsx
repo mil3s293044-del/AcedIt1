@@ -83,18 +83,26 @@ const RECOMMENDATIONS = {
     },
 };
 
-export default function StudyIntentModal({ firstName, onDismiss }) {
+export default function StudyIntentModal({ firstName, onDismiss, onPick }) {
     const [selected, setSelected] = useState(null);
     const [duration, setDuration] = useState(null);
     const [step, setStep]         = useState("pick"); // "pick" | "plan"
 
     const rec = selected ? RECOMMENDATIONS[selected.id] : null;
 
+    // Report the intent the moment it's chosen rather than on the CTA — closing
+    // the modal after picking still means they told us what today is for.
     const handleModeSelect = (mode) => {
         setSelected(mode);
         const r = RECOMMENDATIONS[mode.id];
         setDuration(r.defaultDuration);
         setStep("plan");
+        onPick?.({ mode: mode.id, duration: r.defaultDuration });
+    };
+
+    const handleDuration = (d) => {
+        setDuration(d);
+        if (selected) onPick?.({ mode: selected.id, duration: d });
     };
 
     const fmtDuration = (d) => (d < 60 ? `${d}m` : d % 60 === 0 ? `${d / 60}h` : `${Math.floor(d / 60)}h ${d % 60}m`);
@@ -182,7 +190,7 @@ export default function StudyIntentModal({ firstName, onDismiss }) {
                                     {rec.durations.map((d) => (
                                         <button
                                             key={d}
-                                            onClick={() => setDuration(d)}
+                                            onClick={() => handleDuration(d)}
                                             className={`px-4 py-2 rounded-xl text-sm font-bold border shadow-soft transition-colors ${
                                                 duration === d
                                                     ? "bg-primary border-primary text-primary-foreground"

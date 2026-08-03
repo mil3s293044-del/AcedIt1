@@ -4484,7 +4484,7 @@ async function computePlanning(email, sinceDate) {
   const lookahead = new Date(Date.now() + ASSESSMENT_LOOKAHEAD_DAYS * 86400000)
     .toISOString().slice(0, 10);
 
-  const [goalsQ, plansQ, sessionsQ, assessmentsQ] = await Promise.all([
+  const [goalsQ, plansQ, sessionsQ, assessmentsQ, profileQ] = await Promise.all([
     supabaseAdmin.from("goals")
       .select("created_date, is_completed, completed_at")
       .eq("created_by", email).limit(500),
@@ -4497,6 +4497,7 @@ async function computePlanning(email, sinceDate) {
     supabaseAdmin.from("subject_assessments")
       .select("due_date, subject_name")
       .eq("created_by", email).gte("due_date", sinceDay).lte("due_date", lookahead).limit(200),
+    supabaseAdmin.from("user_profiles").select("extra").eq("created_by", email).maybeSingle(),
   ]);
 
   // ── Goals: set, then met ──────────────────────────────────────────────
@@ -4551,7 +4552,22 @@ async function computePlanning(email, sinceDate) {
     prepScore = perAssessment.reduce((a, b) => a + b, 0) / perAssessment.length;
   }
 
-  const planning = 0.40 * goalScore + 0.35 * planScore + 0.25 * prepScore;
+  // ── Declared an intent, then actually studied ─────────────────────────────
+  // The Dashboard's study-intent modal writes one entry per day. On its own a
+  // click is cheap and farmable, so it only counts on days that also carry a
+  // session — declaring the day's purpose and then showing up for it.
+  const intentLog = Array.isArray(profileQ.data?.extra?.intent_log)
+    ? profileQ.data.extra.intent_log : [];
+  const sessionDays = new Set(sessions.filter((s) => s.date).map((s) => s.date));
+  const intentDays = new Set(
+    intentLog.filter((e) => e?.d && e.d >= sinceDay).map((e) => e.d),
+  );
+  const keptIntents = [...intentDays].filter((d) => sessionDays.has(d)).length;
+  // ~3 a week over the window earns full marks.
+  const intentScore = Math.min(1, keptIntents / 12);
+
+  const planning =
+    0.30 * goalScore + 0.30 * planScore + 0.20 * prepScore + 0.20 * intentScore;
   return {
     planning: Math.max(0, Math.min(1, planning)),
     detail: {
@@ -4560,6 +4576,8 @@ async function computePlanning(email, sinceDate) {
       blocks_planned: plans.length,
       blocks_kept: kept,
       assessments_tracked: assessments.length,
+      intents_declared: intentDays.size,
+      intents_kept: keptIntents,
     },
   };
 }
