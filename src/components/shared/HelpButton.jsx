@@ -26,7 +26,7 @@ export const HELP_CONTENT = {
             { heading: "🔁 Spaced Repetition (Flashcards)", body: "Review flashcard decks using the SM-2 algorithm. Rate each card (Again / Hard / Good / Easy) and the system schedules the next review automatically. Cards due today appear first." },
             { heading: "🧠 Active Recall", body: "AI generates questions on your chosen topic. Answer them in your own words — the AI then gives feedback and a score. Great for exam prep." },
             { heading: "✍️ Blurting Method", body: "Write everything you know about a topic from memory (no notes!). Upload your notes and the AI compares what you wrote vs. the source material." },
-            { heading: "📖 Revision Mode", body: "Load a past paper or AI-generated exam and work through it timed. Use this to simulate real exam conditions." },
+            { heading: "📖 Revision Mode", body: "Builds a timed mock exam from your own flashcards, quizzes and active recall sets. Use this to simulate real exam conditions." },
         ]
     },
     Quizzes: {

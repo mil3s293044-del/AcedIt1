@@ -344,3 +344,8 @@ export const defaultOptions = (tool) =>
 
 export const resolveChoices = (group, opts) =>
     typeof group.choices === "function" ? group.choices(opts) : group.choices;
+
+// Marketing and paywall copy quotes this number. Derive it rather than typing
+// it — it was independently written as "8" on two screens and "10" on three
+// while the real count was 9.
+export const TOOL_COUNT = CHAT_TOOLS.length;

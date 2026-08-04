@@ -3,12 +3,13 @@ import { Button } from "@/components/ui/button";
 import { ChevronLeft, Check, Loader2, Lock } from "lucide-react";
 import { base44 } from "@/api/base44Client";
 import { createPageUrl } from "@/utils";
+import { TOOL_COUNT } from "@/components/ai_tools/chatTools";
 
 const FEATURES = [
     "Unlimited AI practice questions generated from your own notes",
     "AI marks your SAC answers with a full-marks model answer",
     "Weak topic detection — know exactly what to fix before exams",
-    "All 8 AI study tools: essay planner, concept explainer, maths tutor, blurting method, teaching assistant, note summariser, question generator, practice answer generator",
+    `All ${TOOL_COUNT} AI study tools: essay planner, concept explainer, maths tutor, blurting method, teaching assistant, note summariser, question generator, practice answer generator`,
     "Spaced repetition flashcards with SM-2 algorithm",
     "Friend competitions, score bets and XP leaderboards",
     "Full analytics dashboard with AI performance coach",
