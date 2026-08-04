@@ -121,6 +121,8 @@ export default function ExamMode({ userSubjects }) {
   const [submittedAt, setSubmittedAt] = useState(null);
   const [isLoadingData, setIsLoadingData] = useState(false);
   const [showQuestionMap, setShowQuestionMap] = useState(false);
+  const [flagged, setFlagged] = useState({});          // qId -> true, "come back to this"
+  const [confirmSubmit, setConfirmSubmit] = useState(false);
   const hasSubmitted = useRef(false);
 
   const [isAIMarking, setIsAIMarking] = useState(false);
@@ -237,6 +239,37 @@ export default function ExamMode({ userSubjects }) {
       handleSubmitExam();
     }
   }, [timeLeft]);
+
+  // Under exam conditions a stray reload or back-swipe costs the whole paper,
+  // so make the browser ask first. Only while a paper is actually running.
+  useEffect(() => {
+    if (phase !== "exam") return;
+    const warn = (e) => { e.preventDefault(); e.returnValue = ""; };
+    window.addEventListener("beforeunload", warn);
+    return () => window.removeEventListener("beforeunload", warn);
+  }, [phase]);
+
+  // Keyboard, the way you'd actually sit a paper: arrows to move between
+  // questions, number keys to pick a multiple-choice option, F to flag.
+  useEffect(() => {
+    if (phase !== "exam") return;
+    const onKey = (e) => {
+      const typing = ["INPUT", "TEXTAREA"].includes(e.target?.tagName);
+      if (e.key === "ArrowRight" && !typing) setCurrentIndex((i) => Math.min(examQuestions.length - 1, i + 1));
+      if (e.key === "ArrowLeft" && !typing) setCurrentIndex((i) => Math.max(0, i - 1));
+      const q = examQuestions[currentIndex];
+      if (!q) return;
+      if ((e.key === "f" || e.key === "F") && !typing) {
+        setFlagged((prev) => ({ ...prev, [q.id]: !prev[q.id] }));
+      }
+      if (!typing && q.type === "mcq" && /^[1-9]$/.test(e.key)) {
+        const idx = Number(e.key) - 1;
+        if (idx < (q.options?.length || 0)) handleSelectMCQ(q.id, idx);
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [phase, currentIndex, examQuestions]);
 
   const handleSubmitExam = () => {
     if (hasSubmitted.current) return;
@@ -445,7 +478,7 @@ Return exactly ${openQs.length} results, in order.`,
                                 </SelectTrigger>
                                 <SelectContent>
                                     <SelectItem value="all"><span className="inline-flex items-center gap-2"><Sparkles className="w-3.5 h-3.5 text-xp" /> All Subjects</span></SelectItem>
-                                    {userSubjects.map((s) => <SelectItem key={s.id} value={s.subject_name}>{s.subject_name}</SelectItem>)}
+                                    {(userSubjects || []).map((s) => <SelectItem key={s.id} value={s.subject_name}>{s.subject_name}</SelectItem>)}
                                 </SelectContent>
                             </Select>
                         </div>
@@ -552,8 +585,15 @@ Return exactly ${openQs.length} results, in order.`,
     const currentAnswer = answers[q?.id] || {};
     const isCurrentAnswered = q?.type === "mcq" ? currentAnswer.selectedIndex !== undefined : currentAnswer.typed?.length > 0;
 
+    const flaggedCount = examQuestions.filter((eq) => flagged[eq.id]).length;
+    const unanswered = examQuestions.length - answered;
+
     return (
-      <div className="max-w-3xl mx-auto space-y-4">
+      // Full-screen takeover. Sitting a paper with the nav, side rail and tab
+      // bar still on screen is the main reason this never felt like an exam —
+      // everything else in the app is one tap away the whole time.
+      <div className="fixed inset-0 z-50 bg-background overflow-y-auto overscroll-contain">
+      <div className="max-w-3xl mx-auto space-y-4 p-4 pb-24">
                 {/* Header Bar */}
                 <motion.div
           animate={{ backgroundColor: isVeryLow ? "hsl(0 100% 45%)" : isLow ? "hsl(0 100% 55%)" : "hsl(218 50% 11%)" }}
@@ -580,9 +620,9 @@ Return exactly ${openQs.length} results, in order.`,
             className="w-9 h-9 bg-surface/10 hover:bg-surface/20 rounded-xl flex items-center justify-center transition-colors">
                             <Layers className="w-4 h-4 text-white/70" />
                         </button>
-                        <Button size="sm" onClick={handleSubmitExam}
+                        <Button size="sm" onClick={() => setConfirmSubmit(true)}
             className={`rounded-xl font-bold gap-1.5 text-xs px-4 ${isLow ? "bg-surface text-streak hover:bg-surface/90" : "bg-surface/15 hover:bg-surface/25 text-white border border-white/20"}`}>
-                            <Flag className="w-3.5 h-3.5" /> Submit
+                            <Flag className="w-3.5 h-3.5" /> Hand in
                         </Button>
                     </div>
                 </motion.div>
@@ -602,10 +642,12 @@ Return exactly ${openQs.length} results, in order.`,
                                 {examQuestions.map((eq, i) => {
                 const a = answers[eq.id] || {};
                 const done = eq.type === "mcq" ? a.selectedIndex !== undefined : a.typed?.length > 0;
+                const isFlagged = !!flagged[eq.id];
                 return (
                   <button key={i} onClick={() => {setCurrentIndex(i);setShowQuestionMap(false);}}
-                  className={`w-8 h-8 rounded-lg text-xs font-bold transition-all ${i === currentIndex ? "bg-streak text-white ring-2 ring-streak/30" : done ? "bg-primary/15 text-primary" : "bg-secondary text-muted-foreground hover:bg-secondary"}`}>
+                  className={`relative w-8 h-8 rounded-lg text-xs font-bold transition-all ${i === currentIndex ? "bg-streak text-white ring-2 ring-streak/30" : done ? "bg-primary/15 text-primary" : "bg-secondary text-muted-foreground hover:bg-secondary"}`}>
                                             {i + 1}
+                                            {isFlagged && <span className="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-xp" />}
                                         </button>);
 
               })}
@@ -639,6 +681,14 @@ Return exactly ${openQs.length} results, in order.`,
                                             <Check className="w-3 h-3" /> Done
                                         </span>
                   }
+                                    {/* Come back to this one — what you'd circle on a real paper. */}
+                                    <button
+                    onClick={() => q && setFlagged((prev) => ({ ...prev, [q.id]: !prev[q.id] }))}
+                    aria-label={flagged[q?.id] ? "Remove flag" : "Flag for review"}
+                    aria-pressed={!!flagged[q?.id]}
+                    className={`w-7 h-7 rounded-lg flex items-center justify-center transition-colors ${flagged[q?.id] ? "bg-xp/15 text-xp" : "text-muted-foreground/50 hover:text-foreground hover:bg-secondary"}`}>
+                                        <Flag className="w-3.5 h-3.5" />
+                                    </button>
                                     <span className="text-xs font-bold text-muted-foreground/60">{currentIndex + 1} / {examQuestions.length}</span>
                                 </div>
                             </div>
@@ -696,7 +746,7 @@ Return exactly ${openQs.length} results, in order.`,
             if (currentIndex < examQuestions.length - 1) {
               setCurrentIndex((i) => i + 1);
             } else {
-              handleSubmitExam();
+              setConfirmSubmit(true);
             }
           }}
           className={`gap-2 rounded-xl font-bold px-6 ${currentIndex === examQuestions.length - 1 ? "bg-streak hover:bg-streak/90 text-white btn-3d" : "bg-foreground hover:bg-foreground/90 text-background"}`}>
@@ -707,6 +757,50 @@ Return exactly ${openQs.length} results, in order.`,
             }
                     </Button>
                 </div>
+
+                <p className="text-center text-[11px] text-muted-foreground/60">
+                    ← → to move · 1-9 to answer · F to flag
+                </p>
+
+                {/* Handing in is final — say what's still open before it happens.
+                    Submit used to fire straight off a single tap. */}
+                <AnimatePresence>
+                    {confirmSubmit &&
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+          className="fixed inset-0 z-[60] flex items-center justify-center bg-foreground/50 backdrop-blur-sm p-4">
+                            <motion.div initial={{ scale: 0.96, y: 12 }} animate={{ scale: 1, y: 0 }} exit={{ scale: 0.96, y: 12 }}
+            className="bg-surface rounded-2xl border-2 border-border shadow-soft-lg w-full max-w-sm p-6">
+                                <h3 className="font-display font-extrabold text-foreground text-xl mb-1">Hand it in?</h3>
+                                <p className="text-sm text-muted-foreground mb-4">
+                                    {unanswered === 0 && flaggedCount === 0
+                    ? "Everything's answered. Once you hand in you can't change your answers."
+                    : "Once you hand in you can't change your answers."}
+                                </p>
+                                {(unanswered > 0 || flaggedCount > 0) &&
+              <div className="space-y-1.5 mb-5">
+                                        {unanswered > 0 &&
+                <p className="text-sm font-bold text-streak">{unanswered} question{unanswered === 1 ? "" : "s"} unanswered</p>
+                }
+                                        {flaggedCount > 0 &&
+                <p className="text-sm font-bold text-xp">{flaggedCount} flagged for review</p>
+                }
+                                    </div>
+              }
+                                <div className="flex flex-col gap-2">
+                                    <Button onClick={() => { setConfirmSubmit(false); handleSubmitExam(); }}
+                  className="w-full rounded-xl font-bold bg-streak hover:bg-streak/90 text-white">
+                                        Hand in
+                                    </Button>
+                                    <Button variant="outline" onClick={() => setConfirmSubmit(false)}
+                  className="w-full rounded-xl font-semibold">
+                                        Keep working
+                                    </Button>
+                                </div>
+                            </motion.div>
+                        </motion.div>
+          }
+                </AnimatePresence>
+            </div>
             </div>);
 
   }
