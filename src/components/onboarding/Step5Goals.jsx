@@ -109,7 +109,12 @@ export default function Step5Goals({ data, onNext, onBack, saving }) {
             <Button
                 onClick={() => onNext({
                     qualitative_goal: qualitative_goal.trim(),
+                    // The Dashboard's goal poster reads goal_course_name, which is
+                    // what the signup funnel writes. Writing only dream_course made
+                    // the promise printed under this input — "appears on your
+                    // dashboard every time you open the app" — quietly false.
                     dream_course: dream_course.trim(),
+                    goal_course_name: dream_course.trim(),
                     ...(goal_atar ? { goal_atar } : {}),
                 })}
                 disabled={!canProceed || saving}

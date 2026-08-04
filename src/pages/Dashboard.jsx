@@ -175,7 +175,61 @@ const INTENT_MOVES = {
     },
 };
 
-function getTodaysMove({ todayMins, streakDays, dueFlashcards, urgentDays, urgentTitle, hour, intentMode }) {
+// What the student told onboarding they struggle with. It picked which features
+// the tour displayed and was then never read again — so a student who said
+// burnout and one who said they forget everything got the same nudge every
+// morning. Used only as the quiet-day fallback: anything they've declared or
+// that's actually due still outranks it.
+const CHALLENGE_MOVES = {
+    forget: {
+        label: "Your sticking point",
+        title: "Retrieval beats re-reading, every time",
+        sub: "You said it slips away after studying — pulling it back out from memory is what makes it stay.",
+        cta: "Start active recall", link: "Study", accent: "chart-4", icon: Brain,
+    },
+    time: {
+        label: "Your sticking point",
+        title: "Map the week before it gets away",
+        sub: "You said there's never enough runway before a SAC — blocking it out now buys some back.",
+        cta: "Open the planner", link: "Goals", accent: "xp", icon: Map,
+    },
+    weak: {
+        label: "Your sticking point",
+        title: "Find out what you're actually shaky on",
+        sub: "You said it's hard to tell — your analytics already know which topics keep costing you marks.",
+        cta: "See weak topics", link: "Analytics", accent: "chart-3", icon: BarChart3,
+    },
+    motivated: {
+        label: "Your sticking point",
+        title: "A short session still counts on the board",
+        sub: "You said staying motivated is the hard part — 25 minutes is enough to keep the streak and the score going.",
+        cta: "Start a Pomodoro", link: "Study", accent: "primary", icon: Timer,
+    },
+    writing: {
+        label: "Your sticking point",
+        title: "Get a response marked properly",
+        sub: "You said writing strong answers is the gap — the English mentor marks to VCAA criteria and shows you the upgrade.",
+        cta: "Open AI Tools", link: "AITools", accent: "chart-4", icon: Sparkles,
+    },
+    burnout: {
+        label: "Your sticking point",
+        title: "One focused block, then genuinely stop",
+        sub: "You said the pressure is getting heavy — a short bounded session beats an open-ended one.",
+        cta: "Start 25 minutes", link: "Study", accent: "primary", icon: Timer,
+    },
+};
+
+// Students can pick more than one. Rotate by day so the same card isn't the
+// only thing they ever see, and deterministically so it doesn't flicker on
+// re-render.
+function challengeMove(challenge) {
+    const list = (Array.isArray(challenge) ? challenge : [challenge])
+        .filter((c) => CHALLENGE_MOVES[c]);
+    if (!list.length) return null;
+    return CHALLENGE_MOVES[list[new Date().getDate() % list.length]];
+}
+
+function getTodaysMove({ todayMins, streakDays, dueFlashcards, urgentDays, urgentTitle, hour, intentMode, challenge }) {
     // What they told us this morning outranks anything we'd infer — until they
     // actually start, at which point the usual signals take over again.
     if (intentMode && todayMins === 0 && INTENT_MOVES[intentMode]) {
@@ -215,7 +269,9 @@ function getTodaysMove({ todayMins, streakDays, dueFlashcards, urgentDays, urgen
         };
     }
     if (todayMins === 0) {
-        return {
+        // Nothing declared, nothing due — this is where their stated struggle
+        // is the most useful thing we know about them.
+        return challengeMove(challenge) || {
             label: "Easiest start",
             title: "A 25-minute Pomodoro is the easiest win today",
             sub: "Show up, stay focused, walk away with momentum.",
@@ -583,6 +639,7 @@ export default function Dashboard() {
         urgentTitle: nextDeadline?.title ?? null,
         hour,
         intentMode: todayIntentPlan?.mode ?? null,
+        challenge: userProfile?.primary_challenge ?? null,
     });
     const moveTheme = MOVE_THEME[move.accent];
     const MoveIcon = move.icon;
@@ -1076,6 +1133,14 @@ export default function Dashboard() {
                                         <p className="text-sm text-muted-foreground">at {userProfile.goal_university}</p>
                                     )}
                                 </div>
+                                {/* Onboarding asks what success looks like this year and tells
+                                    them the more specific it is the more it will drive them.
+                                    It was then stored and never shown to them again. */}
+                                {userProfile.qualitative_goal && (
+                                    <p className="text-sm text-muted-foreground italic leading-relaxed mt-3 pt-3 border-t border-chart-3/15">
+                                        “{userProfile.qualitative_goal}”
+                                    </p>
+                                )}
                                 <Link to={createPageUrl("Goals")} className="inline-flex items-center gap-1 text-sm font-bold text-chart-3 hover:underline mt-5">
                                     Edit goal <ArrowRight className="w-3.5 h-3.5" />
                                 </Link>
