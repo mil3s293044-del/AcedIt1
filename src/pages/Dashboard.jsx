@@ -16,6 +16,7 @@ import StudyIntentModal from "@/components/dashboard/StudyIntentModal";
 import { reconcileUserXP } from "@/lib/reconcileXP";
 import { getStreakMultiplier as getStreakMultiplierValue } from "@/components/shared/streakHelpers";
 import { atarBandOf } from "@/lib/atarBands";
+import { todaysIntent } from "@/lib/studyIntent";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 const fmtTime = (m) => {
@@ -73,7 +74,7 @@ function weakestComponent(components) {
 // thing worth doing about it today.
 function getCoachLine({
     name, hour, streakDays, todayMins, studiedYesterday,
-    urgentDays, urgentTitle, atar, band, components, goalAtar,
+    urgentDays, urgentTitle, atar, band, components, goalAtar, intentBlurb,
 }) {
     const period = hour < 12 ? "Morning" : hour < 17 ? "Afternoon" : hour < 21 ? "Evening" : "Late night";
 
@@ -87,6 +88,12 @@ function getCoachLine({
         line = urgentTitle
             ? `${period}, ${name}. ${urgentTitle} lands in ${urgentDays} day${urgentDays === 1 ? "" : "s"}.`
             : `${period}, ${name}. Something lands in ${urgentDays} day${urgentDays === 1 ? "" : "s"}.`;
+    } else if (intentBlurb && todayMins > 0) {
+        // They declared something this morning and then did it — close the loop
+        // while it's still today, because that is the whole habit.
+        line = atar != null
+            ? `${period}, ${name}. ${fmtTime(todayMins)} in on what you said you'd do — ${atar.toFixed(2)} on the board.`
+            : `${period}, ${name}. ${fmtTime(todayMins)} in on what you said you'd do.`;
     } else if (atar != null && band) {
         // The ATAR is the flagship number — lead with it once it exists.
         if (todayMins >= 90) line = `${period}, ${name}. ${fmtTime(todayMins)} in and sitting at ${atar.toFixed(2)}. Big day.`;
@@ -482,9 +489,7 @@ export default function Dashboard() {
     // declared intents actually turn into sessions. Same shape as the trailing
     // mock_atar_history the server already keeps there.
     const todayKey = format(new Date(), "yyyy-MM-dd");
-    const todayIntent = userProfile?.extra?.daily_intent?.date === todayKey
-        ? userProfile.extra.daily_intent
-        : null;
+    const todayIntentPlan = todaysIntent(userProfile);
 
     const saveIntent = useCallback(async ({ mode, duration }) => {
         if (!userProfile?.id) return;
@@ -549,6 +554,7 @@ export default function Dashboard() {
         band: atarBandOf(userProfile?.acedit_atar),
         components: userProfile?.atar_components || null,
         goalAtar: userProfile?.goal_atar ? Number(userProfile.goal_atar) : null,
+        intentBlurb: todayIntentPlan?.plan?.blurb ?? null,
     });
     const streakBlurb = getStreakBlurb(streakDays);
     const multiplier = getStreakMultiplier(streakDays);
@@ -576,7 +582,7 @@ export default function Dashboard() {
         urgentDays: nextDeadline?.days ?? null,
         urgentTitle: nextDeadline?.title ?? null,
         hour,
-        intentMode: todayIntent?.mode ?? null,
+        intentMode: todayIntentPlan?.mode ?? null,
     });
     const moveTheme = MOVE_THEME[move.accent];
     const MoveIcon = move.icon;

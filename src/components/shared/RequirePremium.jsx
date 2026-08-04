@@ -4,6 +4,7 @@ import { Crown, Sparkles, Lock } from "lucide-react";
 import { base44 } from "@/api/base44Client";
 import { isPremium as checkIsPremium } from "@/lib/tierAccess";
 import { createPageUrl } from "@/utils";
+import { TOOL_COUNT } from "@/components/ai_tools/chatTools";
 
 // Route-level gate. Wrap a page's contents:
 //   <RequirePremium featureName="AI Tools">{children}</RequirePremium>
@@ -71,9 +72,9 @@ export default function RequirePremium({ children, featureName = "this feature",
                         What you get
                     </p>
                     <ul className="text-xs text-muted-foreground space-y-1.5">
-                        <li>• 10 AI study tools (essay planner, note summariser, math tutor, more)</li>
+                        <li>• {TOOL_COUNT} AI study tools (essay planner, note summariser, math tutor, more)</li>
                         <li>• AI-generated quizzes & flashcard sets every day</li>
-                        <li>• AI test marker, goal & roadmap generation</li>
+                        <li>• AI test marker and goal generation</li>
                         <li>• Blurting, active recall, spaced repetition</li>
                         <li>• Advanced analytics</li>
                     </ul>

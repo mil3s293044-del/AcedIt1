@@ -33,6 +33,7 @@ import { Input } from "@/components/ui/input";
 import { VCE_SUBJECTS } from "@/data/vceSubjects";
 import { supabase } from "@/api/supabaseClient";
 import { useAuth } from "@/lib/AuthContext";
+import { TOOL_COUNT } from "@/components/ai_tools/chatTools";
 
 const TOTAL_STEPS = 8;
 const STORAGE_KEY = "acedit_onboarding_v1";
@@ -552,8 +553,8 @@ function Step5PlanReveal({ answers, onNext }) {
     const planItems = [
         { Icon: Brain,         text: `Daily AI quizzes tailored to your ${subjectsCount > 0 ? subjectsCount : ""} subject${subjectsCount === 1 ? "" : "s"}`.replace("  ", " ").trim() },
         { Icon: Layers,        text: "AI quiz marking with VCAA-aligned feedback" },
-        { Icon: MapIcon,       text: answers.goalAtar ? `Personalised study roadmap to ATAR ${answers.goalAtar.toFixed(answers.goalAtar % 1 === 0 ? 0 : 2)}` : "Personalised study roadmap to your target" },
-        { Icon: Sparkles,      text: "All 10 AI study tools (Essay Planner, Math Tutor, Concept Explainer, more)" },
+        { Icon: MapIcon,       text: answers.goalAtar ? `Personalised plan to ATAR ${answers.goalAtar.toFixed(answers.goalAtar % 1 === 0 ? 0 : 2)}` : "Personalised plan to your target" },
+        { Icon: Sparkles,      text: `All ${TOOL_COUNT} AI study tools (Essay Planner, Math Tutor, Concept Explainer, more)` },
     ];
 
     return (
@@ -672,7 +673,7 @@ function Step7Premium({ onNext }) {
         "Everything in Free",
         "Daily AI-generated quizzes",
         "AI quiz marking with VCAA feedback",
-        "All 10 AI study tools (unlimited daily)",
+        `All ${TOOL_COUNT} AI study tools (unlimited daily)`,
         "Goal & Roadmap AI generation",
         "Spaced repetition (SM-2 algorithm)",
         "Blurting & Active Recall with AI marking",

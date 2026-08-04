@@ -59,7 +59,7 @@ const RECOMMENDATIONS = {
         durations:[45, 60, 90],
         defaultDuration: 60,
         steps: [
-            { Icon: Map,           text: "Open your study roadmap to identify the highest-priority topics." },
+            { Icon: Map,           text: "Open your planner and pick off the highest-priority topics first." },
             { Icon: Brain,         text: "Use active recall — test yourself, don't just re-read." },
             { Icon: FileQuestion,  text: "Do a practice quiz after each topic to lock in the knowledge." },
             { Icon: Clock,         text: "Take a 10-minute break every 50 minutes — your brain needs it." },

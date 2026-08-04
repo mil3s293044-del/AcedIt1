@@ -28,6 +28,7 @@ import ActiveRecall from "../components/study/ActiveRecall";
 import BlurtingMethod from "../components/study/BlurtingMethod";
 import ExamMode from "../components/study/ExamMode";
 import HelpButton from "@/components/shared/HelpButton";
+import { todaysIntent } from "@/lib/studyIntent";
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 const fmtTime = (m) => {
@@ -121,6 +122,13 @@ export default function Study() {
                 base44.entities.SubjectAssessment.filter({ created_by: userEmail, is_completed: false }, "due_date", 10).catch(() => []),
             ]);
             setUserProfile(profileData);
+            // What they said this morning picks the technique — unless they
+            // arrived by deep link, which is a more specific request. Read the
+            // URL rather than state: loadData's closure would still hold the
+            // pre-effect value on the first run.
+            const deepLink = new URLSearchParams(window.location.search).get("tab");
+            const intent = todaysIntent(profileData);
+            if (intent && !deepLink) setActiveTab(intent.plan.technique);
             setRecentSessions(sessionsData || []);
             setUserSubjects(subjectsData || []);
             setStudySessions(studySessionsData || []);

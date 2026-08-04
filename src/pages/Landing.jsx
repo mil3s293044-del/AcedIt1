@@ -799,8 +799,8 @@ export default function Landing() {
                 "Ace — your 24/7 AI study companion",
                 "Unlimited quizzes, flashcards & practice",
                 "Active recall, blurting & spaced repetition",
-                "Compete: weekly leagues, XP battles & wagers",
-                "A study roadmap that plans your week",
+                "Compete: XP battles, wagers & friend leaderboards",
+                "A planner that maps your week around your SACs",
                 "Full progress & analytics dashboard",
               ].map((f) => (
                 <div key={f} className="flex items-start gap-2 text-sm text-white/85">
