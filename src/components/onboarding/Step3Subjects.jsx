@@ -4,13 +4,14 @@ import { Input } from "@/components/ui/input";
 import { base44 } from "@/api/base44Client";
 import { ChevronLeft, Plus, Search } from "lucide-react";
 
-export default function Step3Subjects({ data, onNext, onBack, saving }) {
+export default function Step3Subjects({ data, email, onNext, onBack, saving }) {
     const [subjects, setSubjects] = useState([]);
     const [selected, setSelected] = useState(new Set(data.enrolled_subjects || []));
     const [customInput, setCustomInput] = useState("");
     const [customSubjects, setCustomSubjects] = useState([]);
     const [loading, setLoading] = useState(true);
     const [search, setSearch] = useState("");
+    const [savingSubjects, setSavingSubjects] = useState(false);
 
     useEffect(() => {
         base44.entities.VCESubject.list("name", 500)
@@ -45,8 +46,37 @@ export default function Step3Subjects({ data, onNext, onBack, saving }) {
         setCustomInput("");
     };
 
-    const handleNext = () => {
-        onNext({ enrolled_subjects: Array.from(selected) });
+    // enrolled_subjects on the profile is read by nothing outside this modal —
+    // the whole app (Dashboard, Study, Quizzes, every AI tool) reads UserSubject
+    // rows. Writing only the profile field meant a student picked their subjects,
+    // saw them confirmed on the summary screen, and landed in an app that
+    // behaved as though they had none. Create the rows the app actually reads.
+    const handleNext = async () => {
+        const picked = Array.from(selected);
+        setSavingSubjects(true);
+        try {
+            const existing = email
+                ? await base44.entities.UserSubject.filter({ created_by: email }).catch(() => [])
+                : [];
+            const have = new Set((existing || []).map(s => s.subject_name));
+            const catalog = new Map(subjects.map(s => [s.name, s]));
+
+            await Promise.all(
+                picked.filter(name => !have.has(name)).map(name => {
+                    const match = catalog.get(name);
+                    return base44.entities.UserSubject.create({
+                        subject_name:   name,
+                        subject_code:   match?.code || name.slice(0, 6).toUpperCase(),
+                        vce_subject_id: match?.id || null,
+                        year_level:     data.year_level || null,
+                        is_active:      true,
+                    }).catch(e => console.error("Could not create user subject:", name, e));
+                })
+            );
+        } finally {
+            setSavingSubjects(false);
+        }
+        onNext({ enrolled_subjects: picked });
     };
 
     const allSubjects = [...subjects.map(s => s.name), ...customSubjects.filter(c => !subjects.find(s => s.name === c))];
@@ -112,11 +142,10 @@ export default function Step3Subjects({ data, onNext, onBack, saving }) {
 
             <Button
                 onClick={handleNext}
-                disabled={selected.size === 0 || saving}
+                disabled={selected.size === 0 || saving || savingSubjects}
                 className="w-full h-12 text-base font-semibold mt-4"
-                
             >
-                {saving ? "Saving..." : `Next \u2192 (${selected.size} selected)`}
+                {saving || savingSubjects ? "Saving..." : `Next \u2192 (${selected.size} selected)`}
             </Button>
         </div>
     );
