@@ -1076,6 +1076,14 @@ export default function Dashboard() {
                                         <p className="text-sm text-muted-foreground">at {userProfile.goal_university}</p>
                                     )}
                                 </div>
+                                {/* Onboarding asks what success looks like this year and tells
+                                    them the more specific it is the more it will drive them.
+                                    It was then stored and never shown to them again. */}
+                                {userProfile.qualitative_goal && (
+                                    <p className="text-sm text-muted-foreground italic leading-relaxed mt-3 pt-3 border-t border-chart-3/15">
+                                        “{userProfile.qualitative_goal}”
+                                    </p>
+                                )}
                                 <Link to={createPageUrl("Goals")} className="inline-flex items-center gap-1 text-sm font-bold text-chart-3 hover:underline mt-5">
                                     Edit goal <ArrowRight className="w-3.5 h-3.5" />
                                 </Link>
