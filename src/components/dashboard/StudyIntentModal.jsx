@@ -83,12 +83,19 @@ const RECOMMENDATIONS = {
     },
 };
 
-export default function StudyIntentModal({ firstName, onDismiss, onPick }) {
+export default function StudyIntentModal({ firstName, onDismiss, onPick, suggested }) {
     const [selected, setSelected] = useState(null);
     const [duration, setDuration] = useState(null);
     const [step, setStep]         = useState("pick"); // "pick" | "plan"
 
     const rec = selected ? RECOMMENDATIONS[selected.id] : null;
+
+    // The app usually already knows what today is about — a SAC two days out,
+    // sessions blocked in for this morning, or simply what this student always
+    // picks. Float that one to the top rather than asking from a blank slate.
+    const orderedModes = suggested?.mode
+        ? [...MODES].sort((a, b) => (a.id === suggested.mode ? -1 : b.id === suggested.mode ? 1 : 0))
+        : MODES;
 
     // Report the intent the moment it's chosen rather than on the CTA — closing
     // the modal after picking still means they told us what today is for.
@@ -150,22 +157,30 @@ export default function StudyIntentModal({ firstName, onDismiss, onPick }) {
                             exit={{ opacity: 0, x: 12 }}
                             className="p-5 space-y-2.5"
                         >
-                            {MODES.map((mode) => (
-                                <button
-                                    key={mode.id}
-                                    onClick={() => handleModeSelect(mode)}
-                                    className={`w-full flex items-center gap-4 p-4 rounded-xl border shadow-soft transition-all duration-200 text-left group ${mode.wrap}`}
-                                >
-                                    <div className={`w-11 h-11 rounded-xl border flex items-center justify-center flex-shrink-0 ${mode.iconWrap}`}>
-                                        <mode.Icon className="w-5 h-5" strokeWidth={2.5} />
-                                    </div>
-                                    <div className="flex-1 min-w-0">
-                                        <p className="font-display font-extrabold text-foreground text-base">{mode.label}</p>
-                                        <p className="text-sm text-muted-foreground leading-snug mt-0.5">{mode.desc}</p>
-                                    </div>
-                                    <ChevronRight className="w-5 h-5 text-muted-foreground/60 group-hover:text-foreground transition-colors flex-shrink-0" />
-                                </button>
-                            ))}
+                            {orderedModes.map((mode) => {
+                                const isSuggested = suggested?.mode === mode.id;
+                                return (
+                                    <button
+                                        key={mode.id}
+                                        onClick={() => handleModeSelect(mode)}
+                                        className={`w-full flex items-center gap-4 p-4 rounded-xl border shadow-soft transition-all duration-200 text-left group ${mode.wrap} ${isSuggested ? "ring-2 ring-primary/30" : ""}`}
+                                    >
+                                        <div className={`w-11 h-11 rounded-xl border flex items-center justify-center flex-shrink-0 ${mode.iconWrap}`}>
+                                            <mode.Icon className="w-5 h-5" strokeWidth={2.5} />
+                                        </div>
+                                        <div className="flex-1 min-w-0">
+                                            <p className="font-display font-extrabold text-foreground text-base">{mode.label}</p>
+                                            <p className="text-sm text-muted-foreground leading-snug mt-0.5">{mode.desc}</p>
+                                            {isSuggested && suggested.reason && (
+                                                <span className="inline-block mt-1.5 text-[11px] font-bold px-2 py-0.5 rounded-full bg-primary/10 text-primary">
+                                                    {suggested.reason}
+                                                </span>
+                                            )}
+                                        </div>
+                                        <ChevronRight className="w-5 h-5 text-muted-foreground/60 group-hover:text-foreground transition-colors flex-shrink-0" />
+                                    </button>
+                                );
+                            })}
                             <button
                                 onClick={onDismiss}
                                 className="w-full text-center text-sm font-semibold text-muted-foreground hover:text-foreground pt-2 transition-colors"

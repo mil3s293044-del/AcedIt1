@@ -506,6 +506,37 @@ export default function Dashboard() {
         }
     }, [userProfile, todayKey]);
 
+    // What today is most likely for, in order of how strong the evidence is:
+    // a deadline beats a plan, a plan beats a habit, and a habit beats nothing.
+    // Only a suggestion — the student still picks.
+    const intentSuggestion = useMemo(() => {
+        const days = nextDeadline?.days ?? null;
+        if (days !== null && days <= 3) {
+            const what = nextDeadline.title || "Something";
+            return {
+                mode: "cramming",
+                reason: days === 0 ? `${what} is due today` : `${what} in ${days} day${days === 1 ? "" : "s"}`,
+            };
+        }
+        const plannedCount = plannerReminders.filter(p => p.date === todayKey).length;
+        if (plannedCount > 0) {
+            return {
+                mode: "homework",
+                reason: `${plannedCount} session${plannedCount === 1 ? "" : "s"} blocked in today`,
+            };
+        }
+        // Their own pattern — needs a couple of picks before it means anything.
+        const log = Array.isArray(userProfile?.extra?.intent_log) ? userProfile.extra.intent_log : [];
+        const recent = log.slice(-14);
+        if (recent.length >= 3) {
+            const counts = {};
+            recent.forEach((e) => { if (e?.m) counts[e.m] = (counts[e.m] || 0) + 1; });
+            const top = Object.entries(counts).sort((a, b) => b[1] - a[1])[0];
+            if (top && top[1] >= 2) return { mode: top[0], reason: "What you usually pick" };
+        }
+        return null;
+    }, [nextDeadline, plannerReminders, userProfile, todayKey]);
+
     const coachLine = getCoachLine({
         name: firstName,
         hour,
@@ -574,6 +605,7 @@ export default function Dashboard() {
                         firstName={firstName}
                         onDismiss={() => setShowStudyIntent(false)}
                         onPick={saveIntent}
+                        suggested={intentSuggestion}
                     />
                 )}
             </AnimatePresence>
