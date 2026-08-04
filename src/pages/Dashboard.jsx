@@ -5,7 +5,7 @@ import { BookOpen, Target, ArrowRight,
     GraduationCap, Zap, Flame, Brain, FileQuestion,
     Sparkles, Trophy, Play, Layers, Timer, Users,
     Map, Swords, BarChart3, Star, CheckCircle2, AlertTriangle,
-    TrendingUp, Crown, Medal, Shield
+    TrendingUp, Crown, Medal, Shield, Sprout
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { format, startOfWeek, differenceInDays, parseISO, isToday, isYesterday } from "date-fns";
@@ -72,8 +72,8 @@ function weakestComponent(components) {
 // Returns a headline plus one supporting line: where you stand, then the single
 // thing worth doing about it today.
 function getCoachLine({
-    name, hour, streakDays, todayMins, studiedYesterday, dueFlashcards,
-    urgentDays, urgentTitle, atar, band, components, goalAtar, plannedToday,
+    name, hour, streakDays, todayMins, studiedYesterday,
+    urgentDays, urgentTitle, atar, band, components, goalAtar,
 }) {
     const period = hour < 12 ? "Morning" : hour < 17 ? "Afternoon" : hour < 21 ? "Evening" : "Late night";
 
@@ -110,24 +110,15 @@ function getCoachLine({
         line = `${period}, ${name}. Let's make today count.`;
     }
 
-    // ── Support: ONE thing worth doing about it ─────────────────────────────
-    // Kept to a single clause, or a gap plus the lever that closes it. Stacking
-    // three nudges under a headline reads like a to-do list, not a coach.
+    // ── Support: where you stand, NOT what to do ────────────────────────────
+    // The Today's move card owns the instruction — it has a CTA button, which a
+    // headline can't. Anything actionable said here is said twice on one screen,
+    // so this sticks to what the Move card never shows: your score, the gap to
+    // your goal, and which of the five components is holding it back.
     let sub;
     const lever = weakestComponent(components);
 
-    if (urgentDays !== null && urgentDays <= 3) {
-        // Prep spread over the days before an assessment is exactly what the
-        // ATAR's planning component rewards, so say so while it still counts.
-        sub = urgentDays === 0
-            ? "Sessions in the days before it count toward your planning score — today still counts."
-            : `Studying it across the next ${urgentDays} day${urgentDays === 1 ? "" : "s"} lifts your planning score more than one long night.`;
-    } else if (plannedToday > 0 && todayMins === 0) {
-        // Something they already committed to beats anything we'd suggest.
-        sub = `You blocked out ${plannedToday} session${plannedToday === 1 ? "" : "s"} for today — that's the plan already made.`;
-    } else if (dueFlashcards >= 10 && todayMins === 0) {
-        sub = `${dueFlashcards} flashcards are due — a review round is the fastest win on the board.`;
-    } else if (atar == null) {
+    if (atar == null) {
         sub = "Three study days puts you on the board and unlocks your AcedIt ATAR.";
     } else if (goalAtar && atar >= goalAtar) {
         sub = `You're past your ${goalAtar} goal — hold it there and it stops being a fluke.`;
@@ -153,7 +144,36 @@ function getStreakBlurb(streakDays) {
     return `${streakDays} days. Different breed.`;
 }
 
-function getTodaysMove({ todayMins, streakDays, dueFlashcards, urgentDays, urgentTitle, hour }) {
+// Intent modes map onto the move the student already committed to. Without
+// this the modal asks what today is for, then the card behind it ignores the
+// answer and offers a generic Pomodoro — two instructions, one click apart.
+const INTENT_MOVES = {
+    homework: {
+        label: "Homework mode",
+        title: "You said homework today",
+        sub: "List the tasks first, then run the clock on them one at a time.",
+        cta: "Start the timer", link: "Study", accent: "chart-3", icon: Timer,
+    },
+    cramming: {
+        label: "Cram mode",
+        title: "You said cramming today",
+        sub: "Cover ground fast — quiz yourself as you go so it actually sticks.",
+        cta: "Start a session", link: "Study", accent: "xp", icon: Zap,
+    },
+    free: {
+        label: "Free study",
+        title: "You said free study today",
+        sub: "No deadline pressure — good day to shore up a weak spot.",
+        cta: "Pick a technique", link: "Study", accent: "primary", icon: Sprout,
+    },
+};
+
+function getTodaysMove({ todayMins, streakDays, dueFlashcards, urgentDays, urgentTitle, hour, intentMode }) {
+    // What they told us this morning outranks anything we'd infer — until they
+    // actually start, at which point the usual signals take over again.
+    if (intentMode && todayMins === 0 && INTENT_MOVES[intentMode]) {
+        return INTENT_MOVES[intentMode];
+    }
     if (urgentDays !== null && urgentDays <= 3) {
         return {
             label: urgentDays === 0 ? "Today's deadline" : `In ${urgentDays} day${urgentDays === 1 ? '' : 's'}`,
@@ -455,10 +475,67 @@ export default function Dashboard() {
     const totalReminders = assessments.length + flashcardReminders.length + plannerReminders.length;
 
     const hour = new Date().getHours();
-    const plannedToday = useMemo(() => {
-        const key = format(new Date(), "yyyy-MM-dd");
-        return plannerReminders.filter(p => p.date === key).length;
-    }, [plannerReminders]);
+    // ── Study intent ─────────────────────────────────────────────────────────
+    // What the student said today is for. Kept on profile.extra alongside the
+    // Planner's daily_intention (free text — a different thing, left alone) and
+    // appended to a capped log so the ATAR's planning component can see whether
+    // declared intents actually turn into sessions. Same shape as the trailing
+    // mock_atar_history the server already keeps there.
+    const todayKey = format(new Date(), "yyyy-MM-dd");
+    const todayIntent = userProfile?.extra?.daily_intent?.date === todayKey
+        ? userProfile.extra.daily_intent
+        : null;
+
+    const saveIntent = useCallback(async ({ mode, duration }) => {
+        if (!userProfile?.id) return;
+        const extra = userProfile.extra || {};
+        const log = Array.isArray(extra.intent_log) ? [...extra.intent_log] : [];
+        // One entry per day — re-picking overwrites rather than stacking.
+        const withoutToday = log.filter((e) => e.d !== todayKey);
+        withoutToday.push({ d: todayKey, m: mode });
+        const nextExtra = {
+            ...extra,
+            daily_intent: { date: todayKey, mode, duration },
+            intent_log: withoutToday.slice(-30),
+        };
+        setUserProfile((prev) => ({ ...(prev || {}), extra: nextExtra }));
+        try {
+            await base44.entities.UserProfile.update(userProfile.id, { extra: nextExtra });
+        } catch (e) {
+            console.error("Failed to save study intent:", e);
+        }
+    }, [userProfile, todayKey]);
+
+    // What today is most likely for, in order of how strong the evidence is:
+    // a deadline beats a plan, a plan beats a habit, and a habit beats nothing.
+    // Only a suggestion — the student still picks.
+    const intentSuggestion = useMemo(() => {
+        const days = nextDeadline?.days ?? null;
+        if (days !== null && days <= 3) {
+            const what = nextDeadline.title || "Something";
+            return {
+                mode: "cramming",
+                reason: days === 0 ? `${what} is due today` : `${what} in ${days} day${days === 1 ? "" : "s"}`,
+            };
+        }
+        const plannedCount = plannerReminders.filter(p => p.date === todayKey).length;
+        if (plannedCount > 0) {
+            return {
+                mode: "homework",
+                reason: `${plannedCount} session${plannedCount === 1 ? "" : "s"} blocked in today`,
+            };
+        }
+        // Their own pattern — needs a couple of picks before it means anything.
+        const log = Array.isArray(userProfile?.extra?.intent_log) ? userProfile.extra.intent_log : [];
+        const recent = log.slice(-14);
+        if (recent.length >= 3) {
+            const counts = {};
+            recent.forEach((e) => { if (e?.m) counts[e.m] = (counts[e.m] || 0) + 1; });
+            const top = Object.entries(counts).sort((a, b) => b[1] - a[1])[0];
+            if (top && top[1] >= 2) return { mode: top[0], reason: "What you usually pick" };
+        }
+        return null;
+    }, [nextDeadline, plannerReminders, userProfile, todayKey]);
 
     const coachLine = getCoachLine({
         name: firstName,
@@ -466,14 +543,12 @@ export default function Dashboard() {
         streakDays,
         todayMins: todaysStudyTime,
         studiedYesterday,
-        dueFlashcards: dueFlashcardCount,
         urgentDays: nextDeadline?.days ?? null,
         urgentTitle: nextDeadline?.title ?? null,
         atar: userProfile?.acedit_atar != null ? Number(userProfile.acedit_atar) : null,
         band: atarBandOf(userProfile?.acedit_atar),
         components: userProfile?.atar_components || null,
         goalAtar: userProfile?.goal_atar ? Number(userProfile.goal_atar) : null,
-        plannedToday,
     });
     const streakBlurb = getStreakBlurb(streakDays);
     const multiplier = getStreakMultiplier(streakDays);
@@ -501,6 +576,7 @@ export default function Dashboard() {
         urgentDays: nextDeadline?.days ?? null,
         urgentTitle: nextDeadline?.title ?? null,
         hour,
+        intentMode: todayIntent?.mode ?? null,
     });
     const moveTheme = MOVE_THEME[move.accent];
     const MoveIcon = move.icon;
@@ -525,7 +601,12 @@ export default function Dashboard() {
         <div className="min-h-screen bg-background">
             <AnimatePresence>
                 {showStudyIntent && (
-                    <StudyIntentModal firstName={firstName} onDismiss={() => setShowStudyIntent(false)} />
+                    <StudyIntentModal
+                        firstName={firstName}
+                        onDismiss={() => setShowStudyIntent(false)}
+                        onPick={saveIntent}
+                        suggested={intentSuggestion}
+                    />
                 )}
             </AnimatePresence>
 
