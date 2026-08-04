@@ -4674,8 +4674,13 @@ async function computeAcedItATAR(email) {
       effort: Number((effort * 100).toFixed(0)),
       breadth: Number((breadth * 100).toFixed(0)),
       planning: Number((planning * 100).toFixed(0)),
+      // Evidence behind each bar, so the Ranked page can say why a component
+      // sits where it does instead of showing a bare percentage.
       study_days: days.size,
       minutes,
+      quiz_marks: quizWeight,
+      cards_reviewed: cardsTotal,
+      technique_families: families.size,
       ...planningDetail,
     },
   };

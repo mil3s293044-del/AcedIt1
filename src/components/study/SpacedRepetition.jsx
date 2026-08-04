@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { Flashcard, UserSubject } from "@/entities/all";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -388,6 +388,50 @@ export default function SpacedRepetition() {
         } catch (error) { console.error(error); }
     };
 
+    // ── Generated-deck draft ─────────────────────────────────────────────────
+    // Generation runs for a while and students navigate away mid-way. The
+    // request finishes regardless, the "N flashcards generated!" toast fires
+    // globally — but setGeneratedFlashcards lands on an unmounted component, so
+    // the cards existed only in state that no longer exists and were silently
+    // lost. Stash them so coming back to the page picks up where they left off.
+    const draftKey = user?.email ? `flashcardDraft_${user.email}` : null;
+
+    const saveDraft = useCallback((cards, deck) => {
+        if (!draftKey || !cards?.length) return;
+        try {
+            sessionStorage.setItem(draftKey, JSON.stringify({ cards, deck, at: Date.now() }));
+        } catch { /* quota or private mode — the in-memory path still works */ }
+    }, [draftKey]);
+
+    const clearDraft = useCallback(() => {
+        if (!draftKey) return;
+        try { sessionStorage.removeItem(draftKey); } catch { /* nothing to clean up */ }
+    }, [draftKey]);
+
+    useEffect(() => {
+        if (!draftKey || generatedFlashcards?.length) return;
+        try {
+            const raw = sessionStorage.getItem(draftKey);
+            if (!raw) return;
+            const draft = JSON.parse(raw);
+            if (!draft?.cards?.length) return;
+            setGeneratedFlashcards(draft.cards);
+            if (draft.deck) setNewDeck(prev => ({ ...prev, ...draft.deck }));
+            setIsShowingGenerated(true);
+            toast({
+                title: "Picked up where you left off",
+                description: `${draft.cards.length} generated cards are still waiting to be saved.`,
+            });
+        } catch { clearDraft(); }
+        // Restores once, when the user lands on the page.
+    }, [draftKey]);
+
+    // Subject and topic are usually typed after generating, so keep the stashed
+    // draft current — otherwise coming back restores the cards but loses them.
+    useEffect(() => {
+        if (isShowingGenerated && generatedFlashcards?.length) saveDraft(generatedFlashcards, newDeck);
+    }, [isShowingGenerated, generatedFlashcards, newDeck, saveDraft]);
+
     const handleGenerateFlashcardsFromFile = async () => {
         if (!uploadedFiles.length) {
             toast({ title: "No file selected", description: "Please upload at least one file.", variant: "destructive" });
@@ -468,10 +512,17 @@ The documents provided may be PowerPoint slides, Word documents, or text files. 
                 await base44.entities.UserProfile.update(userProfile.id, { ai_credits: Math.max(0, userProfile.ai_credits - 100) });
             }
 
+            // Stash before touching state — if they navigated away mid-generation
+            // these setters are no-ops, and the draft is the only thing that
+            // survives to be saved later.
+            saveDraft(response.flashcards, newDeck);
             setGeneratedFlashcards(response.flashcards);
             setIsGenerating(false);
             setIsShowingGenerated(true);
-            toast({ title: `${response.flashcards.length} flashcards generated!` });
+            toast({
+                title: `${response.flashcards.length} flashcards generated!`,
+                description: "Not saved yet — open Spaced Repetition and hit Save to keep them.",
+            });
         } catch (error) {
             console.error(error);
             toast({ title: "Generation failed", description: error.message, variant: "destructive" });
@@ -509,13 +560,43 @@ The documents provided may be PowerPoint slides, Word documents, or text files. 
                     next_review_date:    new Date().toISOString().split('T')[0],
                 });
             });
-            const results = await Promise.all(createPromises);
-            toast({ title: "Deck saved!", description: `${results.filter(Boolean).length} cards added.` });
+            // allSettled, not all: one rejected insert used to reject the whole
+            // batch, so a deck that mostly saved reported as a total failure.
+            const results = await Promise.allSettled(createPromises);
+            const saved = results.filter(r => r.status === "fulfilled" && r.value).length;
+            const failed = results.filter(r => r.status === "rejected").length;
+            const blocked = results.filter(r => r.status === "fulfilled" && !r.value).length;
+
+            if (saved === 0) {
+                toast({
+                    title: "Could not save flashcards",
+                    description: blocked ? "The cards were blocked by the content filter." : "Nothing was saved — try again.",
+                    variant: "destructive",
+                });
+                return;
+            }
+
+            toast({
+                title: "Deck saved!",
+                description: failed
+                    ? `${saved} cards added — ${failed} could not be saved.`
+                    : `${saved} cards added.`,
+            });
+            clearDraft();
             setIsShowingGenerated(false); setGeneratedFlashcards(null); setUploadedFiles([]);
-            await loadDecks(user.email);
-        } catch {
+        } catch (error) {
+            console.error("Flashcard save failed:", error);
             toast({ title: "Error", description: "Could not save flashcards.", variant: "destructive" });
         } finally { setIsSavingDeck(false); }
+
+        // Refreshing the list is not part of saving. It used to sit inside the
+        // try, so a failure here fired "Could not save flashcards" straight
+        // after the success toast, for cards that were already in the database.
+        try {
+            await loadDecks(user.email);
+        } catch (e) {
+            console.error("Deck refresh after save failed:", e);
+        }
     };
 
     const handleDeleteDeck = async (deckId) => {
@@ -1245,7 +1326,7 @@ The documents provided may be PowerPoint slides, Word documents, or text files. 
                     )}
 
                     <DialogFooter className="pt-4">
-                        <Button variant="outline" onClick={() => { setIsShowingGenerated(false); setGeneratedFlashcards(null); setUploadedFiles([]); }} className="rounded-xl">Cancel</Button>
+                        <Button variant="outline" onClick={() => { clearDraft(); setIsShowingGenerated(false); setGeneratedFlashcards(null); setUploadedFiles([]); }} className="rounded-xl">Cancel</Button>
                         {!generatedFlashcards ? (
                             <Button onClick={handleGenerateFlashcardsFromFile} disabled={!uploadedFiles.length || isGenerating} className="btn-3d bg-chart-4 hover:bg-chart-4 text-white rounded-xl gap-2">
                                 {isGenerating ? <><Loader2 className="w-4 h-4 animate-spin" /> Generating...</> : <><Sparkles className="w-4 h-4" /> Generate All Cards</>}

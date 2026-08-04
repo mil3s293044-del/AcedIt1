@@ -26,12 +26,47 @@ const BAND_STYLE = {
     "Foundation":      "bg-secondary text-muted-foreground",
 };
 
+const fmtMins = (m) => {
+    if (!m) return "0m";
+    const h = Math.floor(m / 60), mm = Math.round(m % 60);
+    return h === 0 ? `${mm}m` : mm === 0 ? `${h}h` : `${h}h ${mm}m`;
+};
+
+// Each bar states the evidence it was computed from. A percentage on its own
+// tells a student their planning is 22 without telling them why, which makes
+// the one number the whole app is standardised around impossible to act on.
 const COMPONENT_META = [
-    { key: "mastery",     label: "Mastery",     hint: "Quiz accuracy + card retention", bar: "bg-chart-4" },
-    { key: "consistency", label: "Consistency", hint: "Days showing up",                bar: "bg-streak" },
-    { key: "effort",      label: "Effort",      hint: "Focused minutes",                bar: "bg-xp" },
-    { key: "breadth",     label: "Breadth",     hint: "Technique variety",              bar: "bg-chart-3" },
-    { key: "planning",    label: "Planning",    hint: "Goals met + blocks kept",        bar: "bg-primary" },
+    {
+        key: "mastery", label: "Mastery", hint: "Quiz accuracy + card retention", bar: "bg-chart-4",
+        evidence: (c) => {
+            const bits = [];
+            if (c.quiz_marks) bits.push(`${c.quiz_marks} quiz marks`);
+            if (c.cards_reviewed) bits.push(`${c.cards_reviewed} cards`);
+            return bits.length ? bits.join(" · ") : "no quizzes or cards yet";
+        },
+    },
+    {
+        key: "consistency", label: "Consistency", hint: "Days showing up", bar: "bg-streak",
+        evidence: (c) => `${c.study_days ?? 0} of 20 days`,
+    },
+    {
+        key: "effort", label: "Effort", hint: "Focused minutes", bar: "bg-xp",
+        evidence: (c) => `${fmtMins(c.minutes)} of ~20h`,
+    },
+    {
+        key: "breadth", label: "Breadth", hint: "Technique variety", bar: "bg-chart-3",
+        evidence: (c) => `${c.technique_families ?? 0} of 5 techniques`,
+    },
+    {
+        key: "planning", label: "Planning", hint: "Goals, blocks and intents kept", bar: "bg-primary",
+        evidence: (c) => {
+            const bits = [];
+            if (c.goals_set) bits.push(`${c.goals_met ?? 0}/${c.goals_set} goals`);
+            if (c.blocks_planned) bits.push(`${c.blocks_kept ?? 0}/${c.blocks_planned} blocks`);
+            if (c.intents_declared) bits.push(`${c.intents_kept ?? 0}/${c.intents_declared} intents kept`);
+            return bits.length ? bits.join(" · ") : "nothing planned yet";
+        },
+    },
 ];
 
 const BOARDS = [
@@ -112,7 +147,9 @@ export default function Ranked() {
                             </div>
                             <div className="flex-1 min-w-[220px] space-y-2.5">
                                 {COMPONENT_META.map(c => {
-                                    const v = data?.my_components?.[c.key] ?? 0;
+                                    const comps = data?.my_components || {};
+                                    const v = comps[c.key] ?? 0;
+                                    const evidence = data?.my_components ? c.evidence(comps) : null;
                                     return (
                                         <div key={c.key}>
                                             <div className="flex items-baseline justify-between mb-1">
@@ -123,6 +160,9 @@ export default function Ranked() {
                                                 <motion.div initial={{ width: 0 }} animate={{ width: `${v}%` }} transition={{ duration: 0.8, delay: 0.2 }}
                                                     className={`h-full rounded-full ${c.bar}`} />
                                             </div>
+                                            {evidence && (
+                                                <p className="text-[11px] text-muted-foreground/70 mt-1">{evidence}</p>
+                                            )}
                                         </div>
                                     );
                                 })}
