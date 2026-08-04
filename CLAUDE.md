@@ -36,6 +36,38 @@ The app reads/writes through shims that route to either Base44 or Supabase based
 | 3d | Swap `AuthContext.jsx` from Base44 to Supabase Google OAuth | **done** (2026-05-08; dual-run via `shouldUseSupabase()` toggle, Base44 path preserved for rollback) |
 | 4 | Capacitor wrap → iOS app via Xcode | future |
 
+## The AcedIt ATAR
+
+The flagship score everything else is standardised around. 0–99.95, trailing 28
+days, **not** a VCAA prediction and the UI says so wherever it appears. Computed
+in `computeAcedItATAR` (`server.mjs`), stored on `user_profiles.acedit_atar` +
+`atar_components`, mirrored to `leaderboards`.
+
+Mastery 28% · consistency 27% · effort 22% · breadth 13% · planning 10%.
+Unranked under 3 study days. Planning is goals set-and-met, planned blocks kept,
+prep started before an assessment, and declared study intents actually followed
+— its weights live in `computePlanning`.
+
+Every component reports the evidence behind it in `atar_components`, and Ranked
+renders it under each bar. If you add a component, add its counts too — a bare
+percentage tells a student nothing they can act on.
+
+Client mirror of the band thresholds is `src/lib/atarBands.js`. Server is the
+source of truth; keep them in sync.
+
+## Study intent
+
+The Dashboard modal asks what today is for (homework / cramming / free study)
+and how long. The answer lives on `user_profiles.extra.daily_intent`, with a
+capped `intent_log` for history. `src/lib/studyIntent.js` is the shared read and
+owns the mode→technique→tool mapping.
+
+It threads: Today's move leads with it, Study opens on the matching technique,
+AI Tools on the matching persona, the greeting closes the loop once minutes are
+logged, and kept intents feed the ATAR's planning component. The mapping matches
+the advice the modal itself gives — change one, change both, or the app argues
+with itself one screen later.
+
 ### Functions ported (in `server.mjs`)
 - **XP/Streak (4)**: `updateStreak`, `awardXP`, `awardXPIncremental`, `awardGoalXP`. JWT auth helper + `supabaseAdmin` (service_role) live at `server.mjs:28-60`.
 - **Goal AI (2)**: `updateGoalProgress`, `generateGoalWithAI`. Helpers `callLocalFn` / `callInvokeAI` near top of `server.mjs` let one ported function call another.
@@ -49,10 +81,20 @@ The app reads/writes through shims that route to either Base44 or Supabase based
 - **Support (1)**: `sendSupportTicket` — ticket saves to DB AND sends two Resend emails (admin notification to `ADMIN_EMAIL`, confirmation to user). Sender domain `acedit.au` is DNS-verified in Resend. Wired 2026-05-19.
 
 ### Functions remaining
-- **Stripe (4)**: `stripeCheckout`, `stripePortal`, `verifySubscription`, `stripe-webhook` — critical for premium signups. Requires public webhook URL (ngrok in dev).
-- **Admin (3)**: `resetAllCredits`, `migrateStudyHoursToXP`, `banAbusiveAccounts` — admin-only, can defer post-cutover.
+- **Admin (3)**: `resetAllCredits`, `migrateStudyHoursToXP`, `banAbusiveAccounts` — admin-only, can defer post-cutover. Genuinely unported: no handler exists in `server.mjs` for any of them.
 
-Recommended next: Stripe.
+Stripe is **not** remaining. All four (`stripeCheckout`, `stripePortal`,
+`verifySubscription`, `stripe-webhook`) are live in `server.mjs` and wired in
+`supabaseClient.js` — this section listed them as outstanding for months while
+the phase table above said they were ported, and every session that read it was
+sent to write code that already existed.
+
+Still worth confirming rather than assuming: the webhook path needs a public
+URL, so it may never have run against a real Stripe event. If subscriptions are
+not activating after payment, start there, not at the port.
+
+Recommended next: nothing in the migration is blocking. Product work is the
+better use of a session — see below.
 
 ## Run / develop
 
@@ -65,7 +107,17 @@ npm run dev    # vite :5173 + server.mjs :3001 concurrently
 ## Known issues / paper-cuts
 
 - Console 400s on `/study_plans` and `/flashcards` — missing-column patches. Non-blocking.
-- ESLint `react-hooks/exhaustive-deps` warnings and unused-import churn from rapid edits.
+- Lint is at ~46 warnings, down from 190. What's left is mostly unread state; the
+  genuinely dead things have been removed. Worth reading a warning before deleting
+  it — twice now an "unused" symbol turned out to mark a half-wired feature, not
+  dead code (the shared-quiz handlers, Layout's unreachable UpgradeModal).
+- No test runner is configured. There is no `test` script, no vitest, no jest.
+  Adding one is a real decision, not a freebie.
+- Copy drifts away from the product. Retired features kept being advertised
+  (weekly leagues on the paid tier, a Study Roadmap page that redirects, past
+  papers in Revision Mode) and the AI tool count was hand-written as three
+  different numbers across five screens. Tool count now derives from
+  `TOOL_COUNT` in `chatTools.js`. When you retire something, grep the copy.
 - Long subagent runs in this codebase have repeatedly hit 600s stream-idle timeouts. Avoid long-running subagents — do work in the main conversation or split into smaller agent tasks.
 - `package.json` `name` is still `base44-app` and `@base44/sdk` + `@base44/vite-plugin` are still listed (kept for dual-run; remove after cutover).
 
@@ -75,7 +127,15 @@ npm run dev    # vite :5173 + server.mjs :3001 concurrently
 - **Banned words**: "Don't", "Fix it", "No excuses", "Embarrassing", "Move".
 - **Primary green** `#58CC02` (Duolingo-like). XP orange, streak red, chart-3 blue, chart-4 purple. Use design tokens, not raw hex.
 - **Static Tailwind classes only** — JIT can't see template-string class names. Recurring gotcha.
-- **Streaming AI for prose tools, NOT JSON tools** (ExamQuestionGenerator, NoteSummarizer, LineMemoriser stay non-streaming).
+- **Streaming AI for prose tools, NOT JSON tools.** In the unified chat this is
+  the `artifact` spec on a tool in `chatTools.js`: declaring one switches that
+  send to a single non-streaming schema call. Cheat sheet, exam questions and
+  the line memoriser all take that path.
+- **Collect nothing you don't use.** The recurring bug in this app is asking the
+  student something and then ignoring the answer — the study intent was
+  discarded on close, the duration they picked was never read, the ATAR
+  components were computed and never shown. If you add an input, wire it through
+  the same session.
 - **No mascot yet** (maybe later). **No dark mode yet** (later).
 - VCAA examiner prompts live in `src/lib/subjectExaminerPrompts.js` (34 subjects).
 
