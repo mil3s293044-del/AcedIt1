@@ -27,6 +27,7 @@ import CheatSheetArtifact from "./CheatSheetArtifact";
 import ExamQuestionsArtifact from "./ExamQuestionsArtifact";
 import LineMemoriserArtifact from "./LineMemoriserArtifact";
 import { actionById } from "./chatActions";
+import { todaysIntent } from "@/lib/studyIntent";
 
 const MAX_TURNS_IN_PROMPT = 12;
 
@@ -87,10 +88,20 @@ export default function UnifiedChat() {
         base44.auth.me().then(async (u) => {
             setUser(u);
             if (!u?.email) return;
-            const [subs, convs] = await Promise.all([
+            const [subs, convs, profiles] = await Promise.all([
                 base44.entities.UserSubject.filter({ created_by: u.email, is_active: true }).catch(() => []),
                 base44.entities.AISavedResult.filter({ created_by: u.email }, "-created_date", 120).catch(() => []),
+                base44.entities.UserProfile.filter({ created_by: u.email }).catch(() => []),
             ]);
+            // Open on the tool that fits what they said today is for. Safe to
+            // set unconditionally — this runs once on mount, before any saved
+            // conversation has been opened.
+            const intent = todaysIntent(profiles?.[0]);
+            const wanted = intent && toolById(intent.plan.tool);
+            if (wanted?.id === intent.plan.tool) {
+                setActiveTool(wanted.id);
+                setToolOptions(defaultOptions(wanted));
+            }
             const seen = new Set();
             setSubjects((subs || []).filter(s => !seen.has(s.subject_name) && seen.add(s.subject_name)));
             // Only chat-format rows join the sidebar (legacy saved results
