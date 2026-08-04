@@ -10,7 +10,6 @@ import { motion, AnimatePresence } from "framer-motion";
 import { Toaster } from "@/components/ui/toaster";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { base44 } from "@/api/base44Client";
-import UpgradeModal from "@/components/shared/UpgradeModal";
 import XPFeedback from "@/components/ranked/XPFeedback";
 import StreakCelebration from "@/components/ranked/StreakCelebration";
 import StakesPill from "@/components/arena/StakesPill";
@@ -82,8 +81,6 @@ export default function Layout({ children }) {
     const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
     const timerRef = useRef(null);
     const [userProfile, setUserProfile] = useState(null);
-    const [showUpgradeModal, setShowUpgradeModal] = useState(false);
-    const [blockedFeature, setBlockedFeature] = useState(null);
     const [navigationGuard, setNavigationGuard] = useState({ show: false, targetUrl: null, onSave: null });
     const [pendingNavigation, setPendingNavigation] = useState(null);
     const [showOnboarding, setShowOnboarding] = useState(false);
@@ -300,15 +297,6 @@ export default function Layout({ children }) {
                     </div>
                 </DialogContent>
             </Dialog>
-
-            <UpgradeModal
-                isOpen={showUpgradeModal}
-                onClose={() => setShowUpgradeModal(false)}
-                feature={blockedFeature}
-                requiredTier="premium"
-                userProfile={userProfile}
-                isBlocking={false}
-            />
             <XPFeedback />
             <StreakCelebration />
 
