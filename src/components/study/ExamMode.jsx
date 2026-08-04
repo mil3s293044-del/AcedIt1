@@ -66,6 +66,23 @@ const SOURCE_PILL = {
   "Active Recall": "bg-primary/10 text-primary"
 };
 
+// Roughly half the paper drawn from flagged-weak material when there's enough
+// of it. Enough to make revision feel targeted, not so much that the mock stops
+// covering the rest of the course.
+const WEAK_SHARE = 0.5;
+
+// Fisher-Yates. `sort(() => Math.random() - 0.5)` is not a shuffle — the
+// comparator is inconsistent, so the result is measurably biased toward the
+// original order and some questions surface far less often than others.
+function shuffle(list) {
+  const a = [...list];
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
+
 const SOURCE_ICON = {
   Flashcards: BookOpen,
   Quizzes: FileText,
@@ -112,7 +129,9 @@ export default function ExamMode({ userSubjects }) {
     subject: "all",
     questionCount: 20,
     timeLimit: 30,
-    sources: ["flashcards", "quizzes"]
+    // Active recall sessions were collected and then excluded by default, so
+    // that material never reached a mock unless you went looking for the toggle.
+    sources: ["flashcards", "quizzes", "active_recall"]
   });
 
   useEffect(() => {
@@ -136,7 +155,9 @@ export default function ExamMode({ userSubjects }) {
 
       (flashcards || []).forEach((fc) => {
         if (!fc.question || !fc.answer) return;
-        questions.push({ id: `fc_${fc.id}`, type: "open", question: fc.question, modelAnswer: fc.answer, subject: fc.subject_name || "General", topic: fc.topic || "General", source: "Flashcards" });
+        // cardId + weak are what let the exam feed back into spaced repetition
+        // rather than being a read-only dead end.
+        questions.push({ id: `fc_${fc.id}`, cardId: fc.id, weak: !!fc.is_weak_spot, type: "open", question: fc.question, modelAnswer: fc.answer, subject: fc.subject_name || "General", topic: fc.topic || "General", source: "Flashcards" });
       });
 
       (quizzes || []).forEach((quiz) => {
@@ -172,8 +193,28 @@ export default function ExamMode({ userSubjects }) {
   );
 
   const handleStartExam = () => {
-    let pool = [...getAvailablePool()].sort(() => Math.random() - 0.5);
-    if (config.questionCount !== "all") pool = pool.slice(0, config.questionCount);
+    const available = getAvailablePool();
+    let pool;
+    if (config.questionCount === "all") {
+      pool = shuffle(available);
+    } else {
+      // Weight the paper toward what you're actually weak at. The app flags
+      // weak cards in spaced repetition and this is the one place it matters
+      // most, but selection used to be flat random — you could sit a whole mock
+      // and never meet the material you keep getting wrong.
+      const want = config.questionCount;
+      const weak = shuffle(available.filter((q) => q.weak));
+      const rest = shuffle(available.filter((q) => !q.weak));
+      // Up to WEAK_SHARE from weak material, but never the entire paper —
+      // revision that only revisits failures stops testing everything else.
+      const weakSlots = Math.min(weak.length, Math.floor(want * WEAK_SHARE));
+      pool = shuffle([...weak.slice(0, weakSlots), ...rest.slice(0, want - weakSlots)]);
+      // Short on fresh material — top back up from whatever's left.
+      if (pool.length < want) {
+        const used = new Set(pool.map((q) => q.id));
+        pool = pool.concat(available.filter((q) => !used.has(q.id)).slice(0, want - pool.length));
+      }
+    }
     if (!pool.length) return;
     hasSubmitted.current = false;
     setExamQuestions(pool);
@@ -288,6 +329,11 @@ Return exactly ${openQs.length} results, in order.`,
         });
         return next;
       });
+      // Same feedback loop as a manual self-mark — anything short of full marks
+      // sends the card back into the review queue.
+      openQs.forEach((q, i) => {
+        if (marked[i]) feedWeakSpot(q, marked[i].verdict === "correct");
+      });
       toast({ title: "✅ Marked by the examiner", description: `${marked.length} answer${marked.length === 1 ? "" : "s"} assessed to VCAA standards.` });
     } catch (e) {
       toast({ title: "AI marking unavailable", description: e.message || "You can still self-mark below.", variant: "destructive" });
@@ -307,8 +353,25 @@ Return exactly ${openQs.length} results, in order.`,
   const handleTypeAnswer = (qId, text) =>
   setAnswers((prev) => ({ ...prev, [qId]: { ...prev[qId], typed: text } }));
 
-  const handleSelfMark = (qId, correct) =>
-  setAnswers((prev) => ({ ...prev, [qId]: { ...prev[qId], selfMark: correct } }));
+  // Getting a card wrong in a mock used to teach the system nothing — ExamMode
+  // only ever read. A miss here now flags the card weak and pulls its next
+  // review to today, so the mock feeds spaced repetition instead of sitting
+  // outside it. Only ever flags: clearing a weak spot is what real graded
+  // reviews are for, and one lucky mock answer shouldn't undo that.
+  const markedWeak = useRef(new Set());
+  const feedWeakSpot = (question, isCorrect) => {
+    if (isCorrect || !question?.cardId || markedWeak.current.has(question.cardId)) return;
+    markedWeak.current.add(question.cardId);
+    base44.entities.Flashcard.update(question.cardId, {
+      is_weak_spot: true,
+      next_review_date: new Date().toISOString().split("T")[0],
+    }).catch((e) => console.error("Could not flag weak card:", e));
+  };
+
+  const handleSelfMark = (qId, correct) => {
+    setAnswers((prev) => ({ ...prev, [qId]: { ...prev[qId], selfMark: correct } }));
+    feedWeakSpot(examQuestions.find((q) => q.id === qId), correct);
+  };
 
   const computeScore = () => {
     let correct = 0,total = 0,pending = 0;
@@ -790,6 +853,15 @@ Return exactly ${openQs.length} results, in order.`,
                                             {isCorrect ? <Check className="w-4 h-4" /> : isWrong ? <X className="w-4 h-4" /> : i + 1}
                                         </div>
                                         <div className="flex-1 min-w-0">
+                                            {/* Where each question came from — SOURCE_ICON was defined
+                                                and never rendered, so review gave no way to tell a
+                                                flashcard miss from a quiz miss. */}
+                                            <div className="flex items-center gap-1.5 mb-1.5 text-[11px] text-muted-foreground">
+                                                {SOURCE_ICON[eq.source] && React.createElement(SOURCE_ICON[eq.source], { className: "w-3 h-3" })}
+                                                <span>{eq.source}</span>
+                                                {eq.weak && <span className="pill bg-streak/10 text-streak text-[10px] px-1.5 py-0">weak spot</span>}
+                                                <span className="text-muted-foreground/50">· {eq.topic}</span>
+                                            </div>
                                             <p className="font-semibold text-foreground text-sm mb-3 leading-relaxed">{eq.question}</p>
 
                                             {isMCQ &&
