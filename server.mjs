@@ -4497,7 +4497,10 @@ async function computePlanning(email, sinceDate) {
     supabaseAdmin.from("subject_assessments")
       .select("due_date, subject_name")
       .eq("created_by", email).gte("due_date", sinceDay).lte("due_date", lookahead).limit(200),
-    supabaseAdmin.from("user_profiles").select("extra").eq("created_by", email).maybeSingle(),
+    // .limit(1) before .maybeSingle() — without it, a duplicate user_profiles
+    // row makes maybeSingle throw, which takes the whole ATAR computation down
+    // with it. loadUserProfile and refreshAcedItATAR both guard the same way.
+    supabaseAdmin.from("user_profiles").select("extra").eq("created_by", email).limit(1).maybeSingle(),
   ]);
 
   // ── Goals: set, then met ──────────────────────────────────────────────
@@ -4648,7 +4651,14 @@ async function computeAcedItATAR(email) {
   const breadth = Math.min(1, families.size / 5);
 
   // ── Planning (10%): goals set and met, blocks kept, prep started early ──
-  const { planning, detail: planningDetail } = await computePlanning(email, sinceDate);
+  // Four tables' worth of queries for 10% of the score — a failure in any of
+  // them should cost the student that slice, not their whole ATAR.
+  let planning = 0, planningDetail = {};
+  try {
+    ({ planning, detail: planningDetail } = await computePlanning(email, sinceDate));
+  } catch (e) {
+    console.warn("[acedit_atar] planning component failed:", e?.message);
+  }
 
   const composite =
     0.28 * mastery + 0.27 * consistency + 0.22 * effort + 0.13 * breadth + 0.10 * planning;
