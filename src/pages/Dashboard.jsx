@@ -249,11 +249,11 @@ function getTodaysMove({ todayMins, streakDays, dueFlashcards, urgentDays, urgen
 
 // Direction A — softer tints, lighter borders, shadow for depth.
 const MOVE_THEME = {
-    primary:   { bg: "bg-primary/5",   border: "border-primary/15",   iconBg: "bg-primary/10",   iconText: "text-primary"   },
-    streak:    { bg: "bg-streak/5",    border: "border-streak/15",    iconBg: "bg-streak/10",    iconText: "text-streak"    },
-    xp:        { bg: "bg-xp/5",        border: "border-xp/15",        iconBg: "bg-xp/10",        iconText: "text-xp"        },
-    "chart-3": { bg: "bg-chart-3/5",   border: "border-chart-3/15",   iconBg: "bg-chart-3/10",   iconText: "text-chart-3"   },
-    "chart-4": { bg: "bg-chart-4/5",   border: "border-chart-4/15",   iconBg: "bg-chart-4/10",   iconText: "text-chart-4"   },
+    primary:   { bg: "bg-primary/5",   border: "border-primary/15",   iconBg: "bg-primary/10",   iconText: "text-primary",   bar: "bg-primary"   },
+    streak:    { bg: "bg-streak/5",    border: "border-streak/15",    iconBg: "bg-streak/10",    iconText: "text-streak",    bar: "bg-streak"    },
+    xp:        { bg: "bg-xp/5",        border: "border-xp/15",        iconBg: "bg-xp/10",        iconText: "text-xp",        bar: "bg-xp"        },
+    "chart-3": { bg: "bg-chart-3/5",   border: "border-chart-3/15",   iconBg: "bg-chart-3/10",   iconText: "text-chart-3",   bar: "bg-chart-3"   },
+    "chart-4": { bg: "bg-chart-4/5",   border: "border-chart-4/15",   iconBg: "bg-chart-4/10",   iconText: "text-chart-4",   bar: "bg-chart-4"   },
 };
 
 const URGENCY = {
@@ -587,6 +587,16 @@ export default function Dashboard() {
     const moveTheme = MOVE_THEME[move.accent];
     const MoveIcon = move.icon;
 
+    // The modal asks "how long?" and saves the answer, but nothing ever read it
+    // back — a student committed to an hour and the app never mentioned it
+    // again. Track today's minutes against what they actually committed to.
+    const commitment = useMemo(() => {
+        if (!todayIntentPlan?.duration) return null;
+        const target = todayIntentPlan.duration;
+        const done = todaysStudyTime;
+        return { target, done, pct: Math.min(100, Math.round((done / target) * 100)), met: done >= target };
+    }, [todayIntentPlan, todaysStudyTime]);
+
     const hasGoal = !!(userProfile?.goal_atar || userProfile?.goal_course_name);
     const onboardingTasks = userProfile?.onboarding_tasks || {};
     const onboardingComplete = onboardingTasks.username_set && onboardingTasks.subjects_selected && onboardingTasks.goals_set;
@@ -650,6 +660,57 @@ export default function Dashboard() {
                             {coachLine.sub}
                         </p>
                     )}
+                </motion.section>
+
+                {/* ── TODAY'S MOVE (compact, single row) ──────────────── */}
+                <motion.section
+                    initial={{ opacity: 0, y: 12 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: 0.2 }}
+                >
+                    <div className={`rounded-2xl ${moveTheme.bg} border ${moveTheme.border} shadow-soft p-5 lg:p-6`}>
+                        <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
+                            <div className={`w-12 h-12 rounded-xl ${moveTheme.iconBg} flex items-center justify-center flex-shrink-0`}>
+                                <MoveIcon className={`w-6 h-6 ${moveTheme.iconText}`} />
+                            </div>
+                            <div className="flex-1 min-w-0">
+                                <p className="stat-label mb-1">Today's move · {move.label}</p>
+                                <h2 className="font-display font-extrabold text-foreground text-base lg:text-lg leading-snug">
+                                    {commitment?.met ? "You did what you said you'd do." : move.title}
+                                </h2>
+                                <p className="text-muted-foreground text-sm mt-0.5">
+                                    {commitment?.met
+                                        ? `${fmtTime(commitment.done)} against the ${fmtTime(commitment.target)} you committed to.`
+                                        : move.sub}
+                                </p>
+                                {commitment && !commitment.met && (
+                                    <div className="mt-2.5">
+                                        <div className="flex items-baseline justify-between mb-1">
+                                            <span className="text-[11px] font-bold text-foreground">
+                                                {fmtTime(commitment.done)} of {fmtTime(commitment.target)}
+                                            </span>
+                                            <span className="text-[11px] text-muted-foreground">
+                                                {commitment.done === 0 ? "you committed to this today" : `${commitment.pct}%`}
+                                            </span>
+                                        </div>
+                                        <div className="h-1.5 bg-secondary rounded-full overflow-hidden">
+                                            <motion.div
+                                                initial={{ width: 0 }}
+                                                animate={{ width: `${commitment.pct}%` }}
+                                                transition={{ duration: 0.7, delay: 0.2 }}
+                                                className={`h-full rounded-full ${moveTheme.bar}`}
+                                            />
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+                            <Link to={createPageUrl(move.link)} className="w-full sm:w-auto flex-shrink-0">
+                                <Button className="w-full sm:w-auto">
+                                    {move.cta} <ArrowRight className="w-4 h-4" />
+                                </Button>
+                            </Link>
+                        </div>
+                    </div>
                 </motion.section>
 
                 {/* ── HERO ROW: Streak (2/3) + Today snapshot (1/3) ──── */}
@@ -988,33 +1049,6 @@ export default function Dashboard() {
                         </div>
                     </motion.section>
                 )}
-
-                {/* ── TODAY'S MOVE (compact, single row) ──────────────── */}
-                <motion.section
-                    initial={{ opacity: 0, y: 12 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: 0.2 }}
-                >
-                    <div className={`rounded-2xl ${moveTheme.bg} border ${moveTheme.border} shadow-soft p-5 lg:p-6`}>
-                        <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
-                            <div className={`w-12 h-12 rounded-xl ${moveTheme.iconBg} flex items-center justify-center flex-shrink-0`}>
-                                <MoveIcon className={`w-6 h-6 ${moveTheme.iconText}`} />
-                            </div>
-                            <div className="flex-1 min-w-0">
-                                <p className="stat-label mb-1">Today's move · {move.label}</p>
-                                <h2 className="font-display font-extrabold text-foreground text-base lg:text-lg leading-snug">
-                                    {move.title}
-                                </h2>
-                                <p className="text-muted-foreground text-sm mt-0.5">{move.sub}</p>
-                            </div>
-                            <Link to={createPageUrl(move.link)} className="w-full sm:w-auto flex-shrink-0">
-                                <Button className="w-full sm:w-auto">
-                                    {move.cta} <ArrowRight className="w-4 h-4" />
-                                </Button>
-                            </Link>
-                        </div>
-                    </div>
-                </motion.section>
 
                 {/* ── GOAL POSTER + RECENT (3:2) ──────────────────────── */}
                 <motion.section
