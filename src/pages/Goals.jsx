@@ -12,13 +12,15 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { DragDropContext, Droppable, Draggable } from "@hello-pangea/dnd";
 import {
     CalendarDays, Plus, Check, X, GraduationCap, Sparkles,
     Loader2, ArrowRight, Edit2, Flag, BookOpen, Trash2, ChevronLeft,
-    ChevronRight, Repeat
+    ChevronRight, Repeat, GripVertical
 } from "lucide-react";
 import { base44 } from "@/api/base44Client";
 import { useToast } from "@/components/ui/use-toast";
+import { ToastAction } from "@/components/ui/toast";
 import { format, differenceInDays, parseISO, addDays, startOfWeek, addWeeks } from "date-fns";
 import HelpButton from "@/components/shared/HelpButton";
 
@@ -106,6 +108,64 @@ const durationOf = (plan) => {
 const noteTextOf = (plan) =>
     (plan.notes || "").replace(REC_TAG, "").replace(DUR_TAG, "").trim() || null;
 
+// Rebuild the notes field from its parts, preserving the recurrence id so
+// editing a session doesn't quietly orphan it from its series.
+const buildNotes = (recId, duration, text) => {
+    const tags = `${recId ? `[rec:${recId}]` : ""}${duration ? `[dur:${duration}]` : ""}`;
+    const body = (text || "").trim();
+    return `${tags}${body ? ` ${body}` : ""}` || null;
+};
+
+// ─── Time maths for dragging ────────────────────────────────────────────────
+// Days render as time-ordered stacks, so where a session lands in the stack is
+// a statement about when it happens. These turn a drop position into a clock
+// time, under three rules the UI states out loud:
+//   · into an empty day  → keeps its own time
+//   · above everything   → ends where the first session starts
+//   · after a session    → starts when that one finishes
+const DEFAULT_DUR = 40;
+const GAP = 10;          // minutes of breathing room between back-to-back sessions
+const DAY_MIN = 6 * 60;  // don't schedule before 06:00
+const DAY_MAX = 22 * 60; // or after 22:00
+
+const toMinutes = (hhmm) => {
+    const m = /^(\d{1,2}):(\d{2})/.exec(hhmm || "");
+    return m ? Number(m[1]) * 60 + Number(m[2]) : null;
+};
+const toHHMM = (mins) => {
+    const c = Math.max(DAY_MIN, Math.min(DAY_MAX, Math.round(mins / 5) * 5));
+    return `${String(Math.floor(c / 60)).padStart(2, "0")}:${String(c % 60).padStart(2, "0")}`;
+};
+const prettyTime = (hhmm) => {
+    const mins = toMinutes(hhmm);
+    if (mins == null) return null;
+    const h = Math.floor(mins / 60), m = mins % 60;
+    const suffix = h < 12 ? "am" : "pm";
+    const h12 = h % 12 === 0 ? 12 : h % 12;
+    return m === 0 ? `${h12}${suffix}` : `${h12}:${String(m).padStart(2, "0")}${suffix}`;
+};
+
+/**
+ * Start time for a session dropped at `index` in `siblings` (the target day's
+ * other sessions, already time-ordered). Returns null to mean "keep whatever
+ * time it already had".
+ */
+function timeForSlot(siblings, index, movingDuration) {
+    const dur = movingDuration || DEFAULT_DUR;
+    const prev = siblings[index - 1];
+    const next = siblings[index];
+
+    if (prev) {
+        const prevStart = toMinutes(prev.start_time);
+        if (prevStart != null) return toHHMM(prevStart + (durationOf(prev) || DEFAULT_DUR) + GAP);
+    }
+    if (next) {
+        const nextStart = toMinutes(next.start_time);
+        if (nextStart != null) return toHHMM(nextStart - GAP - dur);
+    }
+    return null; // empty day, or neighbours with no times of their own
+}
+
 export default function Planner() {
     const { toast } = useToast();
     const [user, setUser] = useState(null);
@@ -125,8 +185,10 @@ export default function Planner() {
     const [sacDate, setSacDate] = useState("");
     const [savingSac, setSavingSac] = useState(false);
 
-    // Add-session dialog (type + details + recurrence)
+    // Add/edit-session dialog (type + details + recurrence). `editingPlan`
+    // switches the same dialog from create to update.
     const [planDay, setPlanDay] = useState(null);
+    const [editingPlan, setEditingPlan] = useState(null);
     const [planType, setPlanType] = useState("");
     const [planTitle, setPlanTitle] = useState("");
     const [planSubject, setPlanSubject] = useState("");
@@ -299,6 +361,98 @@ export default function Planner() {
         } finally {
             setSavingPlan(false);
         }
+    };
+
+    // ─── Editing an existing session ──────────────────────────────────────────
+    // The add dialog already collects everything a session has, so editing
+    // reuses it rather than growing a second form that drifts out of sync.
+    const openAddPlan = (dayKey) => {
+        setEditingPlan(null);
+        setPlanDay(dayKey);
+        setPlanTitle(""); setPlanType(""); setPlanNote(""); setRepeatWeekly(false);
+    };
+
+    const openEditPlan = (p) => {
+        const known = SESSION_TYPES.find(t => p.title?.startsWith(`${t.value}: `));
+        setEditingPlan(p);
+        setPlanDay(p.date);
+        setPlanType(known?.value || "");
+        setPlanTitle(known ? p.title.slice(known.value.length + 2) : (p.title || ""));
+        setPlanSubject(p.subject_name || "");
+        setPlanTime(p.start_time || "16:00");
+        setPlanDuration(durationOf(p) || DEFAULT_DUR);
+        setPlanNote(noteTextOf(p) || "");
+        setRepeatWeekly(false);
+    };
+
+    const closePlanDialog = () => { setPlanDay(null); setEditingPlan(null); };
+
+    const savePlanEdits = async () => {
+        if (!editingPlan || !planTitle.trim() || !planDay) return;
+        setSavingPlan(true);
+        const alreadyPrefixed = planTitle.includes(":");
+        const finalTitle = planType && planType !== "Other" && !alreadyPrefixed
+            ? `${planType}: ${planTitle.trim()}`
+            : planTitle.trim();
+        const patch = {
+            title: finalTitle,
+            subject_name: planSubject || null,
+            date: planDay,
+            start_time: planTime || null,
+            notes: buildNotes(recIdOf(editingPlan), planDuration, planNote),
+        };
+        try {
+            await base44.entities.StudyPlan.update(editingPlan.id, patch);
+            setPlans(prev => prev.map(x => x.id === editingPlan.id ? { ...x, ...patch } : x));
+            closePlanDialog();
+            toast({ title: "Session updated" });
+        } catch (e) {
+            toast({ title: "Couldn't save", description: e.message, variant: "destructive" });
+        } finally {
+            setSavingPlan(false);
+        }
+    };
+
+    // ─── Dragging a session to another day / time ─────────────────────────────
+    const movePlan = async (planId, toDate, toIndex) => {
+        const plan = plans.find(p => p.id === planId);
+        if (!plan) return;
+
+        const siblings = plans
+            .filter(p => p.date === toDate && p.id !== planId)
+            .sort((a, b) => (a.start_time || "").localeCompare(b.start_time || ""));
+        const newTime = timeForSlot(siblings, toIndex, durationOf(plan)) || plan.start_time;
+
+        if (plan.date === toDate && plan.start_time === newTime) return;
+
+        const before = { date: plan.date, start_time: plan.start_time };
+        const patch = { date: toDate, start_time: newTime };
+        // Optimistic — the board should follow your finger, not the network.
+        setPlans(prev => prev.map(p => p.id === planId ? { ...p, ...patch } : p));
+
+        const revert = async () => {
+            setPlans(prev => prev.map(p => p.id === planId ? { ...p, ...before } : p));
+            try { await base44.entities.StudyPlan.update(planId, before); } catch { /* board is already back */ }
+        };
+
+        try {
+            await base44.entities.StudyPlan.update(planId, patch);
+            toast({
+                title: `Moved to ${format(parseISO(toDate), "EEE d MMM")}`,
+                description: newTime ? `Now starts ${prettyTime(newTime)}.` : undefined,
+                action: <ToastAction altText="Undo the move" onClick={revert}>Undo</ToastAction>,
+            });
+        } catch (e) {
+            setPlans(prev => prev.map(p => p.id === planId ? { ...p, ...before } : p));
+            toast({ title: "Couldn't move it", description: e.message, variant: "destructive" });
+        }
+    };
+
+    const onDragEnd = (result) => {
+        const { draggableId, source, destination } = result;
+        if (!destination) return;
+        if (destination.droppableId === source.droppableId && destination.index === source.index) return;
+        movePlan(draggableId, destination.droppableId, destination.index);
     };
 
     const togglePlanDone = async (p) => {
@@ -672,90 +826,124 @@ Rules: weight sessions toward the nearest assessments; at most 2 sessions per da
                         </div>
                     )}
 
-                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-7 gap-3">
-                        {week.map(day => (
-                            <div key={day.key}
-                                className={`rounded-2xl border-2 p-3 min-h-[240px] flex flex-col gap-2 transition-colors ${
-                                    day.isToday ? "bg-primary/5 border-primary/40" : day.isPast ? "bg-secondary/30 border-border/60 opacity-70" : "bg-surface border-border"
-                                }`}>
-                                <div className="flex items-center justify-between px-0.5 mb-0.5">
-                                    <div className="flex items-baseline gap-1.5">
-                                        <p className={`text-xs font-black uppercase tracking-wide ${day.isToday ? "text-primary" : "text-muted-foreground/70"}`}>{day.dayName}</p>
-                                        <p className={`font-display font-extrabold text-lg ${day.isToday ? "text-primary" : "text-muted-foreground/50"}`}>{day.dayNum}</p>
-                                    </div>
-                                    {!day.isPast && (
-                                        <button onClick={() => { setPlanDay(day.key); setPlanTitle(""); setPlanType(""); setPlanNote(""); setRepeatWeekly(false); }} aria-label={`Add session on ${day.dayName} ${day.dayNum}`}
-                                            className="w-7 h-7 rounded-lg flex items-center justify-center text-muted-foreground/50 hover:text-primary hover:bg-primary/10 transition-all">
-                                            <Plus className="w-4 h-4" />
-                                        </button>
-                                    )}
-                                </div>
-
-                                {day.sacs.map(a => (
-                                    <div key={a.id} className="rounded-xl bg-streak text-white px-2.5 py-2 shadow-soft">
-                                        <p className="text-xs font-black leading-tight">🚩 {a.subject_name}</p>
-                                        <p className="text-[11px] font-bold text-white/80 leading-tight">{(a.assessment_type || "SAC").toUpperCase()} · {a.title}</p>
-                                    </div>
-                                ))}
-
-                                <AnimatePresence>
-                                    {day.plans.map(p => {
-                                        const dur = durationOf(p);
-                                        const note = noteTextOf(p);
-                                        return (
-                                        <motion.div key={p.id} layout initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.9 }}
-                                            className={`group rounded-xl border px-2.5 py-2 transition-colors ${
-                                                p.is_completed ? "bg-primary/5 border-primary/20" : subjectChipClass(p.subject_name || p.title)
+                    <DragDropContext onDragEnd={onDragEnd}>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-7 gap-3">
+                            {week.map(day => (
+                                <Droppable droppableId={day.key} key={day.key}>
+                                    {(dropProvided, dropSnapshot) => (
+                                        <div ref={dropProvided.innerRef} {...dropProvided.droppableProps}
+                                            className={`rounded-2xl border-2 p-3 min-h-[240px] flex flex-col gap-2 transition-colors ${
+                                                dropSnapshot.isDraggingOver ? "bg-chart-3/10 border-chart-3 border-dashed"
+                                                    : day.isToday ? "bg-primary/5 border-primary/40"
+                                                    : day.isPast ? "bg-secondary/30 border-border/60 opacity-70"
+                                                    : "bg-surface border-border"
                                             }`}>
-                                            <div className="flex items-start gap-2">
-                                                <button onClick={() => togglePlanDone(p)} aria-label="Toggle session done"
-                                                    className={`w-4 h-4 mt-0.5 rounded border flex-shrink-0 flex items-center justify-center transition-colors ${
-                                                        p.is_completed ? "bg-primary border-primary text-white" : "border-current/40 hover:border-current"
-                                                    }`}>
-                                                    {p.is_completed && <Check className="w-3 h-3" />}
-                                                </button>
-                                                <Link to={sessionLink(p.title)} className="min-w-0 flex-1" title={note || undefined}>
-                                                    <p className={`text-xs font-bold leading-tight ${p.is_completed ? "text-muted-foreground line-through" : "text-foreground"}`}>
-                                                        {p.title}
-                                                        {recIdOf(p) && <Repeat className="w-2.5 h-2.5 inline ml-1 opacity-50" />}
-                                                    </p>
-                                                    <p className="text-[11px] text-muted-foreground leading-tight mt-0.5">
-                                                        {[p.start_time, dur ? `${dur}m` : null, p.subject_name].filter(Boolean).join(" · ")}
-                                                    </p>
-                                                    {note && <p className="text-[11px] text-muted-foreground/70 italic leading-tight mt-0.5 truncate">{note}</p>}
-                                                </Link>
-                                                <button onClick={() => requestDeletePlan(p)} aria-label="Remove session"
-                                                    className="opacity-0 group-hover:opacity-100 text-muted-foreground/40 hover:text-streak transition-all flex-shrink-0">
-                                                    <X className="w-3.5 h-3.5" />
-                                                </button>
+                                            <div className="flex items-center justify-between px-0.5 mb-0.5">
+                                                <div className="flex items-baseline gap-1.5">
+                                                    <p className={`text-xs font-black uppercase tracking-wide ${day.isToday ? "text-primary" : "text-muted-foreground/70"}`}>{day.dayName}</p>
+                                                    <p className={`font-display font-extrabold text-lg ${day.isToday ? "text-primary" : "text-muted-foreground/50"}`}>{day.dayNum}</p>
+                                                </div>
+                                                {!day.isPast && (
+                                                    <button onClick={() => openAddPlan(day.key)} aria-label={`Add session on ${day.dayName} ${day.dayNum}`}
+                                                        className="w-7 h-7 rounded-lg flex items-center justify-center text-muted-foreground/50 hover:text-primary hover:bg-primary/10 transition-all">
+                                                        <Plus className="w-4 h-4" />
+                                                    </button>
+                                                )}
                                             </div>
-                                        </motion.div>
-                                        );
-                                    })}
-                                </AnimatePresence>
 
-                                {day.plans.length === 0 && day.sacs.length === 0 && !day.isPast && (
-                                    <button onClick={() => { setPlanDay(day.key); setPlanTitle(""); setPlanType(""); setPlanNote(""); setRepeatWeekly(false); }}
-                                        className="flex-1 rounded-xl border border-dashed border-border/60 text-xs text-muted-foreground/40 hover:text-muted-foreground hover:border-muted-foreground/40 transition-colors">
-                                        + plan
-                                    </button>
-                                )}
-                            </div>
-                        ))}
-                    </div>
+                                            {day.sacs.map(a => (
+                                                <div key={a.id} className="rounded-xl bg-streak text-white px-2.5 py-2 shadow-soft">
+                                                    <p className="text-xs font-black leading-tight">🚩 {a.subject_name}</p>
+                                                    <p className="text-[11px] font-bold text-white/80 leading-tight">{(a.assessment_type || "SAC").toUpperCase()} · {a.title}</p>
+                                                </div>
+                                            ))}
 
-                    <p className="text-xs text-muted-foreground mt-3 flex items-center gap-1.5">
-                        <ArrowRight className="w-3.5 h-3.5" />
-                        Tap a session to open the right tool — studying it feeds your streak, duels and bets automatically.
+                                            {day.plans.map((p, i) => {
+                                                const dur = durationOf(p);
+                                                const note = noteTextOf(p);
+                                                // disableInteractiveElementBlocking is what makes the whole
+                                                // bubble grabbable. By default the library refuses to lift a
+                                                // drag that starts on a link or button, which is most of this
+                                                // card — with it off, a tap still opens the tool (a lift needs
+                                                // movement first) but click-and-hold picks the session up from
+                                                // anywhere on it.
+                                                return (
+                                                    <Draggable draggableId={p.id} index={i} key={p.id} disableInteractiveElementBlocking>
+                                                        {(dragProvided, dragSnapshot) => (
+                                                            <div ref={dragProvided.innerRef} {...dragProvided.draggableProps} {...dragProvided.dragHandleProps}
+                                                                aria-label={`${p.title}. Press space to pick this session up, then the arrow keys to move it.`}
+                                                                className={`group relative rounded-xl border pl-2 pr-2 py-2 transition-shadow cursor-grab active:cursor-grabbing focus:outline-none focus:ring-2 focus:ring-chart-3 ${
+                                                                    dragSnapshot.isDragging ? "shadow-lg ring-2 ring-chart-3 rotate-1" : ""
+                                                                } ${
+                                                                    p.is_completed ? "bg-primary/5 border-primary/20" : subjectChipClass(p.subject_name || p.title)
+                                                                }`}>
+                                                                {/* Edit and remove float over the card rather than sitting
+                                                                    in the row — at seven columns a day is ~150px wide and
+                                                                    an action column costs the title a whole line. */}
+                                                                <div className="absolute top-1 right-1 flex gap-0.5 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity z-10">
+                                                                    <button onClick={() => openEditPlan(p)} aria-label={`Edit ${p.title}`}
+                                                                        className="w-5 h-5 rounded-md bg-surface/90 shadow-sm flex items-center justify-center text-muted-foreground/60 hover:text-chart-3">
+                                                                        <Edit2 className="w-3 h-3" />
+                                                                    </button>
+                                                                    <button onClick={() => requestDeletePlan(p)} aria-label={`Remove ${p.title}`}
+                                                                        className="w-5 h-5 rounded-md bg-surface/90 shadow-sm flex items-center justify-center text-muted-foreground/60 hover:text-streak">
+                                                                        <X className="w-3 h-3" />
+                                                                    </button>
+                                                                </div>
+
+                                                                <div className="flex items-start gap-1.5">
+                                                                    <GripVertical className="w-3 h-3 -ml-1.5 mt-0.5 text-muted-foreground/25 group-hover:text-muted-foreground/60 flex-shrink-0 transition-colors" />
+                                                                    <button onClick={() => togglePlanDone(p)} aria-label="Toggle session done"
+                                                                        className={`w-4 h-4 mt-0.5 rounded border flex-shrink-0 flex items-center justify-center transition-colors ${
+                                                                            p.is_completed ? "bg-primary border-primary text-white" : "border-current/40 hover:border-current"
+                                                                        }`}>
+                                                                        {p.is_completed && <Check className="w-3 h-3" />}
+                                                                    </button>
+                                                                    <Link to={sessionLink(p.title)} className="min-w-0 flex-1" title={note || undefined}>
+                                                                        <p className={`text-xs font-bold leading-tight ${p.is_completed ? "text-muted-foreground line-through" : "text-foreground"}`}>
+                                                                            {p.title}
+                                                                            {recIdOf(p) && <Repeat className="w-2.5 h-2.5 inline ml-1 opacity-50" />}
+                                                                        </p>
+                                                                        <p className="text-[11px] text-muted-foreground leading-tight mt-0.5">
+                                                                            {[prettyTime(p.start_time), dur ? `${dur}m` : null, p.subject_name].filter(Boolean).join(" · ")}
+                                                                        </p>
+                                                                        {note && <p className="text-[11px] text-muted-foreground/70 italic leading-tight mt-0.5 truncate">{note}</p>}
+                                                                    </Link>
+                                                                </div>
+                                                            </div>
+                                                        )}
+                                                    </Draggable>
+                                                );
+                                            })}
+                                            {dropProvided.placeholder}
+
+                                            {day.plans.length === 0 && day.sacs.length === 0 && !day.isPast && !dropSnapshot.isDraggingOver && (
+                                                <button onClick={() => openAddPlan(day.key)}
+                                                    className="flex-1 rounded-xl border border-dashed border-border/60 text-xs text-muted-foreground/40 hover:text-muted-foreground hover:border-muted-foreground/40 transition-colors">
+                                                    + plan
+                                                </button>
+                                            )}
+                                        </div>
+                                    )}
+                                </Droppable>
+                            ))}
+                        </div>
+                    </DragDropContext>
+
+                    <p className="text-xs text-muted-foreground mt-3 flex items-start gap-1.5">
+                        <ArrowRight className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" />
+                        Tap a session to open the right tool. Drag one to another day to move it — dropping it under
+                        another session starts it when that one finishes, and dropping it on top puts it first.
                     </p>
                 </motion.section>
 
                 {/* ── Add-session dialog (with recurrence) ─────────────── */}
-                <Dialog open={!!planDay} onOpenChange={(o) => !o && setPlanDay(null)}>
+                <Dialog open={!!planDay} onOpenChange={(o) => !o && closePlanDialog()}>
                     <DialogContent className="max-w-md rounded-3xl max-h-[85vh] overflow-y-auto">
                         <DialogHeader>
                             <DialogTitle className="font-display">
-                                Plan a session{planDay ? ` — ${format(parseISO(planDay), "EEE d MMM")}` : ""}
+                                {editingPlan ? "Edit session" : "Plan a session"}
+                                {planDay ? ` — ${format(parseISO(planDay), "EEE d MMM")}` : ""}
                             </DialogTitle>
                         </DialogHeader>
                         <div className="space-y-3.5">
@@ -781,15 +969,23 @@ Rules: weight sessions toward the nearest assessments; at most 2 sessions per da
                                     value={planTitle} onChange={e => setPlanTitle(e.target.value)} maxLength={80} autoFocus />
                             </div>
 
+                            <div>
+                                <p className="stat-label mb-1.5">Subject</p>
+                                <Select value={planSubject} onValueChange={setPlanSubject}>
+                                    <SelectTrigger><SelectValue placeholder="Optional" /></SelectTrigger>
+                                    <SelectContent>
+                                        {subjects.map(s => <SelectItem key={s.id} value={s.subject_name}>{s.subject_name}</SelectItem>)}
+                                    </SelectContent>
+                                </Select>
+                            </div>
+
+                            {/* Day and time together — dragging is the quick way to move a
+                                session, this is the exact way, and the only way on a
+                                keyboard-free-hands day when you know precisely when. */}
                             <div className="grid grid-cols-2 gap-2">
                                 <div>
-                                    <p className="stat-label mb-1.5">Subject</p>
-                                    <Select value={planSubject} onValueChange={setPlanSubject}>
-                                        <SelectTrigger><SelectValue placeholder="Optional" /></SelectTrigger>
-                                        <SelectContent>
-                                            {subjects.map(s => <SelectItem key={s.id} value={s.subject_name}>{s.subject_name}</SelectItem>)}
-                                        </SelectContent>
-                                    </Select>
+                                    <p className="stat-label mb-1.5">Day</p>
+                                    <Input type="date" value={planDay || ""} onChange={e => e.target.value && setPlanDay(e.target.value)} />
                                 </div>
                                 <div>
                                     <p className="stat-label mb-1.5">Start time</p>
@@ -816,7 +1012,17 @@ Rules: weight sessions toward the nearest assessments; at most 2 sessions per da
                                 <Input placeholder='Optional — e.g. "focus on q4-style problems"' value={planNote} onChange={e => setPlanNote(e.target.value)} maxLength={120} />
                             </div>
 
-                            {/* Recurrence */}
+                            {/* Recurrence — creation only. Editing one occurrence of a
+                                series changes that occurrence, which is said out loud
+                                below rather than left for the student to discover. */}
+                            {editingPlan ? (
+                                recIdOf(editingPlan) && (
+                                    <p className="text-xs text-muted-foreground flex items-start gap-1.5 bg-secondary/50 rounded-xl p-2.5 border border-border">
+                                        <Repeat className="w-3.5 h-3.5 text-chart-3 flex-shrink-0 mt-0.5" />
+                                        This one repeats weekly. Your changes apply to this session only — the rest of the series stays as it is.
+                                    </p>
+                                )
+                            ) : (
                             <div className={`rounded-2xl border-2 p-3 transition-colors ${repeatWeekly ? "border-chart-3/40 bg-chart-3/5" : "border-border"}`}>
                                 <button onClick={() => setRepeatWeekly(r => !r)} className="flex items-center gap-2 w-full">
                                     <span className={`w-5 h-5 rounded-md border-2 flex items-center justify-center transition-colors ${repeatWeekly ? "bg-chart-3 border-chart-3 text-white" : "border-border"}`}>
@@ -837,10 +1043,11 @@ Rules: weight sessions toward the nearest assessments; at most 2 sessions per da
                                     </div>
                                 )}
                             </div>
+                            )}
 
-                            <Button onClick={addPlan} disabled={savingPlan || !planTitle.trim()} className="w-full gap-1.5">
-                                {savingPlan ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
-                                {repeatWeekly ? `Add ${repeatWeeks} weekly sessions` : "Add to plan"}
+                            <Button onClick={editingPlan ? savePlanEdits : addPlan} disabled={savingPlan || !planTitle.trim()} className="w-full gap-1.5">
+                                {savingPlan ? <Loader2 className="w-4 h-4 animate-spin" /> : editingPlan ? <Check className="w-4 h-4" /> : <Plus className="w-4 h-4" />}
+                                {editingPlan ? "Save changes" : repeatWeekly ? `Add ${repeatWeeks} weekly sessions` : "Add to plan"}
                             </Button>
                         </div>
                     </DialogContent>
