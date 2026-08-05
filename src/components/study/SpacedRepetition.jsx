@@ -28,6 +28,49 @@ import { recordStudyAndGetStreak } from "@/components/shared/streakHelpers";
 // Lucide alias — design system maps "alert" semantics to AlertTriangle.
 const AlertCircle = AlertTriangle;
 
+// ─── AI generation: how much, and how deep ──────────────────────────────────
+// The generator used to be exhaustive-only — the prompt literally said "if the
+// document has 200 distinct facts, create 200 cards", which is right before an
+// exam on one chapter and useless when you want the ten things that matter.
+// Coverage decides what qualifies as card-worthy; count decides how many of
+// those you get. Count is the binding constraint when the two disagree.
+
+const COVERAGE_OPTIONS = [
+    {
+        id: "key_ideas", label: "Key ideas", blurb: "The big concepts only",
+        scope: "the key ideas only",
+        instruction: "Only the material's most important ideas — the ones a student cannot understand this topic without. Skip minor detail, incidental examples and anything peripheral. Every card has to earn its place."
+    },
+    {
+        id: "balanced", label: "Balanced", blurb: "Core plus the detail that gets tested",
+        scope: "core concepts plus the detail that gets tested",
+        instruction: "The core concepts, plus the supporting detail that makes them usable: key definitions, the formulas and process steps that go with them, and the distinctions examiners test. Leave out incidental detail and asides."
+    },
+    {
+        id: "everything", label: "Everything", blurb: "Every learnable fact",
+        scope: "every learnable fact in it",
+        instruction: "Every distinct learnable fact in the material — every definition, term, formula, process step, date, name, event, cause-effect relationship, comparison, exception, diagram label and key point. Read every slide, bullet, heading, body paragraph, table cell and list item. Leave nothing behind."
+    },
+];
+
+const COUNT_OPTIONS = [10, 20, 30, 50];
+
+const coverageOf = (id) => COVERAGE_OPTIONS.find((c) => c.id === id) || COVERAGE_OPTIONS[2];
+
+const countInstruction = (cardCount) =>
+    cardCount === "max"
+        ? "Generate as many cards as the material genuinely supports at the coverage above. Do not stop at a round number — if it yields 200, generate 200; if it yields 40, generate 40. Never pad to reach a total."
+        : `Generate ${cardCount} cards. This is a hard ceiling and it overrides the coverage scope: if the material offers more than ${cardCount} card-worthy ideas, pick the ${cardCount} most valuable — the ones most likely to be tested and most costly to forget. If it genuinely offers fewer, return fewer rather than padding with filler or restating a concept twice.`;
+
+// What the two dials will actually produce, in one line, so the setting isn't
+// a guess. Reads under the controls.
+const generationSummary = (cardCount, coverage) => {
+    const scope = coverageOf(coverage).scope;
+    return cardCount === "max"
+        ? `As many cards as the material supports — ${scope}.`
+        : `Up to ${cardCount} cards — ${scope}.`;
+};
+
 // ─── SM-2 based mastery algorithm ───────────────────────────────────────────
 // Mastery score (0–100) is a weighted composite:
 //   40% success rate (good+easy / total reviews)
@@ -305,7 +348,11 @@ export default function SpacedRepetition() {
     const [newDeck, setNewDeck] = useState({ subject_name: '', subject_code: '', topic: '', unit: 'General' });
     const [newCard, setNewCard] = useState({ question: '', answer: '' });
     const [aiSettings, setAiSettings] = useState({
-        cardCount: 15, difficulty: 'mixed', cardStyle: 'standard', focusArea: 'key_concepts', includeExamples: true, language: 'simple'
+        // 'max' = as many as the material supports. `everything` + `max` is what
+        // the generator did before these two dials existed, so it stays the
+        // default — dialling down is the new thing, not the new normal.
+        cardCount: 'max', coverage: 'everything',
+        difficulty: 'mixed', cardStyle: 'standard', focusArea: 'key_concepts', includeExamples: true, language: 'simple'
     });
 
     const { toast } = useToast();
@@ -464,9 +511,17 @@ export default function SpacedRepetition() {
             const focusInstructions = { key_concepts: "Focus on the most important concepts, theories, and principles.", definitions: "Focus on vocabulary, terminology, and definitions.", processes: "Focus on processes, steps, and procedures.", relationships: "Focus on cause-effect relationships and connections between ideas.", exam_prep: "Focus on content likely to appear in VCE exams, including common question types." };
             const languageInstructions = { simple: "Use clear, simple language suitable for quick recall.", detailed: "Provide more detailed answers with explanations.", technical: "Use proper technical terminology and academic language." };
 
-            const basePrompt = `You are a comprehensive VCE flashcard generator. Your job is to extract EVERY single learnable piece of information from the provided study material and turn it into a flashcard. You must be exhaustive and thorough — leave nothing behind.
+            const coverage = coverageOf(aiSettings.coverage);
+
+            const basePrompt = `You are a VCE flashcard generator. Turn the provided study material into flashcards at the scope and volume specified below.
 
 ${documentContext ? `EXTRACTED TEXT FROM UPLOADED DOCUMENTS:\n${documentContext}` : ''}
+
+COVERAGE — what qualifies as card-worthy (${coverage.label}):
+${coverage.instruction}
+
+HOW MANY:
+${countInstruction(aiSettings.cardCount)}
 
 GENERATION SETTINGS:
 - Difficulty: ${aiSettings.difficulty} - ${difficultyInstructions[aiSettings.difficulty]}
@@ -475,17 +530,13 @@ GENERATION SETTINGS:
 - Language: ${aiSettings.language} - ${languageInstructions[aiSettings.language]}
 ${aiSettings.includeExamples ? '- Include practical examples where relevant.' : '- Keep answers concise without extra examples.'}
 
-CRITICAL REQUIREMENTS — READ CAREFULLY:
-- You MUST generate a flashcard for EVERY distinct piece of learnable information in the material.
-- This means: every definition, every concept, every term, every formula, every process step, every date/name/event, every cause-effect relationship, every comparison, every exception, every example, every diagram label, every key point, every heading and sub-heading topic.
-- If the document has 200 distinct facts, create 200 cards. If it has 50, create 50. Do NOT stop early.
-- NEVER cap yourself at a round number. Extract everything.
-- Do NOT repeat or paraphrase the same concept twice.
+RULES THAT APPLY WHATEVER THE SCOPE:
 - Each card must test exactly ONE idea — keep them atomic and focused.
-- Questions must be clear, specific, and unambiguous.
-- Answers must be complete and correct.
+- Do NOT repeat or paraphrase the same concept twice.
+- Questions must be clear, specific, and unambiguous. Never "explain X" where X is a whole topic.
+- Answers must be complete and correct, and short enough to check yourself against in a couple of seconds.
 
-The documents provided may be PowerPoint slides, Word documents, or text files. Read every slide, every bullet point, every heading, every body text, every table cell, every numbered list item — and create a card for each learnable fact.`;
+The documents provided may be PowerPoint slides, Word documents, PDFs or text files. Read the body text, headings, bullet points, table cells and numbered list items — not just the slide titles.`;
 
             // Only pass PDF/TXT files to Gemini — it cannot natively read DOCX/PPTX.
             // DOCX/PPTX content is already injected as text in documentContext above.
@@ -501,6 +552,7 @@ The documents provided may be PowerPoint slides, Word documents, or text files. 
                     properties: {
                         flashcards: {
                             type: "array",
+                            ...(aiSettings.cardCount === "max" ? {} : { maxItems: aiSettings.cardCount }),
                             items: { type: "object", properties: { question: { type: "string" }, answer: { type: "string" } }, required: ["question", "answer"] }
                         }
                     },
@@ -512,16 +564,27 @@ The documents provided may be PowerPoint slides, Word documents, or text files. 
                 await base44.entities.UserProfile.update(userProfile.id, { ai_credits: Math.max(0, userProfile.ai_credits - 100) });
             }
 
+            // The count has to be a guarantee, not a request. maxItems above is
+            // advisory — providers routinely overshoot it — so the number they
+            // picked is enforced here.
+            const cards = aiSettings.cardCount === "max"
+                ? (response.flashcards || [])
+                : (response.flashcards || []).slice(0, aiSettings.cardCount);
+
             // Stash before touching state — if they navigated away mid-generation
             // these setters are no-ops, and the draft is the only thing that
             // survives to be saved later.
-            saveDraft(response.flashcards, newDeck);
-            setGeneratedFlashcards(response.flashcards);
+            saveDraft(cards, newDeck);
+            setGeneratedFlashcards(cards);
             setIsGenerating(false);
             setIsShowingGenerated(true);
             toast({
-                title: `${response.flashcards.length} flashcards generated!`,
-                description: "Not saved yet — open Spaced Repetition and hit Save to keep them.",
+                title: `${cards.length} flashcards generated!`,
+                // Asking for 30 and getting 12 looks like a failure unless you
+                // say the material was the limit, not the generator.
+                description: aiSettings.cardCount !== "max" && cards.length < aiSettings.cardCount
+                    ? `That's everything the material supported at this coverage. Not saved yet — hit Save to keep them.`
+                    : "Not saved yet — open Spaced Repetition and hit Save to keep them.",
             });
         } catch (error) {
             console.error(error);
@@ -1233,6 +1296,41 @@ The documents provided may be PowerPoint slides, Word documents, or text files. 
 
                             {/* Settings */}
                             <div className="space-y-4">
+                                {/* How many + how deep. These two decide whether you get a
+                                    usable deck or 200 cards, so they lead. */}
+                                <div className="space-y-3 bg-secondary/40 rounded-2xl p-3.5 border border-border">
+                                    <div className="space-y-1.5">
+                                        <Label className="text-xs font-medium text-muted-foreground">How many cards</Label>
+                                        <div className="flex flex-wrap gap-2">
+                                            {COUNT_OPTIONS.map(n => (
+                                                <button key={n} type="button" onClick={() => setAiSettings({ ...aiSettings, cardCount: n })}
+                                                    className={`px-3.5 py-1.5 rounded-xl text-sm font-bold border-2 transition-all ${aiSettings.cardCount === n ? "bg-foreground border-foreground text-background" : "border-border text-muted-foreground hover:border-muted-foreground"}`}>
+                                                    {n}
+                                                </button>
+                                            ))}
+                                            <button type="button" onClick={() => setAiSettings({ ...aiSettings, cardCount: 'max' })}
+                                                className={`px-3.5 py-1.5 rounded-xl text-sm font-bold border-2 transition-all ${aiSettings.cardCount === 'max' ? "bg-foreground border-foreground text-background" : "border-border text-muted-foreground hover:border-muted-foreground"}`}>
+                                                As many as possible
+                                            </button>
+                                        </div>
+                                    </div>
+
+                                    <div className="space-y-1.5">
+                                        <Label className="text-xs font-medium text-muted-foreground">Coverage</Label>
+                                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                                            {COVERAGE_OPTIONS.map(c => (
+                                                <button key={c.id} type="button" onClick={() => setAiSettings({ ...aiSettings, coverage: c.id })}
+                                                    className={`text-left px-3 py-2 rounded-xl border-2 transition-all ${aiSettings.coverage === c.id ? "bg-chart-4/10 border-chart-4" : "border-border hover:border-muted-foreground"}`}>
+                                                    <span className={`block text-sm font-bold ${aiSettings.coverage === c.id ? "text-chart-4" : "text-foreground"}`}>{c.label}</span>
+                                                    <span className="block text-xs text-muted-foreground leading-snug mt-0.5">{c.blurb}</span>
+                                                </button>
+                                            ))}
+                                        </div>
+                                    </div>
+
+                                    <p className="text-xs text-muted-foreground/80">{generationSummary(aiSettings.cardCount, aiSettings.coverage)}</p>
+                                </div>
+
                                 <div className="grid grid-cols-2 gap-3">
                                     <div className="space-y-1.5">
                                         <Label className="text-xs font-medium text-muted-foreground">Difficulty</Label>
@@ -1258,11 +1356,15 @@ The documents provided may be PowerPoint slides, Word documents, or text files. 
                                         </Select>
                                     </div>
                                     <div className="space-y-1.5">
-                                        <Label className="text-xs font-medium text-muted-foreground">Focus Area</Label>
+                                        {/* "Emphasis", not "Focus Area" — Coverage above already
+                                            answers how much, and two controls both offering
+                                            "key concepts" read as the same dial twice. This one
+                                            picks what kind of content, not how much of it. */}
+                                        <Label className="text-xs font-medium text-muted-foreground">Emphasis</Label>
                                         <Select value={aiSettings.focusArea} onValueChange={v => setAiSettings({ ...aiSettings, focusArea: v })}>
                                             <SelectTrigger className="border-2 rounded-xl h-10"><SelectValue /></SelectTrigger>
                                             <SelectContent>
-                                                <SelectItem value="key_concepts">Key Concepts</SelectItem>
+                                                <SelectItem value="key_concepts">Concepts &amp; Theories</SelectItem>
                                                 <SelectItem value="definitions">Definitions</SelectItem>
                                                 <SelectItem value="processes">Processes</SelectItem>
                                                 <SelectItem value="relationships">Cause & Effect</SelectItem>
@@ -1329,7 +1431,7 @@ The documents provided may be PowerPoint slides, Word documents, or text files. 
                         <Button variant="outline" onClick={() => { clearDraft(); setIsShowingGenerated(false); setGeneratedFlashcards(null); setUploadedFiles([]); }} className="rounded-xl">Cancel</Button>
                         {!generatedFlashcards ? (
                             <Button onClick={handleGenerateFlashcardsFromFile} disabled={!uploadedFiles.length || isGenerating} className="btn-3d bg-chart-4 hover:bg-chart-4 text-white rounded-xl gap-2">
-                                {isGenerating ? <><Loader2 className="w-4 h-4 animate-spin" /> Generating...</> : <><Sparkles className="w-4 h-4" /> Generate All Cards</>}
+                                {isGenerating ? <><Loader2 className="w-4 h-4 animate-spin" /> Generating...</> : <><Sparkles className="w-4 h-4" /> {aiSettings.cardCount === 'max' ? 'Generate All Cards' : `Generate ${aiSettings.cardCount} Cards`}</>}
                             </Button>
                         ) : (
                             <Button onClick={() => handleSaveGeneratedFlashcards(newDeck)} disabled={!newDeck.subject_name || !newDeck.topic || isSavingDeck} className="btn-3d bg-chart-3 hover:bg-chart-3 text-white rounded-xl gap-2">
