@@ -1357,6 +1357,44 @@ const DAILY_CAPS = {
 };
 const HOURLY_VELOCITY_CAP = 600;
 
+/**
+ * The one way to write an xp_events row.
+ *
+ * Every audit insert used to be written inline with its result destructured as
+ * `const { data } = await ...`, which throws the error on the floor —
+ * supabase-js resolves with `{ data, error }` rather than rejecting, so a
+ * rejected insert was indistinguishable from a successful one. Migration 0003
+ * created `xp_amount int not null` with no default and no code has ever
+ * written it, so every insert was failing a not-null violation in silence.
+ *
+ * xp_events is not a nice-to-have log. Duel scores, back-yourself bets, the
+ * Arena momentum ticker and the AcedIt ATAR are all computed by reading it
+ * back, so an empty table renders all four permanently zero — which is exactly
+ * how it presented: duels that never tracked progress.
+ *
+ * Migration 0023 makes xp_amount nullable with a default; this keeps it in
+ * step with xp_awarded so the legacy column stays truthful, and makes a failed
+ * write loud instead of invisible.
+ */
+async function insertXPEvent(row, context = "awardXP") {
+  const { data, error } = await supabaseAdmin
+    .from("xp_events")
+    .insert({ ...row, xp_amount: row.xp_awarded ?? 0 })
+    .select()
+    .single();
+  if (error) {
+    // Loud on purpose. Swallowing this takes duels, bets and the ATAR down
+    // with it and leaves nothing behind to find it by.
+    console.error(
+      `[${context}] xp_events insert FAILED — duel/bet/ATAR scoring reads this row:`,
+      error.code, error.message,
+      JSON.stringify({ user_email: row.user_email, source: row.source, event_key: row.event_key }),
+    );
+    return null;
+  }
+  return data;
+}
+
 app.post("/local-ai/fn/awardXP", async (req, res) => {
   const user = await authenticateRequest(req);
   if (!user) return res.status(401).json({ error: "Unauthorized" });
@@ -1511,7 +1549,7 @@ app.post("/local-ai/fn/awardXP", async (req, res) => {
 
     // Helper: write a zero-XP audit event (for capped/zero outcomes)
     const writeZeroEvent = async (flags = [], metadata = {}) => {
-      await supabaseAdmin.from("xp_events").insert({
+      await insertXPEvent({
         created_by: userEmail,
         event_key,
         user_email: userEmail,
@@ -1526,7 +1564,7 @@ app.post("/local-ai/fn/awardXP", async (req, res) => {
         level_after: profile.current_level || 1,
         leveled_up: false,
         metadata: { ...body, ...metadata },
-      });
+      }, "awardXP:zero");
     };
 
     if (rawXP <= 0) {
@@ -1585,32 +1623,28 @@ app.post("/local-ai/fn/awardXP", async (req, res) => {
     const seasonRankUp = newSeasonRank.tier > prevSeasonRank.tier;
 
     // Write the audit event FIRST (idempotency anchor)
-    const { data: xpEvent } = await supabaseAdmin
-      .from("xp_events")
-      .insert({
-        created_by: userEmail,
-        event_key,
-        user_email: userEmail,
-        source,
-        xp_awarded: finalXP,
-        raw_xp: rawXP,
-        capped: isCapped || velocityCapped,
-        integrity_flags: [],
-        total_xp_after: newTotalXP,
-        season_xp_after: newSeasonXP,
-        level_before: prevLevel,
-        level_after: newLevel,
-        leveled_up: leveledUp,
-        // Everything the arena metrics + analytics read back — dropping a
-        // field here silently zeroes a duel yardstick.
-        metadata: {
-          challenge_type, difficulty, score_percent, score, duration_minutes,
-          total_marks: body.total_marks, questions_correct, questions_total,
-          questions_attempted, quiz_score, cards_reviewed, cards_correct,
-        },
-      })
-      .select()
-      .single();
+    const xpEvent = await insertXPEvent({
+      created_by: userEmail,
+      event_key,
+      user_email: userEmail,
+      source,
+      xp_awarded: finalXP,
+      raw_xp: rawXP,
+      capped: isCapped || velocityCapped,
+      integrity_flags: [],
+      total_xp_after: newTotalXP,
+      season_xp_after: newSeasonXP,
+      level_before: prevLevel,
+      level_after: newLevel,
+      leveled_up: leveledUp,
+      // Everything the arena metrics + analytics read back — dropping a
+      // field here silently zeroes a duel yardstick.
+      metadata: {
+        challenge_type, difficulty, score_percent, score, duration_minutes,
+        total_marks: body.total_marks, questions_correct, questions_total,
+        questions_attempted, quiz_score, cards_reviewed, cards_correct,
+      },
+    }, "awardXP");
 
     // Update UserProfile XP (CRITICAL — strictly increasing)
     await supabaseAdmin
@@ -1821,8 +1855,9 @@ app.post("/local-ai/fn/awardXPIncremental", async (req, res) => {
     const newTotalXP = (profile.total_xp || 0) + finalXP;
     const newSeasonXP = (profile.season_xp || 0) + finalXP;
 
-    // Audit event
-    await supabaseAdmin.from("xp_events").insert({
+    // Audit event. This is the per-card / per-minute drip, so it's the row
+    // that makes a duel move while the student is still studying.
+    await insertXPEvent({
       created_by: userEmail,
       event_key,
       user_email: userEmail,
@@ -1837,7 +1872,7 @@ app.post("/local-ai/fn/awardXPIncremental", async (req, res) => {
       level_after: profile.current_level || 1,
       leveled_up: false,
       metadata: { type, ...metadata },
-    });
+    }, "awardXPIncremental");
 
     // Update profile + caps + velocity
     const updatedCaps = {
@@ -3679,26 +3714,22 @@ async function deductXPWithAudit(userEmail, amount, eventKey, source, metadata =
   } catch (e) {
     console.warn(`[${source}] leaderboard mirror failed:`, e?.message);
   }
-  try {
-    await supabaseAdmin.from("xp_events").insert({
-      created_by: userEmail,
-      event_key: eventKey,
-      user_email: userEmail,
-      source,
-      xp_awarded: -amount,
-      raw_xp: -amount,
-      capped: false,
-      integrity_flags: [],
-      total_xp_after: newXP,
-      season_xp_after: newSeasonXP,
-      level_before: profile.current_level || 1,
-      level_after: levelFromXP(newXP),
-      leveled_up: false,
-      metadata,
-    });
-  } catch (e) {
-    console.warn(`[${source}] xp_events audit insert failed:`, e?.message);
-  }
+  await insertXPEvent({
+    created_by: userEmail,
+    event_key: eventKey,
+    user_email: userEmail,
+    source,
+    xp_awarded: -amount,
+    raw_xp: -amount,
+    capped: false,
+    integrity_flags: [],
+    total_xp_after: newXP,
+    season_xp_after: newSeasonXP,
+    level_before: profile.current_level || 1,
+    level_after: levelFromXP(newXP),
+    leveled_up: false,
+    metadata,
+  }, source);
   return true;
 }
 
@@ -3944,24 +3975,22 @@ async function creditXPWithAudit(userEmail, amount, eventKey, source, metadata =
         .eq("id", lbRows[0].id);
     }
   } catch (e) { console.warn(`[${source}] leaderboard mirror failed:`, e?.message); }
-  try {
-    await supabaseAdmin.from("xp_events").insert({
-      created_by: userEmail,
-      event_key: eventKey,
-      user_email: userEmail,
-      source,
-      xp_awarded: amount,
-      raw_xp: amount,
-      capped: false,
-      integrity_flags: [],
-      total_xp_after: newXP,
-      season_xp_after: newSeasonXP,
-      level_before: profile.current_level || 1,
-      level_after: levelFromXP(newXP),
-      leveled_up: false,
-      metadata,
-    });
-  } catch (e) { console.warn(`[${source}] xp_events audit insert failed:`, e?.message); }
+  await insertXPEvent({
+    created_by: userEmail,
+    event_key: eventKey,
+    user_email: userEmail,
+    source,
+    xp_awarded: amount,
+    raw_xp: amount,
+    capped: false,
+    integrity_flags: [],
+    total_xp_after: newXP,
+    season_xp_after: newSeasonXP,
+    level_before: profile.current_level || 1,
+    level_after: levelFromXP(newXP),
+    leveled_up: false,
+    metadata,
+  }, source);
 }
 
 // Measure one student's study output between two instants, from xp_events.
