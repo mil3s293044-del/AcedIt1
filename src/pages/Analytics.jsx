@@ -6,8 +6,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Button } from "@/components/ui/button";
 import {
     BarChart3, TrendingUp, Clock, Brain, Target, Calendar, Award,
-    Zap, BookOpen, Activity, Flame, ArrowUpRight,
-    ArrowDownRight, Minus, Layers, CheckCircle2, AlertTriangle,
+    Zap, BookOpen, Activity, Flame,
+    Layers, CheckCircle2, AlertTriangle,
     Sparkles, Star, FileQuestion
 } from "lucide-react";
 import { base44 } from "@/api/base44Client";
@@ -25,6 +25,7 @@ import {
 } from "recharts";
 import AIPerformanceAnalyzer from "../components/analytics/AIPerformanceAnalyzer";
 import AtarPanel from "../components/analytics/AtarPanel";
+import WeakTopicsPanel from "../components/analytics/WeakTopicsPanel";
 import HelpButton from "@/components/shared/HelpButton";
 
 const fmt = (mins) => {
@@ -111,7 +112,7 @@ function getCoachLine({ name, hour, totalMins, totalSess, weekDelta, quizAvg, qu
 }
 
 // ─── Featured insight detection ──────────────────────────────────────────────
-function getFeaturedInsight({ metrics, fcHealth, techBreakdown, subjectData, quizDelta, weekDelta, streakDays }) {
+function getFeaturedInsight({ metrics, techBreakdown, subjectData, quizDelta, weekDelta, streakDays }) {
     // Priority order: biggest signal first
     if (metrics.totalMins === 0) {
         return {
@@ -197,14 +198,6 @@ function getFeaturedInsight({ metrics, fcHealth, techBreakdown, subjectData, qui
         icon: Sparkles,
     };
 }
-
-const StatPill = ({ value, prev }) => {
-    if (prev === null || prev === undefined) return null;
-    const diff = value - prev;
-    if (diff === 0) return <span className="flex items-center gap-0.5 text-xs text-muted-foreground"><Minus className="w-3 h-3" /> same</span>;
-    if (diff > 0) return <span className="flex items-center gap-0.5 text-xs text-primary"><ArrowUpRight className="w-3 h-3" /> {diff > 0 ? "+" : ""}{typeof diff === "number" && diff % 1 !== 0 ? diff.toFixed(1) : diff}</span>;
-    return <span className="flex items-center gap-0.5 text-xs text-streak"><ArrowDownRight className="w-3 h-3" /> {typeof diff === "number" && diff % 1 !== 0 ? diff.toFixed(1) : diff}</span>;
-};
 
 export default function Analytics() {
     const [user, setUser] = useState(null);
@@ -473,8 +466,8 @@ export default function Analytics() {
     });
 
     const featured = useMemo(() => getFeaturedInsight({
-        metrics, fcHealth, techBreakdown, subjectData, quizDelta, weekDelta: weekStats.weekDelta, streakDays,
-    }), [metrics, fcHealth, techBreakdown, subjectData, quizDelta, weekStats.weekDelta, streakDays]);
+        metrics, techBreakdown, subjectData, quizDelta, weekDelta: weekStats.weekDelta, streakDays,
+    }), [metrics, techBreakdown, subjectData, quizDelta, weekStats.weekDelta, streakDays]);
     const FeaturedIcon = featured.icon;
     const featuredTheme = FEATURED_THEME[featured.accent] || FEATURED_THEME["chart-3"];
 
@@ -687,6 +680,14 @@ export default function Analytics() {
                             </div>
                         </div>
                     </div>
+                </motion.section>
+
+                {/* ── WEAK TOPICS ─────────────────────────────────────── */}
+                {/* The page counted weak cards and stopped there. Naming the
+                    topics and handing each one a paper is the difference
+                    between a statistic and a next action. */}
+                <motion.section initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.12 }}>
+                    <WeakTopicsPanel flashcards={data.flashcards} />
                 </motion.section>
 
                 {/* ── Time range selector ── */}

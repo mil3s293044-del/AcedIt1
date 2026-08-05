@@ -127,13 +127,21 @@ export default function ExamMode({ userSubjects }) {
 
   const [isAIMarking, setIsAIMarking] = useState(false);
   const { toast } = useToast();
-  const [config, setConfig] = useState({
-    subject: "all",
-    questionCount: 20,
-    timeLimit: 30,
-    // Active recall sessions were collected and then excluded by default, so
-    // that material never reached a mock unless you went looking for the toggle.
-    sources: ["flashcards", "quizzes", "active_recall"]
+  const [config, setConfig] = useState(() => {
+    // Deep link from the weak-topics panel on Analytics:
+    // /Study?tab=exam&subject=…&topic=…. Read straight off the URL at init —
+    // seeding it from an effect would leave loadAllQuestions' closure holding
+    // the pre-seed value.
+    const params = new URLSearchParams(window.location.search);
+    return {
+      subject: params.get("subject") || "all",
+      topic: params.get("topic") || "all",
+      questionCount: 20,
+      timeLimit: 30,
+      // Active recall sessions were collected and then excluded by default, so
+      // that material never reached a mock unless you went looking for the toggle.
+      sources: ["flashcards", "quizzes", "active_recall"]
+    };
   });
 
   useEffect(() => {
@@ -190,9 +198,18 @@ export default function ExamMode({ userSubjects }) {
 
   const getAvailablePool = (cfg = config) =>
   allQuestions.filter((q) =>
-  (cfg.subject === "all" || q.subject === cfg.subject) &&
+  (cfg.subject === "all" || q.subject === cfg.subject) && (
+  cfg.topic === "all" || q.topic === cfg.topic) &&
   cfg.sources.includes(getSourceKey(q.source))
   );
+
+  // Topics that actually have material behind them, for the subject in play.
+  const availableTopics = [...new Set(
+    allQuestions.
+    filter((q) => config.subject === "all" || q.subject === config.subject).
+    map((q) => q.topic).
+    filter(Boolean)
+  )].sort((a, b) => a.localeCompare(b));
 
   const handleStartExam = () => {
     const available = getAvailablePool();
@@ -467,20 +484,54 @@ Return exactly ${openQs.length} results, in order.`,
                     </div> :
 
         <div className="space-y-4">
-                        {/* Subject */}
+                        {/* Subject + Topic */}
                         <div className="card-soft p-5 space-y-3">
-                            <label className="text-sm font-bold text-foreground flex items-center gap-2">
-                                <BookOpen className="w-4 h-4 text-muted-foreground" /> Subject
-                            </label>
-                            <Select value={config.subject} onValueChange={(v) => setConfig((c) => ({ ...c, subject: v }))}>
-                                <SelectTrigger className="border-2 border-border rounded-xl h-11 bg-secondary/50 focus:border-streak/40">
-                                    <SelectValue />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    <SelectItem value="all"><span className="inline-flex items-center gap-2"><Sparkles className="w-3.5 h-3.5 text-xp" /> All Subjects</span></SelectItem>
-                                    {(userSubjects || []).map((s) => <SelectItem key={s.id} value={s.subject_name}>{s.subject_name}</SelectItem>)}
-                                </SelectContent>
-                            </Select>
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                <div className="space-y-3">
+                                    <label className="text-sm font-bold text-foreground flex items-center gap-2">
+                                        <BookOpen className="w-4 h-4 text-muted-foreground" /> Subject
+                                    </label>
+                                    {/* Topic belongs to a subject — switching subject has to clear it,
+                                        or you get a paper filtered to a topic that isn't in there. */}
+                                    <Select value={config.subject} onValueChange={(v) => setConfig((c) => ({ ...c, subject: v, topic: "all" }))}>
+                                        <SelectTrigger className="border-2 border-border rounded-xl h-11 bg-secondary/50 focus:border-streak/40">
+                                            <SelectValue />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            <SelectItem value="all"><span className="inline-flex items-center gap-2"><Sparkles className="w-3.5 h-3.5 text-xp" /> All Subjects</span></SelectItem>
+                                            {(userSubjects || []).map((s) => <SelectItem key={s.id} value={s.subject_name}>{s.subject_name}</SelectItem>)}
+                                        </SelectContent>
+                                    </Select>
+                                </div>
+
+                                <div className="space-y-3">
+                                    <label className="text-sm font-bold text-foreground flex items-center gap-2">
+                                        <Target className="w-4 h-4 text-muted-foreground" /> Topic
+                                    </label>
+                                    <Select value={config.topic} onValueChange={(v) => setConfig((c) => ({ ...c, topic: v }))} disabled={!availableTopics.length}>
+                                        <SelectTrigger className="border-2 border-border rounded-xl h-11 bg-secondary/50 focus:border-streak/40">
+                                            <SelectValue />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            <SelectItem value="all">All topics</SelectItem>
+                                            {availableTopics.map((t) => <SelectItem key={t} value={t}>{t}</SelectItem>)}
+                                            {/* A deep link can name a topic with nothing behind it any
+                                                more. Keep it selectable so the label isn't blank. */}
+                                            {config.topic !== "all" && !availableTopics.includes(config.topic) &&
+                                            <SelectItem value={config.topic}>{config.topic}</SelectItem>}
+                                        </SelectContent>
+                                    </Select>
+                                </div>
+                            </div>
+                            {config.topic !== "all" &&
+                            <p className="text-xs text-muted-foreground flex items-center gap-1.5">
+                                <Target className="w-3 h-3 text-streak flex-shrink-0" />
+                                Drilling <span className="font-bold text-foreground">{config.topic}</span> only.
+                                <button onClick={() => setConfig((c) => ({ ...c, topic: "all" }))} className="font-bold text-streak hover:underline">
+                                    Widen it
+                                </button>
+                            </p>
+              }
                         </div>
 
                         {/* Sources */}
@@ -490,7 +541,7 @@ Return exactly ${openQs.length} results, in order.`,
                             </label>
                             <div className="grid grid-cols-3 gap-3">
                                 {SOURCES.map((s) => {
-                const cnt = allQuestions.filter((q) => getSourceKey(q.source) === s.id && (config.subject === "all" || q.subject === config.subject)).length;
+                const cnt = allQuestions.filter((q) => getSourceKey(q.source) === s.id && (config.subject === "all" || q.subject === config.subject) && (config.topic === "all" || q.topic === config.topic)).length;
                 const sel = config.sources.includes(s.id);
                 const cls = SOURCE_CLASSES[s.id];
                 const SourceIcon = s.icon;
@@ -551,7 +602,11 @@ Return exactly ${openQs.length} results, in order.`,
                             <div className="flex items-center justify-between gap-4">
                                 <div>
                                     {available === 0 ?
-                <p className="text-sm text-streak font-medium">No questions match your selection. Add flashcards or quizzes first.</p> :
+                <p className="text-sm text-streak font-medium">
+                                        {config.topic !== "all" ?
+                  <>Nothing on <span className="font-bold">{config.topic}</span> in these sources. Widen the topic, or make cards for it first.</> :
+                  "No questions match your selection. Add flashcards or quizzes first."}
+                                    </p> :
 
                 <>
                                             <p className="text-sm text-muted-foreground"><span className="font-black text-foreground text-lg">{willUse}</span> <span className="text-muted-foreground/60">of {available} questions</span></p>
