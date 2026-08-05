@@ -24,6 +24,7 @@ import {
     ResponsiveContainer, Cell
 } from "recharts";
 import AIPerformanceAnalyzer from "../components/analytics/AIPerformanceAnalyzer";
+import AtarPanel from "../components/analytics/AtarPanel";
 import HelpButton from "@/components/shared/HelpButton";
 
 const fmt = (mins) => {
@@ -208,6 +209,9 @@ const StatPill = ({ value, prev }) => {
 export default function Analytics() {
     const [user, setUser] = useState(null);
     const [userProfile, setUserProfile] = useState(null);
+    // getRankedBoards forces a recompute, so opening Analytics shows a current
+    // score rather than whatever was last written by an XP award.
+    const [ranked, setRanked] = useState(null);
     const [timeRange, setTimeRange] = useState("month");
     const [isLoading, setIsLoading] = useState(true);
     const [activeTab, setActiveTab] = useState("overview");
@@ -258,6 +262,9 @@ export default function Analytics() {
                 StudySession.filter({ created_by: email, date: { $gte: dr.start, $lte: dr.end } })
             ]);
             setUserProfile(profile);
+            base44.functions.invoke("getRankedBoards", {})
+                .then(res => setRanked(res?.data ?? res))
+                .catch(() => {});
             setData({ techniques: techniques||[], quizzes: quizzes||[], flashcards: flashcards||[], activeRecall: activeRecall||[], blurting: blurting||[], subjects: subjects||[], studySessions: studySessions||[] });
         } catch (e) { console.error(e); }
         finally { setIsLoading(false); }
@@ -521,6 +528,19 @@ export default function Analytics() {
                     <h1 className="font-display text-2xl sm:text-3xl lg:text-4xl font-extrabold tracking-tight text-foreground leading-[1.1]">
                         {coachLine}
                     </h1>
+                </motion.section>
+
+                {/* ── ACEDIT ATAR ─────────────────────────────────────── */}
+                {/* Everything below this measures inputs. This is the score they
+                    all feed, and Analytics had no idea it existed. */}
+                <motion.section initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.04 }}>
+                    <AtarPanel
+                        atar={ranked?.my_atar ?? (userProfile?.acedit_atar != null ? Number(userProfile.acedit_atar) : null)}
+                        band={ranked?.my_band}
+                        components={ranked?.my_components || userProfile?.atar_components}
+                        history={userProfile?.extra?.atar_history || []}
+                        goalAtar={userProfile?.goal_atar ? Number(userProfile.goal_atar) : null}
+                    />
                 </motion.section>
 
                 {/* ── HERO ROW: Biggest insight (3/5) + This week stats (2/5) ── */}
