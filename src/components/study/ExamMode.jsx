@@ -592,69 +592,88 @@ Return exactly ${openQs.length} results, in order.`,
       // Full-screen takeover. Sitting a paper with the nav, side rail and tab
       // bar still on screen is the main reason this never felt like an exam —
       // everything else in the app is one tap away the whole time.
-      <div className="fixed inset-0 z-50 bg-background overflow-y-auto overscroll-contain">
-      <div className="max-w-3xl mx-auto space-y-4 p-4 pb-24">
-                {/* Header Bar */}
-                <motion.div
+      // z-[60], not z-50 — BottomNav's mobile tab bar is also z-50 and renders
+      // later in the DOM, so at equal stacking it painted straight over the
+      // paper. A column shell rather than one long scroll: the timer and the
+      // navigation stay put, and only the question itself scrolls.
+      <div className="fixed inset-0 z-[60] bg-background flex flex-col">
+
+                {/* ── Top bar — full width, spans the screen ─────────── */}
+                <motion.header
           animate={{ backgroundColor: isVeryLow ? "hsl(0 100% 45%)" : isLow ? "hsl(0 100% 55%)" : "hsl(218 50% 11%)" }}
-          className="rounded-2xl p-4 flex items-center justify-between gap-4 transition-colors duration-1000">
-
-                    <div className="flex items-center gap-3 min-w-0">
-                        <div className="w-8 h-8 bg-surface/10 rounded-xl flex items-center justify-center flex-shrink-0">
-                            <GraduationCap className="w-4 h-4 text-white/70" />
-                        </div>
-                        <div className="min-w-0">
-                            <p className="text-white font-bold text-sm truncate">Exam Mode</p>
-                            <p className="text-white/60 text-xs">{answered}/{examQuestions.length} answered</p>
-                        </div>
-                    </div>
-
-                    <div className="flex items-center gap-3">
-                        {config.timeLimit > 0 &&
-            <div className={`font-mono font-black text-2xl flex items-center gap-1.5 tabular-nums ${isVeryLow ? "text-white animate-pulse" : isLow ? "text-white" : "text-white"}`}>
-                                <Clock className="w-4 h-4" />
-                                {formatTime(timeLeft)}
+          className="flex-shrink-0 transition-colors duration-1000">
+                    <div className="px-4 sm:px-6 h-16 flex items-center justify-between gap-4">
+                        <div className="flex items-center gap-3 min-w-0">
+                            <div className="w-8 h-8 bg-surface/10 rounded-xl flex items-center justify-center flex-shrink-0">
+                                <GraduationCap className="w-4 h-4 text-white/70" />
                             </div>
-            }
-                        <button onClick={() => setShowQuestionMap((v) => !v)}
-            className="w-9 h-9 bg-surface/10 hover:bg-surface/20 rounded-xl flex items-center justify-center transition-colors">
-                            <Layers className="w-4 h-4 text-white/70" />
-                        </button>
-                        <Button size="sm" onClick={() => setConfirmSubmit(true)}
-            className={`rounded-xl font-bold gap-1.5 text-xs px-4 ${isLow ? "bg-surface text-streak hover:bg-surface/90" : "bg-surface/15 hover:bg-surface/25 text-white border border-white/20"}`}>
-                            <Flag className="w-3.5 h-3.5" /> Hand in
-                        </Button>
+                            <div className="min-w-0">
+                                <p className="text-white font-bold text-sm truncate">Exam conditions</p>
+                                <p className="text-white/60 text-xs">
+                                    {answered}/{examQuestions.length} answered
+                                    {flaggedCount > 0 && <span className="text-white/50"> · {flaggedCount} flagged</span>}
+                                </p>
+                            </div>
+                        </div>
+
+                        <div className="flex items-center gap-2 sm:gap-3">
+                            {config.timeLimit > 0 &&
+              <div className={`font-mono font-black text-xl sm:text-3xl flex items-center gap-1.5 tabular-nums text-white ${isVeryLow ? "animate-pulse" : ""}`}>
+                                    <Clock className="w-4 h-4 sm:w-5 sm:h-5" />
+                                    {formatTime(timeLeft)}
+                                </div>
+              }
+                            {/* Desktop keeps the navigator open beside the paper,
+                                so the toggle is only needed on small screens. */}
+                            <button onClick={() => setShowQuestionMap((v) => !v)}
+              aria-label="Question map"
+              className="lg:hidden w-9 h-9 bg-surface/10 hover:bg-surface/20 rounded-xl flex items-center justify-center transition-colors">
+                                <Layers className="w-4 h-4 text-white/70" />
+                            </button>
+                            <Button size="sm" onClick={() => setConfirmSubmit(true)}
+              className={`rounded-xl font-bold gap-1.5 text-xs px-4 ${isLow ? "bg-surface text-streak hover:bg-surface/90" : "bg-surface/15 hover:bg-surface/25 text-white border border-white/20"}`}>
+                                <Flag className="w-3.5 h-3.5" /> Hand in
+                            </Button>
+                        </div>
                     </div>
-                </motion.div>
+                    <div className="h-1 bg-black/20">
+                        <motion.div className="h-full bg-white/70" animate={{ width: `${progress}%` }} transition={{ duration: 0.4, ease: "easeOut" }} />
+                    </div>
+                </motion.header>
 
-                {/* Progress bar */}
-                <div className="h-1 bg-secondary rounded-full overflow-hidden">
-                    <motion.div className="h-full bg-streak rounded-full" animate={{ width: `${progress}%` }} transition={{ duration: 0.4, ease: "easeOut" }} />
-                </div>
+                <div className="flex-1 flex min-h-0">
 
-                {/* Question Map Drawer */}
-                <AnimatePresence>
-                    {showQuestionMap &&
-          <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} exit={{ opacity: 0, height: 0 }}
-          className="card-soft p-4 overflow-hidden">
-                            <p className="text-xs font-bold text-muted-foreground mb-3 uppercase tracking-wider">Question Map</p>
-                            <div className="flex flex-wrap gap-1.5">
-                                {examQuestions.map((eq, i) => {
+                    {/* ── Navigator — always visible on desktop ──────── */}
+                    <aside className="hidden lg:flex lg:flex-col w-56 flex-shrink-0 border-r border-border bg-surface/40 overflow-y-auto p-4">
+                        <p className="stat-label mb-3">Questions</p>
+                        <div className="grid grid-cols-5 gap-1.5">
+                            {examQuestions.map((eq, i) => {
                 const a = answers[eq.id] || {};
                 const done = eq.type === "mcq" ? a.selectedIndex !== undefined : a.typed?.length > 0;
                 const isFlagged = !!flagged[eq.id];
                 return (
-                  <button key={i} onClick={() => {setCurrentIndex(i);setShowQuestionMap(false);}}
-                  className={`relative w-8 h-8 rounded-lg text-xs font-bold transition-all ${i === currentIndex ? "bg-streak text-white ring-2 ring-streak/30" : done ? "bg-primary/15 text-primary" : "bg-secondary text-muted-foreground hover:bg-secondary"}`}>
-                                            {i + 1}
-                                            {isFlagged && <span className="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-xp" />}
-                                        </button>);
+                  <button key={i} onClick={() => setCurrentIndex(i)}
+                  className={`relative w-8 h-8 rounded-lg text-xs font-bold transition-all ${i === currentIndex ? "bg-streak text-white ring-2 ring-streak/30" : done ? "bg-primary/15 text-primary" : "bg-secondary text-muted-foreground hover:bg-secondary/80"}`}>
+                                        {i + 1}
+                                        {isFlagged && <span className="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-xp" />}
+                                    </button>);
 
               })}
-                            </div>
-                        </motion.div>
-          }
-                </AnimatePresence>
+                        </div>
+                        <div className="mt-5 space-y-1.5 text-[11px] text-muted-foreground">
+                            <p className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded bg-primary/30" /> answered</p>
+                            <p className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded bg-secondary" /> not yet</p>
+                            <p className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-xp" /> flagged</p>
+                        </div>
+                    </aside>
+
+                    {/* ── The paper ──────────────────────────────────── */}
+                    <main className="flex-1 overflow-y-auto">
+                    {/* min-h-full + centring: a short question sat at the top of
+                        a full-height column with a screen of empty background
+                        under it, which is the opposite of filling the screen.
+                        Long questions still scroll normally. */}
+                    <div className="min-h-full max-w-3xl mx-auto px-4 sm:px-8 py-6 flex flex-col justify-center">
 
                 {/* Question Card */}
                 <AnimatePresence mode="wait">
@@ -735,32 +754,68 @@ Return exactly ${openQs.length} results, in order.`,
                     </motion.div>
                 </AnimatePresence>
 
-                {/* Navigation */}
-                <div className="flex items-center justify-between gap-3">
-                    <Button variant="outline" onClick={() => setCurrentIndex((i) => Math.max(0, i - 1))} disabled={currentIndex === 0}
-          className="gap-2 rounded-xl border-2 border-border font-semibold hover:bg-secondary/50">
-                        <ChevronLeft className="w-4 h-4" /> Prev
-                    </Button>
-
-                    <Button onClick={() => {
-            if (currentIndex < examQuestions.length - 1) {
-              setCurrentIndex((i) => i + 1);
-            } else {
-              setConfirmSubmit(true);
-            }
-          }}
-          className={`gap-2 rounded-xl font-bold px-6 ${currentIndex === examQuestions.length - 1 ? "bg-streak hover:bg-streak/90 text-white btn-3d" : "bg-foreground hover:bg-foreground/90 text-background"}`}>
-                        {currentIndex === examQuestions.length - 1 ?
-            <><Flag className="w-4 h-4" /> Finish</> :
-
-            <>Next <ChevronRight className="w-4 h-4" /></>
-            }
-                    </Button>
+                    </div>
+                    </main>
                 </div>
 
-                <p className="text-center text-[11px] text-muted-foreground/60">
-                    ← → to move · 1-9 to answer · F to flag
-                </p>
+                {/* ── Navigation — pinned, so moving between questions never
+                       depends on scrolling back down the page ────────── */}
+                <footer className="flex-shrink-0 border-t border-border bg-surface">
+                    <div className="max-w-3xl mx-auto px-4 sm:px-8 py-3 flex items-center justify-between gap-3">
+                        <Button variant="outline" onClick={() => setCurrentIndex((i) => Math.max(0, i - 1))} disabled={currentIndex === 0}
+            className="gap-2 rounded-xl border-2 border-border font-semibold hover:bg-secondary/50">
+                            <ChevronLeft className="w-4 h-4" /> Prev
+                        </Button>
+
+                        <p className="hidden sm:block text-[11px] text-muted-foreground/60 text-center">
+                            ← → between questions · 1-9 to answer · F to flag
+                        </p>
+
+                        <Button onClick={() => {
+              if (currentIndex < examQuestions.length - 1) {
+                setCurrentIndex((i) => i + 1);
+              } else {
+                setConfirmSubmit(true);
+              }
+            }}
+            className={`gap-2 rounded-xl font-bold px-6 ${currentIndex === examQuestions.length - 1 ? "bg-streak hover:bg-streak/90 text-white btn-3d" : "bg-foreground hover:bg-foreground/90 text-background"}`}>
+                            {currentIndex === examQuestions.length - 1 ?
+              <><Flag className="w-4 h-4" /> Finish</> :
+
+              <>Next <ChevronRight className="w-4 h-4" /></>
+              }
+                        </Button>
+                    </div>
+                </footer>
+
+                {/* ── Navigator on small screens, as an overlay ───────── */}
+                <AnimatePresence>
+                    {showQuestionMap &&
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+          onClick={() => setShowQuestionMap(false)}
+          className="lg:hidden fixed inset-0 z-[70] bg-foreground/50 backdrop-blur-sm flex items-end">
+                            <motion.div initial={{ y: 40 }} animate={{ y: 0 }} exit={{ y: 40 }}
+            onClick={(e) => e.stopPropagation()}
+            className="w-full bg-surface rounded-t-2xl p-5 max-h-[70vh] overflow-y-auto">
+                                <p className="stat-label mb-3">Questions</p>
+                                <div className="grid grid-cols-8 gap-2">
+                                    {examQuestions.map((eq, i) => {
+                  const a = answers[eq.id] || {};
+                  const done = eq.type === "mcq" ? a.selectedIndex !== undefined : a.typed?.length > 0;
+                  const isFlagged = !!flagged[eq.id];
+                  return (
+                    <button key={i} onClick={() => {setCurrentIndex(i);setShowQuestionMap(false);}}
+                    className={`relative w-9 h-9 rounded-lg text-xs font-bold transition-all ${i === currentIndex ? "bg-streak text-white ring-2 ring-streak/30" : done ? "bg-primary/15 text-primary" : "bg-secondary text-muted-foreground"}`}>
+                                            {i + 1}
+                                            {isFlagged && <span className="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-xp" />}
+                                        </button>);
+
+                })}
+                                </div>
+                            </motion.div>
+                        </motion.div>
+          }
+                </AnimatePresence>
 
                 {/* Handing in is final — say what's still open before it happens.
                     Submit used to fire straight off a single tap. */}
@@ -800,7 +855,6 @@ Return exactly ${openQs.length} results, in order.`,
                         </motion.div>
           }
                 </AnimatePresence>
-            </div>
             </div>);
 
   }
