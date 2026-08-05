@@ -4692,7 +4692,7 @@ async function refreshAcedItATAR(email, force = false) {
   try {
     const { data: rows, error } = await supabaseAdmin
       .from("user_profiles")
-      .select("id, acedit_atar, atar_updated_at")
+      .select("id, acedit_atar, atar_updated_at, extra")
       .eq("created_by", email).limit(1);
     if (error) {
       if (/acedit_atar|atar_updated_at/.test(error.message || "")) return null; // migration 0022 pending
@@ -4705,9 +4705,32 @@ async function refreshAcedItATAR(email, force = false) {
       return { atar: profile.acedit_atar, cached: true };
     }
     const { atar, components } = await computeAcedItATAR(email);
-    await supabaseAdmin.from("user_profiles")
-      .update({ acedit_atar: atar, atar_components: components, atar_updated_at: new Date().toISOString() })
-      .eq("id", profile.id);
+
+    // The score was recomputed and overwritten in place, so nothing recorded how
+    // it got there — "am I improving?" was unanswerable, which is the whole
+    // question Analytics exists to answer. Weekly snapshots, capped at 26 (~6
+    // months), merged into extra alongside daily_intent and intent_log.
+    const extra = profile.extra || {};
+    let history = Array.isArray(extra.atar_history) ? [...extra.atar_history] : [];
+    const last = history[history.length - 1];
+    const aWeekOn = !last || Date.now() - new Date(last.d).getTime() >= 6 * 86400000;
+    const patch = { acedit_atar: atar, atar_components: components, atar_updated_at: new Date().toISOString() };
+    if (atar != null && aWeekOn) {
+      history.push({
+        d: new Date().toISOString().slice(0, 10),
+        a: atar,
+        // Components too — a flat score can still hide one slice collapsing
+        // while another carries it.
+        c: {
+          m: components?.mastery ?? 0, c: components?.consistency ?? 0,
+          e: components?.effort ?? 0,  b: components?.breadth ?? 0,
+          p: components?.planning ?? 0,
+        },
+      });
+      patch.extra = { ...extra, atar_history: history.slice(-26) };
+    }
+
+    await supabaseAdmin.from("user_profiles").update(patch).eq("id", profile.id);
     try {
       await supabaseAdmin.from("leaderboards")
         .update({ acedit_atar: atar }).eq("user_email", email);
