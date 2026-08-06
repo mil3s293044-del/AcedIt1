@@ -36,23 +36,30 @@ function timeLeftLabel(endsAt) {
 }
 
 /** The market chart: win probability over the life of the battle. */
-function MarketChart({ series }) {
-    if (!series || series.length < 2) {
+function MarketChart({ series, currentOdds }) {
+    // With no trail yet the honest line is a flat one at today's number, not an
+    // empty box. A student who has studied a little should see where they
+    // stand; the caption says the shape isn't there yet.
+    const thin = !series || series.length < 2;
+    const data = thin
+        ? (currentOdds == null ? null : [{ p: currentOdds }, { p: currentOdds }])
+        : series;
+    if (!data) {
         return (
             <div className="h-40 rounded-2xl bg-secondary/40 border border-border flex items-center justify-center px-6">
                 <p className="text-sm text-muted-foreground flex items-start gap-2 text-center">
                     <Info className="w-4 h-4 flex-shrink-0 mt-0.5" />
-                    The line starts drawing once there are a couple of hours of scores behind it.
+                    Nobody to race yet — the line appears once someone joins.
                 </p>
             </div>
         );
     }
-    const pts = series.map((d, i) => {
-        const x = (i / (series.length - 1)) * 100;
+    const pts = data.map((d, i) => {
+        const x = (i / (data.length - 1)) * 100;
         const y = 100 - d.p;           // 0% at the bottom, 100% at the top
         return `${x},${y}`;
     });
-    const last = series[series.length - 1];
+    const last = data[data.length - 1];
     const above = last.p >= 50;
     const line = above ? "text-primary" : "text-streak";
     const fillId = `mkt-${above ? "up" : "down"}`;
@@ -75,17 +82,26 @@ function MarketChart({ series }) {
                     vectorEffect="non-scaling-stroke" strokeLinejoin="round" strokeLinecap="round" className={line} />
             </svg>
             <div className="flex items-center justify-between mt-1.5 text-[11px] text-muted-foreground/70">
-                <span>start</span>
+                <span>{thin ? "today" : "start"}</span>
                 <span className="text-border">— 50% —</span>
                 <span>now</span>
             </div>
+            {thin && (
+                <p className="text-[11px] text-muted-foreground/70 mt-2 flex items-start gap-1.5">
+                    <Info className="w-3 h-3 flex-shrink-0 mt-0.5" />
+                    Flat for now — the shape fills in as scores are recorded through the battle.
+                </p>
+            )}
         </div>
     );
 }
 
 /** Momentum: gap against the leader over time. Positive is ahead. */
-function SwingChart({ swing }) {
-    if (!swing || swing.length < 2) return null;
+function SwingChart({ swing, currentGap }) {
+    // Same principle as the market line: one point is still a position.
+    const thin = !swing || swing.length < 2;
+    if (thin && currentGap == null) return null;
+    swing = thin ? [currentGap, currentGap] : swing;
     const lo = Math.min(...swing, 0), hi = Math.max(...swing, 0);
     const span = Math.max(1, hi - lo);
     const pts = swing.map((v, i) => {
@@ -105,6 +121,9 @@ function SwingChart({ swing }) {
                     vectorEffect="non-scaling-stroke" strokeLinejoin="round" strokeLinecap="round"
                     className={ahead ? "text-primary" : "text-streak"} />
             </svg>
+            <p className="text-[11px] text-muted-foreground/70 mt-1">
+                {thin ? "Flat until more scores land." : ahead ? "Above the line — you're ahead." : "Below the line — you're behind."}
+            </p>
         </div>
     );
 }
@@ -201,14 +220,14 @@ export default function BattleDashboard({ battle, onBack, footer, activity = [] 
                         <p className="stat-label">Win probability</p>
                         <p className="text-[11px] text-muted-foreground/70">over the life of this battle</p>
                     </div>
-                    <MarketChart series={market} />
+                    <MarketChart series={market} currentOdds={odds} />
                 </div>
             )}
 
             {/* ── Momentum + today ──────────────────────────────────────── */}
-            {(swing.length > 1 || momentum != null) && (
+            {(swing.length > 1 || momentum != null || projection) && (
                 <div className="card-soft p-6 space-y-4">
-                    <SwingChart swing={swing} />
+                    <SwingChart swing={swing} currentGap={projection ? projection.lead : null} />
                     {momentum != null && (
                         <div className="flex items-center justify-between rounded-xl bg-secondary/50 px-4 py-3">
                             <span className="text-sm font-bold text-foreground">Points you've put on today</span>
