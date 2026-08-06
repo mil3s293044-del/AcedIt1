@@ -9,7 +9,6 @@ import { motion, AnimatePresence } from "framer-motion";
 import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { DragDropContext, Droppable, Draggable } from "@hello-pangea/dnd";
@@ -21,6 +20,7 @@ import {
 import { base44 } from "@/api/base44Client";
 import { useToast } from "@/components/ui/use-toast";
 import { ToastAction } from "@/components/ui/toast";
+import StrategiseWizard from "@/components/planner/StrategiseWizard";
 import { format, differenceInDays, parseISO, addDays, startOfWeek, addWeeks } from "date-fns";
 import HelpButton from "@/components/shared/HelpButton";
 
@@ -207,18 +207,8 @@ export default function Planner() {
     const [intentionDraft, setIntentionDraft] = useState("");
     const [savingIntention, setSavingIntention] = useState(false);
 
-    // AI planning dialog
-    const [aiOpen, setAiOpen] = useState(false);
-    const [aiHours, setAiHours] = useState(5);
-    const [aiFocus, setAiFocus] = useState([]);
-    const [aiTimes, setAiTimes] = useState("after_school");
-    const [aiNotes, setAiNotes] = useState("");
-    const [aiProposals, setAiProposals] = useState(null); // [{...session, include}]
-    const [aiGenerating, setAiGenerating] = useState(false);
-    const [aiSaving, setAiSaving] = useState(false);
-    const [aiSacSubject, setAiSacSubject] = useState("");
-    const [aiSacTitle, setAiSacTitle] = useState("");
-    const [aiSacDate, setAiSacDate] = useState("");
+    const [strategiseOpen, setStrategiseOpen] = useState(false);
+
 
     const loadData = useCallback(async (email) => {
         try {
@@ -506,92 +496,8 @@ export default function Planner() {
     };
 
     // ─── AI planning ───────────────────────────────────────────────────────────
-    const openAiPlanner = () => {
-        const soon = new Set(upcoming.filter(a => differenceInDays(parseISO(a.due_date), parseISO(todayStr)) <= 14).map(a => a.subject_name));
-        setAiFocus(soon.size ? [...soon] : subjects.slice(0, 2).map(s => s.subject_name));
-        setAiProposals(null);
-        setAiOpen(true);
-    };
 
-    const toggleFocus = (name) =>
-        setAiFocus(prev => prev.includes(name) ? prev.filter(x => x !== name) : [...prev, name]);
 
-    const generatePlan = async () => {
-        setAiGenerating(true);
-        try {
-            const planStart = weekStart < new Date() ? todayStr : format(weekStart, "yyyy-MM-dd");
-            const planEnd = format(addDays(weekStart, 6), "yyyy-MM-dd");
-            const timeHint = aiTimes === "after_school" ? "16:00-18:00 on school days"
-                : aiTimes === "evenings" ? "19:00-21:30"
-                : "mostly Saturday and Sunday, 10:00-17:00";
-            const response = await base44.integrations.Core.InvokeLLM({
-                feature: "ai_tool",
-                prompt: `You are a VCE study coach planning one week of study sessions. Today is ${todayStr}.
-Plan for dates ${planStart} to ${planEnd} only.
-Total study budget: about ${aiHours} hours for the week (each session 25-60 min; derive the session count from the budget).
-Focus subjects: ${aiFocus.join(", ") || "any of the student's subjects"}.
-All subjects: ${subjects.map(s => s.subject_name).join(", ") || "not set"}.
-Upcoming assessments: ${upcoming.slice(0, 8).map(a => `${a.subject_name} ${a.title} (${a.assessment_type}) on ${a.due_date}`).join("; ") || "none tracked"}.
-Preferred study times: ${timeHint}.
-Existing sessions (avoid clashing): ${plans.filter(p => p.date >= planStart && p.date <= planEnd).map(p => `${p.date} ${p.start_time || ""} ${p.title}`).join("; ") || "none"}.
-Student notes: ${aiNotes || "none"}.
-
-Rules: weight sessions toward the nearest assessments; at most 2 sessions per day; vary techniques (flashcards, active recall, quiz, timed mock, blurting, pomodoro notes review); every title starts with the technique, e.g. "Flashcards: gene regulation", "Timed mock: Methods tech-free", "Active recall: AOS2 key knowledge". Give each a date within range and a start_time (HH:MM) respecting the preferred times. Also give duration_minutes (25-60).`,
-                response_json_schema: {
-                    type: "object",
-                    properties: {
-                        sessions: {
-                            type: "array",
-                            items: {
-                                type: "object",
-                                properties: {
-                                    title: { type: "string" },
-                                    subject_name: { type: "string" },
-                                    date: { type: "string" },
-                                    start_time: { type: "string" },
-                                    duration_minutes: { type: "number" },
-                                },
-                                required: ["title", "date"],
-                            },
-                        },
-                    },
-                    required: ["sessions"],
-                },
-            });
-            const proposals = (response?.sessions || [])
-                .filter(s => s.date >= planStart && s.date <= planEnd)
-                .slice(0, 12)
-                .map(s => ({ ...s, include: true }));
-            if (!proposals.length) throw new Error("The coach came back empty-handed — try again.");
-            setAiProposals(proposals);
-        } catch (e) {
-            toast({ title: "Planning unavailable", description: e.message, variant: "destructive" });
-        } finally {
-            setAiGenerating(false);
-        }
-    };
-
-    const saveProposals = async () => {
-        const chosen = (aiProposals || []).filter(p => p.include);
-        if (!chosen.length) { setAiOpen(false); return; }
-        setAiSaving(true);
-        try {
-            for (const s of chosen) {
-                await base44.entities.StudyPlan.create({
-                    title: s.title, subject_name: s.subject_name || null,
-                    date: s.date, start_time: s.start_time || null, is_completed: false,
-                    notes: s.duration_minutes ? `[dur:${Math.round(s.duration_minutes)}]` : null,
-                });
-            }
-            toast({ title: `✨ ${chosen.length} sessions on the board`, description: "Adjust anything that clashes — it's your week." });
-            setAiOpen(false);
-            loadData(user.email);
-        } catch (e) {
-            toast({ title: "Couldn't save", description: e.message, variant: "destructive" });
-        } finally {
-            setAiSaving(false);
-        }
-    };
 
     if (isLoading) {
         return (
@@ -810,8 +716,13 @@ Rules: weight sessions toward the nearest assessments; at most 2 sessions per da
                                 )}
                             </div>
                         </div>
-                        <Button onClick={openAiPlanner} size="sm" variant="outline" className="gap-1.5 border-2 border-chart-4/30 text-chart-4 hover:bg-chart-4/5">
-                            <Sparkles className="w-3.5 h-3.5" /> Plan this week for me
+                        {/* Strategise replaces "Plan this week for me", which asked
+                            for an hours budget and returned generic sessions with no
+                            idea what the student was preparing for. This starts from
+                            a logged assessment and works backwards from its date. */}
+                        <Button onClick={() => setStrategiseOpen(true)} size="sm"
+                            className="gap-1.5 bg-chart-4 hover:bg-chart-4/90 text-white btn-3d">
+                            <Sparkles className="w-3.5 h-3.5" /> Strategise a SAC
                         </Button>
                     </div>
 
@@ -1053,6 +964,14 @@ Rules: weight sessions toward the nearest assessments; at most 2 sessions per da
                     </DialogContent>
                 </Dialog>
 
+                <StrategiseWizard
+                    open={strategiseOpen}
+                    onOpenChange={setStrategiseOpen}
+                    assessments={assessments}
+                    userEmail={user?.email}
+                    onSaved={() => loadData(user.email)}
+                />
+
                 {/* ── Recurring-delete choice ──────────────────────────── */}
                 <Dialog open={!!deleteTarget} onOpenChange={(o) => !o && setDeleteTarget(null)}>
                     <DialogContent className="max-w-xs rounded-3xl">
@@ -1067,131 +986,6 @@ Rules: weight sessions toward the nearest assessments; at most 2 sessions per da
                 </Dialog>
 
                 {/* ── AI week planner dialog ───────────────────────────── */}
-                <Dialog open={aiOpen} onOpenChange={setAiOpen}>
-                    <DialogContent className="max-w-lg rounded-3xl max-h-[85vh] overflow-y-auto">
-                        <DialogHeader>
-                            <DialogTitle className="font-display flex items-center gap-2">
-                                <Sparkles className="w-5 h-5 text-chart-4" /> Plan {weekLabel.toLowerCase()} for me
-                            </DialogTitle>
-                        </DialogHeader>
-
-                        {!aiProposals ? (
-                            <div className="space-y-4">
-                                <div>
-                                    <p className="stat-label mb-2">Hours this week</p>
-                                    <div className="flex gap-2">
-                                        {HOUR_OPTIONS.map(h => (
-                                            <button key={h} onClick={() => setAiHours(h)}
-                                                className={`flex-1 py-2 rounded-xl text-sm font-bold border-2 transition-all ${aiHours === h ? "bg-chart-4 border-chart-4 text-white shadow-soft" : "bg-surface border-border text-foreground hover:border-chart-4/40"}`}>
-                                                {h}h
-                                            </button>
-                                        ))}
-                                    </div>
-                                </div>
-
-                                <div>
-                                    <p className="stat-label mb-2">Focus subjects</p>
-                                    <div className="flex gap-2 flex-wrap">
-                                        {subjects.map(s => (
-                                            <button key={s.id} onClick={() => toggleFocus(s.subject_name)}
-                                                className={`px-3 py-1.5 rounded-xl text-xs font-bold border-2 transition-all ${aiFocus.includes(s.subject_name) ? "bg-foreground border-foreground text-background" : "bg-surface border-border text-muted-foreground hover:border-muted-foreground"}`}>
-                                                {s.subject_name}
-                                            </button>
-                                        ))}
-                                        {subjects.length === 0 && <p className="text-xs text-muted-foreground">Add subjects in Settings first.</p>}
-                                    </div>
-                                </div>
-
-                                <div>
-                                    <p className="stat-label mb-2">When you study</p>
-                                    <div className="flex gap-2">
-                                        {TIME_PREFS.map(t => (
-                                            <button key={t.value} onClick={() => setAiTimes(t.value)}
-                                                className={`flex-1 py-2 rounded-xl text-xs font-bold border-2 transition-all ${aiTimes === t.value ? "bg-foreground border-foreground text-background" : "bg-surface border-border text-muted-foreground hover:border-muted-foreground"}`}>
-                                                {t.label}
-                                            </button>
-                                        ))}
-                                    </div>
-                                </div>
-
-                                {/* Assessments in scope + quick add */}
-                                <div>
-                                    <p className="stat-label mb-2">Assessments it plans around</p>
-                                    {upcoming.length > 0 ? (
-                                        <div className="space-y-1.5 mb-2">
-                                            {upcoming.slice(0, 4).map(a => (
-                                                <div key={a.id} className="flex items-center gap-2 text-xs">
-                                                    <Flag className="w-3 h-3 text-chart-3 flex-shrink-0" />
-                                                    <span className="font-bold text-foreground truncate">{a.subject_name} — {a.title}</span>
-                                                    <span className="text-muted-foreground whitespace-nowrap ml-auto">{format(parseISO(a.due_date), "d MMM")}</span>
-                                                </div>
-                                            ))}
-                                        </div>
-                                    ) : (
-                                        <p className="text-xs text-muted-foreground mb-2">None tracked — add one so the plan has a target:</p>
-                                    )}
-                                    <div className="grid grid-cols-[1fr,1fr,auto,auto] gap-1.5 items-center">
-                                        <Select value={aiSacSubject} onValueChange={setAiSacSubject}>
-                                            <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Subject" /></SelectTrigger>
-                                            <SelectContent>
-                                                {subjects.map(s => <SelectItem key={s.id} value={s.subject_name}>{s.subject_name}</SelectItem>)}
-                                            </SelectContent>
-                                        </Select>
-                                        <Input className="h-8 text-xs" placeholder="SAC name" value={aiSacTitle} onChange={e => setAiSacTitle(e.target.value)} />
-                                        <Input className="h-8 text-xs w-auto" type="date" min={todayStr} value={aiSacDate} onChange={e => setAiSacDate(e.target.value)} />
-                                        <Button size="sm" variant="outline" className="h-8 border-2 px-2"
-                                            onClick={async () => {
-                                                const ok = await addSac(aiSacSubject, aiSacTitle, "sac", aiSacDate);
-                                                if (ok) { setAiSacTitle(""); setAiSacDate(""); }
-                                            }}>
-                                            <Plus className="w-3.5 h-3.5" />
-                                        </Button>
-                                    </div>
-                                </div>
-
-                                <div>
-                                    <p className="stat-label mb-2">Anything else?</p>
-                                    <Textarea value={aiNotes} onChange={e => setAiNotes(e.target.value)} rows={2}
-                                        placeholder='e.g. "short sessions", "heavy on Methods", "nothing Friday night"' className="text-sm" />
-                                </div>
-
-                                <Button onClick={generatePlan} disabled={aiGenerating} className="w-full bg-chart-4 hover:bg-chart-4/90 text-white font-bold rounded-xl py-5 btn-3d">
-                                    {aiGenerating ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Sparkles className="w-4 h-4 mr-2" />}
-                                    {aiGenerating ? "Planning…" : "Draft my week"}
-                                </Button>
-                            </div>
-                        ) : (
-                            /* Proposal review — nothing saves until approved */
-                            <div className="space-y-3">
-                                <p className="text-xs text-muted-foreground">Untick anything that clashes, then add the rest. Nothing is saved yet.</p>
-                                <div className="space-y-1.5">
-                                    {aiProposals.map((s, i) => (
-                                        <button key={i}
-                                            onClick={() => setAiProposals(prev => prev.map((x, xi) => xi === i ? { ...x, include: !x.include } : x))}
-                                            className={`w-full flex items-start gap-2.5 rounded-xl border-2 px-3 py-2.5 text-left transition-all ${s.include ? "border-chart-4/40 bg-chart-4/5" : "border-border opacity-50"}`}>
-                                            <span className={`w-5 h-5 rounded-md border-2 flex items-center justify-center flex-shrink-0 mt-0.5 transition-colors ${s.include ? "bg-chart-4 border-chart-4 text-white" : "border-border"}`}>
-                                                {s.include && <Check className="w-3 h-3" />}
-                                            </span>
-                                            <span className="min-w-0 flex-1">
-                                                <span className="block text-sm font-bold text-foreground leading-tight">{s.title}</span>
-                                                <span className="block text-xs text-muted-foreground mt-0.5">
-                                                    {format(parseISO(s.date), "EEE d MMM")}{s.start_time ? ` · ${s.start_time}` : ""}{s.subject_name ? ` · ${s.subject_name}` : ""}{s.duration_minutes ? ` · ${s.duration_minutes}m` : ""}
-                                                </span>
-                                            </span>
-                                        </button>
-                                    ))}
-                                </div>
-                                <div className="flex gap-2">
-                                    <Button onClick={() => setAiProposals(null)} variant="outline" className="border-2">Adjust</Button>
-                                    <Button onClick={saveProposals} disabled={aiSaving} className="flex-1 bg-chart-4 hover:bg-chart-4/90 text-white font-bold">
-                                        {aiSaving ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Check className="w-4 h-4 mr-2" />}
-                                        Add {(aiProposals || []).filter(p => p.include).length} session{(aiProposals || []).filter(p => p.include).length === 1 ? "" : "s"}
-                                    </Button>
-                                </div>
-                            </div>
-                        )}
-                    </DialogContent>
-                </Dialog>
             </div>
         </div>
     );
