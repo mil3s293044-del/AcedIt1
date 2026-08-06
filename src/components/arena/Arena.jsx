@@ -149,13 +149,17 @@ export default function Arena({ view = "all" }) {
 
     return (
         <div className="space-y-6">
-            {/* Section header + challenge CTA */}
+            {/* Section header + challenge CTA. In actions mode the Compete page
+                renders this inside its "Start something new" card instead, so a
+                second floating button here would be the clutter again. */}
+            {listsOwnDuels && (
             <div className="flex items-center justify-end gap-3">
                 <Button onClick={() => setChallengeOpen(true)}
                     className="rounded-2xl bg-chart-4 hover:bg-chart-4/90 text-white font-bold gap-2 btn-3d">
                     <Swords className="w-4 h-4" /> Challenge a rival
                 </Button>
             </div>
+            )}
 
             {/* Incoming challenges — the loudest thing on the page */}
             {incoming.map(d => (
