@@ -4586,6 +4586,8 @@ app.post("/local-ai/fn/getArenaState", async (req, res) => {
 // curve (no cohort percentile — too few users for that to be stable).
 
 const ATAR_WINDOW_DAYS = 28;
+// Days of study before the score is presented as final rather than provisional.
+const ATAR_MIN_STUDY_DAYS = 3;
 const ATAR_REFRESH_MINUTES = 30;
 
 export function atarBand(atar) {
@@ -4735,8 +4737,11 @@ async function computeAcedItATAR(email) {
 
   // ── Consistency (30%): distinct study days, target 20 of 28 ─────────────
   const days = new Set(studyEvents.map((e) => (e.created_date || "").slice(0, 10)));
-  // Too little signal → unranked (stops day-one users seeing a scary "30").
-  if (days.size < 3) return { atar: null, components: null };
+  // Under three study days the score isn't stable enough to stand behind, but
+  // returning nothing left the student with a blank panel and no idea what to
+  // do about it. Compute everything regardless and flag it as provisional —
+  // the UI shows the working and exactly what's still needed.
+  const ranked = days.size >= ATAR_MIN_STUDY_DAYS;
   const consistency = Math.min(1, days.size / 20);
 
   // ── Effort (25%): study minutes, log-scaled diminishing returns ─────────
@@ -4802,6 +4807,14 @@ async function computeAcedItATAR(email) {
 
   return {
     atar: Number(atar.toFixed(2)),
+    ranked,
+    // What's left before the score counts. Empty once ranked.
+    needs: ranked ? [] : [{
+      kind: "study_days",
+      have: days.size,
+      need: ATAR_MIN_STUDY_DAYS,
+      label: `Study on ${ATAR_MIN_STUDY_DAYS - days.size} more day${ATAR_MIN_STUDY_DAYS - days.size === 1 ? "" : "s"}`,
+    }],
     components: {
       mastery: Number((mastery * 100).toFixed(0)),
       consistency: Number((consistency * 100).toFixed(0)),
@@ -4815,6 +4828,8 @@ async function computeAcedItATAR(email) {
       quiz_marks: quizWeight,
       cards_reviewed: cardsTotal,
       technique_families: families.size,
+      ranked,
+      days_needed: Math.max(0, ATAR_MIN_STUDY_DAYS - days.size),
       ...planningDetail,
     },
   };

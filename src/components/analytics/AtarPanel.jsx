@@ -65,6 +65,9 @@ function Delta({ value }) {
 
 export default function AtarPanel({ atar, band, components, history = [], goalAtar }) {
     const comps = components || {};
+    // `ranked === false` means the score is live but still provisional.
+    const ranked = comps.ranked !== false;
+    const daysNeeded = Math.max(0, Number(comps.days_needed) || 0);
     const series = Array.isArray(history) ? history.filter((h) => h && typeof h.a === "number") : [];
     const first = series[0];
     const prev = series.length > 1 ? series[series.length - 2] : null;
@@ -88,9 +91,10 @@ export default function AtarPanel({ atar, band, components, history = [], goalAt
         return (
             <div className="card-soft p-6">
                 <p className="stat-label mb-1">AcedIt ATAR</p>
-                <p className="font-display font-extrabold text-foreground text-xl">Not ranked yet</p>
+                <p className="font-display font-extrabold text-foreground text-xl">Waiting on your first session</p>
                 <p className="text-sm text-muted-foreground mt-1">
-                    Three study days puts you on the board. Everything on this page starts feeding it from then on.
+                    Log any study — a pomodoro, a quiz, a deck of flashcards — and the score starts calculating
+                    immediately. It firms up after three separate days.
                 </p>
             </div>
         );
@@ -98,6 +102,30 @@ export default function AtarPanel({ atar, band, components, history = [], goalAt
 
     return (
         <div className="card-soft p-6 lg:p-7">
+            {/* Provisional: the score is real and live, it just isn't stable
+                enough to stand behind yet. Saying so — and saying exactly what
+                closes the gap — beats a blank panel that looks broken. */}
+            {!ranked && (
+                <div className="mb-5 rounded-2xl bg-chart-4/10 border border-chart-4/25 p-4">
+                    <p className="text-sm font-bold text-chart-4 flex items-center gap-1.5">
+                        <Info className="w-4 h-4 flex-shrink-0" /> Provisional — still settling
+                    </p>
+                    <p className="text-xs text-muted-foreground mt-1.5">
+                        This is your live score from what you've done so far. It counts for Ranked
+                        {daysNeeded > 0
+                            ? ` once you've studied on ${daysNeeded} more day${daysNeeded === 1 ? "" : "s"}.`
+                            : " from your next session."}
+                    </p>
+                    <div className="flex items-center gap-1.5 mt-3">
+                        {[0, 1, 2].map(i => (
+                            <span key={i} className={`h-1.5 flex-1 rounded-full ${
+                                i < (3 - daysNeeded) ? "bg-chart-4" : "bg-chart-4/20"}`} />
+                        ))}
+                        <span className="text-[11px] font-bold text-chart-4 ml-1 tabular-nums">{3 - daysNeeded}/3 days</span>
+                    </div>
+                </div>
+            )}
+
             <div className="flex flex-wrap items-start gap-6">
                 <div className="min-w-[160px]">
                     <p className="stat-label mb-1 flex items-center gap-1.5">
