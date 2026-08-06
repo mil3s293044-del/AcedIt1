@@ -37,7 +37,7 @@ export function momentumOf(participant, hours = 24) {
 }
 
 /** Points per hour over the trail, used to project where a battle is heading. */
-function paceOf(participant) {
+export function paceOf(participant) {
     const trail = trailOf(participant);
     if (trail.length < 2) return 0;
     const first = trail[0];
@@ -164,4 +164,33 @@ export function battleNarrative({ me, rivals }) {
     if (lead > 0) return { tone: "good", text: `${lead} pts ahead of ${name}.` };
     if (lead < 0) return { tone: "warn", text: `${Math.abs(lead)} pts behind ${name} — catch up!` };
     return { tone: "warn", text: `Dead level with ${name}.` };
+}
+
+/**
+ * The analytical read on a battle: how fast each side is scoring, where that
+ * lands them at the deadline, and what it would take to change the answer.
+ */
+export function projections({ me, rivals, targetDate }) {
+    if (!me || !rivals?.length) return null;
+    const best = rivals.reduce((a, b) => (scoreOf(b) > scoreOf(a) ? b : a));
+    const hrs = hoursLeft(targetDate);
+    const myPace = paceOf(me);
+    const theirPace = paceOf(best);
+    const horizon = hrs == null ? null : hrs;
+
+    const myFinal = horizon == null ? null : Math.round(scoreOf(me) + myPace * horizon);
+    const theirFinal = horizon == null ? null : Math.round(scoreOf(best) + theirPace * horizon);
+    const lead = scoreOf(me) - scoreOf(best);
+
+    // Points you'd need on top of your current pace to end up in front.
+    const shortfall = myFinal != null && theirFinal != null ? theirFinal - myFinal : null;
+    return {
+        myPace: Math.round(myPace * 10) / 10,
+        theirPace: Math.round(theirPace * 10) / 10,
+        rivalName: (best.name || best.email || "Rival").split(" ")[0],
+        myFinal, theirFinal, lead,
+        hoursLeft: horizon == null ? null : Math.round(horizon),
+        // Positive = you're projected short by this much.
+        needed: shortfall != null && shortfall > 0 ? shortfall : 0,
+    };
 }

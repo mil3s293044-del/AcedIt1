@@ -39,9 +39,14 @@ export default function BattleRow({ battle, onClick }) {
         <motion.button
             initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}
             onClick={onClick}
-            className={`group w-full text-left card-soft p-4 lg:p-5 border-2 transition-all hover:shadow-soft ${
-                settled ? "border-border bg-secondary/25"
-                    : urgent ? "border-streak/40" : "border-border hover:border-chart-3/40"
+            // Duels and group battles are different games — a purple left rail
+            // for one, blue for the other, so the list is scannable by kind
+            // without reading a word.
+            className={`group w-full text-left card-soft p-4 lg:p-5 border-2 border-l-4 transition-all hover:shadow-soft ${
+                settled ? "border-border border-l-muted-foreground/30 bg-secondary/25"
+                    : urgent ? "border-streak/40 border-l-streak"
+                    : kind === "duel" ? "border-border border-l-chart-4 hover:border-chart-4/40"
+                    : "border-border border-l-chart-3 hover:border-chart-3/40"
             }`}
         >
             {/* Line 1 — what kind, and the state */}

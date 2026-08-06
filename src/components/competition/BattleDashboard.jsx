@@ -19,6 +19,7 @@ import React from "react";
 import { motion } from "framer-motion";
 import {
     ArrowLeft, Clock, Coins, Crown, TrendingUp, TrendingDown, Minus, Users, Info, Trophy,
+    Swords, Gauge, Flag, Zap, Activity,
 } from "lucide-react";
 import { Countdown } from "./arenaHelpers";
 
@@ -108,9 +109,14 @@ function SwingChart({ swing }) {
     );
 }
 
-export default function BattleDashboard({ battle, onBack, footer }) {
+export default function BattleDashboard({ battle, onBack, footer, activity = [] }) {
     if (!battle) return null;
-    const { odds, market, swing, momentum, narrative, sides, potXP, endsAt, status, unit } = battle;
+    const { odds, market, swing, momentum, narrative, sides, potXP, endsAt, status, unit, kind, projection } = battle;
+    // Duels and group battles are different games; they read as different
+    // colours everywhere so you always know which one you're looking at.
+    const accent = kind === "duel"
+        ? { chip: "bg-chart-4/15 text-chart-4", text: "text-chart-4", ring: "border-chart-4/25", label: "Duel" }
+        : { chip: "bg-chart-3/15 text-chart-3", text: "text-chart-3", ring: "border-chart-3/25", label: "Group battle" };
     const ranked = [...sides].sort((a, b) => b.score - a.score);
     const total = Math.max(1, ranked.reduce((s, p) => s + Math.max(0, p.score), 0));
     const settled = status === "settled";
@@ -130,6 +136,9 @@ export default function BattleDashboard({ battle, onBack, footer }) {
             <div className="card-soft p-6 lg:p-7">
                 <div className="flex flex-wrap items-start justify-between gap-4">
                     <div className="min-w-0">
+                        <span className={`pill ${accent.chip} mb-2`}>
+                            {kind === "duel" ? <Swords className="w-3 h-3" /> : <Trophy className="w-3 h-3" />} {accent.label}
+                        </span>
                         <h1 className="font-display font-extrabold text-foreground text-xl lg:text-2xl leading-tight">
                             {battle.title}
                         </h1>
@@ -210,6 +219,61 @@ export default function BattleDashboard({ battle, onBack, footer }) {
                             </span>
                         </div>
                     )}
+                </div>
+            )}
+
+            {/* ── Key numbers ───────────────────────────────────────────── */}
+            {projection && (
+                <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+                    {[
+                        { label: "Your pace", value: `${projection.myPace}`, suffix: `${unit}/h`,
+                          icon: Gauge, tone: projection.myPace >= projection.theirPace ? "text-primary" : "text-foreground" },
+                        { label: `${projection.rivalName}'s pace`, value: `${projection.theirPace}`, suffix: `${unit}/h`,
+                          icon: Gauge, tone: "text-muted-foreground" },
+                        { label: "Projected finish", value: projection.myFinal != null ? `${projection.myFinal}` : "—",
+                          suffix: projection.theirFinal != null ? `vs ${projection.theirFinal}` : "",
+                          icon: Flag, tone: (projection.myFinal ?? 0) >= (projection.theirFinal ?? 0) ? "text-primary" : "text-streak" },
+                        { label: projection.needed > 0 ? "Need to close" : "Current lead",
+                          value: projection.needed > 0 ? `${projection.needed}` : `${Math.abs(projection.lead)}`,
+                          suffix: unit, icon: projection.needed > 0 ? Zap : Crown,
+                          tone: projection.needed > 0 ? "text-streak" : "text-xp" },
+                    ].map(({ label, value, suffix, icon: Icon, tone }) => (
+                        <div key={label} className="card-soft p-4">
+                            <div className={`w-8 h-8 rounded-lg ${accent.chip} flex items-center justify-center mb-2`}>
+                                <Icon className="w-4 h-4" />
+                            </div>
+                            <p className={`font-display font-black text-xl leading-none tabular-nums ${tone}`}>{value}</p>
+                            {suffix && <p className="text-[11px] text-muted-foreground mt-0.5">{suffix}</p>}
+                            <p className="stat-label mt-1.5">{label}</p>
+                        </div>
+                    ))}
+                </div>
+            )}
+
+            {/* ── Activity ──────────────────────────────────────────────── */}
+            {/* The momentum feed used to sit loose on the Compete page showing
+                every event across every battle, which is noise there and the
+                whole story here. Scoped to the people in this battle. */}
+            {activity.length > 0 && (
+                <div className="card-soft p-6">
+                    <p className="stat-label mb-3 flex items-center gap-1.5">
+                        <Activity className={`w-3.5 h-3.5 ${accent.text}`} /> Live activity
+                    </p>
+                    <div className="space-y-2">
+                        {activity.slice(0, 6).map((e, i) => (
+                            <motion.div key={`${e.email}-${e.at}-${i}`}
+                                initial={{ opacity: 0, x: -6 }} animate={{ opacity: 1, x: 0 }}
+                                transition={{ delay: i * 0.04 }}
+                                className="flex items-center gap-2 text-xs">
+                                <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${
+                                    e.isMe ? "bg-primary" : "bg-chart-3"}`} />
+                                <span className="font-bold text-foreground">{e.isMe ? "You" : (e.name || "").split(" ")[0]}</span>
+                                <span className="font-bold text-xp">+{e.xp}</span>
+                                <span className="text-muted-foreground">from {e.label}</span>
+                                <span className="text-muted-foreground/60 ml-auto flex-shrink-0">{e.ago}</span>
+                            </motion.div>
+                        ))}
+                    </div>
                 </div>
             )}
 
