@@ -384,34 +384,37 @@ export default function PomodoroTimer({ onSessionComplete, userSubjects: initial
         if (isResettingRef.current) return;
         isResettingRef.current = true;
 
-        // If a work session was in progress, bank however much was studied.
-        // No subject gate here either — resetting ten minutes in should pay
-        // for those ten minutes.
-        if (hasBeenStarted && !isBreak) {
-            const totalWorkSeconds = (settings.workTime || 25) * 60;
-            const elapsedSeconds = totalWorkSeconds - timeLeft;
-            const elapsedMinutes = Math.floor(elapsedSeconds / 60);
-            if (elapsedMinutes >= 1) {
-                await saveSession(elapsedMinutes);
-                toast({
-                    title: `${elapsedMinutes}m logged · +${elapsedMinutes * XP_PER_MINUTE} XP`,
-                    description: `Saved to ${selectedSubject || "General"}.`,
-                });
-            }
-        }
+        // Work out what was studied, then stop everything *before* saving.
+        // Saving is a round trip, and it re-loads the Study page underneath us;
+        // anything left until after the await was running on borrowed time and
+        // could be stranded mid-reset, which is how a reset used to leave the
+        // header clock still counting.
+        const totalWorkSeconds = (settings.workTime || 25) * 60;
+        const elapsedMinutes = (hasBeenStarted && !isBreak)
+            ? Math.floor((totalWorkSeconds - timeLeft) / 60)
+            : 0;
 
         setIsRunning(false);
         setHasBeenStarted(false);
+        setSession(1);
+        setIsBreak(false);
         if (intervalRef.current) {
             clearInterval(intervalRef.current);
             intervalRef.current = null;
         }
         localStorage.removeItem('pomodoroTimerState');
         localStorage.removeItem('globalTimerState');
-        setSession(1);
-        setIsBreak(false);
-
         window.dispatchEvent(new CustomEvent('timerStateChanged', { detail: { isActive: false } }));
+
+        // Now bank whatever was studied. Resetting ten minutes in still pays
+        // for those ten minutes.
+        if (elapsedMinutes >= 1) {
+            toast({
+                title: `${elapsedMinutes}m logged · +${elapsedMinutes * XP_PER_MINUTE} XP`,
+                description: `Saved to ${selectedSubject || "General"}.`,
+            });
+            try { await saveSession(elapsedMinutes); } catch { /* saveSession toasts its own failure */ }
+        }
         isResettingRef.current = false;
     }, [hasBeenStarted, isBreak, selectedSubject, settings.workTime, timeLeft, saveSession, toast]);
 
@@ -554,7 +557,7 @@ export default function PomodoroTimer({ onSessionComplete, userSubjects: initial
                                     {isRunning ? <Pause className="w-6 h-6 mr-2" /> : <Play className="w-6 h-6 mr-2" />}
                                     {getButtonText()}
                                 </Button>
-                                <Button onClick={resetTimer} variant="outline" size="lg" className="bg-surface/10 border-surface/20 hover:bg-surface/20 text-surface">
+                                <Button onClick={resetTimer} aria-label="Reset timer" variant="outline" size="lg" className="bg-surface/10 border-surface/20 hover:bg-surface/20 text-surface">
                                     <RotateCcw className="w-6 h-6" />
                                 </Button>
                                 {isBreak && (
@@ -687,6 +690,7 @@ export default function PomodoroTimer({ onSessionComplete, userSubjects: initial
                             </Button>
                             <Button
                                 onClick={resetTimer}
+                                aria-label="Reset timer"
                                 variant="outline"
                                 size="lg"
                                 className="w-14 h-14 rounded-2xl hover:bg-secondary border-2"

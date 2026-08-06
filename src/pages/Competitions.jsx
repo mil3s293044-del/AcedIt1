@@ -461,37 +461,55 @@ export default function Competitions() {
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ delay: 0.05 }}
                 >
-                    <div className="rounded-2xl bg-chart-4/5 border border-chart-4/15 shadow-soft px-5 py-4">
-                        <div className="flex flex-wrap items-center gap-x-6 gap-y-2">
-                            <div className="flex items-center gap-3 min-w-0">
-                                <Swords className="w-6 h-6 text-chart-4 flex-shrink-0" />
-                                <div className="min-w-0">
-                                    <p className="font-display font-black text-lg leading-tight truncate text-foreground">{seasonRank?.name || 'Unranked'}</p>
-                                    <p className="text-xs text-muted-foreground">
-                                        {seasonXp.toLocaleString()} season XP{seasonRank?.maxXP && seasonRank.maxXP !== Infinity ? ` · ${(seasonRank.maxXP - seasonXp).toLocaleString()} to next tier` : ''}
-                                    </p>
-                                </div>
+                    {/* Your rank is the identity of a compete page, so it gets to
+                        look like one. This was a thin tinted bar with the rank at
+                        text-lg and the record crushed into 11px on the right. */}
+                    <div className="relative overflow-hidden rounded-3xl bg-chart-4/10 border-2 border-chart-4/25 p-6 lg:p-7">
+                        <Swords className="absolute -top-6 -right-6 w-40 h-40 text-chart-4/10 pointer-events-none rotate-12" />
+                        <div className="relative flex flex-col lg:flex-row lg:items-end gap-5 lg:gap-6">
+                            <div className="min-w-0 flex-1">
+                                <p className="stat-label text-chart-4/80 mb-1.5">This season</p>
+                                <p className="font-display font-black text-foreground leading-none tracking-tight"
+                                    style={{ fontSize: 'clamp(2rem, 5.5vw, 3.25rem)' }}>
+                                    {seasonRank?.name || 'Unranked'}
+                                </p>
+                                <p className="text-sm font-bold text-muted-foreground mt-2 flex flex-wrap items-center gap-2">
+                                    <span>{seasonXp.toLocaleString()} season XP</span>
+                                    {stats.winStreak > 1 && <span className="pill bg-xp/15 text-xp">🔥 {stats.winStreak} win streak</span>}
+                                </p>
                             </div>
-                            <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 ml-auto text-xs font-bold">
-                                <span className="tabular-nums text-foreground">{stats.recentWins}W – {Math.max(0, stats.completed.length - stats.recentWins)}L · {winRate}%</span>
-                                {stats.winStreak > 1 && (
-                                    <span className="pill bg-xp/15 text-xp">🔥 {stats.winStreak} win streak</span>
-                                )}
-                                {stats.active.length > 0 && (
-                                    <span className="inline-flex items-center gap-1.5 text-muted-foreground">
-                                        <Crown className="w-3.5 h-3.5 text-xp" /> Leading {stats.leading} · behind in {stats.behind}
-                                    </span>
-                                )}
+
+                            {/* Record, win rate, and where you stand right now. */}
+                            <div className="grid grid-cols-3 gap-2.5 lg:gap-3 flex-shrink-0">
+                                {[
+                                    { label: "Record", value: `${stats.recentWins}–${Math.max(0, stats.completed.length - stats.recentWins)}`, tone: "text-foreground" },
+                                    { label: "Win rate", value: `${winRate}%`, tone: winRate >= 50 ? "text-primary" : "text-foreground" },
+                                    { label: "Leading", value: `${stats.leading}/${stats.active.length}`, tone: stats.leading > 0 ? "text-xp" : "text-muted-foreground" },
+                                ].map(s => (
+                                    <div key={s.label} className="rounded-2xl bg-surface/90 border border-chart-4/15 px-3 py-2.5 text-center min-w-[84px]">
+                                        <p className={`font-display font-black text-xl leading-none tabular-nums ${s.tone}`}>{s.value}</p>
+                                        <p className="stat-label mt-1.5">{s.label}</p>
+                                    </div>
+                                ))}
                             </div>
                         </div>
+
                         {seasonRank?.maxXP && seasonRank.maxXP !== Infinity && (
-                            <div className="h-1.5 bg-chart-4/10 rounded-full overflow-hidden mt-3">
-                                <motion.div
-                                    initial={{ width: 0 }}
-                                    animate={{ width: `${Math.min(100, ((seasonXp - seasonRank.minXP) / (seasonRank.maxXP - seasonRank.minXP)) * 100)}%` }}
-                                    transition={{ duration: 0.9, delay: 0.4 }}
-                                    className="h-full rounded-full bg-chart-4"
-                                />
+                            <div className="relative mt-5">
+                                <div className="flex items-baseline justify-between mb-1.5">
+                                    <p className="text-xs font-bold text-muted-foreground">Next tier</p>
+                                    <p className="text-xs font-bold text-chart-4">
+                                        {(seasonRank.maxXP - seasonXp).toLocaleString()} XP to go
+                                    </p>
+                                </div>
+                                <div className="h-2 bg-chart-4/15 rounded-full overflow-hidden">
+                                    <motion.div
+                                        initial={{ width: 0 }}
+                                        animate={{ width: `${Math.min(100, ((seasonXp - seasonRank.minXP) / (seasonRank.maxXP - seasonRank.minXP)) * 100)}%` }}
+                                        transition={{ duration: 0.9, delay: 0.4 }}
+                                        className="h-full rounded-full bg-chart-4"
+                                    />
+                                </div>
                             </div>
                         )}
                     </div>
@@ -506,11 +524,14 @@ export default function Competitions() {
                             { value: "battles", label: "Group battles", icon: Trophy, count: stats.active.length },
                         ].map(tab => (
                             <TabsTrigger key={tab.value} value={tab.value}
-                                className="flex items-center justify-center gap-1.5 py-2.5 px-2 rounded-xl text-xs lg:text-sm font-bold text-muted-foreground data-[state=active]:bg-foreground data-[state=active]:text-background data-[state=active]:shadow-soft transition-all">
-                                <tab.icon className="w-3.5 h-3.5" />
-                                <span>{tab.label}</span>
+                                className="flex items-center justify-center gap-1 sm:gap-1.5 py-2.5 px-1.5 sm:px-2 rounded-xl text-xs lg:text-sm font-bold text-muted-foreground data-[state=active]:bg-foreground data-[state=active]:text-background data-[state=active]:shadow-soft transition-all min-w-0">
+                                {/* Icon goes at phone width — three labels plus icons
+                                    plus a count badge doesn't fit 390px, and the
+                                    badge was the thing getting clipped off. */}
+                                <tab.icon className="w-3.5 h-3.5 hidden sm:block flex-shrink-0" />
+                                <span className="truncate">{tab.label}</span>
                                 {tab.count > 0 && (
-                                    <span className="bg-primary text-white text-xs rounded-full w-4 h-4 flex items-center justify-center font-bold">{tab.count}</span>
+                                    <span className="bg-primary text-white text-[10px] rounded-full w-4 h-4 flex items-center justify-center font-bold flex-shrink-0">{tab.count}</span>
                                 )}
                             </TabsTrigger>
                         ))}
