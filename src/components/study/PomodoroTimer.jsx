@@ -50,6 +50,10 @@ const COLOR_SCHEMES = {
     },
 };
 
+// Display only — the award itself is calculated server-side in
+// calcStudySessionXP. Keep the two in step.
+const XP_PER_MINUTE = 4;
+
 export default function PomodoroTimer({ onSessionComplete, userSubjects: initialUserSubjects = [] }) {
     const [settings, setSettings] = useState({
         workTime: 25,
@@ -191,20 +195,25 @@ export default function PomodoroTimer({ onSessionComplete, userSubjects: initial
     }, [timeLeft, isRunning, isBreak, session, selectedSubject, topic, settings, hasBeenStarted]);
 
     const saveSession = useCallback(async (durationMinutes) => {
-        if (!selectedSubject || durationMinutes < 1) return;
+        // Starting is already gated on picking a subject, so this normally
+        // holds. It can still come back empty when the timer is restored from
+        // localStorage in a new tab, and dropping the session there would lose
+        // real study time silently — bank it against General instead.
+        if (durationMinutes < 1) return;
+        const subject = selectedSubject || "General";
         // Update streak on every completed session
         recordStudyAndGetStreak().catch(() => {});
         try {
             await onSessionComplete({
                 technique_name: "pomodoro",
                 session_duration: Math.round(durationMinutes),
-                subject: selectedSubject,
+                subject,
                 topic: topic || "Focus Session",
                 date: format(new Date(), "yyyy-MM-dd")
             });
             // Dispatch event so goals page can pick up new study time instantly
             window.dispatchEvent(new CustomEvent('studySessionSaved', {
-                detail: { subject: selectedSubject, duration_minutes: Math.round(durationMinutes) }
+                detail: { subject, duration_minutes: Math.round(durationMinutes) }
             }));
         } catch (error) {
             console.error("Error saving session:", error);
@@ -231,7 +240,7 @@ export default function PomodoroTimer({ onSessionComplete, userSubjects: initial
             });
             setIsBreak(false);
         } else {
-            if (selectedSubject) await saveCompletedSession();
+            await saveCompletedSession();
 
             const currentSession = session;
             const nextSession = currentSession + 1;
@@ -375,14 +384,19 @@ export default function PomodoroTimer({ onSessionComplete, userSubjects: initial
         if (isResettingRef.current) return;
         isResettingRef.current = true;
 
-        // If a work session was in progress, save however much time was studied
-        if (hasBeenStarted && !isBreak && selectedSubject) {
+        // If a work session was in progress, bank however much was studied.
+        // No subject gate here either — resetting ten minutes in should pay
+        // for those ten minutes.
+        if (hasBeenStarted && !isBreak) {
             const totalWorkSeconds = (settings.workTime || 25) * 60;
             const elapsedSeconds = totalWorkSeconds - timeLeft;
             const elapsedMinutes = Math.floor(elapsedSeconds / 60);
             if (elapsedMinutes >= 1) {
                 await saveSession(elapsedMinutes);
-                toast({ title: `Session saved! ${elapsedMinutes}m logged for ${selectedSubject}` });
+                toast({
+                    title: `${elapsedMinutes}m logged · +${elapsedMinutes * XP_PER_MINUTE} XP`,
+                    description: `Saved to ${selectedSubject || "General"}.`,
+                });
             }
         }
 

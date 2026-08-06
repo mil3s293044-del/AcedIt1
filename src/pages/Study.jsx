@@ -219,9 +219,11 @@ export default function Study() {
             await StudyTechnique.create({ ...sessionData });
             loadData(user.email);
 
-            // Award XP: 1 XP per minute for pomodoro, active_recall, and blurting
+            // Award XP by the minute studied. The rate per source lives on the
+            // server (calcStudySessionXP and friends); a one-minute floor here
+            // so a genuine minute isn't silently dropped.
             const mins = sessionData.session_duration || 0;
-            if (mins >= 2) {
+            if (mins >= 1) {
                 const technique = sessionData.technique_name; // pomodoro, active_recall, blurting
                 const sourceMap = {
                     pomodoro: 'study_session',

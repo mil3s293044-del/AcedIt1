@@ -1319,9 +1319,19 @@ function calcQuizXP({ quiz_score = 0, questions_total = 1, questions_correct = 0
   if (total_marks > 0) return Math.round(total_marks * 2);
   return Math.round((questions_correct || Math.round((quiz_score / 100) * questions_total)) * 2);
 }
+// Pomodoro pays by the minute actually studied — whether the timer ran out or
+// the student reset it partway through. 4 XP a minute, so a standard 25-minute
+// block is 100 XP.
+const STUDY_SESSION_XP_PER_MIN = 4;
+const STUDY_SESSION_MAX_MINUTES = 120;   // one sitting; longer is a data error
+
 function calcStudySessionXP(duration_minutes) {
-  if (duration_minutes < 2) return 0;
-  return Math.min(150, Math.round(duration_minutes * 1.25));
+  // Was a 2-minute floor at 1.25/min. A single minute of study is still a
+  // minute — the floor only ever punished short sessions.
+  if (duration_minutes < 1) return 0;
+  return Math.round(
+    Math.min(duration_minutes, STUDY_SESSION_MAX_MINUTES) * STUDY_SESSION_XP_PER_MIN,
+  );
 }
 function calcStreakXP(streak_days) {
   return Math.min(100, 15 + streak_days * 2);
@@ -1342,7 +1352,9 @@ const DAILY_CAPS = {
   sub_goal:           400,
   goal:               1200,
   quiz:               100,
-  study_session:      160,
+  // 4 XP/min means the old 160 cap ran out after 40 minutes of study — a cap
+  // that punishes a normal afternoon. 960 is four hours of pomodoro.
+  study_session:      960,
   active_recall:      120,
   blurting:           80,
   streak:             100,
@@ -3944,7 +3956,8 @@ const ARENA_STUDY_SOURCES = [
   "quiz", "flashcard", "study_session", "active_recall", "blurting",
   "focus_session", "practice_questions", "mini_test", "loading_quiz", "challenge",
 ];
-const ARENA_MINUTE_SOURCES = ["study_session", "active_recall", "blurting", "focus_session"];
+// (study_minutes no longer reads xp_events — it sums study_techniques and
+// study_sessions directly, the same records the goal engine counts.)
 const ARENA_METRICS = ["xp", "quiz_marks", "flashcards", "study_minutes"];
 
 // Credit XP outside the award engine — refunds only (escrow returns on
@@ -3995,6 +4008,41 @@ async function creditXPWithAudit(userEmail, amount, eventKey, source, metadata =
 
 // Measure one student's study output between two instants, from xp_events.
 async function computeMetricValue(email, metric, startIso, endIso) {
+  // ── study_minutes ─────────────────────────────────────────────────────────
+  // Counted from the study records themselves, not the XP log. This is the
+  // exact pair of tables the goal engine sums for a `study_hours` sub-goal
+  // (updateGoalProgress → calcProgress), so a Back Yourself bet on minutes and
+  // a goal on hours now agree to the minute instead of quietly disagreeing.
+  //
+  // Reading xp_events for this was wrong twice over: nothing is recorded when
+  // the XP award is capped or deduplicated, so a student who hit their daily
+  // cap watched their bet stop moving while they were still studying.
+  if (metric === "study_minutes") {
+    const [{ data: techs }, { data: sess }] = await Promise.all([
+      supabaseAdmin.from("study_techniques").select("session_duration")
+        .eq("created_by", email).gte("created_date", startIso).lte("created_date", endIso).limit(2000),
+      supabaseAdmin.from("study_sessions").select("duration_minutes, session_duration")
+        .eq("created_by", email).gte("created_date", startIso).lte("created_date", endIso).limit(2000),
+    ]);
+    const a = (techs || []).reduce((s, t) => s + (Number(t.session_duration) || 0), 0);
+    const b = (sess || []).reduce((s, x) => s + (Number(x.duration_minutes) || Number(x.session_duration) || 0), 0);
+    return Math.round(a + b);
+  }
+
+  // ── quiz_marks ────────────────────────────────────────────────────────────
+  // Same reasoning: quiz_attempts is the durable record the goal engine reads
+  // for quiz_count and quiz_score.
+  if (metric === "quiz_marks") {
+    const { data: attempts } = await supabaseAdmin
+      .from("quiz_attempts").select("questions_correct")
+      .eq("created_by", email).gte("created_date", startIso).lte("created_date", endIso).limit(2000);
+    return Math.round((attempts || []).reduce((s, a) => s + (Number(a.questions_correct) || 0), 0));
+  }
+
+  // ── xp and flashcards ─────────────────────────────────────────────────────
+  // XP is only defined by the audit log. Flashcards have no per-review row to
+  // window against — review counts live on the card — so the log stays the
+  // only source that can answer "how many in the last 72 hours".
   const { data: events } = await supabaseAdmin
     .from("xp_events")
     .select("source, xp_awarded, metadata")
@@ -4006,14 +4054,9 @@ async function computeMetricValue(email, metric, startIso, endIso) {
   for (const e of events || []) {
     if (metric === "xp") {
       if ((e.xp_awarded || 0) > 0 && ARENA_STUDY_SOURCES.includes(e.source)) total += e.xp_awarded;
-    } else if (metric === "quiz_marks" && e.source === "quiz") {
-      total += Number(e.metadata?.total_marks) || Number(e.metadata?.questions_correct) || 0;
     } else if (metric === "flashcards" && e.source === "flashcard") {
       // Batch awards carry cards_reviewed; incremental drips are one card each.
       total += Number(e.metadata?.cards_reviewed) || (e.metadata?.type === "flashcard_card" ? 1 : 0);
-    } else if (metric === "study_minutes" && ARENA_MINUTE_SOURCES.includes(e.source)) {
-      // Session awards carry duration_minutes; focus drips are one minute each.
-      total += Number(e.metadata?.duration_minutes) || (e.metadata?.type === "focus_minute" ? 1 : 0);
     }
   }
   return Math.round(total);
