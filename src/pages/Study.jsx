@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useCallback } from "react";
+import React, { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { StudyTechnique, UserProfile, User, UserSubject } from "@/entities/all";
 import { motion } from "framer-motion";
 import {
@@ -106,6 +106,9 @@ export default function Study() {
     }, []);
     const [isLoading, setIsLoading] = useState(true);
     const [authError, setAuthError] = useState(false);
+    // Today's intent picks the opening technique once per visit, not on every
+    // refresh — see loadData.
+    const intentAppliedRef = useRef(false);
 
     const loadData = useCallback(async (userEmail) => {
         if (!userEmail) return;
@@ -122,13 +125,29 @@ export default function Study() {
                 base44.entities.SubjectAssessment.filter({ created_by: userEmail, is_completed: false }, "due_date", 10).catch(() => []),
             ]);
             setUserProfile(profileData);
-            // What they said this morning picks the technique — unless they
-            // arrived by deep link, which is a more specific request. Read the
-            // URL rather than state: loadData's closure would still hold the
-            // pre-effect value on the first run.
-            const deepLink = new URLSearchParams(window.location.search).get("tab");
-            const intent = todaysIntent(profileData);
-            if (intent && !deepLink) setActiveTab(intent.plan.technique);
+            // What they said this morning picks the technique — but only on the
+            // first load. loadData also runs after every saved session and on
+            // entity subscriptions, and it was re-applying the intent each
+            // time: finishing a pomodoro yanked you to Active Recall mid-reset,
+            // and any background refresh flashed the page across to it. Steer
+            // once, then leave the student wherever they've navigated to.
+            if (!intentAppliedRef.current) {
+                intentAppliedRef.current = true;
+                // Read the URL rather than state — loadData's closure would
+                // still hold the pre-effect value on the first run.
+                const deepLink = new URLSearchParams(window.location.search).get("tab");
+                // A running pomodoro outranks the intent. Reloading mid-session
+                // used to drop you on Active Recall with the timer still
+                // counting somewhere behind you.
+                let timerLive = false;
+                try {
+                    const t = JSON.parse(localStorage.getItem("pomodoroTimerState") || "null");
+                    timerLive = !!t?.isRunning && (t.timeLeft || 0) > 0;
+                } catch { /* corrupt state isn't a running timer */ }
+                const intent = todaysIntent(profileData);
+                if (timerLive) setActiveTab("pomodoro");
+                else if (intent && !deepLink) setActiveTab(intent.plan.technique);
+            }
             setRecentSessions(sessionsData || []);
             setUserSubjects(subjectsData || []);
             setStudySessions(studySessionsData || []);
