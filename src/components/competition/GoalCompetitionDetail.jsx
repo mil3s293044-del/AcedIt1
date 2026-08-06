@@ -12,7 +12,14 @@ import HoursLeaderboard from "./HoursLeaderboard";
 import ScorePredictionBetting from "./ScorePredictionBetting";
 import { Countdown, Confetti, useCountUp } from "./arenaHelpers";
 
-export default function GoalCompetitionDetail({ competition, currentUserEmail, onBack, onUpdate }) {
+/**
+ * `embedded` renders this under the BattleDashboard, which already shows the
+ * title, participants, countdown, standings and scores. In that mode the
+ * duplicated header — back button, title, countdown — is dropped and only the
+ * controls the dashboard doesn't have survive: the invite code, sync, settle,
+ * sub-goals and score bets.
+ */
+export default function GoalCompetitionDetail({ competition, currentUserEmail, onBack, onUpdate, embedded = false }) {
     const { toast } = useToast();
     const [copied, setCopied] = useState(false);
 
@@ -36,6 +43,18 @@ export default function GoalCompetitionDetail({ competition, currentUserEmail, o
             <Confetti active={isCompleted && isWinner} />
 
             {/* Header */}
+            {embedded ? (
+                !isCompleted && (
+                    <div className="flex items-center justify-between gap-3">
+                        <p className="stat-label">Manage this battle</p>
+                        <Button variant="outline" size="sm" onClick={handleCopyCode}
+                            className="gap-1.5 font-mono font-bold text-xs rounded-xl border-dashed">
+                            {copied ? <Check className="w-3.5 h-3.5 text-primary" /> : <Copy className="w-3.5 h-3.5" />}
+                            {competition.invite_code}
+                        </Button>
+                    </div>
+                )
+            ) : (
             <div className="flex items-center gap-3">
                 <Button variant="ghost" size="sm" onClick={onBack} className="rounded-xl">
                     <ChevronLeft className="w-4 h-4 mr-1" /> Back
@@ -62,6 +81,7 @@ export default function GoalCompetitionDetail({ competition, currentUserEmail, o
                     </Button>
                 )}
             </div>
+            )}
 
             {/* Winner banner */}
             <AnimatePresence>

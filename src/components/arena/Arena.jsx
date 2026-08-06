@@ -140,6 +140,12 @@ export default function Arena({ view = "all" }) {
     }
 
     const showBets = view === "all";
+    // "actions" = everything the arena owns that the unified battle list on the
+    // Compete page doesn't: challenging, answering invites, spectating friends.
+    // The live and settled duel cards are suppressed there because that list
+    // already shows them, and showing each duel twice is exactly the clutter
+    // this was meant to fix.
+    const listsOwnDuels = view !== "actions";
 
     return (
         <div className="space-y-6">
@@ -180,7 +186,7 @@ export default function Arena({ view = "all" }) {
             ))}
 
             {/* Live duels */}
-            {active.length > 0 && (
+            {listsOwnDuels && active.length > 0 && (
                 <div className="space-y-3">
                     {active.map(d => (
                         <DuelCard key={d.id} duel={d} currentUserEmail={me} balance={state.balance} onUpdate={refresh} />
@@ -246,7 +252,7 @@ export default function Arena({ view = "all" }) {
             )}
 
             {/* Recent results */}
-            {recent.length > 0 && (
+            {listsOwnDuels && recent.length > 0 && (
                 <div className="space-y-3">
                     <p className="stat-label">Recent results</p>
                     {recent.map(d => (

@@ -106,6 +106,46 @@ export function gapSeries({ me, rivals }) {
     return mine.map((h) => h.s - theirScoreAt(h.t));
 }
 
+/**
+ * Win probability at each point in the trail — the market line.
+ *
+ * Replays the battle: at every recorded moment, what did the odds look like
+ * given the gap then and the time still left at that moment? That's what makes
+ * a swing legible — you can see the exact point a lead stopped being safe.
+ */
+export function oddsSeries({ me, rivals, targetDate, startedAt }) {
+    const mine = trailOf(me);
+    if (mine.length < 2 || !rivals?.length) return [];
+    const best = rivals.reduce((a, b) => (scoreOf(b) > scoreOf(a) ? b : a));
+    const theirs = trailOf(best);
+    if (!theirs.length) return [];
+
+    const theirScoreAt = (ms) => {
+        const pt = [...theirs].reverse().find((h) => new Date(h.t).getTime() <= ms);
+        return pt ? pt.s : theirs[0].s;
+    };
+    const endMs = targetDate ? new Date(targetDate).getTime() : null;
+    const startMs = startedAt ? new Date(startedAt).getTime() : new Date(mine[0].t).getTime();
+
+    return mine.map((h) => {
+        const at = new Date(h.t).getTime();
+        const lead = h.s - theirScoreAt(at);
+        // Hours left as at that moment, and pace measured up to it.
+        const hrsThen = endMs ? Math.max(0, (endMs - at) / HOUR) : 48;
+        const elapsed = Math.max(1, (at - startMs) / HOUR);
+        const myPaceThen = Math.max(0, (h.s - mine[0].s) / elapsed);
+        const theirPaceThen = Math.max(0, (theirScoreAt(at) - theirs[0].s) / elapsed);
+        const margin = lead + (myPaceThen - theirPaceThen) * hrsThen;
+        const typical = Math.max(1, (myPaceThen + theirPaceThen) / 2);
+        const sigma = Math.max(4, typical * Math.sqrt(hrsThen + 1) * 1.6);
+        return {
+            t: h.t,
+            p: Math.max(1, Math.min(99, Math.round(logistic(margin / sigma) * 100))),
+            lead,
+        };
+    });
+}
+
 /** One line naming the state of the race. Drives the card's headline. */
 export function battleNarrative({ me, rivals }) {
     if (!me || !rivals?.length) return null;

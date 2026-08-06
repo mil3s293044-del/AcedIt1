@@ -4397,13 +4397,31 @@ async function loadMyArenaCore(me, authHeader) {
     }
   }
 
-  // Live scores for my still-active duels.
+  // Live scores for my still-active duels, plus the trail behind them.
   await Promise.all(duels.filter((d) => d.status === "active").map(async (d) => {
     const [cs, os] = await Promise.all([
       computeMetricValue(d.challenger_email, d.metric, d.starts_at, nowIso),
       computeMetricValue(d.opponent_email, d.metric, d.starts_at, nowIso),
     ]);
     d.live_scores = { [d.challenger_email]: cs, [d.opponent_email]: os };
+
+    // Duel scores are recomputed on every read and never stored, so without
+    // this a duel has a present and no past — no momentum, no swing, no
+    // probability line. Snapshot both sides on the same cadence as battles.
+    const history = Array.isArray(d.score_history) ? [...d.score_history] : [];
+    const last = history[history.length - 1];
+    const point = { t: nowIso, a: cs, b: os };
+    if (!last || Date.now() - new Date(last.t).getTime() >= 3 * 3600 * 1000) {
+      history.push(point);
+    } else {
+      history[history.length - 1] = point;   // same window — keep it current
+    }
+    d.score_history = history.slice(-40);
+    const { error: histErr } = await supabaseAdmin
+      .from("study_duels").update({ score_history: d.score_history }).eq("id", d.id);
+    // Migration 0024 not applied yet — the duel still works, it just can't
+    // draw its line. Don't take the whole arena down over a chart.
+    if (histErr) console.warn("[arenaCore] duel score_history write failed:", histErr.message);
   }));
 
   // Back-yourself bets: settle wins the moment the target is hit, losses

@@ -3,8 +3,8 @@ import { motion, AnimatePresence } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
-    Trophy, Swords, Users, Crown, Activity, ClipboardList, Settings as SettingsIcon,
-    LogIn, Loader2, Clock, ChevronRight, ArrowRight, TrendingUp, Coins, RotateCcw, Target
+    Trophy, Swords, Crown, Activity, ClipboardList, Settings as SettingsIcon,
+    LogIn, Loader2, ArrowRight, TrendingUp, Coins, RotateCcw, Target
 } from "lucide-react";
 import { base44 } from "@/api/base44Client";
 import { useToast } from "@/components/ui/use-toast";
@@ -12,11 +12,12 @@ import GoalCompetitionDetail from "@/components/competition/GoalCompetitionDetai
 import Arena from "@/components/arena/Arena";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { joinGoalCompetition, createGoalCompetition } from "@/api/functionsShim";
-import { Countdown, computePot } from "@/components/competition/arenaHelpers";
-import { winOdds, momentumOf, gapSeries, battleNarrative } from "@/components/competition/battleOdds";
+import { computePot } from "@/components/competition/arenaHelpers";
+import { momentumOf } from "@/components/competition/battleOdds";
+import { allBattles } from "@/components/competition/normaliseBattle";
+import BattleRow from "@/components/competition/BattleRow";
+import BattleDashboard from "@/components/competition/BattleDashboard";
 import HelpButton from "@/components/shared/HelpButton";
-import EmptyState from "@/components/shared/EmptyState";
-import { format, isPast, parseISO } from "date-fns";
 
 // Battles now rank by Compete Score; fall back to legacy progress for old data.
 const rankVal = (p) => (p?.compete_score ?? p?.progress_percent ?? 0);
@@ -34,218 +35,6 @@ function getCoachLine({ name, hour, total, active, leading, behind, recentWins }
     return `${period}, ${name}. ${active} live battle${active === 1 ? '' : 's'} on the board.`;
 }
 
-// ─── CompCard ────────────────────────────────────────────────────────────────
-function CompCard({ comp, currentUserEmail, onClick }) {
-    const accepted = (comp.participants || []).filter(p => p.status === 'accepted' || p.status === 'completed');
-    const me = comp.participants?.find(p => p.email === currentUserEmail);
-    const ranked = [...accepted].sort((a, b) => rankVal(b) - rankVal(a));
-    const myRank = ranked.findIndex(p => p.email === currentUserEmail) + 1;
-    const isCompleted = comp.status === 'completed';
-    const isLeading = myRank === 1 && !isCompleted && accepted.length > 1;
-    const myScore = Math.round(rankVal(me));
-    const leaderScore = Math.round(rankVal(ranked[0])) || 1;
-    const myPct = Math.min(100, Math.round((myScore / leaderScore) * 100));
-    const overdue = comp.goal_target_date && isPast(parseISO(comp.goal_target_date)) && !isCompleted;
-    const pot = computePot(comp);
-
-    // The competitive read: odds, today's movement, and the shape of the gap.
-    const others = accepted.filter(p => p.email !== currentUserEmail);
-    const odds = isCompleted ? null : winOdds({ me, rivals: others, targetDate: comp.goal_target_date });
-    const myMomentum = momentumOf(me, 24);
-    const swing = gapSeries({ me, rivals: others });
-    const narrative = isCompleted ? null : battleNarrative({ me, rivals: others });
-    // Sparkline geometry, scaled to the range the gap actually walked so a
-    // few points of swing don't render as a flat line.
-    const swingPoints = (() => {
-        if (swing.length < 2) return "";
-        const lo = Math.min(...swing, 0), hi = Math.max(...swing, 0);
-        const span = Math.max(1, hi - lo);
-        return swing.map((v, i) => {
-            const x = (i / (swing.length - 1)) * 100;
-            const y = 32 - ((v - lo) / span) * 32;
-            return `${x},${Math.max(2, Math.min(30, y))}`;
-        }).join(" ");
-    })();
-
-    // Token-tinted shell based on state
-    const shell = isCompleted
-        ? "bg-chart-4/5 border-chart-4/25"
-        : isLeading
-            ? "bg-xp/5 border-xp/30"
-            : overdue
-                ? "bg-streak/5 border-streak/25"
-                : "bg-chart-3/5 border-chart-3/25";
-
-    const accentColor = isCompleted ? "text-chart-4" : isLeading ? "text-xp" : overdue ? "text-streak" : "text-chart-3";
-
-    return (
-        <motion.button
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            onClick={onClick}
-            className={`relative text-left rounded-2xl border-2 p-5 hover:shadow-soft transition-all group w-full ${shell}`}
-        >
-            {/* State indicator */}
-            {!isCompleted && (
-                <div className="absolute top-4 right-4 flex items-center gap-1.5">
-                    <span className={`w-2 h-2 rounded-full animate-soft-pulse ${overdue ? 'bg-streak' : 'bg-primary'}`} />
-                    <span className={`text-xs font-extrabold ${overdue ? 'text-streak' : 'text-primary'}`}>{overdue ? 'Overdue' : 'Live'}</span>
-                </div>
-            )}
-            {isCompleted && (
-                <div className="absolute top-4 right-4 inline-flex items-center gap-1 pill bg-chart-4/15 text-chart-4">
-                    <Trophy className="w-3 h-3" /> Settled
-                </div>
-            )}
-
-            <div className="mb-3 pr-20">
-                <h3 className="font-display font-extrabold text-foreground text-base leading-tight truncate">{comp.goal_title}</h3>
-                <p className="text-xs text-muted-foreground mt-1 inline-flex items-center gap-1 flex-wrap">
-                    by {comp.creator_name} <span className="text-muted-foreground/40">·</span> <Users className="w-3 h-3" /> {accepted.length}
-                    {!isCompleted && pot.total > 0 && (
-                        <>
-                            <span className="text-muted-foreground/40">·</span>
-                            <span className="inline-flex items-center gap-0.5 font-bold text-xp"><Coins className="w-3 h-3" /> {pot.total} XP</span>
-                        </>
-                    )}
-                </p>
-            </div>
-
-            {/* Odds + momentum — the two things a score alone can't tell you:
-                whether you're likely to win, and which way it's moving. */}
-            {me && !isCompleted && odds != null && (
-                <div className="mb-3.5">
-                    <div className="flex items-baseline justify-between mb-1.5">
-                        <span className="stat-label">Chance of winning</span>
-                        <span className={`font-display font-black text-2xl leading-none tabular-nums ${
-                            odds >= 60 ? "text-primary" : odds >= 40 ? "text-xp" : "text-streak"
-                        }`}>{odds}%</span>
-                    </div>
-                    {/* Two-sided bar: your share of the race against the leader. */}
-                    <div className="h-2.5 bg-streak/20 rounded-full overflow-hidden flex">
-                        <motion.div
-                            initial={{ width: 0 }} animate={{ width: `${odds}%` }}
-                            transition={{ duration: 0.9, ease: "easeOut" }}
-                            className={`h-full ${odds >= 60 ? "bg-primary" : odds >= 40 ? "bg-xp" : "bg-streak"}`}
-                        />
-                    </div>
-                    <div className="flex items-center justify-between mt-1.5 gap-2">
-                        <span className="text-[11px] font-bold text-muted-foreground tabular-nums">{myScore} pts</span>
-                        {myMomentum != null && (
-                            <span className={`text-[11px] font-bold inline-flex items-center gap-0.5 ${
-                                myMomentum > 0 ? "text-primary" : "text-muted-foreground"
-                            }`}>
-                                {myMomentum > 0 ? <TrendingUp className="w-3 h-3" /> : null}
-                                {myMomentum > 0 ? `+${myMomentum}` : myMomentum} today
-                            </span>
-                        )}
-                    </div>
-                </div>
-            )}
-
-            {/* Settled, or no rival to race — keep the plain score bar. */}
-            {me && (isCompleted || odds == null) && (
-                <div className="mb-4">
-                    <div className="flex items-center justify-between text-xs mb-1.5">
-                        <span className="font-bold text-muted-foreground">Your score</span>
-                        <div className="flex items-center gap-2">
-                            {isLeading && (
-                                <span className="inline-flex items-center gap-1 font-extrabold text-xp">
-                                    <Crown className="w-3 h-3" /> Leading
-                                </span>
-                            )}
-                            <span className={`font-display font-extrabold text-base ${accentColor}`}>{myScore} pts</span>
-                        </div>
-                    </div>
-                    <div className="h-2 bg-secondary rounded-full overflow-hidden">
-                        <motion.div
-                            initial={{ width: 0 }}
-                            animate={{ width: `${myPct}%` }}
-                            transition={{ duration: 0.9, ease: "easeOut" }}
-                            className={`h-full rounded-full ${isLeading ? 'bg-xp' : overdue ? 'bg-streak' : 'bg-chart-3'}`}
-                        />
-                    </div>
-                </div>
-            )}
-
-            {/* Swing line — the gap over time. Above the centre line you're
-                ahead, below it you're behind; the shape is the story. */}
-            {swing.length > 1 && !isCompleted && (
-                <div className="mb-3.5">
-                    <div className="flex items-baseline justify-between mb-1">
-                        <span className="stat-label">Momentum</span>
-                        <span className="text-[11px] text-muted-foreground/70">gap over time</span>
-                    </div>
-                    <svg viewBox="0 0 100 32" preserveAspectRatio="none" className="w-full h-8" role="img"
-                        aria-label="Your points gap against the leader over time">
-                        <line x1="0" y1="16" x2="100" y2="16" stroke="currentColor" strokeWidth="1"
-                            vectorEffect="non-scaling-stroke" className="text-border" strokeDasharray="3 3" />
-                        <polyline points={swingPoints} fill="none" stroke="currentColor" strokeWidth="2"
-                            vectorEffect="non-scaling-stroke" strokeLinejoin="round" strokeLinecap="round"
-                            className={swing[swing.length - 1] >= 0 ? "text-primary" : "text-streak"} />
-                    </svg>
-                </div>
-            )}
-
-            {/* Mini leaderboard */}
-            <div className="space-y-1.5">
-                {ranked.slice(0, 3).map((p, i) => {
-                    const placeBg = i === 0 ? 'bg-xp text-background' : i === 1 ? 'bg-secondary text-foreground' : 'bg-streak/80 text-background';
-                    const isMe = p.email === currentUserEmail;
-                    return (
-                        <div
-                            key={p.email}
-                            className={`flex items-center gap-2 text-xs rounded-xl px-2.5 py-1.5 ${isMe ? 'bg-primary/15 ring-1 ring-primary/30 font-bold' : 'bg-surface'}`}
-                        >
-                            <div className={`w-5 h-5 rounded-full flex items-center justify-center text-xs font-extrabold flex-shrink-0 ${placeBg}`}>{i + 1}</div>
-                            <span className="flex-1 truncate text-foreground">{p.name?.split(' ')[0]}</span>
-                            <span className="text-chart-3 font-bold">{Math.round(rankVal(p))} pts</span>
-                        </div>
-                    );
-                })}
-            </div>
-
-            {/* Where the race actually stands — reads the momentum, not just
-                the standing, so "pulling away" and "lead is closing" are
-                distinguishable at a glance. */}
-            {narrative && (
-                <div className={`mt-3 flex items-start gap-2 rounded-xl px-3 py-2 text-xs font-bold ${
-                    narrative.tone === "good" ? "bg-primary/10 text-primary"
-                        : narrative.tone === "bad" ? "bg-streak/10 text-streak"
-                        : "bg-xp/10 text-xp"
-                }`}>
-                    {narrative.tone === "good"
-                        ? <Crown className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" />
-                        : <TrendingUp className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" />}
-                    <span>{narrative.text}</span>
-                </div>
-            )}
-
-            {isCompleted && comp.winner_name && (
-                <div className="mt-3 inline-flex items-center gap-2 bg-xp/10 border-2 border-xp/25 rounded-xl px-3 py-1.5">
-                    <Trophy className="w-3.5 h-3.5 text-xp" />
-                    <span className="text-xs font-bold text-foreground">{comp.winner_name} took it</span>
-                </div>
-            )}
-
-            {comp.goal_target_date && (
-                <div className="mt-2.5">
-                    {isCompleted ? (
-                        <div className="flex items-center gap-1 text-xs text-muted-foreground">
-                            <Clock className="w-3 h-3" />
-                            {format(parseISO(comp.goal_target_date), 'MMM d, yyyy')}
-                        </div>
-                    ) : (
-                        <Countdown targetDate={comp.goal_target_date} variant="chip" />
-                    )}
-                </div>
-            )}
-
-            <ChevronRight className="absolute bottom-5 right-4 w-4 h-4 text-muted-foreground/40 group-hover:text-foreground transition-colors" />
-        </motion.button>
-    );
-}
-
 // ─── Main page ────────────────────────────────────────────────────────────────
 export default function Competitions() {
     const [user, setUser] = useState(null);
@@ -255,6 +44,10 @@ export default function Competitions() {
     const [selectedComp, setSelectedComp] = useState(null);
     const [inviteCode, setInviteCode] = useState("");
     const [competeTab, setCompeteTab] = useState("duels");
+    // Duels for the unified list. The arena owns creating/answering them;
+    // this is a read so both kinds of competition can sit in one place.
+    const [duels, setDuels] = useState([]);
+    const [openBattle, setOpenBattle] = useState(null);
     const [newBattleTitle, setNewBattleTitle] = useState("");
     const [newBattleDays, setNewBattleDays] = useState(7);
     const [creatingBattle, setCreatingBattle] = useState(false);
@@ -297,6 +90,9 @@ export default function Competitions() {
             ]);
             const myComps = allComps.filter(c => c.creator_email === u.email || (c.participants || []).some(p => p.email === u.email));
             setCompetitions(myComps);
+            base44.functions.invoke('getArenaState')
+                .then(r => setDuels(((r?.data ?? r)?.duels || []).filter(d => d.status === 'active' || d.status === 'settled')))
+                .catch(() => {});
             setUserProfile(profiles[0] || null);
 
             // Auto-sync hours for all active competitions the user is in
@@ -361,6 +157,13 @@ export default function Competitions() {
             toast({ title: "Error", description: e.message, variant: "destructive" });
         } finally { setRematchingEmail(null); }
     };
+
+    // Every competition in one list, most urgent first.
+    const allBattles_ = useMemo(
+        () => allBattles({ duels, competitions, myEmail: user?.email }),
+        [duels, competitions, user],
+    );
+    const liveBattleCount = allBattles_.filter(b => b.status === "live").length;
 
     // ─── Derived stats ────────────────────────────────────────────────────────
     const stats = useMemo(() => {
@@ -491,6 +294,34 @@ export default function Competitions() {
         );
     }
 
+    // The battle dashboard — one competition read as a live market. Group
+    // battles keep their existing management panel (invite code, settle,
+    // sub-goals) below it rather than losing those controls.
+    if (openBattle) {
+        const live = allBattles_.find(b => b.kind === openBattle.kind && b.id === openBattle.id) || openBattle;
+        return (
+            <div className="min-h-screen bg-background">
+                <div className="max-w-3xl mx-auto px-4 lg:px-8 py-6 lg:py-8">
+                    <BattleDashboard
+                        battle={live}
+                        onBack={() => { setOpenBattle(null); loadData(); }}
+                        footer={live.kind === "battle" ? (
+                            <div className="pt-2">
+                                <GoalCompetitionDetail
+                                    competition={live.raw}
+                                    currentUserEmail={user?.email}
+                                    onBack={() => { setOpenBattle(null); loadData(); }}
+                                    onUpdate={loadData}
+                                    embedded
+                                />
+                            </div>
+                        ) : null}
+                    />
+                </div>
+            </div>
+        );
+    }
+
     if (selectedComp) {
         return (
             <div className="min-h-screen bg-background">
@@ -585,11 +416,10 @@ export default function Competitions() {
 
                 {/* ── ONE PAGE, THREE CLEAR MODES ──────────────────────── */}
                 <Tabs value={competeTab} onValueChange={setCompeteTab} className="space-y-5">
-                    <TabsList className="grid w-full grid-cols-3 h-auto p-1.5 rounded-2xl bg-surface border-2 border-border shadow-soft">
+                    <TabsList className="grid w-full grid-cols-2 h-auto p-1.5 rounded-2xl bg-surface border-2 border-border shadow-soft">
                         {[
-                            { value: "duels", label: "Duels", icon: Swords },
+                            { value: "duels", label: "Battles", icon: Swords, count: liveBattleCount },
                             { value: "bets", label: "Back yourself", icon: Target },
-                            { value: "battles", label: "Group battles", icon: Trophy, count: stats.active.length },
                         ].map(tab => (
                             <TabsTrigger key={tab.value} value={tab.value}
                                 className="flex items-center justify-center gap-1 sm:gap-1.5 py-2.5 px-1.5 sm:px-2 rounded-xl text-xs lg:text-sm font-bold text-muted-foreground data-[state=active]:bg-foreground data-[state=active]:text-background data-[state=active]:shadow-soft transition-all min-w-0">
@@ -605,18 +435,48 @@ export default function Competitions() {
                         ))}
                     </TabsList>
 
-                    {/* Duels — challenges, live matches, spectating */}
-                    <TabsContent value="duels" className="mt-4">
-                        <Arena view="matches" />
-                    </TabsContent>
-
                     {/* Back yourself — solo commitment bets */}
                     <TabsContent value="bets" className="mt-4">
                         <Arena view="bets" />
                     </TabsContent>
 
-                    {/* Group battles — goal competitions */}
-                    <TabsContent value="battles" className="mt-4 space-y-6">
+                    {/* Battles — every competition the student is in, duels and
+                        group battles together. They were split across two tabs
+                        with two card designs, which is most of why the page felt
+                        disorganised: you don't have "duels" and "battles", you
+                        have things you're racing in. */}
+                    <TabsContent value="duels" className="mt-4 space-y-6">
+
+                {allBattles_.length > 0 && (
+                    <motion.section initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.08 }}>
+                        <div className="flex items-baseline justify-between mb-3">
+                            <h2 className="font-display font-extrabold text-foreground text-base flex items-center gap-2">
+                                <span className="w-2 h-2 rounded-full bg-primary animate-soft-pulse" /> Live now
+                                <span className="pill bg-primary/15 text-primary">{liveBattleCount}</span>
+                            </h2>
+                        </div>
+                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+                            {allBattles_.filter(b => b.status === "live").map(b => (
+                                <BattleRow key={`${b.kind}-${b.id}`} battle={b} onClick={() => setOpenBattle(b)} />
+                            ))}
+                        </div>
+                        {allBattles_.some(b => b.status === "settled") && (
+                            <>
+                                <h2 className="font-display font-extrabold text-foreground text-base mt-6 mb-3 flex items-center gap-2">
+                                    <Trophy className="w-4 h-4 text-chart-4" /> Settled
+                                </h2>
+                                <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+                                    {allBattles_.filter(b => b.status === "settled").map(b => (
+                                        <BattleRow key={`${b.kind}-${b.id}`} battle={b} onClick={() => setOpenBattle(b)} />
+                                    ))}
+                                </div>
+                            </>
+                        )}
+                    </motion.section>
+                )}
+
+                {/* Challenge / spectate / respond still live in the arena. */}
+                <Arena view="actions" />
 
                 {/* ── FOCUS PANEL ─────────────────────────────────────── */}
                 {focus && (
@@ -761,58 +621,6 @@ export default function Competitions() {
                     </div>
                 </motion.section>
 
-                {/* ── COMPETITIONS LIST ───────────────────────────────── */}
-                {competitions.length === 0 ? (
-                    <motion.section
-                        initial={{ opacity: 0, y: 12 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        transition={{ delay: 0.2 }}
-                        className="rounded-2xl bg-surface border border-dashed border-border shadow-soft"
-                    >
-                        <EmptyState
-                            icon={Swords}
-                            title="No battles yet"
-                            description="Open any goal and tap “Compete with friends” to challenge them — or paste an invite code above to join one."
-                            tone="muted"
-                        />
-                    </motion.section>
-                ) : (
-                    <div className="space-y-6">
-                        {stats.active.length > 0 && (
-                            <motion.section initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }}>
-                                <div className="flex items-center gap-2 mb-3">
-                                    <span className="w-2 h-2 bg-primary rounded-full animate-soft-pulse" />
-                                    <h2 className="font-display font-extrabold text-foreground text-lg lg:text-xl">
-                                        Live battles
-                                    </h2>
-                                    <span className="pill bg-primary/15 text-primary">{stats.active.length}</span>
-                                </div>
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                    {stats.active.map(c => (
-                                        <CompCard key={c.id} comp={c} currentUserEmail={user?.email} onClick={() => setSelectedComp(c)} />
-                                    ))}
-                                </div>
-                            </motion.section>
-                        )}
-
-                        {stats.completed.length > 0 && (
-                            <motion.section initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.25 }}>
-                                <div className="flex items-center gap-2 mb-3">
-                                    <Trophy className="w-4 h-4 text-chart-4" />
-                                    <h2 className="font-display font-extrabold text-foreground text-lg lg:text-xl">
-                                        Settled
-                                    </h2>
-                                    <span className="pill bg-chart-4/15 text-chart-4">{stats.completed.length}</span>
-                                </div>
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                    {stats.completed.map(c => (
-                                        <CompCard key={c.id} comp={c} currentUserEmail={user?.email} onClick={() => setSelectedComp(c)} />
-                                    ))}
-                                </div>
-                            </motion.section>
-                        )}
-                    </div>
-                )}
                     </TabsContent>
                 </Tabs>
             </div>
