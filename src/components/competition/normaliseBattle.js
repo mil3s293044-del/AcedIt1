@@ -43,13 +43,21 @@ function decorate(base) {
 /** A head-to-head duel from the arena. */
 export function fromDuel(duel, myEmail) {
     const scores = duel.status === "settled" ? (duel.final_scores || {}) : (duel.live_scores || {});
-    const side = (email, name) => ({
+    // The trail the server snapshots (migration 0024) is stored as one row per
+    // moment holding both sides; split it per participant so duels feed the
+    // same momentum, swing and probability code that battles do.
+    const trail = Array.isArray(duel.score_history) ? duel.score_history : [];
+    const historyFor = (which) =>
+        trail.filter(h => h && h.t && typeof h[which] === "number").map(h => ({ t: h.t, s: h[which] }));
+
+    const side = (email, name, which) => ({
         email, name: name || email, score: Math.round(scores[email] || 0),
         isMe: email === myEmail,
-        // Duels have no score trail — the server computes live scores on read
-        // rather than snapshotting them — so momentum and the market line are
-        // unavailable here. Better absent than invented.
-        participant: { email, name, compete_score: Math.round(scores[email] || 0) },
+        participant: {
+            email, name,
+            compete_score: Math.round(scores[email] || 0),
+            score_history: historyFor(which),
+        },
     });
     return decorate({
         id: duel.id,
@@ -58,8 +66,8 @@ export function fromDuel(duel, myEmail) {
         subtitle: null,
         unit: METRIC_UNIT[duel.metric] || "pts",
         sides: [
-            side(duel.challenger_email, duel.challenger_name),
-            side(duel.opponent_email, duel.opponent_name),
+            side(duel.challenger_email, duel.challenger_name, "a"),
+            side(duel.opponent_email, duel.opponent_name, "b"),
         ],
         startedAt: duel.starts_at,
         endsAt: duel.ends_at,

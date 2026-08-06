@@ -312,6 +312,7 @@ export default function Competitions() {
                                     currentUserEmail={user?.email}
                                     onBack={() => { setOpenBattle(null); loadData(); }}
                                     onUpdate={loadData}
+                                    embedded
                                 />
                             </div>
                         ) : null}
