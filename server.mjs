@@ -3390,18 +3390,31 @@ async function syncCompetitionSlice(userEmail, competitionId) {
   const { data: freshComp } = await supabaseAdmin
     .from("goal_competitions").select("participants").eq("id", competitionId).maybeSingle();
   const now = new Date().toISOString();
-  const updatedParticipants = (freshComp?.participants || comp.participants || []).map((p) =>
-    p.email === userEmail
-      ? {
-          ...p,
-          study_minutes: totalMinutes,
-          compete_score: cs.total,
-          score_breakdown: { effort: cs.effort, mastery: cs.mastery, consistency: cs.consistency },
-          last_hours_sync: now,
-          last_activity: now,
-        }
-      : p,
-  );
+  const updatedParticipants = (freshComp?.participants || comp.participants || []).map((p) => {
+    if (p.email !== userEmail) return p;
+    // Score trail. A battle only had a current score, so nobody could tell a
+    // ten-point lead that's opening up from one that's closing — no momentum,
+    // no swing, no odds worth the name. One point every few hours is enough
+    // to draw a gap line, and 40 of them covers a week-long battle.
+    const history = Array.isArray(p.score_history) ? [...p.score_history] : [];
+    const last = history[history.length - 1];
+    const MIN_GAP_MS = 3 * 3600 * 1000;
+    if (!last || Date.now() - new Date(last.t).getTime() >= MIN_GAP_MS) {
+      history.push({ t: now, s: cs.total });
+    } else {
+      // Same window — keep the trail honest by updating the point in place.
+      history[history.length - 1] = { t: now, s: cs.total };
+    }
+    return {
+      ...p,
+      study_minutes: totalMinutes,
+      compete_score: cs.total,
+      score_breakdown: { effort: cs.effort, mastery: cs.mastery, consistency: cs.consistency },
+      score_history: history.slice(-40),
+      last_hours_sync: now,
+      last_activity: now,
+    };
+  });
   const { error: updErr } = await supabaseAdmin
     .from("goal_competitions")
     .update({ participants: updatedParticipants })

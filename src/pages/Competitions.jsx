@@ -13,9 +13,9 @@ import Arena from "@/components/arena/Arena";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { joinGoalCompetition, createGoalCompetition } from "@/api/functionsShim";
 import { Countdown, computePot } from "@/components/competition/arenaHelpers";
+import { winOdds, momentumOf, gapSeries, battleNarrative } from "@/components/competition/battleOdds";
 import HelpButton from "@/components/shared/HelpButton";
 import EmptyState from "@/components/shared/EmptyState";
-import { getSeasonRankFromXP } from "@/components/shared/xpSystem";
 import { format, isPast, parseISO } from "date-fns";
 
 // Battles now rank by Compete Score; fall back to legacy progress for old data.
@@ -45,11 +45,27 @@ function CompCard({ comp, currentUserEmail, onClick }) {
     const myScore = Math.round(rankVal(me));
     const leaderScore = Math.round(rankVal(ranked[0])) || 1;
     const myPct = Math.min(100, Math.round((myScore / leaderScore) * 100));
-    // Live rivalry: who's just above (chasing) or just below (defending)?
-    const rival = isLeading ? ranked[1] : ranked[0];
-    const gap = rival ? Math.abs(Math.round(rankVal(me) - rankVal(rival))) : 0;
     const overdue = comp.goal_target_date && isPast(parseISO(comp.goal_target_date)) && !isCompleted;
     const pot = computePot(comp);
+
+    // The competitive read: odds, today's movement, and the shape of the gap.
+    const others = accepted.filter(p => p.email !== currentUserEmail);
+    const odds = isCompleted ? null : winOdds({ me, rivals: others, targetDate: comp.goal_target_date });
+    const myMomentum = momentumOf(me, 24);
+    const swing = gapSeries({ me, rivals: others });
+    const narrative = isCompleted ? null : battleNarrative({ me, rivals: others });
+    // Sparkline geometry, scaled to the range the gap actually walked so a
+    // few points of swing don't render as a flat line.
+    const swingPoints = (() => {
+        if (swing.length < 2) return "";
+        const lo = Math.min(...swing, 0), hi = Math.max(...swing, 0);
+        const span = Math.max(1, hi - lo);
+        return swing.map((v, i) => {
+            const x = (i / (swing.length - 1)) * 100;
+            const y = 32 - ((v - lo) / span) * 32;
+            return `${x},${Math.max(2, Math.min(30, y))}`;
+        }).join(" ");
+    })();
 
     // Token-tinted shell based on state
     const shell = isCompleted
@@ -95,8 +111,40 @@ function CompCard({ comp, currentUserEmail, onClick }) {
                 </p>
             </div>
 
-            {/* My progress bar */}
-            {me && (
+            {/* Odds + momentum — the two things a score alone can't tell you:
+                whether you're likely to win, and which way it's moving. */}
+            {me && !isCompleted && odds != null && (
+                <div className="mb-3.5">
+                    <div className="flex items-baseline justify-between mb-1.5">
+                        <span className="stat-label">Chance of winning</span>
+                        <span className={`font-display font-black text-2xl leading-none tabular-nums ${
+                            odds >= 60 ? "text-primary" : odds >= 40 ? "text-xp" : "text-streak"
+                        }`}>{odds}%</span>
+                    </div>
+                    {/* Two-sided bar: your share of the race against the leader. */}
+                    <div className="h-2.5 bg-streak/20 rounded-full overflow-hidden flex">
+                        <motion.div
+                            initial={{ width: 0 }} animate={{ width: `${odds}%` }}
+                            transition={{ duration: 0.9, ease: "easeOut" }}
+                            className={`h-full ${odds >= 60 ? "bg-primary" : odds >= 40 ? "bg-xp" : "bg-streak"}`}
+                        />
+                    </div>
+                    <div className="flex items-center justify-between mt-1.5 gap-2">
+                        <span className="text-[11px] font-bold text-muted-foreground tabular-nums">{myScore} pts</span>
+                        {myMomentum != null && (
+                            <span className={`text-[11px] font-bold inline-flex items-center gap-0.5 ${
+                                myMomentum > 0 ? "text-primary" : "text-muted-foreground"
+                            }`}>
+                                {myMomentum > 0 ? <TrendingUp className="w-3 h-3" /> : null}
+                                {myMomentum > 0 ? `+${myMomentum}` : myMomentum} today
+                            </span>
+                        )}
+                    </div>
+                </div>
+            )}
+
+            {/* Settled, or no rival to race — keep the plain score bar. */}
+            {me && (isCompleted || odds == null) && (
                 <div className="mb-4">
                     <div className="flex items-center justify-between text-xs mb-1.5">
                         <span className="font-bold text-muted-foreground">Your score</span>
@@ -120,6 +168,25 @@ function CompCard({ comp, currentUserEmail, onClick }) {
                 </div>
             )}
 
+            {/* Swing line — the gap over time. Above the centre line you're
+                ahead, below it you're behind; the shape is the story. */}
+            {swing.length > 1 && !isCompleted && (
+                <div className="mb-3.5">
+                    <div className="flex items-baseline justify-between mb-1">
+                        <span className="stat-label">Momentum</span>
+                        <span className="text-[11px] text-muted-foreground/70">gap over time</span>
+                    </div>
+                    <svg viewBox="0 0 100 32" preserveAspectRatio="none" className="w-full h-8" role="img"
+                        aria-label="Your points gap against the leader over time">
+                        <line x1="0" y1="16" x2="100" y2="16" stroke="currentColor" strokeWidth="1"
+                            vectorEffect="non-scaling-stroke" className="text-border" strokeDasharray="3 3" />
+                        <polyline points={swingPoints} fill="none" stroke="currentColor" strokeWidth="2"
+                            vectorEffect="non-scaling-stroke" strokeLinejoin="round" strokeLinecap="round"
+                            className={swing[swing.length - 1] >= 0 ? "text-primary" : "text-streak"} />
+                    </svg>
+                </div>
+            )}
+
             {/* Mini leaderboard */}
             <div className="space-y-1.5">
                 {ranked.slice(0, 3).map((p, i) => {
@@ -138,12 +205,19 @@ function CompCard({ comp, currentUserEmail, onClick }) {
                 })}
             </div>
 
-            {/* Live rivalry alert — push the user to study */}
-            {!isCompleted && accepted.length > 1 && rival && (
-                <div className={`mt-3 flex items-center gap-2 rounded-xl px-3 py-2 text-xs font-bold ${isLeading ? 'bg-primary/10 text-primary' : 'bg-streak/10 text-streak'}`}>
-                    {isLeading
-                        ? <><Crown className="w-3.5 h-3.5 flex-shrink-0" /> {rival.name?.split(' ')[0]} is {gap} pts behind — defend your lead</>
-                        : <><TrendingUp className="w-3.5 h-3.5 flex-shrink-0" /> {gap} pts behind {rival.name?.split(' ')[0]} — catch up!</>}
+            {/* Where the race actually stands — reads the momentum, not just
+                the standing, so "pulling away" and "lead is closing" are
+                distinguishable at a glance. */}
+            {narrative && (
+                <div className={`mt-3 flex items-start gap-2 rounded-xl px-3 py-2 text-xs font-bold ${
+                    narrative.tone === "good" ? "bg-primary/10 text-primary"
+                        : narrative.tone === "bad" ? "bg-streak/10 text-streak"
+                        : "bg-xp/10 text-xp"
+                }`}>
+                    {narrative.tone === "good"
+                        ? <Crown className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" />
+                        : <TrendingUp className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" />}
+                    <span>{narrative.text}</span>
                 </div>
             )}
 
@@ -343,8 +417,6 @@ export default function Competitions() {
         behind: stats.behind,
         recentWins: stats.recentWins,
     });
-    const seasonRank = userProfile ? getSeasonRankFromXP(userProfile.season_xp || 0) : null;
-    const seasonXp = userProfile?.season_xp || 0;
 
     // Featured: most-active comp where user is behind, OR most recent active
     const focus = useMemo(() => {
@@ -461,56 +533,23 @@ export default function Competitions() {
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ delay: 0.05 }}
                 >
-                    {/* Your rank is the identity of a compete page, so it gets to
-                        look like one. This was a thin tinted bar with the rank at
-                        text-lg and the record crushed into 11px on the right. */}
-                    <div className="relative overflow-hidden rounded-3xl bg-chart-4/10 border-2 border-chart-4/25 p-6 lg:p-7">
-                        <Swords className="absolute -top-6 -right-6 w-40 h-40 text-chart-4/10 pointer-events-none rotate-12" />
-                        <div className="relative flex flex-col lg:flex-row lg:items-end gap-5 lg:gap-6">
-                            <div className="min-w-0 flex-1">
-                                <p className="stat-label text-chart-4/80 mb-1.5">This season</p>
-                                <p className="font-display font-black text-foreground leading-none tracking-tight"
-                                    style={{ fontSize: 'clamp(2rem, 5.5vw, 3.25rem)' }}>
-                                    {seasonRank?.name || 'Unranked'}
-                                </p>
-                                <p className="text-sm font-bold text-muted-foreground mt-2 flex flex-wrap items-center gap-2">
-                                    <span>{seasonXp.toLocaleString()} season XP</span>
-                                    {stats.winStreak > 1 && <span className="pill bg-xp/15 text-xp">🔥 {stats.winStreak} win streak</span>}
-                                </p>
+                    {/* Tiers are gone — a Bronze/Silver ladder measured
+                        lifetime XP, not how you're doing in the battles on this
+                        page, so it dressed the page up while saying nothing
+                        about the competition. What's left is the record itself. */}
+                    <div className="rounded-2xl bg-surface border border-border shadow-soft px-5 py-4 flex flex-wrap items-center gap-x-6 gap-y-3">
+                        {[
+                            { label: "Record", value: `${stats.recentWins}\u2013${Math.max(0, stats.completed.length - stats.recentWins)}`, tone: "text-foreground" },
+                            { label: "Win rate", value: `${winRate}%`, tone: winRate >= 50 ? "text-primary" : "text-foreground" },
+                            { label: "Leading", value: `${stats.leading}/${stats.active.length}`, tone: stats.leading > 0 ? "text-xp" : "text-muted-foreground" },
+                        ].map(s => (
+                            <div key={s.label} className="flex items-baseline gap-2">
+                                <span className={`font-display font-black text-xl leading-none tabular-nums ${s.tone}`}>{s.value}</span>
+                                <span className="stat-label">{s.label}</span>
                             </div>
-
-                            {/* Record, win rate, and where you stand right now. */}
-                            <div className="grid grid-cols-3 gap-2.5 lg:gap-3 flex-shrink-0">
-                                {[
-                                    { label: "Record", value: `${stats.recentWins}–${Math.max(0, stats.completed.length - stats.recentWins)}`, tone: "text-foreground" },
-                                    { label: "Win rate", value: `${winRate}%`, tone: winRate >= 50 ? "text-primary" : "text-foreground" },
-                                    { label: "Leading", value: `${stats.leading}/${stats.active.length}`, tone: stats.leading > 0 ? "text-xp" : "text-muted-foreground" },
-                                ].map(s => (
-                                    <div key={s.label} className="rounded-2xl bg-surface/90 border border-chart-4/15 px-3 py-2.5 text-center min-w-[84px]">
-                                        <p className={`font-display font-black text-xl leading-none tabular-nums ${s.tone}`}>{s.value}</p>
-                                        <p className="stat-label mt-1.5">{s.label}</p>
-                                    </div>
-                                ))}
-                            </div>
-                        </div>
-
-                        {seasonRank?.maxXP && seasonRank.maxXP !== Infinity && (
-                            <div className="relative mt-5">
-                                <div className="flex items-baseline justify-between mb-1.5">
-                                    <p className="text-xs font-bold text-muted-foreground">Next tier</p>
-                                    <p className="text-xs font-bold text-chart-4">
-                                        {(seasonRank.maxXP - seasonXp).toLocaleString()} XP to go
-                                    </p>
-                                </div>
-                                <div className="h-2 bg-chart-4/15 rounded-full overflow-hidden">
-                                    <motion.div
-                                        initial={{ width: 0 }}
-                                        animate={{ width: `${Math.min(100, ((seasonXp - seasonRank.minXP) / (seasonRank.maxXP - seasonRank.minXP)) * 100)}%` }}
-                                        transition={{ duration: 0.9, delay: 0.4 }}
-                                        className="h-full rounded-full bg-chart-4"
-                                    />
-                                </div>
-                            </div>
+                        ))}
+                        {stats.winStreak > 1 && (
+                            <span className="pill bg-xp/15 text-xp ml-auto">\ud83d\udd25 {stats.winStreak} win streak</span>
                         )}
                     </div>
                 </motion.section>
