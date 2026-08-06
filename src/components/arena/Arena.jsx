@@ -198,8 +198,10 @@ export default function Arena({ view = "all" }) {
                 </div>
             )}
 
-            {/* Momentum ticker */}
-            {state.ticker?.length > 0 && (
+            {/* Momentum ticker. In actions mode it moves into the battle
+                dashboard, scoped to that battle's players — loose on the page it
+                was every event from every battle at once. */}
+            {listsOwnDuels && state.ticker?.length > 0 && (
                 <div className="card-soft px-4 py-3 overflow-hidden">
                     <p className="stat-label mb-2 flex items-center gap-1.5">
                         <Activity className="w-3.5 h-3.5 text-primary" /> Momentum

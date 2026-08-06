@@ -48,6 +48,8 @@ export default function Competitions() {
     // Duels for the unified list. The arena owns creating/answering them;
     // this is a read so both kinds of competition can sit in one place.
     const [duels, setDuels] = useState([]);
+    const [ticker, setTicker] = useState([]);
+    const [userSubjects, setUserSubjects] = useState([]);
     const [openBattle, setOpenBattle] = useState(null);
     // The challenge dialog is opened from the "Start something" card, so this
     // page owns it rather than reaching into Arena for a button that used to
@@ -55,6 +57,7 @@ export default function Competitions() {
     const [challengeOpen, setChallengeOpen] = useState(false);
     const [newBattleTitle, setNewBattleTitle] = useState("");
     const [newBattleDays, setNewBattleDays] = useState(7);
+    const [newBattleSubject, setNewBattleSubject] = useState('');
     const [creatingBattle, setCreatingBattle] = useState(false);
 
     const handleCreateBattle = async () => {
@@ -65,10 +68,11 @@ export default function Competitions() {
                 standalone: true,
                 title: newBattleTitle.trim(),
                 duration_days: newBattleDays,
+                subject_name: newBattleSubject || undefined,
             });
             const data = res?.data ?? res;
             toast({ title: "⚔️ Battle created!", description: data?.invite_code ? `Share code ${data.invite_code} with your friends.` : "Open it to grab the invite code." });
-            setNewBattleTitle("");
+            setNewBattleTitle(""); setNewBattleSubject("");
             loadData();
         } catch (e) {
             toast({ title: "Battle not created", description: e.message, variant: "destructive" });
@@ -89,14 +93,21 @@ export default function Competitions() {
         try {
             const u = await base44.auth.me();
             setUser(u);
-            const [allComps, profiles] = await Promise.all([
+            const [allComps, profiles, subjects] = await Promise.all([
                 base44.entities.GoalCompetition.list('-created_date', 50),
                 base44.entities.UserProfile.filter({ created_by: u.email }),
+                base44.entities.UserSubject.filter({ created_by: u.email, is_active: true }).catch(() => []),
             ]);
+            const seenSub = new Set();
+            setUserSubjects((subjects || []).filter(x => !seenSub.has(x.subject_name) && seenSub.add(x.subject_name)));
             const myComps = allComps.filter(c => c.creator_email === u.email || (c.participants || []).some(p => p.email === u.email));
             setCompetitions(myComps);
             base44.functions.invoke('getArenaState')
-                .then(r => setDuels(((r?.data ?? r)?.duels || []).filter(d => d.status === 'active' || d.status === 'settled')))
+                .then(r => {
+                    const d = r?.data ?? r;
+                    setDuels((d?.duels || []).filter(x => x.status === 'active' || x.status === 'settled'));
+                    setTicker(d?.ticker || []);
+                })
                 .catch(() => {});
             setUserProfile(profiles[0] || null);
 
@@ -323,6 +334,21 @@ export default function Competitions() {
                 <div className="max-w-3xl mx-auto px-4 lg:px-8 py-6 lg:py-8">
                     <BattleDashboard
                         battle={live}
+                        activity={(() => {
+                            const emails = new Set(live.sides.map(x => x.email));
+                            const label = { quiz: "a quiz", flashcard: "flashcards", study_session: "a session",
+                                active_recall: "active recall", blurting: "blurting", focus_session: "focus",
+                                mini_test: "a mock", loading_quiz: "a warm-up", challenge: "a mission",
+                                practice_questions: "practice" };
+                            const ago = (at) => {
+                                const m = Math.max(1, Math.round((Date.now() - new Date(at).getTime()) / 60000));
+                                return m < 60 ? `${m}m ago` : `${Math.floor(m / 60)}h ago`;
+                            };
+                            return (ticker || []).filter(e => emails.has(e.email)).map(e => ({
+                                ...e, isMe: e.email === user?.email,
+                                label: label[e.source] || e.source, ago: ago(e.at),
+                            }));
+                        })()}
                         onBack={() => { setOpenBattle(null); loadData(); }}
                         footer={live.kind === "battle" ? (
                             <div className="pt-2">
@@ -600,6 +626,26 @@ export default function Competitions() {
                                 maxLength={80}
                                 className="mb-2"
                             />
+                            {/* Subject scopes what counts. The server has always
+                                accepted it on a standalone battle; the form
+                                never asked, so every battle silently counted
+                                every subject. */}
+                            <div className="mb-2">
+                                <p className="stat-label mb-1.5">Counts study in</p>
+                                <div className="flex flex-wrap gap-1.5">
+                                    <button onClick={() => setNewBattleSubject("")}
+                                        className={`px-3 py-1.5 rounded-xl text-xs font-bold border-2 transition-all ${
+                                            !newBattleSubject ? "bg-foreground border-foreground text-background" : "bg-surface border-border text-muted-foreground hover:border-muted-foreground/40"
+                                        }`}>Every subject</button>
+                                    {userSubjects.map(sub => (
+                                        <button key={sub.id} onClick={() => setNewBattleSubject(sub.subject_name)}
+                                            className={`px-3 py-1.5 rounded-xl text-xs font-bold border-2 transition-all ${
+                                                newBattleSubject === sub.subject_name ? "bg-foreground border-foreground text-background" : "bg-surface border-border text-muted-foreground hover:border-muted-foreground/40"
+                                            }`}>{sub.subject_name}</button>
+                                    ))}
+                                </div>
+                            </div>
+                            <p className="stat-label mb-1.5">Runs for</p>
                             <div className="flex items-center gap-2">
                                 {[3, 7, 14].map(d => (
                                     <button key={d} onClick={() => setNewBattleDays(d)}

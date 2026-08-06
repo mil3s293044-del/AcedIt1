@@ -10,7 +10,7 @@
  * Everything downstream — the unified list and the dashboard — reads this
  * shape, so neither has to know which table a battle came from.
  */
-import { winOdds, momentumOf, gapSeries, oddsSeries, battleNarrative } from "./battleOdds";
+import { winOdds, momentumOf, gapSeries, oddsSeries, battleNarrative, projections } from "./battleOdds";
 import { computePot } from "./arenaHelpers";
 
 const METRIC_UNIT = {
@@ -36,6 +36,8 @@ function decorate(base) {
         }),
         narrative: base.status === "settled" ? null
             : battleNarrative({ me: meP, rivals: rivals.map((r) => r.participant) }),
+        projection: base.status === "settled" ? null
+            : projections({ me: meP, rivals: rivals.map((r) => r.participant), targetDate: base.endsAt }),
         leader: [...base.sides].sort((a, b) => b.score - a.score)[0] || null,
     };
 }
