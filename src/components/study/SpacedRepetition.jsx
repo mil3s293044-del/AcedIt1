@@ -730,21 +730,56 @@ The documents provided may be PowerPoint slides, Word documents, PDFs or text fi
         setReviewStartTime(null);
     };
 
-    const handleExitReview = async () => {
+    const handleExitReview = useCallback(() => {
+        // Leaving is instant. This used to await the session write *and* a full
+        // deck reload before the screen changed, so tapping Exit sat there for
+        // a beat doing nothing — every card is already saved as it's rated, so
+        // there was never anything worth waiting on.
         const reviewed = sessionStats.totalReviews;
-        if (reviewStartTime && currentCardIndex > 0) await handleCompleteReview();
+        const xp = sessionXPRef.current;
+        const startedAt = reviewStartTime;
+        const deck = selectedDeck;
+        const cardsSoFar = currentCardIndex;
+
         setReviewMode(false); setReviewStartTime(null); setSelectedDeck(null);
-        // Refresh deck cards-due counts — cards rated this session are already
-        // scheduled forward, so the front page must reflect it immediately.
-        if (user?.email) await loadDecks(user.email);
+        sessionXPRef.current = 0;
+
         if (reviewed > 0) {
             toast({
-                title: "Progress saved 👍",
-                description: `${reviewed} card${reviewed === 1 ? '' : 's'} reviewed${sessionXPRef.current > 0 ? ` · +${sessionXPRef.current} XP banked` : ''}. They're off today's due list.`,
+                variant: "success",
+                title: `${reviewed} card${reviewed === 1 ? '' : 's'} reviewed`,
+                description: `${xp > 0 ? `+${xp} XP banked · ` : ''}They're off today's due list.`,
             });
         }
-        sessionXPRef.current = 0;
-    };
+
+        // Log the session and refresh the due counts behind the transition.
+        (async () => {
+            try {
+                if (startedAt && cardsSoFar > 0 && user?.email && deck) {
+                    const durationMinutes = Math.round((Date.now() - startedAt) / 60000);
+                    // XP is paid per card as it happens (awardXPIncremental in
+                    // handleRateCard) — no batch award here, or cards pay twice.
+                    await base44.entities.StudyTechnique.create({
+                        technique_name: "spaced_repetition",
+                        session_duration: durationMinutes,
+                        subject: deck.subject_name, topic: deck.topic,
+                        date: format(new Date(), 'yyyy-MM-dd'),
+                        notes: `Reviewed ${reviewed || 0} flashcards`,
+                        created_by: user.email,
+                    });
+                }
+            } catch (error) { console.error(error); }
+            if (user?.email) loadDecks(user.email).catch(() => {});
+        })();
+    }, [sessionStats.totalReviews, reviewStartTime, selectedDeck, currentCardIndex, user, loadDecks, toast]);
+
+    // Esc leaves the deck, the same as it closes every dialog on the site.
+    useEffect(() => {
+        if (!reviewMode) return;
+        const onKey = (e) => { if (e.key === "Escape") handleExitReview(); };
+        window.addEventListener("keydown", onKey);
+        return () => window.removeEventListener("keydown", onKey);
+    }, [reviewMode, handleExitReview]);
 
     const handleRateCard = async (quality) => {
         if (isRating) return;

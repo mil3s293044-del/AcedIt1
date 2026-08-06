@@ -1369,6 +1369,11 @@ const DAILY_CAPS = {
 };
 const HOURLY_VELOCITY_CAP = 600;
 
+// Per-card and per-minute drips (awardXPIncremental). Flashcards were capped at
+// 80 XP/day — 40 correct cards, roughly one deck — after which reviewing paid
+// nothing and said nothing. 960 is ~480 cards, well past a real session.
+const INCREMENTAL_DAILY_CAP = 960;
+
 /**
  * The one way to write an xp_events row.
  *
@@ -1844,24 +1849,50 @@ app.post("/local-ai/fn/awardXPIncremental", async (req, res) => {
       profile = created;
     }
 
-    // Daily cap (incremental: focus 160/day, flashcards 80/day)
+    // Daily cap. Flashcards used to stop at 80 XP — 40 correct cards, about one
+    // deck — after which every further card paid nothing, with no message. 960
+    // is ~480 cards a day, past what anyone reviews in a sitting, so in
+    // practice flashcards now always pay.
     const todayKey = new Date().toISOString().split("T")[0];
     const dailyCaps = profile.daily_xp_caps || {};
     const todayCaps = dailyCaps[todayKey] || {};
-    const CAP = type === "focus_minute" ? 160 : 80;
+    const CAP = INCREMENTAL_DAILY_CAP;
     const usedToday = todayCaps[source] || 0;
     const allowed = Math.max(0, CAP - usedToday);
     const finalXP = Math.min(xp, allowed);
-    if (finalXP <= 0) {
-      return res.json({ success: true, xp_awarded: 0, message: "Daily cap reached" });
-    }
 
-    // Velocity check (rolling 1h, 600 XP cap)
     const velocityLog = profile.xp_velocity_log || [];
     const oneHourAgo = Date.now() - 3600000;
     const recentXP = velocityLog.filter(e => e.ts > oneHourAgo).reduce((s, e) => s + (e.xp || 0), 0);
-    if (recentXP >= 600) {
-      return res.json({ success: true, xp_awarded: 0, message: "Velocity cap reached" });
+    const velocityCapped = recentXP >= 600;
+
+    // Capping the *payout* must not stop the *counting*. This used to return
+    // early and write nothing, so once a cap hit, the card vanished from
+    // xp_events — and Back Yourself, duels and the ATAR all read that log, so
+    // a flashcard bet simply stopped adding up mid-session while the student
+    // was still reviewing. Record the review at zero XP instead.
+    if (finalXP <= 0 || velocityCapped) {
+      await insertXPEvent({
+        created_by: userEmail,
+        event_key,
+        user_email: userEmail,
+        source,
+        xp_awarded: 0,
+        raw_xp: xp,
+        capped: true,
+        integrity_flags: [velocityCapped ? "velocity_cap" : "daily_cap"],
+        total_xp_after: profile.total_xp || 0,
+        season_xp_after: profile.season_xp || 0,
+        level_before: profile.current_level || 1,
+        level_after: profile.current_level || 1,
+        leveled_up: false,
+        metadata: { type, ...metadata },
+      }, "awardXPIncremental:capped");
+      return res.json({
+        success: true,
+        xp_awarded: 0,
+        message: velocityCapped ? "Velocity cap reached" : "Daily cap reached",
+      });
     }
 
     const newTotalXP = (profile.total_xp || 0) + finalXP;
