@@ -403,7 +403,19 @@ export default function Competitions() {
             .sort((a, b) => b.games - a.games)
             .slice(0, 4);
 
-        return { active, completed, recentWins, leading, behind, winStreak, rivals };
+        // Points put on the board today across every live battle, and the XP
+        // riding on them. Both are about the competition you're in right now,
+        // which is what the tier ladder never was.
+        let pointsToday = 0;
+        let xpAtStake = 0;
+        active.forEach(c => {
+            const mine = (c.participants || []).find(p => p.email === myEmail);
+            const mo = momentumOf(mine, 24);
+            if (mo && mo > 0) pointsToday += mo;
+            xpAtStake += computePot(c)?.total || 0;
+        });
+
+        return { active, completed, recentWins, leading, behind, winStreak, rivals, pointsToday, xpAtStake };
     }, [competitions, user]);
 
     const firstName = userProfile?.username || user?.full_name?.split(' ')[0] || 'friend';
@@ -527,31 +539,48 @@ export default function Competitions() {
                     </h1>
                 </motion.section>
 
-                {/* ── SEASON STRIP — one compact line, not a billboard ──── */}
+                {/* ── SCOREBOARD ──────────────────────────────────────── */}
+                {/* Replaces the tier ladder. Every number here is about the
+                    battles on this page, not a lifetime-XP rank that moved
+                    whether or not you were competing. */}
                 <motion.section
                     initial={{ opacity: 0, y: 12 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ delay: 0.05 }}
                 >
-                    {/* Tiers are gone — a Bronze/Silver ladder measured
-                        lifetime XP, not how you're doing in the battles on this
-                        page, so it dressed the page up while saying nothing
-                        about the competition. What's left is the record itself. */}
-                    <div className="rounded-2xl bg-surface border border-border shadow-soft px-5 py-4 flex flex-wrap items-center gap-x-6 gap-y-3">
+                    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
                         {[
-                            { label: "Record", value: `${stats.recentWins}\u2013${Math.max(0, stats.completed.length - stats.recentWins)}`, tone: "text-foreground" },
-                            { label: "Win rate", value: `${winRate}%`, tone: winRate >= 50 ? "text-primary" : "text-foreground" },
-                            { label: "Leading", value: `${stats.leading}/${stats.active.length}`, tone: stats.leading > 0 ? "text-xp" : "text-muted-foreground" },
-                        ].map(s => (
-                            <div key={s.label} className="flex items-baseline gap-2">
-                                <span className={`font-display font-black text-xl leading-none tabular-nums ${s.tone}`}>{s.value}</span>
-                                <span className="stat-label">{s.label}</span>
+                            { label: "Record", value: `${stats.recentWins}\u2013${Math.max(0, stats.completed.length - stats.recentWins)}`,
+                              icon: Trophy, iconBg: "bg-xp/15", iconColor: "text-xp", tone: "text-foreground" },
+                            { label: "Win rate", value: `${winRate}%`,
+                              icon: Target, iconBg: "bg-primary/15", iconColor: "text-primary",
+                              tone: winRate >= 50 ? "text-primary" : "text-foreground" },
+                            { label: "Live now", value: `${stats.active.length}`,
+                              icon: Activity, iconBg: "bg-chart-3/15", iconColor: "text-chart-3", tone: "text-foreground" },
+                            { label: "Leading", value: `${stats.leading}/${stats.active.length}`,
+                              icon: Crown, iconBg: "bg-xp/15", iconColor: "text-xp",
+                              tone: stats.leading > 0 ? "text-xp" : "text-muted-foreground" },
+                            { label: "Points today", value: stats.pointsToday > 0 ? `+${stats.pointsToday}` : "0",
+                              icon: TrendingUp, iconBg: "bg-chart-4/15", iconColor: "text-chart-4",
+                              tone: stats.pointsToday > 0 ? "text-chart-4" : "text-muted-foreground" },
+                            { label: "XP at stake", value: stats.xpAtStake.toLocaleString(),
+                              icon: Coins, iconBg: "bg-streak/15", iconColor: "text-streak",
+                              tone: stats.xpAtStake > 0 ? "text-streak" : "text-muted-foreground" },
+                        ].map(({ label, value, icon: Icon, iconBg, iconColor, tone }) => (
+                            <div key={label} className="card-soft p-4 flex flex-col gap-2">
+                                <div className={`w-9 h-9 rounded-xl ${iconBg} flex items-center justify-center`}>
+                                    <Icon className={`w-4 h-4 ${iconColor}`} />
+                                </div>
+                                <p className={`font-display font-extrabold text-2xl leading-none tabular-nums ${tone}`}>{value}</p>
+                                <p className="stat-label">{label}</p>
                             </div>
                         ))}
-                        {stats.winStreak > 1 && (
-                            <span className="pill bg-xp/15 text-xp ml-auto">\ud83d\udd25 {stats.winStreak} win streak</span>
-                        )}
                     </div>
+                    {stats.winStreak > 1 && (
+                        <p className="mt-3 inline-flex items-center gap-1.5 pill bg-xp/15 text-xp">
+                            \ud83d\udd25 {stats.winStreak} battle win streak
+                        </p>
+                    )}
                 </motion.section>
 
                 {/* ── ONE PAGE, THREE CLEAR MODES ──────────────────────── */}
