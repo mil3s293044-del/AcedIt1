@@ -63,7 +63,20 @@ export default function BattleRow({ battle, onClick }) {
                 {settled && <span className="pill bg-chart-4/15 text-chart-4 flex-shrink-0"><Trophy className="w-3 h-3" /> Settled</span>}
             </div>
 
-            {/* Line 2 — the head-to-head */}
+            {/* Line 2 — the head-to-head. With nobody else in it there is no
+                head to head: rendering "VS — 0 pts" against an empty seat made
+                a battle look broken rather than unjoined. */}
+            {!rival ? (
+                <div className="mb-2.5">
+                    <p className="font-display font-black text-lg leading-none tabular-nums text-foreground">
+                        {(me?.score ?? 0).toLocaleString()}
+                        <span className="text-[11px] font-bold text-muted-foreground ml-1">{unit}</span>
+                    </p>
+                    <p className="text-xs text-muted-foreground mt-1">
+                        {settled ? "Finished unopposed." : "Waiting for someone to join — share the invite code."}
+                    </p>
+                </div>
+            ) : (
             <div className="flex items-center gap-3 mb-2.5">
                 <div className="flex-1 min-w-0">
                     <p className="text-xs font-bold text-muted-foreground truncate">
@@ -87,6 +100,7 @@ export default function BattleRow({ battle, onClick }) {
                     </p>
                 </div>
             </div>
+            )}
 
             {/* Line 3 — the market read */}
             {!settled && odds != null && (

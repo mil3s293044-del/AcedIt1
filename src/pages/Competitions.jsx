@@ -4,12 +4,13 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
     Trophy, Swords, Crown, Activity, ClipboardList, Settings as SettingsIcon,
-    LogIn, Loader2, ArrowRight, TrendingUp, Coins, RotateCcw, Target
+    LogIn, Loader2, ArrowRight, TrendingUp, Coins, RotateCcw, Target, Users
 } from "lucide-react";
 import { base44 } from "@/api/base44Client";
 import { useToast } from "@/components/ui/use-toast";
 import GoalCompetitionDetail from "@/components/competition/GoalCompetitionDetail";
 import Arena from "@/components/arena/Arena";
+import CreateDuelDialog from "@/components/arena/CreateDuelDialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { joinGoalCompetition, createGoalCompetition } from "@/api/functionsShim";
 import { computePot } from "@/components/competition/arenaHelpers";
@@ -48,6 +49,10 @@ export default function Competitions() {
     // this is a read so both kinds of competition can sit in one place.
     const [duels, setDuels] = useState([]);
     const [openBattle, setOpenBattle] = useState(null);
+    // The challenge dialog is opened from the "Start something" card, so this
+    // page owns it rather than reaching into Arena for a button that used to
+    // float on its own above the list.
+    const [challengeOpen, setChallengeOpen] = useState(false);
     const [newBattleTitle, setNewBattleTitle] = useState("");
     const [newBattleDays, setNewBattleDays] = useState(7);
     const [creatingBattle, setCreatingBattle] = useState(false);
@@ -249,11 +254,25 @@ export default function Competitions() {
         const leader = ranked[0];
         const isLeading = myIdx === 0;
 
+        // Nobody has joined yet. "You're leading" against an empty field read
+        // as a contradiction — leading, and alone, in the same breath — and the
+        // useful thing to say is how to get someone in.
+        if (ranked.length < 2) {
+            return {
+                label: "Waiting on players",
+                title: `Share the code for "${target.goal_title}"`,
+                sub: `Nobody's joined yet. Send ${target.invite_code || "the invite code"} to a friend and it becomes a race.`,
+                accent: "chart-4",
+                icon: Users,
+                comp: target,
+            };
+        }
+
         if (isLeading) {
             return {
                 label: "You're leading",
                 title: `Hold the lead in "${target.goal_title}"`,
-                sub: `${Math.round(me?.progress_percent || 0)}% done. ${ranked.length > 1 ? `${ranked[1].name?.split(' ')[0]} is at ${Math.round(ranked[1].progress_percent || 0)}%.` : 'You\'re alone — finish strong.'}`,
+                sub: `${Math.round(me?.progress_percent || 0)}% done. ${ranked[1].name?.split(' ')[0]} is at ${Math.round(ranked[1].progress_percent || 0)}%.`,
                 accent: "xp",
                 icon: Crown,
                 comp: target,
@@ -447,6 +466,36 @@ export default function Competitions() {
                         have things you're racing in. */}
                     <TabsContent value="duels" className="mt-4 space-y-6">
 
+                {/* ── FOCUS PANEL ─────────────────────────────────────── */}
+                {focus && (
+                    <motion.section
+                        initial={{ opacity: 0, y: 12 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ delay: 0.1 }}
+                    >
+                        <div className={`rounded-2xl ${FOCUS_THEME[focus.accent].bg} border ${FOCUS_THEME[focus.accent].border} shadow-soft p-5 lg:p-6`}>
+                            <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
+                                <div className={`w-12 h-12 rounded-xl ${FOCUS_THEME[focus.accent].iconBg} flex items-center justify-center flex-shrink-0`}>
+                                    <focus.icon className={`w-6 h-6 ${FOCUS_THEME[focus.accent].iconText}`} />
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                    <p className="stat-label mb-1">Today's focus · {focus.label}</p>
+                                    <h2 className="font-display font-extrabold text-foreground text-base lg:text-lg leading-snug">
+                                        {focus.title}
+                                    </h2>
+                                    <p className="text-muted-foreground text-sm mt-0.5">{focus.sub}</p>
+                                </div>
+                                <Button
+                                    onClick={() => setSelectedComp(focus.comp)}
+                                    className="w-full sm:w-auto flex-shrink-0"
+                                >
+                                    Open battle <ArrowRight className="w-4 h-4" />
+                                </Button>
+                            </div>
+                        </div>
+                    </motion.section>
+                )}
+
                 {allBattles_.length > 0 && (
                     <motion.section initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.08 }}>
                         <div className="flex items-baseline justify-between mb-3">
@@ -477,36 +526,6 @@ export default function Competitions() {
 
                 {/* Challenge / spectate / respond still live in the arena. */}
                 <Arena view="actions" />
-
-                {/* ── FOCUS PANEL ─────────────────────────────────────── */}
-                {focus && (
-                    <motion.section
-                        initial={{ opacity: 0, y: 12 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        transition={{ delay: 0.1 }}
-                    >
-                        <div className={`rounded-2xl ${FOCUS_THEME[focus.accent].bg} border ${FOCUS_THEME[focus.accent].border} shadow-soft p-5 lg:p-6`}>
-                            <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
-                                <div className={`w-12 h-12 rounded-xl ${FOCUS_THEME[focus.accent].iconBg} flex items-center justify-center flex-shrink-0`}>
-                                    <focus.icon className={`w-6 h-6 ${FOCUS_THEME[focus.accent].iconText}`} />
-                                </div>
-                                <div className="flex-1 min-w-0">
-                                    <p className="stat-label mb-1">Today's focus · {focus.label}</p>
-                                    <h2 className="font-display font-extrabold text-foreground text-base lg:text-lg leading-snug">
-                                        {focus.title}
-                                    </h2>
-                                    <p className="text-muted-foreground text-sm mt-0.5">{focus.sub}</p>
-                                </div>
-                                <Button
-                                    onClick={() => setSelectedComp(focus.comp)}
-                                    className="w-full sm:w-auto flex-shrink-0"
-                                >
-                                    Open battle <ArrowRight className="w-4 h-4" />
-                                </Button>
-                            </div>
-                        </div>
-                    </motion.section>
-                )}
 
                 {/* ── RIVALRIES (head-to-head records) ────────────────── */}
                 {stats.rivals.length > 0 && (
@@ -550,79 +569,106 @@ export default function Competitions() {
                     </motion.section>
                 )}
 
-                {/* ── START A BATTLE — standalone, no goal needed ──────── */}
+                {/* ── START SOMETHING ─────────────────────────────────── */}
+                {/* Was three separate things in three places: a Challenge
+                    button floating alone in dead space, a create bar and a
+                    join bar — all "begin a new competition", none of them next
+                    to each other. One card, three routes, at the end of the
+                    page where you land after reading what you're already in. */}
                 <motion.section
-                    initial={{ opacity: 0, y: 12 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: 0.13 }}
-                    className="card-soft p-4 lg:p-5"
+                    initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.16 }}
+                    className="card-soft p-5 lg:p-6"
                 >
-                    <div className="flex items-center gap-2.5 mb-3">
-                        <div className="w-9 h-9 rounded-xl bg-chart-4/10 border border-chart-4/15 flex items-center justify-center flex-shrink-0">
-                            <Swords className="w-4 h-4 text-chart-4" />
-                        </div>
-                        <div>
-                            <p className="font-bold text-foreground text-sm">Start a battle</p>
-                            <p className="text-xs text-muted-foreground">Most study wins. Friends join with the invite code.</p>
-                        </div>
-                    </div>
-                    <div className="flex flex-col sm:flex-row gap-2">
-                        <Input
-                            placeholder="Name it — e.g. SAC week grind"
-                            value={newBattleTitle}
-                            onChange={e => setNewBattleTitle(e.target.value)}
-                            maxLength={80}
-                            className="flex-1"
-                        />
-                        <div className="flex gap-2">
-                            {[3, 7, 14].map(d => (
-                                <button key={d} onClick={() => setNewBattleDays(d)}
-                                    className={`px-3 py-2 rounded-xl text-xs font-bold border-2 transition-all ${
-                                        newBattleDays === d ? "bg-chart-4 border-chart-4 text-white" : "bg-surface border-border text-foreground hover:border-chart-4/40"
-                                    }`}>{d}d</button>
-                            ))}
-                            <Button onClick={handleCreateBattle} disabled={creatingBattle || !newBattleTitle.trim()}>
-                                {creatingBattle ? <Loader2 className="w-4 h-4 animate-spin" /> : <>Create <ArrowRight className="w-4 h-4" /></>}
-                            </Button>
-                        </div>
-                    </div>
-                </motion.section>
+                    <p className="stat-label mb-4">Start something new</p>
 
-                {/* ── JOIN CODE BAR ───────────────────────────────────── */}
-                <motion.section
-                    initial={{ opacity: 0, y: 12 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: 0.15 }}
-                    className="card-soft p-4 lg:p-5"
-                >
-                    <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3">
-                        <div className="flex items-center gap-2.5 flex-1">
-                            <div className="w-9 h-9 rounded-xl bg-chart-3/10 border border-chart-3/15 flex items-center justify-center flex-shrink-0">
-                                <LogIn className="w-4 h-4 text-chart-3" />
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                        {/* Group battle */}
+                        <div className="rounded-2xl border border-border p-4">
+                            <div className="flex items-center gap-2.5 mb-3">
+                                <div className="w-9 h-9 rounded-xl bg-chart-4/10 border border-chart-4/15 flex items-center justify-center flex-shrink-0">
+                                    <Trophy className="w-4 h-4 text-chart-4" />
+                                </div>
+                                <div className="min-w-0">
+                                    <p className="font-bold text-foreground text-sm">Group battle</p>
+                                    <p className="text-xs text-muted-foreground">Most study wins. Friends join by code.</p>
+                                </div>
                             </div>
-                            <div className="min-w-0">
-                                <p className="font-bold text-foreground text-sm">Got an invite code?</p>
-                                <p className="text-xs text-muted-foreground">Drop it below to join a friend's battle.</p>
+                            <Input
+                                placeholder="Name it — e.g. SAC week grind"
+                                value={newBattleTitle}
+                                onChange={e => setNewBattleTitle(e.target.value)}
+                                maxLength={80}
+                                className="mb-2"
+                            />
+                            <div className="flex items-center gap-2">
+                                {[3, 7, 14].map(d => (
+                                    <button key={d} onClick={() => setNewBattleDays(d)}
+                                        className={`px-3 py-2 rounded-xl text-xs font-bold border-2 transition-all ${
+                                            newBattleDays === d ? "bg-chart-4 border-chart-4 text-white" : "bg-surface border-border text-foreground hover:border-chart-4/40"
+                                        }`}>{d}d</button>
+                                ))}
+                                <Button onClick={handleCreateBattle} disabled={creatingBattle || !newBattleTitle.trim()} className="ml-auto">
+                                    {creatingBattle ? <Loader2 className="w-4 h-4 animate-spin" /> : <>Create <ArrowRight className="w-4 h-4" /></>}
+                                </Button>
                             </div>
                         </div>
-                        <div className="flex items-center gap-2 w-full sm:w-auto">
-                            <Input
-                                placeholder="ABCD12"
-                                value={inviteCode}
-                                onChange={e => setInviteCode(e.target.value.toUpperCase())}
-                                onKeyDown={e => e.key === 'Enter' && handleJoinByCode()}
-                                className="w-full sm:w-32 font-mono uppercase text-center tracking-widest"
-                                maxLength={6}
-                            />
-                            <Button onClick={handleJoinByCode} disabled={joiningCode || !inviteCode.trim()}>
-                                {joiningCode ? <Loader2 className="w-4 h-4 animate-spin" /> : <>Join <ArrowRight className="w-4 h-4" /></>}
-                            </Button>
+
+                        {/* Duel, and joining someone else's */}
+                        <div className="space-y-3">
+                            <div className="rounded-2xl border border-border p-4">
+                                <div className="flex items-center gap-2.5 mb-3">
+                                    <div className="w-9 h-9 rounded-xl bg-chart-4/10 border border-chart-4/15 flex items-center justify-center flex-shrink-0">
+                                        <Swords className="w-4 h-4 text-chart-4" />
+                                    </div>
+                                    <div className="min-w-0">
+                                        <p className="font-bold text-foreground text-sm">Duel a friend</p>
+                                        <p className="text-xs text-muted-foreground">One rival, one yardstick, winner takes the pot.</p>
+                                    </div>
+                                </div>
+                                <Button onClick={() => setChallengeOpen(true)}
+                                    className="w-full rounded-xl bg-chart-4 hover:bg-chart-4/90 text-white font-bold gap-2 btn-3d">
+                                    <Swords className="w-4 h-4" /> Challenge a rival
+                                </Button>
+                            </div>
+
+                            <div className="rounded-2xl border border-border p-4">
+                                <div className="flex items-center gap-2.5 mb-3">
+                                    <div className="w-9 h-9 rounded-xl bg-chart-3/10 border border-chart-3/15 flex items-center justify-center flex-shrink-0">
+                                        <LogIn className="w-4 h-4 text-chart-3" />
+                                    </div>
+                                    <div className="min-w-0">
+                                        <p className="font-bold text-foreground text-sm">Join with a code</p>
+                                        <p className="text-xs text-muted-foreground">Someone sent you six characters.</p>
+                                    </div>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                    <Input
+                                        placeholder="ABCD12"
+                                        value={inviteCode}
+                                        onChange={e => setInviteCode(e.target.value.toUpperCase())}
+                                        onKeyDown={e => e.key === 'Enter' && handleJoinByCode()}
+                                        className="flex-1 font-mono uppercase text-center tracking-widest"
+                                        maxLength={6}
+                                    />
+                                    <Button onClick={handleJoinByCode} disabled={joiningCode || !inviteCode.trim()}>
+                                        {joiningCode ? <Loader2 className="w-4 h-4 animate-spin" /> : <>Join <ArrowRight className="w-4 h-4" /></>}
+                                    </Button>
+                                </div>
+                            </div>
                         </div>
                     </div>
                 </motion.section>
 
                     </TabsContent>
                 </Tabs>
+
+                <CreateDuelDialog
+                    open={challengeOpen}
+                    onOpenChange={setChallengeOpen}
+                    currentUser={user}
+                    balance={userProfile?.total_xp ?? null}
+                    onCreated={() => { setChallengeOpen(false); loadData(); }}
+                />
             </div>
 
             {/* Join setup dialog */}
