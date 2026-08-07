@@ -55,6 +55,7 @@ import Competitions from './pages/Competitions';
 import Dashboard from './pages/Dashboard';
 import Friends from './pages/Friends';
 import Goals from './pages/Goals';
+import Strategise from './pages/Strategise';
 import Guides from './pages/Guides';
 import PaymentCancel from './pages/PaymentCancel';
 import PaymentSuccess from './pages/PaymentSuccess';
@@ -80,6 +81,7 @@ export const PAGES = {
     "Dashboard": Dashboard,
     "Friends": Friends,
     "Goals": Goals,
+    "Strategise": Strategise,
     "Guides": Guides,
     "PaymentCancel": PaymentCancel,
     "PaymentSuccess": PaymentSuccess,
