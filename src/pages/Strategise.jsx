@@ -209,9 +209,13 @@ Rules:
         } finally { setBusy(false); }
     };
 
-    const upcoming = assessments.filter(
-        a => a.due_date && differenceInDays(parseISO(a.due_date), new Date()) >= 1,
-    );
+    // Date-to-date, not date-to-now: `new Date()` carries a time of day, so
+    // comparing it against a midnight due date truncates and reports a SAC as
+    // one day nearer than it is. Needs two clear days — one is the SAC itself
+    // and one is today, which leaves nothing to plan.
+    const todayKey = format(new Date(), "yyyy-MM-dd");
+    const daysUntil = (due) => differenceInDays(parseISO(due), parseISO(todayKey));
+    const upcoming = assessments.filter(a => a.due_date && daysUntil(a.due_date) >= 2);
 
     if (loading) {
         return (
@@ -263,7 +267,7 @@ Rules:
                                     </Button>
                                 </div>
                             ) : upcoming.map(a => {
-                                const d = differenceInDays(parseISO(a.due_date), new Date());
+                                const d = daysUntil(a.due_date);
                                 return (
                                     <button key={a.id}
                                         onClick={() => {
@@ -403,7 +407,9 @@ Rules:
                                 );
                             })}
 
-                            <div className="sticky bottom-4 card-soft p-4 border-2 border-chart-4/30 flex flex-wrap items-center gap-3">
+                            {/* Stacks on narrow screens — side by side, the running
+                                total got squeezed to one word per line. */}
+                            <div className="sticky bottom-4 card-soft p-4 border-2 border-chart-4/30 flex flex-col sm:flex-row sm:items-center gap-3">
                                 <div className="flex-1 min-w-0">
                                     <p className="text-sm font-bold text-foreground">
                                         {chosen.length} study day{chosen.length === 1 ? "" : "s"} · {Math.round(totalMins / 60 * 10) / 10}h total
@@ -412,10 +418,12 @@ Rules:
                                         {days.length - chosen.length} rest day{days.length - chosen.length === 1 ? "" : "s"}.
                                     </p>
                                 </div>
-                                <Button variant="ghost" onClick={() => setStage("setup")} className="rounded-xl">Back</Button>
-                                <Button onClick={generate} disabled={busy || chosen.length === 0} className="gap-1.5">
-                                    {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />} Build my plan
-                                </Button>
+                                <div className="flex gap-2 flex-shrink-0">
+                                    <Button variant="ghost" onClick={() => setStage("setup")} className="rounded-xl">Back</Button>
+                                    <Button onClick={generate} disabled={busy || chosen.length === 0} className="flex-1 sm:flex-none gap-1.5">
+                                        {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />} Build my plan
+                                    </Button>
+                                </div>
                             </div>
                         </motion.div>
                     )}
@@ -478,7 +486,7 @@ Rules:
                                 ))}
                             </div>
 
-                            <div className="sticky bottom-4 card-soft p-4 border-2 border-chart-4/30 flex gap-2">
+                            <div className="sticky bottom-4 card-soft p-4 border-2 border-chart-4/30 flex flex-wrap gap-2">
                                 <Button variant="ghost" onClick={() => setStage("days")} className="rounded-xl">Change the days</Button>
                                 <Button onClick={save} disabled={busy} className="ml-auto gap-1.5">
                                     {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />} Add to my planner
