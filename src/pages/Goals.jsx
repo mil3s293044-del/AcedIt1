@@ -6,7 +6,7 @@
  */
 import React, { useState, useEffect, useCallback, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -20,9 +20,9 @@ import {
 import { base44 } from "@/api/base44Client";
 import { useToast } from "@/components/ui/use-toast";
 import { ToastAction } from "@/components/ui/toast";
-import StrategiseWizard from "@/components/planner/StrategiseWizard";
 import { format, differenceInDays, parseISO, addDays, startOfWeek, addWeeks } from "date-fns";
 import HelpButton from "@/components/shared/HelpButton";
+import { createPageUrl } from "@/utils";
 
 const TYPE_OPTIONS = [
     { value: "sac", label: "SAC" },
@@ -168,6 +168,7 @@ function timeForSlot(siblings, index, movingDuration) {
 
 export default function Planner() {
     const { toast } = useToast();
+    const navigate = useNavigate();
     const [user, setUser] = useState(null);
     const [profile, setProfile] = useState(null);
     const [subjects, setSubjects] = useState([]);
@@ -207,7 +208,6 @@ export default function Planner() {
     const [intentionDraft, setIntentionDraft] = useState("");
     const [savingIntention, setSavingIntention] = useState(false);
 
-    const [strategiseOpen, setStrategiseOpen] = useState(false);
 
 
     const loadData = useCallback(async (email) => {
@@ -720,7 +720,7 @@ export default function Planner() {
                             for an hours budget and returned generic sessions with no
                             idea what the student was preparing for. This starts from
                             a logged assessment and works backwards from its date. */}
-                        <Button onClick={() => setStrategiseOpen(true)} size="sm"
+                        <Button onClick={() => navigate(createPageUrl("Strategise"))} size="sm"
                             className="gap-1.5 bg-chart-4 hover:bg-chart-4/90 text-white btn-3d">
                             <Sparkles className="w-3.5 h-3.5" /> Strategise a SAC
                         </Button>
@@ -963,14 +963,6 @@ export default function Planner() {
                         </div>
                     </DialogContent>
                 </Dialog>
-
-                <StrategiseWizard
-                    open={strategiseOpen}
-                    onOpenChange={setStrategiseOpen}
-                    assessments={assessments}
-                    userEmail={user?.email}
-                    onSaved={() => loadData(user.email)}
-                />
 
                 {/* ── Recurring-delete choice ──────────────────────────── */}
                 <Dialog open={!!deleteTarget} onOpenChange={(o) => !o && setDeleteTarget(null)}>
