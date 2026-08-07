@@ -98,6 +98,62 @@ const shortTitle = (title) => {
     return t ? (title.slice(t.value.length + 2) || t.value) : (title || "");
 };
 
+// ─── Shortening that keeps the words that matter ────────────────────────────
+// Titles come from Strategise and from students typing, and they run long:
+// "Rates of reaction and the collision theory including catalysts and
+// Maxwell-Boltzmann distributions". Clamping that to two lines cut it mid-
+// phrase, which is the least useful place to cut — the topic is the front of
+// the string, and the qualifier is the back.
+//
+// So compress instead of truncating, and only as far as needed:
+//   1. Fits already → leave it exactly as written.
+//   2. Drop parentheticals and anything after a trailing dash/semicolon —
+//      those are qualifiers, not the subject.
+//   3. Drop connective filler ("and the", "including", "as well as").
+//   4. Only then trim, on a word boundary, with an ellipsis.
+// Every step removes filler from the middle or the end, so the opening
+// keywords survive by construction.
+// Deliberately excludes "of", "in" and "on": they look like filler but carry
+// meaning in exactly the phrases students write — "rates of reaction",
+// "effect of temperature on rate". Dropping them reads as a typo, not a
+// shortening.
+const FILLER = /\b(?:and|the|a|an|to|for|with|including|includes?|plus|also|as well as|about|regarding|relating to)\b/gi;
+
+export function keywordTitle(title, maxChars = 42) {
+    let s = (title || "").trim();
+    if (s.length <= maxChars) return s;
+
+    // 2. Qualifiers: bracketed asides, then anything after a trailing dash or
+    //    semicolon (but not a colon — "Unit 3: Redox" needs its tail).
+    s = s.replace(/\s*[([{][^)\]}]*[)\]}]/g, "").trim();
+    if (s.length <= maxChars) return s;
+    const cut = s.search(/\s+[—–-]\s+|;\s+/);
+    if (cut > Math.floor(maxChars / 3)) s = s.slice(0, cut).trim();
+    if (s.length <= maxChars) return s;
+
+    // 3. Filler words, collapsing the double spaces they leave behind. Keep
+    //    the first word whatever it is — "The Crucible" shouldn't become
+    //    "Crucible".
+    const [first, ...rest] = s.split(/\s+/);
+    if (rest.length) {
+        const squeezed = `${first} ${rest.join(" ").replace(FILLER, " ").replace(/\s{2,}/g, " ").trim()}`.trim();
+        if (squeezed.split(/\s+/).length >= 2) s = squeezed;
+    }
+    if (s.length <= maxChars) return s;
+
+    // 4. Word-boundary trim.
+    const words = s.split(/\s+/);
+    let out = "";
+    for (const w of words) {
+        if (out && (out.length + 1 + w.length) > maxChars - 1) break;
+        out = out ? `${out} ${w}` : w;
+    }
+    return `${out || s.slice(0, maxChars - 1)}…`;
+}
+
+/** Type prefix stripped, then shortened to fit a board chip. */
+const chipTitle = (title, maxChars) => keywordTitle(shortTitle(title), maxChars);
+
 function daysLabel(days) {
     if (days < 0) return "Past";
     if (days === 0) return "Today";
@@ -785,33 +841,32 @@ export default function Planner() {
                                         // day needs a drop zone big enough to aim at. Stacked on a phone
                                         // it just made the board 2,400px of mostly-empty boxes.
                                         <div ref={dropProvided.innerRef} {...dropProvided.droppableProps}
-                                            className={`relative rounded-2xl border-2 p-2.5 min-h-[88px] sm:min-h-[220px] flex flex-col gap-1.5 transition-all ${
+                                            className={`relative rounded-2xl border-2 p-3 min-h-[96px] sm:min-h-[300px] flex flex-col gap-2 transition-all ${
                                                 dropSnapshot.isDraggingOver ? "bg-chart-3/10 border-chart-3 border-dashed scale-[1.01]"
-                                                    : day.isToday ? "bg-primary/[0.06] border-primary/40 shadow-soft"
+                                                    : day.isToday ? "bg-primary/[0.06] border-primary/50 shadow-soft"
                                                     : day.isPast ? "bg-secondary/20 border-border/50"
                                                     : "bg-surface border-border/70 hover:border-border"
                                             }`}>
                                             {/* The column is only ~150px wide, so a busy day
                                                 truncates everything. Opening it full-size is
                                                 where you actually inspect and reorder it. */}
-                                            <div className="flex items-center justify-between gap-1 mb-0.5">
+                                            <div className="flex items-start justify-between gap-1">
                                                 <button onClick={() => setOpenDay(day.key)}
                                                     aria-label={`Open ${day.dayName} ${day.dayNum}`}
-                                                    className="group/day flex items-baseline gap-1.5 min-w-0 rounded-lg px-1.5 py-0.5 -mx-1 hover:bg-secondary/70 transition-colors">
-                                                    <span className={`text-[10px] font-black uppercase tracking-widest ${
+                                                    className="flex items-center gap-2 min-w-0 rounded-xl px-1.5 py-1 -mx-1.5 -my-1 hover:bg-secondary/70 transition-colors">
+                                                    {/* Today wears the date as a filled token — one
+                                                        unmistakable anchor per week beats tinting
+                                                        seven similar-looking things. */}
+                                                    <span className={`flex-shrink-0 font-display font-black text-xl leading-none tabular-nums flex items-center justify-center ${
+                                                        day.isToday ? "w-9 h-9 rounded-xl bg-primary text-white shadow-soft"
+                                                            : day.isPast ? "w-9 h-9 text-muted-foreground/35"
+                                                            : "w-9 h-9 text-foreground/75"}`}>
+                                                        {day.dayNum}
+                                                    </span>
+                                                    <span className={`text-[11px] font-black uppercase tracking-widest ${
                                                         day.isToday ? "text-primary" : day.isPast ? "text-muted-foreground/40" : "text-muted-foreground/60"}`}>
                                                         {day.dayName}
                                                     </span>
-                                                    <span className={`font-display font-black text-lg leading-none tabular-nums ${
-                                                        day.isToday ? "text-primary" : day.isPast ? "text-muted-foreground/35" : "text-foreground/70"}`}>
-                                                        {day.dayNum}
-                                                    </span>
-                                                    {day.plans.length > 0 && (
-                                                        <span className={`text-[10px] font-bold tabular-nums px-1.5 rounded-full ${
-                                                            day.plans.every(p => p.is_completed) ? "bg-primary/15 text-primary" : "bg-secondary text-muted-foreground"}`}>
-                                                            {day.plans.filter(p => p.is_completed).length}/{day.plans.length}
-                                                        </span>
-                                                    )}
                                                 </button>
                                                 {!day.isPast && (
                                                     <button onClick={() => openAddPlan(day.key)} aria-label={`Add session on ${day.dayName} ${day.dayNum}`}
@@ -820,6 +875,27 @@ export default function Planner() {
                                                     </button>
                                                 )}
                                             </div>
+
+                                            {/* A thin bar reads as progress at a glance where "1/3"
+                                                needs to be read. Doubles as the divider under the
+                                                header, so it costs no extra height. */}
+                                            {day.plans.length > 0 && (() => {
+                                                const done = day.plans.filter(p => p.is_completed).length;
+                                                const pct = Math.round((done / day.plans.length) * 100);
+                                                return (
+                                                    <div className="flex items-center gap-2 -mt-0.5"
+                                                        title={`${done} of ${day.plans.length} done`}>
+                                                        <div className="flex-1 h-1 rounded-full bg-secondary overflow-hidden">
+                                                            <div className={`h-full rounded-full transition-all ${pct === 100 ? "bg-primary" : "bg-xp"}`}
+                                                                style={{ width: `${Math.max(pct, done ? 8 : 0)}%` }} />
+                                                        </div>
+                                                        <span className={`text-[10px] font-black tabular-nums ${
+                                                            pct === 100 ? "text-primary" : "text-muted-foreground/60"}`}>
+                                                            {done}/{day.plans.length}
+                                                        </span>
+                                                    </div>
+                                                );
+                                            })()}
 
                                             {day.sacs.map(a => (
                                                 <div key={a.id} className="rounded-xl bg-gradient-to-br from-streak to-streak/80 text-white px-2.5 py-2 shadow-soft">
@@ -861,21 +937,25 @@ export default function Planner() {
                                                                     p.is_completed ? "bg-primary" : subjectRailClass(p.subject_name || p.title)}`} />
 
                                                                 <button onClick={() => togglePlanDone(p)} aria-label={`Mark ${p.title} ${p.is_completed ? "not done" : "done"}`}
-                                                                    className={`w-4 h-4 mt-2 ml-1.5 rounded border flex-shrink-0 flex items-center justify-center transition-colors ${
+                                                                    className={`w-4 h-4 mt-2.5 ml-2 rounded border flex-shrink-0 flex items-center justify-center transition-colors ${
                                                                         p.is_completed ? "bg-primary border-primary text-white" : "border-border hover:border-primary"
                                                                     }`}>
                                                                     {p.is_completed && <Check className="w-3 h-3" />}
                                                                 </button>
 
                                                                 <button onClick={() => setOpenSession(p)} aria-label={`Open ${p.title}`}
-                                                                    className="min-w-0 flex-1 text-left pl-1.5 pr-2 py-1.5">
-                                                                    {/* Two lines max — one truncated at ~12 characters told
-                                                                        you nothing, five lines was the problem to begin with. */}
-                                                                    <p className={`text-xs font-bold leading-tight line-clamp-2 ${
+                                                                    className="min-w-0 flex-1 text-left pl-2 pr-2.5 py-2">
+                                                                    {/* Three lines, and keywordTitle does the shortening, so
+                                                                        what survives is the topic rather than whatever
+                                                                        happened to fall before the clamp. The title box is
+                                                                        only ~105px wide at seven columns — two lines held
+                                                                        about 24 characters, which cut most real topics in
+                                                                        half. The taller columns can afford the third line. */}
+                                                                    <p className={`text-[13px] font-bold leading-snug line-clamp-3 ${
                                                                         p.is_completed ? "text-muted-foreground line-through" : "text-foreground"}`}>
-                                                                        {t && <span className="mr-1">{t.emoji}</span>}{shortTitle(p.title)}
+                                                                        {t && <span className="mr-1">{t.emoji}</span>}{chipTitle(p.title, 32)}
                                                                     </p>
-                                                                    <p className="text-[11px] text-muted-foreground/80 leading-tight mt-0.5 truncate">
+                                                                    <p className="text-[11px] text-muted-foreground/80 leading-tight mt-1 truncate">
                                                                         {[prettyTime(p.start_time), dur ? `${dur}m` : null].filter(Boolean).join(" · ") || "Anytime"}
                                                                         {recIdOf(p) && <Repeat className="w-2.5 h-2.5 inline ml-1 opacity-60" />}
                                                                     </p>
