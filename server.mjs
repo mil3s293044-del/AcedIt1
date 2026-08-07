@@ -188,7 +188,7 @@ async function callInvokeAI({ prompt, response_json_schema }) {
 // real cost backstop. Free users' chat shares the free tools lifetime cap.
 const TIER_FREE_CAPS    = { quiz_ai_gen: 5, quiz_ai_mark: 5, flashcard_ai_gen: 5, ai_tool: 5, ai_chat: 5 };
 const TIER_FREE_COUNTER = { quiz_ai_gen: "free_ai_quizzes_used", quiz_ai_mark: "free_ai_quiz_marks_used", flashcard_ai_gen: "free_ai_flashcards_used", ai_tool: "free_ai_tools_used", ai_chat: "free_ai_tools_used" };
-const TIER_PREMIUM_CAPS = { quiz_ai_gen: 3, quiz_ai_mark: 10, flashcard_ai_gen: 3, ai_tool: 6, ai_chat: 8, goal_ai_gen: 1, roadmap_ai_gen: 1, blurting: 5, active_recall: 8, study_coach: 30 };
+const TIER_PREMIUM_CAPS = { quiz_ai_gen: 3, quiz_ai_mark: 10, flashcard_ai_gen: 3, ai_tool: 6, ai_chat: 8, goal_ai_gen: 1, roadmap_ai_gen: 5, blurting: 5, active_recall: 8, study_coach: 30 };
 const TIER_COUNTER_KEY  = { quiz_ai_gen: "quizzes", quiz_ai_mark: "quiz_marks", flashcard_ai_gen: "flashcards", ai_tool: "tools", ai_chat: "chat", goal_ai_gen: "goal", roadmap_ai_gen: "goal", blurting: "blurting", active_recall: "active_recall", study_coach: "coach" };
 const TIER_WEEKLY_CAP_CENTS = 250;
 const TIER_FREE_LIFETIME_COST_CAP_CENTS = 100;   // $1 hard ceiling per free user, lifetime
