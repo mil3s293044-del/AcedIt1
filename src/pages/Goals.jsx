@@ -17,7 +17,7 @@ import { DragDropContext, Droppable, Draggable } from "@hello-pangea/dnd";
 import {
     CalendarDays, Plus, Check, X, GraduationCap, Sparkles,
     Loader2, ArrowRight, Edit2, Flag, BookOpen, Trash2, ChevronLeft,
-    ChevronRight, Repeat, GripVertical
+    ChevronRight, Repeat, GripVertical, Scale
 } from "lucide-react";
 import { base44 } from "@/api/base44Client";
 import { useToast } from "@/components/ui/use-toast";
@@ -25,6 +25,9 @@ import { ToastAction } from "@/components/ui/toast";
 import { format, differenceInDays, parseISO, addDays, startOfWeek, addWeeks } from "date-fns";
 import HelpButton from "@/components/shared/HelpButton";
 import { createPageUrl } from "@/utils";
+import { recIdOf, stratIdOf, durationOf, noteTextOf, buildNotes } from "@/lib/planTags";
+import { strategyNeedingCheckIn } from "@/lib/strategyState";
+import StrategyCheckIn from "@/components/planner/StrategyCheckIn";
 import { fmtDate } from "@/lib/safeDate";
 
 const TYPE_OPTIONS = [
@@ -174,26 +177,8 @@ const routeFor = (title) =>
     SESSION_ROUTES.find(r => r.test.test((title || "").toLowerCase())) || { to: "/Study", label: "Study tools" };
 const sessionLink = (title) => routeFor(title).to;
 
-// Session metadata lives in `notes` as tags — the study_plans table 400s on
-// unknown columns, so duration and free-text notes piggyback on the one text
-// field that already exists: "[rec:abc123][dur:40] bring the formula sheet"
-const REC_TAG = /\[rec:([a-z0-9-]+)\]/i;
-const DUR_TAG = /\[dur:(\d+)\]/i;
-const recIdOf = (plan) => plan.notes?.match(REC_TAG)?.[1] || null;
-const durationOf = (plan) => {
-    const m = plan.notes?.match(DUR_TAG);
-    return m ? Number(m[1]) : null;
-};
-const noteTextOf = (plan) =>
-    (plan.notes || "").replace(REC_TAG, "").replace(DUR_TAG, "").trim() || null;
-
-// Rebuild the notes field from its parts, preserving the recurrence id so
-// editing a session doesn't quietly orphan it from its series.
-const buildNotes = (recId, duration, text) => {
-    const tags = `${recId ? `[rec:${recId}]` : ""}${duration ? `[dur:${duration}]` : ""}`;
-    const body = (text || "").trim();
-    return `${tags}${body ? ` ${body}` : ""}` || null;
-};
+// Session metadata rides in `notes` as tags — see src/lib/planTags.js. Shared
+// with the Strategise check-in, which reads the same [str:] ids.
 
 // ─── Time maths for dragging ────────────────────────────────────────────────
 // Days render as time-ordered stacks, so where a session lands in the stack is
@@ -285,6 +270,12 @@ export default function Planner() {
     // Recurring delete choice
     const [deleteTarget, setDeleteTarget] = useState(null);
 
+    // Real minutes studied, by date — StudyTechnique and StudySession rows
+    // flattened to one shape so the board can compare intent with reality.
+    const [actuals, setActuals] = useState([]);
+    const [checkInDismissed, setCheckInDismissed] = useState(false);
+    const [rescuing, setRescuing] = useState(false);
+
     // Daily intention card
     const [editingIntention, setEditingIntention] = useState(false);
     const [intentionDraft, setIntentionDraft] = useState("");
@@ -296,11 +287,15 @@ export default function Planner() {
         try {
             const rangeStart = format(addWeeks(startOfWeek(new Date(), { weekStartsOn: 1 }), -1), "yyyy-MM-dd");
             const rangeEnd = format(addWeeks(startOfWeek(new Date(), { weekStartsOn: 1 }), MAX_WEEKS_AHEAD + 1), "yyyy-MM-dd");
-            const [profileData, subjectData, assessmentData, planData] = await Promise.all([
+            const [profileData, subjectData, assessmentData, planData, techniqueData, sessionData] = await Promise.all([
                 base44.entities.UserProfile.filter({ created_by: email }).catch(() => []),
                 base44.entities.UserSubject.filter({ created_by: email, is_active: true }).catch(() => []),
                 base44.entities.SubjectAssessment.filter({ created_by: email }, "due_date", 50).catch(() => []),
                 base44.entities.StudyPlan.filter({ created_by: email, date: { $gte: rangeStart, $lte: rangeEnd } }, "date", 200).catch(() => []),
+                // Real study records, so a session can show what actually
+                // happened rather than only what was intended.
+                base44.entities.StudyTechnique.filter({ created_by: email, date: { $gte: rangeStart, $lte: rangeEnd } }, "date", 200).catch(() => []),
+                base44.entities.StudySession.filter({ created_by: email, date: { $gte: rangeStart, $lte: rangeEnd } }, "date", 200).catch(() => []),
             ]);
             const p = profileData[0] || null;
             setProfile(p);
@@ -308,6 +303,10 @@ export default function Planner() {
             setSubjects((subjectData || []).filter(s => !seen.has(s.subject_name) && seen.add(s.subject_name)));
             setAssessments(assessmentData || []);
             setPlans(planData || []);
+            setActuals([
+                ...(techniqueData || []).map(r => ({ date: r.date, subject: r.subject_name || r.subject, minutes: Number(r.session_duration) || 0 })),
+                ...(sessionData || []).map(r => ({ date: r.date, subject: r.subject_name || r.subject, minutes: Number(r.duration_minutes) || 0 })),
+            ].filter(r => r.date && r.minutes > 0));
         } catch (e) {
             console.error("Planner load error:", e);
         } finally {
@@ -350,6 +349,67 @@ export default function Planner() {
     const plannedThisWeek = week.reduce((n, d) => n + d.plans.length, 0);
     const doneThisWeek = week.reduce((n, d) => n + d.plans.filter(p => p.is_completed).length, 0);
     const weekPct = plannedThisWeek > 0 ? Math.round((doneThisWeek / plannedThisWeek) * 100) : 0;
+
+    // ─── Load balance ────────────────────────────────────────────────────────
+    // The board will happily let you put six hours on Tuesday and nothing all
+    // weekend, then say nothing about it. Spacing is the one thing the app
+    // argues for everywhere else, so a week that ignores it should say so.
+    const load = useMemo(() => {
+        const future = week.filter(d => !d.isPast);
+        const mins = future.map(d => ({
+            key: d.key, dayName: d.dayName, isToday: d.isToday,
+            m: d.plans.filter(p => !p.is_completed).reduce((n, p) => n + (durationOf(p) || DEFAULT_DUR), 0),
+        }));
+        const total = mins.reduce((n, d) => n + d.m, 0);
+        if (total < 60 || future.length < 3) return null;   // too little planned to have a shape
+
+        const busiest = mins.reduce((a, b) => (b.m > a.m ? b : a));
+        const empty = mins.filter(d => d.m === 0);
+        const share = busiest.m / total;
+
+        // Two failure modes worth naming, in the order they hurt: one day
+        // carrying the week, and a long silent stretch before the deadline.
+        if (share >= 0.55 && mins.length >= 3 && empty.length >= 1) {
+            return {
+                tone: "warn",
+                text: `${Math.round(share * 100)}% of what's left is stacked on ${busiest.dayName}${busiest.isToday ? " (today)" : ""}.`,
+                hint: `Drag a session onto ${empty.length === 1 ? empty[0].dayName : `${empty[0].dayName} or ${empty[1].dayName}`} — the same work spread out sticks better than massed.`,
+            };
+        }
+        if (empty.length >= future.length - 1 && total >= 90) {
+            return {
+                tone: "warn",
+                text: `Everything left sits on one day.`,
+                hint: "Splitting it across two or three days is the single cheapest thing you can do for retention.",
+            };
+        }
+        if (empty.length === 0 && mins.length >= 4) {
+            return { tone: "good", text: "Nicely spread — something on every day left this week.", hint: null };
+        }
+        return null;
+    }, [week]);
+
+    // ─── Sessions that slipped ───────────────────────────────────────────────
+    // Past days already know exactly what was planned and never done. That is
+    // the raw material for the one action the planner was missing.
+    const missed = useMemo(
+        () => plans
+            .filter(p => p.date < todayStr && !p.is_completed)
+            .sort((a, b) => a.date.localeCompare(b.date)),
+        [plans, todayStr]);
+
+    // ─── What actually happened ──────────────────────────────────────────────
+    // Real minutes per date, so a completed session can show the truth rather
+    // than repeating the number it was planned at.
+    const actualByDate = useMemo(() => {
+        const m = new Map();
+        for (const a of actuals) m.set(a.date, (m.get(a.date) || 0) + a.minutes);
+        return m;
+    }, [actuals]);
+
+    const checkIn = useMemo(
+        () => (checkInDismissed ? null : strategyNeedingCheckIn(plans, assessments, todayStr)),
+        [plans, assessments, todayStr, checkInDismissed]);
 
     const coachLine = !nextSac
         ? "No SACs tracked yet — add the next one and the whole app plans around it."
@@ -413,8 +473,7 @@ export default function Planner() {
             const finalTitle = planType && planType !== "Other" && !alreadyPrefixed
                 ? `${planType}: ${planTitle.trim()}`
                 : planTitle.trim();
-            const tags = `${recId ? `[rec:${recId}]` : ""}${planDuration ? `[dur:${planDuration}]` : ""}`;
-            const notes = `${tags}${planNote.trim() ? ` ${planNote.trim()}` : ""}` || null;
+            const notes = buildNotes(recId, planDuration, planNote, null);
             for (let i = 0; i < weeks; i++) {
                 await base44.entities.StudyPlan.create({
                     title: finalTitle,
@@ -478,7 +537,7 @@ export default function Planner() {
             subject_name: planSubject || null,
             date: planDay,
             start_time: planTime || null,
-            notes: buildNotes(recIdOf(editingPlan), planDuration, planNote),
+            notes: buildNotes(recIdOf(editingPlan), planDuration, planNote, stratIdOf(editingPlan)),
         };
         try {
             await base44.entities.StudyPlan.update(editingPlan.id, patch);
@@ -562,6 +621,77 @@ export default function Planner() {
         deletePlans(plans.filter(p => recIdOf(p) === rid && p.date >= deleteTarget.date));
     };
 
+    /**
+     * Move everything that slipped onto the days ahead.
+     *
+     * Spread rather than dumped: piling five missed sessions onto tomorrow
+     * recreates the reason they were missed. Sessions go one per day across the
+     * lightest of the next seven days, skipping any day that already carries a
+     * SAC, and each lands at a time that doesn't collide with what's there.
+     */
+    const rescueMissed = async () => {
+        if (!missed.length) return;
+        setRescuing(true);
+        const before = missed.map(p => ({ id: p.id, date: p.date, start_time: p.start_time }));
+        try {
+            // Candidate days: the next seven, lightest first, SAC days last.
+            const candidates = Array.from({ length: 7 }, (_, i) => {
+                const key = format(addDays(parseISO(todayStr), i), "yyyy-MM-dd");
+                return {
+                    key,
+                    hasSac: upcoming.some(a => a.due_date === key),
+                    mins: plans.filter(p => p.date === key).reduce((n, p) => n + (durationOf(p) || DEFAULT_DUR), 0),
+                };
+            }).sort((a, b) => (a.hasSac - b.hasSac) || (a.mins - b.mins));
+
+            const moves = missed.map((p, i) => {
+                const target = candidates[i % candidates.length];
+                const siblings = plans
+                    .filter(x => x.date === target.key && x.id !== p.id)
+                    .sort((a, b) => (a.start_time || "").localeCompare(b.start_time || ""));
+                return { plan: p, date: target.key, time: timeForSlot(siblings, siblings.length, durationOf(p)) || p.start_time };
+            });
+
+            // Optimistic first — the board should move before the network does.
+            setPlans(prev => prev.map(p => {
+                const m = moves.find(x => x.plan.id === p.id);
+                return m ? { ...p, date: m.date, start_time: m.time } : p;
+            }));
+            for (const m of moves) {
+                await base44.entities.StudyPlan.update(m.plan.id, { date: m.date, start_time: m.time });
+            }
+
+            const undo = async () => {
+                setPlans(prev => prev.map(p => {
+                    const b = before.find(x => x.id === p.id);
+                    return b ? { ...p, date: b.date, start_time: b.start_time } : p;
+                }));
+                for (const b of before) {
+                    try { await base44.entities.StudyPlan.update(b.id, { date: b.date, start_time: b.start_time }); } catch { /* board is already back */ }
+                }
+            };
+            // Name the days rather than claiming "this week" — with enough
+            // missed sessions the tail lands beyond the visible board, and a
+            // move you can't see is a move you'll assume didn't happen.
+            const landed = [...new Set(moves.map(m => m.date))].sort();
+            const dayNames = landed.map(d => fmtDate(d, "EEE")).join(", ");
+            toast({
+                variant: "success",
+                title: `${moves.length} session${moves.length === 1 ? "" : "s"} rescheduled`,
+                description: `Spread across your lightest days — ${dayNames}.`,
+                action: <ToastAction altText="Undo the reschedule" onClick={undo}>Undo</ToastAction>,
+            });
+        } catch (e) {
+            setPlans(prev => prev.map(p => {
+                const b = before.find(x => x.id === p.id);
+                return b ? { ...p, ...b } : p;
+            }));
+            toast({ title: "Couldn't reschedule", description: e.message, variant: "destructive" });
+        } finally {
+            setRescuing(false);
+        }
+    };
+
     // ─── Daily intention ───────────────────────────────────────────────────────
     // One line for today, stored in profile.extra (merged, never overwritten —
     // extra also carries year_level / attribution / xp boosts).
@@ -625,6 +755,19 @@ export default function Planner() {
                         {coachLine}
                     </h1>
                 </motion.section>
+
+                {/* ── Strategy check-in ───────────────────────────────── */}
+                {/* Sits above everything because it's the thing to deal with
+                    first: a plan that no longer matches the week is worse than
+                    no plan, and it only appears when there's both something to
+                    report and something still changeable. */}
+                {checkIn && (
+                    <StrategyCheckIn
+                        strategy={checkIn}
+                        onRevised={() => { setCheckInDismissed(true); if (user?.email) loadData(user.email); }}
+                        onDismiss={() => setCheckInDismissed(true)}
+                    />
+                )}
 
                 {/* ── HERO: countdown banner + target ─────────────────── */}
                 <motion.section initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.05 }}
@@ -832,6 +975,43 @@ export default function Planner() {
                         </div>
                     )}
 
+                    {/* ── Sessions that slipped ───────────────────────────── */}
+                    {missed.length > 0 && (
+                        <div className="mb-3 rounded-2xl border-2 border-streak/25 bg-streak/5 p-3.5 flex flex-wrap items-center gap-3">
+                            <div className="flex-1 min-w-[200px]">
+                                <p className="text-sm font-bold text-foreground">
+                                    {missed.length} session{missed.length === 1 ? "" : "s"} didn't happen
+                                </p>
+                                <p className="text-xs text-muted-foreground mt-0.5">
+                                    {missed.slice(0, 3).map(p => chipTitle(p.title, 24)).join(" · ")}
+                                    {missed.length > 3 && ` · +${missed.length - 3} more`}
+                                </p>
+                            </div>
+                            <div className="flex gap-2 flex-shrink-0">
+                                <Button size="sm" onClick={rescueMissed} disabled={rescuing} className="gap-1.5">
+                                    {rescuing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <CalendarDays className="w-3.5 h-3.5" />}
+                                    Move them forward
+                                </Button>
+                                <Button size="sm" variant="ghost" onClick={() => deletePlans(missed)} disabled={rescuing}
+                                    className="rounded-xl text-muted-foreground">
+                                    Clear
+                                </Button>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* ── How the week is distributed ─────────────────────── */}
+                    {load && (
+                        <div className={`mb-3 rounded-2xl border px-3.5 py-2.5 flex items-start gap-2 ${
+                            load.tone === "good" ? "border-primary/25 bg-primary/5" : "border-xp/25 bg-xp/5"}`}>
+                            <Scale className={`w-4 h-4 flex-shrink-0 mt-0.5 ${load.tone === "good" ? "text-primary" : "text-xp"}`} />
+                            <div className="min-w-0">
+                                <p className="text-sm font-bold text-foreground leading-snug">{load.text}</p>
+                                {load.hint && <p className="text-xs text-muted-foreground mt-0.5">{load.hint}</p>}
+                            </div>
+                        </div>
+                    )}
+
                     <DragDropContext onDragEnd={onDragEnd}>
                         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-7 gap-3">
                             {week.map(day => (
@@ -955,8 +1135,18 @@ export default function Planner() {
                                                                         p.is_completed ? "text-muted-foreground line-through" : "text-foreground"}`}>
                                                                         {t && <span className="mr-1">{t.emoji}</span>}{chipTitle(p.title, 32)}
                                                                     </p>
+                                                                    {/* A ticked session and one where the timer
+                                                                        actually ran 12 minutes used to look
+                                                                        identical. Once it's done, show what
+                                                                        happened, not what was intended. */}
                                                                     <p className="text-[11px] text-muted-foreground/80 leading-tight mt-1 truncate">
-                                                                        {[prettyTime(p.start_time), dur ? `${dur}m` : null].filter(Boolean).join(" · ") || "Anytime"}
+                                                                        {p.is_completed && actualByDate.has(p.date) ? (
+                                                                            // The number only — 105px can't hold the
+                                                                            // comparison, and the detail card shows both.
+                                                                            <span className="font-bold text-primary">{actualByDate.get(p.date)}m studied</span>
+                                                                        ) : (
+                                                                            [prettyTime(p.start_time), dur ? `${dur}m` : null].filter(Boolean).join(" · ") || "Anytime"
+                                                                        )}
                                                                         {recIdOf(p) && <Repeat className="w-2.5 h-2.5 inline ml-1 opacity-60" />}
                                                                     </p>
                                                                 </button>
@@ -1158,6 +1348,28 @@ export default function Planner() {
                                                 </div>
                                             ))}
                                         </div>
+
+                                        {/* Planned vs actual, where there's room to state both.
+                                            Study records are per-day, not per-session, so this is
+                                            the day's total — said plainly rather than implied. */}
+                                        {s.is_completed && actualByDate.has(s.date) && (() => {
+                                            const real = actualByDate.get(s.date);
+                                            const planned = dur || DEFAULT_DUR;
+                                            const pct = Math.min(150, Math.round((real / planned) * 100));
+                                            return (
+                                                <div className="rounded-xl bg-primary/5 border border-primary/20 px-3 py-2.5">
+                                                    <p className="stat-label mb-1">What actually happened</p>
+                                                    <div className="flex items-baseline gap-1.5">
+                                                        <span className="font-display font-black text-lg text-primary tabular-nums">{real}m</span>
+                                                        <span className="text-xs text-muted-foreground">studied on this day, against {planned}m planned</span>
+                                                    </div>
+                                                    <div className="mt-1.5 h-1.5 rounded-full bg-secondary overflow-hidden">
+                                                        <div className={`h-full rounded-full ${real >= planned ? "bg-primary" : "bg-xp"}`}
+                                                            style={{ width: `${Math.max(4, Math.min(100, pct))}%` }} />
+                                                    </div>
+                                                </div>
+                                            );
+                                        })()}
 
                                         {note && (
                                             <div className="rounded-xl bg-secondary/60 px-3 py-2">

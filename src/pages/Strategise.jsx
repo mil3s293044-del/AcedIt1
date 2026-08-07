@@ -459,13 +459,17 @@ Rules:
                                     Why this plan looks like this
                                 </summary>
                                 <div className="mt-3 space-y-2.5">
-                                    {[...new Set(plan.sessions.map(x => x.principle))].filter(k => PRINCIPLES[k]).map(k => (
-                                        <div key={k}>
-                                            <p className="text-xs font-bold text-foreground">{PRINCIPLES[k].name}</p>
-                                            <p className="text-xs text-muted-foreground leading-snug">{PRINCIPLES[k].claim}</p>
-                                            <p className="text-[11px] text-muted-foreground/60 mt-0.5">{PRINCIPLES[k].source}</p>
-                                        </div>
-                                    ))}
+                                    {/* `metacognition` is always shown — it isn't tied to any one
+                                        session, it's the reason none of them are "read your notes". */}
+                                    {["metacognition", ...new Set(plan.sessions.map(x => x.principle))]
+                                        .filter((k, i, all) => PRINCIPLES[k] && all.indexOf(k) === i)
+                                        .map(k => (
+                                            <div key={k}>
+                                                <p className="text-xs font-bold text-foreground">{PRINCIPLES[k].name}</p>
+                                                <p className="text-xs text-muted-foreground leading-snug">{PRINCIPLES[k].claim}</p>
+                                                <p className="text-[11px] text-muted-foreground/60 mt-0.5">{PRINCIPLES[k].source}</p>
+                                            </div>
+                                        ))}
                                 </div>
                             </details>
 
