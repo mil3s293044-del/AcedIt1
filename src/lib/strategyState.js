@@ -67,14 +67,23 @@ export function activeStrategies(plans = [], assessments = [], today = dayKey())
 }
 
 /**
- * The plan that most needs a check-in right now, or null.
+ * Every plan that wants a check-in, soonest deadline first.
  *
- * Only surfaces when there is something to report on AND something left to
- * change. Nagging someone about a plan you can no longer alter is noise.
+ * Plural because students run more than one at a time — a Chemistry SAC and a
+ * Specialist Maths SAC in the same fortnight is the normal case, not the edge
+ * one, and surfacing only the most urgent left the other silently rotting.
+ *
+ * Only plans with something to report AND something left to change appear.
+ * Nagging someone about a plan they can no longer alter is noise.
  */
-export function strategyNeedingCheckIn(plans, assessments, today = dayKey()) {
+export function strategiesNeedingCheckIn(plans, assessments, today = dayKey()) {
     return activeStrategies(plans, assessments, today)
-        .find(s => s.isLive && s.past.length > 0) || null;
+        .filter(s => s.isLive && s.past.length > 0);
+}
+
+/** The single most urgent one, for callers that only have room for one. */
+export function strategyNeedingCheckIn(plans, assessments, today = dayKey()) {
+    return strategiesNeedingCheckIn(plans, assessments, today)[0] || null;
 }
 
 /** One line per past session, for the model to read. */
@@ -101,6 +110,13 @@ export function strategyStanding(strategy) {
     if (past.length === 0) return { tone: "ok", text: "Nothing due yet." };
     const kept = past.length - overdue.length;
     if (overdue.length === 0) return { tone: "good", text: `${kept}/${past.length} done so far. Dead on plan.` };
-    if (kept === 0) return { tone: "bad", text: `None of the first ${past.length} got done. Worth rebuilding around what's actually left.` };
+    if (kept === 0) {
+        return {
+            tone: "bad",
+            text: past.length === 1
+                ? "The first session didn't happen. Worth rebuilding around what's actually left."
+                : `None of the first ${past.length} got done. Worth rebuilding around what's actually left.`,
+        };
+    }
     return { tone: "warn", text: `${kept}/${past.length} done — ${overdue.length} slipped.` };
 }
