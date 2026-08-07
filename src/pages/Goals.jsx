@@ -17,7 +17,7 @@ import { DragDropContext, Droppable, Draggable } from "@hello-pangea/dnd";
 import {
     CalendarDays, Plus, Check, X, GraduationCap, Sparkles,
     Loader2, ArrowRight, Edit2, Flag, BookOpen, Trash2, ChevronLeft,
-    ChevronRight, Repeat, GripVertical, Scale
+    ChevronRight, Repeat, Scale
 } from "lucide-react";
 import { base44 } from "@/api/base44Client";
 import { useToast } from "@/components/ui/use-toast";
@@ -60,6 +60,23 @@ const SESSION_TYPES = [
     { value: "Homework", emoji: "📚" },
     { value: "Other", emoji: "✨" },
 ];
+
+// Strategise names its own techniques, and three of them aren't in the list
+// above: "Focused block", "Concept explainer" and "Revision Mode" (the planner
+// calls the last one "Timed mock"). Sessions it wrote were therefore invisible
+// to the type system — no emoji, no prefix stripped, so the board showed
+// "Focused block: Acids and bases — core concepts (pH scale, strong vs weak
+// acids/bases, neutralisation)" in full, and clicking it opened the generic
+// Study page instead of the tool it names.
+//
+// They're recognised here but deliberately not offered in the add form: they
+// are what the planner *understands*, not what it asks a student to pick.
+const AI_SESSION_TYPES = [
+    { value: "Focused block", emoji: "⏳" },
+    { value: "Concept explainer", emoji: "💡" },
+    { value: "Revision Mode", emoji: "⏱️" },
+];
+const ALL_SESSION_TYPES = [...SESSION_TYPES, ...AI_SESSION_TYPES];
 const DURATION_OPTIONS = [25, 40, 60, 90];
 
 // ─── Static class lookups (Tailwind JIT-safe) ───────────────────────────────
@@ -95,7 +112,7 @@ const subjectRailClass = (name) => SUBJECT_RAIL[hashName(name) % SUBJECT_RAIL.le
 // Sessions are stored as "Flashcards: Redox half-equations" so sessionLink()
 // can route them. On a 150px column that prefix eats the line that should be
 // showing the actual topic, so the board shows the emoji and drops the word.
-const typeOf = (title) => SESSION_TYPES.find(t => (title || "").startsWith(`${t.value}: `)) || null;
+const typeOf = (title) => ALL_SESSION_TYPES.find(t => (title || "").startsWith(`${t.value}: `)) || null;
 const shortTitle = (title) => {
     const t = typeOf(title);
     return t ? (title.slice(t.value.length + 2) || t.value) : (title || "");
@@ -168,13 +185,34 @@ function daysLabel(days) {
 // table so the route and the name the detail card shows can't drift apart.
 const SESSION_ROUTES = [
     { test: /flash|card|spaced/, to: "/Study?tab=spaced_repetition", label: "Flashcards" },
-    { test: /mock|exam|paper|sac practice/, to: "/Study?tab=exam", label: "Revision Mode" },
+    { test: /mock|exam|paper|sac practice|revision mode/, to: "/Study?tab=exam", label: "Revision Mode" },
     { test: /quiz/, to: "/Quizzes", label: "Quizzes" },
     { test: /recall/, to: "/Study?tab=active_recall", label: "Active recall" },
     { test: /blurt/, to: "/Study?tab=blurting", label: "Blurting" },
+    // Strategise's own two. "Focused block" is a pomodoro; the explainer is a
+    // chat tool. Without these, both fell through to the generic Study page.
+    { test: /focused block|pomodoro/, to: "/Study?tab=pomodoro", label: "Focus timer" },
+    { test: /concept explainer|explain/, to: "/AITools", label: "AI tools" },
+    { test: /notes review|revise notes/, to: "/Study?tab=active_recall", label: "Active recall" },
 ];
-const routeFor = (title) =>
-    SESSION_ROUTES.find(r => r.test.test((title || "").toLowerCase())) || { to: "/Study", label: "Study tools" };
+
+/**
+ * Where a session opens. The declared type wins over keyword matching — a
+ * session titled "Quiz: how electrolysis papers are marked" is a quiz, not a
+ * past paper, and only the prefix knows that.
+ */
+const TYPE_ROUTE = {
+    "Flashcards": 0, "Timed mock": 1, "Revision Mode": 1, "Quiz": 2,
+    "Active recall": 3, "Blurting": 4, "Focused block": 5, "Concept explainer": 6,
+    "Notes review": 7,
+};
+const routeFor = (title) => {
+    const t = typeOf(title);
+    const byType = t ? SESSION_ROUTES[TYPE_ROUTE[t.value]] : null;
+    if (byType) return byType;
+    return SESSION_ROUTES.find(r => r.test.test((title || "").toLowerCase()))
+        || { to: "/Study", label: "Study tools" };
+};
 const sessionLink = (title) => routeFor(title).to;
 
 // Session metadata rides in `notes` as tags — see src/lib/planTags.js. Shared
@@ -1077,6 +1115,13 @@ export default function Planner() {
                                                 );
                                             })()}
 
+                                            {/* What the day actually cost, once. */}
+                                            {actualByDate.has(day.key) && (
+                                                <p className="text-[10px] font-bold text-primary -mt-1 tabular-nums">
+                                                    {actualByDate.get(day.key)}m studied
+                                                </p>
+                                            )}
+
                                             {day.sacs.map(a => (
                                                 <div key={a.id} className="rounded-xl bg-gradient-to-br from-streak to-streak/80 text-white px-2.5 py-2 shadow-soft">
                                                     <p className="text-[10px] font-black uppercase tracking-wider text-white/70 leading-tight">
@@ -1135,18 +1180,12 @@ export default function Planner() {
                                                                         p.is_completed ? "text-muted-foreground line-through" : "text-foreground"}`}>
                                                                         {t && <span className="mr-1">{t.emoji}</span>}{chipTitle(p.title, 32)}
                                                                     </p>
-                                                                    {/* A ticked session and one where the timer
-                                                                        actually ran 12 minutes used to look
-                                                                        identical. Once it's done, show what
-                                                                        happened, not what was intended. */}
+                                                                    {/* Real minutes are recorded per day, not per
+                                                                        session, so they belong on the day header —
+                                                                        printing the day's total on every chip made
+                                                                        four sessions each claim the same 95m. */}
                                                                     <p className="text-[11px] text-muted-foreground/80 leading-tight mt-1 truncate">
-                                                                        {p.is_completed && actualByDate.has(p.date) ? (
-                                                                            // The number only — 105px can't hold the
-                                                                            // comparison, and the detail card shows both.
-                                                                            <span className="font-bold text-primary">{actualByDate.get(p.date)}m studied</span>
-                                                                        ) : (
-                                                                            [prettyTime(p.start_time), dur ? `${dur}m` : null].filter(Boolean).join(" · ") || "Anytime"
-                                                                        )}
+                                                                        {[prettyTime(p.start_time), dur ? `${dur}m` : null].filter(Boolean).join(" · ") || "Anytime"}
                                                                         {recIdOf(p) && <Repeat className="w-2.5 h-2.5 inline ml-1 opacity-60" />}
                                                                     </p>
                                                                 </button>
@@ -1349,22 +1388,28 @@ export default function Planner() {
                                             ))}
                                         </div>
 
-                                        {/* Planned vs actual, where there's room to state both.
-                                            Study records are per-day, not per-session, so this is
-                                            the day's total — said plainly rather than implied. */}
+                                        {/* Study records are per-day, not per-session, so this
+                                            compares the day against the day. Measuring a whole
+                                            day's minutes against ONE session's plan read as a
+                                            wild overshoot whenever a day held more than one. */}
                                         {s.is_completed && actualByDate.has(s.date) && (() => {
                                             const real = actualByDate.get(s.date);
-                                            const planned = dur || DEFAULT_DUR;
-                                            const pct = Math.min(150, Math.round((real / planned) * 100));
+                                            const dayPlanned = plans
+                                                .filter(x => x.date === s.date)
+                                                .reduce((n, x) => n + (durationOf(x) || DEFAULT_DUR), 0);
+                                            const count = plans.filter(x => x.date === s.date).length;
+                                            const pct = dayPlanned ? Math.round((real / dayPlanned) * 100) : 0;
                                             return (
                                                 <div className="rounded-xl bg-primary/5 border border-primary/20 px-3 py-2.5">
-                                                    <p className="stat-label mb-1">What actually happened</p>
-                                                    <div className="flex items-baseline gap-1.5">
+                                                    <p className="stat-label mb-1">That day, in total</p>
+                                                    <div className="flex items-baseline gap-1.5 flex-wrap">
                                                         <span className="font-display font-black text-lg text-primary tabular-nums">{real}m</span>
-                                                        <span className="text-xs text-muted-foreground">studied on this day, against {planned}m planned</span>
+                                                        <span className="text-xs text-muted-foreground">
+                                                            studied against {dayPlanned}m planned across {count} session{count === 1 ? "" : "s"}
+                                                        </span>
                                                     </div>
                                                     <div className="mt-1.5 h-1.5 rounded-full bg-secondary overflow-hidden">
-                                                        <div className={`h-full rounded-full ${real >= planned ? "bg-primary" : "bg-xp"}`}
+                                                        <div className={`h-full rounded-full ${real >= dayPlanned ? "bg-primary" : "bg-xp"}`}
                                                             style={{ width: `${Math.max(4, Math.min(100, pct))}%` }} />
                                                     </div>
                                                 </div>
@@ -1432,31 +1477,61 @@ export default function Planner() {
                                 if (!p) return <div ref={dg.innerRef} {...dg.draggableProps} {...dg.dragHandleProps} />;
                                 const dur = durationOf(p);
                                 const note = noteTextOf(p);
+                                const t = typeOf(p.title);
                                 const row = (
                                     <div ref={dg.innerRef} {...dg.draggableProps} {...dg.dragHandleProps}
-                                        className={`rounded-2xl border-2 p-3 bg-surface cursor-grab active:cursor-grabbing ${
-                                            snap.isDragging ? "ring-2 ring-chart-3 shadow-lg" : "border-border"}`}>
-                                        <div className="flex items-start gap-2">
-                                            <GripVertical className="w-4 h-4 text-muted-foreground/40 mt-0.5 flex-shrink-0" />
-                                            <button onClick={() => togglePlanDone(p)} aria-label="Toggle done"
-                                                className={`w-4 h-4 mt-0.5 rounded border flex-shrink-0 flex items-center justify-center ${
-                                                    p.is_completed ? "bg-primary border-primary text-white" : "border-border"}`}>
+                                        className={`group/row flex overflow-hidden rounded-2xl border bg-surface transition-all cursor-grab active:cursor-grabbing ${
+                                            snap.isDragging ? "ring-2 ring-chart-3 shadow-lg border-transparent"
+                                                : "border-border hover:border-muted-foreground/40 hover:shadow-soft"
+                                        } ${p.is_completed ? "opacity-70" : ""}`}>
+                                        {/* Subject rail, matching the board — the same session
+                                            should be the same colour wherever you meet it. */}
+                                        <span aria-hidden className={`w-1 flex-shrink-0 ${
+                                            p.is_completed ? "bg-primary" : subjectRailClass(p.subject_name || p.title)}`} />
+
+                                        <div className="flex items-start gap-2.5 flex-1 min-w-0 p-3">
+                                            <button onClick={() => togglePlanDone(p)} aria-label={`Mark ${p.title} ${p.is_completed ? "not done" : "done"}`}
+                                                className={`w-[18px] h-[18px] mt-0.5 rounded-md border-2 flex-shrink-0 flex items-center justify-center transition-colors ${
+                                                    p.is_completed ? "bg-primary border-primary text-white" : "border-border hover:border-primary"}`}>
                                                 {p.is_completed && <Check className="w-3 h-3" />}
                                             </button>
+
                                             {/* Same launch behaviour as the board — inspecting a
                                                 day shouldn't cost you the ability to start from it. */}
                                             <Link to={sessionLink(p.title)} className="flex-1 min-w-0">
-                                                <p className={`text-sm font-bold leading-snug ${p.is_completed ? "line-through text-muted-foreground" : "text-foreground"}`}>
-                                                    {typeOf(p.title) && <span className="mr-1">{typeOf(p.title).emoji}</span>}
-                                                    {shortTitle(p.title)}
+                                                <p className={`text-sm font-bold leading-snug line-clamp-2 ${
+                                                    p.is_completed ? "line-through text-muted-foreground" : "text-foreground"}`}>
+                                                    {t && <span className="mr-1">{t.emoji}</span>}
+                                                    {/* There's more room here than on the board, but
+                                                        not unlimited — an AI-written title can run to
+                                                        a hundred characters and swallow the row. */}
+                                                    {keywordTitle(shortTitle(p.title), 64)}
                                                     {recIdOf(p) && <Repeat className="w-3 h-3 inline ml-1 opacity-50" />}
                                                 </p>
-                                                <p className="text-xs text-muted-foreground mt-0.5">
-                                                    {[prettyTime(p.start_time), dur ? `${dur}m` : null, p.subject_name].filter(Boolean).join(" · ")}
-                                                </p>
-                                                {note && <p className="text-xs text-muted-foreground/70 italic mt-1">{note}</p>}
+                                                <div className="flex flex-wrap items-center gap-1.5 mt-1.5">
+                                                    <span className="text-[11px] font-bold text-muted-foreground tabular-nums">
+                                                        {prettyTime(p.start_time) || "Anytime"}
+                                                        {dur ? ` · ${dur}m` : ""}
+                                                    </span>
+                                                    {p.subject_name && (
+                                                        <span className={`pill border text-[10px] ${subjectChipClass(p.subject_name)}`}>
+                                                            {p.subject_name}
+                                                        </span>
+                                                    )}
+                                                    {stratIdOf(p) && (
+                                                        <span className="pill bg-chart-4/10 text-chart-4 text-[10px] inline-flex items-center gap-1">
+                                                            <Sparkles className="w-2.5 h-2.5" /> Strategy
+                                                        </span>
+                                                    )}
+                                                </div>
+                                                {note && (
+                                                    <p className="text-xs text-muted-foreground/70 italic mt-1.5 line-clamp-2 leading-snug">{note}</p>
+                                                )}
                                             </Link>
-                                            <div className="flex gap-1 flex-shrink-0">
+
+                                            {/* Actions fade in on hover and focus, so a quiet day
+                                                reads as a list rather than a control panel. */}
+                                            <div className="flex gap-0.5 flex-shrink-0 opacity-0 group-hover/row:opacity-100 group-focus-within/row:opacity-100 transition-opacity">
                                                 <button onClick={() => { setReturnToDay(openDay); setOpenDay(null); openEditPlan(p); }} aria-label={`Edit ${p.title}`}
                                                     className="w-7 h-7 rounded-lg hover:bg-secondary flex items-center justify-center text-muted-foreground hover:text-chart-3">
                                                     <Edit2 className="w-3.5 h-3.5" />
@@ -1479,24 +1554,44 @@ export default function Planner() {
 
                             return (
                                 <div className="space-y-4">
-                                    <div className="flex flex-wrap gap-x-6 gap-y-2">
-                                        {[["Sessions", dayPlans.length], ["Done", `${done}/${dayPlans.length || 0}`],
-                                          ["Planned", mins >= 60 ? `${Math.round(mins / 6) / 10}h` : `${mins}m`]].map(([k, v]) => (
-                                            <div key={k}>
-                                                <p className="font-display font-black text-lg leading-none text-foreground tabular-nums">{v}</p>
-                                                <p className="stat-label">{k}</p>
+                                    {/* Stats plus a progress bar — the same read the board
+                                        column gives, at the size the day deserves. */}
+                                    <div className="rounded-2xl bg-secondary/40 p-3.5">
+                                        <div className="flex flex-wrap gap-x-6 gap-y-2">
+                                            {[["Sessions", dayPlans.length], ["Done", `${done}/${dayPlans.length || 0}`],
+                                              ["Planned", mins >= 60 ? `${Math.round(mins / 6) / 10}h` : `${mins}m`],
+                                              ...(actualByDate.has(openDay) ? [["Studied", `${actualByDate.get(openDay)}m`]] : [])
+                                            ].map(([k, v]) => (
+                                                <div key={k}>
+                                                    <p className={`font-display font-black text-lg leading-none tabular-nums ${
+                                                        k === "Studied" ? "text-primary" : "text-foreground"}`}>{v}</p>
+                                                    <p className="stat-label">{k}</p>
+                                                </div>
+                                            ))}
+                                        </div>
+                                        {dayPlans.length > 0 && (
+                                            <div className="mt-3 h-1.5 rounded-full bg-secondary overflow-hidden">
+                                                <div className={`h-full rounded-full transition-all ${done === dayPlans.length ? "bg-primary" : "bg-xp"}`}
+                                                    style={{ width: `${Math.max(done ? 6 : 0, Math.round((done / dayPlans.length) * 100))}%` }} />
                                             </div>
-                                        ))}
+                                        )}
                                     </div>
 
                                     {daySacs.map(a => (
-                                        <div key={a.id} className="rounded-xl bg-streak/10 border border-streak/25 px-3 py-2">
-                                            <p className="text-xs font-black text-streak">🚩 {a.subject_name} — {a.title}</p>
+                                        <div key={a.id} className="rounded-2xl bg-gradient-to-br from-streak to-streak/80 text-white px-3.5 py-2.5 shadow-soft">
+                                            <p className="text-[10px] font-black uppercase tracking-wider text-white/70">
+                                                🚩 {(a.assessment_type || "SAC")} today
+                                            </p>
+                                            <p className="text-sm font-black leading-tight mt-0.5">{a.subject_name} — {a.title}</p>
                                         </div>
                                     ))}
 
                                     {dayPlans.length === 0 ? (
-                                        <p className="text-sm text-muted-foreground">Nothing planned. Add something below.</p>
+                                        <div className="rounded-2xl border border-dashed border-border py-8 text-center">
+                                            <CalendarDays className="w-6 h-6 text-muted-foreground/30 mx-auto mb-2" />
+                                            <p className="text-sm font-bold text-foreground">Nothing planned</p>
+                                            <p className="text-xs text-muted-foreground mt-0.5">Add a session below, or drag one here from another day.</p>
+                                        </div>
                                     ) : (
                                         <DragDropContext onDragEnd={(r) => {
                                             if (!r.destination) return;
