@@ -71,7 +71,31 @@ const SUBJECT_CHIP = [
     "bg-xp/10 border-xp/30 text-xp",
     "bg-streak/10 border-streak/30 text-streak",
 ];
-const subjectChipClass = (name) => SUBJECT_CHIP[(name || "?").charCodeAt(0) % SUBJECT_CHIP.length];
+// Hashing on the first character alone collided constantly — Chemistry and
+// Methods both landed on index 2, so two subjects wore the same colour on the
+// same board. Sum the whole name instead.
+const hashName = (name) => {
+    const s = name || "?";
+    let h = 0;
+    for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0;
+    return h;
+};
+const subjectChipClass = (name) => SUBJECT_CHIP[hashName(name) % SUBJECT_CHIP.length];
+
+// Board chips carry the subject as a solid left rail instead of tinting the
+// whole card. Seven columns of tinted cards read as noise; a 3px rail colour-
+// codes just as well and lets the title sit on plain surface.
+const SUBJECT_RAIL = ["bg-chart-3", "bg-chart-4", "bg-primary", "bg-xp", "bg-streak"];
+const subjectRailClass = (name) => SUBJECT_RAIL[hashName(name) % SUBJECT_RAIL.length];
+
+// Sessions are stored as "Flashcards: Redox half-equations" so sessionLink()
+// can route them. On a 150px column that prefix eats the line that should be
+// showing the actual topic, so the board shows the emoji and drops the word.
+const typeOf = (title) => SESSION_TYPES.find(t => (title || "").startsWith(`${t.value}: `)) || null;
+const shortTitle = (title) => {
+    const t = typeOf(title);
+    return t ? (title.slice(t.value.length + 2) || t.value) : (title || "");
+};
 
 function daysLabel(days) {
     if (days < 0) return "Past";
@@ -80,16 +104,18 @@ function daysLabel(days) {
     return `${days} days`;
 }
 
-// A planned session opens the tool it names — the plan is a launcher.
-function sessionLink(title) {
-    const t = (title || "").toLowerCase();
-    if (/flash|card|spaced/.test(t)) return "/Study?tab=spaced_repetition";
-    if (/mock|exam|paper|sac practice/.test(t)) return "/Study?tab=exam";
-    if (/quiz/.test(t)) return "/Quizzes";
-    if (/recall/.test(t)) return "/Study?tab=active_recall";
-    if (/blurt/.test(t)) return "/Study?tab=blurting";
-    return "/Study";
-}
+// A planned session opens the tool it names — the plan is a launcher. One
+// table so the route and the name the detail card shows can't drift apart.
+const SESSION_ROUTES = [
+    { test: /flash|card|spaced/, to: "/Study?tab=spaced_repetition", label: "Flashcards" },
+    { test: /mock|exam|paper|sac practice/, to: "/Study?tab=exam", label: "Revision Mode" },
+    { test: /quiz/, to: "/Quizzes", label: "Quizzes" },
+    { test: /recall/, to: "/Study?tab=active_recall", label: "Active recall" },
+    { test: /blurt/, to: "/Study?tab=blurting", label: "Blurting" },
+];
+const routeFor = (title) =>
+    SESSION_ROUTES.find(r => r.test.test((title || "").toLowerCase())) || { to: "/Study", label: "Study tools" };
+const sessionLink = (title) => routeFor(title).to;
 
 // Session metadata lives in `notes` as tags — the study_plans table 400s on
 // unknown columns, so duration and free-text notes piggyback on the one text
@@ -188,6 +214,7 @@ export default function Planner() {
     const [editingPlan, setEditingPlan] = useState(null);
     const [openDay, setOpenDay] = useState(null);       // yyyy-mm-dd of the expanded day
     const [returnToDay, setReturnToDay] = useState(null); // day view to restore after the form closes
+    const [openSession, setOpenSession] = useState(null); // the session whose detail card is open
     const [planType, setPlanType] = useState("");
     const [planTitle, setPlanTitle] = useState("");
     const [planSubject, setPlanSubject] = useState("");
@@ -551,7 +578,10 @@ export default function Planner() {
                                 nextSacDays <= 3 ? "bg-gradient-to-br from-streak to-xp" : "bg-gradient-to-br from-chart-3 to-chart-4"
                             }`}>
                                 <Flag className="absolute -top-8 -right-8 w-44 h-44 text-white/10 pointer-events-none" />
-                                <div className="relative">
+                                {/* Centred, because the intention card next to it sets the
+                                    row height and the banner was pooling all the slack in a
+                                    dead block under the buttons. */}
+                                <div className="relative h-full flex flex-col justify-center">
                                     <p className="text-xs font-bold uppercase tracking-widest text-white/70 mb-1">
                                         {nextSacDays <= 3 ? "Crunch time" : "Next assessment"}
                                     </p>
@@ -750,90 +780,105 @@ export default function Planner() {
                             {week.map(day => (
                                 <Droppable droppableId={day.key} key={day.key}>
                                     {(dropProvided, dropSnapshot) => (
+                                        // The tall min-height is for the seven-column grid, where every
+                                        // day needs a drop zone big enough to aim at. Stacked on a phone
+                                        // it just made the board 2,400px of mostly-empty boxes.
                                         <div ref={dropProvided.innerRef} {...dropProvided.droppableProps}
-                                            className={`rounded-2xl border-2 p-3 min-h-[240px] flex flex-col gap-2 transition-colors ${
-                                                dropSnapshot.isDraggingOver ? "bg-chart-3/10 border-chart-3 border-dashed"
-                                                    : day.isToday ? "bg-primary/5 border-primary/40"
-                                                    : day.isPast ? "bg-secondary/30 border-border/60 opacity-70"
-                                                    : "bg-surface border-border"
+                                            className={`relative rounded-2xl border-2 p-2.5 min-h-[88px] sm:min-h-[220px] flex flex-col gap-1.5 transition-all ${
+                                                dropSnapshot.isDraggingOver ? "bg-chart-3/10 border-chart-3 border-dashed scale-[1.01]"
+                                                    : day.isToday ? "bg-primary/[0.06] border-primary/40 shadow-soft"
+                                                    : day.isPast ? "bg-secondary/20 border-border/50"
+                                                    : "bg-surface border-border/70 hover:border-border"
                                             }`}>
-                                            <div className="flex items-center justify-between px-0.5 mb-0.5">
-                                                {/* The column is only ~150px wide, so a busy day
-                                                    truncates everything. Opening it full-size is
-                                                    where you actually inspect and reorder it. */}
+                                            {/* The column is only ~150px wide, so a busy day
+                                                truncates everything. Opening it full-size is
+                                                where you actually inspect and reorder it. */}
+                                            <div className="flex items-center justify-between gap-1 mb-0.5">
                                                 <button onClick={() => setOpenDay(day.key)}
                                                     aria-label={`Open ${day.dayName} ${day.dayNum}`}
-                                                    className="flex items-baseline gap-1.5 rounded-lg px-1 -mx-1 hover:bg-secondary/60 transition-colors">
-                                                    <span className={`text-xs font-black uppercase tracking-wide ${day.isToday ? "text-primary" : "text-muted-foreground/70"}`}>{day.dayName}</span>
-                                                    <span className={`font-display font-extrabold text-lg ${day.isToday ? "text-primary" : "text-muted-foreground/50"}`}>{day.dayNum}</span>
+                                                    className="group/day flex items-baseline gap-1.5 min-w-0 rounded-lg px-1.5 py-0.5 -mx-1 hover:bg-secondary/70 transition-colors">
+                                                    <span className={`text-[10px] font-black uppercase tracking-widest ${
+                                                        day.isToday ? "text-primary" : day.isPast ? "text-muted-foreground/40" : "text-muted-foreground/60"}`}>
+                                                        {day.dayName}
+                                                    </span>
+                                                    <span className={`font-display font-black text-lg leading-none tabular-nums ${
+                                                        day.isToday ? "text-primary" : day.isPast ? "text-muted-foreground/35" : "text-foreground/70"}`}>
+                                                        {day.dayNum}
+                                                    </span>
+                                                    {day.plans.length > 0 && (
+                                                        <span className={`text-[10px] font-bold tabular-nums px-1.5 rounded-full ${
+                                                            day.plans.every(p => p.is_completed) ? "bg-primary/15 text-primary" : "bg-secondary text-muted-foreground"}`}>
+                                                            {day.plans.filter(p => p.is_completed).length}/{day.plans.length}
+                                                        </span>
+                                                    )}
                                                 </button>
                                                 {!day.isPast && (
                                                     <button onClick={() => openAddPlan(day.key)} aria-label={`Add session on ${day.dayName} ${day.dayNum}`}
-                                                        className="w-7 h-7 rounded-lg flex items-center justify-center text-muted-foreground/50 hover:text-primary hover:bg-primary/10 transition-all">
-                                                        <Plus className="w-4 h-4" />
+                                                        className="w-6 h-6 flex-shrink-0 rounded-lg flex items-center justify-center text-muted-foreground/40 hover:text-primary hover:bg-primary/10 transition-all">
+                                                        <Plus className="w-3.5 h-3.5" />
                                                     </button>
                                                 )}
                                             </div>
 
                                             {day.sacs.map(a => (
-                                                <div key={a.id} className="rounded-xl bg-streak text-white px-2.5 py-2 shadow-soft">
-                                                    <p className="text-xs font-black leading-tight">🚩 {a.subject_name}</p>
-                                                    <p className="text-[11px] font-bold text-white/80 leading-tight">{(a.assessment_type || "SAC").toUpperCase()} · {a.title}</p>
+                                                <div key={a.id} className="rounded-xl bg-gradient-to-br from-streak to-streak/80 text-white px-2.5 py-2 shadow-soft">
+                                                    <p className="text-[10px] font-black uppercase tracking-wider text-white/70 leading-tight">
+                                                        🚩 {(a.assessment_type || "SAC")}
+                                                    </p>
+                                                    <p className="text-xs font-black leading-tight mt-0.5 truncate">{a.subject_name}</p>
+                                                    <p className="text-[11px] font-bold text-white/80 leading-tight truncate">{a.title}</p>
                                                 </div>
                                             ))}
 
                                             {day.plans.map((p, i) => {
                                                 const dur = durationOf(p);
-                                                const note = noteTextOf(p);
+                                                const t = typeOf(p.title);
+                                                // Two lines, never more: the type emoji and the topic on
+                                                // one, the clock time on the other. Everything else —
+                                                // subject, note, duration, recurrence, the actions — lives
+                                                // in the detail card a click away, because at seven columns
+                                                // a chip that shows it all shows none of it legibly.
+                                                //
                                                 // disableInteractiveElementBlocking is what makes the whole
                                                 // bubble grabbable. By default the library refuses to lift a
-                                                // drag that starts on a link or button, which is most of this
-                                                // card — with it off, a tap still opens the tool (a lift needs
-                                                // movement first) but click-and-hold picks the session up from
+                                                // drag that starts on a button, which is most of this card —
+                                                // with it off, a tap still opens the detail card (a lift
+                                                // needs movement first) but click-and-hold picks it up from
                                                 // anywhere on it.
                                                 return (
                                                     <Draggable draggableId={p.id} index={i} key={p.id} disableInteractiveElementBlocking>
                                                         {(dragProvided, dragSnapshot) => (
                                                             <div ref={dragProvided.innerRef} {...dragProvided.draggableProps} {...dragProvided.dragHandleProps}
                                                                 aria-label={`${p.title}. Press space to pick this session up, then the arrow keys to move it.`}
-                                                                className={`group relative rounded-xl border pl-2 pr-2 py-2 transition-shadow cursor-grab active:cursor-grabbing focus:outline-none focus:ring-2 focus:ring-chart-3 ${
-                                                                    dragSnapshot.isDragging ? "shadow-lg ring-2 ring-chart-3 rotate-1" : ""
-                                                                } ${
-                                                                    p.is_completed ? "bg-primary/5 border-primary/20" : subjectChipClass(p.subject_name || p.title)
-                                                                }`}>
-                                                                {/* Edit and remove float over the card rather than sitting
-                                                                    in the row — at seven columns a day is ~150px wide and
-                                                                    an action column costs the title a whole line. */}
-                                                                <div className="absolute top-1 right-1 flex gap-0.5 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity z-10">
-                                                                    <button onClick={() => openEditPlan(p)} aria-label={`Edit ${p.title}`}
-                                                                        className="w-5 h-5 rounded-md bg-surface/90 shadow-sm flex items-center justify-center text-muted-foreground/60 hover:text-chart-3">
-                                                                        <Edit2 className="w-3 h-3" />
-                                                                    </button>
-                                                                    <button onClick={() => requestDeletePlan(p)} aria-label={`Remove ${p.title}`}
-                                                                        className="w-5 h-5 rounded-md bg-surface/90 shadow-sm flex items-center justify-center text-muted-foreground/60 hover:text-streak">
-                                                                        <X className="w-3 h-3" />
-                                                                    </button>
-                                                                </div>
+                                                                className={`group relative flex overflow-hidden rounded-xl border bg-surface transition-all cursor-grab active:cursor-grabbing focus:outline-none focus:ring-2 focus:ring-chart-3 ${
+                                                                    dragSnapshot.isDragging
+                                                                        ? "shadow-lg ring-2 ring-chart-3 rotate-1 border-transparent"
+                                                                        : "border-border hover:border-muted-foreground/40 hover:shadow-soft"
+                                                                } ${p.is_completed ? "opacity-60" : ""}`}>
+                                                                {/* Subject as a rail, not a wash. */}
+                                                                <span aria-hidden className={`w-1 flex-shrink-0 ${
+                                                                    p.is_completed ? "bg-primary" : subjectRailClass(p.subject_name || p.title)}`} />
 
-                                                                <div className="flex items-start gap-1.5">
-                                                                    <GripVertical className="w-3 h-3 -ml-1.5 mt-0.5 text-muted-foreground/25 group-hover:text-muted-foreground/60 flex-shrink-0 transition-colors" />
-                                                                    <button onClick={() => togglePlanDone(p)} aria-label="Toggle session done"
-                                                                        className={`w-4 h-4 mt-0.5 rounded border flex-shrink-0 flex items-center justify-center transition-colors ${
-                                                                            p.is_completed ? "bg-primary border-primary text-white" : "border-current/40 hover:border-current"
-                                                                        }`}>
-                                                                        {p.is_completed && <Check className="w-3 h-3" />}
-                                                                    </button>
-                                                                    <Link to={sessionLink(p.title)} className="min-w-0 flex-1" title={note || undefined}>
-                                                                        <p className={`text-xs font-bold leading-tight ${p.is_completed ? "text-muted-foreground line-through" : "text-foreground"}`}>
-                                                                            {p.title}
-                                                                            {recIdOf(p) && <Repeat className="w-2.5 h-2.5 inline ml-1 opacity-50" />}
-                                                                        </p>
-                                                                        <p className="text-[11px] text-muted-foreground leading-tight mt-0.5">
-                                                                            {[prettyTime(p.start_time), dur ? `${dur}m` : null, p.subject_name].filter(Boolean).join(" · ")}
-                                                                        </p>
-                                                                        {note && <p className="text-[11px] text-muted-foreground/70 italic leading-tight mt-0.5 truncate">{note}</p>}
-                                                                    </Link>
-                                                                </div>
+                                                                <button onClick={() => togglePlanDone(p)} aria-label={`Mark ${p.title} ${p.is_completed ? "not done" : "done"}`}
+                                                                    className={`w-4 h-4 mt-2 ml-1.5 rounded border flex-shrink-0 flex items-center justify-center transition-colors ${
+                                                                        p.is_completed ? "bg-primary border-primary text-white" : "border-border hover:border-primary"
+                                                                    }`}>
+                                                                    {p.is_completed && <Check className="w-3 h-3" />}
+                                                                </button>
+
+                                                                <button onClick={() => setOpenSession(p)} aria-label={`Open ${p.title}`}
+                                                                    className="min-w-0 flex-1 text-left pl-1.5 pr-2 py-1.5">
+                                                                    {/* Two lines max — one truncated at ~12 characters told
+                                                                        you nothing, five lines was the problem to begin with. */}
+                                                                    <p className={`text-xs font-bold leading-tight line-clamp-2 ${
+                                                                        p.is_completed ? "text-muted-foreground line-through" : "text-foreground"}`}>
+                                                                        {t && <span className="mr-1">{t.emoji}</span>}{shortTitle(p.title)}
+                                                                    </p>
+                                                                    <p className="text-[11px] text-muted-foreground/80 leading-tight mt-0.5 truncate">
+                                                                        {[prettyTime(p.start_time), dur ? `${dur}m` : null].filter(Boolean).join(" · ") || "Anytime"}
+                                                                        {recIdOf(p) && <Repeat className="w-2.5 h-2.5 inline ml-1 opacity-60" />}
+                                                                    </p>
+                                                                </button>
                                                             </div>
                                                         )}
                                                     </Draggable>
@@ -843,8 +888,9 @@ export default function Planner() {
 
                                             {day.plans.length === 0 && day.sacs.length === 0 && !day.isPast && !dropSnapshot.isDraggingOver && (
                                                 <button onClick={() => openAddPlan(day.key)}
-                                                    className="flex-1 rounded-xl border border-dashed border-border/60 text-xs text-muted-foreground/40 hover:text-muted-foreground hover:border-muted-foreground/40 transition-colors">
-                                                    + plan
+                                                    className="flex-1 min-h-[64px] rounded-xl border border-dashed border-border/60 flex flex-col items-center justify-center gap-1 text-muted-foreground/35 hover:text-primary hover:border-primary/40 hover:bg-primary/5 transition-all">
+                                                    <Plus className="w-4 h-4" />
+                                                    <span className="text-[11px] font-bold">Plan something</span>
                                                 </button>
                                             )}
                                         </div>
@@ -856,8 +902,8 @@ export default function Planner() {
 
                     <p className="text-xs text-muted-foreground mt-3 flex items-start gap-1.5">
                         <ArrowRight className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" />
-                        Tap a session to open the right tool. Drag one to another day to move it — dropping it under
-                        another session starts it when that one finishes, and dropping it on top puts it first.
+                        Tap a session for its details, or a date to open the whole day. Drag one to another day to move
+                        it — dropping it under another session starts it when that one finishes, on top puts it first.
                     </p>
                 </motion.section>
 
@@ -977,6 +1023,93 @@ export default function Planner() {
                     </DialogContent>
                 </Dialog>
 
+                {/* ── Session detail ───────────────────────────────────── */}
+                {/* The board chip is deliberately two lines. This is where the
+                    rest of the session lives, and where you act on it. Reads
+                    from `plans` rather than the captured row so toggling done
+                    or editing updates the card underneath you. */}
+                <Dialog open={!!openSession} onOpenChange={(o) => !o && setOpenSession(null)}>
+                    <DialogContent className="max-w-sm rounded-3xl">
+                        {(() => {
+                            const s = openSession ? (plans.find(p => p.id === openSession.id) || openSession) : null;
+                            if (!s) return null;
+                            const t = typeOf(s.title);
+                            const dur = durationOf(s);
+                            const note = noteTextOf(s);
+                            const started = prettyTime(s.start_time);
+                            const finishes = toMinutes(s.start_time) != null
+                                ? prettyTime(toHHMM(toMinutes(s.start_time) + (dur || DEFAULT_DUR))) : null;
+                            return (
+                                <>
+                                    <DialogHeader>
+                                        <DialogTitle className="font-display flex items-start gap-2 text-left pr-6">
+                                            {t && <span className="text-xl leading-none mt-0.5">{t.emoji}</span>}
+                                            <span className="min-w-0">{shortTitle(s.title)}</span>
+                                        </DialogTitle>
+                                    </DialogHeader>
+
+                                    <div className="space-y-4">
+                                        <div className="flex flex-wrap gap-1.5">
+                                            {s.subject_name && (
+                                                <span className={`pill border ${subjectChipClass(s.subject_name)}`}>{s.subject_name}</span>
+                                            )}
+                                            {t && <span className="pill bg-secondary text-muted-foreground">{t.value}</span>}
+                                            {recIdOf(s) && (
+                                                <span className="pill bg-chart-3/10 text-chart-3 inline-flex items-center gap-1">
+                                                    <Repeat className="w-3 h-3" /> Weekly
+                                                </span>
+                                            )}
+                                            {s.is_completed && (
+                                                <span className="pill bg-primary/15 text-primary inline-flex items-center gap-1">
+                                                    <Check className="w-3 h-3" /> Done
+                                                </span>
+                                            )}
+                                        </div>
+
+                                        <div className="grid grid-cols-2 gap-3">
+                                            {[["When", format(parseISO(s.date), "EEE d MMM")],
+                                              ["Time", started ? (finishes ? `${started}–${finishes}` : started) : "Anytime"],
+                                              ["How long", dur ? `${dur} min` : `${DEFAULT_DUR} min`],
+                                              ["Opens", routeFor(s.title).label]].map(([k, v]) => (
+                                                <div key={k}>
+                                                    <p className="stat-label">{k}</p>
+                                                    <p className="text-sm font-bold text-foreground mt-0.5">{v}</p>
+                                                </div>
+                                            ))}
+                                        </div>
+
+                                        {note && (
+                                            <div className="rounded-xl bg-secondary/60 px-3 py-2">
+                                                <p className="stat-label mb-0.5">Note to self</p>
+                                                <p className="text-sm text-foreground">{note}</p>
+                                            </div>
+                                        )}
+
+                                        <div className="space-y-2">
+                                            <Button onClick={() => { setOpenSession(null); setOpenDay(null); navigate(sessionLink(s.title)); }}
+                                                className="w-full gap-1.5 btn-3d">
+                                                Start this session <ArrowRight className="w-4 h-4" />
+                                            </Button>
+                                            <div className="grid grid-cols-3 gap-2">
+                                                <Button variant="outline" onClick={() => togglePlanDone(s)} className="border-2 gap-1.5 px-2">
+                                                    <Check className="w-3.5 h-3.5" /> {s.is_completed ? "Undo" : "Done"}
+                                                </Button>
+                                                <Button variant="outline" onClick={() => { setOpenSession(null); openEditPlan(s); }} className="border-2 gap-1.5 px-2">
+                                                    <Edit2 className="w-3.5 h-3.5" /> Edit
+                                                </Button>
+                                                <Button variant="outline" onClick={() => { setOpenSession(null); requestDeletePlan(s); }}
+                                                    className="border-2 gap-1.5 px-2 text-streak hover:text-streak hover:bg-streak/10">
+                                                    <Trash2 className="w-3.5 h-3.5" /> Remove
+                                                </Button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </>
+                            );
+                        })()}
+                    </DialogContent>
+                </Dialog>
+
                 {/* ── Day view ─────────────────────────────────────────── */}
                 {/* Everything the week board can't show at 150px wide: full
                     titles, notes, times, and room to drag sessions into the
@@ -1021,7 +1154,8 @@ export default function Planner() {
                                                 day shouldn't cost you the ability to start from it. */}
                                             <Link to={sessionLink(p.title)} className="flex-1 min-w-0">
                                                 <p className={`text-sm font-bold leading-snug ${p.is_completed ? "line-through text-muted-foreground" : "text-foreground"}`}>
-                                                    {p.title}
+                                                    {typeOf(p.title) && <span className="mr-1">{typeOf(p.title).emoji}</span>}
+                                                    {shortTitle(p.title)}
                                                     {recIdOf(p) && <Repeat className="w-3 h-3 inline ml-1 opacity-50" />}
                                                 </p>
                                                 <p className="text-xs text-muted-foreground mt-0.5">
