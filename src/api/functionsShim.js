@@ -60,3 +60,9 @@ export const resetAllCredits           = makeFn('resetAllCredits');
 export const migrateStudyHoursToXP     = makeFn('migrateStudyHoursToXP');
 export const banAbusiveAccounts        = makeFn('banAbusiveAccounts');
 export const invokeAI                  = makeFn('invokeAI');
+
+// ─── Call-outs — prove you learned it, not just that you clocked hours ──────
+export const createCallout             = makeFn('createCallout');
+export const getCallouts               = makeFn('getCallouts');
+export const startCallout              = makeFn('startCallout');
+export const submitCallout             = makeFn('submitCallout');
