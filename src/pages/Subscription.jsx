@@ -3,10 +3,10 @@ import { base44 } from "@/api/base44Client";
 import { motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { Crown, Check, Star, CreditCard, Loader2, Gift, Sparkles, X } from "lucide-react";
-import { format } from "date-fns";
 import { useToast } from "@/components/ui/use-toast";
 import { useNavigate } from "react-router-dom";
 import { createPageUrl } from "@/utils";
+import { fmtDate } from "@/lib/safeDate";
 
 const pricingPlans = [
     {
@@ -157,7 +157,7 @@ export default function Subscription() {
                                 <div>
                                     <h3 className="font-display font-extrabold text-foreground text-lg">Premium member</h3>
                                     <p className="text-sm text-muted-foreground">
-                                        {expiresAt ? `Active until ${format(new Date(expiresAt), "MMM d, yyyy")}` : "Active subscription"}
+                                        {expiresAt ? `Active until ${fmtDate(expiresAt, "MMM d, yyyy")}` : "Active subscription"}
                                     </p>
                                 </div>
                             </div>

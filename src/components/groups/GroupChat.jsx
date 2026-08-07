@@ -7,9 +7,9 @@ import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Send, Loader2, MessageSquare } from "lucide-react";
 import { GroupMessage } from "@/entities/all";
-import { format } from "date-fns";
 import { useToast } from "@/components/ui/use-toast";
 import { moderationPresets } from "@/components/shared/contentModeration";
+import { fmtDate } from "@/lib/safeDate";
 
 const MessageItem = React.memo(({ message, currentUserEmail }) => {
     const isCurrentUser = message.sender_email === currentUserEmail;
@@ -36,7 +36,7 @@ const MessageItem = React.memo(({ message, currentUserEmail }) => {
                         {message.message}
                     </p>
                     <p className={`text-xs mt-1 ${isCurrentUser ? "text-purple-200" : "text-muted-foreground/60"}`}>
-                        {format(new Date(message.timestamp), 'p')}
+                        {fmtDate(message.timestamp, 'p', '')}
                     </p>
                 </div>
             )}

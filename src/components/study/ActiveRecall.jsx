@@ -14,6 +14,7 @@ import { base44 } from "@/api/base44Client";
 import { FEATURES, checkLiveTier } from "@/lib/tierAccess";
 import { getExaminerPrompt } from "@/lib/subjectExaminerPrompts";
 import { recordStudyAndGetStreak } from "@/components/shared/streakHelpers";
+import { fmtDate } from "@/lib/safeDate";
 
 // Static class lookups so Tailwind JIT can see every utility.
 const verdictConfig = {
@@ -692,7 +693,7 @@ For each answer:
                                             <p className="text-xs text-muted-foreground truncate mt-0.5">{session.topic || "General Review"}</p>
                                             <div className="flex items-center gap-2 mt-2">
                                                 <span className="pill bg-chart-4/15 text-chart-4 py-0.5">{session.questions?.length || 0}q</span>
-                                                <span className="text-xs text-muted-foreground/60">{format(new Date(session.date), "MMM d")}</span>
+                                                <span className="text-xs text-muted-foreground/60">{fmtDate(session.date, "MMM d")}</span>
                                             </div>
                                         </div>
                                         <button
@@ -936,7 +937,7 @@ For each answer:
                     <DialogHeader>
                         <DialogTitle>{selectedHistorySession?.subject_name}</DialogTitle>
                         <DialogDescription>
-                            {selectedHistorySession?.topic || "General Review"} · {selectedHistorySession && format(new Date(selectedHistorySession.date), "MMMM d, yyyy")}
+                            {selectedHistorySession?.topic || "General Review"} · {fmtDate(selectedHistorySession?.date, "MMMM d, yyyy", "")}
                         </DialogDescription>
                     </DialogHeader>
                     {selectedHistorySession && (

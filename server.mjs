@@ -514,17 +514,43 @@ async function checkAndGrantAchievements(userEmail, profile) {
     });
     if (newlyUnlocked.length === 0) return [];
 
-    // Insert unlock rows.
+    // Insert the unlock rows, and only pay for the ones that actually landed.
+    //
+    // This used to fire-and-forget the insert and grant the reward regardless.
+    // That is the same shape as the xp_events bug: supabase-js resolves with
+    // { error } rather than throwing, so a rejected write is indistinguishable
+    // from a successful one. The consequence here is worse than a lost row —
+    // with no unlock recorded, the very next check re-detects the same
+    // achievement and pays its reward again, on every request, indefinitely,
+    // while the UI still shows it locked.
     const rows = newlyUnlocked.map(a => ({
       user_email:        userEmail,
       achievement_code:  a.code,
       reward_xp_awarded: a.reward_xp || 0,
     }));
-    await supabaseAdmin.from('user_achievements').insert(rows);
+    const { data: inserted, error: unlockErr } = await supabaseAdmin
+      .from('user_achievements')
+      .insert(rows)
+      .select('achievement_code');
+    if (unlockErr) {
+      console.error(
+        '[achievements] unlock insert FAILED — no reward granted, will retry next check:',
+        unlockErr.code, unlockErr.message,
+        JSON.stringify({ user_email: userEmail, codes: newlyUnlocked.map(a => a.code) }),
+      );
+      return [];
+    }
+    // Pay only for rows the database confirmed. If it reported success but
+    // returned no representation, trust the success — the point of this check
+    // is to catch rejected writes, not to withhold rewards on a quiet insert.
+    const granted = inserted
+      ? newlyUnlocked.filter(a => new Set(inserted.map(r => r.achievement_code)).has(a.code))
+      : newlyUnlocked;
+    if (granted.length === 0) return [];
 
     // Grant reward XP — direct profile + leaderboards bump (no daily caps,
     // achievement rewards bypass them by design).
-    const totalReward = newlyUnlocked.reduce((sum, a) => sum + (a.reward_xp || 0), 0);
+    const totalReward = granted.reduce((sum, a) => sum + (a.reward_xp || 0), 0);
     if (totalReward > 0 && profile) {
       const newTotal  = (profile.total_xp ?? 0) + totalReward;
       const newSeason = (profile.season_xp ?? 0) + totalReward;
@@ -548,8 +574,8 @@ async function checkAndGrantAchievements(userEmail, profile) {
       addLeagueXP(userEmail, profile, totalReward).catch(() => {});
     }
 
-    console.log(`[achievements] unlocked ${newlyUnlocked.length} for ${userEmail}: ${newlyUnlocked.map(a => a.code).join(', ')}`);
-    return newlyUnlocked.map(a => a.code);
+    console.log(`[achievements] unlocked ${granted.length} for ${userEmail}: ${granted.map(a => a.code).join(', ')}`);
+    return granted.map(a => a.code);
   } catch (e) {
     console.warn('[achievements] check failed:', e?.message || e);
     return [];
@@ -5677,15 +5703,33 @@ app.post("/local-ai/fn/verifySubscription", async (req, res) => {
     const { data: existingRows } = await supabaseAdmin
       .from("user_profiles").select("id").eq("created_by", user.email).limit(1);
 
-    if (existingRows?.[0]) {
-      await supabaseAdmin
-        .from("user_profiles")
-        .update(updatePayload)
-        .eq("id", existingRows[0].id);
-    } else {
-      await supabaseAdmin
-        .from("user_profiles")
-        .insert({ ...updatePayload, created_by: user.email });
+    // Stripe has already taken the money by this point. If the profile write
+    // fails we must NOT reply success — that told the student they were
+    // premium, and they stayed on the free tier with nothing anywhere saying
+    // why. supabase-js reports failures on `error`, not by throwing, so this
+    // has to be checked explicitly.
+    const { error: writeErr } = existingRows?.[0]
+      ? await supabaseAdmin.from("user_profiles").update(updatePayload).eq("id", existingRows[0].id)
+      : await supabaseAdmin.from("user_profiles").insert({ ...updatePayload, created_by: user.email });
+
+    if (writeErr) {
+      console.error(
+        "[verifySubscription] PAID but profile write FAILED — user charged and not upgraded:",
+        writeErr.code, writeErr.message,
+        JSON.stringify({ user_email: user.email, session_id: sessionId, subscription_id: subscription.id }),
+      );
+      // 200, deliberately: the request was handled, and the failure is an
+      // outcome the page has to explain. A 5xx makes the client's invoke()
+      // throw, and the student gets a raw JSON blob under a red "verification
+      // failed" heading — for a payment that actually succeeded.
+      return res.json({
+        success: false,
+        paid: true,
+        session_id: sessionId,
+        error: "Your payment went through, but we couldn't switch your account to premium just yet. " +
+               "Stripe will retry automatically within a few minutes. If it still hasn't applied, " +
+               "contact support and quote the reference below.",
+      });
     }
 
     return res.json({
@@ -5706,6 +5750,20 @@ app.post("/local-ai/fn/verifySubscription", async (req, res) => {
 //
 // IMPORTANT: this endpoint does NOT use authenticateRequest — Stripe is the
 // caller, not a logged-in user. Trust comes from the signature check.
+
+/**
+ * A profile write inside the webhook failed. Answer 5xx so Stripe redelivers
+ * the event — a 200 here would mark it handled and the tier change would be
+ * lost for good, with the only trace a log line nobody reads.
+ */
+function webhookWriteFailed(res, eventType, userEmail, error) {
+  console.error(
+    `[stripe-webhook] ${eventType} profile write FAILED for ${userEmail} — returning 500 so Stripe retries:`,
+    error.code, error.message,
+  );
+  return res.status(500).json({ success: false, error: "Profile write failed; retry this event" });
+}
+
 app.post("/local-ai/fn/stripe-webhook", async (req, res) => {
   if (!stripe) return res.status(500).send("Stripe not configured");
   if (!STRIPE_WEBHOOK_SECRET) {
@@ -5767,13 +5825,15 @@ app.post("/local-ai/fn/stripe-webhook", async (req, res) => {
         stripe_customer_id: subscription.customer,
       };
 
-      if (profile) {
-        await supabaseAdmin.from("user_profiles").update(payload).eq("id", profile.id);
-        console.log(`[stripe-webhook] upgraded ${userEmail} to premium`);
-      } else {
-        await supabaseAdmin.from("user_profiles").insert({ ...payload, created_by: userEmail });
-        console.log(`[stripe-webhook] created premium profile for ${userEmail}`);
-      }
+      const { error: upErr } = profile
+        ? await supabaseAdmin.from("user_profiles").update(payload).eq("id", profile.id)
+        : await supabaseAdmin.from("user_profiles").insert({ ...payload, created_by: userEmail });
+      // 200 tells Stripe the event is handled and it never retries. Answering
+      // 200 on a failed write throws away the only safety net this path has,
+      // so a rejected update loses the upgrade permanently. Fail loudly and
+      // let Stripe redeliver.
+      if (upErr) return webhookWriteFailed(res, "checkout.session.completed", userEmail, upErr);
+      console.log(`[stripe-webhook] ${profile ? "upgraded" : "created premium profile for"} ${userEmail}`);
       return res.json({ success: true, upgraded: userEmail });
     }
 
@@ -5786,13 +5846,14 @@ app.post("/local-ai/fn/stripe-webhook", async (req, res) => {
       const profile = await findProfileByEmail(userEmail);
       if (profile) {
         const isActive = subscription.status === "active";
-        await supabaseAdmin.from("user_profiles").update({
+        const { error: updErr } = await supabaseAdmin.from("user_profiles").update({
           subscription_tier: isActive ? "premium" : "free",
           subscription_active: isActive,
           user_role: isActive ? "premium_user" : "free_user",
           ai_credits: isActive ? 999999 : 500,
           subscription_expires_at: new Date(subscription.current_period_end * 1000).toISOString(),
         }).eq("id", profile.id);
+        if (updErr) return webhookWriteFailed(res, "customer.subscription.updated", userEmail, updErr);
         console.log(`[stripe-webhook] subscription update for ${userEmail}: ${subscription.status}`);
       }
       return res.json({ success: true });
@@ -5806,13 +5867,14 @@ app.post("/local-ai/fn/stripe-webhook", async (req, res) => {
 
       const profile = await findProfileByEmail(userEmail);
       if (profile) {
-        await supabaseAdmin.from("user_profiles").update({
+        const { error: delErr } = await supabaseAdmin.from("user_profiles").update({
           subscription_tier: "free",
           subscription_active: false,
           user_role: "free_user",
           ai_credits: 500,
           subscription_expires_at: null,
         }).eq("id", profile.id);
+        if (delErr) return webhookWriteFailed(res, "customer.subscription.deleted", userEmail, delErr);
         console.log(`[stripe-webhook] downgraded ${userEmail} to free`);
       }
       return res.json({ success: true });

@@ -21,13 +21,13 @@ import { invokeLLMStream } from "@/lib/streamingAI";
 import { useToast } from "@/components/ui/use-toast";
 import { recordStudyAndGetStreak } from "@/components/shared/streakHelpers";
 import MarkdownMath from "@/components/shared/MarkdownMath";
-import { format } from "date-fns";
 import { CHAT_TOOLS, toolById, defaultOptions, resolveChoices } from "./chatTools";
 import CheatSheetArtifact from "./CheatSheetArtifact";
 import ExamQuestionsArtifact from "./ExamQuestionsArtifact";
 import LineMemoriserArtifact from "./LineMemoriserArtifact";
 import { actionById } from "./chatActions";
 import { todaysIntent } from "@/lib/studyIntent";
+import { fmtDate } from "@/lib/safeDate";
 
 const MAX_TURNS_IN_PROMPT = 12;
 
@@ -37,7 +37,7 @@ function agoLabel(iso) {
     if (days === 0) return "Today";
     if (days === 1) return "Yesterday";
     if (days < 7) return `${days}d ago`;
-    return format(new Date(iso), "d MMM");
+    return fmtDate(iso, "d MMM");
 }
 
 function buildPrompt(tool, subjectName, toolOptions, messages, userText, files) {

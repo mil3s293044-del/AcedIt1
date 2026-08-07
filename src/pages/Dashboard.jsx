@@ -17,6 +17,7 @@ import { reconcileUserXP } from "@/lib/reconcileXP";
 import { getStreakMultiplier as getStreakMultiplierValue } from "@/components/shared/streakHelpers";
 import { atarBandOf } from "@/lib/atarBands";
 import { todaysIntent } from "@/lib/studyIntent";
+import { fmtDate } from "@/lib/safeDate";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 const fmtTime = (m) => {
@@ -1189,7 +1190,7 @@ export default function Dashboard() {
                                         <div className="min-w-0">
                                             <p className="font-bold text-foreground text-sm truncate">{s.subject || 'Study'}</p>
                                             <p className="text-xs text-muted-foreground">
-                                                {format(new Date(s.date), 'MMM d')} · {s.duration_minutes || 0}m
+                                                {fmtDate(s.date, 'MMM d')} · {s.duration_minutes || 0}m
                                             </p>
                                         </div>
                                         {s.productivity_rating && (

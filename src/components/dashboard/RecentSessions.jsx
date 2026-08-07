@@ -4,7 +4,7 @@ import { motion } from "framer-motion";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Clock, BookOpen, Brain, Eye, FileText } from "lucide-react";
-import { format } from "date-fns";
+import { fmtDate } from "@/lib/safeDate";
 
 const techniqueIcons = {
     pomodoro: Clock,
@@ -86,7 +86,7 @@ export default function RecentSessions({ sessions = [], isLoading }) {
                                             <div className="flex items-center gap-4 text-sm text-muted-foreground">
                                                 <span>{session.duration_minutes} min</span>
                                                 <span>•</span>
-                                                <span>{format(new Date(session.date), "MMM d")}</span>
+                                                <span>{fmtDate(session.date, "MMM d")}</span>
                                                 {session.productivity_rating && (
                                                     <>
                                                         <span>•</span>
