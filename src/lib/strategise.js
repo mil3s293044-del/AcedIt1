@@ -23,36 +23,60 @@
  * principle it applies — so the plan can show its reasoning instead of asking
  * the student to trust it.
  */
+// Every claim below was checked against its source before being shown to a
+// student. Where a finding is narrower than the popular version of it, the
+// claim says so — an assured citation that overstates its paper is worse than
+// no citation, because the reader can't tell the difference.
 export const PRINCIPLES = {
     testing: {
         name: "Testing effect",
-        claim: "Retrieving something is a far stronger memory event than re-reading it.",
-        source: "Roediger & Karpicke, 2006",
+        // The delay qualifier is usually dropped, and it matters: in Roediger
+        // & Karpicke's own data re-reading BEAT testing on a test five minutes
+        // later. Testing only won at two days and one week.
+        claim: "Retrieving beats re-reading when the test is days away — though re-reading wins if you're tested minutes later.",
+        source: "Roediger & Karpicke, 2006, Psychological Science 17(3)",
     },
     spacing: {
         name: "Spacing effect",
-        claim: "The same total study spread over days beats it massed into one sitting.",
-        source: "Cepeda et al., 2006",
+        claim: "The same total study spread over days beats it massed into one sitting, and the further off the assessment, the wider the gaps should be.",
+        source: "Cepeda, Pashler, Vul, Wixted & Rohrer, 2006, Psychological Bulletin 132(3)",
     },
     interleaving: {
         name: "Interleaving",
-        claim: "Mixing topics feels harder and produces better transfer than blocking one at a time.",
-        source: "Rohrer & Taylor, 2007",
+        // Retention and discrimination, not transfer — the old wording named
+        // the wrong construct for this study.
+        claim: "Mixing topics feels worse while you practise and holds up far better a week later — 60% vs 89% during practice, 63% vs 20% on the test.",
+        source: "Rohrer & Taylor, 2007, Instructional Science 35(6)",
     },
     desirable: {
         name: "Desirable difficulty",
-        claim: "Study that feels effortful is usually the study that lasts.",
-        source: "Bjork & Bjork, 2011",
+        claim: "Conditions that slow you down while learning — spacing, mixing, self-testing — tend to raise how much you still know later.",
+        source: "Bjork & Bjork, 2011, Psychology and the Real World",
     },
     prerequisite: {
-        name: "Retrieval needs encoding",
-        claim: "You cannot practise recalling material you have never actually learnt.",
-        source: "Karpicke, Butler & Roediger, 2009",
+        name: "Cover it before you drill it",
+        // Reworded and re-sourced. This used to read "you cannot practise
+        // recalling material you have never actually learnt", cited to
+        // Karpicke, Butler & Roediger 2009 — which is a survey of the study
+        // strategies students choose and says nothing of the sort. The strong
+        // claim is also wrong: unsuccessful retrieval attempts still help.
+        // What the evidence supports is that the size of the benefit depends
+        // on how hard the material is relative to what you already know.
+        claim: "Retrieval practice pays off most on material you've already met — the harder it is relative to what you know, the smaller the gain.",
+        source: "Minear, Coane et al., 2018, J. Exp. Psychol. LMC 44(9)",
+    },
+    metacognition: {
+        name: "You will misjudge re-reading",
+        // The finding the mis-citation above was reaching for, stated as what
+        // its paper actually shows — and the real reason Strategise schedules
+        // retrieval rather than "go over your notes".
+        claim: "Asked how they study, most students name re-reading and rate it highly — the strategy the evidence keeps ranking last.",
+        source: "Karpicke, Butler & Roediger, 2009, Memory 17(4)",
     },
     transfer: {
         name: "Transfer-appropriate processing",
-        claim: "Practise in the form you'll be assessed in — timed, written, closed-book.",
-        source: "Morris, Bransford & Franks, 1977",
+        claim: "You remember best when practice matches the test, so practise timed, written and closed-book if that's the SAC.",
+        source: "Morris, Bransford & Franks, 1977, JVLVB 16(5)",
     },
 };
 
@@ -78,6 +102,12 @@ const PHASE_WINDOW = {
 };
 
 const dayKey = (d) => d.toISOString().slice(0, 10);
+
+/**
+ * What survives when a day can't hold everything. The timed paper is the one
+ * session the rules promise unconditionally, so it claims its minutes first.
+ */
+const PRIORITY = (s) => (s.technique === "exam" ? 0 : 1);
 
 /** Minutes already committed on a given date. */
 const byDayMinutes = (sessions, date) =>
@@ -247,17 +277,52 @@ export function applyRules(sessions, { days, availableDays, minutesPerDay, confi
     let spilled = 0;
     Object.entries(finalByDay).forEach(([date, list]) => {
         let used = 0;
-        list.forEach((s) => {
+        // Claim the budget in priority order. Rule 4 calls the timed paper
+        // non-negotiable, but this pass runs after it and used to bin it
+        // whenever the last day was already full — which is precisely when it
+        // happens, because rule 5's content block is unshifted to the front and
+        // ate the budget first. Ordering here is what makes rule 4 true.
+        [...list].sort((a, b) => PRIORITY(a) - PRIORITY(b)).forEach((s) => {
             if (used + s.duration <= minutesPerDay) { used += s.duration; return; }
             // Push it to the next free day with room rather than binning it.
             const from = days.indexOf(date);
             const moveTo = days.find((d, i) => i > from && freeDays.has(d)
                 && byDayMinutes(out.filter((x) => x !== s), d) + s.duration <= minutesPerDay);
-            if (moveTo) { s.date = moveTo; spilled++; } else { s._drop = true; }
+            if (moveTo) { s.date = moveTo; spilled++; return; }
+            // Nowhere to go. Shrink it rather than lose it, if it's protected
+            // and there's any room at all.
+            const room = Math.max(0, minutesPerDay - used);
+            if (PRIORITY(s) === 0 && room >= 15) { s.duration = room; used += room; return; }
+            s._drop = true;
         });
     });
     out = out.filter((s) => !s._drop);
     if (spilled) fixes.push(`Spread ${spilled} session${spilled === 1 ? "" : "s"} to a later day so no day is overloaded.`);
+
+    // 10. Last line of defence on the timed paper. If every earlier rule has
+    //     conspired to leave none — a very short run-up with a tight daily
+    //     budget does it — make room by displacing the least important session
+    //     on the last available day. A plan that never rehearses the format is
+    //     not the plan this feature promises.
+    if (lastFree && !out.some((s) => s.technique === "exam")) {
+        const dayList = out.filter((s) => s.date === lastFree);
+        const used = dayList.reduce((n, s) => n + s.duration, 0);
+        let room = minutesPerDay - used;
+        while (room < 15 && dayList.length) {
+            const victim = dayList.pop();
+            out = out.filter((s) => s !== victim);
+            room += victim.duration;
+        }
+        if (room >= 15) {
+            out.push({
+                date: lastFree, technique: "exam", duration: Math.min(room, 45),
+                topic: "Full timed run-through",
+                why: "Sit it under real conditions before the real one.",
+                principle: "transfer",
+            });
+            fixes.push("Made room for a timed paper on the last day — meeting the format before it counts is the one thing worth displacing something for.");
+        }
+    }
 
     // Every session declares the principle it applies.
     out.forEach((s) => { s.principle ||= TECHNIQUES[s.technique].principle; });
