@@ -4,7 +4,8 @@ import { motion } from "framer-motion";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Clock, BookOpen, Brain, Eye, FileText, Award, TrendingUp, RefreshCw, PenTool } from "lucide-react";
-import { format, startOfWeek, endOfWeek, subDays } from "date-fns";
+import { startOfWeek, endOfWeek, subDays } from "date-fns";
+import { fmtDate } from "@/lib/safeDate";
 
 const techniqueIcons = {
     pomodoro: Clock,
@@ -210,7 +211,7 @@ export default function StudyStats({ userProfile, recentSessions = [], isLoading
                                                     </Badge>
                                                 </div>
                                                 <div className="text-xs text-muted-foreground">
-                                                    {session.session_duration}min • {format(new Date(session.date), "MMM d")}
+                                                    {session.session_duration}min • {fmtDate(session.date, "MMM d")}
                                                 </div>
                                             </div>
                                         </motion.div>

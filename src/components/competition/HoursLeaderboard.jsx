@@ -8,8 +8,9 @@ import {
 } from "lucide-react";
 import { updateCompetitionProgress, settleHoursCompetition } from "@/api/functionsShim";
 import { useToast } from "@/components/ui/use-toast";
-import { format, parseISO, differenceInDays } from "date-fns";
+import { parseISO, differenceInDays } from "date-fns";
 import { Countdown, computePot } from "./arenaHelpers";
+import { fmtDate } from "@/lib/safeDate";
 
 // Flat XP by finishing rank (1st / 2nd / 3rd / 4th+).
 const FLAT_XP = [150, 100, 60, 30];
@@ -316,8 +317,8 @@ export default function HoursLeaderboard({ competition, currentUserEmail, onUpda
             {competition.competition_start_date && (
                 <p className="text-xs text-muted-foreground text-center">
                     Scoring effort, accuracy &amp; consistency since{' '}
-                    {format(parseISO(competition.competition_start_date), 'MMM d, yyyy')}
-                    {competition.goal_target_date ? ` → ${format(parseISO(competition.goal_target_date), 'MMM d, yyyy')}` : ''}
+                    {fmtDate(competition.competition_start_date, 'MMM d, yyyy')}
+                    {competition.goal_target_date ? ` → ${fmtDate(competition.goal_target_date, 'MMM d, yyyy')}` : ''}
                 </p>
             )}
         </div>

@@ -5,7 +5,8 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Coins, Infinity, Loader2, Crown, Calendar } from "lucide-react";
 import { base44 } from "@/api/base44Client";
-import { differenceInDays, differenceInHours, differenceInMinutes, format } from "date-fns";
+import { differenceInDays, differenceInHours, differenceInMinutes } from "date-fns";
+import { fmtDate } from "@/lib/safeDate";
 
 export default function CreditsDisplay() {
     const location = useLocation();
@@ -204,7 +205,7 @@ export default function CreditsDisplay() {
                                     </p>
                                     <div className="flex items-center gap-2 text-xs text-blue-700">
                                         <Calendar className="w-3 h-3" />
-                                        <span>Renewal: {format(new Date(resetDate), 'MMM d, yyyy')}</span>
+                                        <span>Renewal: {fmtDate(resetDate, 'MMM d, yyyy')}</span>
                                     </div>
                                 </div>
                             )}

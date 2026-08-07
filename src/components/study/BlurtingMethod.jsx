@@ -12,6 +12,7 @@ import { useToast } from "@/components/ui/use-toast";
 import { base44 } from "@/api/base44Client";
 import { FEATURES, checkLiveTier } from "@/lib/tierAccess";
 import { getExaminerPrompt } from "@/lib/subjectExaminerPrompts";
+import { fmtDate } from "@/lib/safeDate";
 
 // Static class lookup for AI score pill — Tailwind JIT cannot see interpolated tokens.
 const SCORE_PILL = {
@@ -460,7 +461,7 @@ Reference Study Design requirements in your feedback.`,
                                                             {score}%
                                                         </span>
                                                     )}
-                                                    <span className="text-xs text-muted-foreground/60">{format(new Date(session.date), "MMM d")}</span>
+                                                    <span className="text-xs text-muted-foreground/60">{fmtDate(session.date, "MMM d")}</span>
                                                 </div>
                                             </div>
                                             <button
@@ -813,7 +814,7 @@ Reference Study Design requirements in your feedback.`,
                     <DialogHeader>
                         <DialogTitle>{selectedHistorySession?.subject_name}</DialogTitle>
                         <DialogDescription>
-                            {selectedHistorySession?.topic || "General Review"} · {selectedHistorySession && format(new Date(selectedHistorySession.date), "MMMM d, yyyy")}
+                            {selectedHistorySession?.topic || "General Review"} · {fmtDate(selectedHistorySession?.date, "MMMM d, yyyy", "")}
                         </DialogDescription>
                     </DialogHeader>
                     {selectedHistorySession && (

@@ -19,6 +19,7 @@ import {
 import { GroupSharedResource, Flashcard, Quiz, AISavedResult, GroupMessage } from "@/entities/all";
 import { useToast } from "@/components/ui/use-toast";
 import { format, addDays } from "date-fns";
+import { fmtDate } from "@/lib/safeDate";
 
 export default function GroupResources({ group, user }) {
     const [resources, setResources] = useState([]);
@@ -381,7 +382,7 @@ export default function GroupResources({ group, user }) {
                                         <div className="space-y-3">
                                             <div className="flex items-center justify-between text-sm text-muted-foreground">
                                                 <span>By {resource.shared_by_name}</span>
-                                                <span>{format(new Date(resource.created_date), 'MMM d')}</span>
+                                                <span>{fmtDate(resource.created_date, 'MMM d')}</span>
                                             </div>
                                             {resource.subject_name && (
                                                 <Badge variant="outline" className="text-xs">

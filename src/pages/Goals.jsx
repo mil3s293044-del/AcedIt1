@@ -25,6 +25,7 @@ import { ToastAction } from "@/components/ui/toast";
 import { format, differenceInDays, parseISO, addDays, startOfWeek, addWeeks } from "date-fns";
 import HelpButton from "@/components/shared/HelpButton";
 import { createPageUrl } from "@/utils";
+import { fmtDate } from "@/lib/safeDate";
 
 const TYPE_OPTIONS = [
     { value: "sac", label: "SAC" },
@@ -463,7 +464,7 @@ export default function Planner() {
             // actually changed, or the toast reads as a bug.
             const sameDay = before.date === toDate;
             toast({
-                title: sameDay ? "Reordered" : `Moved to ${format(parseISO(toDate), "EEE d MMM")}`,
+                title: sameDay ? "Reordered" : `Moved to ${fmtDate(toDate, "EEE d MMM")}`,
                 description: newTime ? `Now starts ${prettyTime(newTime)}.` : undefined,
                 action: <ToastAction altText="Undo the move" onClick={revert}>Undo</ToastAction>,
             });
@@ -591,7 +592,7 @@ export default function Planner() {
                                         </p>
                                         <div className="mb-2 min-w-0">
                                             <p className="font-extrabold text-white truncate text-lg">{nextSac.subject_name} — {nextSac.title}</p>
-                                            <p className="text-sm text-white/75">{format(parseISO(nextSac.due_date), "EEEE d MMMM")}</p>
+                                            <p className="text-sm text-white/75">{fmtDate(nextSac.due_date, "EEEE d MMMM")}</p>
                                         </div>
                                     </div>
                                     <div className="flex gap-2 mt-5 flex-wrap">
@@ -713,7 +714,7 @@ export default function Planner() {
                                                 className="w-6 h-6 rounded-lg border-2 border-border hover:border-primary flex items-center justify-center flex-shrink-0 transition-colors" />
                                             <div className="flex-1 min-w-0">
                                                 <p className="font-bold text-foreground text-sm truncate">{a.subject_name} — {a.title}</p>
-                                                <p className="text-xs text-muted-foreground">{format(parseISO(a.due_date), "EEE d MMM")} · {(a.assessment_type || "sac").toUpperCase()}</p>
+                                                <p className="text-xs text-muted-foreground">{fmtDate(a.due_date, "EEE d MMM")} · {(a.assessment_type || "sac").toUpperCase()}</p>
                                             </div>
                                             <span className={`pill flex-shrink-0 ${countdownPill(d)}`}>{daysLabel(d)}</span>
                                             <button onClick={() => deleteSac(a)} aria-label="Remove assessment"
@@ -913,7 +914,7 @@ export default function Planner() {
                         <DialogHeader>
                             <DialogTitle className="font-display">
                                 {editingPlan ? "Edit session" : "Plan a session"}
-                                {planDay ? ` — ${format(parseISO(planDay), "EEE d MMM")}` : ""}
+                                {planDay ? ` — ${fmtDate(planDay, "EEE d MMM")}` : ""}
                             </DialogTitle>
                         </DialogHeader>
                         <div className="space-y-3.5">
@@ -1067,7 +1068,7 @@ export default function Planner() {
                                         </div>
 
                                         <div className="grid grid-cols-2 gap-3">
-                                            {[["When", format(parseISO(s.date), "EEE d MMM")],
+                                            {[["When", fmtDate(s.date, "EEE d MMM")],
                                               ["Time", started ? (finishes ? `${started}–${finishes}` : started) : "Anytime"],
                                               ["How long", dur ? `${dur} min` : `${DEFAULT_DUR} min`],
                                               ["Opens", routeFor(s.title).label]].map(([k, v]) => (
@@ -1118,7 +1119,7 @@ export default function Planner() {
                     <DialogContent className="max-w-lg rounded-3xl max-h-[85vh] overflow-y-auto">
                         <DialogHeader>
                             <DialogTitle className="font-display">
-                                {openDay ? format(parseISO(openDay), "EEEE d MMMM") : ""}
+                                {openDay ? fmtDate(openDay, "EEEE d MMMM") : ""}
                             </DialogTitle>
                         </DialogHeader>
                         {openDay && (() => {

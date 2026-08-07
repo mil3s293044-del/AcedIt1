@@ -11,7 +11,7 @@ import EmptyState from "@/components/shared/EmptyState";
 import { useToast } from "@/components/ui/use-toast";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import { format } from "date-fns";
+import { fmtDate } from "@/lib/safeDate";
 
 export default function Support() {
     const [user, setUser] = useState(null);
@@ -331,7 +331,7 @@ export default function Support() {
                                                     <div className="flex items-center justify-between gap-2 mt-auto pt-1">
                                                         <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
                                                             <Clock className="w-3 h-3" />
-                                                            {format(new Date(ticket.created_date), "d MMM yyyy")}
+                                                            {fmtDate(ticket.created_date, "d MMM yyyy")}
                                                         </div>
                                                         {screenshotAttached && (
                                                             <div className="flex items-center gap-1 text-xs text-chart-4 font-semibold">

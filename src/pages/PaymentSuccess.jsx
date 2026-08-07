@@ -9,6 +9,11 @@ import { trackPurchase } from "@/lib/analytics";
 export default function PaymentSuccess() {
     const [status, setStatus] = useState("verifying"); // verifying | success | error
     const [errorMsg, setErrorMsg] = useState(null);
+    // Set when Stripe took the money but the upgrade didn't land. That is a
+    // very different message from "your payment failed", and showing the wrong
+    // one to someone who has just been charged is the worst version of this
+    // screen.
+    const [paidButPending, setPaidButPending] = useState(null);
 
     useEffect(() => {
         const run = async () => {
@@ -28,6 +33,7 @@ export default function PaymentSuccess() {
 
                 if (!result?.success) {
                     setErrorMsg(result?.error || "Payment verification failed.");
+                    if (result?.paid) setPaidButPending(result.session_id || sessionId);
                     setStatus("error");
                     return;
                 }
@@ -89,23 +95,37 @@ export default function PaymentSuccess() {
     }
 
     if (status === "error") {
+        const paid = !!paidButPending;
         return (
-            <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-red-50 via-orange-50 to-yellow-50 p-4">
+            <div className={`min-h-screen flex items-center justify-center p-4 bg-gradient-to-br ${
+                paid ? "from-amber-50 via-yellow-50 to-orange-50" : "from-red-50 via-orange-50 to-yellow-50"}`}>
                 <Card className="max-w-md w-full">
                     <CardContent className="p-8 text-center">
-                        <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                            <span className="text-3xl">❌</span>
+                        <div className={`w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4 ${
+                            paid ? "bg-amber-100" : "bg-red-100"}`}>
+                            <span className="text-3xl">{paid ? "⏳" : "❌"}</span>
                         </div>
-                        <h2 className="text-xl font-bold text-red-900 mb-4">Payment Verification Failed</h2>
-                        <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-6">
-                            <p className="text-sm font-mono text-red-800 break-words">{errorMsg}</p>
+                        <h2 className={`text-xl font-bold mb-2 ${paid ? "text-amber-900" : "text-red-900"}`}>
+                            {paid ? "Payment received — activating" : "Payment Verification Failed"}
+                        </h2>
+                        <div className={`rounded-lg p-4 mb-4 border ${
+                            paid ? "bg-amber-50 border-amber-200" : "bg-red-50 border-red-200"}`}>
+                            <p className={`text-sm break-words ${paid ? "text-amber-900" : "font-mono text-red-800"}`}>
+                                {errorMsg}
+                            </p>
                         </div>
+                        {paid && (
+                            <p className="text-xs text-muted-foreground font-mono break-all mb-4">
+                                Reference: {paidButPending}
+                            </p>
+                        )}
                         <div className="space-y-2">
                             <Button onClick={() => window.location.reload()} className="w-full">
-                                Try Again
+                                {paid ? "Check again" : "Try Again"}
                             </Button>
-                            <Button onClick={() => { window.location.href = "/Subscription"; }} variant="outline" className="w-full">
-                                Back to Subscription
+                            <Button onClick={() => { window.location.href = paid ? "/Support" : "/Subscription"; }}
+                                variant="outline" className="w-full">
+                                {paid ? "Contact support" : "Back to Subscription"}
                             </Button>
                         </div>
                     </CardContent>

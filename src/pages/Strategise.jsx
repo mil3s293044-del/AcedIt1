@@ -24,6 +24,7 @@ import {
     Sparkles, ArrowRight, ArrowLeft, Loader2, Check, Target, Flag, Info, BookOpen, Brain, Zap, Coffee, GraduationCap,
 } from "lucide-react";
 import { TECHNIQUES, TECHNIQUE_IDS, PRINCIPLES, runUpDays, applyRules, planSummary } from "@/lib/strategise";
+import { fmtDate } from "@/lib/safeDate";
 
 const CONFIDENCE = [
     { v: 1, label: "Barely started", hint: "Most of it is new to me" },
@@ -201,7 +202,7 @@ Rules:
             toast({
                 variant: "success",
                 title: "Strategy locked in",
-                description: `${plan.sessions.length} sessions through to ${format(parseISO(sac.due_date), "EEE d MMM")}.`,
+                description: `${plan.sessions.length} sessions through to ${fmtDate(sac.due_date, "EEE d MMM")}.`,
             });
             navigate(createPageUrl("Goals"));
         } catch (e) {
@@ -240,7 +241,7 @@ Rules:
                     <h1 className="font-display text-2xl sm:text-3xl lg:text-4xl font-extrabold tracking-tight text-foreground leading-[1.1]">
                         {stage === "pick" ? "Which assessment are we beating?"
                             : stage === "setup" ? "Where are you starting from?"
-                            : stage === "days" ? `${days.length} days until ${sac ? format(parseISO(sac.due_date), "EEE d MMM") : "it"}`
+                            : stage === "days" ? `${days.length} days until ${sac ? fmtDate(sac.due_date, "EEE d MMM") : "it"}`
                             : "Here's the run-up"}
                     </h1>
                     {stage === "days" && (
@@ -280,7 +281,7 @@ Rules:
                                             <div className="min-w-0">
                                                 <p className="font-display font-extrabold text-foreground">{a.title}</p>
                                                 <p className="text-xs text-muted-foreground mt-0.5">
-                                                    {a.subject_name} · {(a.assessment_type || "SAC").toUpperCase()} · {format(parseISO(a.due_date), "EEE d MMM")}
+                                                    {a.subject_name} · {(a.assessment_type || "SAC").toUpperCase()} · {fmtDate(a.due_date, "EEE d MMM")}
                                                 </p>
                                             </div>
                                             <div className="text-right flex-shrink-0">
@@ -368,7 +369,7 @@ Rules:
                                     <div key={d} className={`card-soft p-4 border-2 ${cur.aim === "rest" ? "border-border opacity-70" : "border-border"}`}>
                                         <div className="flex items-baseline justify-between mb-3">
                                             <p className="font-display font-extrabold text-foreground text-sm">
-                                                {format(parseISO(d), "EEEE d MMM")}
+                                                {fmtDate(d, "EEEE d MMM")}
                                                 {isLast && <span className="pill bg-streak/15 text-streak ml-2">day before</span>}
                                             </p>
                                             {cur.aim !== "rest" && (
@@ -472,7 +473,7 @@ Rules:
                                 {plan.sessions.map((s, i) => (
                                     <div key={i} className="card-soft p-4">
                                         <div className="flex items-baseline justify-between gap-2">
-                                            <p className="text-xs font-bold text-chart-4">{format(parseISO(s.date), "EEE d MMM")}</p>
+                                            <p className="text-xs font-bold text-chart-4">{fmtDate(s.date, "EEE d MMM")}</p>
                                             <p className="text-[11px] text-muted-foreground">{TECHNIQUES[s.technique].label} · {s.duration}m</p>
                                         </div>
                                         <p className="font-bold text-foreground mt-0.5">{s.topic}</p>
