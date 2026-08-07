@@ -1,10 +1,12 @@
 /**
  * Planner — SAC-centred planning hub. Monday-anchored week board with
  * multi-week navigation, recurring sessions, launchable session chips
- * (each opens the right study tool), and a customisable AI week planner
- * that proposes sessions for review before anything is saved.
+ * (each opens the right study tool), drag-and-drop between days, and an
+ * expanded day view for inspecting and rearranging a single day at a time.
+ * SAC plans themselves are built on the Strategise page.
  */
 import React, { useState, useEffect, useCallback, useMemo } from "react";
+import { createPortal } from "react-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { Link, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
@@ -30,12 +32,6 @@ const TYPE_OPTIONS = [
     { value: "test", label: "Test" },
 ];
 
-const HOUR_OPTIONS = [2, 5, 8, 12];
-const TIME_PREFS = [
-    { value: "after_school", label: "After school" },
-    { value: "evenings", label: "Evenings" },
-    { value: "weekends", label: "Weekend-heavy" },
-];
 const REPEAT_OPTIONS = [2, 4, 8, 12];
 const MAX_WEEKS_AHEAD = 8;
 
@@ -190,6 +186,8 @@ export default function Planner() {
     // switches the same dialog from create to update.
     const [planDay, setPlanDay] = useState(null);
     const [editingPlan, setEditingPlan] = useState(null);
+    const [openDay, setOpenDay] = useState(null);       // yyyy-mm-dd of the expanded day
+    const [returnToDay, setReturnToDay] = useState(null); // day view to restore after the form closes
     const [planType, setPlanType] = useState("");
     const [planTitle, setPlanTitle] = useState("");
     const [planSubject, setPlanSubject] = useState("");
@@ -344,7 +342,8 @@ export default function Planner() {
                 });
             }
             if (repeatWeekly) toast({ title: `🔁 Weekly for ${weeks} weeks`, description: "The series is on the board — delete any one to trim it." });
-            setPlanDay(null); setPlanTitle(""); setPlanType(""); setPlanNote(""); setRepeatWeekly(false);
+            setPlanTitle(""); setPlanType(""); setPlanNote(""); setRepeatWeekly(false);
+            closePlanDialog();
             loadData(user.email);
         } catch (e) {
             toast({ title: "Couldn't save", description: e.message, variant: "destructive" });
@@ -375,7 +374,13 @@ export default function Planner() {
         setRepeatWeekly(false);
     };
 
-    const closePlanDialog = () => { setPlanDay(null); setEditingPlan(null); };
+    // Editing from inside the day view shouldn't dump you back on the week
+    // board — stash the day so closing the form drops you where you were.
+    const closePlanDialog = () => {
+        setPlanDay(null);
+        setEditingPlan(null);
+        if (returnToDay) { setOpenDay(returnToDay); setReturnToDay(null); }
+    };
 
     const savePlanEdits = async () => {
         if (!editingPlan || !planTitle.trim() || !planDay) return;
@@ -427,8 +432,11 @@ export default function Planner() {
 
         try {
             await base44.entities.StudyPlan.update(planId, patch);
+            // Reordering inside a day isn't a move to another day — say what
+            // actually changed, or the toast reads as a bug.
+            const sameDay = before.date === toDate;
             toast({
-                title: `Moved to ${format(parseISO(toDate), "EEE d MMM")}`,
+                title: sameDay ? "Reordered" : `Moved to ${format(parseISO(toDate), "EEE d MMM")}`,
                 description: newTime ? `Now starts ${prettyTime(newTime)}.` : undefined,
                 action: <ToastAction altText="Undo the move" onClick={revert}>Undo</ToastAction>,
             });
@@ -750,10 +758,15 @@ export default function Planner() {
                                                     : "bg-surface border-border"
                                             }`}>
                                             <div className="flex items-center justify-between px-0.5 mb-0.5">
-                                                <div className="flex items-baseline gap-1.5">
-                                                    <p className={`text-xs font-black uppercase tracking-wide ${day.isToday ? "text-primary" : "text-muted-foreground/70"}`}>{day.dayName}</p>
-                                                    <p className={`font-display font-extrabold text-lg ${day.isToday ? "text-primary" : "text-muted-foreground/50"}`}>{day.dayNum}</p>
-                                                </div>
+                                                {/* The column is only ~150px wide, so a busy day
+                                                    truncates everything. Opening it full-size is
+                                                    where you actually inspect and reorder it. */}
+                                                <button onClick={() => setOpenDay(day.key)}
+                                                    aria-label={`Open ${day.dayName} ${day.dayNum}`}
+                                                    className="flex items-baseline gap-1.5 rounded-lg px-1 -mx-1 hover:bg-secondary/60 transition-colors">
+                                                    <span className={`text-xs font-black uppercase tracking-wide ${day.isToday ? "text-primary" : "text-muted-foreground/70"}`}>{day.dayName}</span>
+                                                    <span className={`font-display font-extrabold text-lg ${day.isToday ? "text-primary" : "text-muted-foreground/50"}`}>{day.dayNum}</span>
+                                                </button>
                                                 {!day.isPast && (
                                                     <button onClick={() => openAddPlan(day.key)} aria-label={`Add session on ${day.dayName} ${day.dayNum}`}
                                                         className="w-7 h-7 rounded-lg flex items-center justify-center text-muted-foreground/50 hover:text-primary hover:bg-primary/10 transition-all">
@@ -964,6 +977,135 @@ export default function Planner() {
                     </DialogContent>
                 </Dialog>
 
+                {/* ── Day view ─────────────────────────────────────────── */}
+                {/* Everything the week board can't show at 150px wide: full
+                    titles, notes, times, and room to drag sessions into the
+                    order you actually want them. */}
+                <Dialog open={!!openDay} onOpenChange={(o) => !o && setOpenDay(null)}>
+                    <DialogContent className="max-w-lg rounded-3xl max-h-[85vh] overflow-y-auto">
+                        <DialogHeader>
+                            <DialogTitle className="font-display">
+                                {openDay ? format(parseISO(openDay), "EEEE d MMMM") : ""}
+                            </DialogTitle>
+                        </DialogHeader>
+                        {openDay && (() => {
+                            const dayPlans = plans.filter(p => p.date === openDay)
+                                .sort((a, b) => (a.start_time || "").localeCompare(b.start_time || ""));
+                            const daySacs = upcoming.filter(a => a.due_date === openDay);
+                            const mins = dayPlans.reduce((n, p) => n + (durationOf(p) || DEFAULT_DUR), 0);
+                            const done = dayPlans.filter(p => p.is_completed).length;
+
+                            // One renderer for both the resting row and the drag clone.
+                            // The clone matters: Radix centres the dialog with a CSS
+                            // transform, which makes it the containing block for the
+                            // library's `position: fixed` drag layer — dragging inside
+                            // it sent the lifted card off-screen. Portalling the clone
+                            // to <body> puts it back under your cursor.
+                            const dayRow = (dg, snap, rubric) => {
+                                const p = dayPlans.find(x => x.id === rubric.draggableId);
+                                if (!p) return <div ref={dg.innerRef} {...dg.draggableProps} {...dg.dragHandleProps} />;
+                                const dur = durationOf(p);
+                                const note = noteTextOf(p);
+                                const row = (
+                                    <div ref={dg.innerRef} {...dg.draggableProps} {...dg.dragHandleProps}
+                                        className={`rounded-2xl border-2 p-3 bg-surface cursor-grab active:cursor-grabbing ${
+                                            snap.isDragging ? "ring-2 ring-chart-3 shadow-lg" : "border-border"}`}>
+                                        <div className="flex items-start gap-2">
+                                            <GripVertical className="w-4 h-4 text-muted-foreground/40 mt-0.5 flex-shrink-0" />
+                                            <button onClick={() => togglePlanDone(p)} aria-label="Toggle done"
+                                                className={`w-4 h-4 mt-0.5 rounded border flex-shrink-0 flex items-center justify-center ${
+                                                    p.is_completed ? "bg-primary border-primary text-white" : "border-border"}`}>
+                                                {p.is_completed && <Check className="w-3 h-3" />}
+                                            </button>
+                                            {/* Same launch behaviour as the board — inspecting a
+                                                day shouldn't cost you the ability to start from it. */}
+                                            <Link to={sessionLink(p.title)} className="flex-1 min-w-0">
+                                                <p className={`text-sm font-bold leading-snug ${p.is_completed ? "line-through text-muted-foreground" : "text-foreground"}`}>
+                                                    {p.title}
+                                                    {recIdOf(p) && <Repeat className="w-3 h-3 inline ml-1 opacity-50" />}
+                                                </p>
+                                                <p className="text-xs text-muted-foreground mt-0.5">
+                                                    {[prettyTime(p.start_time), dur ? `${dur}m` : null, p.subject_name].filter(Boolean).join(" · ")}
+                                                </p>
+                                                {note && <p className="text-xs text-muted-foreground/70 italic mt-1">{note}</p>}
+                                            </Link>
+                                            <div className="flex gap-1 flex-shrink-0">
+                                                <button onClick={() => { setReturnToDay(openDay); setOpenDay(null); openEditPlan(p); }} aria-label={`Edit ${p.title}`}
+                                                    className="w-7 h-7 rounded-lg hover:bg-secondary flex items-center justify-center text-muted-foreground hover:text-chart-3">
+                                                    <Edit2 className="w-3.5 h-3.5" />
+                                                </button>
+                                                <button onClick={() => requestDeletePlan(p)} aria-label={`Remove ${p.title}`}
+                                                    className="w-7 h-7 rounded-lg hover:bg-secondary flex items-center justify-center text-muted-foreground hover:text-streak">
+                                                    <X className="w-3.5 h-3.5" />
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                );
+                                // The wrapper only exists to lift the clone above the
+                                // dialog overlay (z-50); it has no transform, so the
+                                // clone's fixed coordinates stay viewport-relative.
+                                return snap.isClone
+                                    ? createPortal(<div className="fixed inset-0 z-[60] pointer-events-none">{row}</div>, document.body)
+                                    : row;
+                            };
+
+                            return (
+                                <div className="space-y-4">
+                                    <div className="flex flex-wrap gap-x-6 gap-y-2">
+                                        {[["Sessions", dayPlans.length], ["Done", `${done}/${dayPlans.length || 0}`],
+                                          ["Planned", mins >= 60 ? `${Math.round(mins / 6) / 10}h` : `${mins}m`]].map(([k, v]) => (
+                                            <div key={k}>
+                                                <p className="font-display font-black text-lg leading-none text-foreground tabular-nums">{v}</p>
+                                                <p className="stat-label">{k}</p>
+                                            </div>
+                                        ))}
+                                    </div>
+
+                                    {daySacs.map(a => (
+                                        <div key={a.id} className="rounded-xl bg-streak/10 border border-streak/25 px-3 py-2">
+                                            <p className="text-xs font-black text-streak">🚩 {a.subject_name} — {a.title}</p>
+                                        </div>
+                                    ))}
+
+                                    {dayPlans.length === 0 ? (
+                                        <p className="text-sm text-muted-foreground">Nothing planned. Add something below.</p>
+                                    ) : (
+                                        <DragDropContext onDragEnd={(r) => {
+                                            if (!r.destination) return;
+                                            movePlan(r.draggableId, openDay, r.destination.index);
+                                        }}>
+                                            <Droppable droppableId={openDay} renderClone={dayRow}>
+                                                {(dp) => (
+                                                    <div ref={dp.innerRef} {...dp.droppableProps} className="space-y-2">
+                                                        {dayPlans.map((p, i) => (
+                                                            <Draggable draggableId={p.id} index={i} key={p.id} disableInteractiveElementBlocking>
+                                                                {(dg, snap) => dayRow(dg, snap, { draggableId: p.id })}
+                                                            </Draggable>
+                                                        ))}
+                                                        {dp.placeholder}
+                                                    </div>
+                                                )}
+                                            </Droppable>
+                                        </DragDropContext>
+                                    )}
+
+                                    {dayPlans.length > 1 && (
+                                        <p className="text-[11px] text-muted-foreground">
+                                            Drag to reorder — the order sets the times, same as the week board.
+                                        </p>
+                                    )}
+
+                                    <Button onClick={() => { const d = openDay; setReturnToDay(d); setOpenDay(null); openAddPlan(d); }}
+                                        className="w-full gap-1.5">
+                                        <Plus className="w-4 h-4" /> Add a session
+                                    </Button>
+                                </div>
+                            );
+                        })()}
+                    </DialogContent>
+                </Dialog>
+
                 {/* ── Recurring-delete choice ──────────────────────────── */}
                 <Dialog open={!!deleteTarget} onOpenChange={(o) => !o && setDeleteTarget(null)}>
                     <DialogContent className="max-w-xs rounded-3xl">
@@ -976,8 +1118,6 @@ export default function Planner() {
                         </div>
                     </DialogContent>
                 </Dialog>
-
-                {/* ── AI week planner dialog ───────────────────────────── */}
             </div>
         </div>
     );

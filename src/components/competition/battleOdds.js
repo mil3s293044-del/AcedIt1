@@ -178,17 +178,33 @@ export function projections({ me, rivals, targetDate }) {
     const theirPace = paceOf(best);
     const horizon = hrs == null ? null : hrs;
 
-    const myFinal = horizon == null ? null : Math.round(scoreOf(me) + myPace * horizon);
-    const theirFinal = horizon == null ? null : Math.round(scoreOf(best) + theirPace * horizon);
+    // A pace measured over three hours says nothing about the next five days —
+    // extrapolating it produced "projected finish 2017 vs 17", which reads as
+    // broken. Only project once the trail covers a meaningful stretch, and
+    // never extrapolate further forward than the trail reaches back.
+    const spanOf = (p) => {
+        const t = trailOf(p);
+        return t.length < 2 ? 0 : (Date.now() - new Date(t[0].t).getTime()) / HOUR;
+    };
+    const trailHours = Math.min(spanOf(me), spanOf(best));
+    const projectable = trailHours >= 12 && horizon != null;
+    const reach = projectable ? Math.min(horizon, trailHours * 2) : 0;
+
+    const myFinal = projectable ? Math.round(scoreOf(me) + myPace * reach) : null;
+    const theirFinal = projectable ? Math.round(scoreOf(best) + theirPace * reach) : null;
     const lead = scoreOf(me) - scoreOf(best);
 
     // Points you'd need on top of your current pace to end up in front.
     const shortfall = myFinal != null && theirFinal != null ? theirFinal - myFinal : null;
+    // A blank "—" reads as broken. Say what's missing instead.
+    const note = projectable ? null
+        : horizon == null ? "no deadline set"
+        : `needs ${Math.max(1, Math.ceil(12 - trailHours))}h more history`;
     return {
         myPace: Math.round(myPace * 10) / 10,
         theirPace: Math.round(theirPace * 10) / 10,
         rivalName: (best.name || best.email || "Rival").split(" ")[0],
-        myFinal, theirFinal, lead,
+        myFinal, theirFinal, lead, projectable, note,
         hoursLeft: horizon == null ? null : Math.round(horizon),
         // Positive = you're projected short by this much.
         needed: shortfall != null && shortfall > 0 ? shortfall : 0,

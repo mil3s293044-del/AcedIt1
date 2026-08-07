@@ -250,8 +250,10 @@ export default function BattleDashboard({ battle, onBack, footer, activity = [] 
                         { label: `${projection.rivalName}'s pace`, value: `${projection.theirPace}`, suffix: `${unit}/h`,
                           icon: Gauge, tone: "text-muted-foreground" },
                         { label: "Projected finish", value: projection.myFinal != null ? `${projection.myFinal}` : "—",
-                          suffix: projection.theirFinal != null ? `vs ${projection.theirFinal}` : "",
-                          icon: Flag, tone: (projection.myFinal ?? 0) >= (projection.theirFinal ?? 0) ? "text-primary" : "text-streak" },
+                          suffix: projection.theirFinal != null ? `vs ${projection.theirFinal}` : projection.note,
+                          icon: Flag,
+                          tone: !projection.projectable ? "text-muted-foreground"
+                              : projection.myFinal >= projection.theirFinal ? "text-primary" : "text-streak" },
                         { label: projection.needed > 0 ? "Need to close" : "Current lead",
                           value: projection.needed > 0 ? `${projection.needed}` : `${Math.abs(projection.lead)}`,
                           suffix: unit, icon: projection.needed > 0 ? Zap : Crown,

@@ -35,8 +35,7 @@ export default function useStickToBottom(deps, { threshold = 80 } = {}) {
         const el = containerRef.current;
         if (!el || !isAtBottom) return;
         el.scrollTop = el.scrollHeight;
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, deps);
+        }, deps);
 
     return { containerRef, isAtBottom };
 }
