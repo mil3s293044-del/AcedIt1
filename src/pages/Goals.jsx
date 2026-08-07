@@ -26,7 +26,7 @@ import { format, differenceInDays, parseISO, addDays, startOfWeek, addWeeks } fr
 import HelpButton from "@/components/shared/HelpButton";
 import { createPageUrl } from "@/utils";
 import { recIdOf, stratIdOf, durationOf, noteTextOf, buildNotes } from "@/lib/planTags";
-import { strategyNeedingCheckIn } from "@/lib/strategyState";
+import { strategiesNeedingCheckIn } from "@/lib/strategyState";
 import StrategyCheckIn from "@/components/planner/StrategyCheckIn";
 import { fmtDate } from "@/lib/safeDate";
 
@@ -311,7 +311,9 @@ export default function Planner() {
     // Real minutes studied, by date — StudyTechnique and StudySession rows
     // flattened to one shape so the board can compare intent with reality.
     const [actuals, setActuals] = useState([]);
-    const [checkInDismissed, setCheckInDismissed] = useState(false);
+    // Dismissal is per plan id — a student running two SACs at once who
+    // deals with one should still be told about the other.
+    const [dismissedCheckIns, setDismissedCheckIns] = useState(() => new Set());
     const [rescuing, setRescuing] = useState(false);
 
     // Daily intention card
@@ -445,9 +447,12 @@ export default function Planner() {
         return m;
     }, [actuals]);
 
-    const checkIn = useMemo(
-        () => (checkInDismissed ? null : strategyNeedingCheckIn(plans, assessments, todayStr)),
-        [plans, assessments, todayStr, checkInDismissed]);
+    const checkIns = useMemo(
+        () => strategiesNeedingCheckIn(plans, assessments, todayStr)
+            .filter(s => !dismissedCheckIns.has(s.id)),
+        [plans, assessments, todayStr, dismissedCheckIns]);
+    const dismissCheckIn = useCallback(
+        (id) => setDismissedCheckIns(prev => new Set(prev).add(id)), []);
 
     const coachLine = !nextSac
         ? "No SACs tracked yet — add the next one and the whole app plans around it."
@@ -666,6 +671,10 @@ export default function Planner() {
      * recreates the reason they were missed. Sessions go one per day across the
      * lightest of the next seven days, skipping any day that already carries a
      * SAC, and each lands at a time that doesn't collide with what's there.
+     *
+     * Nothing is moved past the assessment it was preparing for. Rescheduling
+     * a Chemistry revision session to the day after the Chemistry SAC is worse
+     * than leaving it where it was — it looks handled and isn't.
      */
     const rescueMissed = async () => {
         if (!missed.length) return;
@@ -682,13 +691,33 @@ export default function Planner() {
                 };
             }).sort((a, b) => (a.hasSac - b.hasSac) || (a.mins - b.mins));
 
-            const moves = missed.map((p, i) => {
-                const target = candidates[i % candidates.length];
+            // The deadline a given session is working towards: the soonest
+            // upcoming assessment in its subject.
+            const deadlineFor = (p) => upcoming
+                .filter(a => !p.subject_name || a.subject_name === p.subject_name)
+                .map(a => a.due_date)
+                .sort()[0] || null;
+
+            const stuck = [];
+            const moves = [];
+            missed.forEach((p, i) => {
+                const deadline = deadlineFor(p);
+                const usable = deadline ? candidates.filter(c => c.key <= deadline) : candidates;
+                if (!usable.length) { stuck.push(p); return; }
+                const target = usable[i % usable.length];
                 const siblings = plans
                     .filter(x => x.date === target.key && x.id !== p.id)
                     .sort((a, b) => (a.start_time || "").localeCompare(b.start_time || ""));
-                return { plan: p, date: target.key, time: timeForSlot(siblings, siblings.length, durationOf(p)) || p.start_time };
+                moves.push({ plan: p, date: target.key, time: timeForSlot(siblings, siblings.length, durationOf(p)) || p.start_time });
             });
+
+            if (!moves.length) {
+                toast({
+                    title: "Nowhere useful to move them",
+                    description: `${stuck.length === 1 ? "That session's" : "Those sessions'"} assessment has already passed or is today — reschedule by hand, or clear them.`,
+                });
+                return;
+            }
 
             // Optimistic first — the board should move before the network does.
             setPlans(prev => prev.map(p => {
@@ -699,12 +728,16 @@ export default function Planner() {
                 await base44.entities.StudyPlan.update(m.plan.id, { date: m.date, start_time: m.time });
             }
 
+            // Undo only what moved. `before` covers every missed session, and
+            // writing a row back to the value it already holds is a wasted
+            // request that can fail for no reason.
+            const movedBefore = before.filter(b => moves.some(m => m.plan.id === b.id));
             const undo = async () => {
                 setPlans(prev => prev.map(p => {
-                    const b = before.find(x => x.id === p.id);
+                    const b = movedBefore.find(x => x.id === p.id);
                     return b ? { ...p, date: b.date, start_time: b.start_time } : p;
                 }));
-                for (const b of before) {
+                for (const b of movedBefore) {
                     try { await base44.entities.StudyPlan.update(b.id, { date: b.date, start_time: b.start_time }); } catch { /* board is already back */ }
                 }
             };
@@ -716,7 +749,8 @@ export default function Planner() {
             toast({
                 variant: "success",
                 title: `${moves.length} session${moves.length === 1 ? "" : "s"} rescheduled`,
-                description: `Spread across your lightest days — ${dayNames}.`,
+                description: `Spread across your lightest days — ${dayNames}.`
+                    + (stuck.length ? ` ${stuck.length} left where ${stuck.length === 1 ? "it is" : "they are"} — past ${stuck.length === 1 ? "its" : "their"} assessment.` : ""),
                 action: <ToastAction altText="Undo the reschedule" onClick={undo}>Undo</ToastAction>,
             });
         } catch (e) {
@@ -799,12 +833,15 @@ export default function Planner() {
                     first: a plan that no longer matches the week is worse than
                     no plan, and it only appears when there's both something to
                     report and something still changeable. */}
-                {checkIn && (
-                    <StrategyCheckIn
-                        strategy={checkIn}
-                        onRevised={() => { setCheckInDismissed(true); if (user?.email) loadData(user.email); }}
-                        onDismiss={() => setCheckInDismissed(true)}
-                    />
+                {checkIns.length > 0 && (
+                    <div className="space-y-3">
+                        {checkIns.map(s => (
+                            <StrategyCheckIn key={s.id} strategy={s}
+                                onRevised={() => { dismissCheckIn(s.id); if (user?.email) loadData(user.email); }}
+                                onDismiss={() => dismissCheckIn(s.id)}
+                            />
+                        ))}
+                    </div>
                 )}
 
                 {/* ── HERO: countdown banner + target ─────────────────── */}

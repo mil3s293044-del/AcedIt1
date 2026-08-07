@@ -48,8 +48,12 @@ const TONE = {
 export default function StrategyCheckIn({ strategy, onRevised, onDismiss }) {
     const { toast } = useToast();
     const [open, setOpen] = useState(false);
-    const [outcomes, setOutcomes] = useState(() =>
-        Object.fromEntries(strategy.past.map(s => [s.id, s.is_completed ? "done" : "skipped"])));
+    // Only what the student explicitly picked. Seeding this from
+    // `is_completed` snapshotted the tick state at mount, so a session ticked
+    // off elsewhere while the card sat open would still be reported as missed.
+    // The default is derived at read time instead.
+    const [outcomes, setOutcomes] = useState({});
+    const outcomeOf = (s) => outcomes[s.id] || (s.is_completed ? "done" : "skipped");
     const [feel, setFeel] = useState("right");
     const [busy, setBusy] = useState(false);
 
@@ -179,7 +183,7 @@ Rules:
                     <p className="text-xs text-muted-foreground mt-1">
                         {sacLabel}
                         {strategy.sac?.due_date && ` · ${fmtDate(strategy.sac.due_date, "EEE d MMM")}`}
-                        {` · ${strategy.future.length} sessions still to come`}
+                        {` · ${strategy.future.length} session${strategy.future.length === 1 ? "" : "s"} still to come`}
                     </p>
                 </div>
                 {!open && (
@@ -205,9 +209,9 @@ Rules:
                                             {OUTCOMES.map(o => (
                                                 <button key={o.id}
                                                     onClick={() => setOutcomes(prev => ({ ...prev, [s.id]: o.id }))}
-                                                    aria-pressed={outcomes[s.id] === o.id}
+                                                    aria-pressed={outcomeOf(s) === o.id}
                                                     className={`flex-1 inline-flex items-center justify-center gap-1 px-2 py-1.5 rounded-xl text-xs font-bold border-2 transition-all ${
-                                                        outcomes[s.id] === o.id ? o.cls : "border-border text-muted-foreground hover:border-muted-foreground/40"}`}>
+                                                        outcomeOf(s) === o.id ? o.cls : "border-border text-muted-foreground hover:border-muted-foreground/40"}`}>
                                                     <o.icon className="w-3.5 h-3.5" /> {o.label}
                                                 </button>
                                             ))}
