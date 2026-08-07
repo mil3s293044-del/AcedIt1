@@ -23,7 +23,7 @@ import { format, parseISO, differenceInDays } from "date-fns";
 import {
     Sparkles, ArrowRight, ArrowLeft, Loader2, Check, Target, Flag, Info, BookOpen, Brain, Zap, Coffee, GraduationCap,
 } from "lucide-react";
-import { TECHNIQUES, TECHNIQUE_IDS, runUpDays, applyRules, planSummary } from "@/lib/strategise";
+import { TECHNIQUES, TECHNIQUE_IDS, PRINCIPLES, runUpDays, applyRules, planSummary } from "@/lib/strategise";
 
 const CONFIDENCE = [
     { v: 1, label: "Barely started", hint: "Most of it is new to me" },
@@ -57,6 +57,15 @@ const AIM_CLASS = {
 
 const MINUTES = [20, 30, 45, 60, 90];
 
+// Transfer-appropriate processing: practice should look like the assessment.
+const SAC_FORMATS = [
+    { id: "extended", label: "Extended response", prompt: "extended written responses — they need writing practice under time, not just recall" },
+    { id: "short",    label: "Short answer",      prompt: "short-answer questions — precise recall and clear definitions matter most" },
+    { id: "mcq",      label: "Multiple choice",   prompt: "multiple choice — discrimination between close alternatives matters most" },
+    { id: "prac",     label: "Practical / data",  prompt: "practical or data analysis — interpreting results and applying method matters most" },
+    { id: "mixed",    label: "A mix",             prompt: "a mix of question types" },
+];
+
 export default function Strategise() {
     const navigate = useNavigate();
     const { toast } = useToast();
@@ -69,6 +78,9 @@ export default function Strategise() {
     const [confidence, setConfidence] = useState(3);
     const [shaky, setShaky] = useState("");
     const [goal, setGoal] = useState("");
+    const [sacFormat, setSacFormat] = useState("mixed");
+    const [topics, setTopics] = useState("");
+    const [lastMark, setLastMark] = useState("");
     const [dayPlan, setDayPlan] = useState({});   // date → { aim, minutes }
     const [busy, setBusy] = useState(false);
     const [plan, setPlan] = useState(null);
@@ -117,6 +129,9 @@ DATE: ${sac.due_date}
 HOW WELL THEY KNOW IT: ${CONFIDENCE.find(c => c.v === confidence)?.label} — ${CONFIDENCE.find(c => c.v === confidence)?.hint}
 SHAKY ON: ${shaky.trim() || "they didn't name specific topics"}
 WHAT THEY WANT: ${goal.trim() || "to do well"}
+FORMAT OF THE ASSESSMENT: ${SAC_FORMATS.find(f => f.id === sacFormat)?.prompt}
+TOPICS IT COVERS: ${topics.trim() || "not listed — infer from the subject"}
+HOW THEY DID LAST TIME: ${lastMark.trim() || "not said"}
 
 THE DAYS THEY'VE PLANNED, AND WHAT EACH IS FOR:
 ${brief}
@@ -130,7 +145,9 @@ Rules:
 - Never schedule a date that isn't listed above.
 - Never exceed that day's stated minutes.
 - Name a specific topic per session, using what they said is shaky where you can.
-- "why" is one short sentence to the student about what that session buys them.`,
+- "why" is one short sentence to the student about what that session buys them.
+- Interleave the topics they listed rather than blocking one topic for days.
+- Match the practice to the format above — an extended-response SAC needs writing practice, not just recall.`,
                 response_json_schema: {
                     type: "object",
                     properties: {
@@ -289,6 +306,21 @@ Rules:
                                     ))}
                                 </div>
                             </div>
+                            <div className="card-soft p-5">
+                                <p className="stat-label mb-1">What sort of assessment is it?</p>
+                                <p className="text-[11px] text-muted-foreground mb-3">
+                                    Practice works best when it looks like the real thing, so this changes what gets scheduled.
+                                </p>
+                                <div className="flex flex-wrap gap-2">
+                                    {SAC_FORMATS.map(f => (
+                                        <button key={f.id} onClick={() => setSacFormat(f.id)}
+                                            className={`px-3.5 py-2 rounded-xl text-xs font-bold border-2 transition-all ${
+                                                sacFormat === f.id ? "bg-chart-4 border-chart-4 text-white" : "border-border text-muted-foreground hover:border-chart-4/40"}`}>
+                                            {f.label}
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
                             <div className="card-soft p-5 space-y-4">
                                 <div>
                                     <p className="stat-label mb-1.5">Anything specific you're shaky on?</p>
@@ -300,6 +332,19 @@ Rules:
                                     <p className="stat-label mb-1.5 flex items-center gap-1.5"><Flag className="w-3.5 h-3.5" /> What do you want out of this?</p>
                                     <Input value={goal} onChange={e => setGoal(e.target.value)} maxLength={140}
                                         placeholder="e.g. top of the class, or just not blank on the extended response" />
+                                </div>
+                                <div>
+                                    <p className="stat-label mb-1.5">Which topics does it cover?</p>
+                                    <Input value={topics} onChange={e => setTopics(e.target.value)} maxLength={240}
+                                        placeholder="e.g. redox, galvanic cells, electrolysis" />
+                                    <p className="text-[11px] text-muted-foreground mt-1">
+                                        Listing them lets the plan interleave topics rather than block one at a time — mixing transfers better.
+                                    </p>
+                                </div>
+                                <div>
+                                    <p className="stat-label mb-1.5">How did the last one go?</p>
+                                    <Input value={lastMark} onChange={e => setLastMark(e.target.value)} maxLength={80}
+                                        placeholder="e.g. 68% — lost most of it on the extended response" />
                                 </div>
                             </div>
                             <div className="flex gap-2">
@@ -398,6 +443,23 @@ Rules:
                                 </div>
                             )}
 
+                            {/* The reasoning, named and sourced. A plan that says
+                                "trust me" is indistinguishable from a guess. */}
+                            <details className="card-soft p-4">
+                                <summary className="text-sm font-bold text-foreground cursor-pointer">
+                                    Why this plan looks like this
+                                </summary>
+                                <div className="mt-3 space-y-2.5">
+                                    {[...new Set(plan.sessions.map(x => x.principle))].filter(k => PRINCIPLES[k]).map(k => (
+                                        <div key={k}>
+                                            <p className="text-xs font-bold text-foreground">{PRINCIPLES[k].name}</p>
+                                            <p className="text-xs text-muted-foreground leading-snug">{PRINCIPLES[k].claim}</p>
+                                            <p className="text-[11px] text-muted-foreground/60 mt-0.5">{PRINCIPLES[k].source}</p>
+                                        </div>
+                                    ))}
+                                </div>
+                            </details>
+
                             <div className="space-y-2">
                                 {plan.sessions.map((s, i) => (
                                     <div key={i} className="card-soft p-4">
@@ -407,6 +469,11 @@ Rules:
                                         </div>
                                         <p className="font-bold text-foreground mt-0.5">{s.topic}</p>
                                         <p className="text-xs text-muted-foreground leading-snug mt-0.5">{s.why}</p>
+                                        {PRINCIPLES[s.principle] && (
+                                            <span className="pill bg-secondary text-muted-foreground mt-2" title={PRINCIPLES[s.principle].claim}>
+                                                {PRINCIPLES[s.principle].name}
+                                            </span>
+                                        )}
                                     </div>
                                 ))}
                             </div>
