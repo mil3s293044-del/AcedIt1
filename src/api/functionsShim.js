@@ -67,3 +67,6 @@ export const getCallouts               = makeFn('getCallouts');
 export const startCallout              = makeFn('startCallout');
 export const submitCallout             = makeFn('submitCallout');
 export const verifyMe                  = makeFn('verifyMe');
+
+// Back Yourself quests — a named act rather than a number.
+export const createStudyQuest          = makeFn('createStudyQuest');
