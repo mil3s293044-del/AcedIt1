@@ -4787,12 +4787,23 @@ app.post("/local-ai/fn/getCallouts", async (req, res) => {
     // Two queries rather than an interpolated .or() filter — the email comes
     // from a verified JWT, but building PostgREST filter syntax out of a
     // string is a habit worth not having.
-    const [{ data: asCaller }, { data: asTarget }] = await Promise.all([
+    const [{ data: asCaller, error: callerErr }, { data: asTarget }] = await Promise.all([
       supabaseAdmin.from("callouts").select("*").eq("caller_email", user.email)
         .order("created_date", { ascending: false }).limit(40),
       supabaseAdmin.from("callouts").select("*").eq("target_email", user.email)
         .order("created_date", { ascending: false }).limit(40),
     ]);
+
+    // Migrations 0025/0026 may not have run yet. Say so plainly instead of
+    // reporting an empty list — the client hides the whole feature on this
+    // flag, so the buttons never appear before the table behind them exists.
+    // 42P01 is "relation does not exist"; PGRST205 is PostgREST's schema-cache
+    // equivalent when the table isn't in its view of the database.
+    if (callerErr && ["42P01", "PGRST205", "PGRST204"].includes(callerErr.code)) {
+      console.warn("[getCallouts] callouts table missing — run migrations 0025 and 0026.");
+      return res.json({ success: true, available: false, callouts: [] });
+    }
+
     const byId = new Map();
     for (const r of [...(asCaller || []), ...(asTarget || [])]) byId.set(r.id, r);
     const data = [...byId.values()].sort((a, b) => new Date(b.created_date) - new Date(a.created_date));
@@ -4801,7 +4812,7 @@ app.post("/local-ai/fn/getCallouts", async (req, res) => {
     for (const row of data || []) {
       rows.push(await settleExpiredCallout(row));
     }
-    return res.json({ success: true, callouts: rows.map(publicCallout) });
+    return res.json({ success: true, available: true, callouts: rows.map(publicCallout) });
   } catch (err) {
     console.error("[getCallouts] error:", err);
     return res.status(500).json({ error: err?.message || String(err) });
@@ -5313,6 +5324,8 @@ app.post("/local-ai/fn/getMyStakes", async (req, res) => {
       .from("callouts").select("*")
       .eq("target_email", user.email)
       .in("status", ["pending", "active"]);
+    // A missing table reads as no call-outs, which is the correct behaviour
+    // for this strip either way.
     const live = [];
     for (const row of incoming || []) {
       const checked = await settleExpiredCallout(row);

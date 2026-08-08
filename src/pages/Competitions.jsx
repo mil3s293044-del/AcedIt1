@@ -56,6 +56,10 @@ export default function Competitions() {
     // challenge you never see is a forfeit you didn't choose.
     const [callouts, setCallouts] = useState([]);
     const [answering, setAnswering] = useState(null);
+    // False until the server confirms the callouts table is there. Migrations
+    // 0025/0026 can lag a deploy, and a button that 500s is worse than a
+    // feature that hasn't appeared yet.
+    const [calloutsReady, setCalloutsReady] = useState(false);
     const [userSubjects, setUserSubjects] = useState([]);
     const [openBattle, setOpenBattle] = useState(null);
     // The challenge dialog is opened from the "Start something" card, so this
@@ -133,9 +137,12 @@ export default function Competitions() {
 
     const loadCallouts = useCallback(async () => {
         try {
-            const r = await base44.functions.invoke('getCallouts');
-            setCallouts(((r?.data ?? r)?.callouts) || []);
-        } catch { /* the page works without them */ }
+            const d = (await base44.functions.invoke('getCallouts'))?.data ?? {};
+            setCalloutsReady(d.available !== false);
+            setCallouts(d.callouts || []);
+        } catch {
+            setCalloutsReady(false);   // the page works fine without them
+        }
     }, []);
 
     // Only what needs answering: aimed at me, still open. A settled one is a
@@ -400,7 +407,7 @@ export default function Competitions() {
                     <BattleDashboard
                         battle={live}
                         me={{ email: user?.email, name: userProfile?.full_name || user?.full_name }}
-                        callouts={{ list: callouts, refresh: loadCallouts, onSelfCheck: setAnswering }}
+                        callouts={calloutsReady ? { list: callouts, refresh: loadCallouts, onSelfCheck: setAnswering } : null}
                         record={userProfile?.extra?.callout_record}
                         activity={(() => {
                             const emails = new Set(live.sides.map(x => x.email));
