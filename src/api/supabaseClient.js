@@ -287,6 +287,7 @@ const PORTED_FUNCTIONS = {
   respondDuel:              '/local-ai/fn/respondDuel',
   placeDuelSideBet:         '/local-ai/fn/placeDuelSideBet',
   createStudyBet:           '/local-ai/fn/createStudyBet',
+  createStudyQuest:         '/local-ai/fn/createStudyQuest',
   getArenaState:            '/local-ai/fn/getArenaState',
   getMyStakes:              '/local-ai/fn/getMyStakes',
   // AcedIt ATAR + standardised ranked boards:

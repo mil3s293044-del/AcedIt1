@@ -8,6 +8,7 @@ import heicConvert from "heic-convert";
 import mammoth from "mammoth";
 import JSZip from "jszip";
 import { createClient as createSupabaseClient } from "@supabase/supabase-js";
+import { QUEST_BY_ID, questMultiplier } from "./src/lib/quests.js";
 import Stripe from "stripe";
 import { Resend } from "resend";
 
@@ -5155,6 +5156,268 @@ app.post("/local-ai/fn/placeDuelSideBet", async (req, res) => {
   }
 });
 
+// ════════════════════════════════════════════════════════════════════════════
+// QUESTS
+//
+// A Back Yourself wager used to be a metric and a number. A quest names an act
+// instead — and the whole thing only means something if the act can be checked
+// without asking the student whether they did it. Every branch below reads
+// records the app already keeps.
+// ════════════════════════════════════════════════════════════════════════════
+
+const DAY_MS = 86400000;
+const dayOf = (iso) => String(iso).slice(0, 10);
+
+/** Every distinct study technique the student has logged in a period. */
+async function techniquesUsed(email, startIso, endIso) {
+  const [{ data: techs }, { data: sess }] = await Promise.all([
+    supabaseAdmin.from("study_techniques").select("technique_type, created_date")
+      .eq("created_by", email).gte("created_date", startIso).lte("created_date", endIso).limit(2000),
+    supabaseAdmin.from("study_sessions").select("technique, created_date")
+      .eq("created_by", email).gte("created_date", startIso).lte("created_date", endIso).limit(2000),
+  ]);
+  const set = new Set();
+  for (const t of techs || []) if (t.technique_type) set.add(String(t.technique_type).toLowerCase());
+  for (const t of sess || []) if (t.technique) set.add(String(t.technique).toLowerCase());
+  return set;
+}
+
+/**
+ * Did this quest get done? Returns { done, progress, target, label }.
+ *
+ * `label` is what the card shows — "2 of 3 subjects", "4/5 cards" — because a
+ * bare percentage on "try something new" tells a student nothing about what
+ * is left to do.
+ */
+async function verifyQuest(email, quest, startIso, endIso) {
+  const c = quest?.check || {};
+  const now = new Date().toISOString();
+  const end = endIso > now ? now : endIso;    // never count the future
+
+  switch (c.kind) {
+    // ── A counter, same as the old bets ───────────────────────────────────
+    case "metric": {
+      const value = await computeMetricValue(email, c.metric, startIso, end);
+      return { done: value >= c.target, progress: value, target: c.target,
+        label: `${value.toLocaleString()} / ${c.target.toLocaleString()}` };
+    }
+
+    // ── One technique they haven't touched in a month ─────────────────────
+    case "new_technique": {
+      const before = new Date(new Date(startIso).getTime() - 30 * DAY_MS).toISOString();
+      const [old, fresh] = await Promise.all([
+        techniquesUsed(email, before, startIso),
+        techniquesUsed(email, startIso, end),
+      ]);
+      const novel = [...fresh].filter(t => !old.has(t));
+      return { done: novel.length > 0, progress: novel.length, target: 1,
+        label: novel.length ? `Tried ${novel[0].replace(/_/g, " ")}` : "Nothing new yet" };
+    }
+
+    // ── Sessions planned on particular weekdays ───────────────────────────
+    // Verified against the planner, not against having studied — the promise
+    // is to plan, and planning is a thing you either did or didn't.
+    case "planned_days": {
+      const { data } = await supabaseAdmin
+        .from("study_plans").select("date")
+        .eq("created_by", email)
+        .gte("date", dayOf(startIso))
+        .lte("date", dayOf(new Date(new Date(endIso).getTime() + 3 * DAY_MS).toISOString()))
+        .limit(200);
+      const hits = (data || []).filter(r => c.days.includes(new Date(`${r.date}T12:00:00`).getDay()));
+      return { done: hits.length >= c.min, progress: hits.length, target: c.min,
+        label: `${hits.length} of ${c.min} planned` };
+    }
+
+    // ── One unbroken block ────────────────────────────────────────────────
+    case "deep_work": {
+      const [{ data: techs }, { data: sess }] = await Promise.all([
+        supabaseAdmin.from("study_techniques").select("session_duration")
+          .eq("created_by", email).gte("created_date", startIso).lte("created_date", end).limit(500),
+        supabaseAdmin.from("study_sessions").select("duration_minutes, session_duration")
+          .eq("created_by", email).gte("created_date", startIso).lte("created_date", end).limit(500),
+      ]);
+      const longest = Math.max(0,
+        ...(techs || []).map(t => Number(t.session_duration) || 0),
+        ...(sess || []).map(x => Number(x.duration_minutes) || Number(x.session_duration) || 0));
+      return { done: longest >= c.minutes, progress: longest, target: c.minutes,
+        label: `Best block ${longest}m of ${c.minutes}m` };
+    }
+
+    // ── Distinct subjects touched ─────────────────────────────────────────
+    case "subjects": {
+      const [{ data: techs }, { data: sess }, { data: quizzes }] = await Promise.all([
+        supabaseAdmin.from("study_techniques").select("subject_name")
+          .eq("created_by", email).gte("created_date", startIso).lte("created_date", end).limit(500),
+        supabaseAdmin.from("study_sessions").select("subject")
+          .eq("created_by", email).gte("created_date", startIso).lte("created_date", end).limit(500),
+        supabaseAdmin.from("quiz_attempts").select("quiz_title")
+          .eq("created_by", email).gte("created_date", startIso).lte("created_date", end).limit(200),
+      ]);
+      const set = new Set();
+      for (const t of techs || []) if (t.subject_name) set.add(t.subject_name);
+      for (const t of sess || []) if (t.subject) set.add(t.subject);
+      void quizzes;
+      return { done: set.size >= c.count, progress: set.size, target: c.count,
+        label: `${set.size} of ${c.count} subjects` };
+    }
+
+    // ── Timed papers ──────────────────────────────────────────────────────
+    case "timed_paper": {
+      const { data } = await supabaseAdmin
+        .from("xp_events").select("source, metadata")
+        .eq("user_email", email).gte("created_date", startIso).lte("created_date", end).limit(500);
+      const runs = (data || []).filter(e =>
+        e.source === "mini_test" || e.source === "exam" || e.metadata?.exam_mode).length;
+      return { done: runs >= c.count, progress: runs, target: c.count,
+        label: `${runs} of ${c.count} sat` };
+    }
+
+    // ── Beat the trailing rate ────────────────────────────────────────────
+    case "beat_average": {
+      const windowDays = Math.max(1, (new Date(endIso) - new Date(startIso)) / DAY_MS);
+      const priorStart = new Date(new Date(startIso).getTime() - 14 * DAY_MS).toISOString();
+      const [inWindow, prior] = await Promise.all([
+        computeMetricValue(email, "study_minutes", startIso, end),
+        computeMetricValue(email, "study_minutes", priorStart, startIso),
+      ]);
+      // No history to beat? Hold them to a modest floor rather than handing it
+      // over — "beat zero" isn't a promise worth paying out on.
+      const dailyBefore = (prior / 14) || 0;
+      const target = Math.max(60, Math.round(dailyBefore * windowDays * (c.ratio || 1.2)));
+      return { done: inWindow >= target, progress: inWindow, target,
+        label: `${inWindow}m of ${target}m` };
+    }
+
+    // ── Every planned session done ────────────────────────────────────────
+    case "plan_clear": {
+      const { data } = await supabaseAdmin
+        .from("study_plans").select("is_completed")
+        .eq("created_by", email)
+        .gte("date", dayOf(startIso)).lte("date", dayOf(endIso)).limit(200);
+      const all = data || [];
+      const done = all.filter(p => p.is_completed).length;
+      // Nothing planned is not the same as everything finished. An empty
+      // planner would otherwise pay out for doing nothing at all.
+      return { done: all.length > 0 && done === all.length, progress: done, target: all.length || 1,
+        label: all.length ? `${done} of ${all.length} done` : "Nothing planned yet" };
+    }
+
+    // ── No zero days ──────────────────────────────────────────────────────
+    case "every_day": {
+      const [{ data: techs }, { data: sess }] = await Promise.all([
+        supabaseAdmin.from("study_techniques").select("created_date")
+          .eq("created_by", email).gte("created_date", startIso).lte("created_date", end).limit(1000),
+        supabaseAdmin.from("study_sessions").select("created_date")
+          .eq("created_by", email).gte("created_date", startIso).lte("created_date", end).limit(1000),
+      ]);
+      const studied = new Set([...(techs || []), ...(sess || [])].map(r => dayOf(r.created_date)));
+      // Enumerate the calendar dates the window actually touches rather than
+      // dividing its duration. A 72-hour window starting at 6pm Monday runs to
+      // 6pm Thursday — four dates, not three — and dividing gave three, so a
+      // student who skipped Tuesday still passed by studying Mon, Wed and Thu.
+      const dates = [];
+      for (let d = new Date(dayOf(startIso)); dayOf(d.toISOString()) <= dayOf(endIso); d.setDate(d.getDate() + 1)) {
+        dates.push(dayOf(d.toISOString()));
+      }
+      const missed = dates.filter(d => !studied.has(d));
+      // Days still ahead can't be missed yet, so an in-flight quest doesn't
+      // read as already failed for tomorrow.
+      const today = dayOf(end);
+      const missedSoFar = missed.filter(d => d <= today);
+      const hit = dates.length - missed.length;
+      return { done: missed.length === 0, progress: hit, target: dates.length,
+        label: missedSoFar.length
+          ? `${hit} of ${dates.length} days — missed ${missedSoFar.length}`
+          : `${hit} of ${dates.length} days, none missed yet` };
+    }
+
+    // ── Weak spots revisited ──────────────────────────────────────────────
+    case "weak_spots": {
+      const { data } = await supabaseAdmin
+        .from("flashcards").select("id, is_weak_spot, last_reviewed_date")
+        .eq("created_by", email).eq("is_weak_spot", true)
+        .gte("updated_date", startIso).limit(200);
+      const touched = (data || []).filter(c2 => c2.last_reviewed_date >= dayOf(startIso)).length;
+      return { done: touched >= c.count, progress: touched, target: c.count,
+        label: `${touched} of ${c.count} weak cards` };
+    }
+
+    default:
+      return { done: false, progress: 0, target: 1, label: "Unknown quest" };
+  }
+}
+
+/** Progress for a bet row, quest-aware, falling back to the old metric path. */
+async function betProgress(bet, endIso) {
+  const quest = bet.quest_id ? QUEST_BY_ID[bet.quest_id] : null;
+  if (quest) {
+    const v = await verifyQuest(bet.created_by, quest, bet.starts_at, bet.ends_at || endIso);
+    return { value: v.progress, done: v.done, target: v.target, label: v.label };
+  }
+  const value = await computeMetricValue(bet.created_by, bet.metric, bet.starts_at, endIso);
+  return { value, done: value >= bet.target, target: bet.target,
+    label: `${value.toLocaleString()} / ${Number(bet.target).toLocaleString()}` };
+}
+
+// ─── createStudyQuest — back yourself to do a specific thing ───────────────
+app.post("/local-ai/fn/createStudyQuest", async (req, res) => {
+  const user = await authenticateRequest(req);
+  if (!user) return res.status(401).json({ error: "Unauthorized" });
+  if (!supabaseAdmin) return res.status(500).json({ error: "Supabase admin not configured" });
+  try {
+    const { quest_id, window_hours, stake_xp } = req.body || {};
+    const quest = QUEST_BY_ID[quest_id];
+    if (!quest) return res.status(400).json({ error: "Unknown quest" });
+    if (!quest.windows.includes(window_hours)) {
+      return res.status(400).json({ error: "That deadline isn't offered for this quest" });
+    }
+    if (!Number.isInteger(stake_xp) || stake_xp < 25 || stake_xp > 500) {
+      return res.status(400).json({ error: "Stake must be 25-500 XP" });
+    }
+
+    const { data: active } = await supabaseAdmin
+      .from("study_bets").select("id, quest_id").eq("created_by", user.email).eq("status", "active");
+    if ((active || []).length >= 3) {
+      return res.status(400).json({ error: "Three live quests is the max — finish one first" });
+    }
+    if ((active || []).some(b => b.quest_id === quest_id)) {
+      return res.status(400).json({ error: "You're already running that one" });
+    }
+
+    const betId = randomUUID();
+    const escrowed = await deductXPWithAudit(
+      user.email, stake_xp, `studyquest_escrow_${betId}`, "bet_escrow",
+      { study_bet_id: betId, quest_id },
+    );
+    if (!escrowed) return res.status(400).json({ error: "Not enough XP to cover that stake" });
+
+    const multiplier = questMultiplier(quest, window_hours);
+    const { data: created, error: insErr } = await supabaseAdmin
+      .from("study_bets")
+      .insert({
+        id: betId, created_by: user.email,
+        quest_id, stake_xp, multiplier,
+        // Snapshot the terms, so editing the catalogue later can't change a
+        // promise already in flight.
+        quest_snapshot: { title: quest.title, blurb: quest.blurb, emoji: quest.emoji,
+          check: quest.check, difficulty: quest.difficulty },
+        metric: quest.check.kind === "metric" ? quest.check.metric : null,
+        target: quest.check.kind === "metric" ? quest.check.target : null,
+        ends_at: new Date(Date.now() + window_hours * 3600 * 1000).toISOString(),
+      })
+      .select().single();
+    if (insErr) {
+      console.error("[createStudyQuest] insert failed:", insErr.code, insErr.message);
+      return res.status(500).json({ error: "Couldn't start that quest." });
+    }
+    return res.json({ success: true, bet: created, payout: Math.floor(stake_xp * multiplier) });
+  } catch (err) {
+    console.error("[createStudyQuest] error:", err);
+    return res.status(500).json({ error: err?.message || String(err) });
+  }
+});
+
 // ─── createStudyBet — back yourself, auto-verified ─────────────────────────
 app.post("/local-ai/fn/createStudyBet", async (req, res) => {
   const user = await authenticateRequest(req);
@@ -5278,11 +5541,16 @@ async function loadMyArenaCore(me, authHeader) {
   const bets = [];
   for (const bet of betsRaw || []) {
     if (bet.status !== "active") { bets.push(bet); continue; }
-    const value = await computeMetricValue(me, bet.metric, bet.starts_at, nowIso);
-    if (value >= bet.target) {
+    // Quest-aware: a quest is checked by its own rule, an old numeric bet by
+    // its counter. betProgress handles both so this loop doesn't have to.
+    const p = await betProgress(bet, nowIso);
+    const decorate = (extra) => ({ ...bet, progress: p.value, progress_label: p.label,
+      quest_target: p.target, ...extra });
+
+    if (p.done) {
       const payout = Math.floor(bet.stake_xp * (Number(bet.multiplier) || STUDY_BET_MULT));
       await supabaseAdmin.from("study_bets")
-        .update({ status: "won", settled_at: nowIso, final_value: value })
+        .update({ status: "won", settled_at: nowIso, final_value: p.value, progress_label: p.label })
         .eq("id", bet.id).eq("status", "active");
       try {
         await callLocalFn("awardXP", {
@@ -5292,16 +5560,16 @@ async function loadMyArenaCore(me, authHeader) {
           target_email: me,
         }, authHeader);
       } catch (e) { console.error("[arenaCore] study bet payout failed:", e?.message); }
-      bets.push({ ...bet, status: "won", final_value: value, progress: value });
+      bets.push(decorate({ status: "won", final_value: p.value }));
       freshlySettled.push({ type: "study_bet", id: bet.id, won: true, payout });
     } else if (bet.ends_at <= nowIso) {
       await supabaseAdmin.from("study_bets")
-        .update({ status: "lost", settled_at: nowIso, final_value: value })
+        .update({ status: "lost", settled_at: nowIso, final_value: p.value, progress_label: p.label })
         .eq("id", bet.id).eq("status", "active");
-      bets.push({ ...bet, status: "lost", final_value: value, progress: value });
+      bets.push(decorate({ status: "lost", final_value: p.value }));
       freshlySettled.push({ type: "study_bet", id: bet.id, won: false });
     } else {
-      bets.push({ ...bet, progress: value });
+      bets.push(decorate({}));
     }
   }
 
