@@ -229,6 +229,27 @@ export default function ActiveRecall({ onSessionComplete, userSubjects: initialU
     const [user, setUser] = useState(null);
     const [userSubjects, setUserSubjects] = useState(initialUserSubjects);
 
+    // Questions handed over from a mind map. The map is where a student records
+    // what they can't yet answer — the open questions and the nodes they marked
+    // shaky — and this is where they find out whether they can. Without this
+    // read, "Send to Active Recall" on a map writes to a key nobody opens,
+    // which is a button that lies.
+    const [fromMap, setFromMap] = useState(null);
+    useEffect(() => {
+        let raw = null;
+        try { raw = sessionStorage.getItem("acedit:recallPrompts"); } catch { return; }
+        if (!raw) return;
+        try { sessionStorage.removeItem("acedit:recallPrompts"); } catch { /* private mode */ }
+        try {
+            const h = JSON.parse(raw);
+            if (!Array.isArray(h?.prompts) || !h.prompts.length) return;
+            setQuestions(h.prompts);
+            if (h.subject) setSelectedSubject(h.subject);
+            if (h.topic) setTopic(h.topic);
+            setFromMap({ topic: h.topic, count: h.prompts.length });
+        } catch { /* a malformed handoff just means an ordinary session */ }
+    }, []);
+
     const defaultQuestions = [
         "What are the key concepts you studied today?",
         "How would you explain this topic to someone else?",
@@ -538,6 +559,18 @@ For each answer:
                             <FolderOpen className="w-4 h-4" /> History
                         </button>
                     </div>
+
+                    {fromMap && (
+                        <div className="rounded-xl border-2 border-map/30 bg-map/5 p-3.5 mb-4">
+                            <p className="text-sm font-bold text-foreground">
+                                {fromMap.count} question{fromMap.count === 1 ? "" : "s"} from your{fromMap.topic ? ` ${fromMap.topic}` : ""} mind map
+                            </p>
+                            <p className="text-xs text-muted-foreground mt-0.5 leading-snug">
+                                Your open questions and the nodes you marked shaky. Answer them from memory —
+                                that's the bit the map itself can't do for you.
+                            </p>
+                        </div>
+                    )}
 
                     <div className="space-y-4">
                         <div className="space-y-1.5">
