@@ -46,6 +46,7 @@ module.exports = {
         },
         xp: 'hsl(var(--xp))',
         streak: 'hsl(var(--streak))',
+        map: 'hsl(var(--map))',
         success: 'hsl(var(--success))',
         destructive: {
           DEFAULT: 'hsl(var(--destructive))',

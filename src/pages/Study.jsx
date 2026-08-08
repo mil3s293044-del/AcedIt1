@@ -13,7 +13,8 @@ import {
     Sparkles,
     Timer,
     Layers,
-    Swords
+    Swords,
+    Network
 } from "lucide-react";
 import { useStakes } from "@/components/arena/useStakes";
 import { METRICS as DUEL_METRICS, firstName as rivalFirstName } from "@/components/arena/arenaMeta";
@@ -27,6 +28,7 @@ import SpacedRepetition from "../components/study/SpacedRepetition";
 import ActiveRecall from "../components/study/ActiveRecall";
 import BlurtingMethod from "../components/study/BlurtingMethod";
 import ExamMode from "../components/study/ExamMode";
+import MindMaps from "../components/study/MindMaps";
 import HelpButton from "@/components/shared/HelpButton";
 import { todaysIntent } from "@/lib/studyIntent";
 
@@ -47,6 +49,7 @@ const TECHNIQUES = [
     { id: "active_recall",     name: "Active Recall",     icon: Brain,         tile: "bg-chart-4/10",  text: "text-chart-4",  accent: "chart-4",  blurb: "Quiz yourself instead of re-reading notes.",                                   goodFor: "Testing what you actually know vs. what feels familiar." },
     { id: "blurting",          name: "Blurting",          icon: PenTool,       tile: "bg-xp/10",       text: "text-xp",       accent: "xp",       blurb: "Brain-dump everything you remember on a topic, then check.",                   goodFor: "Spotting blind spots before exams hit them first." },
     { id: "exam",              name: "Revision Mode",     icon: GraduationCap, tile: "bg-streak/10",   text: "text-streak",   accent: "streak",   blurb: "A timed mock exam built from your own cards and quizzes.",                     goodFor: "Building exam stamina and timing under real conditions." },
+    { id: "mind_map",          name: "Mind Maps",         icon: Network,       tile: "bg-map/10",      text: "text-map",      accent: "map",      blurb: "Map a topic from memory, then get interrogated on the gaps.",                  goodFor: "Seeing how ideas connect — and finding the links you can't explain." },
 ];
 
 const ACCENT_THEME = {
@@ -55,6 +58,7 @@ const ACCENT_THEME = {
     "chart-4": { bg: "bg-chart-4/10",  border: "border-chart-4/25",  iconBg: "bg-chart-4/15",  iconText: "text-chart-4",  divider: "border-chart-4/15",  pillBg: "bg-chart-4/15",  pillText: "text-chart-4"  },
     xp:        { bg: "bg-xp/10",       border: "border-xp/25",       iconBg: "bg-xp/15",       iconText: "text-xp",       divider: "border-xp/15",       pillBg: "bg-xp/15",       pillText: "text-xp"       },
     streak:    { bg: "bg-streak/10",   border: "border-streak/25",   iconBg: "bg-streak/15",   iconText: "text-streak",   divider: "border-streak/15",   pillBg: "bg-streak/15",   pillText: "text-streak"   },
+    map:       { bg: "bg-map/10",      border: "border-map/25",      iconBg: "bg-map/15",      iconText: "text-map",      divider: "border-map/15",      pillBg: "bg-map/15",      pillText: "text-map"      },
 };
 
 // Coach voice — chill, supportive, motivational. Specific not generic.
@@ -62,7 +66,7 @@ function getCoachLine({ name, hour, todayMins, weekMins, streakDays, hasStudiedA
     const period = hour < 12 ? "Morning" : hour < 17 ? "Afternoon" : hour < 21 ? "Evening" : "Late night";
 
     if (!hasStudiedAnything) {
-        return `${period}, ${name}. Five techniques to make studying actually work.`;
+        return `${period}, ${name}. Six techniques to make studying actually work.`;
     }
     if (urgentDays !== null && urgentDays !== undefined && urgentDays <= 3 && todayMins === 0) {
         return `${period}, ${name}. Exam in ${urgentDays === 0 ? 'a few hours' : `${urgentDays} day${urgentDays === 1 ? '' : 's'}`} — let's lock in.`;
@@ -291,6 +295,12 @@ export default function Study() {
             <ExamMode
                 userSubjects={userSubjects}
             />
+        ),
+        mind_map: (
+            <MindMaps
+                user={user}
+                subjects={userSubjects}
+            />
         )
     };
 
@@ -513,6 +523,7 @@ export default function Study() {
             case "active_recall":     return "Quiz yourself — beats re-reading.";
             case "blurting":          return "Brain-dump a topic, spot the gaps.";
             case "exam":              return nextDeadline && nextDeadline.days <= 14 ? `Exam in ${nextDeadline.days}d — run a timed mock.` : "Practice under exam conditions.";
+            case "mind_map":          return "Map a topic blind, find the gaps.";
             default:                  return "";
         }
     };
@@ -693,7 +704,7 @@ export default function Study() {
                         <Sparkles className="w-4 h-4 text-muted-foreground" />
                         <p className="stat-label">Suggested today</p>
                     </div>
-                    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+                    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
                         {TECHNIQUES.map((t) => {
                             const th = ACCENT_THEME[t.accent];
                             const Icon = t.icon;

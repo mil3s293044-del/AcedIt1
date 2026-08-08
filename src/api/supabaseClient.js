@@ -46,6 +46,7 @@ const TABLES = {
   StudyRoadmap:       'study_roadmaps',
   StudyStreak:        'study_streaks',
   StudyPlan:          'study_plans',
+  MindMap:            'mind_maps',
   Leaderboard:        'leaderboards',
   StudyGroup:         'study_groups',
   Friendship:         'friendships',
@@ -288,6 +289,7 @@ const PORTED_FUNCTIONS = {
   placeDuelSideBet:         '/local-ai/fn/placeDuelSideBet',
   createStudyBet:           '/local-ai/fn/createStudyBet',
   createStudyQuest:         '/local-ai/fn/createStudyQuest',
+  mindMapGaps:              '/local-ai/fn/mindMapGaps',
   getArenaState:            '/local-ai/fn/getArenaState',
   getMyStakes:              '/local-ai/fn/getMyStakes',
   // AcedIt ATAR + standardised ranked boards:

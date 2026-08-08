@@ -116,6 +116,7 @@ export const SeasonRecord        = makeEntity('SeasonRecord');
 export const Leaderboard         = makeEntity('Leaderboard');
 export const SchoolProfile       = makeEntity('SchoolProfile');
 export const StudyGroup          = makeEntity('StudyGroup');
+export const MindMap             = makeEntity('MindMap');
 export const StudyPlan           = makeEntity('StudyPlan');
 export const StudyGuide          = makeEntity('StudyGuide');
 export const StudyRoadmap        = makeEntity('StudyRoadmap');
