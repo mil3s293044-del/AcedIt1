@@ -1,10 +1,10 @@
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect, useMemo, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
     Trophy, Swords, Crown, Activity, ClipboardList, Settings as SettingsIcon,
-    LogIn, Loader2, ArrowRight, TrendingUp, Coins, RotateCcw, Target, Users
+    LogIn, Loader2, ArrowRight, TrendingUp, Coins, RotateCcw, Target, Users, ShieldAlert
 } from "lucide-react";
 import { base44 } from "@/api/base44Client";
 import { useToast } from "@/components/ui/use-toast";
@@ -18,6 +18,8 @@ import { momentumOf } from "@/components/competition/battleOdds";
 import { allBattles } from "@/components/competition/normaliseBattle";
 import BattleRow from "@/components/competition/BattleRow";
 import BattleDashboard from "@/components/competition/BattleDashboard";
+import CalloutQuiz from "@/components/competition/CalloutQuiz";
+import { fmtDate } from "@/lib/safeDate";
 import HelpButton from "@/components/shared/HelpButton";
 
 // Battles now rank by Compete Score; fall back to legacy progress for old data.
@@ -49,6 +51,11 @@ export default function Competitions() {
     // this is a read so both kinds of competition can sit in one place.
     const [duels, setDuels] = useState([]);
     const [ticker, setTicker] = useState([]);
+    // Call-outs involving me, in either direction. Loaded once here rather
+    // than per-battle so an incoming one can be surfaced page-wide — a
+    // challenge you never see is a forfeit you didn't choose.
+    const [callouts, setCallouts] = useState([]);
+    const [answering, setAnswering] = useState(null);
     const [userSubjects, setUserSubjects] = useState([]);
     const [openBattle, setOpenBattle] = useState(null);
     // The challenge dialog is opened from the "Start something" card, so this
@@ -109,6 +116,7 @@ export default function Competitions() {
                     setTicker(d?.ticker || []);
                 })
                 .catch(() => {});
+            loadCallouts();
             setUserProfile(profiles[0] || null);
 
             // Auto-sync hours for all active competitions the user is in
@@ -122,6 +130,19 @@ export default function Competitions() {
         } catch (e) { console.error(e); }
         finally { setIsLoading(false); }
     };
+
+    const loadCallouts = useCallback(async () => {
+        try {
+            const r = await base44.functions.invoke('getCallouts');
+            setCallouts(((r?.data ?? r)?.callouts) || []);
+        } catch { /* the page works without them */ }
+    }, []);
+
+    // Only what needs answering: aimed at me, still open. A settled one is a
+    // record, not a demand.
+    const incoming = useMemo(
+        () => callouts.filter(c => c.target_email === user?.email && ["pending", "active"].includes(c.status)),
+        [callouts, user]);
 
     const handleJoinByCode = async () => {
         if (!inviteCode.trim()) return;
@@ -324,6 +345,48 @@ export default function Competitions() {
         );
     }
 
+    // Rendered in every branch that can be on screen: the banner because
+    // ignoring a call-out forfeits real XP, and the quiz because it must be
+    // openable from the battle dashboard as well as the list.
+    const calloutBanner = incoming.map(c => (
+        <motion.div key={c.id} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}
+            className="rounded-3xl border-2 border-streak/40 bg-streak/5 p-5 shadow-soft flex flex-wrap items-center gap-4">
+            <div className="w-11 h-11 rounded-2xl bg-streak/15 flex items-center justify-center flex-shrink-0">
+                <ShieldAlert className="w-5 h-5 text-streak" />
+            </div>
+            <div className="flex-1 min-w-[220px]">
+                <p className="stat-label text-streak">Called out</p>
+                <p className="font-display font-extrabold text-foreground mt-0.5">
+                    {c.caller_name || "A rival"} says you didn't actually learn it
+                </p>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                    {c.question_count} questions from your own study ·
+                    {" "}{Math.round((c.seconds_allowed || 300) / 60)} min ·
+                    {" "}{Math.round((c.pass_mark || 0.75) * 100)}% to pass ·
+                    {" "}answer by {fmtDate(c.respond_by, "EEE h:mmaaa", "soon")}
+                </p>
+            </div>
+            <Button onClick={() => setAnswering(c)}
+                className="gap-1.5 bg-streak hover:bg-streak/90 text-white btn-3d flex-shrink-0">
+                <Swords className="w-4 h-4" /> {c.status === "active" ? "Resume" : "Prove it"}
+            </Button>
+        </motion.div>
+    ));
+
+    // `loadData` is deliberately NOT called on settle. It flips isLoading,
+    // which swaps the whole page for a spinner, unmounts this dialog and
+    // throws away the result screen the student just earned. The board
+    // refreshes when they close it instead.
+    const calloutDialog = answering ? (
+        <CalloutQuiz
+            key={answering.id}
+            callout={answering}
+            open={!!answering}
+            onOpenChange={(o) => { if (!o) { setAnswering(null); loadCallouts(); loadData(); } }}
+            onSettled={loadCallouts}
+        />
+    ) : null;
+
     // The battle dashboard — one competition read as a live market. Group
     // battles keep their existing management panel (invite code, settle,
     // sub-goals) below it rather than losing those controls.
@@ -332,8 +395,13 @@ export default function Competitions() {
         return (
             <div className="min-h-screen bg-background">
                 <div className="max-w-3xl mx-auto px-4 lg:px-8 py-6 lg:py-8">
+                    {calloutBanner.length > 0 && <div className="mb-5 space-y-3">{calloutBanner}</div>}
+                    {calloutDialog}
                     <BattleDashboard
                         battle={live}
+                        me={{ email: user?.email, name: userProfile?.full_name || user?.full_name }}
+                        callouts={{ list: callouts, refresh: loadCallouts, onSelfCheck: setAnswering }}
+                        record={userProfile?.extra?.callout_record}
                         activity={(() => {
                             const emails = new Set(live.sides.map(x => x.email));
                             const label = { quiz: "a quiz", flashcard: "flashcards", study_session: "a session",
@@ -385,6 +453,8 @@ export default function Competitions() {
     return (
         <div className="min-h-screen bg-background">
             <div className="max-w-6xl mx-auto px-4 lg:px-8 py-6 lg:py-10 space-y-6 lg:space-y-8">
+
+                {calloutBanner}
 
                 {/* ── COACH STRIP ─────────────────────────────────────── */}
                 <motion.section initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.35 }}>
@@ -763,6 +833,7 @@ export default function Competitions() {
                     </motion.div>
                 )}
             </AnimatePresence>
+            {calloutDialog}
         </div>
     );
 }

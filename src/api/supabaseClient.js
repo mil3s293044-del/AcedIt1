@@ -278,6 +278,12 @@ const PORTED_FUNCTIONS = {
   submitPredictionResult:   '/local-ai/fn/submitPredictionResult',
   // The Arena — study duels + back-yourself bets:
   createDuel:               '/local-ai/fn/createDuel',
+  // Call-outs — prove you learned it, not just that you clocked hours.
+  createCallout:            '/local-ai/fn/createCallout',
+  getCallouts:              '/local-ai/fn/getCallouts',
+  startCallout:             '/local-ai/fn/startCallout',
+  submitCallout:            '/local-ai/fn/submitCallout',
+  verifyMe:                 '/local-ai/fn/verifyMe',
   respondDuel:              '/local-ai/fn/respondDuel',
   placeDuelSideBet:         '/local-ai/fn/placeDuelSideBet',
   createStudyBet:           '/local-ai/fn/createStudyBet',

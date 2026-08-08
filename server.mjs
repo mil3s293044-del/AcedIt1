@@ -4195,6 +4195,815 @@ async function settleDuelNow(duel, authHeader) {
   return { ...duel, ...update };
 }
 
+// ════════════════════════════════════════════════════════════════════════════
+// CALL-OUTS
+//
+// Every metric a duel or group battle can be fought over — XP, minutes, cards
+// reviewed, quiz marks — measures effort, and effort is farmable. A student
+// who flips a hundred flashcards without reading one of them outscores a
+// student who actually learned the topic, which turns the leaderboard into a
+// measure of patience.
+//
+// A call-out is the check on that. One competitor challenges another to sit a
+// short timed quiz drawn from the material the target themselves studied
+// during the competition. Pass and they take the caller's competition XP;
+// fail and they lose their own.
+//
+// The design problem is griefing: a mechanic that forces someone to drop
+// everything and sit an exam is a weapon unless it's constrained. The rules
+// below are what make it a check rather than a cudgel — see makeCallout.
+// ════════════════════════════════════════════════════════════════════════════
+
+const CALLOUT_QUESTIONS = 8;         // enough to be a real check, short enough to sit
+const CALLOUT_MIN_QUESTIONS = 6;     // below this there isn't enough material to judge
+const CALLOUT_SECONDS = 300;         // 5 minutes — recall speed is part of the point
+const CALLOUT_PASS = 0.75;           // Miles's number
+const CALLOUT_RESPOND_HOURS = 24;    // how long the target has to open it
+const CALLOUT_MIN_XP = 50;           // don't let people call out someone with nothing at stake
+const CALLOUT_LOCKOUT_HOURS = 24;    // no call-outs inside the last day of a contest
+
+const shuffle = (arr) => {
+  const a = [...arr];
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+};
+
+/**
+ * Competition XP for one user: everything the audited log credited them
+ * between `startIso` and now.
+ *
+ * Call-out settlements are excluded, or a second call-out would stake XP the
+ * first one just moved, and two students could pump each other's totals.
+ * Negative events (escrow, earlier losses) are excluded too — you can only
+ * lose what you actually earned studying.
+ */
+/**
+ * Which XP sources a contest's metric actually counts.
+ *
+ * This fixes the worst thing about the first cut: studying counts towards
+ * every live contest at once, so "XP earned in the window" swept up work done
+ * for a completely different battle. A call-out in a throwaway duel could
+ * stake XP you ground out for a group competition.
+ *
+ * Scoping to the metric the contest is fought over makes the stake mean what
+ * it says. A flashcards duel stakes flashcard XP; a quiz-marks duel stakes
+ * quiz XP. An `xp` contest is genuinely global, so it keeps everything —
+ * that is what the student signed up to.
+ */
+const METRIC_SOURCES = {
+  flashcards:    ["flashcard", "spaced_repetition"],
+  quiz_marks:    ["quiz", "mini_test", "practice_questions", "loading_quiz"],
+  study_minutes: ["study_session", "focus_session", "active_recall", "blurting", "mini_test"],
+  xp:            null,   // null = every source counts
+};
+
+async function competitionXP(email, startIso, metric = "xp") {
+  const { data, error } = await supabaseAdmin
+    .from("xp_events")
+    .select("xp_awarded, source")
+    .eq("user_email", email)
+    .gte("created_date", startIso);
+  if (error) {
+    console.error("[callout] competitionXP read failed:", error.code, error.message);
+    return 0;
+  }
+  const allowed = METRIC_SOURCES[metric] ?? null;
+  return (data || [])
+    .filter(r => {
+      const src = String(r.source || "");
+      if (src.startsWith("callout")) return false;   // never stake what a call-out just moved
+      return allowed === null || allowed.includes(src);
+    })
+    .reduce((n, r) => n + Math.max(0, Number(r.xp_awarded) || 0), 0);
+}
+
+/** What a user can actually pay right now. */
+async function spendableXP(email) {
+  const { data } = await supabaseAdmin
+    .from("user_profiles").select("total_xp").eq("created_by", email).limit(1);
+  return Math.max(0, Number(data?.[0]?.total_xp) || 0);
+}
+
+/**
+ * How much moves when a call-out settles: the smaller of what the two sides
+ * earned in the contest, and never more than either could actually pay.
+ *
+ * Two holes this closes.
+ *
+ * The first is spend-to-be-immune. deductXPWithAudit refuses when the balance
+ * is short, so a student who earned 400 in the contest and then spent down to
+ * 100 lost *nothing* — the deduction silently failed and the call-out became a
+ * no-op. Clamping to the balance means they pay what they have.
+ *
+ * The second is the grief asymmetry. "Winner takes everything the other side
+ * earned" reads fair until you notice the caller picks the fight: someone with
+ * 60 XP could wipe out a rival's 3,000 while risking almost nothing. Both
+ * sides now risk the same amount — the smaller of the two — which removes the
+ * incentive to hunt people who have studied far harder than you, and keeps the
+ * mechanic pointed at what it's for: catching someone farming the metric.
+ *
+ * (Set CALLOUT_SYMMETRIC_STAKE to false for the original winner-takes-all.)
+ */
+const CALLOUT_SYMMETRIC_STAKE = true;
+
+/**
+ * How many call-outs this caller has already lost in this contest.
+ *
+ * Prices the one abuse the other guards don't cover: firing accusations at
+ * everyone and eating the losses because each is individually cheap. The
+ * third accusation after two wrong ones costs double.
+ */
+async function callerLosses(row) {
+  if (row.kind === "self_check") return 0;
+  const q = supabaseAdmin.from("callouts").select("id")
+    .eq("caller_email", row.caller_email)
+    .eq("status", "passed")            // the target passed = the caller was wrong
+    .neq("id", row.id);
+  const { data } = row.duel_id
+    ? await q.eq("duel_id", row.duel_id)
+    : await q.eq("competition_id", row.competition_id);
+  return (data || []).length;
+}
+
+const CALLOUT_IMMUNITY_HOURS = 48;   // how long a pass keeps the wolves off
+
+/**
+ * Keep a lifetime record on the profile.
+ *
+ * Passing a call-out used to be purely defensive: you kept your XP and that
+ * was the entire reward, which makes a mechanic students dread rather than
+ * reach for. A verified pass is the strongest evidence the app has that
+ * someone actually retained what they clocked — it should be worth something
+ * to own, and it should count towards the ATAR's mastery component, which is
+ * measuring exactly this.
+ */
+async function recordCalloutOutcome(row, { passed, selfCheck, score, moved }) {
+  try {
+    const { data } = await supabaseAdmin
+      .from("user_profiles").select("id, extra").eq("created_by", row.target_email).limit(1);
+    const profile = data?.[0];
+    if (!profile) return;
+    const rec = { passed: 0, failed: 0, self_checks: 0, xp_won: 0, xp_lost: 0, best_score: 0,
+      ...(profile.extra?.callout_record || {}) };
+
+    if (passed) rec.passed += 1; else rec.failed += 1;
+    if (selfCheck) rec.self_checks += 1;
+    if (passed) rec.xp_won += moved; else rec.xp_lost += moved;
+    rec.best_score = Math.max(rec.best_score, Math.round((score || 0) * 100));
+    rec.last_at = new Date().toISOString();
+
+    await supabaseAdmin.from("user_profiles")
+      .update({ extra: { ...(profile.extra || {}), callout_record: rec } })
+      .eq("id", profile.id);
+  } catch (e) {
+    console.warn("[callout] record update failed:", e?.message || e);
+  }
+
+  // Mastery signal for the ATAR. A timed closed-book quiz on your own material
+  // is a cleaner retention measure than anything else the app records, so it
+  // is logged as a zero-XP quiz event and picked up by the existing weighting.
+  if (!Number.isFinite(score)) return;
+  await insertXPEvent({
+    created_by: row.target_email,
+    event_key: `callout_mastery_${row.id}`,
+    user_email: row.target_email,
+    source: "mini_test",
+    xp_awarded: 0,
+    raw_xp: 0,
+    capped: false,
+    integrity_flags: [],
+    metadata: {
+      quiz_score: Math.round(score * 100),
+      questions_total: (row.questions || []).length || 8,
+      callout_id: row.id,
+      verified: true,
+      kind: selfCheck ? "self_check" : "callout",
+    },
+  }, "calloutMastery");
+}
+
+/**
+ * What each side actually risks. Two numbers, because they are not the same
+ * once a caller has been wrong before.
+ *
+ *   target_risk — what the target loses on a fail. Never inflated by the
+ *                 caller's history; being accused repeatedly shouldn't cost
+ *                 you more.
+ *   caller_risk — what the caller loses if the target passes, doubled per
+ *                 previous wrong accusation in this contest (capped at 4x).
+ *                 This is the price on spraying accusations.
+ *
+ * Both are clamped to what that side can actually pay.
+ */
+async function calloutExposure(row) {
+  const metric = row.metric || "xp";
+  // A self-check has no opponent. Nothing moves either way — the reward is the
+  // immunity and the record, not somebody else's XP.
+  if (row.kind === "self_check") {
+    return { base: 0, target_risk: 0, caller_risk: 0, multiplier: 1, prior_wrong_calls: 0 };
+  }
+
+  const [callerEarned, targetEarned, callerBalance, targetBalance, losses] = await Promise.all([
+    competitionXP(row.caller_email, row.window_start, metric),
+    competitionXP(row.target_email, row.window_start, metric),
+    spendableXP(row.caller_email),
+    spendableXP(row.target_email),
+    callerLosses(row),
+  ]);
+  const base = CALLOUT_SYMMETRIC_STAKE
+    ? Math.min(callerEarned, targetEarned)
+    : Math.max(callerEarned, targetEarned);
+  const multiplier = Math.min(4, 2 ** losses);
+  return {
+    base,
+    target_risk: Math.max(0, Math.min(base, targetBalance)),
+    caller_risk: Math.max(0, Math.min(base * multiplier, callerBalance)),
+    multiplier,
+    prior_wrong_calls: losses,
+  };
+}
+
+/**
+ * Build the quiz from what the target actually studied in the window.
+ *
+ * Two sources, in order of preference:
+ *   1. Their own flashcards reviewed during the competition. Distractors are
+ *      real answers from their other cards in the same subject, which makes a
+ *      plausible wrong option without inventing anything.
+ *   2. Questions from quizzes they sat in the window, which already carry
+ *      options and a marked answer.
+ *
+ * Returns [] when there isn't enough material — the call-out is refused rather
+ * than asking someone about things they never touched.
+ */
+async function buildCalloutQuiz(email, startIso, { earned = 0, metric = "xp" } = {}) {
+  const pool = [];
+
+  const { data: cards } = await supabaseAdmin
+    .from("flashcards")
+    .select("id, question, answer, subject_name, topic, updated_date, last_reviewed_date, " +
+            "is_weak_spot, easiness_factor, review_count_again, total_reviews")
+    .eq("created_by", email)
+    .gte("updated_date", startIso)
+    .limit(200);
+
+  // `updated_date` also moves when a card is created or edited. A card they
+  // actually sat down and reviewed is the stronger claim to "material used
+  // for this competition", so those come first and the rest only fill gaps.
+  const usable = (cards || []).filter(c => c.question && c.answer);
+  const day = String(startIso).slice(0, 10);
+  const actuallyReviewed = usable.filter(c => c.last_reviewed_date && c.last_reviewed_date >= day);
+  const reviewed = actuallyReviewed.length >= CALLOUT_MIN_QUESTIONS ? actuallyReviewed : usable;
+  if (reviewed.length >= 4) {
+    // Answer bank per subject, for distractors that look like they belong.
+    const bySubject = {};
+    for (const c of reviewed) {
+      const k = c.subject_name || "_";
+      (bySubject[k] ||= []).push(c.answer);
+    }
+    // Difficulty tracks the accusation. Someone claiming 3,000 XP in a
+    // fortnight should face the cards they kept getting wrong, not a uniform
+    // random draw — the material is already scored, so this is a sort rather
+    // than new machinery. A modest claim still gets a fair spread.
+    const hardness = (c) =>
+      (c.is_weak_spot ? 2 : 0)
+      + Math.max(0, 2.5 - (Number(c.easiness_factor) || 2.5))
+      + Math.min(2, (Number(c.review_count_again) || 0) / 2);
+    const hardShare = Math.min(0.75, 0.25 + (Number(earned) || 0) / 2000);
+    const byHardness = [...reviewed].sort((a, b) => hardness(b) - hardness(a));
+    const cut = Math.max(1, Math.round(reviewed.length * 0.3));   // the top third is "hard"
+    // Draw a controlled mix rather than shuffling everything together — the
+    // first version shuffled the concatenated list at the end, which threw the
+    // ordering away and made this a uniform random draw regardless of the
+    // claim. Sample the hard band and the rest separately, then interleave.
+    const hardPool = shuffle(byHardness.slice(0, cut));
+    const easyPool = shuffle(byHardness.slice(cut));
+    const wantHard = Math.round(CALLOUT_QUESTIONS * hardShare);
+    const ordered = [];
+    for (let i = 0; i < Math.max(hardPool.length, easyPool.length); i++) {
+      if (i < wantHard && hardPool[i]) ordered.push(hardPool[i]);
+      if (ordered.length < CALLOUT_QUESTIONS * 3 && easyPool[i]) ordered.push(easyPool[i]);
+    }
+    // Anything not yet drawn is still eligible if the picks above can't make
+    // enough fair questions.
+    ordered.push(...hardPool.slice(wantHard), ...easyPool.slice(ordered.length));
+
+    for (const c of ordered) {
+      const others = (bySubject[c.subject_name || "_"] || [])
+        .filter(a => a && a !== c.answer);
+      const distractors = shuffle([...new Set(others)]).slice(0, 3);
+      if (distractors.length < 2) continue;      // can't make a fair question
+      const options = shuffle([c.answer, ...distractors]);
+      pool.push({
+        q: c.question,
+        options,
+        correct: options.indexOf(c.answer),
+        source: "flashcard",
+        ref: c.id,
+        subject: c.subject_name || null,
+      });
+      if (pool.length >= CALLOUT_QUESTIONS) break;
+    }
+  }
+
+  if (pool.length < CALLOUT_QUESTIONS) {
+    const { data: attempts } = await supabaseAdmin
+      .from("quiz_attempts")
+      .select("quiz_id")
+      .eq("created_by", email)
+      .gte("created_date", startIso)
+      .limit(40);
+    const quizIds = [...new Set((attempts || []).map(a => a.quiz_id).filter(Boolean))];
+    if (quizIds.length) {
+      const { data: quizzes } = await supabaseAdmin
+        .from("quizzes").select("id, subject, questions").in("id", quizIds);
+      for (const quiz of shuffle(quizzes || [])) {
+        for (const q of shuffle(quiz.questions || [])) {
+          const opts = Array.isArray(q.options) ? q.options.filter(Boolean) : [];
+          const idx = opts.indexOf(q.correct_answer);
+          if (opts.length < 3 || idx < 0) continue;
+          pool.push({
+            q: q.question, options: opts, correct: idx,
+            source: "quiz", ref: quiz.id, subject: quiz.subject || null,
+          });
+          if (pool.length >= CALLOUT_QUESTIONS) break;
+        }
+        if (pool.length >= CALLOUT_QUESTIONS) break;
+      }
+    }
+  }
+
+  return pool.length >= CALLOUT_MIN_QUESTIONS ? pool.slice(0, CALLOUT_QUESTIONS) : [];
+}
+
+/** Questions with the answers removed — the only shape a client ever sees. */
+const publicQuestions = (questions) =>
+  (questions || []).map((q, i) => ({ i, q: q.q, options: q.options, subject: q.subject || null }));
+
+/** The row a client may see, minus anything that would give the quiz away. */
+const publicCallout = (row) => {
+  if (!row) return null;
+  const { questions, answers, ...rest } = row;
+  return { ...rest, question_count: (questions || []).length, answered: (answers || []).length };
+};
+
+/**
+ * Load the contest a call-out is attached to and check the caller may issue it.
+ * Returns { ok: false, error } with a message written for the student.
+ */
+async function calloutContext({ duel_id, competition_id }, callerEmail, targetEmail) {
+  if (!duel_id && !competition_id) return { ok: false, error: "Nothing to call out — no duel or competition given." };
+  if (duel_id && competition_id) return { ok: false, error: "A call-out belongs to one contest, not two." };
+
+  if (duel_id) {
+    const { data: duel } = await supabaseAdmin.from("study_duels").select("*").eq("id", duel_id).single();
+    if (!duel) return { ok: false, error: "That duel no longer exists." };
+    if (duel.status !== "active") return { ok: false, error: "You can only call someone out while the duel is running." };
+    const players = [duel.challenger_email, duel.opponent_email];
+    if (!players.includes(callerEmail)) return { ok: false, error: "You're not in this duel." };
+    if (!players.includes(targetEmail)) return { ok: false, error: "They're not in this duel." };
+    return {
+      ok: true, kind: "duel", contest: duel,
+      startIso: duel.starts_at || duel.created_date,
+      endIso: duel.ends_at || null,
+      metric: duel.metric || "xp",
+      title: "your duel",
+    };
+  }
+
+  const { data: comp } = await supabaseAdmin.from("goal_competitions").select("*").eq("id", competition_id).single();
+  if (!comp) return { ok: false, error: "That competition no longer exists." };
+  if (comp.status !== "active") return { ok: false, error: "You can only call someone out while the competition is running." };
+  const emails = (comp.participants || []).map(p => p.email);
+  if (!emails.includes(callerEmail)) return { ok: false, error: "You're not in this competition." };
+  if (!emails.includes(targetEmail)) return { ok: false, error: "They're not in this competition." };
+  return {
+    ok: true, kind: "competition", contest: comp,
+    startIso: comp.competition_start_date || comp.created_date,
+    endIso: comp.goal_target_date ? new Date(comp.goal_target_date).toISOString() : null,
+    metric: comp.competition_type === "hours" ? "study_minutes" : "xp",
+    title: comp.goal_title || "your competition",
+  };
+}
+
+/** A live immunity window from a recent pass, or null. */
+async function activeImmunity(email) {
+  const { data } = await supabaseAdmin
+    .from("callouts").select("immunity_until")
+    .eq("target_email", email)
+    .gt("immunity_until", new Date().toISOString())
+    .order("immunity_until", { ascending: false }).limit(1);
+  return data?.[0]?.immunity_until || null;
+}
+
+// ─── createCallout ─────────────────────────────────────────────────────────
+// The guards here are the feature. Without them this is a button that forces
+// a rival to sit an exam on demand, repeatedly, at whatever moment hurts most.
+app.post("/local-ai/fn/createCallout", async (req, res) => {
+  const user = await authenticateRequest(req);
+  if (!user) return res.status(401).json({ error: "Unauthorized" });
+  if (!supabaseAdmin) return res.status(500).json({ error: "Supabase admin not configured" });
+
+  try {
+    const { duel_id, competition_id, target_email, target_name, caller_name } = req.body || {};
+    if (!target_email) return res.status(400).json({ error: "target_email required" });
+    if (target_email === user.email) return res.status(400).json({ error: "You can't call yourself out." });
+
+    const ctx = await calloutContext({ duel_id, competition_id }, user.email, target_email);
+    if (!ctx.ok) return res.status(400).json({ error: ctx.error });
+
+    // No call-outs in the closing stretch. The target is owed a full day to
+    // answer, and a call-out fired an hour before the deadline is a timing
+    // attack rather than a challenge.
+    if (ctx.endIso) {
+      const hoursLeft = (new Date(ctx.endIso).getTime() - Date.now()) / 3600000;
+      if (hoursLeft < CALLOUT_LOCKOUT_HOURS) {
+        return res.status(400).json({
+          error: `Too late to call anyone out — there's under ${CALLOUT_LOCKOUT_HOURS}h left, and they're owed a full day to answer.`,
+        });
+      }
+    }
+
+    // Both sides need something on the table. The caller is staking their own
+    // competition XP, so calling out from zero would be a free roll.
+    // A student who just proved it is off limits. Verifying yourself has to
+    // actually buy something, or nobody will bother.
+    const immune = await activeImmunity(target_email);
+    if (immune) {
+      return res.status(400).json({
+        error: `${target_name || "They"} verified themselves recently — they're protected until ${new Date(immune).toLocaleString()}.`,
+      });
+    }
+
+    const [callerXP, targetXP] = await Promise.all([
+      competitionXP(user.email, ctx.startIso, ctx.metric),
+      competitionXP(target_email, ctx.startIso, ctx.metric),
+    ]);
+    if (callerXP < CALLOUT_MIN_XP) {
+      return res.status(400).json({
+        error: `You need at least ${CALLOUT_MIN_XP} XP earned in this contest to call someone out — you're staking it if they pass.`,
+      });
+    }
+    if (targetXP < CALLOUT_MIN_XP) {
+      return res.status(400).json({
+        error: `They haven't earned enough here yet to be worth challenging (${targetXP} XP).`,
+      });
+    }
+
+    const questions = await buildCalloutQuiz(target_email, ctx.startIso, { earned: targetXP, metric: ctx.metric });
+    if (!questions.length) {
+      return res.status(400).json({
+        error: "Not enough of their study material to build a fair quiz from. Nothing to test them on yet.",
+      });
+    }
+
+    const respondBy = new Date(Date.now() + CALLOUT_RESPOND_HOURS * 3600000);
+    const { data: created, error: insErr } = await supabaseAdmin
+      .from("callouts")
+      .insert({
+        created_by: user.email,
+        duel_id: duel_id || null,
+        competition_id: competition_id || null,
+        caller_email: user.email,
+        caller_name: caller_name || user.email.split("@")[0],
+        target_email,
+        target_name: target_name || target_email.split("@")[0],
+        window_start: ctx.startIso,
+        metric: ctx.metric,
+        kind: "callout",
+        status: "pending",
+        questions,
+        seconds_allowed: CALLOUT_SECONDS,
+        pass_mark: CALLOUT_PASS,
+        respond_by: respondBy.toISOString(),
+        extra: {
+          caller_xp_at_call: callerXP,
+          target_xp_at_call: targetXP,
+          contest: ctx.title,
+          // Indicative only — recomputed at settlement, because a target who
+          // keeps studying should be judged on what they actually hold then.
+          stake_at_call: Math.min(callerXP, targetXP),
+          metric: ctx.metric,
+        },
+      })
+      .select().single();
+
+    if (insErr) {
+      // The partial unique indexes are the one-open-call-out rule.
+      if (insErr.code === "23505") {
+        return res.status(409).json({ error: "There's already a live call-out here. One at a time." });
+      }
+      console.error("[createCallout] insert failed:", insErr.code, insErr.message);
+      return res.status(500).json({ error: "Couldn't create the call-out." });
+    }
+
+    const exposure = await calloutExposure(created);
+    return res.json({ success: true, callout: publicCallout(created), at_stake: exposure });
+  } catch (err) {
+    console.error("[createCallout] error:", err);
+    return res.status(500).json({ error: err?.message || String(err) });
+  }
+});
+
+// ─── verifyMe ──────────────────────────────────────────────────────────────
+// Sit the call-out quiz unprompted. Passing buys a window where nobody can
+// call you out — which turns a mechanic students dread into one they can use,
+// and gives an honest student a way to opt out of the anxiety entirely.
+// Failing costs nothing: volunteering to be tested is the behaviour worth
+// encouraging, and punishing it would stop anyone doing it twice.
+app.post("/local-ai/fn/verifyMe", async (req, res) => {
+  const user = await authenticateRequest(req);
+  if (!user) return res.status(401).json({ error: "Unauthorized" });
+  if (!supabaseAdmin) return res.status(500).json({ error: "Supabase admin not configured" });
+
+  try {
+    const { duel_id, competition_id } = req.body || {};
+    const ctx = await calloutContext({ duel_id, competition_id }, user.email, user.email);
+    if (!ctx.ok) return res.status(400).json({ error: ctx.error });
+
+    const immune = await activeImmunity(user.email);
+    if (immune) {
+      return res.status(400).json({
+        error: `You're already verified until ${new Date(immune).toLocaleString()}.`,
+        immunity_until: immune,
+      });
+    }
+
+    const earned = await competitionXP(user.email, ctx.startIso, ctx.metric);
+    const questions = await buildCalloutQuiz(user.email, ctx.startIso, { earned, metric: ctx.metric });
+    if (!questions.length) {
+      return res.status(400).json({
+        error: "Not enough of your own study here yet to build a quiz from. Do some work first.",
+      });
+    }
+
+    const { data: created, error: insErr } = await supabaseAdmin
+      .from("callouts")
+      .insert({
+        created_by: user.email,
+        duel_id: duel_id || null,
+        competition_id: competition_id || null,
+        caller_email: user.email,
+        caller_name: "You",
+        target_email: user.email,
+        target_name: user.email.split("@")[0],
+        window_start: ctx.startIso,
+        metric: ctx.metric,
+        kind: "self_check",
+        status: "pending",
+        questions,
+        seconds_allowed: CALLOUT_SECONDS,
+        pass_mark: CALLOUT_PASS,
+        respond_by: new Date(Date.now() + CALLOUT_RESPOND_HOURS * 3600000).toISOString(),
+        extra: { contest: ctx.title, metric: ctx.metric, self_check: true },
+      })
+      .select().single();
+
+    if (insErr) {
+      if (insErr.code === "23505") {
+        return res.status(409).json({ error: "You've already got one of these open here." });
+      }
+      console.error("[verifyMe] insert failed:", insErr.code, insErr.message);
+      return res.status(500).json({ error: "Couldn't start the check." });
+    }
+    return res.json({ success: true, callout: publicCallout(created), immunity_hours: CALLOUT_IMMUNITY_HOURS });
+  } catch (err) {
+    console.error("[verifyMe] error:", err);
+    return res.status(500).json({ error: err?.message || String(err) });
+  }
+});
+
+// ─── getCallouts ───────────────────────────────────────────────────────────
+// Everything involving me, with answers stripped and expiry applied lazily.
+app.post("/local-ai/fn/getCallouts", async (req, res) => {
+  const user = await authenticateRequest(req);
+  if (!user) return res.status(401).json({ error: "Unauthorized" });
+  if (!supabaseAdmin) return res.status(500).json({ error: "Supabase admin not configured" });
+
+  try {
+    // Two queries rather than an interpolated .or() filter — the email comes
+    // from a verified JWT, but building PostgREST filter syntax out of a
+    // string is a habit worth not having.
+    const [{ data: asCaller }, { data: asTarget }] = await Promise.all([
+      supabaseAdmin.from("callouts").select("*").eq("caller_email", user.email)
+        .order("created_date", { ascending: false }).limit(40),
+      supabaseAdmin.from("callouts").select("*").eq("target_email", user.email)
+        .order("created_date", { ascending: false }).limit(40),
+    ]);
+    const byId = new Map();
+    for (const r of [...(asCaller || []), ...(asTarget || [])]) byId.set(r.id, r);
+    const data = [...byId.values()].sort((a, b) => new Date(b.created_date) - new Date(a.created_date));
+
+    const rows = [];
+    for (const row of data || []) {
+      rows.push(await settleExpiredCallout(row));
+    }
+    return res.json({ success: true, callouts: rows.map(publicCallout) });
+  } catch (err) {
+    console.error("[getCallouts] error:", err);
+    return res.status(500).json({ error: err?.message || String(err) });
+  }
+});
+
+/**
+ * Forfeit a call-out nobody answered, or one whose timer ran out while the tab
+ * was closed. Idempotent, and safe to call on any row.
+ */
+async function settleExpiredCallout(row) {
+  if (!row || !["pending", "active"].includes(row.status)) return row;
+  const now = Date.now();
+
+  const ranOut = row.status === "active" && row.started_at
+    && now > new Date(row.started_at).getTime() + row.seconds_allowed * 1000 + 15000; // 15s grace for the round trip
+  const neverOpened = row.status === "pending" && now > new Date(row.respond_by).getTime();
+  if (!ranOut && !neverOpened) return row;
+
+  return settleCallout(row, {
+    score: row.status === "active" ? (row.score ?? 0) : 0,
+    passed: false,
+    note: neverOpened ? "Not answered in time." : "Ran out of time.",
+    finalStatus: neverOpened ? "expired" : "failed",
+  });
+}
+
+/**
+ * Move the XP and close the call-out.
+ *
+ * Fail  → the target loses the XP they earned in the contest.
+ * Pass  → the caller's contest XP transfers to the target.
+ *
+ * Both sides are recomputed at settlement rather than trusting the numbers
+ * stored at creation: a call-out sits for up to a day, and a target who kept
+ * studying should be judged on what they actually hold now.
+ */
+async function settleCallout(row, { score, passed, note, finalStatus }) {
+  const key = `callout_${row.id}`;
+  const exposure = await calloutExposure(row);
+  const selfCheck = row.kind === "self_check";
+  let moved = 0;
+  let settleNote = note || "";
+
+  if (passed) {
+    if (exposure.caller_risk > 0) {
+      const took = await deductXPWithAudit(
+        row.caller_email, exposure.caller_risk, `${key}_caller`, "callout_loss",
+        { callout_id: row.id, target_email: row.target_email },
+      );
+      if (took) {
+        await creditXPWithAudit(
+          row.target_email, exposure.caller_risk, `${key}_target`, "callout_win",
+          { callout_id: row.id, caller_email: row.caller_email },
+        );
+        moved = exposure.caller_risk;
+      }
+    }
+    settleNote = selfCheck
+      ? `${settleNote} Verified — nobody can call you out for ${CALLOUT_IMMUNITY_HOURS}h.`.trim()
+      : (settleNote || `Passed — took ${moved} XP off ${row.caller_name || "the caller"}.`);
+  } else if (!selfCheck) {
+    if (exposure.target_risk > 0) {
+      const ok = await deductXPWithAudit(
+        row.target_email, exposure.target_risk, `${key}_forfeit`, "callout_loss",
+        { callout_id: row.id, caller_email: row.caller_email },
+      );
+      if (ok) moved = exposure.target_risk;
+    }
+    settleNote = `${settleNote} Lost ${moved} XP.`.trim();
+  } else {
+    // A failed self-check costs nothing. Volunteering to be tested and coming
+    // up short is exactly the behaviour the app wants more of, not less.
+    settleNote = `${settleNote} No XP lost — you asked for this one.`.trim();
+  }
+
+  // Passing buys peace. Surviving an accusation should be worth the same as
+  // volunteering for one, so both grant the window.
+  const immunityUntil = passed
+    ? new Date(Date.now() + CALLOUT_IMMUNITY_HOURS * 3600000).toISOString()
+    : null;
+
+  await recordCalloutOutcome(row, { passed, selfCheck, score, moved });
+
+  const update = {
+    status: finalStatus,
+    score,
+    xp_moved: moved,
+    settle_note: settleNote,
+    submitted_at: new Date().toISOString(),
+    immunity_until: immunityUntil,
+  };
+  const { data: updated, error } = await supabaseAdmin
+    .from("callouts").update(update).eq("id", row.id)
+    .in("status", ["pending", "active"])      // never re-settle a closed row
+    .select().single();
+  if (error) {
+    console.error("[settleCallout] close failed:", error.code, error.message, row.id);
+    return { ...row, ...update };
+  }
+  return updated || { ...row, ...update };
+}
+
+// ─── startCallout ──────────────────────────────────────────────────────────
+// Opening it starts the clock. Answers are stripped; the server keeps them.
+app.post("/local-ai/fn/startCallout", async (req, res) => {
+  const user = await authenticateRequest(req);
+  if (!user) return res.status(401).json({ error: "Unauthorized" });
+  if (!supabaseAdmin) return res.status(500).json({ error: "Supabase admin not configured" });
+
+  try {
+    const { callout_id } = req.body || {};
+    const { data: row } = await supabaseAdmin.from("callouts").select("*").eq("id", callout_id).single();
+    if (!row) return res.status(404).json({ error: "Call-out not found." });
+    if (row.target_email !== user.email) return res.status(403).json({ error: "That call-out isn't yours to answer." });
+
+    const checked = await settleExpiredCallout(row);
+    if (!["pending", "active"].includes(checked.status)) {
+      return res.status(400).json({ error: "That call-out is already closed.", callout: publicCallout(checked) });
+    }
+
+    let live = checked;
+    if (checked.status === "pending") {
+      const { data: started, error } = await supabaseAdmin
+        .from("callouts")
+        .update({ status: "active", started_at: new Date().toISOString() })
+        .eq("id", row.id).eq("status", "pending")
+        .select().single();
+      if (error) {
+        console.error("[startCallout] update failed:", error.code, error.message);
+        return res.status(500).json({ error: "Couldn't open the call-out." });
+      }
+      live = started;
+    }
+
+    const elapsed = (Date.now() - new Date(live.started_at).getTime()) / 1000;
+    return res.json({
+      success: true,
+      callout: publicCallout(live),
+      questions: publicQuestions(row.questions),
+      seconds_left: Math.max(0, Math.round(live.seconds_allowed - elapsed)),
+    });
+  } catch (err) {
+    console.error("[startCallout] error:", err);
+    return res.status(500).json({ error: err?.message || String(err) });
+  }
+});
+
+// ─── submitCallout ─────────────────────────────────────────────────────────
+// Marked server-side against answers the client was never sent.
+app.post("/local-ai/fn/submitCallout", async (req, res) => {
+  const user = await authenticateRequest(req);
+  if (!user) return res.status(401).json({ error: "Unauthorized" });
+  if (!supabaseAdmin) return res.status(500).json({ error: "Supabase admin not configured" });
+
+  try {
+    const { callout_id, answers } = req.body || {};
+    const { data: row } = await supabaseAdmin.from("callouts").select("*").eq("id", callout_id).single();
+    if (!row) return res.status(404).json({ error: "Call-out not found." });
+    if (row.target_email !== user.email) return res.status(403).json({ error: "That call-out isn't yours to answer." });
+    if (row.status !== "active") {
+      return res.status(400).json({ error: "That call-out isn't open.", callout: publicCallout(row) });
+    }
+
+    const elapsedMs = Date.now() - new Date(row.started_at).getTime();
+    const overtime = elapsedMs > row.seconds_allowed * 1000 + 15000;
+
+    const picks = Array.isArray(answers) ? answers : [];
+    const correct = (row.questions || [])
+      .reduce((n, q, i) => n + (picks[i] === q.correct ? 1 : 0), 0);
+    const score = row.questions.length ? correct / row.questions.length : 0;
+    const passed = !overtime && score >= Number(row.pass_mark);
+
+    const settled = await settleCallout(row, {
+      score,
+      passed,
+      note: overtime
+        ? `Ran out of time — ${correct}/${row.questions.length} answered correctly.`
+        : `${correct}/${row.questions.length} correct.`,
+      finalStatus: passed ? "passed" : "failed",
+    });
+
+    // Store what they picked for the record, without exposing the key.
+    await supabaseAdmin.from("callouts").update({ answers: picks }).eq("id", row.id);
+
+    return res.json({
+      success: true,
+      passed,
+      overtime,
+      score,
+      correct,
+      total: row.questions.length,
+      pass_mark: Number(row.pass_mark),
+      xp_moved: settled.xp_moved,
+      callout: publicCallout({ ...settled, answers: picks }),
+    });
+  } catch (err) {
+    console.error("[submitCallout] error:", err);
+    return res.status(500).json({ error: err?.message || String(err) });
+  }
+});
+
 // ─── createDuel ────────────────────────────────────────────────────────────
 app.post("/local-ai/fn/createDuel", async (req, res) => {
   const user = await authenticateRequest(req);
@@ -4495,12 +5304,27 @@ app.post("/local-ai/fn/getMyStakes", async (req, res) => {
   if (!supabaseAdmin) return res.status(500).json({ error: "Supabase admin not configured" });
   try {
     const core = await loadMyArenaCore(user.email, req.headers.authorization || "");
-    if (core.setup_required) return res.json({ setup_required: true, duels: [], bets: [] });
+    if (core.setup_required) return res.json({ setup_required: true, duels: [], bets: [], callouts: [] });
+
+    // Incoming call-outs ride the always-on strip because ignoring one
+    // forfeits XP. A challenge that only exists on a page you didn't open is
+    // a loss you never chose to take.
+    const { data: incoming } = await supabaseAdmin
+      .from("callouts").select("*")
+      .eq("target_email", user.email)
+      .in("status", ["pending", "active"]);
+    const live = [];
+    for (const row of incoming || []) {
+      const checked = await settleExpiredCallout(row);
+      if (["pending", "active"].includes(checked.status)) live.push(publicCallout(checked));
+    }
+
     return res.json({
       success: true,
       me: user.email,
       duels: core.duels.filter((d) => d.status === "active" || d.status === "pending"),
       bets: core.bets.filter((b) => b.status === "active"),
+      callouts: live,
       freshly_settled: core.freshlySettled,
     });
   } catch (err) {

@@ -22,6 +22,7 @@ import {
     Swords, Gauge, Flag, Zap, Activity,
 } from "lucide-react";
 import { Countdown } from "./arenaHelpers";
+import CalloutPanel from "./CalloutPanel";
 
 const pct = (n) => `${Math.round(n)}%`;
 
@@ -128,7 +129,7 @@ function SwingChart({ swing, currentGap }) {
     );
 }
 
-export default function BattleDashboard({ battle, onBack, footer, activity = [] }) {
+export default function BattleDashboard({ battle, onBack, footer, activity = [], callouts, me, record }) {
     if (!battle) return null;
     const { odds, market, swing, momentum, narrative, sides, potXP, endsAt, status, unit, kind, projection } = battle;
     // Duels and group battles are different games; they read as different
@@ -349,6 +350,21 @@ export default function BattleDashboard({ battle, onBack, footer, activity = [] 
                 <div className="flex justify-center">
                     <Countdown targetDate={endsAt} variant="chip" />
                 </div>
+            )}
+
+            {/* Every metric above measures effort, and effort can be farmed.
+                This is the check on it — and it only exists while the battle
+                is live, because settling one afterwards changes nothing. */}
+            {!settled && callouts && (
+                <CalloutPanel
+                    battle={battle}
+                    me={me}
+                    rivals={ranked.filter(p => p.email && p.email !== me?.email)}
+                    callouts={callouts.list}
+                    onChanged={callouts.refresh}
+                    onSelfCheck={callouts.onSelfCheck}
+                    record={record}
+                />
             )}
 
             {footer}

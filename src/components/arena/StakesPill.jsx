@@ -9,7 +9,7 @@
 import React, { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Link, useLocation } from "react-router-dom";
-import { Swords, Target, Crown, X } from "lucide-react";
+import { Swords, Target, Crown, X, ShieldAlert } from "lucide-react";
 import { useStakes } from "./useStakes";
 import { METRICS, timeLeft, firstName } from "./arenaMeta";
 
@@ -56,6 +56,11 @@ export default function StakesPill() {
     const activeDuels = (stakes?.duels || []).filter(d => d.status === "active" && d.live_scores);
     const activeBets = (stakes?.bets || []).filter(b => b.status === "active");
 
+    // An open call-out outranks everything, everywhere — not just on study
+    // surfaces and not dismissible. Ignoring one forfeits XP, so it is the one
+    // stake that must not be possible to miss.
+    const callout = (stakes?.callouts || [])[0] || null;
+
     // Pick the single most relevant stake for this surface.
     let picked = null;
     if (me && rk && !dismissed) {
@@ -71,14 +76,22 @@ export default function StakesPill() {
         }
     }
 
-    // A transient flash outranks the ambient pill.
-    const show = flash || picked;
+    // A transient flash outranks the ambient pill; a call-out outranks both.
+    const show = callout || flash || picked;
     if (!show) return null;
 
     let content = null;
     let tone = "border-chart-4/40 bg-surface";
 
-    if (flash?.kind === "lead") {
+    if (callout) {
+        tone = "border-streak bg-streak text-white";
+        content = (
+            <Link to="/Competitions" className="flex items-center gap-2 text-sm font-black">
+                <ShieldAlert className="w-4 h-4" />
+                {firstName(callout.caller_name) || "Someone"} called you out — prove it or forfeit
+            </Link>
+        );
+    } else if (flash?.kind === "lead") {
         tone = flash.nowLeading ? "border-primary bg-primary text-white" : "border-streak bg-streak text-white";
         content = (
             <span className="flex items-center gap-2 text-sm font-black">
