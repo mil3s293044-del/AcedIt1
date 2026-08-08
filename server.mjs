@@ -5366,7 +5366,7 @@ app.post("/local-ai/fn/createStudyQuest", async (req, res) => {
   if (!user) return res.status(401).json({ error: "Unauthorized" });
   if (!supabaseAdmin) return res.status(500).json({ error: "Supabase admin not configured" });
   try {
-    const { quest_id, window_hours, stake_xp } = req.body || {};
+    const { quest_id, window_hours, stake_xp, tz_offset } = req.body || {};
     const quest = QUEST_BY_ID[quest_id];
     if (!quest) return res.status(400).json({ error: "Unknown quest" });
     if (!quest.windows.includes(window_hours)) {
@@ -5378,11 +5378,32 @@ app.post("/local-ai/fn/createStudyQuest", async (req, res) => {
 
     const { data: active } = await supabaseAdmin
       .from("study_bets").select("id, quest_id").eq("created_by", user.email).eq("status", "active");
-    if ((active || []).length >= 3) {
-      return res.status(400).json({ error: "Three live quests is the max — finish one first" });
-    }
     if ((active || []).some(b => b.quest_id === quest_id)) {
       return res.status(400).json({ error: "You're already running that one" });
+    }
+
+    // One new quest a day. Quests stack — a three-day promise is still running
+    // tomorrow — but you can only *take on* one at a time, so the commitment
+    // stays a decision rather than a shopping list you pick five of and then
+    // ignore. Judged in the student's own local day, not UTC, or a Melbourne
+    // evening would count as tomorrow.
+    const offset = Number.isFinite(Number(tz_offset)) ? Number(tz_offset) : 0;
+    const localDay = (iso) => new Date(new Date(iso).getTime() - offset * 60000).toISOString().slice(0, 10);
+    const today = localDay(new Date().toISOString());
+    const { data: recent } = await supabaseAdmin
+      .from("study_bets").select("created_date")
+      .eq("created_by", user.email)
+      .gte("created_date", new Date(Date.now() - 3 * 86400000).toISOString())
+      .order("created_date", { ascending: false }).limit(10);
+    const startedToday = (recent || []).find(b => localDay(b.created_date) === today);
+    if (startedToday) {
+      // Midnight in their timezone.
+      const nextLocal = new Date(`${today}T00:00:00.000Z`);
+      nextLocal.setUTCDate(nextLocal.getUTCDate() + 1);
+      return res.status(429).json({
+        error: "One new quest a day — the ones you've already taken on keep running.",
+        next_available_at: new Date(nextLocal.getTime() + offset * 60000).toISOString(),
+      });
     }
 
     const betId = randomUUID();
