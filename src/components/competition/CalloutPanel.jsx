@@ -53,7 +53,7 @@ export default function CalloutPanel({ battle, me, rivals, callouts = [], onChan
             toast({
                 variant: "success",
                 title: `${target.name || "They"} have 24 hours`,
-                description: `${data.at_stake?.yours ?? 0} XP of yours is on it. If they pass, it's theirs.`,
+                description: `${data.at_stake?.stake ?? 0} XP each way. If they pass, it's theirs.`,
             });
             setTarget(null);
             onChanged?.();
@@ -72,8 +72,9 @@ export default function CalloutPanel({ battle, me, rivals, callouts = [], onChan
                     <h3 className="font-display font-extrabold text-foreground">Call it out</h3>
                     <p className="text-xs text-muted-foreground leading-snug mt-0.5">
                         Think someone's farming the metric rather than learning? Make them prove it —
-                        a timed quiz from their own study in this contest. Pass and they take everything
-                        you earned here. Fail and they lose everything they earned.
+                        a timed quiz from their own study in this contest. You both risk the same amount:
+                        whichever of you has earned less here. They pass, it's theirs. They fail or
+                        ignore it, it's yours.
                     </p>
                 </div>
             </div>
@@ -144,14 +145,14 @@ export default function CalloutPanel({ battle, me, rivals, callouts = [], onChan
                                 <Check className="w-4 h-4 text-primary flex-shrink-0 mt-0.5" />
                                 <span className="text-muted-foreground">
                                     <span className="font-bold text-foreground">They fail or ignore it</span> — they
-                                    lose every XP they earned in this contest.
+                                    lose the stake and you're vindicated.
                                 </span>
                             </li>
                             <li className="flex gap-2">
                                 <X className="w-4 h-4 text-streak flex-shrink-0 mt-0.5" />
                                 <span className="text-muted-foreground">
-                                    <span className="font-bold text-foreground">They pass</span> — they take every XP
-                                    <em> you</em> earned in it. All of it.
+                                    <span className="font-bold text-foreground">They pass</span> — that same
+                                    amount comes off <em>you</em>.
                                 </span>
                             </li>
                         </ul>

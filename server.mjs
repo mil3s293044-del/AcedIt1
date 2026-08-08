@@ -4255,6 +4255,49 @@ async function competitionXP(email, startIso) {
     .reduce((n, r) => n + Math.max(0, Number(r.xp_awarded) || 0), 0);
 }
 
+/** What a user can actually pay right now. */
+async function spendableXP(email) {
+  const { data } = await supabaseAdmin
+    .from("user_profiles").select("total_xp").eq("created_by", email).limit(1);
+  return Math.max(0, Number(data?.[0]?.total_xp) || 0);
+}
+
+/**
+ * How much moves when a call-out settles: the smaller of what the two sides
+ * earned in the contest, and never more than either could actually pay.
+ *
+ * Two holes this closes.
+ *
+ * The first is spend-to-be-immune. deductXPWithAudit refuses when the balance
+ * is short, so a student who earned 400 in the contest and then spent down to
+ * 100 lost *nothing* — the deduction silently failed and the call-out became a
+ * no-op. Clamping to the balance means they pay what they have.
+ *
+ * The second is the grief asymmetry. "Winner takes everything the other side
+ * earned" reads fair until you notice the caller picks the fight: someone with
+ * 60 XP could wipe out a rival's 3,000 while risking almost nothing. Both
+ * sides now risk the same amount — the smaller of the two — which removes the
+ * incentive to hunt people who have studied far harder than you, and keeps the
+ * mechanic pointed at what it's for: catching someone farming the metric.
+ *
+ * (Set CALLOUT_SYMMETRIC_STAKE to false for the original winner-takes-all.)
+ */
+const CALLOUT_SYMMETRIC_STAKE = true;
+
+async function calloutStake(row) {
+  const [callerEarned, targetEarned, callerBalance, targetBalance] = await Promise.all([
+    competitionXP(row.caller_email, row.window_start),
+    competitionXP(row.target_email, row.window_start),
+    spendableXP(row.caller_email),
+    spendableXP(row.target_email),
+  ]);
+  const base = CALLOUT_SYMMETRIC_STAKE
+    ? Math.min(callerEarned, targetEarned)
+    : Math.max(callerEarned, targetEarned);
+  // Neither side can be asked for more than it holds.
+  return Math.max(0, Math.min(base, callerBalance, targetBalance));
+}
+
 /**
  * Build the quiz from what the target actually studied in the window.
  *
@@ -4273,12 +4316,18 @@ async function buildCalloutQuiz(email, startIso) {
 
   const { data: cards } = await supabaseAdmin
     .from("flashcards")
-    .select("id, question, answer, subject_name, topic, updated_date")
+    .select("id, question, answer, subject_name, topic, updated_date, last_reviewed_date")
     .eq("created_by", email)
     .gte("updated_date", startIso)
     .limit(200);
 
-  const reviewed = (cards || []).filter(c => c.question && c.answer);
+  // `updated_date` also moves when a card is created or edited. A card they
+  // actually sat down and reviewed is the stronger claim to "material used
+  // for this competition", so those come first and the rest only fill gaps.
+  const usable = (cards || []).filter(c => c.question && c.answer);
+  const day = String(startIso).slice(0, 10);
+  const actuallyReviewed = usable.filter(c => c.last_reviewed_date && c.last_reviewed_date >= day);
+  const reviewed = actuallyReviewed.length >= CALLOUT_MIN_QUESTIONS ? actuallyReviewed : usable;
   if (reviewed.length >= 4) {
     // Answer bank per subject, for distractors that look like they belong.
     const bySubject = {};
@@ -4451,7 +4500,14 @@ app.post("/local-ai/fn/createCallout", async (req, res) => {
         seconds_allowed: CALLOUT_SECONDS,
         pass_mark: CALLOUT_PASS,
         respond_by: respondBy.toISOString(),
-        extra: { caller_xp_at_call: callerXP, target_xp_at_call: targetXP, contest: ctx.title },
+        extra: {
+          caller_xp_at_call: callerXP,
+          target_xp_at_call: targetXP,
+          contest: ctx.title,
+          // Indicative only — recomputed at settlement, because a target who
+          // keeps studying should be judged on what they actually hold then.
+          stake_at_call: Math.min(callerXP, targetXP),
+        },
       })
       .select().single();
 
@@ -4467,7 +4523,7 @@ app.post("/local-ai/fn/createCallout", async (req, res) => {
     return res.json({
       success: true,
       callout: publicCallout(created),
-      at_stake: { yours: callerXP, theirs: targetXP },
+      at_stake: { yours: callerXP, theirs: targetXP, stake: Math.min(callerXP, targetXP) },
     });
   } catch (err) {
     console.error("[createCallout] error:", err);
@@ -4540,11 +4596,11 @@ async function settleExpiredCallout(row) {
  */
 async function settleCallout(row, { score, passed, note, finalStatus }) {
   const key = `callout_${row.id}`;
+  const stake = await calloutStake(row);
   let moved = 0;
   let settleNote = note || "";
 
   if (passed) {
-    const stake = await competitionXP(row.caller_email, row.window_start);
     if (stake > 0) {
       const took = await deductXPWithAudit(
         row.caller_email, stake, `${key}_caller`, "callout_loss",
@@ -4560,7 +4616,6 @@ async function settleCallout(row, { score, passed, note, finalStatus }) {
     }
     settleNote = settleNote || `Passed — took ${moved} XP off ${row.caller_name || "the caller"}.`;
   } else {
-    const stake = await competitionXP(row.target_email, row.window_start);
     if (stake > 0) {
       const ok = await deductXPWithAudit(
         row.target_email, stake, `${key}_forfeit`, "callout_loss",
@@ -4568,7 +4623,7 @@ async function settleCallout(row, { score, passed, note, finalStatus }) {
       );
       if (ok) moved = stake;
     }
-    settleNote = `${settleNote} Lost ${moved} XP earned in this contest.`.trim();
+    settleNote = `${settleNote} Lost ${moved} XP.`.trim();
   }
 
   const update = {
@@ -4988,12 +5043,27 @@ app.post("/local-ai/fn/getMyStakes", async (req, res) => {
   if (!supabaseAdmin) return res.status(500).json({ error: "Supabase admin not configured" });
   try {
     const core = await loadMyArenaCore(user.email, req.headers.authorization || "");
-    if (core.setup_required) return res.json({ setup_required: true, duels: [], bets: [] });
+    if (core.setup_required) return res.json({ setup_required: true, duels: [], bets: [], callouts: [] });
+
+    // Incoming call-outs ride the always-on strip because ignoring one
+    // forfeits XP. A challenge that only exists on a page you didn't open is
+    // a loss you never chose to take.
+    const { data: incoming } = await supabaseAdmin
+      .from("callouts").select("*")
+      .eq("target_email", user.email)
+      .in("status", ["pending", "active"]);
+    const live = [];
+    for (const row of incoming || []) {
+      const checked = await settleExpiredCallout(row);
+      if (["pending", "active"].includes(checked.status)) live.push(publicCallout(checked));
+    }
+
     return res.json({
       success: true,
       me: user.email,
       duels: core.duels.filter((d) => d.status === "active" || d.status === "pending"),
       bets: core.bets.filter((b) => b.status === "active"),
+      callouts: live,
       freshly_settled: core.freshlySettled,
     });
   } catch (err) {

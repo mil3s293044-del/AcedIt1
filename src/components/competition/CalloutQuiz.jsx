@@ -78,6 +78,7 @@ export default function CalloutQuiz({ callout, open, onOpenChange, onSettled }) 
         } finally { setBusy(false); }
     };
 
+    const stake = callout.extra?.stake_at_call ?? null;
     const q = questions[idx];
     const answeredCount = Object.keys(answers).length;
     const urgent = left != null && left <= 60;
@@ -106,16 +107,21 @@ export default function CalloutQuiz({ callout, open, onOpenChange, onSettled }) 
                             <div className="rounded-2xl border-2 border-primary/25 bg-primary/5 p-3">
                                 <p className="stat-label text-primary">If you pass</p>
                                 <p className="text-sm font-bold text-foreground mt-0.5">
-                                    You take every XP they earned in this contest.
+                                    {stake != null ? `You take ${stake} XP off them.` : "You take their stake."}
                                 </p>
                             </div>
                             <div className="rounded-2xl border-2 border-streak/25 bg-streak/5 p-3">
                                 <p className="stat-label text-streak">If you don't</p>
                                 <p className="text-sm font-bold text-foreground mt-0.5">
-                                    You lose every XP you earned in it.
+                                    {stake != null ? `You lose ${stake} XP.` : "You lose the same."}
                                 </p>
                             </div>
                         </div>
+
+                        <p className="text-[11px] text-muted-foreground">
+                            Both of you risk the same amount — whichever of you earned less in this contest.
+                            The exact figure is settled when you submit.
+                        </p>
 
                         <div className="rounded-xl bg-secondary/60 px-3 py-2.5 flex items-start gap-2">
                             <Timer className="w-4 h-4 text-muted-foreground flex-shrink-0 mt-0.5" />
@@ -214,7 +220,7 @@ export default function CalloutQuiz({ callout, open, onOpenChange, onSettled }) 
                             <p className="text-xs text-muted-foreground mt-0.5">
                                 {result.passed
                                     ? `Taken off ${callout.caller_name || "them"} for calling it wrong.`
-                                    : "Everything you earned in this contest."}
+                                    : "Gone to the call-out."}
                             </p>
                         </div>
                         <Button onClick={() => onOpenChange(false)} className="w-full">Done</Button>
