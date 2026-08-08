@@ -30,6 +30,7 @@ import BlurtingMethod from "../components/study/BlurtingMethod";
 import ExamMode from "../components/study/ExamMode";
 import MindMaps from "../components/study/MindMaps";
 import HelpButton from "@/components/shared/HelpButton";
+import NeuroPanel from "../components/study/NeuroPanel";
 import { todaysIntent } from "@/lib/studyIntent";
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -589,7 +590,7 @@ export default function Study() {
 
     return (
         <div className="min-h-screen bg-background">
-            <div className="max-w-6xl mx-auto px-4 lg:px-8 py-6 lg:py-10 space-y-6 lg:space-y-8">
+            <div className="max-w-[1600px] mx-auto px-4 lg:px-8 py-6 lg:py-10 space-y-6 lg:space-y-8">
 
                 {/* ── COACH STRIP ─────────────────────────────────────── */}
                 <motion.section initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.35 }}>
@@ -729,18 +730,33 @@ export default function Study() {
                     </div>
                 </motion.section>
 
-                {/* ── ACTIVE TOOL ───────────────────────────────────────── */}
+                {/* ── ACTIVE TOOL + THE SCIENCE ─────────────────────────── */}
                 {/* Tool switching happens via the colour-coded suggestion grid
                     above and the selected-technique panel — the old tab bar was
-                    redundant, so it's removed. */}
-                <motion.div
-                    key={activeTab}
-                    initial={{ opacity: 0, y: 12 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ duration: 0.3 }}
-                >
-                    {techniqueComponents[activeTab]}
-                </motion.div>
+                    redundant, so it's removed.
+
+                    The tool sits left and the evidence rail fills the space that
+                    used to be dead margin. It only splits at xl: below that the
+                    rail would squeeze the tool, so it stacks underneath — still
+                    read, just after the thing the student came for. */}
+                <div className="grid xl:grid-cols-[minmax(0,1fr)_380px] gap-6 items-start">
+                    <motion.div
+                        key={activeTab}
+                        initial={{ opacity: 0, y: 12 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ duration: 0.3 }}
+                        className="min-w-0"
+                    >
+                        {techniqueComponents[activeTab]}
+                    </motion.div>
+
+                    <div className="xl:sticky xl:top-6">
+                        <NeuroPanel
+                            techniqueId={activeTab}
+                            techniqueName={(TECHNIQUES.find(t => t.id === activeTab) || {}).name || "this"}
+                        />
+                    </div>
+                </div>
             </div>
         </div>
     );
