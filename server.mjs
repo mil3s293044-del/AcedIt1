@@ -155,11 +155,23 @@ async function callLocalFn(name, payload, authHeader) {
   return data;
 }
 
-async function callInvokeAI({ prompt, response_json_schema }) {
+/**
+ * Loopback into our own /local-ai/invokeAI, used by the ported Base44
+ * functions.
+ *
+ * `req` and `feature` are not optional in practice. The tier gate reads its
+ * budget from the caller's JWT and the feature name off the body — so a
+ * loopback that forwards neither is an unauthenticated request for an
+ * unnamed feature, which the gate waves straight through. Every daily cap
+ * registered for a function that goes through here was dead config until
+ * these were forwarded.
+ */
+async function callInvokeAI({ prompt, response_json_schema, feature, req }) {
+  const auth = req?.headers?.authorization;
   const r = await fetch(`http://localhost:${PORT}/local-ai/invokeAI`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ prompt, response_json_schema }),
+    headers: { "Content-Type": "application/json", ...(auth ? { Authorization: auth } : {}) },
+    body: JSON.stringify({ prompt, response_json_schema, ...(feature ? { feature } : {}) }),
   });
   const text = await r.text();
   if (!r.ok) throw new Error(`invokeAI failed (${r.status}): ${text}`);
@@ -189,8 +201,8 @@ async function callInvokeAI({ prompt, response_json_schema }) {
 // real cost backstop. Free users' chat shares the free tools lifetime cap.
 const TIER_FREE_CAPS    = { quiz_ai_gen: 5, quiz_ai_mark: 5, flashcard_ai_gen: 5, ai_tool: 5, ai_chat: 5 };
 const TIER_FREE_COUNTER = { quiz_ai_gen: "free_ai_quizzes_used", quiz_ai_mark: "free_ai_quiz_marks_used", flashcard_ai_gen: "free_ai_flashcards_used", ai_tool: "free_ai_tools_used", ai_chat: "free_ai_tools_used" };
-const TIER_PREMIUM_CAPS = { quiz_ai_gen: 3, quiz_ai_mark: 10, flashcard_ai_gen: 3, ai_tool: 6, ai_chat: 8, goal_ai_gen: 1, roadmap_ai_gen: 5, blurting: 5, active_recall: 8, study_coach: 30 };
-const TIER_COUNTER_KEY  = { quiz_ai_gen: "quizzes", quiz_ai_mark: "quiz_marks", flashcard_ai_gen: "flashcards", ai_tool: "tools", ai_chat: "chat", goal_ai_gen: "goal", roadmap_ai_gen: "goal", blurting: "blurting", active_recall: "active_recall", study_coach: "coach" };
+const TIER_PREMIUM_CAPS = { quiz_ai_gen: 3, quiz_ai_mark: 10, flashcard_ai_gen: 3, ai_tool: 6, ai_chat: 8, goal_ai_gen: 1, roadmap_ai_gen: 5, blurting: 5, active_recall: 8, study_coach: 30, mindmap_gaps: 6 };
+const TIER_COUNTER_KEY  = { quiz_ai_gen: "quizzes", quiz_ai_mark: "quiz_marks", flashcard_ai_gen: "flashcards", ai_tool: "tools", ai_chat: "chat", goal_ai_gen: "goal", roadmap_ai_gen: "goal", blurting: "blurting", active_recall: "active_recall", study_coach: "coach", mindmap_gaps: "mindmap" };
 const TIER_WEEKLY_CAP_CENTS = 250;
 const TIER_FREE_LIFETIME_COST_CAP_CENTS = 100;   // $1 hard ceiling per free user, lifetime
 
@@ -672,7 +684,7 @@ async function recordTierUsage(profile, feature, usage, options = {}) {
     const today = new Date().toISOString().slice(0, 10);
     let counters = profile.daily_ai_counters ?? {};
     if (counters.date !== today) {
-      counters = { date: today, quizzes: 0, flashcards: 0, tools: 0, chat: 0, marker: 0, goal: 0, blurting: 0, active_recall: 0, coach: 0 };
+      counters = { date: today, quizzes: 0, flashcards: 0, tools: 0, chat: 0, marker: 0, goal: 0, blurting: 0, active_recall: 0, coach: 0, mindmap: 0 };
     }
     const counterKey = TIER_COUNTER_KEY[feature];
     if (counterKey) counters = { ...counters, [counterKey]: (counters[counterKey] ?? 0) + 1 };
@@ -3068,7 +3080,8 @@ Structure for ${daysUntilTarget} days:
           required: ["difficulty_level", "sub_goals", "total_xp_reward", "tips"],
         };
 
-    const aiResponse = await callInvokeAI({ prompt: aiPrompt, response_json_schema: schema });
+    const aiResponse = await callInvokeAI({ prompt: aiPrompt, response_json_schema: schema,
+      feature: "roadmap_ai_gen", req });
 
     let processedData;
     if (hasUserSubGoals) {
@@ -5361,6 +5374,80 @@ async function betProgress(bet, endIso) {
 }
 
 // ─── createStudyQuest — back yourself to do a specific thing ───────────────
+// ─── mindMapGaps — interrogate a map built from memory ────────────────────
+//
+// The instinct is "AI draws the map". That is the one thing it must not do:
+// the drawing IS the retrieval, and handing it over removes the entire
+// mechanism the evidence supports.
+//
+// So this never returns content. It returns questions about what is missing,
+// challenges to links that look wrong, and nothing the student can copy in
+// without thinking. A gap stated as a fact is a spoiler; a gap stated as a
+// question is another retrieval attempt.
+app.post("/local-ai/fn/mindMapGaps", async (req, res) => {
+  const user = await authenticateRequest(req);
+  if (!user) return res.status(401).json({ error: "Unauthorized" });
+  try {
+    const { title, subject, topic, outline, built_from_memory } = req.body || {};
+    if (!outline || !String(outline).trim()) {
+      return res.status(400).json({ error: "Build something first — there's nothing to check yet." });
+    }
+
+    // Goes through the same gated path as every other AI feature, so tier
+    // limits and spend caps apply here too.
+    const raw = await callInvokeAI({
+      feature: "mindmap_gaps",
+      req,
+      prompt: `You are reviewing a VCE student's mind map that they built FROM MEMORY with their notes closed.
+
+Your job is to find what is missing or wrong — and to say it as a QUESTION they have to answer, never as the answer itself. Handing them the content removes the retrieval that makes the exercise work. Never write a node they could copy in. Never complete a link for them. Ask about one specific thing at a time, in plain Australian English, as a person would.
+
+SUBJECT: ${subject || "not given"}
+TOPIC: ${topic || title || "not given"}
+
+THEIR MAP, AS AN INDENTED OUTLINE (indentation = nesting, "::" marks a labelled link to the parent):
+${String(outline).slice(0, 6000)}
+
+Return:
+- "missing": up to 5 things absent from the map that a student at this level should have. Each is { "prompt": a question that would make them retrieve it, "hint": a nudge no more specific than a category }. Never name the missing concept in either field.
+- "weak_links": up to 4 links that are vague, wrong, or missing a label. Each is { "between": "A → B", "challenge": a question about the relationship }. Do not state the correct relationship.
+- "misconceptions": up to 3 links that are plausible but actually wrong, as { "between": "A → B", "why_check": a question that would surface the error }. This is the highest-value thing you can find — look hard, but return an empty array rather than inventing one.
+- "strong": up to 3 short observations about what they clearly do understand, so the feedback isn't only criticism.
+- "verdict": one honest sentence about the map's coverage.`,
+      response_json_schema: {
+        type: "object",
+        properties: {
+          missing: { type: "array", items: { type: "object",
+            properties: { prompt: { type: "string" }, hint: { type: "string" } },
+            required: ["prompt"] } },
+          weak_links: { type: "array", items: { type: "object",
+            properties: { between: { type: "string" }, challenge: { type: "string" } },
+            required: ["between", "challenge"] } },
+          misconceptions: { type: "array", items: { type: "object",
+            properties: { between: { type: "string" }, why_check: { type: "string" } },
+            required: ["between", "why_check"] } },
+          strong: { type: "array", items: { type: "string" } },
+          verdict: { type: "string" },
+        },
+        required: ["missing", "weak_links", "verdict"],
+      },
+    });
+    const result = raw?.data ?? raw ?? {};
+
+    return res.json({
+      success: true,
+      ...result,
+      // Surfaced so the UI can be honest about what the review is worth: a map
+      // filled in with the notes open isn't retrieval, and the feedback on it
+      // means much less.
+      built_from_memory: built_from_memory !== false,
+    });
+  } catch (err) {
+    console.error("[mindMapGaps] error:", err);
+    return res.status(500).json({ error: err?.message || String(err) });
+  }
+});
+
 app.post("/local-ai/fn/createStudyQuest", async (req, res) => {
   const user = await authenticateRequest(req);
   if (!user) return res.status(401).json({ error: "Unauthorized" });

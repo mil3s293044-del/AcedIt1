@@ -70,3 +70,4 @@ export const verifyMe                  = makeFn('verifyMe');
 
 // Back Yourself quests — a named act rather than a number.
 export const createStudyQuest          = makeFn('createStudyQuest');
+export const mindMapGaps                = makeFn('mindMapGaps');

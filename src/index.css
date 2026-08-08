@@ -34,6 +34,10 @@
     --xp: 35 100% 50%;
     --streak: 0 100% 65%;            /* #FF4B4B fire red */
     --success: 89 97% 40%;           /* same as primary */
+    /* The five chart hues are already spoken for by the five original study
+       techniques, so mind maps get their own. Teal is the one gap left
+       between green, orange, blue, purple and red. */
+    --map: 175 82% 26%;              /* teal — dark enough to clear 4.5:1 on cream */
 
     /* feedback */
     --destructive: 0 78% 56%;        /* #E53935 */
@@ -86,6 +90,7 @@
     --xp: 35 100% 55%;
     --streak: 0 100% 65%;
     --success: 89 97% 45%;
+    --map: 175 72% 45%;
     --destructive: 0 78% 56%;
     --destructive-foreground: 0 0% 98%;
     --border: 218 25% 20%;
