@@ -283,6 +283,7 @@ const PORTED_FUNCTIONS = {
   getCallouts:              '/local-ai/fn/getCallouts',
   startCallout:             '/local-ai/fn/startCallout',
   submitCallout:            '/local-ai/fn/submitCallout',
+  verifyMe:                 '/local-ai/fn/verifyMe',
   respondDuel:              '/local-ai/fn/respondDuel',
   placeDuelSideBet:         '/local-ai/fn/placeDuelSideBet',
   createStudyBet:           '/local-ai/fn/createStudyBet',

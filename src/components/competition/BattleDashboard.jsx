@@ -129,7 +129,7 @@ function SwingChart({ swing, currentGap }) {
     );
 }
 
-export default function BattleDashboard({ battle, onBack, footer, activity = [], callouts, me }) {
+export default function BattleDashboard({ battle, onBack, footer, activity = [], callouts, me, record }) {
     if (!battle) return null;
     const { odds, market, swing, momentum, narrative, sides, potXP, endsAt, status, unit, kind, projection } = battle;
     // Duels and group battles are different games; they read as different
@@ -362,6 +362,8 @@ export default function BattleDashboard({ battle, onBack, footer, activity = [],
                     rivals={ranked.filter(p => p.email && p.email !== me?.email)}
                     callouts={callouts.list}
                     onChanged={callouts.refresh}
+                    onSelfCheck={callouts.onSelfCheck}
+                    record={record}
                 />
             )}
 

@@ -66,3 +66,4 @@ export const createCallout             = makeFn('createCallout');
 export const getCallouts               = makeFn('getCallouts');
 export const startCallout              = makeFn('startCallout');
 export const submitCallout             = makeFn('submitCallout');
+export const verifyMe                  = makeFn('verifyMe');

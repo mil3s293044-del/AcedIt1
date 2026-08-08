@@ -78,7 +78,8 @@ export default function CalloutQuiz({ callout, open, onOpenChange, onSettled }) 
         } finally { setBusy(false); }
     };
 
-    const stake = callout.extra?.stake_at_call ?? null;
+    const selfCheck = callout.kind === "self_check";
+    const stake = selfCheck ? null : (callout.extra?.stake_at_call ?? null);
     const q = questions[idx];
     const answeredCount = Object.keys(answers).length;
     const urgent = left != null && left <= 60;
@@ -89,7 +90,8 @@ export default function CalloutQuiz({ callout, open, onOpenChange, onSettled }) 
                 <DialogHeader>
                     <DialogTitle className="font-display flex items-center gap-2">
                         <Swords className="w-5 h-5 text-streak" />
-                        {stage === "result" ? "Call-out settled" : "You've been called out"}
+                        {stage === "result" ? (selfCheck ? "Verified" : "Call-out settled")
+                            : selfCheck ? "Prove it" : "You've been called out"}
                     </DialogTitle>
                 </DialogHeader>
 
@@ -97,30 +99,40 @@ export default function CalloutQuiz({ callout, open, onOpenChange, onSettled }) 
                 {stage === "brief" && (
                     <div className="space-y-4">
                         <p className="text-sm text-foreground leading-relaxed">
-                            <span className="font-bold">{callout.caller_name || "A rival"}</span> reckons you clocked
-                            the hours without learning the material. {callout.question_count} questions from your own
-                            study in this contest, {Math.round((callout.seconds_allowed || 300) / 60)} minutes,
-                            {" "}{Math.round((callout.pass_mark || 0.75) * 100)}% to pass.
+                            {selfCheck ? (
+                                <>Nobody asked — you're proving it anyway. {callout.question_count} questions from your
+                                own study in this contest, {Math.round((callout.seconds_allowed || 300) / 60)} minutes,
+                                {" "}{Math.round((callout.pass_mark || 0.75) * 100)}% to pass.</>
+                            ) : (
+                                <><span className="font-bold">{callout.caller_name || "A rival"}</span> reckons you clocked
+                                the hours without learning the material. {callout.question_count} questions from your own
+                                study in this contest, {Math.round((callout.seconds_allowed || 300) / 60)} minutes,
+                                {" "}{Math.round((callout.pass_mark || 0.75) * 100)}% to pass.</>
+                            )}
                         </p>
 
                         <div className="grid grid-cols-2 gap-2">
                             <div className="rounded-2xl border-2 border-primary/25 bg-primary/5 p-3">
                                 <p className="stat-label text-primary">If you pass</p>
                                 <p className="text-sm font-bold text-foreground mt-0.5">
-                                    {stake != null ? `You take ${stake} XP off them.` : "You take their stake."}
+                                    {selfCheck ? "Nobody can call you out for 48 hours."
+                                        : stake != null ? `You take ${stake} XP off them.` : "You take their stake."}
                                 </p>
                             </div>
-                            <div className="rounded-2xl border-2 border-streak/25 bg-streak/5 p-3">
-                                <p className="stat-label text-streak">If you don't</p>
+                            <div className={`rounded-2xl border-2 p-3 ${
+                                selfCheck ? "border-border bg-secondary/40" : "border-streak/25 bg-streak/5"}`}>
+                                <p className={`stat-label ${selfCheck ? "text-muted-foreground" : "text-streak"}`}>If you don't</p>
                                 <p className="text-sm font-bold text-foreground mt-0.5">
-                                    {stake != null ? `You lose ${stake} XP.` : "You lose the same."}
+                                    {selfCheck ? "Nothing. You asked for this one."
+                                        : stake != null ? `You lose ${stake} XP.` : "You lose the same."}
                                 </p>
                             </div>
                         </div>
 
                         <p className="text-[11px] text-muted-foreground">
-                            Both of you risk the same amount — whichever of you earned less in this contest.
-                            The exact figure is settled when you submit.
+                            {selfCheck
+                                ? "Either way it goes on your record, and the score feeds your AcedIt ATAR — a timed closed-book run on your own material is the cleanest retention evidence the app has."
+                                : "Both of you risk the same amount — whichever of you earned less in this contest. The exact figure is settled when you submit."}
                         </p>
 
                         <div className="rounded-xl bg-secondary/60 px-3 py-2.5 flex items-start gap-2">
@@ -133,7 +145,8 @@ export default function CalloutQuiz({ callout, open, onOpenChange, onSettled }) 
 
                         <div className="flex gap-2">
                             <Button variant="ghost" onClick={() => onOpenChange(false)} className="rounded-xl">Not yet</Button>
-                            <Button onClick={begin} disabled={busy} className="flex-1 gap-1.5 bg-streak hover:bg-streak/90 text-white btn-3d">
+                            <Button onClick={begin} disabled={busy}
+                                className={`flex-1 gap-1.5 btn-3d text-white ${selfCheck ? "bg-primary hover:bg-primary/90" : "bg-streak hover:bg-streak/90"}`}>
                                 {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Swords className="w-4 h-4" />}
                                 Start — {Math.round((callout.seconds_allowed || 300) / 60)} min
                             </Button>
@@ -214,14 +227,29 @@ export default function CalloutQuiz({ callout, open, onOpenChange, onSettled }) 
                         </div>
                         <div className={`rounded-2xl border-2 p-4 ${
                             result.passed ? "border-primary/25 bg-primary/5" : "border-streak/25 bg-streak/5"}`}>
-                            <p className="font-display font-black text-3xl tabular-nums text-foreground">
-                                {result.passed ? "+" : "−"}{result.xp_moved} XP
-                            </p>
-                            <p className="text-xs text-muted-foreground mt-0.5">
-                                {result.passed
-                                    ? `Taken off ${callout.caller_name || "them"} for calling it wrong.`
-                                    : "Gone to the call-out."}
-                            </p>
+                            {selfCheck ? (
+                                <>
+                                    <p className="font-display font-black text-xl text-foreground">
+                                        {result.passed ? "Immune for 48 hours" : "No cost"}
+                                    </p>
+                                    <p className="text-xs text-muted-foreground mt-0.5">
+                                        {result.passed
+                                            ? "Nobody can call you out in this contest until it expires."
+                                            : "Nothing lost — but it's worth another pass over the weak spots."}
+                                    </p>
+                                </>
+                            ) : (
+                                <>
+                                    <p className="font-display font-black text-3xl tabular-nums text-foreground">
+                                        {result.passed ? "+" : "−"}{result.xp_moved} XP
+                                    </p>
+                                    <p className="text-xs text-muted-foreground mt-0.5">
+                                        {result.passed
+                                            ? `Taken off ${callout.caller_name || "them"} for calling it wrong.${result.xp_moved ? " Immune for 48 hours too." : ""}`
+                                            : "Gone to the call-out."}
+                                    </p>
+                                </>
+                            )}
                         </div>
                         <Button onClick={() => onOpenChange(false)} className="w-full">Done</Button>
                     </div>

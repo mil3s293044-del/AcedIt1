@@ -400,7 +400,8 @@ export default function Competitions() {
                     <BattleDashboard
                         battle={live}
                         me={{ email: user?.email, name: userProfile?.full_name || user?.full_name }}
-                        callouts={{ list: callouts, refresh: loadCallouts }}
+                        callouts={{ list: callouts, refresh: loadCallouts, onSelfCheck: setAnswering }}
+                        record={userProfile?.extra?.callout_record}
                         activity={(() => {
                             const emails = new Set(live.sides.map(x => x.email));
                             const label = { quiz: "a quiz", flashcard: "flashcards", study_session: "a session",

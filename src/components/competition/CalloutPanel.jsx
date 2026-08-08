@@ -16,7 +16,7 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { base44 } from "@/api/base44Client";
 import { useToast } from "@/components/ui/use-toast";
-import { Swords, Loader2, ShieldAlert, Clock, Check, X } from "lucide-react";
+import { Swords, Loader2, ShieldAlert, ShieldCheck, Clock, Check, X } from "lucide-react";
 import { fmtDate } from "@/lib/safeDate";
 
 const STATUS = {
@@ -28,10 +28,11 @@ const STATUS = {
     voided:  { label: "Voided", cls: "bg-secondary text-muted-foreground", icon: X },
 };
 
-export default function CalloutPanel({ battle, me, rivals, callouts = [], onChanged }) {
+export default function CalloutPanel({ battle, me, rivals, callouts = [], onChanged, onSelfCheck, record }) {
     const { toast } = useToast();
     const [target, setTarget] = useState(null);
     const [busy, setBusy] = useState(false);
+    const [verifying, setVerifying] = useState(false);
 
     const mine = callouts.filter(c =>
         (battle.kind === "duel" ? c.duel_id === battle.id : c.competition_id === battle.id));
@@ -53,13 +54,36 @@ export default function CalloutPanel({ battle, me, rivals, callouts = [], onChan
             toast({
                 variant: "success",
                 title: `${target.name || "They"} have 24 hours`,
-                description: `${data.at_stake?.stake ?? 0} XP each way. If they pass, it's theirs.`,
+                description: data.at_stake?.multiplier > 1
+                    ? `You're risking ${data.at_stake.caller_risk} XP (${data.at_stake.multiplier}× — you've called wrong before). They're risking ${data.at_stake.target_risk}.`
+                    : `${data.at_stake?.target_risk ?? 0} XP each way. If they pass, it's theirs.`,
             });
             setTarget(null);
             onChanged?.();
         } catch (e) {
             toast({ title: "Couldn't call them out", description: e.message, variant: "destructive" });
         } finally { setBusy(false); }
+    };
+
+    // A live pass keeps everyone off you, whether it was volunteered or
+    // survived. Shown here because it's the reason a call-out button is greyed.
+    const immunityUntil = callouts
+        .filter(c => c.target_email === me?.email && c.immunity_until && new Date(c.immunity_until) > new Date())
+        .map(c => c.immunity_until).sort().pop() || null;
+
+    const verify = async () => {
+        setVerifying(true);
+        try {
+            const res = await base44.functions.invoke("verifyMe", {
+                [battle.kind === "duel" ? "duel_id" : "competition_id"]: battle.id,
+            });
+            const data = res?.data ?? res;
+            if (data?.error) throw new Error(data.error);
+            onChanged?.();
+            onSelfCheck?.(data.callout);
+        } catch (e) {
+            toast({ title: "Couldn't start the check", description: e.message, variant: "destructive" });
+        } finally { setVerifying(false); }
     };
 
     return (
@@ -104,6 +128,46 @@ export default function CalloutPanel({ battle, me, rivals, callouts = [], onChan
                     })}
                 </div>
             )}
+
+            {/* The record. Passing used to be purely defensive — this is what
+                makes it worth reaching for. */}
+            {record && (record.passed > 0 || record.failed > 0) && (
+                <div className="flex flex-wrap gap-x-5 gap-y-2 mb-4 rounded-2xl bg-secondary/40 p-3.5">
+                    {[["Verified", record.passed, "text-primary"],
+                      ["Failed", record.failed, "text-streak"],
+                      ["Best score", record.best_score ? `${record.best_score}%` : "—", "text-foreground"],
+                      ["XP won", record.xp_won || 0, "text-xp"]].map(([k, v, tone]) => (
+                        <div key={k}>
+                            <p className={`font-display font-black text-lg leading-none tabular-nums ${tone}`}>{v}</p>
+                            <p className="stat-label">{k}</p>
+                        </div>
+                    ))}
+                </div>
+            )}
+
+            {/* Prove it before anyone asks. The defensive mechanic becomes a
+                flex, and an honest student gets a way out of the anxiety. */}
+            <div className={`rounded-2xl border-2 p-3.5 mb-4 flex flex-wrap items-center gap-3 ${
+                immunityUntil ? "border-primary/30 bg-primary/5" : "border-border"}`}>
+                <ShieldCheck className={`w-5 h-5 flex-shrink-0 ${immunityUntil ? "text-primary" : "text-muted-foreground"}`} />
+                <div className="flex-1 min-w-[180px]">
+                    <p className="text-sm font-bold text-foreground">
+                        {immunityUntil ? "You're verified" : "Prove it first"}
+                    </p>
+                    <p className="text-[11px] text-muted-foreground leading-snug">
+                        {immunityUntil
+                            ? `Nobody can call you out until ${fmtDate(immunityUntil, "EEE h:mmaaa", "it expires")}.`
+                            : "Sit the quiz unprompted. Pass and nobody can call you out for 48 hours — fail and it costs you nothing."}
+                    </p>
+                </div>
+                {!immunityUntil && (
+                    <Button size="sm" variant="outline" onClick={verify} disabled={verifying}
+                        className="border-2 gap-1.5 rounded-xl flex-shrink-0">
+                        {verifying ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <ShieldCheck className="w-3.5 h-3.5" />}
+                        Verify me
+                    </Button>
+                )}
+            </div>
 
             {iHaveOneOpen ? (
                 <p className="text-xs text-muted-foreground">
