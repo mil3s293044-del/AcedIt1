@@ -44,6 +44,7 @@ import { FEATURES, canUseFeature } from "@/lib/tierAccess";
 
 import QuizCard from "../components/quizzes/QuizCard";
 import QuizPlayer from "../components/quizzes/QuizPlayer";
+import QuizInsightRail from "../components/quizzes/QuizInsightRail";
 import MarkdownMath from "@/components/shared/MarkdownMath";
 import QuizModePicker from "../components/quizzes/QuizModePicker";
 
@@ -733,6 +734,40 @@ Return valid JSON only.`,
         }
     };
 
+    /**
+     * Build a drill from the questions that keep catching the student out.
+     *
+     * Copies the original question objects rather than generating new ones: it
+     * costs nothing, it's instant, and re-facing the exact question you've now
+     * missed twice is the point. Saved as a real quiz so it plays through the
+     * normal player and its attempts feed back into the same analysis.
+     */
+    const handleDrill = async (questions, spots) => {
+        if (!questions?.length) return;
+        const subjects = [...new Set(spots.map(x => x.quizCategory).filter(Boolean))];
+        try {
+            const created = await base44.entities.Quiz.create({
+                title: `Drill · ${questions.length} question${questions.length === 1 ? "" : "s"} to nail`,
+                subject: subjects.length === 1 ? subjects[0] : null,
+                questions,
+                difficulty: "intermediate",
+                category: "subject_content",
+                extra: { drill_of: spots.map(x => x.key) },
+            });
+            if (created?.id) {
+                setQuizzes(prev => [created, ...prev]);
+                setSelectedQuiz(created);
+                toast({
+                    variant: "success",
+                    title: "Drill ready",
+                    description: `${questions.length} question${questions.length === 1 ? "" : "s"} you've missed more than once.`,
+                });
+            }
+        } catch (e) {
+            toast({ title: "Couldn't build the drill", description: e.message, variant: "destructive" });
+        }
+    };
+
     const filteredQuizzes = useMemo(() => {
         return quizzes.filter(quiz => {
             const matchesSearch = quiz.title?.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -952,7 +987,7 @@ Return valid JSON only.`,
             />
 
             <div className="min-h-screen bg-background">
-                <div className="max-w-6xl mx-auto px-4 lg:px-8 py-6 lg:py-10 space-y-6 lg:space-y-8">
+                <div className="max-w-[1600px] mx-auto px-4 lg:px-8 py-6 lg:py-10 space-y-6 lg:space-y-8">
 
                 {/* ── COACH STRIP ─────────────────────────────────────── */}
                 <motion.section initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.35 }}>
@@ -1140,6 +1175,11 @@ Return valid JSON only.`,
                     </motion.section>
                 )}
 
+                {/* The quiz list sits left and the insight rail fills what used
+                    to be dead margin. It only splits at xl — below that the rail
+                    would squeeze the list, so it stacks underneath. */}
+                <div className="grid xl:grid-cols-[minmax(0,1fr)_380px] gap-6 items-start">
+                <div className="min-w-0">
                 <Tabs defaultValue="my-quizzes" className="space-y-5">
                     <TabsList className="grid w-full grid-cols-1 h-auto p-1.5 rounded-2xl bg-surface border-2 border-border shadow-soft">
                         <TabsTrigger value="my-quizzes" className="flex items-center justify-center gap-1.5 py-2.5 rounded-xl text-sm font-bold text-muted-foreground data-[state=active]:bg-foreground data-[state=active]:text-background data-[state=active]:shadow-soft transition-all">
@@ -1257,6 +1297,20 @@ Return valid JSON only.`,
 
 
                 </Tabs>
+                </div>
+
+                <div className="xl:sticky xl:top-6" data-insight-rail>
+                    <QuizInsightRail
+                        quizzes={quizzes}
+                        attempts={quizAttempts}
+                        onOpenQuiz={(id) => {
+                            const q = quizzes.find(x => x.id === id);
+                            if (q) setSelectedQuiz(q);
+                        }}
+                        onDrill={handleDrill}
+                    />
+                </div>
+                </div>
 
                 {/* Manual Create Dialog */}
                 <Dialog open={isManualCreate} onOpenChange={setIsManualCreate}>

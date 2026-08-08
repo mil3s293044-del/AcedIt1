@@ -13,6 +13,7 @@ import AdaptiveReview from "./AdaptiveReview";
 import DifficultyRating from "@/components/shared/DifficultyRating";
 import { useToast } from "@/components/ui/use-toast";
 import { base44 } from "@/api/base44Client";
+import { commandTermOf } from "@/lib/quizInsight";
 import { recordStudyAndGetStreak } from "@/components/shared/streakHelpers";
 import MathKeyboard from "../shared/MathKeyboard";
 import MathInput from "../shared/MathInput";
@@ -435,12 +436,44 @@ export default function QuizPlayer({ quiz, onComplete, onExit, mode = "standard"
     // When AI marking is unavailable (tier cap hit, or the call failed) the
     // attempt still counts: save it with the auto-markable (MCQ) score and pay
     // real XP on those marks. awardQuizXP's event_key keeps this un-doublable.
+
+    /**
+     * Per-question results, recorded onto the attempt.
+     *
+     * `user_answers` alone can't support any of this: it stores the INDEX of
+     * the option picked, into a shuffle regenerated per attempt and never
+     * persisted, so a stored attempt genuinely cannot say which questions were
+     * missed. This writes the answer to that — correctness, marks, and the
+     * command term off the stem — so weak spots and command-term analysis have
+     * something real to read. Lives in `extra` so it needs no migration.
+     */
+    const buildQuestionResults = (marksFor) => shuffledQuiz.questions.map((q, i) => {
+        const max = q.type === 'mcq' ? 1 : (q.marks || 5);
+        const { marks, correct } = marksFor(q, i, max);
+        return {
+            q_index: i,
+            type: q.type,
+            question: q.question,
+            command_term: commandTermOf(q.question),
+            marks_max: max,
+            marks,
+            is_correct: correct,
+        };
+    });
+
     const saveMcqOnlyAttempt = async (timeTaken) => {
         const mcqQuestions = shuffledQuiz.questions.filter(q => q.type === 'mcq');
         const mcqCorrect = shuffledQuiz.questions.filter((q, i) => q.type === 'mcq' && userAnswers[i] !== undefined && parseInt(userAnswers[i]) === q.correct_answer).length;
         const fallbackScore = mcqQuestions.length > 0 ? Math.round((mcqCorrect / mcqQuestions.length) * 100) : 0;
+        // Short answers went unmarked on this path, so they record as
+        // null rather than as wrong — an unmarked question is not a
+        // question you got wrong.
+        const mcqOnlyResults = buildQuestionResults((q, i, max) => (q.type === 'mcq'
+            ? { marks: parseInt(userAnswers[i]) === q.correct_answer ? 1 : 0,
+                correct: parseInt(userAnswers[i]) === q.correct_answer }
+            : { marks: undefined, correct: null }));
         try {
-            const created = await base44.entities.QuizAttempt.create({ quiz_id: quiz.id, quiz_title: quiz.title, quiz_category: quiz.category, score: fallbackScore, questions_total: totalQ, questions_correct: mcqCorrect, time_taken: timeTaken, xp_earned: mcqCorrect * 2, user_answers: userAnswers, date: new Date().toISOString().split('T')[0] });
+            const created = await base44.entities.QuizAttempt.create({ quiz_id: quiz.id, quiz_title: quiz.title, quiz_category: quiz.category, score: fallbackScore, questions_total: totalQ, questions_correct: mcqCorrect, time_taken: timeTaken, xp_earned: mcqCorrect * 2, user_answers: userAnswers, date: new Date().toISOString().split('T')[0], extra: { question_results: mcqOnlyResults } });
             if (created?.id) setCreatedAttemptId(created.id);
         } catch {}
         await awardQuizXP({ score: fallbackScore, questionsCorrect: mcqCorrect, totalMarks: mcqCorrect, timeTaken });
@@ -550,11 +583,18 @@ Return exactly ${questionsForAnalysis.length} items.`,
                 return q?.type === 'mcq' ? fb.marks === 1 : fb.marks >= (q?.marks || 5) * 0.8;
             }).length;
 
+            const aiResults = buildQuestionResults((q, i, max) => {
+                const fb = mappedFeedback[i];
+                if (!fb) return { marks: undefined, correct: null };
+                const marks = fb.marks || 0;
+                return { marks, correct: q.type === 'mcq' ? marks === 1 : marks >= max * 0.8 };
+            });
+
             const totalMarksAwarded = mappedFeedback.reduce((sum, fb) => sum + (fb.marks || 0), 0);
             const xpEarned = totalMarksAwarded * 2;
 
             try {
-                const created = await base44.entities.QuizAttempt.create({ quiz_id: quiz.id, quiz_title: quiz.title, quiz_category: quiz.category, score: finalScore, questions_total: totalQ, questions_correct: questionsCorrect, time_taken: timeTaken, xp_earned: xpEarned, user_answers: userAnswers, date: new Date().toISOString().split('T')[0] });
+                const created = await base44.entities.QuizAttempt.create({ quiz_id: quiz.id, quiz_title: quiz.title, quiz_category: quiz.category, score: finalScore, questions_total: totalQ, questions_correct: questionsCorrect, time_taken: timeTaken, xp_earned: xpEarned, user_answers: userAnswers, date: new Date().toISOString().split('T')[0], extra: { question_results: aiResults } });
                 // Stash the new attempt's id so any later self-marks update the same row.
                 if (created?.id) setCreatedAttemptId(created.id);
             } catch {}
@@ -572,8 +612,18 @@ Return exactly ${questionsForAnalysis.length} items.`,
         }
     };
 
+    /**
+     * Score from the marker's feedback.
+     *
+     * This used to bail with `return 0` whenever the feedback array came back
+     * a different length to the quiz — so a marking glitch was written to the
+     * database as a genuine zero, indistinguishable from a student who got
+     * everything wrong, and it dragged their average down permanently. A
+     * partial response is now marked on the questions it actually covered:
+     * `max` only counts questions that came back, so ten right out of ten
+     * marked is 100%, not 50% because the marker skipped the rest.
+     */
     const calcScoreFromFeedback = (feedback) => {
-        if (feedback.length !== shuffledQuiz.questions.length) return 0;
         let total = 0, max = 0;
         shuffledQuiz.questions.forEach((q, i) => {
             const fb = feedback[i];
