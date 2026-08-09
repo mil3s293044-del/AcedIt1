@@ -26,6 +26,9 @@ import {
 import AIPerformanceAnalyzer from "../components/analytics/AIPerformanceAnalyzer";
 import AtarPanel from "../components/analytics/AtarPanel";
 import WeakTopicsPanel from "../components/analytics/WeakTopicsPanel";
+import CognitiveProfilePanel from "../components/analytics/CognitiveProfilePanel";
+import MemoryPanel from "../components/analytics/MemoryPanel";
+import AttentionPanel from "../components/analytics/AttentionPanel";
 import HelpButton from "@/components/shared/HelpButton";
 
 const fmt = (mins) => {
@@ -434,6 +437,10 @@ export default function Analytics() {
 
     const tabs = [
         { id: "overview",  label: "Overview",   icon: BarChart3 },
+        // Everything else on this page answers "how much did I do". Cognition
+        // answers "is any of it sticking", which is a different question and
+        // the only one that predicts a result.
+        { id: "cognition", label: "Cognition",  icon: Brain },
         { id: "subjects",  label: "Subjects",   icon: BookOpen },
         { id: "flashcards",label: "Flashcards", icon: Layers },
         { id: "ai",        label: "AI Coach",   icon: Sparkles },
@@ -740,10 +747,13 @@ export default function Analytics() {
                 )}
 
                 {/* ── Tabs ── */}
-                <div className="flex gap-1 card-soft p-1 w-fit">
+                {/* Scrolls rather than overflowing. Five tabs with icons and
+                    labels is 480px of content in a 390px viewport, and w-fit on
+                    a flex row simply pushed it off the right of the page. */}
+                <div className="flex gap-1 card-soft p-1 w-fit max-w-full overflow-x-auto scrollbar-none">
                     {tabs.map(({ id, label, icon: Icon }) => (
                         <button key={id} onClick={() => setActiveTab(id)}
-                            className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold transition-all ${
+                            className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold transition-all flex-shrink-0 ${
                                 activeTab === id
                                     ? "bg-chart-3 text-white shadow-soft"
                                     : "text-muted-foreground hover:text-foreground"
@@ -942,6 +952,24 @@ export default function Analytics() {
                                 </ResponsiveContainer>
                             </div>
                         )}
+                    </div>
+                )}
+
+                {/* ══ COGNITION TAB ══ */}
+                {/* Flashcards are deliberately NOT windowed by the range picker:
+                    memory state is cumulative, and a card's interval is what it
+                    is regardless of which month you're looking at. Techniques
+                    and sessions are windowed, because "how you studied" is a
+                    question about a period. */}
+                {activeTab === "cognition" && (
+                    <div className="space-y-5">
+                        <CognitiveProfilePanel
+                            techniques={data.techniques}
+                            cards={data.flashcards}
+                            sessions={data.studySessions}
+                        />
+                        <MemoryPanel techniques={data.techniques} cards={data.flashcards} />
+                        <AttentionPanel techniques={data.techniques} sessions={data.studySessions} />
                     </div>
                 )}
 

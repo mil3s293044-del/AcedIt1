@@ -209,3 +209,14 @@
   outline-offset: 2px;
   border-radius: 6px;
 }
+
+/* Horizontal scrollers that shouldn't show chrome — the Analytics tab strip
+   scrolls on narrow screens rather than pushing the page sideways, and a
+   scrollbar under five tabs looks like a bug rather than an affordance. */
+.scrollbar-none {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.scrollbar-none::-webkit-scrollbar {
+  display: none;
+}

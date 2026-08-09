@@ -73,6 +73,16 @@ export default function PomodoroTimer({ onSessionComplete, userSubjects: initial
     const [isFocusMode, setIsFocusMode] = useState(false);
     const [showFocusPrompt, setShowFocusPrompt] = useState(false);
     const [hasBeenStarted, setHasBeenStarted] = useState(false);
+    // ── Attention telemetry ─────────────────────────────────────────────────
+    // The app has never recorded anything about a session except its length,
+    // so nothing could say whether focus held. These two facts — how often the
+    // student paused, and whether the timer ran out or was stopped early — are
+    // the difference between "you studied 25 minutes" and "you studied 25
+    // minutes across four restarts". Written to StudyTechnique.extra, which is
+    // an existing jsonb column, so no migration. It only describes sessions
+    // from here on: Analytics says so rather than pretending the history is
+    // missing by accident.
+    const pausesRef = useRef(0);
     const [showSettings, setShowSettings] = useState(false);
 
     const intervalRef = useRef(null);
@@ -194,7 +204,7 @@ export default function PomodoroTimer({ onSessionComplete, userSubjects: initial
         }
     }, [timeLeft, isRunning, isBreak, session, selectedSubject, topic, settings, hasBeenStarted]);
 
-    const saveSession = useCallback(async (durationMinutes) => {
+    const saveSession = useCallback(async (durationMinutes, { completed = true } = {}) => {
         // Starting is already gated on picking a subject, so this normally
         // holds. It can still come back empty when the timer is restored from
         // localStorage in a new tab, and dropping the session there would lose
@@ -209,8 +219,14 @@ export default function PomodoroTimer({ onSessionComplete, userSubjects: initial
                 session_duration: Math.round(durationMinutes),
                 subject,
                 topic: topic || "Focus Session",
-                date: format(new Date(), "yyyy-MM-dd")
+                date: format(new Date(), "yyyy-MM-dd"),
+                extra: {
+                    pauses: pausesRef.current,
+                    completed,
+                    planned_minutes: settings.workTime || 25,
+                },
             });
+            pausesRef.current = 0;
             // Dispatch event so goals page can pick up new study time instantly
             window.dispatchEvent(new CustomEvent('studySessionSaved', {
                 detail: { subject, duration_minutes: Math.round(durationMinutes) }
@@ -355,6 +371,8 @@ export default function PomodoroTimer({ onSessionComplete, userSubjects: initial
 
     const toggleTimer = () => {
         if (isRunning) {
+            // Pausing a break isn't an attention signal — only work counts.
+            if (!isBreak) pausesRef.current += 1;
             setIsRunning(false);
         } else {
             // In focus mode, allow starting without subject check (subject already selected)
@@ -413,7 +431,8 @@ export default function PomodoroTimer({ onSessionComplete, userSubjects: initial
                 title: `${elapsedMinutes}m logged · +${elapsedMinutes * XP_PER_MINUTE} XP`,
                 description: `Saved to ${selectedSubject || "General"}.`,
             });
-            try { await saveSession(elapsedMinutes); } catch { /* saveSession toasts its own failure */ }
+            // Stopped early — which is exactly the thing worth recording.
+            try { await saveSession(elapsedMinutes, { completed: false }); } catch { /* saveSession toasts its own failure */ }
         }
         isResettingRef.current = false;
     }, [hasBeenStarted, isBreak, selectedSubject, settings.workTime, timeLeft, saveSession, toast]);
