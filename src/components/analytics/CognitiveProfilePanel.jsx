@@ -72,6 +72,9 @@ function Radar({ axes }) {
 
 export default function CognitiveProfilePanel({ techniques = [], cards = [], sessions = [] }) {
     const p = useMemo(() => cognitiveProfile({ techniques, cards, sessions }), [techniques, cards, sessions]);
+    // One quiet region worth naming — the one a technique they aren't using
+    // would light. Only ever one: a list of eight gaps is a list nobody acts on.
+    const gap = p.sources.brain.quiet.find(q => q.label) || null;
 
     return (
         <div className="card-soft p-6">
@@ -112,6 +115,22 @@ export default function CognitiveProfilePanel({ techniques = [], cards = [], ses
                                     {p.sources.brain.litCount} of {p.sources.brain.totalRegions} systems
                                     engaged this range
                                 </p>
+                                {/* The dark part. This was the payload of the
+                                    Dashboard brain card and the only actionable
+                                    thing on it, so it moved here with the model
+                                    rather than being dropped. */}
+                                {gap && (
+                                    <Link to={createPageUrl(`Study?tab=${gap.technique}`)}
+                                        className="block rounded-2xl border-2 border-border bg-secondary/40 p-3 mt-3 hover:border-map/50 transition-colors group">
+                                        <p className="text-xs text-muted-foreground leading-snug">
+                                            <span className="font-bold text-foreground">Your {gap.name.toLowerCase()} is dark.</span>{" "}
+                                            {gap.role}. {gap.label} is what lights it.
+                                        </p>
+                                        <span className="inline-flex items-center gap-1 text-[11px] font-bold text-foreground underline underline-offset-2 mt-1.5">
+                                            Open {gap.label} <ArrowRight className="w-3 h-3 group-hover:translate-x-0.5 transition-transform" />
+                                        </span>
+                                    </Link>
+                                )}
                             </div>
                         )}
                     </div>

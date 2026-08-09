@@ -15,7 +15,6 @@ import HelpButton from "@/components/shared/HelpButton";
 import StudyIntentModal from "@/components/dashboard/StudyIntentModal";
 import { reconcileUserXP } from "@/lib/reconcileXP";
 import { getStreakMultiplier as getStreakMultiplierValue } from "@/components/shared/streakHelpers";
-import BrainActivityCard from "@/components/dashboard/BrainActivityCard";
 import RetentionCard from "@/components/dashboard/RetentionCard";
 import DistanceToTarget from "@/components/dashboard/DistanceToTarget";
 import { bestLever } from "@/lib/atarLift";
@@ -1140,40 +1139,6 @@ export default function Dashboard() {
                     </motion.section>
                 )}
 
-                {/* ── REMINDERS ───────────────────────────────────────── */}
-                {totalReminders > 0 && (
-                    <motion.section
-                        initial={{ opacity: 0, y: 12 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        transition={{ delay: 0.15 }}
-                    >
-                        <div className="flex items-baseline justify-between gap-3 mb-3">
-                            <h2 className="font-display font-extrabold text-foreground text-lg lg:text-xl">
-                                On your radar
-                            </h2>
-                            {radar.length > RADAR_SHOWN && (
-                                <Link to={createPageUrl("Goals")} className="text-xs font-bold text-foreground/70 hover:text-foreground underline underline-offset-2 flex-shrink-0">
-                                    See all {radar.length}
-                                </Link>
-                            )}
-                        </div>
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-                            {radar.slice(0, RADAR_SHOWN).map((item) => (
-                                <Link key={item.key} to={createPageUrl(item.to)}>
-                                    <ReminderRow
-                                        icon={item.icon}
-                                        title={item.title}
-                                        subtitle={item.subtitle}
-                                        badge={item.badge
-                                            || (item.days <= 0 ? 'Today' : item.days === 1 ? 'Tomorrow' : `${item.days}d`)}
-                                        theme={URGENCY[urgencyKey(item.days)]}
-                                    />
-                                </Link>
-                            ))}
-                        </div>
-                    </motion.section>
-                )}
-
                 {/* ── DISTANCE TO TARGET ──────────────────────────────── */}
                 {/* This was a poster showing the goal ATAR as a big number and
                     nothing else. The target sat here, the AcedIt ATAR sat on
@@ -1231,7 +1196,11 @@ export default function Dashboard() {
                     initial={{ opacity: 0, y: 12 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ delay: 0.12 }}
-                    className="space-y-5 md:grid md:grid-cols-2 md:gap-5 md:space-y-0 xl:block xl:space-y-5"
+                    /* min-w-0: a grid item defaults to min-width:auto, so its
+                       widest intrinsic child sets the track. Without this the
+                       radar rows pushed the whole page 21px wider than the
+                       viewport on a phone. */
+                    className="min-w-0 space-y-5 md:grid md:grid-cols-2 md:gap-5 md:space-y-0 xl:block xl:space-y-5"
                 >
                     {/* Today's intention — set in the Planner, read here. It was
                         being written and then only ever shown on the page that
@@ -1262,12 +1231,48 @@ export default function Dashboard() {
                         )}
                     </div>
 
-                    <BrainActivityCard techniques={studyTechniques} />
+                    {/* Deadlines moved into the rail when the brain card came
+                        off the dashboard — the right column ran out ~480px
+                        above the main one, and this is a narrow list that reads
+                        better stacked anyway. It also puts what's due next in
+                        the column that stays visible. */}
+                    {totalReminders > 0 && (
+                        <motion.section
+                            initial={{ opacity: 0, y: 12 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            transition={{ delay: 0.15 }}
+                            className="card-soft border-2 border-border p-5"
+                        >
+                            <div className="flex items-baseline justify-between gap-3 mb-3">
+                                <p className="stat-label">On your radar</p>
+                                {radar.length > RADAR_SHOWN && (
+                                    <Link to={createPageUrl("Goals")} className="text-[11px] font-bold text-foreground/70 hover:text-foreground underline underline-offset-2 flex-shrink-0">
+                                        See all {radar.length}
+                                    </Link>
+                                )}
+                            </div>
+                            <div className="space-y-2.5">
+                                {radar.slice(0, RADAR_SHOWN).map((item) => (
+                                    <Link key={item.key} to={createPageUrl(item.to)} className="block">
+                                        <ReminderRow
+                                            icon={item.icon}
+                                            title={item.title}
+                                            subtitle={item.subtitle}
+                                            badge={item.badge
+                                                || (item.days <= 0 ? 'Today' : item.days === 1 ? 'Tomorrow' : `${item.days}d`)}
+                                            theme={URGENCY[urgencyKey(item.days)]}
+                                        />
+                                    </Link>
+                                ))}
+                            </div>
+                        </motion.section>
+                    )}
 
-                    {/* Directly under the brain on purpose: that card shows the
-                        systems the last month leaned on, this one shows what
-                        that work costs if it isn't topped up. Same material,
-                        opposite direction. */}
+                    {/* The brain lives on Study and in the Analytics cognition
+                        tab, not here. On a dashboard it was one idea too many
+                        next to the streak, the goal and the rank — the picture
+                        pulled attention without the page having room for the
+                        explanation that makes it mean anything. */}
                     <RetentionCard flashcards={flashcards} />
 
                     <div className="card-soft border-2 border-border p-5">
