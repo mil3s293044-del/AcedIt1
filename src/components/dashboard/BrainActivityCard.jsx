@@ -106,7 +106,7 @@ export default function BrainActivityCard({ techniques = [] }) {
                     </Link>
                 )}
 
-                <p className="text-[10px] text-muted-foreground/80 leading-snug flex items-start gap-1.5 pt-1 border-t border-border">
+                <p className="text-[10px] text-muted-foreground leading-snug flex items-start gap-1.5 pt-1 border-t border-border">
                     <Info className="w-3 h-3 flex-shrink-0 mt-0.5" />
                     Not a scan. This maps the techniques you used onto the regions imaging studies
                     consistently link to them, weighted by time.

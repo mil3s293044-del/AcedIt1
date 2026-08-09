@@ -16,6 +16,9 @@ import StudyIntentModal from "@/components/dashboard/StudyIntentModal";
 import { reconcileUserXP } from "@/lib/reconcileXP";
 import { getStreakMultiplier as getStreakMultiplierValue } from "@/components/shared/streakHelpers";
 import BrainActivityCard from "@/components/dashboard/BrainActivityCard";
+import RetentionCard from "@/components/dashboard/RetentionCard";
+import DistanceToTarget from "@/components/dashboard/DistanceToTarget";
+import { bestLever } from "@/lib/atarLift";
 import { atarBandOf } from "@/lib/atarBands";
 import { todaysIntent } from "@/lib/studyIntent";
 import { fmtDate } from "@/lib/safeDate";
@@ -52,23 +55,26 @@ function getNextStreakMilestone(days) {
 // Daily XP goal — the daily loop. 100 XP is roughly one solid session.
 const DAILY_XP_GOAL = 100;
 
-// Which lever actually lifts the ATAR right now. The weakest component is the
-// honest answer, and naming it beats a generic "study more" — the whole point
-// of breaking the score into parts is that each one has a different fix.
+// Which lever actually lifts the ATAR right now. Naming one beats a generic
+// "study more" — the whole point of breaking the score into parts is that each
+// part has a different fix.
+//
+// This used to pick the LOWEST raw component, which is the wrong answer and
+// disagreed with the Distance-to-target strip further down the same page.
+// Mastery carries 0.28 of the composite and planning 0.10, so a planning score
+// of 22 has less ATAR sitting on it than a mastery score of 48. bestLever
+// weighs headroom by weight and is the number the strip prices, so both say
+// the same thing.
 const ATAR_LEVERS = {
-    mastery:     "Mastery is your thinnest slice — a quiz or a flashcard round does the most for it.",
-    consistency: "Consistency is your thinnest slice — showing up again tomorrow counts for more than a long session today.",
-    effort:      "Effort is your thinnest slice — one longer sitting lifts it faster than several short ones.",
-    breadth:     "Breadth is your thinnest slice — a technique you have not touched this month is the quickest lift.",
-    planning:    "Planning is your thinnest slice — setting a goal or blocking out tomorrow is the quickest lift.",
+    mastery:     "Mastery has the most left on it — a quiz or a flashcard round does the most for it.",
+    consistency: "Consistency has the most left on it — showing up again tomorrow counts for more than a long session today.",
+    effort:      "Effort has the most left on it — one longer sitting lifts it faster than several short ones.",
+    breadth:     "Breadth has the most left on it — a technique you have not touched this month is the quickest lift.",
+    planning:    "Planning has the most left on it — setting a goal or blocking out tomorrow is the quickest lift.",
 };
-const LEVER_KEYS = ["mastery", "consistency", "effort", "breadth", "planning"];
 
 function weakestComponent(components) {
-    if (!components) return null;
-    const present = LEVER_KEYS.filter((k) => typeof components[k] === "number");
-    if (!present.length) return null;
-    return present.reduce((lo, k) => (components[k] < components[lo] ? k : lo), present[0]);
+    return bestLever(components)?.key || null;
 }
 
 // Coach voice — chill, supportive, motivational. Specific not generic.
@@ -132,10 +138,11 @@ function getCoachLine({
     } else if (goalAtar && atar >= goalAtar) {
         sub = `You're past your ${goalAtar} goal — hold it there and it stops being a fluke.`;
     } else if (goalAtar) {
-        const gap = (goalAtar - atar).toFixed(2);
-        sub = lever
-            ? `${gap} off your ${goalAtar} goal. ${ATAR_LEVERS[lever]}`
-            : `${gap} off your ${goalAtar} goal.`;
+        // Just the gap. When a goal is set, the Distance-to-target strip is on
+        // the page and says the lever properly — with what it's worth in ATAR
+        // points, which this line can't. Saying it here too put the same
+        // sentence on screen twice.
+        sub = `${(goalAtar - atar).toFixed(2)} off your ${goalAtar} goal.`;
     } else if (lever) {
         sub = ATAR_LEVERS[lever];
     }
@@ -314,10 +321,13 @@ const MOVE_THEME = {
     "chart-4": { bg: "bg-chart-4/5",   border: "border-chart-4/15",   iconBg: "bg-chart-4/10",   iconText: "text-chart-4",   bar: "bg-chart-4"   },
 };
 
+// The badge text is foreground, not the accent colour. Measured on the tinted
+// rows these sat at 2.43:1 in light mode — invisible. Urgency still reads from
+// the row tint and the icon, which are graphics and only owe 3:1.
 const URGENCY = {
-    today: { wrap: "bg-streak/5 border-streak/15 hover:bg-streak/10",   iconBg: "bg-streak/15",  iconText: "text-streak",  badge: "bg-streak/15 text-streak"   },
-    soon:  { wrap: "bg-xp/5 border-xp/15 hover:bg-xp/10",               iconBg: "bg-xp/15",      iconText: "text-xp",      badge: "bg-xp/15 text-xp"           },
-    later: { wrap: "bg-surface border-border/60 hover:bg-secondary/40", iconBg: "bg-chart-3/10", iconText: "text-chart-3", badge: "bg-chart-3/10 text-chart-3" },
+    today: { wrap: "bg-streak/5 border-streak/15 hover:bg-streak/10",   iconBg: "bg-streak/15",  iconText: "text-streak",  badge: "bg-streak/20 text-foreground"   },
+    soon:  { wrap: "bg-xp/5 border-xp/15 hover:bg-xp/10",               iconBg: "bg-xp/15",      iconText: "text-xp",      badge: "bg-xp/25 text-foreground"       },
+    later: { wrap: "bg-surface border-border/60 hover:bg-secondary/40", iconBg: "bg-chart-3/10", iconText: "text-chart-3", badge: "bg-chart-3/15 text-foreground"  },
 };
 function urgencyKey(daysAway) {
     if (daysAway <= 1) return "today";
@@ -344,6 +354,7 @@ export default function Dashboard() {
     const [quizAttempts, setQuizAttempts] = useState([]);
     const [assessments, setAssessments] = useState([]);
     const [flashcardReminders, setFlashcardReminders] = useState([]);
+    const [flashcards, setFlashcards] = useState([]);
     const [plannerReminders, setPlannerReminders] = useState([]);
     const [leaderboard, setLeaderboard] = useState([]);
     const [isLoading, setIsLoading] = useState(true);
@@ -412,6 +423,11 @@ export default function Dashboard() {
                 .slice(0, 5);
             setPlannerReminders(plannerEvents);
 
+            // The raw cards, for the retention projection. Only a due-deck
+            // summary was being kept, which threw away every SM-2 field the
+            // forgetting curve is built from.
+            setFlashcards(flashcardData || []);
+
             const dueCards = (flashcardData || []).filter(c => c.next_review_date && c.next_review_date <= today);
             const deckMap = {};
             dueCards.forEach(card => {
@@ -419,7 +435,10 @@ export default function Dashboard() {
                 if (!deckMap[key]) deckMap[key] = { subject: card.subject_name, topic: card.topic, count: 0 };
                 deckMap[key].count++;
             });
-            setFlashcardReminders(Object.values(deckMap).slice(0, 3));
+            // All of them, not the first three. They get folded together by
+            // subject at render, and truncating here silently undercounted the
+            // pile — "90 cards due" when the real number was 260.
+            setFlashcardReminders(Object.values(deckMap));
         } catch (err) {
             console.error("Dashboard load error:", err);
         } finally {
@@ -538,6 +557,60 @@ export default function Dashboard() {
     const goalHours = userProfile?.weekly_study_goal_hours || 20;
     const weeklyPct = Math.min(100, Math.round((weeklyStudyTime / (goalHours * 60)) * 100));
     const totalReminders = assessments.length + flashcardReminders.length + plannerReminders.length;
+
+    // ── The radar, as one ranked list ────────────────────────────────────────
+    // This used to render each source as its own run of tiles — up to eleven
+    // of them in a three-wide grid, mixing SAC deadlines with planner tasks and
+    // flashcard decks. Worse, decks were keyed per deck and titled by SUBJECT,
+    // so three Chemistry decks came out as three identical-looking rows with
+    // the topic (which was fetched, and sitting right there) never rendered.
+    //
+    // One list, sorted by how soon it actually bites, decks folded together by
+    // subject, and everything past the top few behind a link.
+    const radar = useMemo(() => {
+        const now = new Date();
+        const items = [];
+        const daysTo = (iso) => {
+            const d = differenceInDays(parseISO(iso), now);
+            return Number.isFinite(d) ? d : null;
+        };
+
+        for (const a of assessments) {
+            const days = daysTo(a.due_date);
+            if (days == null) continue;
+            items.push({ key: `as-${a.id}`, icon: Target, days, rank: 0,
+                title: a.title, subtitle: a.subject_name, to: "Goals" });
+        }
+        for (const ev of plannerReminders) {
+            const days = daysTo(ev.date);
+            if (days == null) continue;
+            items.push({ key: `pl-${ev.id}`, icon: FileQuestion, days, rank: 1,
+                title: ev.title, subtitle: ev.event_type, to: "Goals" });
+        }
+
+        // Decks: one row per subject, with the topics that make up the pile.
+        // NOT a `new Map()` — this file imports `Map` from lucide-react as an
+        // icon, so the global is shadowed and `new Map()` throws at render.
+        const bySubject = Object.create(null);
+        for (const deck of flashcardReminders) {
+            const subject = deck.subject || "Flashcards";
+            const prev = bySubject[subject] || (bySubject[subject] = { subject, count: 0, topics: [] });
+            prev.count += deck.count || 0;
+            if (deck.topic && !prev.topics.includes(deck.topic)) prev.topics.push(deck.topic);
+        }
+        for (const d of Object.values(bySubject)) {
+            const detail = d.topics.length
+                ? `${d.count} cards · ${d.topics.slice(0, 2).join(", ")}${d.topics.length > 2 ? ` +${d.topics.length - 2}` : ""}`
+                : `${d.count} cards due`;
+            items.push({ key: `fc-${d.subject}`, icon: Layers, days: 0, rank: 2,
+                title: d.subject, subtitle: detail, to: "Study", badge: "Now" });
+        }
+
+        // Soonest first; a deadline outranks a task outranks a deck on the same day.
+        items.sort((a, b) => (a.days - b.days) || (a.rank - b.rank));
+        return items;
+    }, [assessments, plannerReminders, flashcardReminders]);
+    const RADAR_SHOWN = 4;
 
     const hour = new Date().getHours();
     // ── Study intent ─────────────────────────────────────────────────────────
@@ -1074,48 +1147,26 @@ export default function Dashboard() {
                         animate={{ opacity: 1, y: 0 }}
                         transition={{ delay: 0.15 }}
                     >
-                        <h2 className="font-display font-extrabold text-foreground text-lg lg:text-xl mb-3">
-                            On your radar
-                        </h2>
-                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5">
-                            {assessments.slice(0, 3).map((a) => {
-                                const days = differenceInDays(parseISO(a.due_date), new Date());
-                                const u = URGENCY[urgencyKey(days)];
-                                return (
-                                    <Link key={a.id} to={createPageUrl("Goals")}>
-                                        <ReminderRow
-                                            icon={Target}
-                                            title={a.title}
-                                            subtitle={a.subject_name}
-                                            badge={days === 0 ? 'Today' : days === 1 ? 'Tomorrow' : `${days}d`}
-                                            theme={u}
-                                        />
-                                    </Link>
-                                );
-                            })}
-                            {plannerReminders.map((ev) => {
-                                const days = differenceInDays(parseISO(ev.date), new Date());
-                                const u = URGENCY[urgencyKey(days)];
-                                return (
-                                    <Link key={`pl-${ev.id}`} to={createPageUrl("Goals")}>
-                                        <ReminderRow
-                                            icon={FileQuestion}
-                                            title={ev.title}
-                                            subtitle={ev.event_type}
-                                            badge={days === 0 ? 'Today' : days === 1 ? 'Tomorrow' : `${days}d`}
-                                            theme={u}
-                                        />
-                                    </Link>
-                                );
-                            })}
-                            {flashcardReminders.map((deck, i) => (
-                                <Link key={`fc-${i}`} to={createPageUrl("Study")}>
+                        <div className="flex items-baseline justify-between gap-3 mb-3">
+                            <h2 className="font-display font-extrabold text-foreground text-lg lg:text-xl">
+                                On your radar
+                            </h2>
+                            {radar.length > RADAR_SHOWN && (
+                                <Link to={createPageUrl("Goals")} className="text-xs font-bold text-foreground/70 hover:text-foreground underline underline-offset-2 flex-shrink-0">
+                                    See all {radar.length}
+                                </Link>
+                            )}
+                        </div>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                            {radar.slice(0, RADAR_SHOWN).map((item) => (
+                                <Link key={item.key} to={createPageUrl(item.to)}>
                                     <ReminderRow
-                                        icon={Layers}
-                                        title={deck.subject || 'Flashcards'}
-                                        subtitle={`${deck.count} cards due`}
-                                        badge="Now"
-                                        theme={URGENCY.soon}
+                                        icon={item.icon}
+                                        title={item.title}
+                                        subtitle={item.subtitle}
+                                        badge={item.badge
+                                            || (item.days <= 0 ? 'Today' : item.days === 1 ? 'Tomorrow' : `${item.days}d`)}
+                                        theme={URGENCY[urgencyKey(item.days)]}
                                     />
                                 </Link>
                             ))}
@@ -1123,11 +1174,11 @@ export default function Dashboard() {
                     </motion.section>
                 )}
 
-                {/* ── GOAL POSTER ─────────────────────────────────────── */}
-                {/* Last sessions used to sit beside this as a 2/5 column. It's
-                    a narrow list and the rail was running out of content well
-                    before the main column did, so it moved across — that's what
-                    closed the empty stretch of right-hand page. */}
+                {/* ── DISTANCE TO TARGET ──────────────────────────────── */}
+                {/* This was a poster showing the goal ATAR as a big number and
+                    nothing else. The target sat here, the AcedIt ATAR sat on
+                    Ranked, and the two never met — so the number was a wish
+                    with no distance attached. */}
                 <motion.section
                     initial={{ opacity: 0, y: 12 }}
                     animate={{ opacity: 1, y: 0 }}
@@ -1135,35 +1186,17 @@ export default function Dashboard() {
                 >
                     <div>
                         {hasGoal ? (
-                            <div className="relative overflow-hidden rounded-2xl bg-chart-3/5 border border-chart-3/15 shadow-soft p-6 lg:p-8 h-full">
-                                <GraduationCap className="absolute -top-4 -right-4 w-32 h-32 text-chart-3/[0.08] pointer-events-none" />
-                                <p className="stat-label text-chart-3/80 mb-2">Your shot at</p>
-                                <h2
-                                    className="font-display font-extrabold text-foreground leading-none mb-4"
-                                    style={{ fontSize: 'clamp(2.75rem, 7vw, 5rem)' }}
-                                >
-                                    {userProfile.goal_atar || '—'}
-                                </h2>
-                                <div className="space-y-1">
-                                    {userProfile.goal_course_name && (
-                                        <p className="font-bold text-foreground text-base">{userProfile.goal_course_name}</p>
-                                    )}
-                                    {userProfile.goal_university && (
-                                        <p className="text-sm text-muted-foreground">at {userProfile.goal_university}</p>
-                                    )}
-                                </div>
-                                {/* Onboarding asks what success looks like this year and tells
-                                    them the more specific it is the more it will drive them.
-                                    It was then stored and never shown to them again. */}
-                                {userProfile.qualitative_goal && (
-                                    <p className="text-sm text-muted-foreground italic leading-relaxed mt-3 pt-3 border-t border-chart-3/15">
-                                        “{userProfile.qualitative_goal}”
-                                    </p>
-                                )}
-                                <Link to={createPageUrl("Goals")} className="inline-flex items-center gap-1 text-sm font-bold text-chart-3 hover:underline mt-5">
-                                    Edit goal <ArrowRight className="w-3.5 h-3.5" />
-                                </Link>
-                            </div>
+                            <DistanceToTarget
+                                atar={userProfile?.acedit_atar != null ? Number(userProfile.acedit_atar) : null}
+                                goalAtar={userProfile?.goal_atar}
+                                components={userProfile?.atar_components}
+                                courseName={userProfile?.goal_course_name}
+                                university={userProfile?.goal_university}
+                                /* Onboarding asks what success looks like this year and
+                                   says the more specific it is the more it will drive
+                                   them. It was then stored and never shown again. */
+                                qualitativeGoal={userProfile?.qualitative_goal}
+                            />
                         ) : (
                             /* A banner rather than a centred poster: this used to
                                be a 2/5 column where stacking made sense, and at
@@ -1230,6 +1263,12 @@ export default function Dashboard() {
                     </div>
 
                     <BrainActivityCard techniques={studyTechniques} />
+
+                    {/* Directly under the brain on purpose: that card shows the
+                        systems the last month leaned on, this one shows what
+                        that work costs if it isn't topped up. Same material,
+                        opposite direction. */}
+                    <RetentionCard flashcards={flashcards} />
 
                     <div className="card-soft border-2 border-border p-5">
                         <div className="flex items-center justify-between mb-3">
@@ -1321,7 +1360,9 @@ function ReminderRow({ icon: Icon, title, subtitle, badge, theme }) {
             </div>
             <div className="flex-1 min-w-0">
                 <p className="font-bold text-foreground text-sm truncate">{title}</p>
-                <p className="text-xs text-muted-foreground truncate">{subtitle}</p>
+                {/* foreground/70, not muted-foreground: on the urgency tints
+                    muted lands at 4.25:1, just under the 4.5 it needs. */}
+                <p className="text-xs text-foreground/70 truncate">{subtitle}</p>
             </div>
             {badge && <span className={`pill ${theme.badge} flex-shrink-0`}>{badge}</span>}
         </div>
