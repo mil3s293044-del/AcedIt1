@@ -320,6 +320,11 @@ export default function BrainModel({
     return (
         <div ref={wrapRef}
             className={`relative mx-auto overflow-hidden ${plate ? "rounded-2xl" : "max-w-[430px]"} ${className}`}
+            /* The plate is painted by absolutely-positioned children, so nothing
+               in the ancestor chain carries its colour. Declaring it lets a
+               contrast check measure text on the plate correctly instead of
+               measuring it against the card behind. */
+            data-plate-bg={plate ? "#080c16" : undefined}
             style={{ height }}
             onPointerDown={onDown} onPointerMove={onMove} onPointerUp={onUp} onPointerLeave={onUp}>
             {plate && (
@@ -338,7 +343,7 @@ export default function BrainModel({
                 role="img"
                 aria-label={`Brain diagram with ${regions.length} region${regions.length === 1 ? "" : "s"} highlighted: ${named}`} />
             <span className={`absolute bottom-1.5 right-2.5 text-[10px] pointer-events-none ${
-                plate ? "text-white/40" : "text-muted-foreground/60"}`}>
+                plate ? "text-white/60" : "text-muted-foreground"}`}>
                 drag to rotate
             </span>
         </div>
