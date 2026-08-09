@@ -15,6 +15,7 @@ import HelpButton from "@/components/shared/HelpButton";
 import StudyIntentModal from "@/components/dashboard/StudyIntentModal";
 import { reconcileUserXP } from "@/lib/reconcileXP";
 import { getStreakMultiplier as getStreakMultiplierValue } from "@/components/shared/streakHelpers";
+import BrainActivityCard from "@/components/dashboard/BrainActivityCard";
 import { atarBandOf } from "@/lib/atarBands";
 import { todaysIntent } from "@/lib/studyIntent";
 import { fmtDate } from "@/lib/safeDate";
@@ -548,6 +549,13 @@ export default function Dashboard() {
     const todayKey = format(new Date(), "yyyy-MM-dd");
     const todayIntentPlan = todaysIntent(userProfile);
 
+    // The Planner's free-text intention for today. It was being written there
+    // and then only ever displayed on the page that wrote it — which is the
+    // one screen you're least likely to be on when you need reminding.
+    const todayIntention = userProfile?.extra?.daily_intention?.date === todayKey
+        ? userProfile.extra.daily_intention.text
+        : null;
+
     const saveIntent = useCallback(async ({ mode, duration }) => {
         if (!userProfile?.id) return;
         const extra = userProfile.extra || {};
@@ -684,7 +692,7 @@ export default function Dashboard() {
                 )}
             </AnimatePresence>
 
-            <div className="w-full px-4 lg:px-8 py-6 lg:py-10 max-w-6xl mx-auto space-y-8 lg:space-y-10">
+            <div className="w-full px-4 lg:px-8 py-6 lg:py-10 max-w-[1600px] mx-auto space-y-8 lg:space-y-10">
 
                 {/* ── COACH STRIP ─────────────────────────────────────── */}
                 <motion.section initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.35 }}>
@@ -770,6 +778,13 @@ export default function Dashboard() {
                         </div>
                     </div>
                 </motion.section>
+
+                {/* Everything below runs in two columns so the right-hand
+                    margin stops being dead space. The streak row keeps its own
+                    internal 3-column layout untouched — at 1600px the left
+                    column is the same width the whole page used to be. */}
+                <div className="grid xl:grid-cols-[minmax(0,1fr)_360px] gap-6 xl:gap-8 items-start">
+                <div className="min-w-0 space-y-8 lg:space-y-10">
 
                 {/* ── HERO ROW: Streak (2/3) + Today snapshot (1/3) ──── */}
                 <motion.section
@@ -1108,14 +1123,17 @@ export default function Dashboard() {
                     </motion.section>
                 )}
 
-                {/* ── GOAL POSTER + RECENT (3:2) ──────────────────────── */}
+                {/* ── GOAL POSTER ─────────────────────────────────────── */}
+                {/* Last sessions used to sit beside this as a 2/5 column. It's
+                    a narrow list and the rail was running out of content well
+                    before the main column did, so it moved across — that's what
+                    closed the empty stretch of right-hand page. */}
                 <motion.section
                     initial={{ opacity: 0, y: 12 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ delay: 0.25 }}
-                    className="grid grid-cols-1 md:grid-cols-5 gap-5 lg:gap-6"
                 >
-                    <div className="md:col-span-3">
+                    <div>
                         {hasGoal ? (
                             <div className="relative overflow-hidden rounded-2xl bg-chart-3/5 border border-chart-3/15 shadow-soft p-6 lg:p-8 h-full">
                                 <GraduationCap className="absolute -top-4 -right-4 w-32 h-32 text-chart-3/[0.08] pointer-events-none" />
@@ -1147,34 +1165,85 @@ export default function Dashboard() {
                                 </Link>
                             </div>
                         ) : (
-                            <div className="rounded-2xl bg-surface border border-dashed border-border p-6 lg:p-8 text-center h-full flex flex-col items-center justify-center shadow-soft">
-                                <Target className="w-12 h-12 text-muted-foreground/40 mb-3" />
-                                <h3 className="font-display font-extrabold text-foreground text-lg lg:text-xl mb-2">
-                                    What are you chasing?
-                                </h3>
-                                <p className="text-muted-foreground text-sm mb-4 max-w-xs">
-                                    Set your ATAR target and dream course — we'll help you get there.
-                                </p>
-                                <Link to={createPageUrl("Goals")}>
-                                    <Button>Set your goal</Button>
+                            /* A banner rather than a centred poster: this used to
+                               be a 2/5 column where stacking made sense, and at
+                               full width the same markup became a tall box of
+                               mostly nothing. */
+                            <div className="rounded-2xl bg-surface border border-dashed border-border p-5 lg:p-6 shadow-soft
+                                flex flex-col sm:flex-row sm:items-center gap-4 text-center sm:text-left">
+                                <div className="w-12 h-12 rounded-2xl bg-chart-3/10 flex items-center justify-center flex-shrink-0 mx-auto sm:mx-0">
+                                    <Target className="w-6 h-6 text-chart-3" />
+                                </div>
+                                <div className="min-w-0 flex-1">
+                                    <h3 className="font-display font-extrabold text-foreground text-lg lg:text-xl">
+                                        What are you chasing?
+                                    </h3>
+                                    <p className="text-muted-foreground text-sm mt-0.5">
+                                        Set your ATAR target and dream course — we'll help you get there.
+                                    </p>
+                                </div>
+                                <Link to={createPageUrl("Goals")} className="flex-shrink-0">
+                                    <Button className="w-full sm:w-auto">Set your goal</Button>
                                 </Link>
                             </div>
                         )}
                     </div>
 
-                    <div className="md:col-span-2">
-                        <div className="flex items-center justify-between mb-4">
-                            <h3 className="font-display font-extrabold text-foreground text-lg lg:text-xl">Last sessions</h3>
-                            <Link to={createPageUrl("Study")} className="text-xs font-bold text-primary hover:underline">View all</Link>
+                </motion.section>
+
+                </div>
+
+                {/* ── SIDE RAIL ───────────────────────────────────────── */}
+                <motion.div
+                    initial={{ opacity: 0, y: 12 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: 0.12 }}
+                    className="space-y-5 md:grid md:grid-cols-2 md:gap-5 md:space-y-0 xl:block xl:space-y-5"
+                >
+                    {/* Today's intention — set in the Planner, read here. It was
+                        being written and then only ever shown on the page that
+                        wrote it. */}
+                    <div className="card-soft border-2 border-border p-5">
+                        <p className="stat-label text-chart-4/80 mb-1.5">Today's intention</p>
+                        {todayIntention ? (
+                            <>
+                                <p className="text-base font-display font-extrabold text-foreground leading-snug">
+                                    {todayIntention}
+                                </p>
+                                <Link to={createPageUrl("Goals")}
+                                    className="inline-flex items-center gap-1 text-[11px] font-bold text-muted-foreground hover:text-foreground mt-2 transition-colors">
+                                    Change it in the Planner <ArrowRight className="w-3 h-3" />
+                                </Link>
+                            </>
+                        ) : (
+                            <>
+                                <p className="text-sm text-muted-foreground leading-snug">
+                                    Nothing set for today. One line about what today is for makes it much
+                                    harder to drift.
+                                </p>
+                                <Link to={createPageUrl("Goals")}
+                                    className="inline-flex items-center gap-1 text-[11px] font-bold text-chart-4 hover:underline mt-2">
+                                    Set one in the Planner <ArrowRight className="w-3 h-3" />
+                                </Link>
+                            </>
+                        )}
+                    </div>
+
+                    <BrainActivityCard techniques={studyTechniques} />
+
+                    <div className="card-soft border-2 border-border p-5">
+                        <div className="flex items-center justify-between mb-3">
+                            <p className="stat-label">Last sessions</p>
+                            <Link to={createPageUrl("Study")} className="text-[11px] font-bold text-primary hover:underline">View all</Link>
                         </div>
                         {studySessions.length === 0 ? (
-                            <div className="flex flex-col items-center text-center gap-3 py-6">
+                            <div className="flex flex-col items-center text-center gap-3 py-2">
                                 <div className="w-10 h-10 rounded-xl bg-primary/5 flex items-center justify-center border border-primary/10">
                                     <Brain className="w-5 h-5 text-primary" />
                                 </div>
                                 <div>
                                     <p className="font-bold text-foreground text-sm">No sessions yet</p>
-                                    <p className="text-xs text-muted-foreground mt-0.5 max-w-[200px]">Knock out a quick session — it'll show up right here.</p>
+                                    <p className="text-xs text-muted-foreground mt-0.5">Knock out a quick session — it'll show up right here.</p>
                                 </div>
                                 <Link to={createPageUrl("Study")}>
                                     <Button size="sm" className="gap-1.5">
@@ -1205,7 +1274,8 @@ export default function Dashboard() {
                             </ul>
                         )}
                     </div>
-                </motion.section>
+                </motion.div>
+                </div>
 
                 {/* ── JUMP-TO RAIL ────────────────────────────────────── */}
                 <motion.section
