@@ -181,6 +181,9 @@ export default function MindMaps({ user, subjects = [] }) {
     const [trail, setTrail] = useState([]);          // [{ id, title }] — drill path
     const [map, setMap] = useState(null);
     const [selectedId, setSelectedId] = useState(null);
+    // A freshly added node opens its name field, so Tab-Tab-Tab actually builds
+    // a map instead of producing a row of boxes all called "New node".
+    const [renamingId, setRenamingId] = useState(null);
     const [connectFrom, setConnectFrom] = useState(null);
     const [mode, setMode] = useState("canvas");      // canvas | outline
     const [outline, setOutline] = useState("");
@@ -326,6 +329,31 @@ export default function MindMaps({ user, subjects = [] }) {
             return { ...m, nodes: [...m.nodes, n] };
         });
     }, [edit, selectedId]);
+
+    // Tab / Enter from the canvas. A new node arrives unpinned so the layout
+    // places it — pinning it at a guessed spot is what made keyboard-added
+    // nodes land on top of each other.
+    const addRelated = useCallback((anchorId, where) => {
+        edit(m => {
+            const anchor = m.nodes.find(n => n.id === anchorId);
+            if (!anchor) return m;
+            // A sibling of the root has nowhere to go, so it becomes a child.
+            const parent = where === "child" || !anchor.parent ? anchorId : anchor.parent;
+            const n = newNode("New node", { parent, type: "idea" });
+            setSelectedId(n.id);
+            setRenamingId(n.id);
+            return { ...m, nodes: [...m.nodes, n] };
+        });
+    }, [edit]);
+
+    const deleteById = useCallback((id) => {
+        edit(m => {
+            const n = m.nodes.find(x => x.id === id);
+            if (!n || !n.parent) return m;      // never delete the root
+            return removeNode(m, id);
+        });
+        setSelectedId(null);
+    }, [edit]);
 
     const updateNode = useCallback((id, patch) => {
         edit(m => ({ ...m, nodes: m.nodes.map(n => (n.id === id ? { ...n, ...patch } : n)) }));
@@ -675,25 +703,30 @@ export default function MindMaps({ user, subjects = [] }) {
                 </div>
             )}
 
-            <div className="grid lg:grid-cols-[168px_1fr_300px] gap-3">
-                {/* ── Palette ────────────────────────────────────────────── */}
-                <div className="lg:space-y-1.5 flex lg:block gap-2 overflow-x-auto pb-1 lg:pb-0">
-                    <p className="stat-label hidden lg:block mb-2">Drag one in</p>
-                    {NODE_TYPES.map(t => {
-                        const I = TYPE_ICON[t.id];
-                        const c = TONE_CLASS[t.tone];
-                        return (
-                            <button key={t.id} data-palette={t.id}
-                                onPointerDown={() => { setDragType(t.id); }}
-                                title={t.hint}
-                                className={`flex-shrink-0 w-auto lg:w-full flex items-center gap-2 rounded-xl border-2 ${c.border} ${c.bg} px-2.5 py-2 text-left hover:shadow-soft transition-all cursor-grab active:cursor-grabbing`}>
-                                <I className={`w-3.5 h-3.5 flex-shrink-0 ${c.text}`} />
-                                <span className="text-xs font-bold text-foreground whitespace-nowrap">{t.label}</span>
-                            </button>
-                        );
-                    })}
-                </div>
+            {/* The palette used to be a permanent 168px column down the left,
+                which cost the canvas a fifth of its width to eight chips that
+                are used occasionally. It's a strip above the canvas now, and
+                the chips ADD on click as well as drag — dragging was the only
+                way in, which is slow on a desktop and impossible on a keyboard. */}
+            <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-none">
+                <span className="stat-label flex-shrink-0 hidden sm:inline">Add</span>
+                {NODE_TYPES.map(t => {
+                    const I = TYPE_ICON[t.id];
+                    const c = TONE_CLASS[t.tone];
+                    return (
+                        <button key={t.id} data-palette={t.id}
+                            onPointerDown={() => { setDragType(t.id); }}
+                            onClick={() => addNode(t.id)}
+                            title={`${t.hint} — click to add under the selected node, or drag onto the canvas`}
+                            className={`flex-shrink-0 flex items-center gap-1.5 rounded-xl border-2 ${c.border} ${c.bg} px-2.5 py-1.5 hover:shadow-soft transition-all`}>
+                            <I className={`w-3.5 h-3.5 flex-shrink-0 ${c.text}`} />
+                            <span className="text-xs font-bold text-foreground whitespace-nowrap">{t.label}</span>
+                        </button>
+                    );
+                })}
+            </div>
 
+            <div className="grid lg:grid-cols-[minmax(0,1fr)_300px] gap-3">
                 {/* ── Canvas / outline ───────────────────────────────────── */}
                 <div className="space-y-2 min-w-0">
                     {mode === "canvas" ? (
@@ -709,8 +742,14 @@ export default function MindMaps({ user, subjects = [] }) {
                                 onOpenNode={openNode}
                                 connectFrom={connectFrom}
                                 editable expandable
+                                onAddChild={(id) => addRelated(id, "child")}
+                                onAddSibling={(id) => addRelated(id, "sibling")}
+                                onDelete={deleteById}
                                 apiRef={canvasApi}
-                                className="h-[460px]"
+                                /* The canvas is the feature; it was getting 28%
+                                   of the page. Fills the viewport now, with a
+                                   floor so a short window still shows a map. */
+                                className="h-[calc(100vh-340px)] min-h-[440px]"
                             />
                         </div>
                     ) : (
@@ -722,7 +761,7 @@ export default function MindMaps({ user, subjects = [] }) {
                                 spellCheck={false}
                                 aria-label="Mind map outline"
                                 placeholder={"Photosynthesis\n  Light-dependent [step] :: happens first\n    Thylakoid membrane [term]\n  Calvin cycle [step] :: uses the ATP"}
-                                className="w-full h-[420px] rounded-2xl border-2 border-border bg-surface p-4 font-mono text-sm leading-relaxed text-foreground resize-none focus:outline-none focus:border-map"
+                                className="w-full h-[calc(100vh-360px)] min-h-[420px] rounded-2xl border-2 border-border bg-surface p-4 font-mono text-sm leading-relaxed text-foreground resize-none focus:outline-none focus:border-map"
                             />
                             <div className="flex flex-wrap gap-2 text-[11px] text-muted-foreground">
                                 <span className="pill bg-secondary">Tab to nest</span>
@@ -795,7 +834,22 @@ export default function MindMaps({ user, subjects = [] }) {
                                     )}
                                 </div>
 
+                                {/* A node added with Tab or Enter opens focused
+                                    and selected, so you type the name and hit
+                                    Tab again. Without this, keyboard building
+                                    produced a row of boxes all called "New
+                                    node" that then had to be renamed one by one. */}
                                 <Input value={selected.text} aria-label="Node text"
+                                    ref={(el) => {
+                                        if (el && renamingId && renamingId === selected.id) {
+                                            el.focus(); el.select();
+                                            setRenamingId(null);
+                                        }
+                                    }}
+                                    onKeyDown={(e) => {
+                                        if (e.key === "Enter") { e.preventDefault(); addRelated(selected.id, "sibling"); }
+                                        if (e.key === "Tab" && !e.shiftKey) { e.preventDefault(); addRelated(selected.id, "child"); }
+                                    }}
                                     onChange={(e) => updateNode(selected.id, { text: e.target.value })}
                                     className="font-bold border-2 rounded-xl" />
 

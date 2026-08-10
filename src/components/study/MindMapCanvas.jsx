@@ -13,7 +13,7 @@
  * drag-and-drop canvas works if the coordinate maths is approximate.
  */
 import React, { useMemo, useState, useRef, useEffect, useCallback } from "react";
-import { layout, subtreeIds, TYPE_BY_ID } from "@/lib/mindmap";
+import { layout, subtreeIds, branchTones, TYPE_BY_ID } from "@/lib/mindmap";
 import { ZoomIn, ZoomOut, Maximize2, Minimize2, Scan } from "lucide-react";
 
 // Static class strings — Tailwind never sees a class built by a template
@@ -26,16 +26,49 @@ const TONE = {
     primary:   { fill: "fill-primary",   stroke: "stroke-primary",   text: "fill-primary" },
     streak:    { fill: "fill-streak",    stroke: "stroke-streak",    text: "fill-streak" },
 };
-// Depth still colours anything untyped, so an outline typed in thirty seconds
-// isn't a wall of identical grey boxes.
-const DEPTH_TONE = ["map", "chart-3", "chart-4", "xp"];
 const CONF_STROKE = { 1: "stroke-streak", 2: "stroke-xp", 3: "stroke-primary" };
 const CONF_FILL   = { 1: "fill-streak",   2: "fill-xp",   3: "fill-primary" };
 
-// Must match the defaults handed to layout() below — the layout reserves the
-// box, the canvas draws it, and a mismatch shows up as overlapping nodes.
-const NODE_W = 170, NODE_H = 58;
-const LAYOUT_OPTS = { nodeW: NODE_W, nodeH: NODE_H };
+// Nodes size to their label rather than sitting at a fixed width. "CO2
+// concentration" in a 170-wide box wrapped to two cramped lines; the same text
+// in a box that fits it reads in one. The LAYOUT still reserves a uniform
+// column so nothing can collide — only the drawn box varies.
+const NODE_H = 62, ROOT_H = 72;
+const MIN_W = 112, MAX_W = 200, ROOT_MIN_W = 150;
+const LANE_W = 190;                       // uniform slot the layout reserves
+// MEASURED, not guessed: the bold face renders at ~8.9px per character at
+// 13.5px, so the original 7.3 estimate overflowed every box with a long label.
+// These are that measurement scaled to the sizes actually drawn, plus headroom.
+const CHAR = 9.4, ROOT_CHAR = 11.1;
+const FONT = 14, ROOT_FONT = 16.5;
+// colGap is the whole column pitch: it has to clear the widest node plus a
+// link chip. Tighter than it was, because the map's WIDTH is what decides how
+// far the whole thing has to shrink to fit, and therefore how readable it is.
+// rowGap is generous because the fit is almost always WIDTH-bound: a
+// horizontal tree is far wider than it is tall, so vertical space in the canvas
+// is free. Spreading the rows uses it and costs no scale.
+const LAYOUT_OPTS = { nodeW: LANE_W, nodeH: NODE_H, colGap: 272, rowGap: 150 };
+
+// Branch thickness by depth: a trunk leaving the root, tapering to a twig.
+// This is the single thing that makes the picture read as a mind map instead
+// of an org chart.
+const TRUNK = [16, 9, 5.5, 3.5, 2.5];
+const trunkAt = (d) => TRUNK[Math.min(d, TRUNK.length - 1)];
+
+/**
+ * A branch drawn as a filled shape rather than a stroked line, so it can be
+ * thick where it leaves the parent and thin where it meets the child.
+ */
+function taper(a, b, w0, w1) {
+    const mx = (a.x + b.x) / 2;
+    return [
+        `M ${a.x} ${a.y - w0 / 2}`,
+        `C ${mx} ${a.y - w0 / 2}, ${mx} ${b.y - w1 / 2}, ${b.x} ${b.y - w1 / 2}`,
+        `L ${b.x} ${b.y + w1 / 2}`,
+        `C ${mx} ${b.y + w1 / 2}, ${mx} ${a.y + w0 / 2}, ${a.x} ${a.y + w0 / 2}`,
+        "Z",
+    ].join(" ");
+}
 
 /**
  * Wrap a label to at most `maxLines` lines that fit the box.
@@ -61,8 +94,16 @@ function wrap(text, max = 20, maxLines = 2) {
     return lines;
 }
 
-const toneOf = (node, depth) =>
-    TONE[TYPE_BY_ID[node.type]?.tone] || TONE[DEPTH_TONE[Math.min(depth, DEPTH_TONE.length - 1)]];
+/** Wrapped lines plus the box width they need. */
+function fitBox(text, depth) {
+    const root = depth === 0;
+    const char = root ? ROOT_CHAR : CHAR;
+    const maxChars = Math.floor((MAX_W - 26) / char);
+    const lines = wrap(text, maxChars, 2);
+    const longest = Math.max(1, ...lines.map(l => l.length));
+    const w = Math.min(MAX_W, Math.max(root ? ROOT_MIN_W : MIN_W, Math.round(longest * char) + 26));
+    return { lines, w, h: root ? ROOT_H : NODE_H };
+}
 
 export default function MindMapCanvas({
     nodes = [],
@@ -73,6 +114,9 @@ export default function MindMapCanvas({
     onMove,                        // (moves: [{id,x,y}]) — committed on pointer-up
     onConnect,                     // (fromId, toId)
     onOpenNode,                    // double-click / badge — drill into a node
+    onAddChild,                    // Tab — a node under the selected one
+    onAddSibling,                  // Enter — a node beside the selected one
+    onDelete,                      // Delete/Backspace
     connectFrom = null,            // id while the student is drawing a link
     editable = false,
     compact = false,
@@ -91,6 +135,18 @@ export default function MindMapCanvas({
 
     const { positions, minX, minY, width, height } = useMemo(
         () => layout(nodes, LAYOUT_OPTS), [nodes]);
+    const tones = useMemo(() => branchTones(nodes), [nodes]);
+    // Box geometry per node, computed once — the renderer, the link chips and
+    // the hit areas all have to agree on it.
+    const boxes = useMemo(() => {
+        const out = new Map();
+        for (const n of nodes) {
+            const d = positions.get(n.id)?.depth ?? 1;
+            out.set(n.id, fitBox(n.text, d));
+        }
+        return out;
+    }, [nodes, positions]);
+    const toneOf = useCallback((id) => TONE[tones.get(id)] || TONE.map, [tones]);
 
     // Live drag offsets are applied at render time rather than written into
     // state on every pointermove — otherwise a 60fps drag re-lays-out the whole
@@ -118,7 +174,11 @@ export default function MindMapCanvas({
         // piece beats an illegible whole. The root sits at (0,0), which is the
         // other reason the coordinate space isn't normalised.
         const el = wrapRef.current?.getBoundingClientRect();
-        const MIN_SCALE = 0.42;
+        // Raised from 0.42. At 0.42 a 14px label renders at six pixels, which
+        // is a picture of a mind map rather than a mind map. Below this floor,
+        // frame the middle at the floor and let them pan — the fit button is
+        // right there when they want the whole thing.
+        const MIN_SCALE = 0.72;
         if (el?.width && el?.height) {
             const scale = Math.min(el.width / w, el.height / h);
             if (scale < MIN_SCALE) {
@@ -178,10 +238,60 @@ export default function MindMapCanvas({
         return () => window.removeEventListener("keydown", esc);
     }, [full]);
 
+    // ── Keyboard ────────────────────────────────────────────────────────────
+    // Every node used to require dragging a chip in from a palette, which is
+    // slow, needs a mouse, and is unreachable from a keyboard entirely. Enter
+    // and Tab are what every outliner in the world uses; arrows walk the tree.
+    const move = useCallback((dir) => {
+        if (!selectedId) { onSelect?.(nodes.find(n => !n.parent)?.id ?? null); return; }
+        const here = positions.get(selectedId);
+        if (!here) return;
+        const cur = nodes.find(n => n.id === selectedId);
+        // Left/right follow the tree outward and inward, which on a two-sided
+        // map is not the same as screen direction — a branch on the left grows
+        // leftward, so "further out" there means pressing Left.
+        const outward = (dir === "ArrowRight") === (here.x >= 0);
+        if (dir === "ArrowLeft" || dir === "ArrowRight") {
+            if (!outward) { if (cur?.parent) onSelect?.(cur.parent); return; }
+            const kids = nodes.filter(n => n.parent === selectedId);
+            if (kids.length) onSelect?.(kids[0].id);
+            return;
+        }
+        // Up/down step through everything at the same depth, ordered by where
+        // it actually sits on screen.
+        const peers = nodes
+            .map(n => ({ n, p: positions.get(n.id) }))
+            .filter(x => x.p && x.p.depth === here.depth && Math.sign(x.p.x) === Math.sign(here.x))
+            .sort((a, b) => a.p.y - b.p.y);
+        const i = peers.findIndex(x => x.n.id === selectedId);
+        const next = peers[i + (dir === "ArrowDown" ? 1 : -1)];
+        if (next) onSelect?.(next.n.id);
+    }, [selectedId, nodes, positions, onSelect]);
+
+    const onKeyDown = useCallback((e) => {
+        if (!editable || compact) return;
+        // Never steal keys from a field the student is typing in.
+        const t = e.target;
+        if (t !== e.currentTarget && /^(INPUT|TEXTAREA|SELECT)$/.test(t?.tagName || "")) return;
+        if (t?.isContentEditable) return;
+
+        if (e.key === "Tab" && selectedId) { e.preventDefault(); onAddChild?.(selectedId); return; }
+        if (e.key === "Enter" && selectedId) { e.preventDefault(); onAddSibling?.(selectedId); return; }
+        if ((e.key === "Delete" || e.key === "Backspace") && selectedId) {
+            e.preventDefault(); onDelete?.(selectedId); return;
+        }
+        if (e.key.startsWith("Arrow")) { e.preventDefault(); move(e.key); return; }
+        if (e.key === "Escape") { e.preventDefault(); onSelect?.(null); return; }
+        if (e.key === "0") { e.preventDefault(); fit(); return; }
+        if (e.key === "+" || e.key === "=") { e.preventDefault(); zoomBy(1.3); return; }
+        if (e.key === "-" || e.key === "_") { e.preventDefault(); zoomBy(1 / 1.3); return; }
+    }, [editable, compact, selectedId, onAddChild, onAddSibling, onDelete, onSelect, move, fit, zoomBy]);
+
     // ── Pointer handling ────────────────────────────────────────────────────
     const onNodeDown = (e, node) => {
         if (compact) return;
         e.stopPropagation();
+        wrapRef.current?.focus?.({ preventScroll: true });
         onSelect?.(node.id);
         if (connectFrom) { if (connectFrom !== node.id) onConnect?.(connectFrom, node.id); return; }
         if (!editable || !onMove) return;
@@ -228,6 +338,7 @@ export default function MindMapCanvas({
     };
 
     const onBackgroundDown = (e) => {
+        wrapRef.current?.focus?.({ preventScroll: true });
         if (compact || !view) return;
         if (connectFrom) return;
         onSelect?.(null);
@@ -243,6 +354,8 @@ export default function MindMapCanvas({
 
     return (
         <div ref={wrapRef}
+            tabIndex={editable && !compact ? 0 : -1}
+            onKeyDown={onKeyDown}
             className={full
                 ? "fixed inset-3 sm:inset-6 z-50 overflow-hidden rounded-2xl bg-background border-2 border-border shadow-soft-lg"
                 : `relative overflow-hidden rounded-2xl bg-secondary/30 border border-border ${className}`}>
@@ -264,11 +377,11 @@ export default function MindMapCanvas({
                     if (!n.parent) return null;
                     const a = shown.get(n.parent), b = shown.get(n.id);
                     if (!a || !b) return null;
-                    const mx = (a.x + b.x) / 2;
+                    const d = b.depth ?? 1;
                     return (
                         <path key={`e${n.id}`}
-                            d={`M ${a.x} ${a.y} C ${mx} ${a.y}, ${mx} ${b.y}, ${b.x} ${b.y}`}
-                            fill="none" strokeWidth="2" className="stroke-border" />
+                            d={taper(a, b, trunkAt(d - 1), trunkAt(d))}
+                            className={toneOf(n.id).fill} opacity="0.5" />
                     );
                 })}
 
@@ -298,57 +411,60 @@ export default function MindMapCanvas({
                 {nodes.map(n => {
                     const p = shown.get(n.id);
                     if (!p) return null;
-                    const tone = toneOf(n, p.depth);
+                    const tone = toneOf(n.id);
                     const type = TYPE_BY_ID[n.type];
                     const showType = type && n.type !== "idea";
                     const selected = selectedId === n.id;
                     const isSource = connectFrom === n.id;
-                    const lines = wrap(n.text, 18, showType ? 2 : 2);
-                    const w = p.depth === 0 ? NODE_W + 30 : NODE_W;
-                    const textTop = showType ? NODE_H / 2 + 2 : NODE_H / 2 + (lines.length === 1 ? 5 : -2);
+                    const root = p.depth === 0;
+                    const { lines, w, h } = boxes.get(n.id) || fitBox(n.text, p.depth);
+                    // One line sits on the centre line; two straddle it. The type
+                    // marker is a dot in the corner now, so it costs no height.
+                    const textTop = h / 2 + (lines.length === 1 ? 5 : -3);
                     return (
-                        <g key={n.id} transform={`translate(${p.x - w / 2}, ${p.y - NODE_H / 2})`}
+                        <g key={n.id} transform={`translate(${p.x - w / 2}, ${p.y - h / 2})`}
                             onPointerDown={(e) => onNodeDown(e, n)}
                             onDoubleClick={(e) => { e.stopPropagation(); onOpenNode?.(n.id); }}
-                            data-node={n.id} data-type={n.type || "idea"}
+                            data-node={n.id} data-type={n.type || "idea"} data-tone={tones.get(n.id)}
                             className={compact ? "" : editable ? "cursor-grab" : "cursor-pointer"}>
                             {/* Opaque base so the tint above lands on the card
                                 colour rather than on whatever the branch behind
                                 it is painting. */}
-                            <rect width={w} height={NODE_H} rx="14" className="fill-surface" />
-                            <rect width={w} height={NODE_H} rx="14" className={tone.fill}
-                                opacity={p.depth === 0 ? 0.2 : 0.12} />
-                            <rect width={w} height={NODE_H} rx="14" fill="none"
+                            <rect width={w} height={h} rx={root ? 18 : 15} className="fill-surface" />
+                            <rect width={w} height={h} rx={root ? 18 : 15} className={tone.fill}
+                                opacity={root ? 0.22 : 0.13} />
+                            <rect width={w} height={h} rx={root ? 18 : 15} fill="none"
                                 className={selected || isSource ? "stroke-foreground"
                                     : CONF_STROKE[n.confidence] || tone.stroke}
-                                strokeWidth={selected || isSource || n.confidence ? 3 : 2} />
+                                strokeWidth={selected || isSource ? 3.5 : n.confidence ? 3 : 2} />
 
-                            {/* Muted rather than the type's own colour. At 9px
-                                on a tinted card, orange measures 2:1 and purple
-                                3.5:1 — the border and the tint already say which
-                                type this is, so the word only has to be
-                                readable. */}
-                            {showType && (
-                                <text x={w / 2} y={16} textAnchor="middle" opacity="0.7"
-                                    className="fill-foreground text-[9px] font-black tracking-wider">
-                                    {type.label.toUpperCase()}
-                                </text>
-                            )}
                             {lines.map((l, i) => (
-                                <text key={i} x={w / 2} y={textTop + i * 15} textAnchor="middle"
-                                    className={`fill-foreground ${p.depth === 0 ? "text-[15px] font-black" : "text-[13px] font-bold"}`}>
+                                <text key={i} x={w / 2} y={textTop + i * 17} textAnchor="middle"
+                                    style={{ fontSize: root ? ROOT_FONT : FONT }}
+                                    className={`fill-foreground ${root ? "font-black" : "font-bold"}`}>
                                     {l}
                                 </text>
                             ))}
 
+                            {/* Type is a marker, not the node's whole colour —
+                                colour belongs to the branch so structure is
+                                visible. The word still shows on hover via the
+                                title, and in the inspector. */}
+                            {showType && (
+                                <>
+                                    <circle cx="12" cy={h / 2} r="3.5"
+                                        className={TONE[type.tone]?.fill || "fill-map"} />
+                                    <title>{type.label}</title>
+                                </>
+                            )}
                             {/* Confidence reads at a glance without opening the
                                 node — the whole point of marking it. */}
                             {n.confidence > 0 && (
-                                <circle cx={w - 11} cy={11} r="4" className={CONF_FILL[n.confidence]} />
+                                <circle cx={w - 11} cy={11} r="4.5" className={CONF_FILL[n.confidence]} />
                             )}
                             {/* This node opens into a map of its own. */}
                             {childMapNodeIds.has(n.id) && (
-                                <g transform={`translate(${w - 26}, ${NODE_H - 18})`}>
+                                <g transform={`translate(${w - 27}, ${h - 19})`}>
                                     <rect width="18" height="12" rx="3" className={`${tone.fill} stroke-border`}
                                         strokeWidth="1" opacity="0.9" />
                                     <rect x="3" y="-3" width="18" height="12" rx="3"
@@ -382,8 +498,9 @@ export default function MindMapCanvas({
                     // colGap-nodeW, narrower than the chip, so centring it there
                     // put "uses the ATP" straight over the root node's label.
                     const dir = b.x >= a.x ? -1 : 1;
-                    const cx = anchor ? b.x + dir * (NODE_W / 2 + 6 + cw / 2) : (a.x + b.x) / 2;
-                    const cy = anchor ? b.y - (NODE_H + ch) / 2 - 4 : (a.y + b.y) / 2 - Math.min(80, Math.hypot(b.x - a.x, b.y - a.y) / 4) / 2;
+                    const bb = boxes.get(to) || { w: MIN_W, h: NODE_H };
+                    const cx = anchor ? b.x + dir * (bb.w / 2 + 8 + cw / 2) : (a.x + b.x) / 2;
+                    const cy = anchor ? b.y - (bb.h + ch) / 2 - 4 : (a.y + b.y) / 2 - Math.min(80, Math.hypot(b.x - a.x, b.y - a.y) / 4) / 2;
                     return (
                         <g key={key} className="pointer-events-none">
                             <rect x={cx - cw / 2} y={cy - ch / 2} width={cw} height={ch} rx="6"
@@ -422,7 +539,7 @@ export default function MindMapCanvas({
                     </div>
                     <p className="absolute bottom-3 left-3 right-32 hidden sm:block truncate text-[11px] text-muted-foreground/70 pointer-events-none">
                         {connectFrom ? "Click the node you want to link to · Esc to cancel"
-                            : editable ? "Drag a node to move its branch · double-click to open it as its own map"
+                            : editable ? "Tab adds a child · Enter adds a sibling · arrows move · double-click opens a node as its own map"
                                 : "Drag to move · scroll to zoom"}
                     </p>
                 </>
