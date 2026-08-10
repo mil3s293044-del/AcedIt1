@@ -299,6 +299,40 @@ export function layout(nodes, { colGap = 290, rowGap = 88, nodeW = 170, nodeH = 
     return { positions, minX, minY, width: maxX - minX, height: maxY - minY };
 }
 
+/**
+ * Branch colours.
+ *
+ * A mind map's colour has to carry STRUCTURE, not category: every branch off
+ * the root owns a colour and everything hanging off it inherits. That's what
+ * lets you see at a glance that four boxes belong together, and it's the thing
+ * that most separates a mind map from a flowchart.
+ *
+ * Node TYPE used to own the colour instead, which meant a single branch could
+ * be four different colours and two unrelated branches could match — the
+ * palette was fighting the structure rather than showing it. Type now reads
+ * from a small marker on the node instead.
+ */
+export const BRANCH_TONES = ["map", "chart-3", "chart-4", "xp", "primary", "streak"];
+
+export function branchTones(nodes) {
+    const out = new Map();
+    if (!nodes?.length) return out;
+    const { children, root } = indexTree(nodes);
+    if (!root) return out;
+    out.set(root.id, "root");
+    (children.get(root.id) || []).forEach((branch, i) => {
+        const tone = BRANCH_TONES[i % BRANCH_TONES.length];
+        const walk = (n) => {
+            out.set(n.id, tone);
+            (children.get(n.id) || []).forEach(walk);
+        };
+        walk(branch);
+    });
+    // Anything orphaned by a bad parent ref still needs a colour.
+    for (const n of nodes) if (!out.has(n.id)) out.set(n.id, BRANCH_TONES[0]);
+    return out;
+}
+
 /** Where a brand-new node should land when there's nothing selected. */
 export function freeSpotNear(nodes, anchorId, opts = {}) {
     const { positions } = layout(nodes, opts);
