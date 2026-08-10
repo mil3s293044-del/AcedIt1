@@ -28,6 +28,7 @@ import { createPageUrl } from "@/utils";
 import { recIdOf, stratIdOf, durationOf, noteTextOf, buildNotes } from "@/lib/planTags";
 import { strategiesNeedingCheckIn } from "@/lib/strategyState";
 import StrategyCheckIn from "@/components/planner/StrategyCheckIn";
+import WeekPlanDialog from "@/components/planner/WeekPlanDialog";
 import { fmtDate } from "@/lib/safeDate";
 
 const TYPE_OPTIONS = [
@@ -311,6 +312,14 @@ export default function Planner() {
     // Real minutes studied, by date — StudyTechnique and StudySession rows
     // flattened to one shape so the board can compare intent with reality.
     const [actuals, setActuals] = useState([]);
+    const [flashcards, setFlashcards] = useState([]);
+    // RAW StudyTechnique rows. `actuals` below is a derived {date,subject,
+    // minutes} shape for the planned-vs-done comparison — passing that to the
+    // week planner silently disabled every technique-aware rule, because
+    // retrievalShare reads technique_name and session_duration.
+    const [rawTechniques, setRawTechniques] = useState([]);
+    const [weekPlanOpen, setWeekPlanOpen] = useState(false);
+    const [weekPlanSaving, setWeekPlanSaving] = useState(false);
     // Dismissal is per plan id — a student running two SACs at once who
     // deals with one should still be told about the other.
     const [dismissedCheckIns, setDismissedCheckIns] = useState(() => new Set());
@@ -327,7 +336,7 @@ export default function Planner() {
         try {
             const rangeStart = format(addWeeks(startOfWeek(new Date(), { weekStartsOn: 1 }), -1), "yyyy-MM-dd");
             const rangeEnd = format(addWeeks(startOfWeek(new Date(), { weekStartsOn: 1 }), MAX_WEEKS_AHEAD + 1), "yyyy-MM-dd");
-            const [profileData, subjectData, assessmentData, planData, techniqueData, sessionData] = await Promise.all([
+            const [profileData, subjectData, assessmentData, planData, techniqueData, sessionData, flashcardData] = await Promise.all([
                 base44.entities.UserProfile.filter({ created_by: email }).catch(() => []),
                 base44.entities.UserSubject.filter({ created_by: email, is_active: true }).catch(() => []),
                 base44.entities.SubjectAssessment.filter({ created_by: email }, "due_date", 50).catch(() => []),
@@ -336,9 +345,15 @@ export default function Planner() {
                 // happened rather than only what was intended.
                 base44.entities.StudyTechnique.filter({ created_by: email, date: { $gte: rangeStart, $lte: rangeEnd } }, "date", 200).catch(() => []),
                 base44.entities.StudySession.filter({ created_by: email, date: { $gte: rangeStart, $lte: rangeEnd } }, "date", 200).catch(() => []),
+                // The week planner works out which cards fall out of reach in
+                // the next seven days, so it needs the SM-2 state. Not windowed
+                // — memory state is cumulative.
+                base44.entities.Flashcard.filter({ created_by: email, is_active: true }).catch(() => []),
             ]);
             const p = profileData[0] || null;
             setProfile(p);
+            setFlashcards(flashcardData || []);
+            setRawTechniques(techniqueData || []);
             const seen = new Set();
             setSubjects((subjectData || []).filter(s => !seen.has(s.subject_name) && seen.add(s.subject_name)));
             setAssessments(assessmentData || []);
@@ -357,6 +372,37 @@ export default function Planner() {
     useEffect(() => {
         base44.auth.me().then(u => { setUser(u); if (u?.email) loadData(u.email); }).catch(() => setIsLoading(false));
     }, [loadData]);
+
+    // Approved sessions land as ordinary StudyPlan rows with the existing
+    // [dur:] tag, so the board renders them, the launcher routes them and the
+    // ATAR's planning component counts them — no new plumbing.
+    const saveWeekPlan = useCallback(async (sessions) => {
+        if (!sessions?.length) { setWeekPlanOpen(false); return; }
+        setWeekPlanSaving(true);
+        try {
+            for (const s of sessions) {
+                await base44.entities.StudyPlan.create({
+                    title: s.title,
+                    subject_name: s.subject_name || null,
+                    date: s.date,
+                    start_time: s.start_time || null,
+                    is_completed: false,
+                    notes: `[dur:${Math.round(s.duration_minutes)}]`,
+                });
+            }
+            toast({
+                title: `${sessions.length} sessions on your week`,
+                description: "Move anything that clashes — it's your week, not the app's.",
+            });
+            setWeekPlanOpen(false);
+            if (user?.email) loadData(user.email);
+        } catch (e) {
+            toast({ title: "Couldn't save the plan", description: e.message, variant: "destructive" });
+        } finally {
+            setWeekPlanSaving(false);
+        }
+    }, [toast, user, loadData]);
+
 
     const todayStr = format(new Date(), "yyyy-MM-dd");
     const upcoming = useMemo(() =>
@@ -1029,14 +1075,20 @@ export default function Planner() {
                                 )}
                             </div>
                         </div>
-                        {/* Strategise replaces "Plan this week for me", which asked
-                            for an hours budget and returned generic sessions with no
-                            idea what the student was preparing for. This starts from
-                            a logged assessment and works backwards from its date. */}
-                        <Button onClick={() => navigate(createPageUrl("Strategise"))} size="sm"
-                            className="gap-1.5 bg-chart-4 hover:bg-chart-4/90 text-white btn-3d">
-                            <Sparkles className="w-3.5 h-3.5" /> Strategise a SAC
-                        </Button>
+                        {/* Two different questions, so two buttons. Strategise
+                            works backwards from ONE logged assessment; most weeks
+                            of the year there isn't one, and this fills that gap by
+                            reading what the student has actually logged. */}
+                        <div className="flex flex-wrap gap-2">
+                            <Button onClick={() => setWeekPlanOpen(true)} size="sm" variant="outline"
+                                className="gap-1.5 rounded-xl border-2">
+                                <CalendarDays className="w-3.5 h-3.5" /> Plan this week for me
+                            </Button>
+                            <Button onClick={() => navigate(createPageUrl("Strategise"))} size="sm"
+                                className="gap-1.5 bg-chart-4 hover:bg-chart-4/90 text-white btn-3d">
+                                <Sparkles className="w-3.5 h-3.5" /> Strategise a SAC
+                            </Button>
+                        </div>
                     </div>
 
                     {/* Planned vs done scoreboard */}
@@ -1677,6 +1729,22 @@ export default function Planner() {
                         </div>
                     </DialogContent>
                 </Dialog>
+
+                <WeekPlanDialog
+                    open={weekPlanOpen}
+                    onOpenChange={setWeekPlanOpen}
+                    weekStart={weekStart}
+                    subjects={subjects}
+                    assessments={assessments}
+                    flashcards={flashcards}
+                    techniques={rawTechniques}
+                    /* Only this week's plans, so a full Tuesday next month
+                       doesn't block Tuesday now. */
+                    existingPlans={plans.filter(p => p.date >= format(weekStart, "yyyy-MM-dd")
+                        && p.date <= format(addDays(weekStart, 6), "yyyy-MM-dd"))}
+                    onSave={saveWeekPlan}
+                    saving={weekPlanSaving}
+                />
             </div>
         </div>
     );
