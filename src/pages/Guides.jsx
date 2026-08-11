@@ -12,6 +12,7 @@ import { BookOpen, Search, Filter, X, Star, Sparkles, GraduationCap, Brain, Targ
 import { useToast } from "@/components/ui/use-toast";
 import GuideReader from "../components/guides/GuideReader";
 import GuideCard from "../components/guides/GuideCard";
+import AceShuffle from "@/components/ace/AceShuffle";
 
 export default function Guides() {
     const [guides, setGuides] = useState([]);
@@ -331,7 +332,7 @@ export default function Guides() {
 
                     {isLoading ? (
                         <div className="text-center py-12">
-                            <div className="w-16 h-16 border-4 border-purple-200 border-t-purple-600 rounded-full animate-spin mx-auto mb-4"></div>
+                            <AceShuffle size="lg" className="mb-4 mx-auto" />
                             <p className="text-muted-foreground">Loading guides...</p>
                         </div>
                     ) : filteredGuides.length === 0 ? (

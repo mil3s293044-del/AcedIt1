@@ -1,8 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import { User, UserProfile } from '@/entities/all';
 import UpgradeModal from './UpgradeModal';
-import { Loader2 } from 'lucide-react';
 import { getUserTier } from './subscriptionHelpers';
+import AceShuffle from "@/components/ace/AceShuffle";
 
 // CRITICAL: Page access control based on database subscription_tier
 // Never allow premium pages to render without database verification
@@ -58,7 +58,7 @@ export default function ProtectedRoute({ pageName, children }) {
     if (isLoading) {
         return (
             <div className="flex items-center justify-center min-h-screen">
-                <Loader2 className="w-8 h-8 animate-spin text-indigo-600" />
+                <AceShuffle size="lg" />
             </div>
         );
     }

@@ -8,6 +8,7 @@ import { Link } from "react-router-dom";
 import { createPageUrl } from "@/utils";
 import { Flashcard } from "@/entities/all";
 import { format, subDays } from "date-fns";
+import AceShuffle from "@/components/ace/AceShuffle";
 
 export default function FlashcardPerformance({ user }) {
     const [performance, setPerformance] = useState({
@@ -128,7 +129,7 @@ export default function FlashcardPerformance({ user }) {
         return (
             <Card className="shadow-lg border-2 border-purple-100">
                 <CardContent className="p-8 text-center">
-                    <div className="animate-spin w-8 h-8 border-4 border-purple-600 border-t-transparent rounded-full mx-auto"></div>
+                    <AceShuffle size="lg" className="mx-auto" />
                     <p className="text-muted-foreground mt-4 text-sm">Loading performance...</p>
                 </CardContent>
             </Card>

@@ -9,6 +9,7 @@ import { Trophy, Users, X, Loader2, Search } from "lucide-react";
 import { base44 } from "@/api/base44Client";
 import { createGoalCompetition } from "@/api/functionsShim";
 import { useToast } from "@/components/ui/use-toast";
+import AceShuffle from "@/components/ace/AceShuffle";
 
 export default function CreateCompetitionDialog({ open, onClose, goal, onCreated }) {
     const [friends, setFriends] = useState([]);
@@ -109,7 +110,7 @@ export default function CreateCompetitionDialog({ open, onClose, goal, onCreated
                         <ScrollArea className="h-48 border rounded-xl">
                             {loading ? (
                                 <div className="flex items-center justify-center h-full">
-                                    <Loader2 className="w-6 h-6 animate-spin text-muted-foreground/60" />
+                                    <AceShuffle size="lg" />
                                 </div>
                             ) : filtered.length === 0 ? (
                                 <div className="text-center py-8 text-muted-foreground text-sm">

@@ -11,6 +11,7 @@ import { Calendar, Plus, Edit, Trash2, CheckCircle2 } from "lucide-react";
 import { format, parse } from "date-fns";
 import { useToast } from "@/components/ui/use-toast";
 import { base44 } from "@/api/base44Client";
+import AceShuffle from "@/components/ace/AceShuffle";
 
 const activityConfig = {
     lecture_review: { bg: "bg-blue-500/10", text: "text-blue-700", border: "border-blue-200/50", dot: "bg-blue-500", label: "Lecture Review" },
@@ -218,7 +219,7 @@ export default function DayCalendar({ user, userProfile }) {
         return (
             <Card className="overflow-hidden bg-surface/80 backdrop-blur-sm border-0 shadow-xl">
                 <CardContent className="p-8 text-center">
-                    <div className="animate-spin w-8 h-8 border-3 border-purple-200 border-t-purple-600 rounded-full mx-auto"></div>
+                    <AceShuffle size="lg" className="mx-auto" />
                     <p className="text-muted-foreground mt-4 text-sm">Loading schedule...</p>
                 </CardContent>
             </Card>

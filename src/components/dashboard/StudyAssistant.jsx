@@ -23,6 +23,7 @@ import {
     Trash2
 } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
+import AceShuffle from "@/components/ace/AceShuffle";
 
 const MessageBubble = ({ message, isUser }) => (
     <motion.div
@@ -382,7 +383,7 @@ export default function StudyAssistant({ user }) {
                                 {isLoading && messages.length === 0 ? (
                                     <div className="flex items-center justify-center py-8">
                                         <div className="text-center">
-                                            <Loader2 className="w-8 h-8 animate-spin text-purple-600 mx-auto mb-2" />
+                                            <AceShuffle size="lg" className="mb-2 mx-auto" />
                                             <p className="text-muted-foreground">Connecting to assistant...</p>
                                         </div>
                                     </div>
@@ -472,7 +473,7 @@ export default function StudyAssistant({ user }) {
                     <ScrollArea className="flex-1 min-h-0 h-64">
                         {isLoading && messages.length === 0 ? (
                             <div className="text-center py-8">
-                                <Loader2 className="w-8 h-8 animate-spin text-purple-600 mx-auto mb-2" />
+                                <AceShuffle size="lg" className="mb-2 mx-auto" />
                                 <p className="text-sm text-muted-foreground">Starting chat...</p>
                             </div>
                         ) : messages.length === 0 ? (

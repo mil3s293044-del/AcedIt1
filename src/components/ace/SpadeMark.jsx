@@ -43,6 +43,16 @@ const MOODS = {
     excited:  { rx: 7.2, ry: 8.4, dx: 0,    dy: -0.5, squash: 1, mouth: "smile", blush: true, sparkle: true },
     wink:     { rx: 6.4, ry: 7.6, dx: 0,    dy: 0,   squash: 1, mouth: "smile",  blush: true, winkRight: true },
     sleepy:   { rx: 6.4, ry: 4,   dx: 0,    dy: 1.5, squash: 1, mouth: null,     blush: false },
+    // Eyes right and down, watching the card leave his hand.
+    deal:     { rx: 6.2, ry: 7.4, dx: 2.2,  dy: 0.8, squash: 1, mouth: "smile",  blush: false },
+    // Wide and looking up — he's peering over the edge of something.
+    peek:     { rx: 7,   ry: 8.2, dx: 0,    dy: -1.2, squash: 1, mouth: null,    blush: false },
+    // Everything open, sparks going.
+    cheer:    { rx: 7.4, ry: 8.6, dx: 0,    dy: -0.5, squash: 1, mouth: "o",     blush: true, sparkle: true },
+    // Out cold. Eyes as flat lines, not slits.
+    nap:      { rx: 6.4, ry: 0,   dx: 0,    dy: 1,   squash: 1, mouth: null,     blush: true, lids: true },
+    // Looking down at whatever he's pointing at.
+    point:    { rx: 6.4, ry: 7.6, dx: 0,    dy: 1.4, squash: 1, mouth: "smile",  blush: false },
 };
 
 /** Blink timing. Irregular on purpose — a metronome blink reads as a machine. */
@@ -113,6 +123,13 @@ export function SpadeFace({
                 );
             })}
 
+            {/* Out cold: two flat lines. An ellipse with ry 0 draws nothing,
+                so the closed eye has to be an explicit stroke. */}
+            {m.lids && EYE_X.map((x, i) => (
+                <path key={`l${i}`} d={`M${x - 5} ${EYE_Y + 1} L${x + 5} ${EYE_Y + 1}`}
+                    className={cardStroke} strokeWidth="3" strokeLinecap="round" />
+            ))}
+
             {/* Eyes squeezed shut into happy arcs. */}
             {m.arcs && EYE_X.map((x, i) => (
                 <path key={`a${i}`}
@@ -131,8 +148,8 @@ export function SpadeFace({
             {/* A couple of sparks for the moment something good happened. */}
             {m.sparkle && (
                 <g className={card}>
-                    <path d="M52 15 l1.6 4 4 1.6 -4 1.6 -1.6 4 -1.6 -4 -4 -1.6 4 -1.6 Z" opacity="0.9" />
-                    <path d="M12 20 l1.1 2.7 2.7 1.1 -2.7 1.1 -1.1 2.7 -1.1 -2.7 -2.7 -1.1 2.7 -1.1 Z" opacity="0.7" />
+                    <path d="M45 17 l1.7 4.2 4.2 1.7 -4.2 1.7 -1.7 4.2 -1.7 -4.2 -4.2 -1.7 4.2 -1.7 Z" opacity="0.95" />
+                    <path d="M19 21 l1.2 3 3 1.2 -3 1.2 -1.2 3 -1.2 -3 -3 -1.2 3 -1.2 Z" opacity="0.75" />
                 </g>
             )}
         </svg>
@@ -183,6 +200,16 @@ const MOTION = {
     thinking: { rotate: [0, -7, 0, 7, 0], transition: { duration: 3.4, repeat: Infinity, ease: "easeInOut" } },
     sleepy:   { y: [0, 1.5, 0], transition: { duration: 4.5, repeat: Infinity, ease: "easeInOut" } },
     pleased:  { scale: [1, 1.06, 1], transition: { duration: 2.2, repeat: Infinity, ease: "easeInOut" } },
+    // A flick of the wrist — lean back, snap forward, settle.
+    deal:     { rotate: [0, -14, 6, 0], transition: { duration: 1.1, repeat: Infinity, repeatDelay: 1.8, ease: "easeInOut" } },
+    // Rising and dropping, like he's on tiptoes behind something.
+    peek:     { y: [0, -5, -5, 0], transition: { duration: 2.6, repeat: Infinity, repeatDelay: 1.2, times: [0, 0.25, 0.7, 1], ease: "easeInOut" } },
+    // A proper jump with a spin at the top.
+    cheer:    { y: [0, -12, 0, -5, 0], rotate: [0, 0, 360, 360, 360], transition: { duration: 1.3, repeat: Infinity, repeatDelay: 1, ease: "easeOut" } },
+    // Breathing, tipped over.
+    nap:      { rotate: [-12, -14, -12], y: [0, 1.5, 0], transition: { duration: 4, repeat: Infinity, ease: "easeInOut" } },
+    // A nudge in the direction he's pointing.
+    point:    { y: [0, 3, 0], transition: { duration: 1.4, repeat: Infinity, ease: "easeInOut" } },
 };
 
 /**
@@ -193,14 +220,25 @@ const MOTION = {
  * `alive` adds the idle motion. It defaults ON because the whole point of him
  * is company, but every animation still folds flat under reduced motion.
  */
-export default function SpadeMark({ className = "w-9 h-9", mood = "idle", alive = true, title }) {
+export default function SpadeMark({
+    className = "w-9 h-9", mood = "idle", alive = true, title, variant = "card",
+}) {
     const reduce = useReducedMotion();
     const anim = !reduce && alive ? MOTION[mood] || MOTION.idle : undefined;
+    // The focus overlay is a fixed dark gradient regardless of theme, so the
+    // usual `bg-surface` disc lands as a white coin on a night sky in light
+    // mode. On dark he inverts: pale spade, dark knock-out, translucent disc.
+    const dark = variant === "dark";
     return (
         <motion.div
             animate={anim}
-            className={`relative grid place-items-center rounded-full bg-surface border-2 border-border overflow-hidden ${className}`}>
-            <SpadeFace className="w-[68%] h-[68%]" mood={mood} blink={alive} title={title} />
+            className={`relative grid place-items-center rounded-full overflow-hidden ${
+                dark ? "bg-white/10 border-2 border-white/25" : "bg-surface border-2 border-border"
+            } ${className}`}>
+            <SpadeFace className="w-[68%] h-[68%]" mood={mood} blink={alive} title={title}
+                tone={dark ? "fill-white" : "fill-foreground"}
+                card={dark ? "fill-slate-900" : "fill-surface"}
+                cardStroke={dark ? "stroke-slate-900" : "stroke-surface"} />
         </motion.div>
     );
 }

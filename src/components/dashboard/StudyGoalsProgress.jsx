@@ -11,6 +11,7 @@ import { StudyTechnique, SubjectAssessment } from "@/entities/all";
 import { format, startOfWeek, endOfWeek, differenceInDays } from "date-fns";
 import { base44 } from "@/api/base44Client";
 import { useToast } from "@/components/ui/use-toast";
+import AceShuffle from "@/components/ace/AceShuffle";
 
 export default function StudyGoalsProgress({ user, userProfile }) {
     const [weeklyProgress, setWeeklyProgress] = useState({ current: 0, goal: 0 });
@@ -125,7 +126,7 @@ export default function StudyGoalsProgress({ user, userProfile }) {
         return (
             <Card className="shadow-lg border-2 border-purple-100">
                 <CardContent className="p-8 text-center">
-                    <div className="animate-spin w-8 h-8 border-4 border-purple-600 border-t-transparent rounded-full mx-auto"></div>
+                    <AceShuffle size="lg" className="mx-auto" />
                     <p className="text-muted-foreground mt-4 text-sm">Loading progress...</p>
                 </CardContent>
             </Card>

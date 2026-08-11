@@ -21,6 +21,8 @@ import { atarBandOf } from "@/lib/atarBands";
 import { todaysIntent } from "@/lib/studyIntent";
 import { fmtDate } from "@/lib/safeDate";
 import AceTip from "@/components/ace/AceTip";
+import AceShuffle from "@/components/ace/AceShuffle";
+import SpadeMark from "@/components/ace/SpadeMark";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 const fmtTime = (m) => {
@@ -763,7 +765,7 @@ export default function Dashboard() {
         return (
             <div className="min-h-screen flex items-center justify-center bg-background">
                 <div className="text-center">
-                    <div className="w-10 h-10 border-4 border-primary/20 border-t-primary rounded-full animate-spin mx-auto mb-3" />
+                    <AceShuffle size="lg" className="mb-3 mx-auto" />
                     <p className="text-muted-foreground font-medium text-sm">Loading your dashboard…</p>
                 </div>
             </div>
@@ -956,7 +958,7 @@ export default function Dashboard() {
                             </div>
                         ) : (
                             <div className="rounded-2xl bg-surface border border-dashed border-border p-6 lg:p-8 text-center h-full flex flex-col items-center justify-center shadow-soft">
-                                <Flame className="w-12 h-12 text-muted-foreground/30 mb-3" />
+                                <SpadeMark className="w-20 h-20 mb-3" mood="point" />
                                 <h2 className="font-display font-extrabold text-foreground text-xl lg:text-2xl mb-2">
                                     Ready to start a streak?
                                 </h2>

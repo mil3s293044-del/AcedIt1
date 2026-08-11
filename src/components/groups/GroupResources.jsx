@@ -20,6 +20,7 @@ import { GroupSharedResource, Flashcard, Quiz, AISavedResult, GroupMessage } fro
 import { useToast } from "@/components/ui/use-toast";
 import { format, addDays } from "date-fns";
 import { fmtDate } from "@/lib/safeDate";
+import AceShuffle from "@/components/ace/AceShuffle";
 
 export default function GroupResources({ group, user }) {
     const [resources, setResources] = useState([]);
@@ -283,7 +284,7 @@ export default function GroupResources({ group, user }) {
         return (
             <Card className="shadow-xl">
                 <CardContent className="p-12 text-center">
-                    <div className="w-12 h-12 border-4 border-indigo-200 border-t-indigo-600 rounded-full animate-spin mx-auto mb-4"></div>
+                    <AceShuffle size="lg" className="mb-4 mx-auto" />
                     <p className="text-muted-foreground">Loading resources...</p>
                 </CardContent>
             </Card>

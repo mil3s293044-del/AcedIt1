@@ -25,6 +25,7 @@ import { format } from "date-fns";
 import { moderationPresets } from "@/components/shared/contentModeration";
 import { recordStudyAndGetStreak } from "@/components/shared/streakHelpers";
 import AceTip from "@/components/ace/AceTip";
+import AceShuffle from "@/components/ace/AceShuffle";
 
 // Lucide alias — design system maps "alert" semantics to AlertTriangle.
 const AlertCircle = AlertTriangle;
@@ -872,7 +873,7 @@ The documents provided may be PowerPoint slides, Word documents, PDFs or text fi
     if (isLoading) return (
         <div className="flex items-center justify-center min-h-64">
             <div className="flex flex-col items-center gap-3">
-                <Loader2 className="w-8 h-8 animate-spin text-chart-3" />
+                <AceShuffle size="lg" />
                 <p className="text-sm text-muted-foreground">Loading your decks...</p>
             </div>
         </div>

@@ -7,6 +7,7 @@ import { useToast } from "@/components/ui/use-toast";
 import { useNavigate } from "react-router-dom";
 import { createPageUrl } from "@/utils";
 import { fmtDate } from "@/lib/safeDate";
+import AceShuffle from "@/components/ace/AceShuffle";
 
 const pricingPlans = [
     {
@@ -123,7 +124,7 @@ export default function Subscription() {
     if (isLoading) {
         return (
             <div className="min-h-screen bg-background flex items-center justify-center">
-                <Loader2 className="w-8 h-8 animate-spin text-primary" />
+                <AceShuffle size="lg" />
             </div>
         );
     }

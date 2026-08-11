@@ -21,6 +21,7 @@ import BattleDashboard from "@/components/competition/BattleDashboard";
 import CalloutQuiz from "@/components/competition/CalloutQuiz";
 import { fmtDate } from "@/lib/safeDate";
 import HelpButton from "@/components/shared/HelpButton";
+import AceShuffle from "@/components/ace/AceShuffle";
 
 // Battles now rank by Compete Score; fall back to legacy progress for old data.
 const rankVal = (p) => (p?.compete_score ?? p?.progress_percent ?? 0);
@@ -345,7 +346,7 @@ export default function Competitions() {
         return (
             <div className="min-h-screen bg-background flex items-center justify-center">
                 <div className="text-center">
-                    <Loader2 className="w-8 h-8 text-chart-4 animate-spin mx-auto mb-3" />
+                    <AceShuffle size="lg" className="mb-3 mx-auto" />
                     <p className="text-muted-foreground text-sm">Loading…</p>
                 </div>
             </div>

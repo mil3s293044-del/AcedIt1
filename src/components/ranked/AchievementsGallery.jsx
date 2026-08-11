@@ -12,6 +12,7 @@ import {
     PencilLine, Lightbulb, Trophy, Map, Zap, Medal, Crown, Lock, X,
 } from "lucide-react";
 import { supabase } from "@/api/supabaseClient";
+import AceShuffle from "@/components/ace/AceShuffle";
 
 // Lucide icon registry — every name used by the catalog must be in here.
 const ICON_REGISTRY = {
@@ -60,7 +61,7 @@ export default function AchievementsGallery() {
     if (loading) {
         return (
             <div className="card-soft p-8 text-center">
-                <div className="w-8 h-8 border-4 border-primary/20 border-t-primary rounded-full animate-spin mx-auto" />
+                <AceShuffle size="lg" className="mx-auto" />
             </div>
         );
     }

@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { motion, AnimatePresence } from "framer-motion";
+import AceShuffle from "@/components/ace/AceShuffle";
 import {
   GraduationCap, Clock, AlertCircle, BarChart3, Check, X,
   ChevronLeft, ChevronRight, Play, Trophy, Loader2, RefreshCw,
@@ -479,7 +480,7 @@ Return exactly ${openQs.length} results, in order.`,
 
                 {isLoadingData ?
         <div className="flex flex-col items-center justify-center py-16 gap-3">
-                        <Loader2 className="w-7 h-7 animate-spin text-streak" />
+                        <AceShuffle size="lg" />
                         <span className="text-muted-foreground text-sm">Loading your study materials...</span>
                     </div> :
 

@@ -5,6 +5,7 @@ import { CheckCircle, Sparkles, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { base44 } from "@/api/base44Client";
 import { trackPurchase } from "@/lib/analytics";
+import AceShuffle from "@/components/ace/AceShuffle";
 
 export default function PaymentSuccess() {
     const [status, setStatus] = useState("verifying"); // verifying | success | error
@@ -85,7 +86,7 @@ export default function PaymentSuccess() {
             <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-green-50 via-blue-50 to-purple-50 p-4">
                 <Card className="max-w-md w-full">
                     <CardContent className="p-8 text-center">
-                        <Loader2 className="w-12 h-12 animate-spin text-blue-600 mx-auto mb-4" />
+                        <AceShuffle size="lg" className="mb-4 mx-auto" />
                         <h2 className="text-xl font-bold text-foreground mb-2">Activating Your Subscription</h2>
                         <p className="text-muted-foreground">Please wait while we confirm your payment...</p>
                     </CardContent>

@@ -45,6 +45,8 @@ import {
     NODE_TYPES, TYPE_BY_ID, newNode, removeNode, subtreeIds, freeSpotNear, nodeId,
 } from "@/lib/mindmap";
 import AceTip from "@/components/ace/AceTip";
+import AceShuffle from "@/components/ace/AceShuffle";
+import SpadeMark from "@/components/ace/SpadeMark";
 
 const TYPE_ICON = {
     idea: Lightbulb, cause: Zap, effect: Target, step: ListOrdered,
@@ -840,10 +842,10 @@ export default function MindMaps({ user, subjects = [] }) {
                 </div>
 
                 {loading ? (
-                    <div className="flex justify-center py-10"><Loader2 className="w-6 h-6 animate-spin text-map" /></div>
+                    <div className="flex justify-center py-10"><AceShuffle size="lg" /></div>
                 ) : subjects.length === 0 ? (
                     <div className="text-center py-8">
-                        <Network className="w-8 h-8 text-muted-foreground/25 mx-auto mb-2" />
+                        <SpadeMark className="w-16 h-16 mx-auto mb-2" mood="point" />
                         <p className="text-sm font-bold text-foreground">Add a subject first</p>
                         <p className="text-xs text-muted-foreground mt-0.5">Your maps are organised by subject.</p>
                     </div>
@@ -887,7 +889,7 @@ export default function MindMaps({ user, subjects = [] }) {
         );
     }
 
-    if (!map) return <div className="flex justify-center py-10"><Loader2 className="w-6 h-6 animate-spin text-map" /></div>;
+    if (!map) return <div className="flex justify-center py-10"><AceShuffle size="lg" /></div>;
 
     const Icon = TYPE_ICON[selected?.type] || Lightbulb;
     const selTone = TONE_CLASS[TYPE_BY_ID[selected?.type]?.tone] || TONE_CLASS.map;

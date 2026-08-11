@@ -25,6 +25,7 @@ import {
 } from "lucide-react";
 import { TECHNIQUES, TECHNIQUE_IDS, PRINCIPLES, runUpDays, applyRules, planSummary } from "@/lib/strategise";
 import { fmtDate } from "@/lib/safeDate";
+import AceShuffle from "@/components/ace/AceShuffle";
 
 const CONFIDENCE = [
     { v: 1, label: "Barely started", hint: "Most of it is new to me" },
@@ -221,7 +222,7 @@ Rules:
     if (loading) {
         return (
             <div className="min-h-screen bg-background flex items-center justify-center">
-                <Loader2 className="w-8 h-8 text-chart-4 animate-spin" />
+                <AceShuffle size="lg" />
             </div>
         );
     }
