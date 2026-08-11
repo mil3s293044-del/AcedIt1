@@ -10,6 +10,7 @@ import { PenTool, Play, Clock, CheckCircle, RotateCcw, Maximize, Wand2, Loader2,
 import { format } from "date-fns";
 import { useToast } from "@/components/ui/use-toast";
 import { base44 } from "@/api/base44Client";
+import WhatToTest from "./WhatToTest";
 import { FEATURES, checkLiveTier } from "@/lib/tierAccess";
 import { getExaminerPrompt } from "@/lib/subjectExaminerPrompts";
 import { fmtDate } from "@/lib/safeDate";
@@ -72,6 +73,12 @@ function ScoreRing({ percentage, size = 120 }) {
 
 export default function BlurtingMethod({ onSessionComplete }) {
     const [phase, setPhase] = useState("setup");
+    const [ownFlashcards, setOwnFlashcards] = useState([]);
+    const [ownMaps, setOwnMaps] = useState([]);
+    const [ownAssessments, setOwnAssessments] = useState([]);
+    const [ownTechniques, setOwnTechniques] = useState([]);
+    const [makingCards, setMakingCards] = useState(false);
+    const [cardsMade, setCardsMade] = useState(0);
     const [selectedSubject, setSelectedSubject] = useState("");
     const [topic, setTopic] = useState("");
     const [blurtedText, setBlurtedText] = useState("");
@@ -111,6 +118,17 @@ export default function BlurtingMethod({ onSessionComplete }) {
                     return acc;
                 }, []);
                 setUserSubjects(uniqueSubjects || []);
+
+                const [cards, maps, asmts, techs] = await Promise.all([
+                    base44.entities.Flashcard.filter({ created_by: currentUser.email, is_active: true }).catch(() => []),
+                    base44.entities.MindMap.filter({ created_by: currentUser.email }, "-updated_date", 50).catch(() => []),
+                    base44.entities.SubjectAssessment.filter({ created_by: currentUser.email, is_completed: false }, "due_date", 20).catch(() => []),
+                    base44.entities.StudyTechnique.filter({ created_by: currentUser.email }, "-date", 40).catch(() => []),
+                ]);
+                setOwnFlashcards(cards || []);
+                setOwnMaps(maps || []);
+                setOwnAssessments(asmts || []);
+                setOwnTechniques(techs || []);
             } catch (error) {
                 console.error("Error loading subjects:", error);
                 if (error.message?.includes("not logged in")) base44.auth.redirectToLogin(window.location.pathname);
@@ -280,8 +298,65 @@ Reference Study Design requirements in your feedback.`,
     const wordCount = blurtedText.trim() ? blurtedText.trim().split(/\s+/).length : 0;
     const timerPercent = sessionStartTime ? Math.max(0, (timeLeft / (sessionDuration * 60)) * 100) : 100;
 
+    /**
+     * Turn the misses into flashcards.
+     *
+     * Without this, a blurt ends with a list of things you didn't know and no
+     * mechanism that ever shows them to you again — which is most of the value
+     * of having done it. The cards go into the same SM-2 schedule as
+     * everything else, so the misses come back at the right interval.
+     */
+    const makeCardsFromMisses = async () => {
+        const missed = aiFeedback?.points_missed || [];
+        if (!missed.length) return;
+        setMakingCards(true);
+        try {
+            let made = 0;
+            for (const point of missed) {
+                const text = String(point || "").trim();
+                if (!text) continue;
+                await base44.entities.Flashcard.create({
+                    subject_name: selectedSubject || null,
+                    topic: topic || "Blurting gaps",
+                    // The miss IS the answer; the prompt asks for it back.
+                    question: `${topic || selectedSubject || "This topic"}: what about — ${text.slice(0, 90)}?`,
+                    answer: text,
+                    is_active: true,
+                    // Straight into the schedule as a weak spot, because it
+                    // demonstrably is one.
+                    is_weak_spot: true,
+                    next_review_date: format(new Date(), "yyyy-MM-dd"),
+                });
+                made++;
+            }
+            setCardsMade(made);
+            toast({
+                title: `${made} card${made === 1 ? "" : "s"} made`,
+                description: "They're due now and flagged as weak spots, so they'll come back until they stick.",
+            });
+        } catch (e) {
+            toast({ title: "Couldn't make the cards", description: e.message, variant: "destructive" });
+        } finally {
+            setMakingCards(false);
+        }
+    };
+
     const renderSetup = () => (
         <motion.div key="setup" initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -16 }} className="space-y-5">
+            {/* Same question as Active Recall, same answer — the page used to
+                open on an empty subject picker and nothing else. */}
+            <WhatToTest
+                flashcards={ownFlashcards}
+                assessments={ownAssessments}
+                techniques={ownTechniques}
+                maps={ownMaps}
+                verb="Blurt"
+                onPick={(sug) => {
+                    if (sug.subject) setSelectedSubject(sug.subject);
+                    setTopic(sug.topic || "");
+                }}
+            />
+
             <div className="grid grid-cols-1 lg:grid-cols-5 gap-5">
                 {/* Left: Setup */}
                 <div className="lg:col-span-3 card-soft p-6 space-y-5">
@@ -658,6 +733,18 @@ Reference Study Design requirements in your feedback.`,
                                             </motion.div>
                                         ))}
                                     </div>
+                                    {/* The loop-closer. A list of things you
+                                        didn't know, with no mechanism that ever
+                                        shows them to you again, is most of the
+                                        value of the blurt thrown away. */}
+                                    <Button onClick={makeCardsFromMisses} disabled={makingCards || cardsMade > 0}
+                                        className="mt-3 w-full gap-2 rounded-xl bg-streak hover:bg-streak/90 text-white">
+                                        {makingCards ? <Loader2 className="w-4 h-4 animate-spin" />
+                                            : cardsMade > 0 ? <Check className="w-4 h-4" /> : <Layers className="w-4 h-4" />}
+                                        {cardsMade > 0
+                                            ? `${cardsMade} card${cardsMade === 1 ? "" : "s"} made — due now`
+                                            : `Turn these ${aiFeedback.points_missed.length} into flashcards`}
+                                    </Button>
                                 </div>
                             )}
 

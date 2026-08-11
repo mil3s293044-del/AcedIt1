@@ -15,6 +15,10 @@ import { FEATURES, checkLiveTier } from "@/lib/tierAccess";
 import { getExaminerPrompt } from "@/lib/subjectExaminerPrompts";
 import { recordStudyAndGetStreak } from "@/components/shared/streakHelpers";
 import { fmtDate } from "@/lib/safeDate";
+import { CONFIDENCE } from "@/lib/calibration";
+import CalibrationReport from "./CalibrationReport";
+import WhatToTest from "./WhatToTest";
+import { questionsFromCards, questionsFromMap } from "@/lib/recallSuggest";
 
 // Static class lookups so Tailwind JIT can see every utility.
 const verdictConfig = {
@@ -41,7 +45,7 @@ const verdictConfig = {
     },
 };
 
-function QuestionCard({ question, index, total, answer, onAnswerChange, onNext, onPrev, isLast }) {
+function QuestionCard({ question, index, total, answer, onAnswerChange, onNext, onPrev, isLast, confidence, onConfidence }) {
     const progress = ((index + 1) / total) * 100;
     const wordCount = answer.trim() ? answer.trim().split(/\s+/).length : 0;
 
@@ -101,6 +105,28 @@ function QuestionCard({ question, index, total, answer, onAnswerChange, onNext, 
                 />
                 <div className="absolute bottom-3 right-4 text-xs text-muted-foreground/60">
                     {wordCount} {wordCount === 1 ? 'word' : 'words'}
+                </div>
+            </div>
+
+            {/* ── Confidence, BEFORE the answer is marked ──────────────────
+                The order is the whole point. A rating collected after the
+                verdict measures nothing, so it's asked here and locked in with
+                the answer. This is the only place in the app that can see the
+                gap between feeling certain and being right. */}
+            <div className="mt-4 pt-4 border-t border-border">
+                <p className="stat-label mb-2">How sure are you?</p>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5" data-confidence-picker>
+                    {CONFIDENCE.map(c => (
+                        <button key={c.value} onClick={() => onConfidence?.(c.value)}
+                            aria-pressed={confidence === c.value}
+                            className={`rounded-xl border-2 px-2 py-2 text-left transition-colors ${
+                                confidence === c.value
+                                    ? "border-foreground bg-secondary"
+                                    : "border-border hover:border-foreground/30"}`}>
+                            <span className="block text-xs font-bold text-foreground">{c.label}</span>
+                            <span className="block text-[10px] text-muted-foreground leading-tight">{c.blurb}</span>
+                        </button>
+                    ))}
                 </div>
             </div>
 
@@ -211,6 +237,15 @@ export default function ActiveRecall({ onSessionComplete, userSubjects: initialU
     const [topic, setTopic] = useState("");
     const [questions, setQuestions] = useState([]);
     const [userAnswers, setUserAnswers] = useState([]);
+    // One confidence value per question, captured before marking.
+    const [confidences, setConfidences] = useState([]);
+    // How many questions the student wants. Was hardcoded to whatever the
+    // generator happened to return.
+    const [questionCount, setQuestionCount] = useState(6);
+    const [ownFlashcards, setOwnFlashcards] = useState([]);
+    const [ownMaps, setOwnMaps] = useState([]);
+    const [ownAssessments, setOwnAssessments] = useState([]);
+    const [ownTechniques, setOwnTechniques] = useState([]);
     const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
     const [sessionStartTime, setSessionStartTime] = useState(null);
     const [timeLeft, setTimeLeft] = useState(0);
@@ -269,6 +304,20 @@ export default function ActiveRecall({ onSessionComplete, userSubjects: initialU
                     return acc;
                 }, []);
                 setUserSubjects(uniqueSubjects || []);
+
+                // What the student already has. All of it existed and none of
+                // it was read here, which is why the only fast path was
+                // "default questions".
+                const [cards, maps, asmts, techs] = await Promise.all([
+                    base44.entities.Flashcard.filter({ created_by: currentUser.email, is_active: true }).catch(() => []),
+                    base44.entities.MindMap.filter({ created_by: currentUser.email }, "-updated_date", 50).catch(() => []),
+                    base44.entities.SubjectAssessment.filter({ created_by: currentUser.email, is_completed: false }, "due_date", 20).catch(() => []),
+                    base44.entities.StudyTechnique.filter({ created_by: currentUser.email }, "-date", 40).catch(() => []),
+                ]);
+                setOwnFlashcards(cards || []);
+                setOwnMaps(maps || []);
+                setOwnAssessments(asmts || []);
+                setOwnTechniques(techs || []);
             } catch (error) {
                 console.error("Error loading subjects:", error);
                 if (error.message?.includes("not logged in")) base44.auth.redirectToLogin(window.location.pathname);
@@ -383,8 +432,19 @@ Questions should:
     };
 
     const handleStartConfirmed = (inFocus) => {
-        const questionsToUse = questions.length > 0 ? questions : defaultQuestions;
+        // Their own cards and maps beat generic defaults, and need no upload.
+        const own = questions.length > 0 ? [] : [
+            ...questionsFromCards(ownFlashcards, { subject: selectedSubject, topic, limit: questionCount }),
+            ...(ownMaps.length ? questionsFromMap(
+                ownMaps.find(m => (m.topic || m.title) === topic) || ownMaps[0],
+                { limit: questionCount }) : []),
+        ];
+        const base = questions.length > 0
+            ? questions
+            : own.length >= 3 ? own.map(q => q.question) : defaultQuestions;
+        const questionsToUse = base.slice(0, questionCount);
         setQuestions(questionsToUse);
+        setConfidences(new Array(questionsToUse.length).fill(null));
         setUserAnswers(new Array(questionsToUse.length).fill(""));
         setCurrentQuestionIndex(0);
         setSessionStartTime(Date.now());
@@ -434,7 +494,19 @@ Questions should:
                 answers: userAnswers,
                 ai_feedback: markingResults.length > 0 ? JSON.stringify(markingResults) : "",
                 session_duration: sessionStartTime ? Math.floor((Date.now() - sessionStartTime) / 60000) : 0,
-                date: format(new Date(), "yyyy-MM-dd")
+                date: format(new Date(), "yyyy-MM-dd"),
+                // Confidence lives in `extra` — an existing jsonb column, so no
+                // migration. It only describes sessions from here on, which is
+                // why it starts being written now rather than when the
+                // over-time calibration chart gets built.
+                extra: {
+                    confidences,
+                    calibration: questions.map((q, i) => ({
+                        question: q,
+                        confidence: confidences[i] ?? null,
+                        verdict: markingResults[i]?.verdict ?? null,
+                    })),
+                },
             });
         } catch (error) { console.error(error); }
     };
@@ -547,6 +619,21 @@ For each answer:
 
     const renderSetup = () => (
         <motion.div key="setup" initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -16 }} className="space-y-5">
+            {/* The page used to open on an empty subject picker and a button
+                offering "default questions". This answers the question the
+                student actually has. */}
+            <WhatToTest
+                flashcards={ownFlashcards}
+                assessments={ownAssessments}
+                techniques={ownTechniques}
+                maps={ownMaps}
+                onPick={(sug) => {
+                    if (sug.subject) setSelectedSubject(sug.subject);
+                    setTopic(sug.topic || "");
+                    setQuestions([]);
+                }}
+            />
+
             <div className="grid grid-cols-1 lg:grid-cols-5 gap-5">
                 {/* Left: Setup */}
                 <div className="lg:col-span-3 card-soft p-6 space-y-5">
@@ -601,6 +688,27 @@ For each answer:
                                 className="h-11 border-2 border-border focus:border-chart-4 rounded-xl"
                             />
                         </div>
+
+                        {/* How many questions. The session used to be however
+                            many the generator happened to return. */}
+                        <div className="space-y-1.5">
+                            <Label className="text-sm font-medium text-muted-foreground">How many questions</Label>
+                            <div className="flex gap-1.5" data-question-count>
+                                {[4, 6, 8, 12].map(n => (
+                                    <button key={n} onClick={() => setQuestionCount(n)}
+                                        aria-pressed={questionCount === n}
+                                        className={`flex-1 rounded-xl border-2 py-2 text-sm font-bold transition-colors ${
+                                            questionCount === n
+                                                ? "border-chart-4 bg-chart-4/10 text-foreground"
+                                                : "border-border text-muted-foreground hover:text-foreground"}`}>
+                                        {n}
+                                    </button>
+                                ))}
+                            </div>
+                            <p className="text-[11px] text-muted-foreground">
+                                About {Math.round(questionCount * 3)} minutes at three minutes a question.
+                            </p>
+                        </div>
                     </div>
 
                     {questions.length > 0 && (
@@ -624,7 +732,9 @@ For each answer:
                         className="w-full h-12 bg-chart-4 hover:bg-chart-4/90 text-white font-semibold rounded-xl shadow-soft gap-2"
                     >
                         <Play className="w-5 h-5" />
-                        {questions.length > 0 ? `Start Session (${questions.length} questions)` : 'Start with Default Questions'}
+                        {questions.length > 0
+                            ? `Start session (${Math.min(questions.length, questionCount)} questions)`
+                            : `Start session (${questionCount} questions)`}
                     </Button>
                     {!!sourceFiles.length && questions.length === 0 && (
                         <p className="text-xs text-center text-xp">Generate questions from your uploaded notes first.</p>
@@ -786,11 +896,25 @@ For each answer:
                         onNext={handleNext}
                         onPrev={handlePrevious}
                         isLast={currentQuestionIndex === questions.length - 1}
+                        confidence={confidences[currentQuestionIndex] ?? null}
+                        onConfidence={(v) => {
+                            const c = [...confidences];
+                            c[currentQuestionIndex] = v;
+                            setConfidences(c);
+                        }}
                     />
                 </div>
             </div>
         </motion.div>
     );
+
+    // Confidence joined to the verdict for each question. Only answers that
+    // were rated BEFORE marking are in here, which is the whole contract.
+    const calibrationAnswers = questions.map((q, i) => ({
+        question: q,
+        confidence: confidences[i] ?? null,
+        verdict: markingResults[i]?.verdict ?? null,
+    }));
 
     const renderReview = () => (
         <motion.div key="review" initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} className="space-y-5">
@@ -822,6 +946,10 @@ For each answer:
                     </div>
                 )}
             </div>
+
+            {/* The score says how much you knew. This says whether you KNEW
+                how much you knew, which is what decides your next revision. */}
+            <CalibrationReport answers={calibrationAnswers} />
 
             {/* AI Feedback CTA */}
             {!markingResults.length && (

@@ -128,7 +128,11 @@
      Apply `.btn-3d` to any button alongside its color classes. */
   .btn-3d {
     position: relative;
-    border-bottom: 4px solid hsl(var(--primary-dark));
+    /* Darkens whatever the button already is, rather than hardcoding the green
+       --primary-dark. That edge was correct on a green button and wrong on
+       every other one: Active Recall's purple and Blurting's orange both had a
+       green underline, which read as a rendering fault rather than a style. */
+    border-bottom: 4px solid rgb(0 0 0 / 0.2);
     transition: transform 80ms ease-out, border-bottom-width 80ms ease-out, filter 120ms;
     will-change: transform;
   }
