@@ -14,6 +14,7 @@ import React from "react";
 import { motion } from "framer-motion";
 import { Gauge, AlertTriangle, ThumbsUp, Info } from "lucide-react";
 import { calibrate, calibrationVerdict, overconfidentItems, CONFIDENCE } from "@/lib/calibration";
+import AceTip from "@/components/ace/AceTip";
 
 export default function CalibrationReport({ answers = [] }) {
     const c = calibrate(answers);
@@ -29,7 +30,9 @@ export default function CalibrationReport({ answers = [] }) {
                     <Gauge className="w-4.5 h-4.5 text-chart-4" />
                 </div>
                 <div className="min-w-0">
-                    <h3 className="font-display font-extrabold text-foreground text-base">Did you know what you knew?</h3>
+                    <h3 className="font-display font-extrabold text-foreground text-base inline-flex items-center gap-1.5">
+                        Did you know what you knew? <AceTip term="calibration" />
+                    </h3>
                     <p className="text-xs text-muted-foreground">
                         Your confidence before the answer, against how it went
                     </p>

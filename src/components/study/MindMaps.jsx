@@ -44,6 +44,7 @@ import {
     parseOutline, toOutline, emptyMap, mapStats, exportCards, exportPrompts, diffMaps,
     NODE_TYPES, TYPE_BY_ID, newNode, removeNode, subtreeIds, freeSpotNear, nodeId,
 } from "@/lib/mindmap";
+import AceTip from "@/components/ace/AceTip";
 
 const TYPE_ICON = {
     idea: Lightbulb, cause: Zap, effect: Target, step: ListOrdered,
@@ -990,7 +991,7 @@ export default function MindMaps({ user, subjects = [] }) {
             {diff && (
                 <div className="rounded-2xl border-2 border-xp/30 bg-gradient-to-br from-xp/10 to-transparent p-4">
                     <p className="stat-label text-xp flex items-center gap-1.5 mb-1">
-                        <TrendingUp className="w-3.5 h-3.5" /> Against your real map
+                        <TrendingUp className="w-3.5 h-3.5" /> Against your real map <AceTip term="retention_score" />
                     </p>
                     <p className="font-display font-black text-3xl text-foreground tabular-nums leading-none">
                         {diff.retention}%
@@ -1233,7 +1234,9 @@ export default function MindMaps({ user, subjects = [] }) {
                                 </div>
 
                                 <div>
-                                    <p className="stat-label mb-1.5">How solid is it?</p>
+                                    <p className="stat-label mb-1.5 inline-flex items-center gap-1">
+                                        How solid is it? <AceTip term="node_confidence" />
+                                    </p>
                                     <div className="flex gap-1">
                                         {CONF.map(c => (
                                             <button key={c.v} onClick={() => updateNode(selected.id, { confidence: c.v })}

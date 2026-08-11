@@ -21,6 +21,7 @@ import { bestLever } from "@/lib/atarLift";
 import { atarBandOf } from "@/lib/atarBands";
 import { todaysIntent } from "@/lib/studyIntent";
 import { fmtDate } from "@/lib/safeDate";
+import AceTip from "@/components/ace/AceTip";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 const fmtTime = (m) => {
@@ -871,7 +872,9 @@ export default function Dashboard() {
                                 <Flame className="absolute -top-6 -right-6 w-32 h-32 text-streak/[0.08] pointer-events-none" />
                                 <div className="relative grid grid-cols-1 sm:grid-cols-5 gap-5 items-center">
                                     <div className="sm:col-span-3">
-                                        <p className="stat-label text-streak/80 mb-1">Day streak</p>
+                                        <p className="stat-label text-streak/80 mb-1 inline-flex items-center gap-1">
+                                            Day streak <AceTip term="streak" />
+                                        </p>
                                         <div className="flex items-baseline gap-3">
                                             <span
                                                 className="font-display font-extrabold text-streak leading-none"

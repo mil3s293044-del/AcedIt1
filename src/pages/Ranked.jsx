@@ -34,6 +34,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
     standing, titlesFor, nextBand, weakestComponent, BAND_TONE,
 } from "@/lib/ranked";
+import AceTip from "@/components/ace/AceTip";
 
 const TONE_PILL = {
     muted: "bg-secondary text-muted-foreground", xp: "bg-xp/15 text-xp",
@@ -161,6 +162,9 @@ export default function Ranked() {
                         <div className="grid lg:grid-cols-[auto_1fr] gap-6 items-center">
                             <div className="flex flex-col items-center gap-3">
                                 <AtarDial atar={loading ? null : data?.my_atar} band={data?.my_band} size={230} />
+                                <span className="inline-flex items-center gap-1 text-[11px] font-bold text-muted-foreground">
+                                    AcedIt ATAR <AceTip term="atar" align="center" />
+                                </span>
                                 {data?.my_band && (
                                     <span className={`pill ${TONE_PILL[bandTone]}`}>{data.my_band}</span>
                                 )}
@@ -188,7 +192,9 @@ export default function Ranked() {
                                         return (
                                             <div key={c.key}>
                                                 <div className="flex items-baseline justify-between mb-1 gap-2">
-                                                    <span className="text-xs font-bold text-foreground">{c.label}</span>
+                                                    <span className="text-xs font-bold text-foreground inline-flex items-center gap-1">
+                                                        {c.label} <AceTip term={c.key} />
+                                                    </span>
                                                     <span className="text-xs font-bold text-foreground tabular-nums">{v}</span>
                                                 </div>
                                                 <div className="h-1.5 bg-secondary rounded-full overflow-hidden">
