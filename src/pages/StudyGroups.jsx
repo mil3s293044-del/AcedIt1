@@ -29,6 +29,7 @@ import { useToast } from "@/components/ui/use-toast";
 
 import GroupChat from "../components/groups/GroupChat";
 import GroupResources from "../components/groups/GroupResources";
+import AceShuffle from "@/components/ace/AceShuffle";
 
 export default function StudyGroups() {
     const [user, setUser] = useState(null);
@@ -317,7 +318,7 @@ export default function StudyGroups() {
             <div className="min-h-screen bg-gradient-to-br from-cyan-50 via-blue-50 to-indigo-50 flex items-center justify-center p-4">
                 <Card className="max-w-md w-full">
                     <CardContent className="p-8 text-center">
-                        <div className="w-16 h-16 border-4 border-indigo-200 border-t-indigo-600 rounded-full animate-spin mx-auto mb-4"></div>
+                        <AceShuffle size="lg" className="mb-4 mx-auto" />
                         <p className="text-muted-foreground">Loading study groups...</p>
                     </CardContent>
                 </Card>

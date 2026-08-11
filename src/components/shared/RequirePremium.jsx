@@ -5,6 +5,7 @@ import { base44 } from "@/api/base44Client";
 import { isPremium as checkIsPremium } from "@/lib/tierAccess";
 import { createPageUrl } from "@/utils";
 import { TOOL_COUNT } from "@/components/ai_tools/chatTools";
+import AceShuffle from "@/components/ace/AceShuffle";
 
 // Route-level gate. Wrap a page's contents:
 //   <RequirePremium featureName="AI Tools">{children}</RequirePremium>
@@ -31,7 +32,7 @@ export default function RequirePremium({ children, featureName = "this feature",
         // Loading — match the app's existing spinner pattern
         return (
             <div className="fixed inset-0 flex items-center justify-center">
-                <div className="w-8 h-8 border-4 border-border border-t-slate-800 rounded-full animate-spin" />
+                <AceShuffle size="lg" />
             </div>
         );
     }

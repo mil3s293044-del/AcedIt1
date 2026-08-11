@@ -12,6 +12,7 @@ import { useToast } from "@/components/ui/use-toast";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { fmtDate } from "@/lib/safeDate";
+import AceShuffle from "@/components/ace/AceShuffle";
 
 export default function Support() {
     const [user, setUser] = useState(null);
@@ -118,7 +119,7 @@ export default function Support() {
     if (isLoading) {
         return (
             <div className="flex items-center justify-center min-h-96">
-                <Loader2 className="w-8 h-8 animate-spin text-primary" />
+                <AceShuffle size="lg" />
             </div>
         );
     }
@@ -283,7 +284,7 @@ export default function Support() {
                         <TabsContent value="history" className="mt-0">
                             {isLoadingHistory ? (
                                 <div className="flex items-center justify-center py-12">
-                                    <Loader2 className="w-8 h-8 animate-spin text-primary" />
+                                    <AceShuffle size="lg" />
                                 </div>
                             ) : ticketHistory.length === 0 ? (
                                 <EmptyState

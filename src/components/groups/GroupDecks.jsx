@@ -19,6 +19,7 @@ import {
 import { GroupFlashcardDeck, Flashcard, GroupMessage } from "@/entities/all";
 import { useToast } from "@/components/ui/use-toast";
 import { format, addDays } from "date-fns";
+import AceShuffle from "@/components/ace/AceShuffle";
 
 export default function GroupDecks({ group, user }) {
     const [decks, setDecks] = useState([]);
@@ -188,7 +189,7 @@ export default function GroupDecks({ group, user }) {
         return (
             <Card className="shadow-xl">
                 <CardContent className="p-12 text-center">
-                    <div className="w-12 h-12 border-4 border-purple-200 border-t-purple-600 rounded-full animate-spin mx-auto mb-4"></div>
+                    <AceShuffle size="lg" className="mb-4 mx-auto" />
                     <p className="text-muted-foreground">Loading decks...</p>
                 </CardContent>
             </Card>

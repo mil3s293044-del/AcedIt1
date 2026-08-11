@@ -28,6 +28,7 @@ import {
 import ReactMarkdown from 'react-markdown';
 import { Link } from 'react-router-dom';
 import { createPageUrl } from '@/utils';
+import AceShuffle from "@/components/ace/AceShuffle";
 
 const toolIcons = {
     essay_planner: Book,
@@ -255,7 +256,7 @@ export default function AIToolsHistory() {
                 {/* Results */}
                 {isLoading ? (
                     <div className="text-center py-12">
-                        <div className="w-16 h-16 border-4 border-purple-200 border-t-purple-600 rounded-full animate-spin mx-auto mb-4"></div>
+                        <AceShuffle size="lg" className="mb-4 mx-auto" />
                         <p className="text-muted-foreground">Loading your history...</p>
                     </div>
                 ) : filteredResults.length === 0 ? (

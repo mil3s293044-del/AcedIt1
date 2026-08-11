@@ -11,7 +11,6 @@ import {
     Brain,
     Target,
     Users,
-    Loader2,
     ArrowRight,
     Lock,
     Unlock,
@@ -21,6 +20,7 @@ import {
 } from "lucide-react";
 import { createPageUrl } from "@/utils";
 import { Link } from "react-router-dom";
+import AceShuffle from "@/components/ace/AceShuffle";
 
 const features = [
     {
@@ -101,7 +101,7 @@ export default function Premium() {
     if (isLoading) {
         return (
             <div className="flex items-center justify-center min-h-screen">
-                <Loader2 className="w-8 h-8 animate-spin text-indigo-600" />
+                <AceShuffle size="lg" />
             </div>
         );
     }

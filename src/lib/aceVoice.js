@@ -168,6 +168,30 @@ export const ON_PAGE_FALLBACK = [
     "Poke me if you get stuck.",
 ];
 
+/**
+ * The break.
+ *
+ * Five minutes of nothing on screen, which is the biggest uninterrupted space
+ * in the app and currently says "Take a well-deserved break! \u{1F9D8}". These push
+ * toward actually leaving the chair, because a break spent looking at the same
+ * screen isn't one — that's the entire mechanism the Pomodoro is built on.
+ */
+export const BREAK = [
+    "Off you go. Water, window, anything that isn't a screen.",
+    "Stand up. Genuinely — that's the bit that makes this work.",
+    "Five minutes. Don't spend them here, I'll still be around.",
+    "Look at something more than two metres away. Your eyes will thank you.",
+    "Break properly and the next block is twice as good. That's not a slogan, it's the whole point.",
+    "I'll hold your spot. Go and move.",
+];
+
+/** What he says the moment focus starts — once, then he's gone. */
+export const FOCUS_START = [
+    "Right. I'm out of your way.",
+    "Go on then. See you at the break.",
+    "Quiet from me. You've got this.",
+];
+
 /** He noticed something in the data. Warm, never guilt. */
 export const NUDGE = {
     slipping: [

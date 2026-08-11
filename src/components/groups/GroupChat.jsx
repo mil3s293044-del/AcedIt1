@@ -10,6 +10,7 @@ import { GroupMessage } from "@/entities/all";
 import { useToast } from "@/components/ui/use-toast";
 import { moderationPresets } from "@/components/shared/contentModeration";
 import { fmtDate } from "@/lib/safeDate";
+import AceShuffle from "@/components/ace/AceShuffle";
 
 const MessageItem = React.memo(({ message, currentUserEmail }) => {
     const isCurrentUser = message.sender_email === currentUserEmail;
@@ -129,7 +130,7 @@ export default function GroupChat({ group, user }) {
                 <ScrollArea className="flex-1 p-4">
                     {isLoading ? (
                         <div className="flex justify-center py-8">
-                            <Loader2 className="w-6 h-6 animate-spin text-purple-600" />
+                            <AceShuffle size="lg" />
                         </div>
                     ) : (
                         <div className="space-y-3">
