@@ -45,3 +45,40 @@ export default function useAceYield() {
 
     return yielding;
 }
+
+/* ────────────────────────────────────────────────────────────────────────
+ * He can only be in one place.
+ *
+ * The buddy and the launcher are separate components that both draw Ace in
+ * the bottom-right corner. That was fine when the launcher was a pill with a
+ * 36px icon on it, and stopped being fine the moment both became the whole
+ * character: two identical Aces, overlapping, both waving.
+ *
+ * So the buddy announces itself while it's on screen and the launcher stands
+ * down. A count rather than a boolean, because two things could plausibly
+ * claim him at once and the last one to leave should be the one that clears
+ * it — a bare flag leaves him hidden forever if they unmount out of order.
+ * ──────────────────────────────────────────────────────────────────────── */
+const BUSY = "ace:busy";
+
+/** Call from whatever is currently drawing him. Returns a release function. */
+export function claimAce() {
+    window.dispatchEvent(new CustomEvent(BUSY, { detail: { delta: 1 } }));
+    let released = false;
+    return () => {
+        if (released) return;
+        released = true;
+        window.dispatchEvent(new CustomEvent(BUSY, { detail: { delta: -1 } }));
+    };
+}
+
+/** True while something else is drawing him. */
+export function useAceClaimed() {
+    const [n, setN] = useState(0);
+    useEffect(() => {
+        const on = (e) => setN((v) => Math.max(0, v + (e.detail?.delta || 0)));
+        window.addEventListener(BUSY, on);
+        return () => window.removeEventListener(BUSY, on);
+    }, []);
+    return n > 0;
+}

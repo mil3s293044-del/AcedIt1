@@ -25,7 +25,8 @@
  */
 import React from "react";
 import { motion, useReducedMotion } from "framer-motion";
-import SpadeMark from "@/components/ace/SpadeMark";
+import AceBody from "@/components/ace/AceBody";
+import { useAceClaimed } from "@/components/ace/useAceYield";
 
 // He sits on the CORNER, hanging slightly off the edge, rather than inside the
 // button's horizontal span. At `right-3` on a narrow button he covered the
@@ -39,11 +40,17 @@ const SIDE = {
 
 export default function AcePerch({
     side = "right",
-    size = "w-14 h-14",
+    size = "w-14",
     delay = 0.35,
     label,
 }) {
     const reduce = useReducedMotion();
+    // He is one character. With the companion already standing in the corner
+    // there were three of him on the Dashboard at once — companion, perch and
+    // empty state — which stops reading as a mascot and starts reading as a
+    // pattern. The perch is the one that yields: it's decoration, and the
+    // companion is mid-conversation.
+    const claimed = useAceClaimed();
 
     // The arc: crouch, spring up and over, land with a squash, settle.
     // `times` is what makes it read as a jump rather than a slide — the rise is
@@ -58,20 +65,22 @@ export default function AcePerch({
             transition: { duration: 0.72, times: [0, 0.35, 0.6, 0.8, 1], delay, ease: "easeOut" },
         };
 
+    if (claimed) return null;
+
     return (
         <span
             aria-hidden={label ? undefined : "true"}
             role={label ? "img" : undefined}
             aria-label={label}
             data-ace-perch={side}
-            className={`absolute -top-9 ${SIDE[side] || SIDE.right} pointer-events-none z-10`}
+            className={`absolute -top-12 ${SIDE[side] || SIDE.right} pointer-events-none z-10`}
         >
             <motion.span className="block origin-bottom" initial={reduce ? false : { opacity: 0, y: 26 }} animate={hop}>
                 {/* Once he's landed, his own idle takes over — a small bob and
                     the blink loop. `alive={false}` would stop the bob but it
                     stops the blinking too, and an unblinking mascot on a button
                     reads as a sticker rather than a character. */}
-                <SpadeMark className={size} mood="happy" />
+                <AceBody className={size} pose="wave" />
             </motion.span>
         </span>
     );

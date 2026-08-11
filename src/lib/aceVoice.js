@@ -87,25 +87,25 @@ export const PLANS = [
         id: "cram", mode: "cramming", label: "Something's due",
         blurb: "SAC or exam coming and I need to cover ground",
         ace: "Right, no messing about. I'll point you at what's actually going to be on it.",
-        mood: "alert",
+        mood: "alert", pose: "alert",
     },
     {
         id: "homework", mode: "homework", label: "Get work done",
         blurb: "Assignments and tasks to finish",
         ace: "Heads down then. I'll keep out of your way and just flag the useful stuff.",
-        mood: "thinking",
+        mood: "thinking", pose: "think",
     },
     {
         id: "keep", mode: "free", label: "Keep it ticking",
         blurb: "Nothing urgent, just don't want to fall behind",
         ace: "Love this one. Small and often beats a panic later — let's keep the streak honest.",
-        mood: "happy",
+        mood: "happy", pose: "happy",
     },
     {
         id: "lost", mode: "free", label: "No idea",
         blurb: "Tell me what I should be doing",
         ace: "Perfect, that's my favourite question. Give me a second and I'll read your week.",
-        mood: "excited",
+        mood: "excited", pose: "cheer",
     },
 ];
 

@@ -8,7 +8,7 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Flame, Shield, ShieldCheck } from 'lucide-react';
-import SpadeMark from '@/components/ace/SpadeMark';
+import AceBody from '@/components/ace/AceBody';
 import { STREAK_CHEER, pick } from '@/lib/aceVoice';
 
 const MILESTONE_MESSAGES = {
@@ -101,7 +101,7 @@ export default function StreakCelebration() {
                         transition={{ type: 'spring', stiffness: 320, damping: 16, delay: 0.25 }}
                         data-ace-streak
                     >
-                        <SpadeMark className="w-16 h-16 sm:w-20 sm:h-20" mood="excited" />
+                        <AceBody className="w-20 sm:w-24" pose="cheer" title="Ace" />
                     </motion.div>
 
                     {/* Main card — brand streak→xp gradient */}

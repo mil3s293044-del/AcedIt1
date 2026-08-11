@@ -17,7 +17,8 @@ import { motion, AnimatePresence } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { base44 } from "@/api/base44Client";
 import { useToast } from "@/components/ui/use-toast";
-import { Sparkles, Loader2, Check, X, Minus, ChevronRight, RotateCcw } from "lucide-react";
+import { Loader2, Check, X, Minus, ChevronRight, RotateCcw } from "lucide-react";
+import AceBody from "@/components/ace/AceBody";
 import { TECHNIQUES, TECHNIQUE_IDS, applyRules } from "@/lib/strategise";
 import { describeOutcomes, describeRemaining, strategyStanding, dayKey } from "@/lib/strategyState";
 import { durationOf } from "@/lib/planTags";
@@ -171,11 +172,15 @@ Rules:
     return (
         <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}
             className="rounded-3xl border-2 border-chart-4/30 bg-chart-4/5 p-5 shadow-soft">
+            {/* Ace asks this, rather than a card with a sparkle icon on it.
+                It's the same question either way, but "how did the last few
+                days go" is a question a person asks — and a student is far
+                more willing to admit a bad week to someone than to a form. */}
             <div className="flex items-start justify-between gap-3">
-                <div className="min-w-0">
-                    <p className="stat-label text-chart-4 flex items-center gap-1.5">
-                        <Sparkles className="w-3.5 h-3.5" /> Strategy check-in
-                    </p>
+                <AceBody className="w-16 sm:w-20 flex-shrink-0 -mt-1" pose="offer"
+                    title="Ace" />
+                <div className="min-w-0 flex-1">
+                    <p className="stat-label text-chart-4">Strategy check-in</p>
                     <p className="font-display font-extrabold text-foreground mt-1">
                         How did the last few days go?
                     </p>

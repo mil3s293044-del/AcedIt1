@@ -23,8 +23,8 @@
 import React, { useState, useEffect, useCallback, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { X, ArrowRight, MoonStar, BellOff } from "lucide-react";
-import SpadeMark from "@/components/ace/SpadeMark";
-import useAceYield from "@/components/ace/useAceYield";
+import AceWalker, { AceBubble } from "@/components/ace/AceWalker";
+import useAceYield, { claimAce } from "@/components/ace/useAceYield";
 import { PAGES } from "@/lib/aceKnowledge";
 import {
     shouldAskPlan, setPlan, skipPlan, currentPlan, shouldSpeak, markSpoke,
@@ -130,6 +130,11 @@ export default function AceBuddy({ page, userProfile, suppressed = false, onPlan
         setTimeout(() => setMode(null), 2600);
     }, [today]);
 
+    // While the buddy is drawing him, the launcher stands down — otherwise
+    // there are two of him in the same corner.
+    const showing = Boolean(mode) && !yielding && !suppressed;
+    useEffect(() => (showing ? claimAce() : undefined), [showing]);
+
     if (suppressed) return null;
 
     return (
@@ -137,22 +142,26 @@ export default function AceBuddy({ page, userProfile, suppressed = false, onPlan
             {mode && !yielding && (
                 <motion.aside
                     key={mode}
-                    initial={{ opacity: 0, y: 18, scale: 0.96 }}
-                    animate={{ opacity: 1, y: 0, scale: 1 }}
-                    exit={{ opacity: 0, x: 40, scale: 0.96 }}
-                    transition={{ type: "spring", stiffness: 340, damping: 26 }}
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    exit={{ opacity: 0, x: 60 }}
+                    transition={{ duration: 0.25 }}
                     data-ace-buddy={mode}
                     role="status"
-                    /* RIGHT side, and above the launcher. The nav rail owns the
-                       left edge on desktop; the launcher owns the corner. */
-                    className="fixed z-40 right-3 left-3 sm:left-auto sm:right-6 bottom-[9.5rem] sm:bottom-[5.5rem]
-                        sm:w-[330px] rounded-2xl bg-surface border-2 border-border shadow-soft-lg p-4">
+                    /* RIGHT side, above the launcher lane. The nav rail owns
+                       the left edge on desktop; the launcher owns the corner. */
+                    className="fixed z-40 right-3 sm:right-6 max-w-[calc(100vw-1.5rem)]
+                        bottom-[9.5rem] sm:bottom-[5.5rem] pointer-events-none">
+                <AceWalker trip={`${mode}-${page || ""}`}
+                    pose={mode === "bye" ? "sleep" : mode === "reply" ? (chosen?.pose || "happy") : mode === "ask" ? "wave" : "stand"}
+                    size={mode === "ask" ? "w-24 sm:w-28" : "w-20 sm:w-24"}
+                    className="justify-end">
+                <AceBubble className="pointer-events-auto w-[min(19rem,calc(100vw-8.5rem))]">
 
                     {mode === "ask" && (
                         <>
                             <div className="flex items-start gap-2.5">
-                                <SpadeMark className="w-11 h-11 flex-shrink-0" mood="happy" />
-                                <p className="text-sm font-bold text-foreground leading-snug flex-1 min-w-0 pt-1">
+                                <p className="text-sm font-bold text-foreground leading-snug flex-1 min-w-0">
                                     {hello}
                                 </p>
                                 <button onClick={() => { skipPlan(); setMode(null); }}
@@ -198,7 +207,6 @@ export default function AceBuddy({ page, userProfile, suppressed = false, onPlan
 
                     {mode === "line" && (
                         <div className="flex items-start gap-2.5">
-                            <SpadeMark className="w-9 h-9 flex-shrink-0" mood="idle" />
                             <p className="text-sm text-foreground leading-snug flex-1 min-w-0">{line}</p>
                             <div className="flex flex-col gap-1 flex-shrink-0">
                                 <button onClick={() => setMode(null)} aria-label="Dismiss"
@@ -218,18 +226,14 @@ export default function AceBuddy({ page, userProfile, suppressed = false, onPlan
                     {/* His reaction to your answer — the moment he stops
                         being a form and starts being someone. */}
                     {mode === "reply" && chosen && (
-                        <div className="flex items-start gap-2.5">
-                            <SpadeMark className="w-11 h-11 flex-shrink-0" mood={chosen.mood} />
-                            <p className="text-sm text-foreground leading-snug">{chosen.ace}</p>
-                        </div>
+                        <p className="text-sm text-foreground leading-snug">{chosen.ace}</p>
                     )}
 
                     {mode === "bye" && (
-                        <div className="flex items-center gap-2.5">
-                            <SpadeMark className="w-9 h-9 flex-shrink-0" mood="sleepy" />
-                            <p className="text-sm text-foreground leading-snug">{bye}</p>
-                        </div>
+                        <p className="text-sm text-foreground leading-snug">{bye}</p>
                     )}
+                </AceBubble>
+                </AceWalker>
                 </motion.aside>
             )}
         </AnimatePresence>

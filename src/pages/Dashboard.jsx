@@ -22,7 +22,7 @@ import { todaysIntent } from "@/lib/studyIntent";
 import { fmtDate } from "@/lib/safeDate";
 import AceTip from "@/components/ace/AceTip";
 import AceShuffle from "@/components/ace/AceShuffle";
-import SpadeMark from "@/components/ace/SpadeMark";
+import AceBody from "@/components/ace/AceBody";
 import AcePerch from "@/components/ace/AcePerch";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -965,7 +965,7 @@ export default function Dashboard() {
                             </div>
                         ) : (
                             <div className="rounded-2xl bg-surface border border-dashed border-border p-6 lg:p-8 text-center h-full flex flex-col items-center justify-center shadow-soft">
-                                <SpadeMark className="w-20 h-20 mb-3" mood="point" />
+                                <AceBody className="w-28 mb-1" pose="point" title="Ace" />
                                 <h2 className="font-display font-extrabold text-foreground text-xl lg:text-2xl mb-2">
                                     Ready to start a streak?
                                 </h2>

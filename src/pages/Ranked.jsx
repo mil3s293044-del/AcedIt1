@@ -35,7 +35,7 @@ import {
     standing, titlesFor, nextBand, weakestComponent, BAND_TONE,
 } from "@/lib/ranked";
 import AceTip from "@/components/ace/AceTip";
-import SpadeMark from "@/components/ace/SpadeMark";
+import AceBody from "@/components/ace/AceBody";
 
 const TONE_PILL = {
     muted: "bg-secondary text-muted-foreground", xp: "bg-xp/15 text-xp",
@@ -277,7 +277,7 @@ export default function Ranked() {
                                     </div>
                                 ) : rows.length === 0 ? (
                                     <div className="card-soft p-8 text-center">
-                                        <SpadeMark className="w-16 h-16 mx-auto mb-2" mood="peek" />
+                                        <AceBody className="w-24 mx-auto" pose="peek" title="Ace" />
                                         <p className="text-sm text-muted-foreground">
                                             {board === "atar"
                                                 ? "No ranked students in this scope yet — three study days gets you on the board."

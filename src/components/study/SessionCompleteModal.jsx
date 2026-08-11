@@ -7,7 +7,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Save, X, Star } from "lucide-react";
 import DifficultyRating from "@/components/shared/DifficultyRating";
-import SpadeMark from "@/components/ace/SpadeMark";
+import AceBody from "@/components/ace/AceBody";
 import { SESSION_DONE, sessionBand, pick } from "@/lib/aceVoice";
 
 // Per-technique accent (matches the Study page tiles). Static class strings
@@ -64,7 +64,7 @@ export default function SessionCompleteModal({ session, onSave, onCancel }) {
                             className="mx-auto mb-1"
                             data-ace-session={band}
                         >
-                            <SpadeMark className="w-16 h-16" mood={band === "long" ? "pleased" : "happy"} />
+                            <AceBody className="w-24 mx-auto" pose={band === "long" ? "proud" : "cheer"} title="Ace" />
                         </motion.div>
                         <CardTitle className={`text-2xl ${a.text}`}>
                             Session Complete!
