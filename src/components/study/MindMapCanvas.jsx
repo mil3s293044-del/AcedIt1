@@ -6,6 +6,12 @@
  * by typing an outline arrives already tidy and only stops tidying itself
  * where they've disagreed with it.
  *
+ * Colour carries two things at once. The tapered branches behind the nodes take
+ * the BRANCH tone, so everything hanging off one limb of the root reads as a
+ * group; the node boxes take the TYPE tone, so a term and an open question are
+ * telling apart without reading either. They're legible together because they
+ * never land on the same pixels.
+ *
  * Pan and zoom live in the viewBox, not in a CSS transform. That's not a style
  * preference: every drag has to convert a pointer position into map
  * coordinates, `getScreenCTM()` is the only reliable way to do that, and a CSS
@@ -25,16 +31,22 @@ const TONE = {
     "chart-4": { fill: "fill-chart-4",   stroke: "stroke-chart-4",   text: "fill-chart-4" },
     primary:   { fill: "fill-primary",   stroke: "stroke-primary",   text: "fill-primary" },
     streak:    { fill: "fill-streak",    stroke: "stroke-streak",    text: "fill-streak" },
+    berry:     { fill: "fill-berry",     stroke: "stroke-berry",     text: "fill-berry" },
+    vine:      { fill: "fill-vine",      stroke: "stroke-vine",      text: "fill-vine" },
 };
-const CONF_STROKE = { 1: "stroke-streak", 2: "stroke-xp", 3: "stroke-primary" };
-const CONF_FILL   = { 1: "fill-streak",   2: "fill-xp",   3: "fill-primary" };
+const CONF_FILL = { 1: "fill-streak", 2: "fill-xp", 3: "fill-primary" };
+const CONF_WORD = { 1: "Shaky", 2: "Getting it", 3: "Solid" };
 
 // Nodes size to their label rather than sitting at a fixed width. "CO2
 // concentration" in a 170-wide box wrapped to two cramped lines; the same text
 // in a box that fits it reads in one. The LAYOUT still reserves a uniform
 // column so nothing can collide — only the drawn box varies.
 const NODE_H = 62, ROOT_H = 72;
-const MIN_W = 112, MAX_W = 200, ROOT_MIN_W = 150;
+// PAD is the horizontal room the box keeps for chrome: the type bar down the
+// left edge takes 13px of it, and the label is nudged right by half the rest so
+// it still looks centred inside what's left.
+const PAD = 34, BAR_SHIFT = 6;
+const MIN_W = 120, MAX_W = 210, ROOT_MIN_W = 158;
 const LANE_W = 190;                       // uniform slot the layout reserves
 // MEASURED, not guessed: the bold face renders at ~8.9px per character at
 // 13.5px, so the original 7.3 estimate overflowed every box with a long label.
@@ -98,17 +110,19 @@ function wrap(text, max = 20, maxLines = 2) {
 function fitBox(text, depth) {
     const root = depth === 0;
     const char = root ? ROOT_CHAR : CHAR;
-    const maxChars = Math.floor((MAX_W - 26) / char);
+    const maxChars = Math.floor((MAX_W - PAD) / char);
     const lines = wrap(text, maxChars, 2);
     const longest = Math.max(1, ...lines.map(l => l.length));
-    const w = Math.min(MAX_W, Math.max(root ? ROOT_MIN_W : MIN_W, Math.round(longest * char) + 26));
+    const w = Math.min(MAX_W, Math.max(root ? ROOT_MIN_W : MIN_W, Math.round(longest * char) + PAD));
     return { lines, w, h: root ? ROOT_H : NODE_H };
 }
 
 export default function MindMapCanvas({
     nodes = [],
     edges = [],
-    childMapNodeIds = new Set(),   // nodes that already open into their own map
+    // Map<nodeId, nodeCount> — nodes that already open into their own map, and
+    // how big that map is. A Set still works; it just can't show the count.
+    childMapNodeIds = new Map(),
     selectedId = null,
     onSelect,
     onMove,                        // (moves: [{id,x,y}]) — committed on pointer-up
@@ -121,12 +135,24 @@ export default function MindMapCanvas({
     editable = false,
     compact = false,
     expandable = false,
+    // Full screen can be driven from outside. It has to be, for the builder:
+    // a canvas that goes full screen on its own leaves the palette and the
+    // inspector behind, which is the half of the screen you actually build
+    // with. When `full` is passed the parent owns it; otherwise we do.
+    full: fullProp,
+    onToggleFull,
     apiRef,                        // gets { clientToSvg, fit } so a palette can drop onto us
     className = "",
 }) {
     const svgRef = useRef(null);
     const wrapRef = useRef(null);
-    const [full, setFull] = useState(false);
+    const [fullOwn, setFullOwn] = useState(false);
+    const controlled = fullProp !== undefined;
+    const full = controlled ? fullProp : fullOwn;
+    const toggleFull = useCallback(() => {
+        if (controlled) onToggleFull?.(!fullProp);
+        else setFullOwn(f => !f);
+    }, [controlled, onToggleFull, fullProp]);
     const [view, setView] = useState(null);         // { x, y, w, h } — null until first fit
     const [drag, setDrag] = useState(null);         // live node drag
     const [ghost, setGhost] = useState(null);       // pointer position while connecting
@@ -146,7 +172,15 @@ export default function MindMapCanvas({
         }
         return out;
     }, [nodes, positions]);
+    // Two colour systems, deliberately, because they answer two different
+    // questions. The BRANCH tone says "these boxes belong together" and is what
+    // makes the picture a mind map; the TYPE tone says "this one is a term and
+    // that one is an open question" and is what makes it classifiable. They
+    // don't collide because they're painted on different things: branch on the
+    // tapered connectors behind, type on the box itself.
     const toneOf = useCallback((id) => TONE[tones.get(id)] || TONE.map, [tones]);
+    const typeToneOf = useCallback(
+        (n) => TONE[TYPE_BY_ID[n.type]?.tone] || TONE.map, []);
 
     // Live drag offsets are applied at render time rather than written into
     // state on every pointermove — otherwise a 60fps drag re-lays-out the whole
@@ -174,12 +208,19 @@ export default function MindMapCanvas({
         // piece beats an illegible whole. The root sits at (0,0), which is the
         // other reason the coordinate space isn't normalised.
         const el = wrapRef.current?.getBoundingClientRect();
-        // Raised from 0.42. At 0.42 a 14px label renders at six pixels, which
-        // is a picture of a mind map rather than a mind map. Below this floor,
-        // frame the middle at the floor and let them pan — the fit button is
-        // right there when they want the whole thing.
-        const MIN_SCALE = 0.72;
         if (el?.width && el?.height) {
+            // The floor scales with the room available, because the trade it
+            // makes goes the other way at each end.
+            //
+            // On a phone canvas a whole map lands at 0.25 — a four-pixel label,
+            // which is a picture OF a mind map rather than a mind map. Framing
+            // the middle at a readable size and letting them pan is better.
+            //
+            // On a desktop canvas a flat 0.72 was clipping eight of thirteen
+            // nodes to buy 10px labels over 9px ones. Seeing most of your map
+            // cut off at the edge reads as broken, and the fix — one scroll to
+            // zoom — is right there. So a wide canvas shows the whole thing.
+            const MIN_SCALE = el.width < 620 ? 0.72 : 0.45;
             const scale = Math.min(el.width / w, el.height / h);
             if (scale < MIN_SCALE) {
                 w = el.width / MIN_SCALE;
@@ -231,12 +272,14 @@ export default function MindMapCanvas({
         return () => el.removeEventListener("wheel", onWheel);
     }, [zoomBy, clientToSvg, compact]);
 
+    // The parent owns Escape when it owns full screen — otherwise Escape both
+    // closes the builder and clears the selection, and you lose your place.
     useEffect(() => {
-        if (!full) return;
-        const esc = (e) => { if (e.key === "Escape") setFull(false); };
+        if (!full || controlled) return;
+        const esc = (e) => { if (e.key === "Escape") setFullOwn(false); };
         window.addEventListener("keydown", esc);
         return () => window.removeEventListener("keydown", esc);
-    }, [full]);
+    }, [full, controlled]);
 
     // ── Keyboard ────────────────────────────────────────────────────────────
     // Every node used to require dragging a chip in from a palette, which is
@@ -356,7 +399,7 @@ export default function MindMapCanvas({
         <div ref={wrapRef}
             tabIndex={editable && !compact ? 0 : -1}
             onKeyDown={onKeyDown}
-            className={full
+            className={full && !controlled
                 ? "fixed inset-3 sm:inset-6 z-50 overflow-hidden rounded-2xl bg-background border-2 border-border shadow-soft-lg"
                 : `relative overflow-hidden rounded-2xl bg-secondary/30 border border-border ${className}`}>
             <svg ref={svgRef}
@@ -381,7 +424,7 @@ export default function MindMapCanvas({
                     return (
                         <path key={`e${n.id}`}
                             d={taper(a, b, trunkAt(d - 1), trunkAt(d))}
-                            className={toneOf(n.id).fill} opacity="0.5" />
+                            className={toneOf(n.id).fill} opacity="0.4" />
                     );
                 })}
 
@@ -411,64 +454,74 @@ export default function MindMapCanvas({
                 {nodes.map(n => {
                     const p = shown.get(n.id);
                     if (!p) return null;
-                    const tone = toneOf(n.id);
-                    const type = TYPE_BY_ID[n.type];
-                    const showType = type && n.type !== "idea";
+                    const branch = toneOf(n.id);
+                    const type = TYPE_BY_ID[n.type] || TYPE_BY_ID.idea;
+                    const tone = typeToneOf(n);
                     const selected = selectedId === n.id;
                     const isSource = connectFrom === n.id;
                     const root = p.depth === 0;
                     const { lines, w, h } = boxes.get(n.id) || fitBox(n.text, p.depth);
-                    // One line sits on the centre line; two straddle it. The type
-                    // marker is a dot in the corner now, so it costs no height.
+                    // One line sits on the centre line; two straddle it. The
+                    // type bar is vertical down the left edge, so it costs no
+                    // height either way.
                     const textTop = h / 2 + (lines.length === 1 ? 5 : -3);
+                    const layers = childMapNodeIds.get?.(n.id) ?? (childMapNodeIds.has?.(n.id) ? 0 : null);
+                    const hasChildMap = layers != null;
                     return (
                         <g key={n.id} transform={`translate(${p.x - w / 2}, ${p.y - h / 2})`}
                             onPointerDown={(e) => onNodeDown(e, n)}
                             onDoubleClick={(e) => { e.stopPropagation(); onOpenNode?.(n.id); }}
-                            data-node={n.id} data-type={n.type || "idea"} data-tone={tones.get(n.id)}
+                            data-node={n.id} data-type={n.type || "idea"}
+                            data-tone={tones.get(n.id)} data-type-tone={type.tone}
                             className={compact ? "" : editable ? "cursor-grab" : "cursor-pointer"}>
                             {/* Opaque base so the tint above lands on the card
                                 colour rather than on whatever the branch behind
                                 it is painting. */}
                             <rect width={w} height={h} rx={root ? 18 : 15} className="fill-surface" />
                             <rect width={w} height={h} rx={root ? 18 : 15} className={tone.fill}
-                                opacity={root ? 0.22 : 0.13} />
+                                opacity={root ? 0.2 : 0.14} />
                             <rect width={w} height={h} rx={root ? 18 : 15} fill="none"
-                                className={selected || isSource ? "stroke-foreground"
-                                    : CONF_STROKE[n.confidence] || tone.stroke}
-                                strokeWidth={selected || isSource ? 3.5 : n.confidence ? 3 : 2} />
+                                className={selected || isSource ? "stroke-foreground" : tone.stroke}
+                                strokeWidth={selected || isSource ? 3.5 : 2.5} />
+
+                            {/* The type colour at FULL strength. A 14% wash of
+                                it behind the text is a hint; a solid bar is
+                                something you can sort thirty nodes by without
+                                reading one of them. */}
+                            <rect x="8" y={(h - 24) / 2} width="5" height="24" rx="2.5"
+                                className={tone.fill} />
+                            <title>{type.label}{n.confidence ? ` · ${CONF_WORD[n.confidence]}` : ""}</title>
 
                             {lines.map((l, i) => (
-                                <text key={i} x={w / 2} y={textTop + i * 17} textAnchor="middle"
+                                <text key={i} x={w / 2 + BAR_SHIFT} y={textTop + i * 17} textAnchor="middle"
                                     style={{ fontSize: root ? ROOT_FONT : FONT }}
                                     className={`fill-foreground ${root ? "font-black" : "font-bold"}`}>
                                     {l}
                                 </text>
                             ))}
 
-                            {/* Type is a marker, not the node's whole colour —
-                                colour belongs to the branch so structure is
-                                visible. The word still shows on hover via the
-                                title, and in the inspector. */}
-                            {showType && (
-                                <>
-                                    <circle cx="12" cy={h / 2} r="3.5"
-                                        className={TONE[type.tone]?.fill || "fill-map"} />
-                                    <title>{type.label}</title>
-                                </>
-                            )}
                             {/* Confidence reads at a glance without opening the
-                                node — the whole point of marking it. */}
+                                node — the whole point of marking it. It's a ring
+                                rather than the border now, because the border
+                                belongs to the type. */}
                             {n.confidence > 0 && (
                                 <circle cx={w - 11} cy={11} r="4.5" className={CONF_FILL[n.confidence]} />
                             )}
-                            {/* This node opens into a map of its own. */}
-                            {childMapNodeIds.has(n.id) && (
-                                <g transform={`translate(${w - 27}, ${h - 19})`}>
-                                    <rect width="18" height="12" rx="3" className={`${tone.fill} stroke-border`}
-                                        strokeWidth="1" opacity="0.9" />
-                                    <rect x="3" y="-3" width="18" height="12" rx="3"
-                                        className={`fill-surface ${tone.stroke}`} strokeWidth="1.5" />
+                            {/* This node opens into a map of its own, and says
+                                how much is behind it. "Something is down there"
+                                is not enough to decide whether to go and look. */}
+                            {hasChildMap && (
+                                <g transform={`translate(${w / 2 - 17}, ${h - 7})`} data-child-map={n.id}
+                                    className="cursor-pointer"
+                                    onPointerDown={(e) => e.stopPropagation()}
+                                    onClick={(e) => { e.stopPropagation(); onOpenNode?.(n.id); }}>
+                                    <rect width="34" height="16" rx="8" className={`fill-surface ${branch.stroke}`}
+                                        strokeWidth="1.5" />
+                                    <text x="17" y="11.5" textAnchor="middle"
+                                        className={`${branch.text} text-[10px] font-black`}>
+                                        {layers > 0 ? `${layers} ▸` : "▸"}
+                                    </text>
+                                    <title>Open the {layers > 0 ? `${layers}-node ` : ""}map behind this node</title>
                                 </g>
                             )}
                         </g>
@@ -527,7 +580,7 @@ export default function MindMapCanvas({
                             [ZoomIn, () => zoomBy(1.3), "Zoom in"],
                             [Scan, fit, "Fit to view"],
                             ...(expandable || full
-                                ? [[full ? Minimize2 : Maximize2, () => { setFull(f => !f); requestAnimationFrame(fit); },
+                                ? [[full ? Minimize2 : Maximize2, () => { toggleFull(); requestAnimationFrame(fit); },
                                     full ? "Exit full screen" : "Full screen"]]
                                 : []),
                         ].map(([Icon, fn, label]) => (
@@ -539,7 +592,7 @@ export default function MindMapCanvas({
                     </div>
                     <p className="absolute bottom-3 left-3 right-32 hidden sm:block truncate text-[11px] text-muted-foreground/70 pointer-events-none">
                         {connectFrom ? "Click the node you want to link to · Esc to cancel"
-                            : editable ? "Tab adds a child · Enter adds a sibling · arrows move · double-click opens a node as its own map"
+                            : editable ? "Tab adds a child · Enter adds a sibling · arrows move · colour bar = what kind of node it is · double-click opens one as its own map"
                                 : "Drag to move · scroll to zoom"}
                     </p>
                 </>

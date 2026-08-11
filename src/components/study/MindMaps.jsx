@@ -37,6 +37,7 @@ import {
     Network, Plus, Loader2, EyeOff, Sparkles, ArrowLeft, Trash2, Check, AlertTriangle,
     Lightbulb, ListTree, Layers, TrendingUp, ChevronRight, Link2, X, Zap, Target,
     ListOrdered, BookMarked, Quote, FlaskConical, HelpCircle, Send, Wand2, MousePointer2,
+    Maximize2, Minimize2, Circle, CornerDownRight,
 } from "lucide-react";
 import MindMapCanvas from "./MindMapCanvas";
 import {
@@ -56,6 +57,8 @@ const TONE_CLASS = {
     "chart-4": { text: "text-chart-4",   bg: "bg-chart-4/10",   border: "border-chart-4/40",   dot: "bg-chart-4" },
     primary:   { text: "text-primary",   bg: "bg-primary/10",   border: "border-primary/40",   dot: "bg-primary" },
     streak:    { text: "text-streak",    bg: "bg-streak/10",    border: "border-streak/40",    dot: "bg-streak" },
+    berry:     { text: "text-berry",     bg: "bg-berry/10",     border: "border-berry/40",     dot: "bg-berry" },
+    vine:      { text: "text-vine",      bg: "bg-vine/10",      border: "border-vine/40",      dot: "bg-vine" },
 };
 const CONF = [
     { v: 0, label: "—",          cls: "bg-secondary text-muted-foreground" },
@@ -88,6 +91,9 @@ const mapToRow = (m) => ({
     is_subject_root: !!m.isSubjectRoot,
     drill_from_map_id: m.drillFromMapId || null,
     drill_from_node_id: m.drillFromNodeId || null,
+    // rowToMap reads this back, so leaving it out of the write meant a recall
+    // attempt lost its link to the map it was an attempt AT on the first save.
+    parent_map_id: m.parentMapId || null,
 });
 
 /** The gap review — questions only, never answers. */
@@ -173,6 +179,35 @@ function GapReview({ review, onClose, onAddNode }) {
     );
 }
 
+/**
+ * Save state, said plainly.
+ *
+ * A spinner that appears for 300ms and vanishes tells you nothing about
+ * whether your work is safe, which is the only question worth answering here.
+ * "Saved" persists; a failure persists too, and offers the retry.
+ */
+function SaveState({ state, onRetry }) {
+    if (state === "idle") return null;
+    if (state === "error") {
+        return (
+            <button onClick={onRetry} data-save-state="error"
+                className="inline-flex items-center gap-1 rounded-lg bg-streak/15 px-2 py-1 text-[11px] font-bold text-foreground">
+                <AlertTriangle className="w-3 h-3 text-streak" /> Not saved — retry
+            </button>
+        );
+    }
+    const label = state === "saving" ? "Saving" : state === "pending" ? "Unsaved" : "Saved";
+    return (
+        <span data-save-state={state}
+            className="text-[11px] font-bold text-muted-foreground inline-flex items-center gap-1">
+            {state === "saving" ? <Loader2 className="w-3 h-3 animate-spin" />
+                : state === "saved" ? <Check className="w-3 h-3 text-primary" />
+                    : <Circle className="w-2 h-2 fill-xp text-xp" />}
+            {label}
+        </span>
+    );
+}
+
 export default function MindMaps({ user, subjects = [] }) {
     const { toast } = useToast();
     const [allMaps, setAllMaps] = useState([]);
@@ -189,33 +224,68 @@ export default function MindMaps({ user, subjects = [] }) {
     const [outline, setOutline] = useState("");
     const [review, setReview] = useState(null);
     const [busy, setBusy] = useState(false);
-    const [saving, setSaving] = useState(false);
+    const [saveState, setSaveState] = useState("idle"); // idle | pending | saving | saved | error
+    const [builder, setBuilder] = useState(false);   // full-screen building mode
     const [dragType, setDragType] = useState(null);  // palette chip being dragged
     const [dragAt, setDragAt] = useState(null);
     const [scope, setScope] = useState("map");       // map | branch — what exports
     const [recallOf, setRecallOf] = useState(null);  // the real map being recalled against
     const [diff, setDiff] = useState(null);
+    const [confirmLayer, setConfirmLayer] = useState(null);  // map id awaiting a second click
     const canvasApi = useRef(null);
     const dirty = useRef(0);
     const savedAt = useRef(0);
+    // The saved rows, mirrored in a ref. Every navigation reads FROM this list,
+    // and React state hasn't committed yet at the moment a flush finishes — so
+    // a handler that awaits a save and then reads `allMaps` reads the version
+    // from before the save. The ref is written synchronously; the state exists
+    // only to re-render.
+    const allMapsRef = useRef([]);
+    const mapRef = useRef(null);
+    useEffect(() => { mapRef.current = map; }, [map]);
 
     const selected = useMemo(
         () => map?.nodes.find(n => n.id === selectedId) || null, [map, selectedId]);
     const stats = useMemo(() => (map ? mapStats(map) : null), [map]);
 
-    // Which nodes in this map already open into a map of their own.
-    const childMapNodeIds = useMemo(() => new Set(
-        allMaps.filter(m => m.drill_from_map_id === map?.id && m.drill_from_node_id)
-            .map(m => m.drill_from_node_id)), [allMaps, map]);
+    // The maps that hang off nodes of this one — the layer below.
+    const childMapRows = useMemo(
+        () => allMaps.filter(m => m.drill_from_map_id === map?.id && m.drill_from_node_id),
+        [allMaps, map]);
+    // Node → how much is behind it. The count is nodes BELOW that map's own
+    // root, so "0" honestly means you opened it and never put anything in.
+    const childMapNodeIds = useMemo(() => new Map(
+        childMapRows.map(r => [r.drill_from_node_id, Math.max(0, (r.nodes?.length || 1) - 1)])),
+        [childMapRows]);
+    const layers = useMemo(() => childMapRows.map(r => ({
+        row: r,
+        nodeId: r.drill_from_node_id,
+        title: map?.nodes.find(n => n.id === r.drill_from_node_id)?.text || r.title,
+        count: Math.max(0, (r.nodes?.length || 1) - 1),
+    })).sort((a, b) => b.count - a.count || a.title.localeCompare(b.title)), [childMapRows, map]);
+
+    const putRows = useCallback((rows) => {
+        allMapsRef.current = rows;
+        setAllMaps(rows);
+    }, []);
+    /** Insert or merge one row, keeping the ref and the state in step. */
+    const putRow = useCallback((row) => {
+        const has = row.id && allMapsRef.current.some(r => r.id === row.id);
+        putRows(has
+            ? allMapsRef.current.map(r => (r.id === row.id ? { ...r, ...row } : r))
+            : [row, ...allMapsRef.current]);
+    }, [putRows]);
 
     const load = useCallback(async () => {
         if (!user?.email) return;
         try {
             const rows = await base44.entities.MindMap.filter({ created_by: user.email }, "-updated_date", 200);
-            setAllMaps(rows || []);
+            putRows(rows || []);
         } catch { /* the sandbox still works unsaved */ }
         finally { setLoading(false); }
-    }, [user]);
+        // Depending on `user` itself would re-run this on every parent render
+        // that hands down a fresh object.
+    }, [user?.email, putRows]);
     useEffect(() => { load(); }, [load]);
 
     // ── Mutation helper ─────────────────────────────────────────────────────
@@ -226,37 +296,84 @@ export default function MindMaps({ user, subjects = [] }) {
         dirty.current += 1;
     }, []);
 
+    // ── Saving ──────────────────────────────────────────────────────────────
+    // One writer, used by both the debounce and the flush, so there is exactly
+    // one place that knows how a map reaches the database.
+    const persist = useCallback(async (m, at) => {
+        if (!m) return null;
+        const row = mapToRow(m);
+        if (m.id) {
+            await base44.entities.MindMap.update(m.id, row);
+            // THE bug this replaced: allMaps was loaded once and never touched
+            // again, so every breadcrumb click, every drill-out and every
+            // return to a subject reloaded the version from page load — and
+            // then autosaved that back over everything since. The map appeared
+            // to save and then silently un-saved itself the moment you moved.
+            putRow({ ...row, id: m.id });
+            savedAt.current = at;
+            return m.id;
+        }
+        const created = await base44.entities.MindMap.create(row);
+        const id = created?.id || null;
+        if (id) {
+            setMap(x => (x && !x.id ? { ...x, id } : x));
+            if (mapRef.current && !mapRef.current.id) mapRef.current = { ...mapRef.current, id };
+        }
+        putRow({ ...row, id });
+        savedAt.current = at;
+        return id;
+    }, [putRow]);
+
+    const save = useCallback(async () => {
+        if (dirty.current === savedAt.current) return true;
+        const at = dirty.current;
+        setSaveState("saving");
+        try {
+            await persist(mapRef.current, at);
+            setSaveState("saved");
+            return true;
+        } catch (e) {
+            setSaveState("error");
+            toast({ title: "Couldn't save the map", description: e.message, variant: "destructive" });
+            return false;
+        }
+    }, [persist, toast]);
+
     // Autosave. A "brain of storage" you can lose by closing a tab is not a
     // store, and an explicit Save button is exactly the step people skip.
     useEffect(() => {
         if (!map || dirty.current === savedAt.current) return;
-        const t = setTimeout(async () => {
-            const at = dirty.current;
-            setSaving(true);
-            try {
-                const row = mapToRow(map);
-                if (map.id) await base44.entities.MindMap.update(map.id, row);
-                else {
-                    const created = await base44.entities.MindMap.create(row);
-                    if (created?.id) setMap(m => ({ ...m, id: created.id }));
-                    setAllMaps(prev => [{ ...row, id: created?.id }, ...prev]);
-                }
-                savedAt.current = at;
-            } catch (e) {
-                toast({ title: "Couldn't save the map", description: e.message, variant: "destructive" });
-            } finally { setSaving(false); }
-        }, 1200);
+        setSaveState("pending");
+        const t = setTimeout(save, 900);
         return () => clearTimeout(t);
-    }, [map, toast]);
+    }, [map, save]);
+
+    // Anything that navigates has to land the pending write FIRST. The debounce
+    // timer is cleared when the map changes, so without this, editing a node
+    // and clicking a breadcrumb inside the next second threw the edit away.
+    const flush = useCallback(async () => { await save(); }, [save]);
+
+    // The last line of defence. A 900ms debounce is short, but "I closed the
+    // tab" is exactly when losing work is unforgivable.
+    useEffect(() => {
+        const warn = (e) => {
+            if (dirty.current === savedAt.current) return;
+            e.preventDefault();
+            e.returnValue = "";
+        };
+        window.addEventListener("beforeunload", warn);
+        return () => window.removeEventListener("beforeunload", warn);
+    }, []);
 
     // ── Opening a subject ───────────────────────────────────────────────────
     const openSubject = useCallback(async (name) => {
+        await flush();
         setSubject(name);
         setSelectedId(null); setReview(null); setConnectFrom(null);
-        const existing = allMaps.find(m => m.subject_name === name && m.is_subject_root);
+        const existing = allMapsRef.current.find(m => m.subject_name === name && m.is_subject_root);
         if (existing) {
             const m = rowToMap(existing);
-            setMap(m); setTrail([{ id: m.id, title: name }]); setOutline(toOutline(m.nodes));
+            setMap(m); setTrail([{ id: m.id, title: m.title || name }]); setOutline(toOutline(m.nodes));
             savedAt.current = dirty.current;
             return;
         }
@@ -271,30 +388,36 @@ export default function MindMaps({ user, subjects = [] }) {
             const m = { ...base, id: created?.id };
             setMap(m); setTrail([{ id: m.id, title: name }]); setOutline(toOutline(m.nodes));
             savedAt.current = dirty.current;
-            setAllMaps(prev => [{ ...mapToRow(base), id: created?.id }, ...prev]);
+            putRow({ ...mapToRow(base), id: created?.id });
         } catch {
             setMap(base); setTrail([{ id: null, title: name }]); setOutline(toOutline(base.nodes));
             toast({ title: "Working offline", description: "Couldn't reach your saved maps — this one won't persist yet." });
         }
-    }, [allMaps, toast]);
+    }, [flush, putRow, toast]);
 
     const openMapRow = useCallback((row, newTrail) => {
         const m = rowToMap(row);
         setMap(m); setTrail(newTrail); setOutline(toOutline(m.nodes));
         setSelectedId(null); setReview(null); setConnectFrom(null);
         savedAt.current = dirty.current;
+        setSaveState("idle");
     }, []);
 
     // ── Drilling a node into its own map ────────────────────────────────────
     const openNode = useCallback(async (id) => {
-        const node = map?.nodes.find(n => n.id === id);
+        const node = mapRef.current?.nodes.find(n => n.id === id);
         if (!node) return;
-        const existing = allMaps.find(m => m.drill_from_map_id === map.id && m.drill_from_node_id === id);
+        // Land the pending write before leaving, then read the list back from
+        // the ref — the state copy is still a render behind.
+        await flush();
+        const here = mapRef.current;
+        const existing = allMapsRef.current.find(
+            m => m.drill_from_map_id === here.id && m.drill_from_node_id === id);
         if (existing) { openMapRow(existing, [...trail, { id: existing.id, title: node.text }]); return; }
 
         const child = emptyMap(node.text, node.type || "idea");
         child.subject = subject;
-        child.drillFromMapId = map.id;
+        child.drillFromMapId = here.id;
         child.drillFromNodeId = id;
         // The node's note is the one piece of real content it already holds, so
         // it comes across rather than being stranded a level up.
@@ -304,18 +427,71 @@ export default function MindMaps({ user, subjects = [] }) {
         try {
             const created = await base44.entities.MindMap.create(mapToRow(child));
             const row = { ...mapToRow(child), id: created?.id };
-            setAllMaps(prev => [row, ...prev]);
+            putRow(row);
             openMapRow(row, [...trail, { id: created?.id, title: node.text }]);
         } catch (e) {
             toast({ title: "Couldn't open that node", description: e.message, variant: "destructive" });
         }
-    }, [map, allMaps, subject, trail, openMapRow, toast]);
+    }, [flush, putRow, subject, trail, openMapRow, toast]);
 
-    const goToTrail = useCallback((i) => {
+    const goToTrail = useCallback(async (i) => {
         const target = trail[i];
-        const row = allMaps.find(m => m.id === target.id);
-        if (row) openMapRow(row, trail.slice(0, i + 1));
-    }, [trail, allMaps, openMapRow]);
+        if (!target || i === trail.length - 1) return;
+        await flush();
+        const row = allMapsRef.current.find(m => m.id === target.id);
+        if (row) { openMapRow(row, trail.slice(0, i + 1)); return; }
+        // An unsaved map has no row to come back to. Saying so beats a
+        // breadcrumb that silently does nothing when you click it.
+        toast({ title: "That level isn't saved yet", description: "Give it a moment and try again." });
+    }, [trail, flush, openMapRow, toast]);
+
+    /** Up one layer — the move you make most, so it gets its own control. */
+    const goUp = useCallback(() => {
+        if (trail.length > 1) goToTrail(trail.length - 2);
+    }, [trail, goToTrail]);
+
+    const openLayer = useCallback(async (layer) => {
+        await flush();
+        const row = allMapsRef.current.find(m => m.id === layer.row.id) || layer.row;
+        openMapRow(row, [...trail, { id: row.id, title: layer.title }]);
+    }, [flush, trail, openMapRow]);
+
+    /** Every map beneath one, at any depth. A layer can have layers. */
+    const descendantMapIds = useCallback((id) => {
+        const out = [];
+        const walk = (parentId) => {
+            for (const r of allMapsRef.current) {
+                if (r.drill_from_map_id === parentId) { out.push(r.id); walk(r.id); }
+            }
+        };
+        walk(id);
+        return out;
+    }, []);
+
+    /**
+     * Remove a nested map and everything under it.
+     *
+     * There was no way to do this at all. Open a node as a map by mistake and
+     * it was permanent — which also made deleting the node dangerous, because
+     * the map it anchored stayed in the database with nothing pointing at it.
+     */
+    const deleteLayer = useCallback(async (layer) => {
+        const ids = [layer.row.id, ...descendantMapIds(layer.row.id)];
+        setBusy(true);
+        try {
+            for (const id of ids) await base44.entities.MindMap.delete(id);
+            putRows(allMapsRef.current.filter(r => !ids.includes(r.id)));
+            setConfirmLayer(null);
+            toast({
+                title: `Removed "${layer.title}"`,
+                description: ids.length > 1
+                    ? `That map and the ${ids.length - 1} inside it are gone. The node stays.`
+                    : "The node stays — only the map behind it is gone.",
+            });
+        } catch (e) {
+            toast({ title: "Couldn't remove that map", description: e.message, variant: "destructive" });
+        } finally { setBusy(false); }
+    }, [descendantMapIds, putRows, toast]);
 
     // ── Node operations ─────────────────────────────────────────────────────
     const addNode = useCallback((type, at) => {
@@ -326,6 +502,10 @@ export default function MindMaps({ user, subjects = [] }) {
             const spot = at || freeSpotNear(m.nodes, parent);
             const n = newNode(TYPE_BY_ID[type]?.label || "New node", { parent, type, x: spot.x, y: spot.y });
             setSelectedId(n.id);
+            // Opens its name field, same as a keyboard-added node. Without it a
+            // palette click leaves a box called "Cause" that you then have to
+            // find, click and rename — three actions for the one you wanted.
+            setRenamingId(n.id);
             return { ...m, nodes: [...m.nodes, n] };
         });
     }, [edit, selectedId]);
@@ -347,16 +527,40 @@ export default function MindMaps({ user, subjects = [] }) {
     }, [edit]);
 
     const deleteById = useCallback((id) => {
-        edit(m => {
-            const n = m.nodes.find(x => x.id === id);
-            if (!n || !n.parent) return m;      // never delete the root
-            return removeNode(m, id);
-        });
+        const m = mapRef.current;
+        const n = m?.nodes.find(x => x.id === id);
+        if (!n || !n.parent) return;            // never delete the root
+        // Deleting a node that opens into a map used to leave that map in the
+        // database with nothing pointing at it — invisible, unreachable, and
+        // still counted. Say so, and point at the control that removes it.
+        const doomed = subtreeIds(m.nodes, id);
+        const anchored = doomed.filter(x => childMapNodeIds.has(x));
+        if (anchored.length) {
+            const name = m.nodes.find(x => x.id === anchored[0])?.text || "It";
+            toast({
+                title: "That node opens into a map",
+                description: `"${name}" has a map of its own. Remove it under "Inside this map" first — otherwise it'd be left with nothing pointing at it.`,
+            });
+            return;
+        }
+        edit(mm => removeNode(mm, id));
         setSelectedId(null);
-    }, [edit]);
+    }, [edit, childMapNodeIds, toast]);
 
     const updateNode = useCallback((id, patch) => {
-        edit(m => ({ ...m, nodes: m.nodes.map(n => (n.id === id ? { ...n, ...patch } : n)) }));
+        edit(m => {
+            const nodes = m.nodes.map(n => (n.id === id ? { ...n, ...patch } : n));
+            const isRoot = !m.nodes.find(n => n.id === id)?.parent;
+            // Renaming the root renames the MAP. It's the only way to rename
+            // one, and without this the breadcrumb, the layer panel and the
+            // subject list all keep showing the name you just changed. The old
+            // title is kept while the field is empty mid-edit rather than
+            // letting the map briefly become "".
+            if (!isRoot || patch.text == null) return { ...m, nodes };
+            const title = patch.text.trim() ? patch.text : m.title;
+            setTrail(t => (t.length ? t.map((x, i) => (i === t.length - 1 ? { ...x, title } : x)) : t));
+            return { ...m, nodes, title };
+        });
     }, [edit]);
 
     const moveNodes = useCallback((moves) => {
@@ -381,11 +585,11 @@ export default function MindMaps({ user, subjects = [] }) {
         toast({ title: "Linked", description: "Now say what the link IS — an unlabelled arrow isn't worth revising." });
     }, [edit, toast]);
 
+    // The inspector's bin and the Delete key are the same action, so they go
+    // through the same guard rather than one of them quietly skipping it.
     const deleteSelected = useCallback(() => {
-        if (!selected || !selected.parent) return;   // never delete the root
-        edit(m => removeNode(m, selected.id));
-        setSelectedId(null);
-    }, [selected, edit]);
+        if (selected) deleteById(selected.id);
+    }, [selected, deleteById]);
 
     const retidy = useCallback(() => {
         edit(m => ({ ...m, nodes: m.nodes.map(({ x: _x, y: _y, pinned: _p, ...n }) => n) }));
@@ -404,22 +608,25 @@ export default function MindMaps({ user, subjects = [] }) {
             toast({ title: "Not enough to recall yet", description: "Build the map out a bit first." });
             return;
         }
+        // The map being recalled against has to be on disk before we walk away
+        // from it — that's the whole promise of "your real map is untouched".
+        await flush();
         const attempt = emptyMap(map.title);
         attempt.subject = map.subject;
         attempt.parentMapId = map.id;
         attempt.drillFromMapId = map.drillFromMapId;
         attempt.drillFromNodeId = map.drillFromNodeId;
         try {
-            const created = await base44.entities.MindMap.create({ ...mapToRow(attempt), parent_map_id: map.id });
-            const row = { ...mapToRow(attempt), parent_map_id: map.id, id: created?.id };
-            setAllMaps(prev => [row, ...prev]);
+            const created = await base44.entities.MindMap.create(mapToRow(attempt));
+            const row = { ...mapToRow(attempt), id: created?.id };
+            putRow(row);
             setRecallOf({ id: map.id, title: map.title, nodes: map.nodes, trail });
             openMapRow(row, [...trail, { id: created?.id, title: "From memory" }]);
             toast({ title: "Notes shut", description: `Rebuild ${map.title} from memory. Your real map is untouched.` });
         } catch (e) {
             toast({ title: "Couldn't start", description: e.message, variant: "destructive" });
         }
-    }, [map, trail, openMapRow, toast]);
+    }, [map, trail, flush, putRow, openMapRow, toast]);
 
     const finishRecall = useCallback(() => {
         if (!recallOf || !map) return;
@@ -429,13 +636,21 @@ export default function MindMaps({ user, subjects = [] }) {
         if (map.id) base44.entities.MindMap.update(map.id, { retention_score: d.retention }).catch(() => {});
     }, [recallOf, map, edit]);
 
-    const leaveRecall = useCallback(() => {
-        const row = allMaps.find(m => m.id === recallOf?.id);
+    const leaveRecall = useCallback(async () => {
+        // The attempt is work too — it's what the next comparison reads.
+        await flush();
+        const row = allMapsRef.current.find(m => m.id === recallOf?.id);
+        const back = recallOf?.trail;
         setDiff(null); setRecallOf(null);
-        if (row) openMapRow(row, recallOf.trail);
-    }, [allMaps, recallOf, openMapRow]);
+        if (row) openMapRow(row, back);
+    }, [flush, recallOf, openMapRow]);
 
     // ── Palette drag-and-drop ───────────────────────────────────────────────
+    // A chip is both a button and a drag handle, which is why this needs a
+    // latch: pointerdown arms the drag, pointerup adds the node, and then the
+    // browser's own click event fires and the onClick handler adds a SECOND
+    // one. Every palette click was making two nodes.
+    const paletteHandled = useRef(false);
     useEffect(() => {
         if (!dragType) return;
         const move = (e) => setDragAt({ x: e.clientX, y: e.clientY });
@@ -445,6 +660,7 @@ export default function MindMaps({ user, subjects = [] }) {
             const overCanvas = !!el?.closest("[data-mm-canvas]");
             if (api && overCanvas) addNode(dragType, api.clientToSvg(e.clientX, e.clientY));
             else addNode(dragType);          // a tap on the chip still adds one
+            paletteHandled.current = true;
             setDragType(null); setDragAt(null);
         };
         window.addEventListener("pointermove", move);
@@ -452,12 +668,42 @@ export default function MindMaps({ user, subjects = [] }) {
         return () => { window.removeEventListener("pointermove", move); window.removeEventListener("pointerup", up); };
     }, [dragType, addNode]);
 
+    /** Keyboard activation only — the pointer path already added one. */
+    const paletteClick = useCallback((id) => {
+        if (paletteHandled.current) { paletteHandled.current = false; return; }
+        addNode(id);
+    }, [addNode]);
+
     useEffect(() => {
         if (!connectFrom) return;
         const esc = (e) => { if (e.key === "Escape") setConnectFrom(null); };
         window.addEventListener("keydown", esc);
         return () => window.removeEventListener("keydown", esc);
     }, [connectFrom]);
+
+    // Escape leaves the builder, but only once it has nothing more urgent to
+    // do — cancelling a link you're drawing comes first, then clearing the
+    // selection, which the canvas owns.
+    useEffect(() => {
+        if (!builder) return;
+        document.body.style.overflow = "hidden";
+        const esc = (e) => {
+            if (e.key !== "Escape" || connectFrom || selectedId) return;
+            setBuilder(false);
+        };
+        window.addEventListener("keydown", esc);
+        return () => {
+            document.body.style.overflow = "";
+            window.removeEventListener("keydown", esc);
+        };
+    }, [builder, connectFrom, selectedId]);
+
+    // Entering or leaving full screen changes how much room the map has, so it
+    // gets re-framed. Two frames because the layout has to settle first.
+    useEffect(() => {
+        const t = requestAnimationFrame(() => requestAnimationFrame(() => canvasApi.current?.fit()));
+        return () => cancelAnimationFrame(t);
+    }, [builder]);
 
     // ── Outline mode ────────────────────────────────────────────────────────
     const applyOutline = useCallback((text) => {
@@ -558,9 +804,21 @@ export default function MindMaps({ user, subjects = [] }) {
 
     // ── Subject picker ──────────────────────────────────────────────────────
     if (!subject) {
-        const countFor = (name) => allMaps.filter(m => m.subject_name === name)
-            .reduce((s, m) => s + (m.nodes?.length || 0), 0);
-        const mapsFor = (name) => allMaps.filter(m => m.subject_name === name).length;
+        const forSubject = (name) => allMaps.filter(m => m.subject_name === name);
+        const countFor = (name) => forSubject(name).reduce((s, m) => s + (m.nodes?.length || 0), 0);
+        const mapsFor = (name) => forSubject(name).length;
+        // "When did I last touch this" is the thing that decides which subject
+        // to open, and the card was three rows of nothing without it.
+        const lastFor = (name) => {
+            const t = forSubject(name)
+                .map(m => Date.parse(m.updated_date || m.created_date || ""))
+                .filter(Number.isFinite);
+            if (!t.length) return null;
+            const days = Math.floor((Date.now() - Math.max(...t)) / 86400000);
+            return days <= 0 ? "today" : days === 1 ? "yesterday"
+                : days < 14 ? `${days} days ago`
+                    : days < 60 ? `${Math.round(days / 7)} weeks ago` : `${Math.round(days / 30)} months ago`;
+        };
         return (
             <div className="space-y-5">
                 <div className="rounded-3xl bg-gradient-to-br from-map/10 to-transparent border-2 border-map/20 p-6">
@@ -592,18 +850,33 @@ export default function MindMaps({ user, subjects = [] }) {
                     <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
                         {subjects.map(s => {
                             const n = countFor(s.subject_name);
+                            const maps = mapsFor(s.subject_name);
+                            const last = lastFor(s.subject_name);
                             return (
                                 <button key={s.subject_name} onClick={() => openSubject(s.subject_name)}
                                     data-subject={s.subject_name}
                                     className="text-left card-soft p-5 border-2 border-border hover:border-map/50 hover:shadow-soft transition-all">
-                                    <div className="flex items-center justify-between">
-                                        <p className="font-display font-extrabold text-foreground">{s.subject_name}</p>
-                                        <ChevronRight className="w-4 h-4 text-muted-foreground" />
+                                    <div className="flex items-center justify-between gap-2">
+                                        <p className="font-display font-extrabold text-foreground truncate">{s.subject_name}</p>
+                                        <ChevronRight className="w-4 h-4 text-muted-foreground flex-shrink-0" />
                                     </div>
-                                    <p className="text-xs text-muted-foreground mt-1">
-                                        {n === 0 ? "Nothing mapped yet — start it"
-                                            : `${n} node${n === 1 ? "" : "s"} across ${mapsFor(s.subject_name)} map${mapsFor(s.subject_name) === 1 ? "" : "s"}`}
-                                    </p>
+                                    {n === 0 ? (
+                                        <p className="text-xs text-muted-foreground mt-1">Nothing mapped yet — start it</p>
+                                    ) : (
+                                        <>
+                                            <div className="flex items-baseline gap-3 mt-2">
+                                                <div>
+                                                    <p className="font-display font-black text-xl leading-none text-foreground tabular-nums">{n}</p>
+                                                    <p className="stat-label">nodes</p>
+                                                </div>
+                                                <div>
+                                                    <p className="font-display font-black text-xl leading-none text-foreground tabular-nums">{maps}</p>
+                                                    <p className="stat-label">layer{maps === 1 ? "" : "s"}</p>
+                                                </div>
+                                            </div>
+                                            {last && <p className="text-[11px] text-muted-foreground mt-2">Last worked on {last}</p>}
+                                        </>
+                                    )}
                                 </button>
                             );
                         })}
@@ -619,27 +892,51 @@ export default function MindMaps({ user, subjects = [] }) {
     const selTone = TONE_CLASS[TYPE_BY_ID[selected?.type]?.tone] || TONE_CLASS.map;
 
     return (
-        <div className="space-y-3">
+        // Full-screen building mode. It carries the whole editor — breadcrumb,
+        // palette, canvas, inspector — because a full-screen CANVAS on its own
+        // leaves behind the two panels you build with, which made it a viewing
+        // mode wearing a builder's name.
+        <div data-builder={builder || undefined}
+            className={builder
+                ? "fixed inset-0 z-50 bg-background overflow-y-auto p-3 sm:p-4 space-y-3"
+                : "space-y-3"}>
             {/* ── Breadcrumb ─────────────────────────────────────────────── */}
             <div className="flex items-center gap-2 flex-wrap">
-                <button onClick={() => { setSubject(null); setMap(null); setTrail([]); }}
-                    className="inline-flex items-center gap-1.5 text-sm font-bold text-muted-foreground hover:text-foreground transition-colors">
-                    <ArrowLeft className="w-4 h-4" /> Subjects
-                </button>
+                {trail.length > 1 ? (
+                    <button onClick={goUp} aria-label="Up one layer"
+                        className="inline-flex items-center gap-1.5 text-sm font-bold text-muted-foreground hover:text-foreground transition-colors">
+                        <ArrowLeft className="w-4 h-4" /> Up
+                    </button>
+                ) : (
+                    <button onClick={async () => { await flush(); setSubject(null); setMap(null); setTrail([]); setBuilder(false); }}
+                        className="inline-flex items-center gap-1.5 text-sm font-bold text-muted-foreground hover:text-foreground transition-colors">
+                        <ArrowLeft className="w-4 h-4" /> Subjects
+                    </button>
+                )}
                 <span className="text-muted-foreground/40">/</span>
-                {trail.map((t, i) => (
-                    <span key={t.id || i} className="inline-flex items-center gap-2 min-w-0">
-                        {i > 0 && <ChevronRight className="w-3.5 h-3.5 text-muted-foreground/40 flex-shrink-0" />}
-                        <button onClick={() => goToTrail(i)} disabled={i === trail.length - 1}
-                            className={`text-sm truncate max-w-[10rem] ${i === trail.length - 1
-                                ? "font-extrabold text-foreground" : "font-bold text-muted-foreground hover:text-foreground"}`}>
-                            {t.title}
-                        </button>
-                    </span>
+                {/* Deep trails collapse in the middle rather than wrapping onto
+                    a third line — where you are and where you came from are the
+                    two ends, and those are what stay. */}
+                {(trail.length > 4 ? [trail[0], { ellipsis: true }, ...trail.slice(-2)] : trail).map((t, i) => (
+                    t.ellipsis ? (
+                        <span key="gap" className="inline-flex items-center gap-2">
+                            <ChevronRight className="w-3.5 h-3.5 text-muted-foreground/40" />
+                            <span className="text-sm font-bold text-muted-foreground/60">…</span>
+                        </span>
+                    ) : (
+                        <span key={t.id || i} className="inline-flex items-center gap-2 min-w-0">
+                            {i > 0 && <ChevronRight className="w-3.5 h-3.5 text-muted-foreground/40 flex-shrink-0" />}
+                            <button onClick={() => goToTrail(trail.indexOf(t))} disabled={t === trail[trail.length - 1]}
+                                data-crumb={t.title}
+                                className={`text-sm truncate max-w-[10rem] ${t === trail[trail.length - 1]
+                                    ? "font-extrabold text-foreground" : "font-bold text-muted-foreground hover:text-foreground"}`}>
+                                {t.title}
+                            </button>
+                        </span>
+                    )
                 ))}
                 <span className="ml-auto flex items-center gap-2">
-                    {saving && <span className="text-[11px] text-muted-foreground inline-flex items-center gap-1">
-                        <Loader2 className="w-3 h-3 animate-spin" /> Saving</span>}
+                    <SaveState state={saveState} onRetry={save} />
                     <div className="inline-flex rounded-xl border-2 border-border overflow-hidden">
                         {[["canvas", MousePointer2, "Canvas"], ["outline", ListTree, "Outline"]].map(([id, I, label]) => (
                             <button key={id} onClick={() => { setMode(id); if (id === "outline") setOutline(toOutline(map.nodes)); }}
@@ -649,6 +946,14 @@ export default function MindMaps({ user, subjects = [] }) {
                             </button>
                         ))}
                     </div>
+                    <button onClick={() => setBuilder(b => !b)} data-builder-toggle
+                        aria-pressed={builder}
+                        title={builder ? "Leave full screen (Esc)" : "Build full screen"}
+                        className={`inline-flex items-center gap-1.5 rounded-xl border-2 px-2.5 py-1.5 text-xs font-bold transition-colors ${
+                            builder ? "border-map bg-map text-white" : "border-border text-muted-foreground hover:text-foreground"}`}>
+                        {builder ? <Minimize2 className="w-3.5 h-3.5" /> : <Maximize2 className="w-3.5 h-3.5" />}
+                        <span className="hidden sm:inline">{builder ? "Exit" : "Full screen"}</span>
+                    </button>
                 </span>
             </div>
 
@@ -714,11 +1019,15 @@ export default function MindMaps({ user, subjects = [] }) {
                     const I = TYPE_ICON[t.id];
                     const c = TONE_CLASS[t.tone];
                     return (
-                        <button key={t.id} data-palette={t.id}
+                        <button key={t.id} data-palette={t.id} data-palette-tone={t.tone}
                             onPointerDown={() => { setDragType(t.id); }}
-                            onClick={() => addNode(t.id)}
+                            onClick={() => paletteClick(t.id)}
                             title={`${t.hint} — click to add under the selected node, or drag onto the canvas`}
-                            className={`flex-shrink-0 flex items-center gap-1.5 rounded-xl border-2 ${c.border} ${c.bg} px-2.5 py-1.5 hover:shadow-soft transition-all`}>
+                            className={`flex-shrink-0 flex items-center gap-1.5 rounded-xl border-2 ${c.border} ${c.bg} pl-1.5 pr-2.5 py-1.5 hover:shadow-soft transition-all`}>
+                            {/* The same solid bar the node draws down its left
+                                edge, so this strip doubles as the legend rather
+                                than needing one of its own. */}
+                            <span className={`w-1.5 h-4 rounded-full flex-shrink-0 ${c.dot}`} />
                             <I className={`w-3.5 h-3.5 flex-shrink-0 ${c.text}`} />
                             <span className="text-xs font-bold text-foreground whitespace-nowrap">{t.label}</span>
                         </button>
@@ -742,6 +1051,8 @@ export default function MindMaps({ user, subjects = [] }) {
                                 onOpenNode={openNode}
                                 connectFrom={connectFrom}
                                 editable expandable
+                                full={builder}
+                                onToggleFull={setBuilder}
                                 onAddChild={(id) => addRelated(id, "child")}
                                 onAddSibling={(id) => addRelated(id, "sibling")}
                                 onDelete={deleteById}
@@ -749,7 +1060,9 @@ export default function MindMaps({ user, subjects = [] }) {
                                 /* The canvas is the feature; it was getting 28%
                                    of the page. Fills the viewport now, with a
                                    floor so a short window still shows a map. */
-                                className="h-[calc(100vh-340px)] min-h-[440px]"
+                                className={builder
+                                    ? "h-[calc(100vh-210px)] min-h-[420px]"
+                                    : "h-[calc(100vh-340px)] min-h-[440px]"}
                             />
                         </div>
                     ) : (
@@ -801,6 +1114,53 @@ export default function MindMaps({ user, subjects = [] }) {
 
                 {/* ── Inspector ──────────────────────────────────────────── */}
                 <div className="space-y-3">
+                    {/* ── The layer below ────────────────────────────────
+                        Drilling in was easy and getting back out was a
+                        breadcrumb; knowing what was down there at all needed
+                        you to remember. This lists it, sized, so the nesting
+                        is navigable rather than just possible. */}
+                    {layers.length > 0 && (
+                        <div className="card-soft p-4 border-2 border-border space-y-2">
+                            <p className="stat-label flex items-center gap-1.5">
+                                <Layers className="w-3.5 h-3.5" /> Inside this map
+                            </p>
+                            <ul className="space-y-1">
+                                {layers.map(l => (
+                                    <li key={l.row.id} className="flex items-center gap-1">
+                                        <button onClick={() => openLayer(l)} data-layer={l.title}
+                                            className={`min-w-0 flex-1 text-left flex items-center gap-2 rounded-xl border-2 px-2.5 py-1.5 transition-colors ${
+                                                selectedId === l.nodeId
+                                                    ? "border-map/50 bg-map/5" : "border-border hover:border-map/40"}`}>
+                                            <CornerDownRight className="w-3.5 h-3.5 text-muted-foreground flex-shrink-0" />
+                                            <span className="text-xs font-bold text-foreground truncate flex-1">{l.title}</span>
+                                            <span className="text-[11px] text-muted-foreground tabular-nums flex-shrink-0">
+                                                {l.count === 0 ? "empty" : l.count}
+                                            </span>
+                                        </button>
+                                        {/* Two clicks, not a modal. Removing a map is
+                                            worth a pause; it isn't worth a dialog. */}
+                                        <button
+                                            onClick={() => (confirmLayer === l.row.id ? deleteLayer(l) : setConfirmLayer(l.row.id))}
+                                            onBlur={() => setConfirmLayer(c => (c === l.row.id ? null : c))}
+                                            disabled={busy}
+                                            data-remove-layer={l.title}
+                                            aria-label={confirmLayer === l.row.id ? `Confirm removing ${l.title}` : `Remove the map behind ${l.title}`}
+                                            className={`flex-shrink-0 rounded-lg px-1.5 py-1.5 text-[10px] font-bold transition-colors ${
+                                                confirmLayer === l.row.id
+                                                    ? "bg-streak text-white"
+                                                    : "text-muted-foreground hover:text-streak"}`}>
+                                            {confirmLayer === l.row.id ? "Sure?" : <Trash2 className="w-3.5 h-3.5" />}
+                                        </button>
+                                    </li>
+                                ))}
+                            </ul>
+                            <p className="text-[10px] text-muted-foreground leading-snug">
+                                Any node can become one of these — open it and it gets a map of its own.
+                                Removing one here leaves the node itself alone.
+                            </p>
+                        </div>
+                    )}
+
                     {/* No AnimatePresence here on purpose. `mode="wait"` keeps
                         the PREVIOUS node's panel mounted while it animates out,
                         so clicking a new node shows the old node's editable

@@ -47,6 +47,9 @@ module.exports = {
         xp: 'hsl(var(--xp))',
         streak: 'hsl(var(--streak))',
         map: 'hsl(var(--map))',
+        // Mind-map node types: eight types need eight colours.
+        berry: 'hsl(var(--berry))',
+        vine: 'hsl(var(--vine))',
         success: 'hsl(var(--success))',
         destructive: {
           DEFAULT: 'hsl(var(--destructive))',
