@@ -33,6 +33,8 @@ import { isPremium } from "@/lib/tierAccess";
 import { base44 } from "@/api/base44Client";
 import { createPageUrl } from "@/utils";
 import { dealHand, answer, openers } from "@/lib/aceGuide";
+import { readsAsDismissal, readsAsRecall, DISMISS, pick } from "@/lib/aceVoice";
+import { turnOff, turnOn } from "@/lib/aceBuddy";
 import { deck, deckBySection, STATE } from "@/lib/aceDeck";
 import { SECTIONS, BY_ID, PAGES, featuresForPage, readiness } from "@/lib/aceKnowledge";
 
@@ -174,6 +176,21 @@ export default function AceCompanion({ userProfile }) {
         setError(null);
         setInput("");
         const asked = [...messages, { role: "user", content }];
+
+        // "Go away" is a sentence, not just a button. Someone who types it and
+        // gets a feature lookup back has been ignored by the one thing in the
+        // app whose whole job is listening — so it's checked before anything
+        // else, and it actually does what it says.
+        if (readsAsDismissal(content)) {
+            turnOff();
+            setMessages([...asked, { role: "ace", dismissed: true }]);
+            return;
+        }
+        if (readsAsRecall(content)) {
+            turnOn();
+            setMessages([...asked, { role: "ace", recalled: true }]);
+            return;
+        }
 
         // The guide gets first refusal on everything. It's instant, it's free,
         // and it cannot invent a feature — so a question it can answer should
@@ -468,6 +485,26 @@ function Turn({ m, hand, deck: myDeck, streaming, onGo, onUpgrade }) {
     if (m.pageTour) return <PageTour page={m.pageTour} onGo={onGo} />;
     if (m.deck) return <Deck d={myDeck} onGo={onGo} />;
 
+    if (m.dismissed) {
+        return (
+            <AceSays mood="sleepy">
+                <p className="text-sm text-foreground leading-snug">
+                    {pick(DISMISS.off, "chat")}
+                </p>
+                <p className="text-[11px] text-muted-foreground leading-snug mt-1.5">
+                    No more pop-ups. Say &ldquo;come back&rdquo; whenever.
+                </p>
+            </AceSays>
+        );
+    }
+    if (m.recalled) {
+        return (
+            <AceSays mood="excited">
+                <p className="text-sm text-foreground leading-snug">{pick(DISMISS.back, "chat")}</p>
+            </AceSays>
+        );
+    }
+
     if (m.upgrade) {
         return (
             <AceSays>
@@ -665,10 +702,10 @@ function Tour({ onGo }) {
     );
 }
 
-function AceSays({ children }) {
+function AceSays({ children, mood = "idle" }) {
     return (
         <div className="flex gap-2">
-            <SpadeMark className="w-7 h-7 flex-shrink-0 mt-0.5" />
+            <SpadeMark className="w-7 h-7 flex-shrink-0 mt-0.5" mood={mood} />
             <div className="min-w-0 flex-1 rounded-2xl rounded-tl-md bg-secondary px-3.5 py-2.5 text-sm text-foreground">
                 {children}
             </div>

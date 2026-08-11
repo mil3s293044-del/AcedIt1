@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useMemo } from "react";
 import { base44 } from "@/api/base44Client";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion } from "framer-motion";
 import { BookOpen, Target, ArrowRight,
     GraduationCap, Zap, Flame, Brain, FileQuestion,
     Sparkles, Trophy, Play, Layers, Timer, Users,
@@ -12,7 +12,6 @@ import { format, startOfWeek, differenceInDays, parseISO, isToday, isYesterday }
 import { createPageUrl } from "@/utils";
 import { Link } from "react-router-dom";
 import HelpButton from "@/components/shared/HelpButton";
-import StudyIntentModal from "@/components/dashboard/StudyIntentModal";
 import { reconcileUserXP } from "@/lib/reconcileXP";
 import { getStreakMultiplier as getStreakMultiplierValue } from "@/components/shared/streakHelpers";
 import RetentionCard from "@/components/dashboard/RetentionCard";
@@ -359,7 +358,6 @@ export default function Dashboard() {
     const [leaderboard, setLeaderboard] = useState([]);
     const [isLoading, setIsLoading] = useState(true);
     const [todayXP, setTodayXP] = useState(0);
-    const [showStudyIntent, setShowStudyIntent] = useState(false);
 
     const loadData = useCallback(async (userEmail) => {
         try {
@@ -452,11 +450,6 @@ export default function Dashboard() {
                 const currentUser = await base44.auth.me();
                 setUser(currentUser);
                 await loadData(currentUser.email);
-                const intentKey = `studyIntent_${format(new Date(), 'yyyy-MM-dd')}_${currentUser.email}`;
-                if (!sessionStorage.getItem(intentKey)) {
-                    setShowStudyIntent(true);
-                    sessionStorage.setItem(intentKey, '1');
-                }
             } catch {
                 base44.auth.redirectToLogin(window.location.pathname);
             }
@@ -628,6 +621,19 @@ export default function Dashboard() {
         ? userProfile.extra.daily_intention.text
         : null;
 
+    // Wired to Ace: when he asks "what's the plan?" and you answer, that
+    // answer arrives here. Same field the retired three-choice modal wrote, so
+    // the coach line, today's move and the ATAR's planning component all carry
+    // on without needing to know who asked the question.
+    useEffect(() => {
+        const onPlan = (e) => {
+            const mode = e?.detail?.mode;
+            if (mode) saveIntentRef.current?.({ mode, duration: null });
+        };
+        window.addEventListener("ace:plan", onPlan);
+        return () => window.removeEventListener("ace:plan", onPlan);
+    }, []);
+
     const saveIntent = useCallback(async ({ mode, duration }) => {
         if (!userProfile?.id) return;
         const extra = userProfile.extra || {};
@@ -647,6 +653,10 @@ export default function Dashboard() {
             console.error("Failed to save study intent:", e);
         }
     }, [userProfile, todayKey]);
+    // A ref so the listener above never captures a stale closure over the
+    // profile — it mounts once and lives for the whole page.
+    const saveIntentRef = useRef(saveIntent);
+    useEffect(() => { saveIntentRef.current = saveIntent; }, [saveIntent]);
 
     // What today is most likely for, in order of how strong the evidence is:
     // a deadline beats a plan, a plan beats a habit, and a habit beats nothing.
@@ -678,6 +688,15 @@ export default function Dashboard() {
         }
         return null;
     }, [nextDeadline, plannerReminders, userProfile, todayKey]);
+
+    // Handed to Ace so he can lead with it rather than asking cold. This was
+    // computed for the retired modal and is the best guess the app has about
+    // what today is actually for — throwing it away with the modal would have
+    // made the new question dumber than the old one.
+    useEffect(() => {
+        if (!intentSuggestion) return;
+        window.dispatchEvent(new CustomEvent("ace:suggest", { detail: intentSuggestion }));
+    }, [intentSuggestion]);
 
     const coachLine = getCoachLine({
         name: firstName,
@@ -753,17 +772,6 @@ export default function Dashboard() {
 
     return (
         <div className="min-h-screen bg-background">
-            <AnimatePresence>
-                {showStudyIntent && (
-                    <StudyIntentModal
-                        firstName={firstName}
-                        onDismiss={() => setShowStudyIntent(false)}
-                        onPick={saveIntent}
-                        suggested={intentSuggestion}
-                    />
-                )}
-            </AnimatePresence>
-
             <div className="w-full px-4 lg:px-8 py-6 lg:py-10 max-w-[1600px] mx-auto space-y-8 lg:space-y-10">
 
                 {/* ── COACH STRIP ─────────────────────────────────────── */}

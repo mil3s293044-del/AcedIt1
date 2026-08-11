@@ -1,0 +1,237 @@
+/**
+ * aceVoice — what Ace actually says, and how he says it.
+ *
+ * Split from aceKnowledge on purpose, and the split is the important bit.
+ * A feature's `what` and `when` are reference text: a student reads them to
+ * decide something, and a bubbly voice there would be noise in the way of an
+ * answer. THIS file is Ace's own chatter — greetings, page reactions,
+ * encouragement, the thing he says when you tell him to get lost. That can be
+ * warm and daft, because nobody is making a decision off it.
+ *
+ * So: the definitions stay plain, and the personality lives out here. Getting
+ * that the wrong way round gives you an assistant who's cute about the wrong
+ * things and vague about the things you needed.
+ *
+ * Voice rules, from what the app already sounds like:
+ *   Australian, seventeen-ish, a friend rather than a teacher.
+ *   Short. One or two sentences, and never a paragraph.
+ *   Never scolds. Never guilt. A missed day is a fact, not a failing.
+ *   No emoji spam — one, occasionally, when it's actually earned.
+ */
+
+/**
+ * Deterministic pick.
+ *
+ * A line that changes on every re-render makes the whole thing feel unstable,
+ * and it makes the tests unrunnable. Seeded by whatever the caller is keyed on
+ * — usually page + day — so Ace says the same thing for the whole time you're
+ * standing there, and something different tomorrow.
+ */
+export function pick(list, seed = "") {
+    if (!list?.length) return null;
+    let h = 2166136261;
+    for (let i = 0; i < String(seed).length; i++) {
+        h ^= String(seed).charCodeAt(i);
+        h = Math.imul(h, 16777619);
+    }
+    return list[Math.abs(h) % list.length];
+}
+
+/**
+ * What he opens with, by time of day.
+ *
+ * `{}` is where a first name goes if we have one, and the marker is explicit
+ * because inserting it by rule produced "Morning! Miles, Right — what's the
+ * plan?". A name dropped into a sentence at a guessed position reads worse
+ * than no name at all.
+ */
+export const HELLO = {
+    morning: [
+        "Morning{}! Right — what's the plan?",
+        "Early start{}, I like it. What are we doing?",
+        "Morning{}. Give me the plan and I'll keep up.",
+    ],
+    afternoon: [
+        "Afternoon{}! What's the plan today?",
+        "Right{}, what are we tackling?",
+        "Hey{}. What's today for?",
+    ],
+    evening: [
+        "Evening{}! What's left to do?",
+        "Hey{}. What are we getting through tonight?",
+        "Evening{}. What's the plan?",
+    ],
+    late: [
+        "Late one{}. What are we doing — and be honest.",
+        "Still up{}? Alright. What's the plan?",
+        "Late session{}. Let's make it a short one.",
+    ],
+};
+
+export function timeBand(hour = new Date().getHours()) {
+    if (hour >= 23 || hour < 5) return "late";
+    if (hour < 12) return "morning";
+    if (hour < 17) return "afternoon";
+    return "evening";
+}
+
+/**
+ * The plans he offers.
+ *
+ * `mode` maps onto the intent the Dashboard already stores, so picking one
+ * here writes the same field the old three-choice modal did — this is a new
+ * front on an existing thing, not a second parallel one.
+ */
+export const PLANS = [
+    {
+        id: "cram", mode: "cramming", label: "Something's due",
+        blurb: "SAC or exam coming and I need to cover ground",
+        ace: "Right, no messing about. I'll point you at what's actually going to be on it.",
+        mood: "alert",
+    },
+    {
+        id: "homework", mode: "homework", label: "Get work done",
+        blurb: "Assignments and tasks to finish",
+        ace: "Heads down then. I'll keep out of your way and just flag the useful stuff.",
+        mood: "thinking",
+    },
+    {
+        id: "keep", mode: "free", label: "Keep it ticking",
+        blurb: "Nothing urgent, just don't want to fall behind",
+        ace: "Love this one. Small and often beats a panic later — let's keep the streak honest.",
+        mood: "happy",
+    },
+    {
+        id: "lost", mode: "free", label: "No idea",
+        blurb: "Tell me what I should be doing",
+        ace: "Perfect, that's my favourite question. Give me a second and I'll read your week.",
+        mood: "excited",
+    },
+];
+
+export const PLAN_BY_ID = Object.fromEntries(PLANS.map(p => [p.id, p]));
+
+/**
+ * What he says when you arrive somewhere, tuned to the plan you gave him.
+ *
+ * Deliberately thin. He is not narrating the app — the help drawer and the
+ * tips do that properly. This is one friendly line so it feels like someone
+ * came with you, and then he shuts up.
+ */
+export const ON_PAGE = {
+    Study: {
+        cram: ["Six ways in here. For a SAC that's close, Blurting finds holes fastest.",
+               "Pick Blurting or Revision Mode — both show you what you haven't got."],
+        homework: ["Pomodoro if you're stalling. It's the one that gets people started.",
+                   "Timer's the move when the task is big and boring."],
+        keep: ["Spaced Repetition is the low-effort one. Ten minutes here goes a long way.",
+               "Cards first — it's the cheapest thing you can do today."],
+        lost: ["Not sure which? Spaced Repetition if you've got cards, Pomodoro if you haven't.",
+               "Start with the timer. Deciding is harder than doing."],
+    },
+    Goals: {
+        cram: ["Get the SAC on here and everything else plans itself around it."],
+        homework: ["Block the work out. Vague plans are the ones that don't happen."],
+        keep: ["A planned week beats a motivated one. Ask me to build it if you like."],
+        lost: ["Try 'Plan this week for me' — it reads what you've logged and shows its working."],
+    },
+    Analytics: {
+        cram: ["Weak spots first. That's where the marks are hiding."],
+        homework: ["Have a quick look then get back to it — this one's for later."],
+        keep: ["Cognition tab is the interesting one. It's how you're learning, not how much."],
+        lost: ["Start with weak topics. It's the only page here that tells you what to DO."],
+    },
+    Quizzes: {
+        cram: ["Exam-shaped questions. Closest thing to the real feel."],
+        homework: ["Quick one now beats a long one never."],
+        keep: ["Make one from your notes and future-you gets a free session."],
+        lost: ["Generate one from a file you already have. Takes about a minute."],
+    },
+    Subjects: {
+        cram: ["Put the date in. Half of what I can do for you is dark until I know when things are due."],
+        homework: ["Dates in here, and the planner stops guessing."],
+        keep: ["Add your SAC dates when you get them — I'll do the rest."],
+        lost: ["This is the bit everything else hangs off. Worth five minutes."],
+    },
+    Ranked: {
+        cram: ["Don't get lost in here, you've got a SAC. Two minutes then back to it."],
+        homework: ["Have a look, then back to the work. It'll still be here."],
+        keep: ["Your score's built from the last 28 days, so a quiet week shows. No drama."],
+        lost: ["This scores your habits, not your marks. It's the one you can actually move."],
+    },
+};
+
+/** When there's nothing page-specific worth saying. */
+export const ON_PAGE_FALLBACK = [
+    "Tap me if you want a hand with anything here.",
+    "I'm around if this bit's confusing.",
+    "Poke me if you get stuck.",
+];
+
+/** He noticed something in the data. Warm, never guilt. */
+export const NUDGE = {
+    slipping: [
+        "Few cards are about to slip. Want to catch them?",
+        "Your deck's getting sleepy — quick review would fix it.",
+    ],
+    deadline: [
+        "That SAC's getting close. Want a plan for it?",
+        "Something's due soon — shall we sort it out?",
+    ],
+    streak: [
+        "Streak's alive. Nice.",
+        "You've shown up again. That's the whole trick, honestly.",
+    ],
+    quiet: [
+        "Nothing logged this week yet. One block is enough to start it moving.",
+        "Been a quiet one. No judgement — want the easiest thing to pick up?",
+    ],
+};
+
+/**
+ * Being told to go away.
+ *
+ * No sulking, no guilt-trip, no "are you sure?". He goes, and he says how to
+ * get him back exactly once. Anything else here would earn the annoyance.
+ */
+export const DISMISS = {
+    snooze: [
+        "All good — I'll be quiet. Tap me if you want me.",
+        "Say no more. I'll be in the corner.",
+        "Fair enough. I'll leave you to it.",
+    ],
+    off: [
+        "Done — no more pop-ups. I'm still in the corner if you need me.",
+        "Gone quiet for good. Tap the spade any time.",
+    ],
+    back: [
+        "Missed me? Course you did.",
+        "Back in. What are we doing?",
+    ],
+};
+
+/** Phrases that mean "stop talking to me". Checked before anything else. */
+const GO_AWAY = /\b(go away|shut up|leave me alone|stop talking|be quiet|not now|piss off|buzz off|get lost|stop it|annoying)\b/i;
+/** …and the ones that mean "come back". */
+const COME_BACK = /\b(come back|i'?m back|hello again|talk to me|help me again)\b/i;
+
+export function readsAsDismissal(text) {
+    return GO_AWAY.test(String(text || ""));
+}
+export function readsAsRecall(text) {
+    return COME_BACK.test(String(text || ""));
+}
+
+/** A greeting for the plan prompt, seeded so it holds still. */
+export function greeting({ name = "", hour = new Date().getHours(), seed = "" } = {}) {
+    const line = pick(HELLO[timeBand(hour)], seed || String(hour)) || "";
+    const first = String(name || "").trim().split(/\s+/)[0];
+    return line.replace("{}", first ? ` ${first}` : "");
+}
+
+/** The line for a page, given the plan. Falls back rather than inventing. */
+export function pageLine(page, planId, seed = "") {
+    const forPage = ON_PAGE[page];
+    const lines = forPage?.[planId] || forPage?.lost;
+    return pick(lines || ON_PAGE_FALLBACK, seed || `${page}:${planId}`);
+}

@@ -19,6 +19,7 @@ import SideRail from "@/components/layout/SideRail";
 import AceCompanion from "@/components/ace/AceCompanion";
 import AceIntro from "@/components/ace/AceIntro";
 import { recordVisit } from "@/lib/aceDeck";
+import AceBuddy from "@/components/ace/AceBuddy";
 
 const FloatingTimer = React.memo(({ currentTime, timerPosition, isDragging, handleMouseDown, timerRef, formatTime }) => (
     <motion.div
@@ -319,6 +320,10 @@ export default function Layout({ children }) {
                 onboarding is up; being introduced to a page you can't see is
                 the sort of thing that makes people close both. */}
             <AceIntro page={pageKey} suppressed={showOnboarding} />
+            {/* He asks what the plan is once a day and then travels with you.
+                Suppressed during onboarding — two of Ace talking at once in the
+                same corner is what makes a companion feel like a popup. */}
+            <AceBuddy page={pageKey} userProfile={userProfile} suppressed={showOnboarding} />
 
             {showOnboarding && (
                 <OnboardingModal

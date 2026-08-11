@@ -69,17 +69,15 @@ export default function AceIntro({ page, suppressed = false }) {
                     transition={{ type: "spring", stiffness: 320, damping: 28 }}
                     data-ace-intro={page}
                     role="note" aria-label={`About ${meta.title}`}
-                    /* Bottom-LEFT on purpose: the launcher lives bottom-right,
-                       and two things in one corner is how you cover a button
-                       someone was reaching for.
+                    /* RIGHT side, always. The nav rail owns the left edge on
+                       desktop, so anything Ace puts over there is either under
+                       it or fighting it — he gets one column and stays in it.
 
-                       On a phone the card is full-width, so "opposite corner"
-                       stops meaning anything — it has to clear the launcher
-                       VERTICALLY instead. The launcher sits at bottom-24 and is
-                       ~44px tall, so anything below bottom-40 puts the pill
-                       straight on top of this card's own buttons, which is
-                       exactly what it did until a mobile-width test caught it. */
-                    className="fixed left-3 right-3 bottom-40 sm:right-auto sm:left-6 sm:bottom-6 sm:w-[340px] z-30
+                       Stacked ABOVE the launcher rather than beside it: the
+                       launcher is a button people reach for, and at phone width
+                       this card is full-bleed, so "opposite corner" stops
+                       meaning anything and it has to clear it vertically. */
+                    className="fixed left-3 right-3 bottom-40 sm:left-auto sm:right-6 sm:bottom-[5.5rem] sm:w-[340px] z-30
                         rounded-2xl bg-surface border-2 border-border shadow-soft-lg p-4">
                     <div className="flex items-start gap-2.5">
                         <SpadeMark className="w-9 h-9 flex-shrink-0" mood="pleased" />
