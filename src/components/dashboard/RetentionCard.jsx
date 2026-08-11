@@ -22,6 +22,7 @@ import { TrendingDown, ArrowRight, Info, Check } from "lucide-react";
 import { Link } from "react-router-dom";
 import { createPageUrl } from "@/utils";
 import { retentionOutlook, retentionSummary } from "@/lib/retention";
+import AceTip from "@/components/ace/AceTip";
 
 /**
  * The collection split three ways. This replaced a day-by-day decay curve:
@@ -81,7 +82,9 @@ export default function RetentionCard({ flashcards = [], days = 7 }) {
                     <TrendingDown className="w-4 h-4 text-streak" />
                 </div>
                 <div className="min-w-0">
-                    <p className="stat-label">What you'll lose this week</p>
+                    <p className="stat-label inline-flex items-center gap-1">
+                        What you'll lose this week <AceTip term="at_risk" />
+                    </p>
                     <p className="text-[11px] text-muted-foreground">
                         {o.hasData ? `${o.learnedCount} card${o.learnedCount === 1 ? "" : "s"} learned so far` : "nothing reviewed yet"}
                     </p>

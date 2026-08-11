@@ -24,6 +24,7 @@ import { base44 } from "@/api/base44Client";
 import { format } from "date-fns";
 import { moderationPresets } from "@/components/shared/contentModeration";
 import { recordStudyAndGetStreak } from "@/components/shared/streakHelpers";
+import AceTip from "@/components/ace/AceTip";
 
 // Lucide alias — design system maps "alert" semantics to AlertTriangle.
 const AlertCircle = AlertTriangle;
@@ -952,7 +953,9 @@ The documents provided may be PowerPoint slides, Word documents, PDFs or text fi
                                     </div>
                                     {/* Rating */}
                                     <div>
-                                        <p className="text-xs text-center text-muted-foreground/60 mb-3">How well did you recall this?</p>
+                                        <p className="text-xs text-center text-muted-foreground/60 mb-3 inline-flex items-center justify-center gap-1 w-full">
+                                            How well did you recall this? <AceTip term="sm2_rating" align="center" />
+                                        </p>
                                         <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
                                             {ratingConfig.map(r => (
                                                 <button
@@ -1035,11 +1038,11 @@ The documents provided may be PowerPoint slides, Word documents, PDFs or text fi
                                 </div>
                                 <div className="text-center px-4 py-2 bg-chart-3/10 rounded-2xl">
                                     <p className="text-xl font-bold text-chart-3">{stats.due}</p>
-                                    <p className="text-xs text-chart-3">Due</p>
+                                    <p className="text-xs text-chart-3 inline-flex items-center gap-1">Due <AceTip term="due" /></p>
                                 </div>
                                 <div className="text-center px-4 py-2 bg-streak/10 rounded-2xl">
                                     <p className="text-xl font-bold text-streak">{stats.weak}</p>
-                                    <p className="text-xs text-streak">Weak</p>
+                                    <p className="text-xs text-streak inline-flex items-center gap-1">Weak <AceTip term="weak_spot" /></p>
                                 </div>
                             </div>
                         </div>

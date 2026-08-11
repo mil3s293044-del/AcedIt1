@@ -18,6 +18,7 @@ import { createPageUrl } from "@/utils";
 import { Brain, ArrowRight, Info, HelpCircle } from "lucide-react";
 import BrainModel from "@/components/study/BrainModel";
 import { cognitiveProfile, whatUnlocks, REFERENCES } from "@/lib/cognitiveProfile";
+import AceTip from "@/components/ace/AceTip";
 
 // The ring radius has to leave room for the axis LABELS, which sit at 1.3x it.
 // At R=96 in a 260 box, "Stability" and "Focus" ran off both edges and rendered
@@ -139,7 +140,9 @@ export default function CognitiveProfilePanel({ techniques = [], cards = [], ses
                         {p.axes.map(a => (
                             <li key={a.id} className="min-w-0">
                                 <div className="flex items-baseline justify-between gap-3">
-                                    <span className="text-sm font-bold text-foreground">{a.label}</span>
+                                    <span className="text-sm font-bold text-foreground inline-flex items-center gap-1">
+                                        {a.label} <AceTip term={a.id} />
+                                    </span>
                                     {a.known ? (
                                         <span className="text-sm font-bold text-foreground tabular-nums flex-shrink-0">
                                             {a.display}<span className="text-[10px] font-normal text-muted-foreground ml-1">{a.unit}</span>

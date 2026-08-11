@@ -18,6 +18,7 @@ import { GraduationCap, ArrowRight, Trophy } from "lucide-react";
 import { Link } from "react-router-dom";
 import { createPageUrl } from "@/utils";
 import { bestLever } from "@/lib/atarLift";
+import AceTip from "@/components/ace/AceTip";
 
 // Accent tokens measure between 2.1:1 and 4.0:1 as small text on this card's
 // tinted background, so numbers and links are foreground here. The chart-3
@@ -57,7 +58,9 @@ export default function DistanceToTarget({ atar, goalAtar, components, courseNam
             <div className="relative flex flex-col lg:flex-row lg:items-center gap-5 lg:gap-8">
                 {/* ── The target ── */}
                 <div className="flex-shrink-0">
-                    <p className="stat-label text-foreground/70 mb-1">Your shot at</p>
+                    <p className="stat-label text-foreground/70 mb-1 inline-flex items-center gap-1">
+                        Your shot at <AceTip term="atar" />
+                    </p>
                     <p className="font-display font-extrabold text-foreground leading-none"
                         style={{ fontSize: "clamp(2.5rem, 6vw, 3.75rem)" }}>
                         {Number.isFinite(goal) ? goal : "—"}

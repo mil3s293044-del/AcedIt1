@@ -21,6 +21,7 @@ import { Repeat, Info, TrendingDown, ArrowRight } from "lucide-react";
 import {
     retrievalShare, stabilityBySubject, lapseProfile, retentionForecast, memoryVerdict,
 } from "@/lib/memoryAnalytics";
+import AceTip from "@/components/ace/AceTip";
 
 const LAPSE_BAND = {
     solid:          { label: "Solid",         cls: "bg-primary/15 text-foreground" },
@@ -143,8 +144,9 @@ export default function MemoryPanel({ techniques = [], cards = [] }) {
                         </p>
                     </div>
                     {lapse.band && (
-                        <span className={`pill flex-shrink-0 ${LAPSE_BAND[lapse.band].cls}`}>
+                        <span className={`pill flex-shrink-0 inline-flex items-center gap-1 ${LAPSE_BAND[lapse.band].cls}`}>
                             {Math.round(lapse.rate * 100)}% lapse · {LAPSE_BAND[lapse.band].label}
+                            <AceTip term="lapse_rate" align="end" />
                         </span>
                     )}
                 </div>

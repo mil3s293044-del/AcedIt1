@@ -6,6 +6,7 @@ import {
     XP_RANKS, getRankFromXP, getRankProgress, xpToNextRank,
     levelFromXP, levelProgress, xpToNextLevel, xpForLevel,
 } from "@/components/shared/xpSystem";
+import AceTip from "@/components/ace/AceTip";
 
 export default function XPLevelCard({ totalXP = 0, streakDays = 0, compact = false }) {
     const rank = getRankFromXP(totalXP);
@@ -30,7 +31,7 @@ export default function XPLevelCard({ totalXP = 0, streakDays = 0, compact = fal
                     </div>
                     <div className="text-right">
                         <p className="text-2xl font-display font-extrabold text-foreground">{totalXP.toLocaleString()}</p>
-                        <p className="stat-label">Total XP</p>
+                        <p className="stat-label inline-flex items-center gap-1">Total XP <AceTip term="xp" /></p>
                     </div>
                 </div>
                 <div className="mt-3">
