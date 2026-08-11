@@ -35,6 +35,13 @@ export default [
       "unused-imports": pluginUnusedImports,
     },
     rules: {
+      // The `rules` block below replaces the one that `pluginJs.configs
+      // .recommended` spreads in above, which silently switched off `no-undef`
+      // — the single rule that catches a reference to something that doesn't
+      // exist. A missing `useRef` in an import list shipped a blank screen
+      // past both lint and build because of it; esbuild doesn't do
+      // undefined-variable analysis either, so nothing was looking.
+      "no-undef": "error",
       "no-unused-vars": "off",
       "react/jsx-uses-vars": "error",
       "react/jsx-uses-react": "error",

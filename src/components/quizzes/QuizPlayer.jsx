@@ -1159,14 +1159,13 @@ Return exactly ${questionsForAnalysis.length} items.`,
                                         <span className="text-xs text-muted-foreground/60 font-medium">Write a detailed answer below</span>
                                         <div className="flex items-center gap-2">
                                             <Calculator className="w-3.5 h-3.5 text-muted-foreground/60" />
-                                            <Switch checked={mathMode[currentQuestionIndex] || false} onCheckedChange={(v) => { setMathMode(p => ({ ...p, [currentQuestionIndex]: v })); setShowKeyboard(p => ({ ...p, [currentQuestionIndex]: v })); }} />
+                                            <Switch checked={mathMode[currentQuestionIndex] || false} onCheckedChange={(v) => { setMathMode(p => ({ ...p, [currentQuestionIndex]: v })); }} />
                                             <Label className="text-xs text-muted-foreground cursor-pointer">Math</Label>
                                         </div>
                                     </div>
                                     {mathMode[currentQuestionIndex] ? (
                                         <>
                                             <MathInput value={getCurrentAnswer() || ""} onChange={(value) => handleAnswerChange(value)}
-                                                onCursorPositionChange={(pos) => setCursorPosition(p => ({ ...p, [currentQuestionIndex]: pos }))}
                                                 textareaRef={(ref) => { if (ref) mathInputRefs[currentQuestionIndex] = ref; }}
                                                 placeholder="Write your answer here..." rows={6}
                                                 className="w-full rounded-2xl border-2 border-border focus-within:border-chart-3" />
@@ -1187,7 +1186,6 @@ Return exactly ${questionsForAnalysis.length} items.`,
                                                                 newValue = current.substring(0, lastTokenPos) + rep + current.substring(pos);
                                                                 newCursor = lastTokenPos + rep.length;
                                                                 handleAnswerChange(newValue);
-                                                                setCursorPosition(p => ({ ...p, [currentQuestionIndex]: newCursor }));
                                                                 setTimeout(() => { if (textarea) { textarea.selectionStart = newCursor; textarea.selectionEnd = newCursor; textarea.focus(); } }, 0);
                                                                 return;
                                                             }
@@ -1196,7 +1194,6 @@ Return exactly ${questionsForAnalysis.length} items.`,
                                                     newValue = current.substring(0, pos) + value + current.substring(pos);
                                                     newCursor = pos + value.length;
                                                     handleAnswerChange(newValue);
-                                                    setCursorPosition(p => ({ ...p, [currentQuestionIndex]: newCursor }));
                                                     setTimeout(() => { if (textarea) { textarea.selectionStart = newCursor; textarea.selectionEnd = newCursor; textarea.focus(); } }, 0);
                                                 }}
                                                 onBackspace={() => {
@@ -1207,11 +1204,10 @@ Return exactly ${questionsForAnalysis.length} items.`,
                                                         const nv = current.substring(0, pos - 1) + current.substring(pos);
                                                         const nc = pos - 1;
                                                         handleAnswerChange(nv);
-                                                        setCursorPosition(p => ({ ...p, [currentQuestionIndex]: nc }));
                                                         setTimeout(() => { if (textarea) { textarea.selectionStart = nc; textarea.selectionEnd = nc; textarea.focus(); } }, 0);
                                                     }
                                                 }}
-                                                onClear={() => { handleAnswerChange(""); setCursorPosition(p => ({ ...p, [currentQuestionIndex]: 0 })); const textarea = mathInputRefs[currentQuestionIndex]; setTimeout(() => { if (textarea) { textarea.selectionStart = 0; textarea.selectionEnd = 0; textarea.focus(); } }, 0); }}
+                                                onClear={() => { handleAnswerChange(""); const textarea = mathInputRefs[currentQuestionIndex]; setTimeout(() => { if (textarea) { textarea.selectionStart = 0; textarea.selectionEnd = 0; textarea.focus(); } }, 0); }}
                                             />
                                         </>
                                     ) : (
