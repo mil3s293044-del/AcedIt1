@@ -23,6 +23,7 @@ import { fmtDate } from "@/lib/safeDate";
 import AceTip from "@/components/ace/AceTip";
 import AceShuffle from "@/components/ace/AceShuffle";
 import SpadeMark from "@/components/ace/SpadeMark";
+import AcePerch from "@/components/ace/AcePerch";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 const fmtTime = (m) => {
@@ -852,10 +853,16 @@ export default function Dashboard() {
                                     </div>
                                 )}
                             </div>
-                            <Link to={createPageUrl(move.link)} className="w-full sm:w-auto flex-shrink-0">
+                            {/* The one action the Dashboard wants, so it gets
+                                the one perch. `relative` is what AcePerch
+                                positions against; he's pointer-events-none, so
+                                the whole link stays clickable through him. */}
+                            <Link to={createPageUrl(move.link)}
+                                className="relative w-full sm:w-auto flex-shrink-0">
                                 <Button className="w-full sm:w-auto">
                                     {move.cta} <ArrowRight className="w-4 h-4" />
                                 </Button>
+                                <AcePerch side="right" />
                             </Link>
                         </div>
                     </div>

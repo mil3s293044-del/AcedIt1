@@ -8,6 +8,8 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Flame, Shield, ShieldCheck } from 'lucide-react';
+import SpadeMark from '@/components/ace/SpadeMark';
+import { STREAK_CHEER, pick } from '@/lib/aceVoice';
 
 const MILESTONE_MESSAGES = {
     3:   { msg: "3 day streak", sub: "You're building a habit." },
@@ -84,6 +86,24 @@ export default function StreakCelebration() {
                         initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
                     />
 
+                    {/* Column, so Ace can sit ON the card's top edge. The
+                        outer container is a row — putting him there directly
+                        parks him beside the card instead of above it. */}
+                    <div className="relative z-10 flex flex-col items-center">
+
+                    {/* He vaults up from behind the card's top edge. Behind,
+                        deliberately: in front he'd cover the number, which is
+                        the one thing anybody actually looks at here. */}
+                    <motion.div
+                        className="relative z-0 -mb-4"
+                        initial={{ y: 70, opacity: 0, scale: 0.6 }}
+                        animate={{ y: 0, opacity: 1, scale: 1 }}
+                        transition={{ type: 'spring', stiffness: 320, damping: 16, delay: 0.25 }}
+                        data-ace-streak
+                    >
+                        <SpadeMark className="w-16 h-16 sm:w-20 sm:h-20" mood="excited" />
+                    </motion.div>
+
                     {/* Main card — brand streak→xp gradient */}
                     <motion.div
                         className="relative z-10 flex flex-col items-center gap-3 px-10 py-9 rounded-3xl shadow-2xl bg-gradient-to-br from-streak to-xp text-white overflow-hidden"
@@ -128,6 +148,18 @@ export default function StreakCelebration() {
                                 Day Streak
                             </div>
                         </motion.div>
+
+                        {/* Ordinary days get a word from Ace. Milestones
+                            already carry their own copy — stacking both is two
+                            congratulations for one event. */}
+                        {!milestone && (
+                            <motion.p
+                                className="text-sm font-semibold opacity-90 text-center -mt-1"
+                                initial={{ opacity: 0 }} animate={{ opacity: 0.9 }} transition={{ delay: 0.4 }}
+                            >
+                                {pick(STREAK_CHEER, `streak-${days}`)}
+                            </motion.p>
+                        )}
 
                         {/* Milestone message */}
                         {milestone && (
@@ -183,6 +215,7 @@ export default function StreakCelebration() {
                             </motion.div>
                         )}
                     </motion.div>
+                    </div>
                 </motion.div>
             )}
         </AnimatePresence>

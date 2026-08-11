@@ -24,6 +24,7 @@ import React, { useState, useEffect, useCallback, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { X, ArrowRight, MoonStar, BellOff } from "lucide-react";
 import SpadeMark from "@/components/ace/SpadeMark";
+import useAceYield from "@/components/ace/useAceYield";
 import { PAGES } from "@/lib/aceKnowledge";
 import {
     shouldAskPlan, setPlan, skipPlan, currentPlan, shouldSpeak, markSpoke,
@@ -40,6 +41,9 @@ export default function AceBuddy({ page, userProfile, suppressed = false, onPlan
     // "ask" — what's the plan · "reply" — his reaction to it · "line" — a
     // passing remark · "bye" — the sign-off
     const [mode, setMode] = useState(null);
+    // He shares this corner with the XP popup stack, which wins on z-index.
+    // Rather than get covered by a celebration, he steps out for a few seconds.
+    const yielding = useAceYield();
     const [line, setLine] = useState(null);
     const [bye, setBye] = useState(null);
     const [chosen, setChosen] = useState(null);
@@ -130,12 +134,12 @@ export default function AceBuddy({ page, userProfile, suppressed = false, onPlan
 
     return (
         <AnimatePresence mode="wait">
-            {mode && (
+            {mode && !yielding && (
                 <motion.aside
                     key={mode}
                     initial={{ opacity: 0, y: 18, scale: 0.96 }}
                     animate={{ opacity: 1, y: 0, scale: 1 }}
-                    exit={{ opacity: 0, y: 12, scale: 0.96 }}
+                    exit={{ opacity: 0, x: 40, scale: 0.96 }}
                     transition={{ type: "spring", stiffness: 340, damping: 26 }}
                     data-ace-buddy={mode}
                     role="status"

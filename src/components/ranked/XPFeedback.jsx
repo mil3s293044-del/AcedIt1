@@ -5,6 +5,7 @@
 import React, { useState, useEffect, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Zap, Star, Flame, Sparkles, Trophy, Target, Timer, Layers, BrainCircuit, Lightbulb, PencilLine, Coins, Medal } from "lucide-react";
+import SpadeMark from "@/components/ace/SpadeMark";
 
 const SOURCE_LABELS = {
     study_session:      "Focus Session",
@@ -261,12 +262,16 @@ function LevelUpBanner({ level, rankUp, rank }) {
                 className="absolute -top-6 -right-6 w-20 h-20 bg-surface/5 rounded-full"
             />
             <div className="relative flex items-center gap-3">
+                {/* Ace turns up for a level-up and nothing smaller. He'd be
+                    wallpaper inside a day if he rode every +XP popup. */}
                 <motion.div
-                    animate={{ rotate: [0, -15, 15, -8, 8, 0], scale: [1, 1.3, 1.1, 1.2, 1] }}
-                    transition={{ duration: 0.7 }}
-                    className="w-11 h-11 bg-surface/20 rounded-xl flex items-center justify-center flex-shrink-0"
+                    initial={{ scale: 0, rotate: -40 }}
+                    animate={{ scale: 1, rotate: 0 }}
+                    transition={{ type: "spring", stiffness: 340, damping: 14, delay: 0.1 }}
+                    className="relative w-11 h-11 flex items-center justify-center flex-shrink-0"
                 >
-                    <Star className="w-6 h-6 text-yellow-300 fill-yellow-300" />
+                    <SpadeMark className="w-11 h-11" mood="cheer" variant="dark" />
+                    <Star className="absolute -top-1 -right-1 w-4 h-4 text-yellow-300 fill-yellow-300" />
                 </motion.div>
                 <div>
                     <p className="font-black text-lg leading-tight">Level Up! 🎉</p>

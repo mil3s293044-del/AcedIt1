@@ -5,8 +5,10 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Save, X, Star, Zap } from "lucide-react";
+import { Save, X, Star } from "lucide-react";
 import DifficultyRating from "@/components/shared/DifficultyRating";
+import SpadeMark from "@/components/ace/SpadeMark";
+import { SESSION_DONE, sessionBand, pick } from "@/lib/aceVoice";
 
 // Per-technique accent (matches the Study page tiles). Static class strings
 // (literals here) so Tailwind JIT keeps them.
@@ -20,6 +22,12 @@ const ACCENT = {
 
 export default function SessionCompleteModal({ session, onSave, onCancel }) {
     const a = ACCENT[session.technique_name] || ACCENT.pomodoro;
+    // Graded by the length that actually ran, so a twelve-minute session and a
+    // ninety-minute one don't get congratulated identically.
+    const mins = Number(session.session_duration) || 0;
+    const band = sessionBand(mins);
+    const line = React.useMemo(
+        () => pick(SESSION_DONE[band], `done-${band}-${mins}`), [band, mins]);
     const [formData, setFormData] = useState({
         subject: "",
         topic: "",
@@ -49,15 +57,22 @@ export default function SessionCompleteModal({ session, onSave, onCancel }) {
             >
                 <Card className="bg-surface border-border shadow-2xl">
                     <CardHeader className="text-center">
-                        <div className={`w-12 h-12 rounded-2xl ${a.ring} flex items-center justify-center mx-auto mb-1`}>
-                            <Zap className={`w-6 h-6 ${a.icon}`} />
-                        </div>
+                        <motion.div
+                            initial={{ scale: 0.4, rotate: -25, opacity: 0 }}
+                            animate={{ scale: 1, rotate: 0, opacity: 1 }}
+                            transition={{ type: "spring", stiffness: 320, damping: 15, delay: 0.12 }}
+                            className="mx-auto mb-1"
+                            data-ace-session={band}
+                        >
+                            <SpadeMark className="w-16 h-16" mood={band === "long" ? "pleased" : "happy"} />
+                        </motion.div>
                         <CardTitle className={`text-2xl ${a.text}`}>
                             Session Complete!
                         </CardTitle>
                         <p className="text-muted-foreground">
-                            You studied for {session.session_duration} minutes using {session.technique_name.replace('_', ' ')}!
+                            {mins} minutes of {session.technique_name.replace('_', ' ')}.
                         </p>
+                        <p className="text-sm text-foreground font-semibold pt-0.5">{line}</p>
                     </CardHeader>
                     <CardContent>
                         <form onSubmit={handleSubmit} className="space-y-4">
