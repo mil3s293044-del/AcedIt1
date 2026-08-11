@@ -33,7 +33,8 @@ import { isPremium } from "@/lib/tierAccess";
 import { base44 } from "@/api/base44Client";
 import { createPageUrl } from "@/utils";
 import { dealHand, answer, openers } from "@/lib/aceGuide";
-import { SECTIONS, BY_ID, readiness } from "@/lib/aceKnowledge";
+import { deck, deckBySection, STATE } from "@/lib/aceDeck";
+import { SECTIONS, BY_ID, PAGES, featuresForPage, readiness } from "@/lib/aceKnowledge";
 
 // Static class strings — Tailwind never sees a class built from a variable.
 const TONE = {
@@ -116,19 +117,43 @@ export default function AceCompanion({ userProfile }) {
 
     useEffect(() => { if (open) load(); }, [open, load]);
 
+    // Anything in the app can hand over to Ace — the first-run card does it,
+    // and a `page` in the detail means "open showing what's on that page"
+    // rather than the usual hand.
+    useEffect(() => {
+        const onOpen = (e) => {
+            const page = e?.detail?.page;
+            setOpen(true);
+            setMessages(page ? [{ role: "ace", pageTour: page }] : []);
+        };
+        window.addEventListener("ace:open", onOpen);
+        return () => window.removeEventListener("ace:open", onOpen);
+    }, []);
+
     const hand = useMemo(() => (data ? dealHand({
         ...data,
         atarComponents: userProfile?.atar_components || null,
     }) : null), [data, userProfile]);
 
     const ready = useMemo(() => (data ? readiness(data) : null), [data]);
+    const myDeck = useMemo(() => (data ? deck(data) : null), [data]);
 
     // Follow the conversation, but never on the opening screen — the hand
     // arriving counted as new content, so the panel opened already scrolled
     // past its own heading and first card.
+    //
+    // And a reply that fills more than a screen — the deck, the tour, a page
+    // walkthrough — wants its TOP in view, not its bottom. Scrolling to the
+    // end of those dropped the student at the last row of a list whose
+    // heading and summary they never saw.
     useEffect(() => {
-        if (!messages.length) return;
-        if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+        const el = scrollRef.current;
+        if (!el || !messages.length) return;
+        const last = messages[messages.length - 1];
+        const isScreen = last?.deck || last?.tour || last?.pageTour;
+        const node = el.lastElementChild;
+        if (isScreen && node) el.scrollTop = Math.max(0, node.offsetTop - el.offsetTop - 8);
+        else el.scrollTop = el.scrollHeight;
     }, [messages, streaming]);
 
     useEffect(() => {
@@ -279,11 +304,14 @@ export default function AceCompanion({ userProfile }) {
                             <div ref={scrollRef} className="flex-1 overflow-y-auto px-4 py-4 space-y-4">
                                 {messages.length === 0 && (
                                     <Opening hand={hand} loading={loading} ready={ready}
-                                        onGo={go} onAsk={ask} onTour={() => setMessages([{ role: "ace", tour: true }])} />
+                                        onGo={go} onAsk={ask} deck={myDeck}
+                                        onTour={() => setMessages([{ role: "ace", tour: true }])}
+                                        onDeck={() => setMessages([{ role: "ace", deck: true }])} />
                                 )}
 
                                 {messages.map((m, i) => (
-                                    <Turn key={i} m={m} hand={hand} streaming={streaming && i === messages.length - 1}
+                                    <Turn key={i} m={m} hand={hand} deck={myDeck}
+                                        streaming={streaming && i === messages.length - 1}
                                         onGo={go} onUpgrade={() => go("/Subscription")} />
                                 ))}
 
@@ -327,7 +355,7 @@ export default function AceCompanion({ userProfile }) {
 
 /* ── The opening screen: a dealt hand ─────────────────────────────────── */
 
-function Opening({ hand, loading, ready, onGo, onAsk, onTour }) {
+function Opening({ hand, loading, ready, deck: myDeck, onGo, onAsk, onTour, onDeck }) {
     if (loading || !hand) {
         return (
             <div className="flex flex-col items-center justify-center py-12 gap-3">
@@ -362,6 +390,16 @@ function Opening({ hand, loading, ready, onGo, onAsk, onTour }) {
                         {o.q}
                     </button>
                 ))}
+                {/* Only offered once there's a real gap to show. "You've played
+                    2 of 33" on day one is a scoreboard of things you haven't
+                    done yet, which is the opposite of encouraging. */}
+                {myDeck && myDeck.played >= 3 && myDeck.unseen > 0 && (
+                    <button onClick={onDeck} data-open-deck
+                        className="w-full text-left text-sm text-foreground bg-secondary/60 hover:bg-secondary rounded-xl px-3.5 py-2.5 transition-colors">
+                        What haven't I tried yet?
+                        <span className="text-muted-foreground"> · {myDeck.played} of {myDeck.total} played</span>
+                    </button>
+                )}
             </div>
         </div>
     );
@@ -394,7 +432,7 @@ function HandCard({ c, i, onGo }) {
 
 /* ── A turn in the thread ─────────────────────────────────────────────── */
 
-function Turn({ m, hand, streaming, onGo, onUpgrade }) {
+function Turn({ m, hand, deck: myDeck, streaming, onGo, onUpgrade }) {
     if (m.role === "user") {
         return (
             <div className="flex justify-end">
@@ -427,6 +465,8 @@ function Turn({ m, hand, streaming, onGo, onUpgrade }) {
     }
 
     if (m.tour) return <Tour onGo={onGo} />;
+    if (m.pageTour) return <PageTour page={m.pageTour} onGo={onGo} />;
+    if (m.deck) return <Deck d={myDeck} onGo={onGo} />;
 
     if (m.upgrade) {
         return (
@@ -477,6 +517,119 @@ function Turn({ m, hand, streaming, onGo, onUpgrade }) {
         );
     }
     return null;
+}
+
+/**
+ * One page, explained — where the first-run card hands over to.
+ *
+ * Sub-features are included here and excluded from the card, because this is
+ * the place with room to say that Mind Maps has layers inside it.
+ */
+function PageTour({ page, onGo }) {
+    const meta = PAGES[page];
+    const items = featuresForPage(page);
+    if (!meta) return null;
+    return (
+        <div className="space-y-2" data-page-tour={page}>
+            <AceSays>
+                <p className="text-sm font-bold text-foreground">{meta.title}</p>
+                <p className="text-sm text-foreground leading-snug mt-1">{meta.intro}</p>
+            </AceSays>
+            {items.map(f => (
+                <button key={f.id} onClick={() => onGo(f.to)} data-page-tour-item={f.id}
+                    className="w-full text-left rounded-2xl border-2 border-border hover:border-primary/40 px-3 py-2.5 transition-colors">
+                    <div className="flex items-center gap-2">
+                        <span className="text-sm font-bold text-foreground">{f.name}</span>
+                        {f.premium && <Lock className="w-3 h-3 text-muted-foreground flex-shrink-0" />}
+                        {f.parent && <span className="pill bg-secondary text-muted-foreground">inside</span>}
+                    </div>
+                    <p className="text-xs text-muted-foreground leading-snug mt-0.5">{f.what}</p>
+                    <p className="text-[11px] text-muted-foreground leading-snug mt-1">
+                        <span className="font-bold text-foreground">Worth it when:</span>{" "}
+                        {f.when.charAt(0).toLowerCase() + f.when.slice(1)}
+                    </p>
+                </button>
+            ))}
+        </div>
+    );
+}
+
+/**
+ * The deck — what you've touched, and what's still face down.
+ *
+ * The three states are kept visibly apart because they're different claims.
+ * Played means there's data behind it. Opened means you visited the route on
+ * this device, which is all we can know about the read-only parts and is not
+ * the same as having used them. Face down means neither.
+ *
+ * Blurring those together would make the number bigger and the number
+ * worthless, and this only works at all if a face-down card genuinely means
+ * "you have never seen this".
+ */
+function Deck({ d, onGo }) {
+    if (!d) return null;
+    const sections = deckBySection(d);
+    return (
+        <div className="space-y-3" data-deck>
+            <AceSays>
+                <p className="text-sm text-foreground leading-snug">
+                    <span className="font-bold">{d.played} of {d.total}</span> played
+                    {d.opened > 0 && <>, {d.opened} opened but not used</>}.
+                    {d.unseen > 0 && " The rest you've never seen."}
+                </p>
+                <p className="text-[11px] text-muted-foreground leading-snug mt-1.5">
+                    Worked out from what you've left behind — decks, maps, logged sessions —
+                    plus the pages you've opened on this device. It's evidence, not a record.
+                </p>
+            </AceSays>
+
+            {d.suggestions.length > 0 && (
+                <div>
+                    <p className="stat-label mb-1.5">Worth a look</p>
+                    <div className="space-y-1.5">
+                        {d.suggestions.slice(0, 3).map(c => (
+                            <button key={c.id} onClick={() => onGo(c.feature.to)} data-deck-suggestion={c.id}
+                                className="w-full text-left rounded-2xl border-2 border-primary/30 bg-primary/5 px-3 py-2.5 hover:shadow-soft transition-shadow">
+                                <div className="flex items-center gap-2">
+                                    <span className="text-sm font-bold text-foreground">{c.feature.name}</span>
+                                    {c.feature.premium && <Lock className="w-3 h-3 text-muted-foreground flex-shrink-0" />}
+                                </div>
+                                <p className="text-xs text-muted-foreground leading-snug mt-0.5">{c.feature.what}</p>
+                            </button>
+                        ))}
+                    </div>
+                </div>
+            )}
+
+            {Object.entries(sections).map(([section, cards]) => (
+                <div key={section}>
+                    <p className="stat-label mb-1.5">{section}</p>
+                    <div className="grid grid-cols-2 gap-1.5">
+                        {cards.map(c => (
+                            <button key={c.id} onClick={() => onGo(c.feature.to)}
+                                data-deck-card={c.id} data-deck-state={c.state}
+                                className={`text-left rounded-xl border-2 px-2.5 py-2 transition-colors ${
+                                    c.state === STATE.played
+                                        ? "border-primary/40 bg-primary/5"
+                                        : c.state === STATE.opened
+                                            ? "border-border bg-secondary/40"
+                                            : "border-dashed border-border hover:border-primary/40"}`}>
+                                <p className={`text-xs font-bold leading-tight ${
+                                    c.state === STATE.unseen ? "text-muted-foreground" : "text-foreground"}`}>
+                                    {c.feature.name}
+                                </p>
+                                <p className="text-[10px] text-muted-foreground leading-tight mt-0.5">
+                                    {c.state === STATE.played ? "played"
+                                        : c.state === STATE.opened ? "opened"
+                                            : c.blocked ? `needs ${c.blocked.label}` : "not tried"}
+                                </p>
+                            </button>
+                        ))}
+                    </div>
+                </div>
+            ))}
+        </div>
+    );
 }
 
 /** "What's in this app?" — the whole surface, grouped, in one screen. */
