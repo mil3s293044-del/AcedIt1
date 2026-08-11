@@ -12,7 +12,7 @@ const ALL_TASKS = [
     { id: 'subjects_selected', title: 'Select Your Subjects', description: 'Add at least one subject to get started.', link: createPageUrl('Subjects'), icon: GraduationCap },
 ];
 
-export default function ToDoList({ user, userProfile, onUpdate }) {
+export default function ToDoList({ userProfile }) {
     const [tasks, setTasks] = useState([]);
     const [completedCount, setCompletedCount] = useState(0);
 

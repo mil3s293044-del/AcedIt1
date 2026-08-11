@@ -29,7 +29,6 @@ export default function LineMemoriser() {
     const [masteredSentences, setMasteredSentences] = useState(new Set());
     const [chunkProgress, setChunkProgress] = useState(0);
     const [isChaining, setIsChaining] = useState(false);
-    const [isFirstAttempt, setIsFirstAttempt] = useState(true);
     const [streak, setStreak] = useState(0);
     const [totalCorrect, setTotalCorrect] = useState(0);
     const [sessionStartTime, setSessionStartTime] = useState(null);
@@ -41,7 +40,6 @@ export default function LineMemoriser() {
     const [pendingExit, setPendingExit] = useState(false);
     const [feedbackDialog, setFeedbackDialog] = useState({ show: false, content: null, chunkText: '', userInput: '' });
     const [isFeedbackLoading, setIsFeedbackLoading] = useState(false);
-    const [user, setUser] = useState(null);
     const [userSubjects, setUserSubjects] = useState([]);
 
     useEffect(() => {
@@ -49,7 +47,6 @@ export default function LineMemoriser() {
         if (saved) setSavedSessions(JSON.parse(saved));
         const init = async () => {
             const currentUser = await base44.auth.me();
-            setUser(currentUser);
             const subjects = await base44.entities.UserSubject.filter({ created_by: currentUser.email, is_active: true }).catch(() => []);
             const unique = subjects.reduce((acc, s) => { if (!acc.find(x => x.subject_name === s.subject_name)) acc.push(s); return acc; }, []);
             setUserSubjects(unique);
@@ -70,7 +67,7 @@ export default function LineMemoriser() {
     const initializeSession = (sessionSentences, sessionId, sessionTitle, sessionSubject) => {
         if (!sessionSentences.length) { toast({ title: 'No text to memorize', variant: 'destructive' }); return; }
         setSentences(sessionSentences); setMode(MODES.LEARNING); setCurrentSentenceIndex(0);
-        setShowSentence(true); setIsFirstAttempt(true); setAttempts({}); setMasteredSentences(new Set());
+        setShowSentence(true); setAttempts({}); setMasteredSentences(new Set());
         setChunkProgress(0); setStreak(0); setTotalCorrect(0); setSessionStartTime(Date.now());
         setCurrentSessionId(sessionId || Date.now().toString()); setUserInput(''); setIsChaining(false);
         setTitle(sessionTitle || ''); setSubject(sessionSubject || '');
@@ -105,12 +102,12 @@ export default function LineMemoriser() {
             const requiredAttempts = streak > 5 ? 2 : 3;
             if (newAttempts[currentKey] >= requiredAttempts) { setShowMorePracticeDialog(true); }
             else {
-                setShowSentence(false); setIsFirstAttempt(false); setUserInput('');
+                setShowSentence(false); setUserInput('');
                 toast({ title: `✓ Correct! ${requiredAttempts - newAttempts[currentKey]} more to master` });
             }
         } else {
             setStreak(0); setAttempts({ ...attempts, [`${currentSentenceIndex}_${isChaining ? 'chain' : 'single'}`]: 0 });
-            setShowSentence(true); setIsFirstAttempt(false); setUserInput('');
+            setShowSentence(true); setUserInput('');
             toast({ title: 'Not quite right', description: result.feedback || 'Study the text and try again', variant: 'destructive' });
         }
     };
@@ -119,24 +116,24 @@ export default function LineMemoriser() {
         setShowMorePracticeDialog(false);
         if (wantMore) {
             const key = `${currentSentenceIndex}_${isChaining ? 'chain' : 'single'}`;
-            setAttempts(prev => ({ ...prev, [key]: 0 })); setShowSentence(false); setIsFirstAttempt(false); setUserInput('');
+            setAttempts(prev => ({ ...prev, [key]: 0 })); setShowSentence(false); setUserInput('');
             return;
         }
         if (!isChaining) {
             setMasteredSentences(prev => new Set([...prev, currentSentenceIndex]));
             if (currentSentenceIndex === 0) {
-                if (sentences.length > 1) { setCurrentSentenceIndex(1); setIsChaining(false); setShowSentence(true); setIsFirstAttempt(true); setUserInput(''); }
+                if (sentences.length > 1) { setCurrentSentenceIndex(1); setIsChaining(false); setShowSentence(true); setUserInput(''); }
                 else { setMode(MODES.FINAL_TEST); setShowSentence(false); setUserInput(''); }
                 return;
             }
-            setIsChaining(true); setShowSentence(false); setIsFirstAttempt(false); setUserInput('');
+            setIsChaining(true); setShowSentence(false); setUserInput('');
             toast({ title: `Line ${currentSentenceIndex + 1} mastered!`, description: 'Now practice with the chain' });
         } else {
             const shouldChunkTest = (currentSentenceIndex + 1) % chunkSize === 0 && currentSentenceIndex < sentences.length - 1;
             if (shouldChunkTest) {
                 setMode(MODES.CHUNK_TEST); setChunkProgress(Math.floor(currentSentenceIndex / chunkSize)); setShowSentence(false); setUserInput('');
             } else if (currentSentenceIndex < sentences.length - 1) {
-                setCurrentSentenceIndex(prev => prev + 1); setIsChaining(false); setShowSentence(true); setIsFirstAttempt(true); setUserInput('');
+                setCurrentSentenceIndex(prev => prev + 1); setIsChaining(false); setShowSentence(true); setUserInput('');
             } else {
                 setMode(MODES.FINAL_TEST); setShowSentence(false); setUserInput('');
             }
@@ -151,7 +148,7 @@ export default function LineMemoriser() {
         if (result.isCorrect) {
             toast({ title: 'Chunk passed! 🎉' });
             if (chunkEnd === sentences.length) { setMode(MODES.FINAL_TEST); setShowSentence(false); }
-            else { setCurrentSentenceIndex(chunkEnd); setIsChaining(false); setMode(MODES.LEARNING); setShowSentence(true); setIsFirstAttempt(true); }
+            else { setCurrentSentenceIndex(chunkEnd); setIsChaining(false); setMode(MODES.LEARNING); setShowSentence(true); }
         } else {
             setIsFeedbackLoading(true);
             setFeedbackDialog({ show: true, content: null, chunkText, userInput });
@@ -174,7 +171,7 @@ export default function LineMemoriser() {
             toast({ title: '🏆 Perfect!' });
         } else {
             toast({ title: 'Almost!', description: 'Review the passage and try again', variant: 'destructive' });
-            setMode(MODES.LEARNING); setCurrentSentenceIndex(0); setIsChaining(false); setShowSentence(false); setIsFirstAttempt(false);
+            setMode(MODES.LEARNING); setCurrentSentenceIndex(0); setIsChaining(false); setShowSentence(false);
         }
         setUserInput('');
     };
@@ -195,7 +192,7 @@ export default function LineMemoriser() {
     };
 
     const resetSession = () => {
-        setMode(MODES.SETUP); setCurrentSentenceIndex(0); setShowSentence(true); setIsFirstAttempt(true);
+        setMode(MODES.SETUP); setCurrentSentenceIndex(0); setShowSentence(true);
         setUserInput(''); setAttempts({}); setMasteredSentences(new Set()); setChunkProgress(0);
         setStreak(0); setTotalCorrect(0); setIsChaining(false); setCurrentSessionId(null); setContent(''); setTitle(''); setSentences([]);
     };
@@ -241,7 +238,7 @@ export default function LineMemoriser() {
                                     <div className="flex gap-2 ml-3">
                                         <Button size="sm" onClick={() => {
                                             setSentences(session.sentences); setMode(MODES.LEARNING); setCurrentSentenceIndex(session.currentSentenceIndex);
-                                            setShowSentence(false); setIsFirstAttempt(false); setAttempts(session.attempts);
+                                            setShowSentence(false); setAttempts(session.attempts);
                                             setMasteredSentences(new Set(session.masteredSentences)); setChunkProgress(session.chunkProgress);
                                             setStreak(session.streak); setTotalCorrect(session.totalCorrect); setSessionStartTime(session.sessionStartTime);
                                             setCurrentSessionId(session.id); setUserInput(''); setIsChaining(session.isChaining);
@@ -322,8 +319,8 @@ export default function LineMemoriser() {
                             : <div className="prose prose-sm max-w-none"><ReactMarkdown>{feedbackDialog.content || ''}</ReactMarkdown></div>}
                     </div>
                     <DialogFooter className="gap-2">
-                        <Button variant="outline" onClick={() => { setFeedbackDialog({ show: false, content: null, chunkText: '', userInput: '' }); const s = chunkProgress * chunkSize; setCurrentSentenceIndex(s); setIsChaining(false); setMode(MODES.LEARNING); setShowSentence(false); setIsFirstAttempt(false); }} disabled={isFeedbackLoading}><RotateCw className="w-4 h-4 mr-2" />Review Chunk</Button>
-                        <Button onClick={() => { setFeedbackDialog({ show: false, content: null, chunkText: '', userInput: '' }); const next = Math.min((chunkProgress + 1) * chunkSize, sentences.length); if (next < sentences.length) { setCurrentSentenceIndex(next); setIsChaining(false); setMode(MODES.LEARNING); setShowSentence(true); setIsFirstAttempt(true); } else { setMode(MODES.FINAL_TEST); setShowSentence(false); } }} disabled={isFeedbackLoading}><ArrowRight className="w-4 h-4 mr-2" />Continue Anyway</Button>
+                        <Button variant="outline" onClick={() => { setFeedbackDialog({ show: false, content: null, chunkText: '', userInput: '' }); const s = chunkProgress * chunkSize; setCurrentSentenceIndex(s); setIsChaining(false); setMode(MODES.LEARNING); setShowSentence(false); }} disabled={isFeedbackLoading}><RotateCw className="w-4 h-4 mr-2" />Review Chunk</Button>
+                        <Button onClick={() => { setFeedbackDialog({ show: false, content: null, chunkText: '', userInput: '' }); const next = Math.min((chunkProgress + 1) * chunkSize, sentences.length); if (next < sentences.length) { setCurrentSentenceIndex(next); setIsChaining(false); setMode(MODES.LEARNING); setShowSentence(true); } else { setMode(MODES.FINAL_TEST); setShowSentence(false); } }} disabled={isFeedbackLoading}><ArrowRight className="w-4 h-4 mr-2" />Continue Anyway</Button>
                     </DialogFooter>
                 </DialogContent>
             </Dialog>
@@ -415,7 +412,7 @@ export default function LineMemoriser() {
                                 const key = `${currentSentenceIndex}_${isChaining ? 'chain' : 'single'}`;
                                 const n = { ...attempts, [key]: (attempts[key] || 0) + 1 };
                                 setAttempts(n); setStreak(prev => prev + 1); setTotalCorrect(prev => prev + 1);
-                                if (n[key] >= 3) { setShowMorePracticeDialog(true); } else { setShowSentence(false); setIsFirstAttempt(false); setUserInput(''); }
+                                if (n[key] >= 3) { setShowMorePracticeDialog(true); } else { setShowSentence(false); setUserInput(''); }
                             }} className="border-blue-200 text-blue-600 hover:bg-blue-50">
                                 <ArrowRight className="w-4 h-4 mr-2" />I Know It
                             </Button>

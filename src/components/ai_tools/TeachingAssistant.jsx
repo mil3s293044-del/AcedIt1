@@ -33,7 +33,6 @@ export default function TeachingAssistant() {
     const [hasStarted, setHasStarted] = useState(false);
     const [loadedResultId, setLoadedResultId] = useState(null);
     const [showHistory, setShowHistory] = useState(false);
-    const [viewingSession, setViewingSession] = useState(null);
     const [showQuizDialog, setShowQuizDialog] = useState(false);
     const [quizTitle, setQuizTitle] = useState('');
     const [isGeneratingQuiz, setIsGeneratingQuiz] = useState(false);

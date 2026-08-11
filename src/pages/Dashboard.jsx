@@ -550,7 +550,6 @@ export default function Dashboard() {
         return { myRank, myXP, myEntry, rivals, below, total: leaderboard.length };
     }, [leaderboard, user, userProfile]);
 
-    const xp = userProfile?.total_xp || 0;
     const streakDays = userProfile?.streak_days || 0;
     const firstName = userProfile?.username || user?.full_name?.split(' ')[0] || 'friend';
     const goalHours = userProfile?.weekly_study_goal_hours || 20;

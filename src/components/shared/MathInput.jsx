@@ -46,9 +46,6 @@ export default function MathInput({ value, onChange, className, placeholder, row
     const internalRef = useRef(null);
     const textareaRef = externalRef || internalRef;
     const [focused, setFocused] = useState(false);
-    const [isEditingPreview, setIsEditingPreview] = useState(false);
-    const [previewEditValue, setPreviewEditValue] = useState("");
-    const previewEditRef = useRef(null);
     
     const handleChange = (e) => {
         onChange?.(e.target.value);

@@ -7,7 +7,6 @@ export default function AILoadingProgress({
     stage = 'starting',
     message = 'AI is working...',
     estimatedTime = 30,
-    onComplete = null
 }) {
     const [progress, setProgress] = useState(0);
     const [timeElapsed, setTimeElapsed] = useState(0);

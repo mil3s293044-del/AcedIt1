@@ -39,7 +39,6 @@ export default function FlashcardPerformance({ user }) {
                 throw err;
             });
             const today = format(new Date(), 'yyyy-MM-dd');
-            const last7Days = format(subDays(new Date(), 7), 'yyyy-MM-dd');
 
             // Calculate overall stats
             const totalCards = allCards.length;

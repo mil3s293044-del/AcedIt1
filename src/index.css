@@ -38,6 +38,13 @@
        techniques, so mind maps get their own. Teal is the one gap left
        between green, orange, blue, purple and red. */
     --map: 175 82% 26%;              /* teal — dark enough to clear 4.5:1 on cream */
+    /* Two more hues so all EIGHT mind-map node types can own a colour. Six
+       tokens meant two pairs had to share one, and a shared colour is the one
+       thing a classification palette cannot do. Placed in the widest gaps left
+       on the wheel: berry between purple (280) and red (0), vine between lime
+       (89) and teal (175). Both are dark enough to read as text on cream. */
+    --berry: 332 74% 45%;            /* pink */
+    --vine: 132 58% 30%;             /* deep green */
 
     /* feedback */
     --destructive: 0 78% 56%;        /* #E53935 */
@@ -91,6 +98,8 @@
     --streak: 0 100% 65%;
     --success: 89 97% 45%;
     --map: 175 72% 45%;
+    --berry: 332 82% 68%;
+    --vine: 132 52% 52%;
     --destructive: 0 78% 56%;
     --destructive-foreground: 0 0% 98%;
     --border: 218 25% 20%;

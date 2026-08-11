@@ -68,13 +68,6 @@ const FriendSkeleton = () => (
     </div>
 );
 
-const formatTime = (minutes) => {
-    const h = Math.floor(minutes / 60);
-    const m = minutes % 60;
-    if (h > 0) return `${h}h ${m}m`;
-    return `${m}m`;
-};
-
 const FEATURED_THEME = {
     primary:   { bg: "bg-primary/10",   border: "border-primary/25",   iconBg: "bg-primary/15",   iconText: "text-primary"   },
     streak:    { bg: "bg-streak/10",    border: "border-streak/25",    iconBg: "bg-streak/15",    iconText: "text-streak"    },
@@ -216,7 +209,7 @@ export default function Friends() {
                 return;
             }
             let targetProfile = null;
-            try { targetProfile = (await base44.entities.UserProfile.filter({ created_by: identifier }))[0]; } catch (_) {}
+            try { targetProfile = (await base44.entities.UserProfile.filter({ created_by: identifier }))[0]; } catch { /* no profile yet */ }
             await base44.entities.Friendship.create({
                 requester_email: user.email,
                 requester_name: user.full_name,
@@ -358,7 +351,6 @@ export default function Friends() {
     ), [myFlashcardDecks, deckSearch]);
 
     const totalShared = sharedQuizzes.length + sharedFlashcards.length;
-    const totalNotifs = pendingRequests.length + totalShared;
 
     // ── Derived stats for hero / coach / featured ─────────────────────
     const friendCount = friends.length;

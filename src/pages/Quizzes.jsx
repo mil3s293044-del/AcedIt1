@@ -145,17 +145,6 @@ export default function Quizzes() {
         explanation: ""
     });
 
-    // Helper function for page navigation
-    const createPageUrl = (pageName) => {
-        switch (pageName) {
-            case "Subjects":
-                return "/subjects";
-            // Add other page mappings if needed
-            default:
-                return "/";
-        }
-    };
-
     useEffect(() => {
         loadData();
     }, []);
@@ -314,7 +303,6 @@ export default function Quizzes() {
 
     const handleGenerateQuiz = async () => {
         const effectiveSubject = aiSettings.customSubject || aiSettings.subject;
-        const uploadedFile = uploadedFiles[0]; // kept for compat checks below
 
         if (!uploadedFiles.length || !effectiveSubject) {
             toast({
@@ -379,14 +367,12 @@ export default function Quizzes() {
             }[aiSettings.quiz_style] || "standard style";
 
             // Handle DOCX/PPTX files — extract text; rest go as file_urls
-            const directFileUrls = uploadedUrls.filter(f => f.ext !== 'docx' && f.ext !== 'pptx').map(f => f.file_url);
             const docFiles = uploadedUrls.filter(f => f.ext === 'docx' || f.ext === 'pptx');
             let documentContentPrompt = '';
             for (const df of docFiles) {
                 const textResult = await base44.functions.invoke('extractDocumentText', { file_url: df.file_url });
                 if (textResult.data?.text) documentContentPrompt += `\n\n[${df.name}]:\n${textResult.data.text}`;
             }
-            const fileExtension = uploadedFiles[0].name.split('.').pop()?.toLowerCase();
 
             const marksValue = parseInt(aiSettings.marks_per_short) || 5;
 
@@ -955,11 +941,6 @@ Return valid JSON only.`,
                         quiz={selectedQuiz}
                         mode={quizMode}
                         timeLimitMs={quizTimeLimitMs}
-                        onComplete={async () => {
-                            // QuizPlayer owns attempt-saving and the XP award
-                            // (idempotent via event_key) — this only refreshes.
-                            await loadData();
-                        }}
                         onExit={async () => {
                             setIsPlaying(false);
                             setSelectedQuiz(null);

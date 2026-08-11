@@ -19,9 +19,8 @@ import {
     Award,
     Infinity
 } from "lucide-react";
-import { useToast } from "@/components/ui/use-toast";
 import { createPageUrl } from "@/utils";
-import { Link, useNavigate } from "react-router-dom";
+import { Link } from "react-router-dom";
 
 const features = [
     {
@@ -75,11 +74,8 @@ const comparisonFeatures = [
 ];
 
 export default function Premium() {
-    const [user, setUser] = useState(null);
     const [userProfile, setUserProfile] = useState(null);
     const [isLoading, setIsLoading] = useState(true);
-    const { toast } = useToast();
-    const navigate = useNavigate();
 
     useEffect(() => {
         loadData();
@@ -88,7 +84,6 @@ export default function Premium() {
     const loadData = async () => {
         try {
             const currentUser = await base44.auth.me();
-            setUser(currentUser);
 
             const profiles = await base44.entities.UserProfile.filter({ created_by: currentUser.email });
             setUserProfile(profiles[0] || null);

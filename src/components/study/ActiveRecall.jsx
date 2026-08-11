@@ -261,7 +261,6 @@ export default function ActiveRecall({ onSessionComplete, userSubjects: initialU
     const [showSessionHistory, setShowSessionHistory] = useState(false);
     const [sessionHistory, setSessionHistory] = useState([]);
     const [selectedHistorySession, setSelectedHistorySession] = useState(null);
-    const [user, setUser] = useState(null);
     const [userSubjects, setUserSubjects] = useState(initialUserSubjects);
 
     // Questions handed over from a mind map. The map is where a student records
@@ -297,7 +296,6 @@ export default function ActiveRecall({ onSessionComplete, userSubjects: initialU
         const loadSubjects = async () => {
             try {
                 const currentUser = await base44.auth.me();
-                setUser(currentUser);
                 const subjects = await base44.entities.UserSubject.filter({ created_by: currentUser.email, is_active: true });
                 const uniqueSubjects = subjects.reduce((acc, cur) => {
                     if (!acc.find(i => i.subject_name === cur.subject_name)) acc.push(cur);

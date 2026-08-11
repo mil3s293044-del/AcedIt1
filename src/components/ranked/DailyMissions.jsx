@@ -77,11 +77,10 @@ export default function DailyMissions({ streakDays = 0 }) {
         try {
             const user = await base44.auth.me();
             const today = new Date().toISOString().split('T')[0];
-            const [sessions, flashcards, quizAttempts, subGoals] = await Promise.all([
+            const [sessions, flashcards, quizAttempts] = await Promise.all([
                 base44.entities.StudyTechnique.filter({ created_by: user.email }).catch(() => []),
                 base44.entities.Flashcard.filter({ created_by: user.email }).catch(() => []),
                 base44.entities.QuizAttempt.filter({ created_by: user.email }).catch(() => []),
-                base44.entities.Goal.filter({ created_by: user.email }).catch(() => []),
             ]);
             const todaySessions = sessions.filter(s => (s.date || s.created_date?.split('T')[0]) === today);
             const todayMins = todaySessions.reduce((a, s) => a + (s.session_duration || 0), 0);

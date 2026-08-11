@@ -49,20 +49,31 @@ export const CONFIDENCE = [
  * becomes "what does this lead to". An untyped map exports almost nothing,
  * which is the honest outcome — there's nothing in it to make a question from.
  *
- * Eight types, because a palette of twenty is a palette nobody reads. Colour
- * groups the family (blue = structure, orange/purple = causal, green =
- * support, red = unresolved) and the icon separates members within it.
+ * Eight types, because a palette of twenty is a palette nobody reads. Each one
+ * owns a colour of its own — no two types share.
+ *
+ * They used to share: step and term were both blue, example and evidence both
+ * green, on the theory that the icon separated members of a family. It doesn't,
+ * at a glance across thirty nodes, which is the only moment classification is
+ * worth anything. Two extra hues (berry, vine) were added to the palette so
+ * every type could be told apart without reading it.
+ *
+ * These run roughly around the wheel so neighbouring types are also
+ * neighbouring colours: unresolved (red) → causal (orange, purple) → process
+ * (blue) → structure (teal) → definitions (pink) → support (greens).
  */
 export const NODE_TYPES = [
     { id: "idea",     label: "Main idea", hint: "The thing this branch is about",      tone: "map",     icon: "Lightbulb" },
     { id: "cause",    label: "Cause",     hint: "What drives it",                      tone: "xp",      icon: "Zap" },
     { id: "effect",   label: "Effect",    hint: "What follows from it",                tone: "chart-4", icon: "Target" },
     { id: "step",     label: "Step",      hint: "One stage in a process",              tone: "chart-3", icon: "ListOrdered" },
-    { id: "term",     label: "Term",      hint: "A word you have to be able to define", tone: "chart-3", icon: "BookMarked" },
-    { id: "example",  label: "Example",   hint: "A concrete case",                     tone: "primary", icon: "Quote" },
+    { id: "term",     label: "Term",      hint: "A word you have to be able to define", tone: "berry",  icon: "BookMarked" },
+    { id: "example",  label: "Example",   hint: "A concrete case",                     tone: "vine",    icon: "Quote" },
     { id: "evidence", label: "Evidence",  hint: "Data, a study, a case",               tone: "primary", icon: "FlaskConical" },
     { id: "question", label: "Open question", hint: "Something you can't answer yet",  tone: "streak",  icon: "HelpCircle" },
 ];
+/** Every tone a node type can use — the legend renders straight off this. */
+export const TYPE_TONES = NODE_TYPES.map(t => t.tone);
 export const TYPE_BY_ID = Object.fromEntries(NODE_TYPES.map(t => [t.id, t]));
 
 export const emptyMap = (title = "Untitled map", type = "idea") => ({
@@ -294,8 +305,14 @@ export function layout(nodes, { colGap = 290, rowGap = 88, nodeW = 170, nodeH = 
 
     const xs = [...positions.values()].map(p => p.x);
     const ys = [...positions.values()].map(p => p.y);
-    const minX = Math.min(...xs) - nodeW, maxX = Math.max(...xs) + nodeW;
-    const minY = Math.min(...ys) - nodeH, maxY = Math.max(...ys) + nodeH;
+    // Positions are node CENTRES, so the bounds only need half a box plus a
+    // margin. Padding by a whole box on each side added ~380 units of empty
+    // width to every map, which the canvas then had to shrink to fit — it cost
+    // about a fifth of the scale, and therefore a fifth of the label size, to
+    // frame nothing.
+    const padX = nodeW / 2 + 24, padY = nodeH / 2 + 20;
+    const minX = Math.min(...xs) - padX, maxX = Math.max(...xs) + padX;
+    const minY = Math.min(...ys) - padY, maxY = Math.max(...ys) + padY;
     return { positions, minX, minY, width: maxX - minX, height: maxY - minY };
 }
 
@@ -307,10 +324,13 @@ export function layout(nodes, { colGap = 290, rowGap = 88, nodeW = 170, nodeH = 
  * lets you see at a glance that four boxes belong together, and it's the thing
  * that most separates a mind map from a flowchart.
  *
- * Node TYPE used to own the colour instead, which meant a single branch could
- * be four different colours and two unrelated branches could match — the
- * palette was fighting the structure rather than showing it. Type now reads
- * from a small marker on the node instead.
+ * Type has a colour too, and the two don't fight because they're painted on
+ * different things: the branch tone goes on the tapered connectors BEHIND the
+ * nodes, the type tone on the node box itself. So you read grouping from the
+ * shape of the colour running out from the root, and category from the boxes.
+ * Putting both on the box is what fails — one branch in four colours, two
+ * unrelated branches matching, and no way to tell which reading you're looking
+ * at.
  */
 export const BRANCH_TONES = ["map", "chart-3", "chart-4", "xp", "primary", "streak"];
 

@@ -190,7 +190,7 @@ function SelfMarkBox({ maxMarks, currentMark, onMark, onClear }) {
     );
 }
 
-export default function QuizPlayer({ quiz, onComplete, onExit, mode = "standard", timeLimitMs = null }) {
+export default function QuizPlayer({ quiz, onExit, mode = "standard", timeLimitMs = null }) {
     const isSAC = mode === "sac" && timeLimitMs > 0;
     const [showSaveProgressDialog, setShowSaveProgressDialog] = useState(false);
     const [savedProgressId, setSavedProgressId] = useState(null);
@@ -248,8 +248,6 @@ export default function QuizPlayer({ quiz, onComplete, onExit, mode = "standard"
     const [pastAttempts, setPastAttempts] = useState([]);
     const [mathMode, setMathMode] = useState({});
     const [, forceUpdate] = useState(0);
-    const [showKeyboard, setShowKeyboard] = useState({});
-    const [cursorPosition, setCursorPosition] = useState({});
     const mathInputRefs = useState({})[0];
     const [currentFeedbackIndex, setCurrentFeedbackIndex] = useState(0);
     const [previousAnswers, setPreviousAnswers] = useState({});
@@ -300,7 +298,6 @@ export default function QuizPlayer({ quiz, onComplete, onExit, mode = "standard"
 
     const saveProgressToDatabase = async () => {
         try {
-            const user = await base44.auth.me();
             const progressData = { quiz_id: quiz.id, quiz_title: quiz.title, current_question_index: currentQuestionIndex, user_answers: userAnswers, start_time: startTime, last_updated: new Date().toISOString() };
             if (savedProgressId) {
                 await base44.entities.QuizProgress.update(savedProgressId, progressData);
@@ -355,11 +352,6 @@ export default function QuizPlayer({ quiz, onComplete, onExit, mode = "standard"
         window.addEventListener('navigation-guard-check', handler);
         return () => window.removeEventListener('navigation-guard-check', handler);
     }, [userAnswers, showResults]);
-
-    const isMCQSubmitted = (idx) => {
-        const q = shuffledQuiz.questions[idx];
-        return q?.type === 'mcq' && submittedQuestions.has(idx);
-    };
 
     const handleAnswerChange = (value) => {
         if (!showFeedback) setUserAnswers(prev => ({ ...prev, [currentQuestionIndex]: value }));
@@ -468,7 +460,7 @@ export default function QuizPlayer({ quiz, onComplete, onExit, mode = "standard"
         // Short answers went unmarked on this path, so they record as
         // null rather than as wrong — an unmarked question is not a
         // question you got wrong.
-        const mcqOnlyResults = buildQuestionResults((q, i, max) => (q.type === 'mcq'
+        const mcqOnlyResults = buildQuestionResults((q, i) => (q.type === 'mcq'
             ? { marks: parseInt(userAnswers[i]) === q.correct_answer ? 1 : 0,
                 correct: parseInt(userAnswers[i]) === q.correct_answer }
             : { marks: undefined, correct: null }));
