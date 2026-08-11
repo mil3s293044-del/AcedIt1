@@ -192,6 +192,53 @@ export const FOCUS_START = [
     "Quiet from me. You've got this.",
 ];
 
+/**
+ * A finished session, graded by how long it actually ran.
+ *
+ * The modal said "You studied for N minutes using pomodoro!" whether N was
+ * twelve or ninety. A student who did a short one already knows it was short,
+ * and being congratulated identically is how a product stops being believed.
+ * The short lines refuse to sulk about it either — twelve minutes genuinely
+ * does beat none.
+ */
+export const SESSION_DONE = {
+    short: [   // under 15 minutes
+        "Short one. Still counts — showing up is the hard part.",
+        "In and out. That's a session, not a failed one.",
+        "Quick hit. Your streak doesn't know the difference.",
+    ],
+    solid: [   // 15–44
+        "That's a proper block. Nicely done.",
+        "Long enough to get somewhere, short enough to do again tomorrow.",
+        "That's the one that compounds. Good.",
+    ],
+    long: [    // 45+
+        "That's a serious stretch. Go and do nothing for a bit.",
+        "Big session. Genuinely — go and eat something.",
+        "That's a lot of focus in one go. Rest is part of it now.",
+    ],
+};
+
+/** Which band a finished session falls into. */
+export function sessionBand(minutes) {
+    const m = Number(minutes) || 0;
+    if (m >= 45) return "long";
+    if (m >= 15) return "solid";
+    return "short";
+}
+
+/**
+ * A streak ticked over. Milestones get their own copy from the celebration
+ * component, so these are the ordinary days — which are the ones that need a
+ * reason to keep going.
+ */
+export const STREAK_CHEER = [
+    "Another one on the pile.",
+    "Day after day is the whole trick.",
+    "Still going. That's the bit that counts.",
+    "You showed up again. Good.",
+];
+
 /** He noticed something in the data. Warm, never guilt. */
 export const NUDGE = {
     slipping: [

@@ -28,6 +28,7 @@ import { X, Send, Loader2, ArrowRight, Lock, Sparkles, RefreshCw } from "lucide-
 import { Button } from "@/components/ui/button";
 import MarkdownMath from "@/components/shared/MarkdownMath";
 import SpadeMark, { AceCard } from "@/components/ace/SpadeMark";
+import useAceYield from "@/components/ace/useAceYield";
 import { streamAce, TierBlockedError } from "@/lib/aiClient";
 import { isPremium } from "@/lib/tierAccess";
 import { base44 } from "@/api/base44Client";
@@ -51,6 +52,9 @@ const TONE = {
 export default function AceCompanion({ userProfile }) {
     const navigate = useNavigate();
     const [open, setOpen] = useState(false);
+    // The XP popup stack sits at exactly these coordinates on a phone and wins
+    // on z-index, so it covers him outright. He gets out of its way instead.
+    const yielding = useAceYield();
     const [messages, setMessages] = useState([]);
     const [input, setInput] = useState("");
     const [streaming, setStreaming] = useState(false);
@@ -258,7 +262,7 @@ export default function AceCompanion({ userProfile }) {
     return (
         <>
             <AnimatePresence>
-                {!open && (
+                {!open && !yielding && (
                     <motion.div key="ace-fab" drag dragMomentum={false} dragElastic={0.08}
                         onDragStart={() => { draggedRef.current = true; }}
                         onDragEnd={onPillDragEnd}
@@ -266,7 +270,7 @@ export default function AceCompanion({ userProfile }) {
                         className="fixed right-4 md:right-6 bottom-24 md:bottom-6 z-40 cursor-grab active:cursor-grabbing">
                         <motion.button
                             initial={{ opacity: 0, scale: 0.6 }} animate={{ opacity: 1, scale: 1 }}
-                            exit={{ opacity: 0, scale: 0.6 }}
+                            exit={{ opacity: 0, scale: 0.6, x: 60 }}
                             transition={{ type: "spring", stiffness: 380, damping: 24 }}
                             whileHover={{ scale: 1.06 }} whileTap={{ scale: 0.94 }}
                             onClick={() => { if (!draggedRef.current) setOpen(true); }}
