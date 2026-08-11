@@ -279,28 +279,6 @@ function LevelUpBanner({ level, rankUp, rank }) {
     );
 }
 
-function RankUpBanner({ rank }) {
-    if (!rank) return null;
-    return (
-        <div className="relative overflow-hidden bg-gradient-to-r from-amber-500 via-orange-500 to-red-500 text-white px-4 py-3.5 rounded-2xl shadow-2xl border border-amber-400">
-            <div className="relative flex items-center gap-3">
-                <motion.div
-                    animate={{ scale: [1, 1.4, 0.9, 1.15, 1], rotate: [0, 20, -15, 8, 0] }}
-                    transition={{ duration: 0.7 }}
-                    className="w-11 h-11 bg-surface/20 rounded-xl flex items-center justify-center flex-shrink-0 text-2xl"
-                >
-                    {rank.emoji}
-                </motion.div>
-                <div>
-                    <p className="font-black text-lg leading-tight">Rank Up! 🚀</p>
-                    <p className="text-amber-100 text-sm font-bold">{rank.name}</p>
-                    <p className="text-amber-200 text-xs mt-0.5">Your friends won't know what hit them 😤</p>
-                </div>
-            </div>
-        </div>
-    );
-}
-
 /**
  * Helper — call after any awardXP response to fire the popup.
  */

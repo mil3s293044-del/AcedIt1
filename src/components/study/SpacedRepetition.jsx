@@ -336,14 +336,12 @@ export default function SpacedRepetition() {
     const [filterSubject, setFilterSubject] = useState('all');
     const [userSubjects, setUserSubjects] = useState([]);
     const [viewingStats, setViewingStats] = useState(null);
-    const [reviewFilter, setReviewFilter] = useState('all');
     const [reviewStartTime, setReviewStartTime] = useState(null);
     const [sessionStats, setSessionStats] = useState({ totalReviews: 0, againCount: 0, hardCount: 0, goodCount: 0, easyCount: 0 });
     // Real XP banked this session from per-card incremental awards.
     const sessionXPRef = React.useRef(0);
     const [isRating, setIsRating] = useState(false);
     const [isSavingDeck, setIsSavingDeck] = useState(false);
-    const [isFlipped, setIsFlipped] = useState(false);
 
     const [newDeck, setNewDeck] = useState({ subject_name: '', subject_code: '', topic: '', unit: 'General' });
     const [newCard, setNewCard] = useState({ question: '', answer: '' });
@@ -378,7 +376,7 @@ export default function SpacedRepetition() {
         if (!reviewMode) return;
         const handleKey = (e) => {
             if (!showAnswer) {
-                if (e.code === 'Space' || e.code === 'Enter') { e.preventDefault(); setShowAnswer(true); setIsFlipped(true); }
+                if (e.code === 'Space' || e.code === 'Enter') { e.preventDefault(); setShowAnswer(true); }
             } else {
                 if (e.key === '1') handleRateCard(1);
                 else if (e.key === '2') handleRateCard(2);
@@ -710,8 +708,8 @@ The documents provided may be PowerPoint slides, Word documents, PDFs or text fi
         let cards = filter === 'due' ? deck.cards.filter(isDue) :
             filter === 'weak' ? deck.cards.filter(c => c.is_weak_spot) : deck.cards;
         if (!cards.length) { toast({ title: "No cards available", description: "No cards match that filter." }); return; }
-        setReviewCards(cards); setCurrentCardIndex(0); setShowAnswer(false); setIsFlipped(false);
-        setReviewMode(true); setReviewFilter(filter); setReviewStartTime(Date.now());
+        setReviewCards(cards); setCurrentCardIndex(0); setShowAnswer(false);
+        setReviewMode(true); setReviewStartTime(Date.now());
         setSessionStats({ totalReviews: 0, againCount: 0, hardCount: 0, goodCount: 0, easyCount: 0 });
         recordStudyAndGetStreak().catch(() => {});
     };
@@ -825,7 +823,7 @@ The documents provided may be PowerPoint slides, Word documents, PDFs or text fi
             }).catch(() => {});
             if (currentCardIndex < reviewCards.length - 1) {
                 setCurrentCardIndex(currentCardIndex + 1);
-                setShowAnswer(false); setIsFlipped(false);
+                setShowAnswer(false);
                 setIsRating(false);
             } else {
                 await handleCompleteReview();
@@ -923,7 +921,7 @@ The documents provided may be PowerPoint slides, Word documents, PDFs or text fi
                             {!showAnswer ? (
                                 <button
                                     type="button"
-                                    onClick={() => { setShowAnswer(true); setIsFlipped(true); }}
+                                    onClick={() => { setShowAnswer(true); }}
                                     className="w-full p-8 sm:p-12 min-h-[56vh] flex flex-col items-center justify-center text-center gap-7 cursor-pointer hover:bg-chart-3/[0.03] transition-colors"
                                 >
                                     <span className="pill bg-chart-3/10 text-chart-3 uppercase tracking-widest">Question</span>

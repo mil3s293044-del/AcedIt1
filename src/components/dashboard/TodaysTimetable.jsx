@@ -179,7 +179,7 @@ export default function TodaysTimetable({ user }) {
 
                             {/* All Activities */}
                             <div className="space-y-2 max-h-60 overflow-y-auto">
-                                {todayActivities.map((activity, index) => (
+                                {todayActivities.map((activity) => (
                                     <div 
                                         key={activity.id} 
                                         className={`flex items-center justify-between p-3 rounded-lg border transition-all duration-200 ${

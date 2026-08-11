@@ -7,7 +7,7 @@ import {
     levelFromXP, levelProgress, xpToNextLevel, xpForLevel,
 } from "@/components/shared/xpSystem";
 
-export default function XPLevelCard({ totalXP = 0, seasonXP = 0, streakDays = 0, compact = false }) {
+export default function XPLevelCard({ totalXP = 0, streakDays = 0, compact = false }) {
     const rank = getRankFromXP(totalXP);
     const nextRank = XP_RANKS[rank.tier] || null;
     const rankPct = getRankProgress(totalXP);

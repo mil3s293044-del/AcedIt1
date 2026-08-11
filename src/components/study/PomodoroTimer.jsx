@@ -62,7 +62,6 @@ export default function PomodoroTimer({ onSessionComplete, userSubjects: initial
         sessionsBeforeLongBreak: 4,
     });
     const [userSubjects, setUserSubjects] = useState(initialUserSubjects);
-    const [user, setUser] = useState(null);
 
     const [isBreak, setIsBreak] = useState(false);
     const [session, setSession] = useState(1);
@@ -128,7 +127,6 @@ export default function PomodoroTimer({ onSessionComplete, userSubjects: initial
         const loadSubjects = async () => {
             try {
                 const currentUser = await base44.auth.me();
-                setUser(currentUser);
 
                 const subjects = await base44.entities.UserSubject.filter({
                     created_by: currentUser.email,

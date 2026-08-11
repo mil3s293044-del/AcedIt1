@@ -1,6 +1,5 @@
 import React, { useEffect, useState } from "react";
 import { motion, useScroll, useReducedMotion } from "framer-motion";
-import { useAuth } from "@/lib/AuthContext";
 import { trackStartTrial } from "@/lib/analytics";
 import EmailCapture from "@/components/marketing/EmailCapture";
 import { Button } from "@/components/ui/button";
@@ -71,7 +70,6 @@ const STATS = [
 ];
 
 export default function Landing() {
-  const { navigateToLogin } = useAuth();
   const [scrolled, setScrolled] = useState(false);
   const { scrollYProgress } = useScroll();
   const prefersReducedMotion = useReducedMotion();

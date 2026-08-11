@@ -20,7 +20,7 @@ const getScoreTextClass = (score) => {
     return "text-streak";
 };
 
-const QuizCard = React.memo(({ quiz, onPlay, onRetryWrong, onDelete, onReshuffle, pastAttempts = [], subjectColor }) => {
+const QuizCard = React.memo(({ quiz, onPlay, onRetryWrong, onDelete, onReshuffle, pastAttempts = [] }) => {
     const [showResults, setShowResults] = useState(false);
     const quizAttempts = pastAttempts.filter(a => a.quiz_id === quiz.id);
 
@@ -42,7 +42,6 @@ const QuizCard = React.memo(({ quiz, onPlay, onRetryWrong, onDelete, onReshuffle
     const bestScore = bestAttempt ? effectiveScore(bestAttempt) : null;
 
     const difficulty = difficultyConfig[quiz.difficulty] || difficultyConfig.intermediate;
-    const color = subjectColor || '#8B5CF6';
 
     return (
         <motion.div
@@ -136,7 +135,7 @@ const QuizCard = React.memo(({ quiz, onPlay, onRetryWrong, onDelete, onReshuffle
                                         className="overflow-hidden"
                                     >
                                         <div className="mt-2 space-y-1 max-h-28 overflow-y-auto">
-                                            {quizAttempts.slice(0, 5).map((attempt, idx) => (
+                                            {quizAttempts.slice(0, 5).map((attempt) => (
                                                 <div key={attempt.id} className="flex items-center justify-between text-xs bg-secondary/50 rounded-lg px-3 py-1.5">
                                                     <span className="text-muted-foreground">
                                                         {new Date(attempt.created_date).toLocaleDateString()}
