@@ -11,36 +11,43 @@
  * so the whole mascot works in light and dark from one fill and can never end
  * up with black eyes on a black spade.
  *
- * Moods are the only animation. A mascot that bounces continuously is a mascot
- * you turn off.
+ * He blinks, he bobs, and he reacts. All of it is small and all of it stops
+ * when the system asks for reduced motion — a mascot that moves constantly is
+ * a mascot people turn off, and the point of him being alive is that you like
+ * having him around rather than that you notice him.
  */
-import React from "react";
+import React, { useEffect, useState } from "react";
+import { motion, useReducedMotion } from "framer-motion";
 
-// The spade itself: apex, two lobes, and the tail, as one closed path so the
-// silhouette stays crisp at 16px.
-const SPADE = "M32 5 C32 5 6 26 6 36 C6 43.5 11.5 49 18 49 C23 49 27.5 46 30 42 "
-    + "C29.5 49 26 55 19.5 59.5 L44.5 59.5 C38 55 34.5 49 34 42 "
-    + "C36.5 46 41 49 46 49 C52.5 49 58 43.5 58 36 C58 26 32 5 32 5 Z";
+// The spade: apex, two lobes, and the tail, as one closed path so the
+// silhouette stays crisp at 16px. Fuller in the cheeks than a printed pip —
+// the extra width is what turns a suit symbol into a face.
+const SPADE = "M32 6 C32 6 5 26 5 37 C5 45 11 50.5 18 50.5 C23.5 50.5 28 47.5 30 43.5 "
+    + "C29.5 50 26 55.5 19.5 60 L44.5 60 C38 55.5 34.5 50 34 43.5 "
+    + "C36 47.5 40.5 50.5 46 50.5 C53 50.5 59 45 59 37 C59 26 32 6 32 6 Z";
 
-/** Where the eyes sit, and how they change per mood. */
-const MOODS = {
-    // Open and level — the default, and what he wears 95% of the time.
-    idle:     { eye: { rx: 6.4, ry: 7.6, dy: 0, dx: 0 }, brow: null },
-    // Looking up and away while he works something out.
-    thinking: { eye: { rx: 6, ry: 7.2, dy: -1.5, dx: -1.8 }, brow: null },
-    // Squeezed shut into happy arcs.
-    pleased:  { eye: null, brow: "happy" },
-    // Wide, for the moment he's flagging something.
-    alert:    { eye: { rx: 7.2, ry: 8.6, dy: 0, dx: 0 }, brow: null },
-};
-
-const EYE_X = [24, 40];
+const EYE_X = [23.5, 40.5];
 const EYE_Y = 30;
 
 /**
- * The mascot's head. `tone` picks the spade's fill; the default reads as a
- * real playing card — black pip on the card stock.
+ * Moods. `squash` is how much the eye is closed — 1 is open, 0 is a line —
+ * which is the only thing the blink has to animate, so blinking and
+ * expression share one mechanism instead of fighting over the same shapes.
  */
+const MOODS = {
+    idle:     { rx: 6.4, ry: 7.6, dx: 0,    dy: 0,   squash: 1, mouth: null,     blush: false },
+    happy:    { rx: 6.4, ry: 7.6, dx: 0,    dy: 0,   squash: 1, mouth: "smile",  blush: true },
+    pleased:  { rx: 6.4, ry: 7.6, dx: 0,    dy: 0,   squash: 0, mouth: "smile",  blush: true, arcs: true },
+    thinking: { rx: 6,   ry: 7.2, dx: -1.8, dy: -1.5, squash: 1, mouth: null,    blush: false },
+    alert:    { rx: 7.4, ry: 8.8, dx: 0,    dy: 0,   squash: 1, mouth: "o",      blush: false },
+    excited:  { rx: 7.2, ry: 8.4, dx: 0,    dy: -0.5, squash: 1, mouth: "smile", blush: true, sparkle: true },
+    wink:     { rx: 6.4, ry: 7.6, dx: 0,    dy: 0,   squash: 1, mouth: "smile",  blush: true, winkRight: true },
+    sleepy:   { rx: 6.4, ry: 4,   dx: 0,    dy: 1.5, squash: 1, mouth: null,     blush: false },
+};
+
+/** Blink timing. Irregular on purpose — a metronome blink reads as a machine. */
+const BLINK_MIN = 2600, BLINK_SPREAD = 3600;
+
 export function SpadeFace({
     className = "w-8 h-8",
     mood = "idle",
@@ -50,29 +57,83 @@ export function SpadeFace({
     // "stroke-")` compiled to nothing and the pleased face rendered blank.
     card = "fill-surface",
     cardStroke = "stroke-surface",
+    blink = true,
     title,
 }) {
     const m = MOODS[mood] || MOODS.idle;
+    const reduce = useReducedMotion();
+    const [blinking, setBlinking] = useState(false);
+
+    useEffect(() => {
+        if (!blink || reduce || m.squash === 0) return;
+        let timer;
+        const schedule = () => {
+            timer = setTimeout(() => {
+                setBlinking(true);
+                setTimeout(() => { setBlinking(false); schedule(); }, 110);
+            }, BLINK_MIN + Math.random() * BLINK_SPREAD);
+        };
+        schedule();
+        return () => clearTimeout(timer);
+    }, [blink, reduce, m.squash]);
+
+    const open = blinking ? 0.08 : m.squash;
+    const eyeShut = m.squash === 0;
+
     return (
         <svg viewBox="0 0 64 64" className={className} role={title ? "img" : "presentation"}
             aria-label={title || undefined} aria-hidden={title ? undefined : true}>
             <path d={SPADE} className={tone} />
-            {m.eye && EYE_X.map((x, i) => (
-                <ellipse key={i} cx={x + m.eye.dx} cy={EYE_Y + m.eye.dy}
-                    rx={m.eye.rx} ry={m.eye.ry} className={card} />
+
+            {/* Cheeks. Sitting UNDER the eyes and knocked out of the spade at
+                low opacity, so they read as a blush rather than as two more
+                holes in his face. */}
+            {m.blush && EYE_X.map((x, i) => (
+                <ellipse key={`b${i}`} cx={x + (i ? 6.5 : -6.5)} cy={EYE_Y + 7.5} rx="4.2" ry="2.8"
+                    className={card} opacity="0.4" />
             ))}
-            {m.brow === "happy" && EYE_X.map((x, i) => (
-                <path key={i}
-                    d={`M${x - 4.5} ${EYE_Y + 1.5} Q${x} ${EYE_Y - 4} ${x + 4.5} ${EYE_Y + 1.5}`}
-                    fill="none" className={cardStroke}
-                    strokeWidth="3" strokeLinecap="round" />
+
+            {!eyeShut && EYE_X.map((x, i) => {
+                // One eye shut while the other stays open is the whole wink.
+                const shut = m.winkRight && i === 1;
+                return shut ? (
+                    <path key={i} d={`M${x - 4.6} ${EYE_Y} Q${x} ${EYE_Y - 4.6} ${x + 4.6} ${EYE_Y}`}
+                        fill="none" className={cardStroke} strokeWidth="3" strokeLinecap="round" />
+                ) : (
+                    <g key={i} transform={`translate(${x + m.dx} ${EYE_Y + m.dy})`}>
+                        <ellipse rx={m.rx} ry={m.ry * open} className={card} />
+                        {/* The highlight is what makes an eye look wet rather
+                            than punched out. Hidden mid-blink so it can't
+                            float in a closed eye. */}
+                        {open > 0.5 && (
+                            <circle cx={m.rx * 0.34} cy={-m.ry * 0.34} r={m.rx * 0.26}
+                                className={tone} opacity="0.55" />
+                        )}
+                    </g>
+                );
+            })}
+
+            {/* Eyes squeezed shut into happy arcs. */}
+            {m.arcs && EYE_X.map((x, i) => (
+                <path key={`a${i}`}
+                    d={`M${x - 5} ${EYE_Y + 2} Q${x} ${EYE_Y - 4.5} ${x + 5} ${EYE_Y + 2}`}
+                    fill="none" className={cardStroke} strokeWidth="3" strokeLinecap="round" />
             ))}
-            {/* A mouth only when he's pleased — a permanent smile on a small
-                mark turns into a smudge. */}
-            {mood === "pleased" && (
-                <path d="M26.5 36.5 Q32 41.5 37.5 36.5" fill="none"
-                    className={cardStroke}
-                    strokeWidth="2.8" strokeLinecap="round" />
+
+            {m.mouth === "smile" && (
+                <path d="M25.5 37 Q32 43 38.5 37" fill="none"
+                    className={cardStroke} strokeWidth="3.4" strokeLinecap="round" />
+            )}
+            {m.mouth === "o" && (
+                <ellipse cx="32" cy="39.5" rx="3.2" ry="3.8" className={card} />
+            )}
+
+            {/* A couple of sparks for the moment something good happened. */}
+            {m.sparkle && (
+                <g className={card}>
+                    <path d="M52 15 l1.6 4 4 1.6 -4 1.6 -1.6 4 -1.6 -4 -4 -1.6 4 -1.6 Z" opacity="0.9" />
+                    <path d="M12 20 l1.1 2.7 2.7 1.1 -2.7 1.1 -1.1 2.7 -1.1 -2.7 -2.7 -1.1 2.7 -1.1 Z" opacity="0.7" />
+                </g>
             )}
         </svg>
     );
@@ -89,9 +150,7 @@ export function SpadePip({ className = "w-3 h-3", tone = "fill-foreground" }) {
 
 /**
  * Ace as an actual playing card — corner index, big centred face.
- *
- * Used where he introduces himself and has room to. The proportions are a real
- * card's (2.5:3.5) so it reads as one at a glance.
+ * The proportions are a real card's (2.5:3.5) so it reads as one at a glance.
  */
 export function AceCard({ className = "w-20", mood = "idle", tilt = 0 }) {
     return (
@@ -113,13 +172,35 @@ export function AceCard({ className = "w-20", mood = "idle", tilt = 0 }) {
 }
 
 /**
- * The mark used in the launcher and the panel header: the face on a round
- * card. Small enough that the pip has to carry it, so no index corners here.
+ * How he moves, per mood. Kept here rather than at each call site so he
+ * behaves the same everywhere — a mascot with a different bounce on every
+ * screen reads as three different mascots.
  */
-export default function SpadeMark({ className = "w-9 h-9", mood = "idle", title }) {
+const MOTION = {
+    idle:     { y: [0, -2.5, 0], transition: { duration: 3.2, repeat: Infinity, ease: "easeInOut" } },
+    happy:    { y: [0, -3.5, 0], transition: { duration: 2.4, repeat: Infinity, ease: "easeInOut" } },
+    excited:  { y: [0, -6, 0], rotate: [0, -5, 5, 0], transition: { duration: 0.9, repeat: Infinity, repeatDelay: 1.4, ease: "easeInOut" } },
+    thinking: { rotate: [0, -7, 0, 7, 0], transition: { duration: 3.4, repeat: Infinity, ease: "easeInOut" } },
+    sleepy:   { y: [0, 1.5, 0], transition: { duration: 4.5, repeat: Infinity, ease: "easeInOut" } },
+    pleased:  { scale: [1, 1.06, 1], transition: { duration: 2.2, repeat: Infinity, ease: "easeInOut" } },
+};
+
+/**
+ * The mark used in the launcher, the panel header and the buddy: the face on
+ * a round card. Small enough that the pip has to carry it, so no index
+ * corners here.
+ *
+ * `alive` adds the idle motion. It defaults ON because the whole point of him
+ * is company, but every animation still folds flat under reduced motion.
+ */
+export default function SpadeMark({ className = "w-9 h-9", mood = "idle", alive = true, title }) {
+    const reduce = useReducedMotion();
+    const anim = !reduce && alive ? MOTION[mood] || MOTION.idle : undefined;
     return (
-        <div className={`relative grid place-items-center rounded-full bg-surface border-2 border-border overflow-hidden ${className}`}>
-            <SpadeFace className="w-[68%] h-[68%]" mood={mood} title={title} />
-        </div>
+        <motion.div
+            animate={anim}
+            className={`relative grid place-items-center rounded-full bg-surface border-2 border-border overflow-hidden ${className}`}>
+            <SpadeFace className="w-[68%] h-[68%]" mood={mood} blink={alive} title={title} />
+        </motion.div>
     );
 }
