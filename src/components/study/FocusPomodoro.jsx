@@ -1,7 +1,7 @@
 import React from 'react';
 import { motion } from 'framer-motion';
 import { Button } from '@/components/ui/button';
-import SpadeMark from "@/components/ace/SpadeMark";
+import AceBody from "@/components/ace/AceBody";
 import { BREAK, FOCUS_START, pick } from "@/lib/aceVoice";
 import { 
     Play, 
@@ -160,7 +160,8 @@ export default function FocusPomodoro({
                             data-ace-break
                             className="flex flex-col items-center gap-3 sm:gap-4 max-w-3xl"
                         >
-                            <SpadeMark className="w-20 h-20 sm:w-28 sm:h-28" mood="nap" variant="dark" />
+                            <AceBody className="w-28 sm:w-36" pose="sleep" title="Ace"
+                                tone="fill-white" card="fill-slate-900" cardStroke="stroke-slate-900" />
                             <p className="text-lg sm:text-2xl text-slate-200 leading-snug text-center">
                                 {breakLine}
                             </p>

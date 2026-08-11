@@ -28,7 +28,8 @@ import { X, Send, Loader2, ArrowRight, Lock, Sparkles, RefreshCw } from "lucide-
 import { Button } from "@/components/ui/button";
 import MarkdownMath from "@/components/shared/MarkdownMath";
 import SpadeMark, { AceCard } from "@/components/ace/SpadeMark";
-import useAceYield from "@/components/ace/useAceYield";
+import AceBody from "@/components/ace/AceBody";
+import useAceYield, { useAceClaimed } from "@/components/ace/useAceYield";
 import { streamAce, TierBlockedError } from "@/lib/aiClient";
 import { isPremium } from "@/lib/tierAccess";
 import { base44 } from "@/api/base44Client";
@@ -55,6 +56,7 @@ export default function AceCompanion({ userProfile }) {
     // The XP popup stack sits at exactly these coordinates on a phone and wins
     // on z-index, so it covers him outright. He gets out of its way instead.
     const yielding = useAceYield();
+    const claimed = useAceClaimed();
     const [messages, setMessages] = useState([]);
     const [input, setInput] = useState("");
     const [streaming, setStreaming] = useState(false);
@@ -262,7 +264,7 @@ export default function AceCompanion({ userProfile }) {
     return (
         <>
             <AnimatePresence>
-                {!open && !yielding && (
+                {!open && !yielding && !claimed && (
                     <motion.div key="ace-fab" drag dragMomentum={false} dragElastic={0.08}
                         onDragStart={() => { draggedRef.current = true; }}
                         onDragEnd={onPillDragEnd}
@@ -278,9 +280,11 @@ export default function AceCompanion({ userProfile }) {
                             aria-label="Open Ace, your guide to AcedIt"
                             title="Drag me anywhere · double-click to snap back"
                             data-ace-fab
-                            className="flex items-center gap-2 pl-1.5 pr-4 py-1.5 rounded-full shadow-soft bg-surface border-2 border-border hover:shadow-soft-lg transition-shadow">
-                            <SpadeMark className="w-9 h-9" />
-                            <span className="font-display font-extrabold text-sm text-foreground">Ace</span>
+                            className="flex flex-col items-center group">
+                            <AceBody className="w-16 sm:w-20 drop-shadow-md
+                                group-hover:-translate-y-1 transition-transform" pose="wave" />
+                            <span className="-mt-1 px-2.5 py-0.5 rounded-full bg-surface border-2 border-border
+                                shadow-soft font-display font-extrabold text-xs text-foreground">Ace</span>
                         </motion.button>
                     </motion.div>
                 )}

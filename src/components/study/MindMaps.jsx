@@ -46,7 +46,7 @@ import {
 } from "@/lib/mindmap";
 import AceTip from "@/components/ace/AceTip";
 import AceShuffle from "@/components/ace/AceShuffle";
-import SpadeMark from "@/components/ace/SpadeMark";
+import AceBody from "@/components/ace/AceBody";
 
 const TYPE_ICON = {
     idea: Lightbulb, cause: Zap, effect: Target, step: ListOrdered,
@@ -845,7 +845,7 @@ export default function MindMaps({ user, subjects = [] }) {
                     <div className="flex justify-center py-10"><AceShuffle size="lg" /></div>
                 ) : subjects.length === 0 ? (
                     <div className="text-center py-8">
-                        <SpadeMark className="w-16 h-16 mx-auto mb-2" mood="point" />
+                        <AceBody className="w-24 mx-auto" pose="point" title="Ace" />
                         <p className="text-sm font-bold text-foreground">Add a subject first</p>
                         <p className="text-xs text-muted-foreground mt-0.5">Your maps are organised by subject.</p>
                     </div>

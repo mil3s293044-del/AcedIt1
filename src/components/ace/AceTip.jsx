@@ -1,5 +1,5 @@
 /**
- * AceTip — a small spade beside anything the app never bothered to explain.
+ * AceTip — a definition for anything the app never bothered to explain.
  *
  * The help drawer answers "what's on this page". This answers the question
  * that actually stops people: they're looking at one number, one badge, one
@@ -14,12 +14,19 @@
  * Deliberately small and quiet, too. This goes next to dozens of things; if it
  * drew attention it would turn every page into a field of question marks and
  * be the first thing anyone asked us to remove.
+ *
+ * The trigger used to be a tiny spade. Fourteen of them, scattered next to
+ * labels across the app — and a spade next to a number doesn't mean "tap for a
+ * definition" to anybody. It read as decoration, which is exactly what it
+ * became: a random suit symbol strewn about the UI. Ace's identity belongs to
+ * Ace, in the places he actually turns up as himself; a help affordance should
+ * look like a help affordance, which is what everyone already knows a small
+ * circled "?" to be.
  */
 import React from "react";
 import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover";
 import { Link } from "react-router-dom";
-import { ArrowRight } from "lucide-react";
-import { SpadePip } from "@/components/ace/SpadeMark";
+import { ArrowRight, HelpCircle } from "lucide-react";
 import { termFor } from "@/lib/aceTerms";
 import { BY_ID } from "@/lib/aceKnowledge";
 
@@ -37,10 +44,10 @@ export default function AceTip({ term, className = "", align = "start", side = "
                 <button type="button" data-ace-tip={term}
                     aria-label={`What is ${t.term}?`}
                     onClick={(e) => e.stopPropagation()}
-                    className={`inline-grid place-items-center w-4 h-4 rounded-full align-middle
+                    className={`inline-grid place-items-center w-3.5 h-3.5 rounded-full align-middle
                         text-muted-foreground/70 hover:text-foreground transition-colors
                         focus-visible:outline focus-visible:outline-2 focus-visible:outline-ring ${className}`}>
-                    <SpadePip className="w-2.5 h-2.5" tone="fill-current" />
+                    <HelpCircle className="w-3.5 h-3.5" strokeWidth={2.5} />
                 </button>
             </PopoverTrigger>
             <PopoverContent align={align} side={side} sideOffset={6}

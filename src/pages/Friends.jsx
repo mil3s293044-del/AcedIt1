@@ -16,7 +16,7 @@ import { base44 } from "@/api/base44Client";
 import { useToast } from "@/components/ui/use-toast";
 import HelpButton from "@/components/shared/HelpButton";
 import FriendsLeaderboard from "@/components/friends/FriendsLeaderboard";
-import SpadeMark from "@/components/ace/SpadeMark";
+import AceBody from "@/components/ace/AceBody";
 
 // ── Coach voice (chill + motivational, social) ────────────────────────────
 function getCoachLine({ name, hour, friendCount, pendingCount, sharedCount }) {
@@ -523,7 +523,7 @@ export default function Friends() {
                             </div>
                         ) : (
                             <div className="rounded-3xl bg-secondary/40 border-2 border-dashed border-border p-6 lg:p-8 text-center h-full flex flex-col items-center justify-center">
-                                <SpadeMark className="w-20 h-20 mb-3" mood="peek" />
+                                <AceBody className="w-28 mb-1" pose="wave" title="Ace" />
                                 <h2 className="font-display font-extrabold text-foreground text-xl lg:text-2xl mb-2">
                                     Build your study crew
                                 </h2>
