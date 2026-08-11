@@ -17,6 +17,8 @@ import TopNav from "@/components/layout/TopNav";
 import BottomNav from "@/components/layout/BottomNav";
 import SideRail from "@/components/layout/SideRail";
 import AceCompanion from "@/components/ace/AceCompanion";
+import AceIntro from "@/components/ace/AceIntro";
+import { recordVisit } from "@/lib/aceDeck";
 
 const FloatingTimer = React.memo(({ currentTime, timerPosition, isDragging, handleMouseDown, timerRef, formatTime }) => (
     <motion.div
@@ -70,6 +72,15 @@ FloatingTimer.displayName = 'FloatingTimer';
 
 export default function Layout({ children }) {
     const location = useLocation();
+    const pageKey = location.pathname.replace(/^\//, "").split("/")[0] || "Dashboard";
+
+    // The deck's weaker half. Opening a page isn't using a feature, which is
+    // why this is kept apart from the evidence in the student's own rows — but
+    // for the read-only parts of the app (Analytics, Ranked, the guides) it's
+    // the only thing we can honestly know at all.
+    useEffect(() => {
+        recordVisit(location.pathname + location.search);
+    }, [location.pathname, location.search]);
     const navigate = useNavigate();
     const [globalTimer, setGlobalTimer] = useState(null);
     const [currentTime, setCurrentTime] = useState(null);
@@ -301,6 +312,13 @@ export default function Layout({ children }) {
             <StreakCelebration />
 
             <AceCompanion userProfile={userProfile} />
+            {/* One mount for the whole app rather than a call on each of the
+                ten pages that carry a help button — the route already tells us
+                where we are, and this way a page added later is covered the
+                moment it gets a knowledge-map entry. Suppressed while
+                onboarding is up; being introduced to a page you can't see is
+                the sort of thing that makes people close both. */}
+            <AceIntro page={pageKey} suppressed={showOnboarding} />
 
             {showOnboarding && (
                 <OnboardingModal
