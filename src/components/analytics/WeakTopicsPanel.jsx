@@ -13,38 +13,7 @@ import React from "react";
 import { Link } from "react-router-dom";
 import { createPageUrl } from "@/utils";
 import { TrendingDown, ArrowRight, ShieldCheck } from "lucide-react";
-
-// A topic needs enough reviews behind it before "you're weak at this" is a fair
-// claim — two failed cards on a brand-new deck is noise, not a weakness.
-const MIN_REVIEWS = 5;
-
-export function weakTopicsFrom(flashcards = []) {
-    const byTopic = {};
-    for (const c of flashcards) {
-        if (!c.topic) continue;
-        const key = `${c.subject_name || "General"}:::${c.topic}`;
-        const t = byTopic[key] || (byTopic[key] = {
-            subject: c.subject_name || "General", topic: c.topic,
-            reviews: 0, landed: 0, weakCards: 0, cards: 0,
-        });
-        t.cards += 1;
-        t.reviews += c.total_reviews || 0;
-        t.landed += (c.review_count_good || 0) + (c.review_count_easy || 0);
-        if (c.is_weak_spot) t.weakCards += 1;
-    }
-
-    return Object.values(byTopic)
-        .filter((t) => t.weakCards > 0 || t.reviews >= MIN_REVIEWS)
-        .map((t) => ({
-            ...t,
-            // Share of reviews that didn't land. No reviews yet but flagged
-            // cards still counts as worth attention, just without a rate.
-            missRate: t.reviews > 0 ? Math.round((1 - t.landed / t.reviews) * 100) : null,
-        }))
-        .filter((t) => t.weakCards > 0 || (t.missRate ?? 0) >= 30)
-        .sort((a, b) => (b.weakCards - a.weakCards) || ((b.missRate ?? 0) - (a.missRate ?? 0)))
-        .slice(0, 6);
-}
+import { weakTopicsFrom } from "@/lib/weakTopics";
 
 export default function WeakTopicsPanel({ flashcards = [] }) {
     const topics = weakTopicsFrom(flashcards);
@@ -108,3 +77,6 @@ export default function WeakTopicsPanel({ flashcards = [] }) {
         </div>
     );
 }
+
+// Re-exported so existing imports keep resolving.
+export { weakTopicsFrom };
