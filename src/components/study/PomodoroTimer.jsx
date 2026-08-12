@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from "react";
+import React, { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -10,6 +10,8 @@ import { format } from "date-fns";
 import { useToast } from "@/components/ui/use-toast";
 import { base44 } from "@/api/base44Client";
 import { recordStudyAndGetStreak } from "@/components/shared/streakHelpers";
+import AceBody from "@/components/ace/AceBody";
+import { BREAK, pick } from "@/lib/aceVoice";
 
 // Static class lookup so Tailwind JIT can see every class string.
 // `accentVar` is the CSS variable used for inline `style` color/filter
@@ -70,6 +72,9 @@ export default function PomodoroTimer({ onSessionComplete, userSubjects: initial
     const [selectedSubject, setSelectedSubject] = useState("");
     const [topic, setTopic] = useState("");
     const [isFocusMode, setIsFocusMode] = useState(false);
+    // Seeded by which break this is, so it holds still for the whole five
+    // minutes instead of changing on every tick of the timer.
+    const breakLine = useMemo(() => pick(BREAK, `break-${session}`), [session]);
     const [showFocusPrompt, setShowFocusPrompt] = useState(false);
     const [hasBeenStarted, setHasBeenStarted] = useState(false);
     // ── Attention telemetry ─────────────────────────────────────────────────
@@ -535,6 +540,20 @@ export default function PomodoroTimer({ onSessionComplete, userSubjects: initial
                 <div className="relative z-10 p-8 h-[calc(100vh-100px)] overflow-auto flex items-center justify-center">
                     <div className="bg-surface/5 backdrop-blur-sm rounded-3xl border border-surface/10 p-12 shadow-soft">
                         <div className="flex flex-col items-center space-y-8">
+                            {/* Ace owns the break here too. He does NOT appear
+                                during focus — a mascot beside a running timer
+                                sabotages the thing the timer protects. */}
+                            {isBreak && (
+                                <div className="flex flex-col items-center" data-ace-break>
+                                    <AceBody className="w-24 sm:w-32" pose="sleep" title="Ace"
+                                        tone="fill-white" card="fill-slate-900"
+                                        cardStroke="stroke-slate-900" />
+                                    <p className="text-surface/90 text-lg sm:text-xl text-center max-w-md mt-3"
+                                        data-ace-break-line>
+                                        {breakLine}
+                                    </p>
+                                </div>
+                            )}
                             <div className="relative w-80 h-80 flex items-center justify-center">
                                 <svg className="absolute w-full h-full transform -rotate-90" viewBox="0 0 100 100">
                                     <circle
@@ -778,17 +797,18 @@ export default function PomodoroTimer({ onSessionComplete, userSubjects: initial
                                 className="card-soft text-center p-8 max-w-md"
                                 style={{ borderColor: colorScheme.accentVar }}
                             >
-                                <div className={`w-16 h-16 rounded-2xl ${colorScheme.tile10} flex items-center justify-center mx-auto mb-4`}>
-                                    <Coffee className={`w-8 h-8 ${colorScheme.timerText}`} />
+                                {/* The break belongs to Ace. Five minutes of
+                                    dead screen is the biggest uninterrupted
+                                    space in the product, and it used to be a
+                                    coffee cup in a rounded square. */}
+                                <div data-ace-break className="flex justify-center">
+                                    <AceBody className="w-24 sm:w-28" pose="sleep" title="Ace" />
                                 </div>
-                                <h3 className="text-2xl font-bold text-foreground mb-3">
+                                <h3 className="text-2xl font-bold text-foreground mt-2 mb-3">
                                     {isLongBreak(session - 1) ? 'Long Break Time!' : 'Short Break Time!'}
                                 </h3>
-                                <p className="text-muted-foreground leading-relaxed">
-                                    {isLongBreak(session - 1)
-                                        ? 'Take a longer rest - walk around, stretch, or grab a snack.'
-                                        : 'Quick break - hydrate, stretch, or rest your eyes.'
-                                    }
+                                <p className="text-muted-foreground leading-relaxed" data-ace-break-line>
+                                    {breakLine}
                                 </p>
                             </motion.div>
                         )}

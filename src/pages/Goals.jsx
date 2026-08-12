@@ -29,6 +29,7 @@ import { recIdOf, stratIdOf, durationOf, noteTextOf, buildNotes } from "@/lib/pl
 import { strategiesNeedingCheckIn } from "@/lib/strategyState";
 import StrategyCheckIn from "@/components/planner/StrategyCheckIn";
 import AceBody from "@/components/ace/AceBody";
+import { sacMood } from "@/lib/aceVoice";
 import WeekPlanDialog from "@/components/planner/WeekPlanDialog";
 import { fmtDate } from "@/lib/safeDate";
 
@@ -413,6 +414,8 @@ export default function Planner() {
         [assessments, todayStr]);
     const nextSac = upcoming[0] || null;
     const nextSacDays = nextSac ? differenceInDays(parseISO(nextSac.due_date), parseISO(todayStr)) : null;
+    // His read on the number, not just the number.
+    const sacFeel = sacMood(nextSacDays);
 
     // Visible week (Mon–Sun).
     const weekStart = useMemo(() => addWeeks(startOfWeek(new Date(), { weekStartsOn: 1 }), weekOffset), [weekOffset]);
@@ -920,6 +923,17 @@ export default function Planner() {
                                 nextSacDays <= 3 ? "bg-gradient-to-br from-streak to-xp" : "bg-gradient-to-br from-chart-3 to-chart-4"
                             }`}>
                                 <Flag className="absolute -top-8 -right-8 w-44 h-44 text-white/10 pointer-events-none" />
+                                {/* Ace, reacting to how close it is. The banner
+                                    already shouts the number; what it never did
+                                    was have an opinion, and the opinion is the
+                                    useful half — "eleven days" means nothing to
+                                    someone who doesn't know if eleven is fine. */}
+                                <div className="absolute right-4 bottom-3 sm:right-6 sm:bottom-4 w-20 sm:w-28
+                                    pointer-events-none" data-ace-sac={sacFeel.pose}>
+                                    <AceBody className="w-full" pose={sacFeel.pose} title="Ace"
+                                        tone="fill-white" card="fill-slate-900"
+                                        cardStroke="stroke-slate-900" />
+                                </div>
                                 {/* Centred, because the intention card next to it sets the
                                     row height and the banner was pooling all the slack in a
                                     dead block under the buttons. */}
@@ -934,6 +948,8 @@ export default function Planner() {
                                         <div className="mb-2 min-w-0">
                                             <p className="font-extrabold text-white truncate text-lg">{nextSac.subject_name} — {nextSac.title}</p>
                                             <p className="text-sm text-white/75">{fmtDate(nextSac.due_date, "EEEE d MMMM")}</p>
+                                            <p className="text-sm font-bold text-white/90 mt-1 max-w-md"
+                                                data-ace-sac-line>{sacFeel.line}</p>
                                         </div>
                                     </div>
                                     <div className="flex gap-2 mt-5 flex-wrap">
@@ -950,9 +966,7 @@ export default function Planner() {
                             </div>
                         ) : (
                             <div className="rounded-3xl bg-surface border border-dashed border-border p-6 lg:p-8 text-center h-full flex flex-col items-center justify-center shadow-soft">
-                                <div className="w-14 h-14 rounded-2xl bg-chart-3/10 flex items-center justify-center mb-3">
-                                    <Flag className="w-7 h-7 text-chart-3" />
-                                </div>
+                                <AceBody className="w-24 mb-1" pose="point" title="Ace" />
                                 <h2 className="font-display font-extrabold text-foreground text-lg mb-1">What's your next SAC?</h2>
                                 <p className="text-muted-foreground text-sm max-w-sm">
                                     Add it below — Study, Revision Mode and your Dashboard all start counting down with you.

@@ -11,6 +11,7 @@ import { format } from "date-fns";
 import ReactMarkdown from 'react-markdown';
 import { useToast } from "@/components/ui/use-toast";
 import { base44 } from "@/api/base44Client";
+import { aceDone } from "@/components/ace/AceReacts";
 import { FEATURES, checkLiveTier } from "@/lib/tierAccess";
 import { getExaminerPrompt } from "@/lib/subjectExaminerPrompts";
 import { recordStudyAndGetStreak } from "@/components/shared/streakHelpers";
@@ -584,6 +585,7 @@ For each answer:
 
     const completeSession = async (confidence) => {
         await saveSession();
+        aceDone("active_recall", null);
         const totalDuration = sessionStartTime ? Math.floor((Date.now() - sessionStartTime) / 60000) : 0;
         await onSessionComplete({
             technique_name: "active_recall",

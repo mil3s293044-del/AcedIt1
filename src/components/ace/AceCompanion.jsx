@@ -282,7 +282,7 @@ export default function AceCompanion({ userProfile }) {
                             data-ace-fab
                             className="flex flex-col items-center group">
                             <AceBody className="w-16 sm:w-20 drop-shadow-md
-                                group-hover:-translate-y-1 transition-transform" pose="wave" />
+                                group-hover:-translate-y-1 transition-transform" pose="stand" />
                             <span className="-mt-1 px-2.5 py-0.5 rounded-full bg-surface border-2 border-border
                                 shadow-soft font-display font-extrabold text-xs text-foreground">Ace</span>
                         </motion.button>

@@ -20,6 +20,7 @@ import AceCompanion from "@/components/ace/AceCompanion";
 import AceIntro from "@/components/ace/AceIntro";
 import { recordVisit } from "@/lib/aceDeck";
 import AceBuddy from "@/components/ace/AceBuddy";
+import AceReacts from "@/components/ace/AceReacts";
 
 const FloatingTimer = React.memo(({ currentTime, timerPosition, isDragging, handleMouseDown, timerRef, formatTime }) => (
     <motion.div
@@ -282,6 +283,8 @@ export default function Layout({ children }) {
             </main>
 
             <BottomNav />
+
+            <AceReacts />
 
             <Toaster />
 

@@ -13,6 +13,7 @@ import AdaptiveReview from "./AdaptiveReview";
 import DifficultyRating from "@/components/shared/DifficultyRating";
 import { useToast } from "@/components/ui/use-toast";
 import { base44 } from "@/api/base44Client";
+import { aceDone } from "@/components/ace/AceReacts";
 import { commandTermOf } from "@/lib/quizInsight";
 import { recordStudyAndGetStreak } from "@/components/shared/streakHelpers";
 import MathKeyboard from "../shared/MathKeyboard";
@@ -401,6 +402,13 @@ export default function QuizPlayer({ quiz, onExit, mode = "standard", timeLimitM
             }
         } catch {}
         setShowResults(true);
+        // Ace reacts to the mark. One event; the reaction itself is mounted
+        // once in the Layout rather than built into three results screens.
+        const marked = shuffledQuiz.questions.filter(
+            (q, i) => q.type === "mcq" && userAnswers[i] !== undefined
+                && parseInt(userAnswers[i], 10) === q.correct_answer).length;
+        aceDone("quiz", shuffledQuiz.questions.length
+            ? Math.round((marked / shuffledQuiz.questions.length) * 100) : null);
         await generateAIFeedback(timeTaken);
     };
 
