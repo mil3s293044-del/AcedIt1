@@ -19,6 +19,7 @@
 import React from "react";
 import { motion, useReducedMotion } from "framer-motion";
 import { SpadeFace, SpadePip } from "@/components/ace/SpadeMark";
+import AceBody from "@/components/ace/AceBody";
 
 const SIZES = {
     // In a button, next to a label. Too small for a face — the pip carries it.
@@ -92,11 +93,39 @@ export default function AceShuffle({ size = "md", label = "Loading", className =
  * margins, and a sentence — and they'd all drifted apart. One component means
  * the wait looks the same wherever you hit it.
  */
-export function AceLoading({ children = "Just a sec…", className = "" }) {
+/**
+ * How he waits, by how long the wait is.
+ *
+ * One animation for every wait is one animation you stop seeing. These are
+ * matched to the kind of wait rather than chosen for variety:
+ *
+ *   deck   — the riffling card stack. Short, mechanical waits: a page
+ *            fetching rows. Small, quiet, over in a second.
+ *   toss   — the whole character, flicking cards out of frame. Long AI
+ *            generations, ten to forty seconds, where a small spinner starts
+ *            to feel like nothing is happening.
+ *   think  — the whole character, scratching his head. Waits where the app is
+ *            genuinely reasoning about YOUR data — marking, planning,
+ *            analysing — because "he's working it out" is the honest read.
+ */
+const WAITS = {
+    deck:  null,          // handled by AceShuffle below
+    toss:  { pose: "toss",  size: "w-32 sm:w-40" },
+    think: { pose: "think", size: "w-28 sm:w-36" },
+};
+
+export function AceLoading({ children = "Just a sec…", variant = "deck", className = "" }) {
+    const w = WAITS[variant];
+    const label = typeof children === "string" ? children : "Loading";
     return (
-        <div className={`flex flex-col items-center justify-center py-12 gap-3 ${className}`}
-            data-ace-loading>
-            <AceShuffle size="lg" label={typeof children === "string" ? children : "Loading"} />
+        <div className={`relative overflow-hidden flex flex-col items-center justify-center
+                py-12 gap-3 ${className}`}
+            data-ace-loading={variant}>
+            {w
+                ? <span role="status" aria-label={label}>
+                    <AceBody className={w.size} pose={w.pose} />
+                  </span>
+                : <AceShuffle size="lg" label={label} />}
             <p className="text-sm text-muted-foreground text-center max-w-xs">{children}</p>
         </div>
     );

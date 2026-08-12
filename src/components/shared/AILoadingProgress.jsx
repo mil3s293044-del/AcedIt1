@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
-import { Loader2, Sparkles, CheckCircle } from 'lucide-react';
+import AceBody from '@/components/ace/AceBody';
 import { Progress } from '@/components/ui/progress';
 
 export default function AILoadingProgress({ 
@@ -68,16 +68,17 @@ export default function AILoadingProgress({
         }
     }, [stage, isCompleting, progress]);
 
+    // Only the text is read now — Ace fills the slot the per-stage icon and
+    // colour used to occupy, so keeping them would be a table half-used.
     const stages = {
-        starting: { icon: Loader2, text: 'Starting...', color: 'text-blue-600' },
-        processing: { icon: Sparkles, text: message, color: 'text-purple-600' },
-        analyzing: { icon: Loader2, text: 'Analyzing content...', color: 'text-indigo-600' },
-        generating: { icon: Sparkles, text: 'Generating results...', color: 'text-pink-600' },
-        completing: { icon: CheckCircle, text: 'Almost done...', color: 'text-green-600' }
+        starting:   { text: 'Starting...' },
+        processing: { text: message },
+        analyzing:  { text: 'Analyzing content...' },
+        generating: { text: 'Generating results...' },
+        completing: { text: 'Almost done...' },
     };
 
     const currentStage = stages[stage] || stages.processing;
-    const Icon = currentStage.icon;
 
     return (
         <motion.div
@@ -87,13 +88,16 @@ export default function AILoadingProgress({
         >
             <div className="bg-surface rounded-2xl shadow-2xl p-8 max-w-md w-full mx-4">
                 <div className="text-center space-y-6">
-                    <div className="flex justify-center">
-                        <div className="relative">
-                            <div className="w-20 h-20 rounded-full bg-gradient-to-br from-purple-100 to-indigo-100 flex items-center justify-center">
-                                <Icon className={`w-10 h-10 ${currentStage.color} ${Icon === Loader2 ? 'animate-spin' : ''}`} />
-                            </div>
-                            <div className="absolute inset-0 rounded-full bg-gradient-to-br from-purple-500/20 to-indigo-500/20 animate-ping" />
-                        </div>
+                    {/* Ten to forty seconds is the longest wait in the
+                        product, and it had the most generic possible thing in
+                        it. He tosses cards while the model works; when the
+                        stage says it's reasoning about the student's own
+                        content he switches to thinking, because that's the
+                        honest read of what's happening. */}
+                    <div className="flex justify-center" data-ace-ai={stage}>
+                        <AceBody className="w-32 sm:w-36"
+                            pose={stage === "analyzing" ? "think" : "toss"}
+                            title="Ace" />
                     </div>
 
                     <div>
