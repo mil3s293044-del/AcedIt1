@@ -18,6 +18,7 @@ import { Button } from "@/components/ui/button";
 import { base44 } from "@/api/base44Client";
 import { useToast } from "@/components/ui/use-toast";
 import { Loader2, Check, X, Minus, ChevronRight, RotateCcw } from "lucide-react";
+import AceBody from "@/components/ace/AceBody";
 import { TECHNIQUES, TECHNIQUE_IDS, applyRules } from "@/lib/strategise";
 import { describeOutcomes, describeRemaining, strategyStanding, dayKey } from "@/lib/strategyState";
 import { durationOf } from "@/lib/planTags";
@@ -27,9 +28,9 @@ import { fmtDate } from "@/lib/safeDate";
 // options — "did you do it" is a yes/no that most real days fail, and a plan
 // revised as if a half-done session never happened throws away real progress.
 const OUTCOMES = [
-    { id: "done", label: "Did it", icon: Check, cls: "border-primary bg-primary/10 text-primary" },
-    { id: "partly", label: "Partly", icon: Minus, cls: "border-xp bg-xp/10 text-xp" },
-    { id: "skipped", label: "Missed", icon: X, cls: "border-streak bg-streak/10 text-streak" },
+    { id: "done",    label: "Did it",  icon: Check, cls: "border-primary bg-primary/10 text-primary", pose: "happy" },
+    { id: "partly",  label: "Partly",  icon: Minus, cls: "border-xp bg-xp/10 text-xp",                pose: "stand" },
+    { id: "skipped", label: "Missed",  icon: X,     cls: "border-streak bg-streak/10 text-streak",    pose: "think" },
 ];
 
 const FEEL = [
@@ -45,15 +46,14 @@ const TONE = {
     ok: "text-muted-foreground",
 };
 
-export default function StrategyCheckIn({ strategy, onRevised, onDismiss }) {
+export default function StrategyCheckIn({ strategy, onRevised, onDismiss, open = false, onOpen }) {
     const { toast } = useToast();
-    const [open, setOpen] = useState(false);
+    const [step, setStep] = useState(0);
     // Only what the student explicitly picked. Seeding this from
     // `is_completed` snapshotted the tick state at mount, so a session ticked
     // off elsewhere while the card sat open would still be reported as missed.
     // The default is derived at read time instead.
     const [outcomes, setOutcomes] = useState({});
-    const outcomeOf = (s) => outcomes[s.id] || (s.is_completed ? "done" : "skipped");
     const [feel, setFeel] = useState("right");
     const [busy, setBusy] = useState(false);
 
@@ -168,90 +168,145 @@ Rules:
         }
     };
 
-    return (
-        <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}
-            className="rounded-3xl border-2 border-chart-4/30 bg-chart-4/5 p-5 shadow-soft">
-            {/* No Ace in here. He asks the question once, above the whole
-                group — see Goals.jsx. Three of these cards used to mean three
-                identical Aces stacked in a column. */}
-            <div className="flex items-start justify-between gap-3">
-                <div className="min-w-0 flex-1">
-                    <p className="stat-label text-chart-4">Strategy check-in</p>
-                    <p className="font-display font-extrabold text-foreground mt-1">
-                        {sacLabel}
-                    </p>
-                    <p className={`text-sm font-bold mt-0.5 ${TONE[standing.tone]}`}>{standing.text}</p>
-                    <p className="text-xs text-muted-foreground mt-1">
-                        {strategy.sac?.due_date
-                            ? `Due ${fmtDate(strategy.sac.due_date, "EEE d MMM")} · `
-                            : ""}
+    /**
+     * One question at a time.
+     *
+     * This was a purple card that expanded into a form: every past session
+     * listed at once with three buttons each, then a load picker, then a
+     * submit. That's a survey, and a student scrolls past a survey.
+     *
+     * Ace asks about one session, you answer, he asks about the next. Same
+     * data, same model call, same rules — but "how did Tuesday go" is a
+     * question a person asks, and people answer those.
+     *
+     * `step` walks the past sessions, then the load question, then the
+     * confirm. His pose follows your answers rather than being decoration:
+     * he's pleased when you did it and thinking when you didn't, and never
+     * disappointed, because a missed session is information.
+     */
+    const past = strategy.past;
+    const total = past.length + 2;            // sessions + load + confirm
+    const onSession = step < past.length;
+    const session = onSession ? past[step] : null;
+    const lastAnswer = session ? null : OUTCOMES.find(o => o.id === outcomes[past[past.length - 1]?.id]);
+
+    const answer = (sessionId, outcomeId) => {
+        setOutcomes(prev => ({ ...prev, [sessionId]: outcomeId }));
+        setStep(n => n + 1);
+    };
+
+    if (!open) {
+        return (
+            <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}
+                data-ace-checkin="closed"
+                className="rounded-2xl border-2 border-border bg-surface p-4 shadow-soft
+                    flex items-center justify-between gap-3">
+                <div className="min-w-0">
+                    <p className="font-display font-extrabold text-foreground truncate">{sacLabel}</p>
+                    <p className={`text-sm font-bold ${TONE[standing.tone]}`}>{standing.text}</p>
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                        {strategy.sac?.due_date ? `Due ${fmtDate(strategy.sac.due_date, "EEE d MMM")} · ` : ""}
                         {strategy.future.length} session{strategy.future.length === 1 ? "" : "s"} still to come
                     </p>
                 </div>
-                {!open && (
-                    <Button size="sm" onClick={() => setOpen(true)} className="gap-1.5 flex-shrink-0 bg-chart-4 hover:bg-chart-4/90 text-white btn-3d">
-                        Check in <ChevronRight className="w-4 h-4" />
-                    </Button>
-                )}
-            </div>
+                <Button size="sm" onClick={() => onOpen?.()} className="gap-1.5 flex-shrink-0">
+                    Check in <ChevronRight className="w-4 h-4" />
+                </Button>
+            </motion.div>
+        );
+    }
 
-            <AnimatePresence initial={false}>
-                {open && (
-                    <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} exit={{ opacity: 0, height: 0 }}
-                        className="overflow-hidden">
-                        <div className="pt-4 space-y-4">
-                            <div className="space-y-2">
-                                {strategy.past.map(s => (
-                                    <div key={s.id} className="rounded-2xl bg-surface border-2 border-border p-3">
-                                        <p className="text-sm font-bold text-foreground leading-snug">{s.title}</p>
-                                        <p className="text-[11px] text-muted-foreground mb-2">
-                                            {fmtDate(s.date, "EEE d MMM")} · {durationOf(s) || 40}m planned
-                                        </p>
-                                        <div className="flex gap-1.5">
-                                            {OUTCOMES.map(o => (
-                                                <button key={o.id}
-                                                    onClick={() => setOutcomes(prev => ({ ...prev, [s.id]: o.id }))}
-                                                    aria-pressed={outcomeOf(s) === o.id}
-                                                    className={`flex-1 inline-flex items-center justify-center gap-1 px-2 py-1.5 rounded-xl text-xs font-bold border-2 transition-all ${
-                                                        outcomeOf(s) === o.id ? o.cls : "border-border text-muted-foreground hover:border-muted-foreground/40"}`}>
-                                                    <o.icon className="w-3.5 h-3.5" /> {o.label}
-                                                </button>
-                                            ))}
-                                        </div>
+    return (
+        <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}
+            data-ace-checkin={onSession ? "session" : step === past.length ? "load" : "confirm"}
+            className="rounded-2xl border-2 border-border bg-surface p-4 shadow-soft">
+
+            <div className="flex items-end gap-3">
+                <AceBody className="w-20 sm:w-24 flex-shrink-0"
+                    pose={busy ? "think" : lastAnswer?.pose || "offer"} title="Ace" />
+
+                <div className="flex-1 min-w-0 mb-1">
+                    {/* Progress, as words rather than a bar — three questions
+                        is not enough to need a bar, and "2 of 5" tells you the
+                        one thing a bar would. */}
+                    <p className="stat-label mb-1">
+                        {sacLabel} · {Math.min(step + 1, total)} of {total}
+                    </p>
+
+                    <AnimatePresence mode="wait">
+                        <motion.div key={step}
+                            initial={{ opacity: 0, x: 10 }} animate={{ opacity: 1, x: 0 }}
+                            exit={{ opacity: 0, x: -10 }} transition={{ duration: 0.16 }}>
+
+                            {onSession && (
+                                <>
+                                    <p className="font-display font-extrabold text-foreground leading-snug">
+                                        How did {fmtDate(session.date, "EEEE")} go?
+                                    </p>
+                                    <p className="text-xs text-muted-foreground leading-snug mt-0.5 mb-2.5">
+                                        {session.title} · {durationOf(session) || 40}m planned
+                                    </p>
+                                    <div className="flex gap-1.5 flex-wrap">
+                                        {OUTCOMES.map(o => (
+                                            <button key={o.id} onClick={() => answer(session.id, o.id)}
+                                                data-ace-answer={o.id}
+                                                className={`inline-flex items-center gap-1.5 px-3 py-2 rounded-xl
+                                                    text-xs font-bold border-2 transition-all
+                                                    border-border text-foreground hover:${o.cls.split(" ")[0]}
+                                                    hover:bg-secondary`}>
+                                                <o.icon className="w-3.5 h-3.5" /> {o.label}
+                                            </button>
+                                        ))}
                                     </div>
-                                ))}
-                            </div>
+                                </>
+                            )}
 
-                            <div>
-                                <p className="stat-label mb-1.5">How has the load felt?</p>
-                                <div className="grid grid-cols-3 gap-1.5">
-                                    {FEEL.map(f => (
-                                        <button key={f.id} onClick={() => setFeel(f.id)} title={f.hint}
-                                            aria-pressed={feel === f.id}
-                                            className={`px-2 py-2 rounded-xl text-xs font-bold border-2 transition-all ${
-                                                feel === f.id ? "border-chart-4 bg-chart-4/10 text-chart-4" : "border-border text-muted-foreground hover:border-muted-foreground/40"}`}>
-                                            {f.label}
-                                        </button>
-                                    ))}
-                                </div>
-                            </div>
+                            {step === past.length && (
+                                <>
+                                    <p className="font-display font-extrabold text-foreground leading-snug">
+                                        And how did that feel?
+                                    </p>
+                                    <p className="text-xs text-muted-foreground leading-snug mt-0.5 mb-2.5">
+                                        Be honest — it changes how much I put in the days left.
+                                    </p>
+                                    <div className="flex gap-1.5 flex-wrap">
+                                        {FEEL.map(f => (
+                                            <button key={f.id} title={f.hint}
+                                                onClick={() => { setFeel(f.id); setStep(n => n + 1); }}
+                                                data-ace-feel={f.id}
+                                                className="px-3 py-2 rounded-xl text-xs font-bold border-2
+                                                    border-border text-foreground hover:bg-secondary transition-all">
+                                                {f.label}
+                                            </button>
+                                        ))}
+                                    </div>
+                                </>
+                            )}
 
-                            <div className="flex flex-wrap gap-2">
-                                <Button onClick={revise} disabled={busy} className="flex-1 gap-1.5 bg-chart-4 hover:bg-chart-4/90 text-white btn-3d">
-                                    {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : <RotateCcw className="w-4 h-4" />}
-                                    Rebuild the days left
-                                </Button>
-                                <Button variant="ghost" onClick={() => { setOpen(false); onDismiss?.(); }} disabled={busy} className="rounded-xl">
-                                    Not now
-                                </Button>
-                            </div>
-                            <p className="text-[11px] text-muted-foreground">
-                                Only the days still ahead get rewritten. Anything you've already ticked off stays exactly as it is.
-                            </p>
-                        </div>
-                    </motion.div>
-                )}
-            </AnimatePresence>
+                            {step > past.length && (
+                                <>
+                                    <p className="font-display font-extrabold text-foreground leading-snug">
+                                        {busy ? "Rebuilding it now…" : "Right — shall I rebuild the days left?"}
+                                    </p>
+                                    <p className="text-xs text-muted-foreground leading-snug mt-0.5 mb-2.5">
+                                        Only the days still ahead change. Anything you&rsquo;ve ticked off stays as it is.
+                                    </p>
+                                    <div className="flex gap-2 flex-wrap">
+                                        <Button size="sm" onClick={revise} disabled={busy} className="gap-1.5">
+                                            {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : <RotateCcw className="w-4 h-4" />}
+                                            Go on then
+                                        </Button>
+                                        <Button size="sm" variant="ghost" disabled={busy}
+                                            onClick={() => { onDismiss?.(); }}>
+                                            Leave it
+                                        </Button>
+                                    </div>
+                                </>
+                            )}
+                        </motion.div>
+                    </AnimatePresence>
+                </div>
+            </div>
         </motion.div>
     );
 }
