@@ -31,8 +31,18 @@
  *     it's recommending is worse than no guide.
  *
  *   - REDUCED MOTION. No walk. He appears at the destination.
+ *
+ *   - THE CONTAINING BLOCK. He is rendered through a PORTAL to document.body,
+ *     and that is not tidiness. `position: fixed` resolves against the nearest
+ *     ancestor with a transform, not against the viewport — and framer-motion
+ *     leaves an inline transform on every animated section in this app. Mounted
+ *     inline he was positioned relative to whichever `<motion.section>` he
+ *     happened to sit under, which put him a section's-worth off: the maths
+ *     said y=784 and the browser painted 816. Portalling to the body removes
+ *     every such ancestor and makes `fixed` mean fixed.
  */
 import React, { useCallback, useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { motion, useMotionValue, useSpring, useReducedMotion } from "framer-motion";
 import AceBody from "@/components/ace/AceBody";
 import { useAceClaimed, claimAce } from "@/components/ace/useAceYield";
@@ -51,11 +61,6 @@ const STEP_MS = 150;
  * H likewise: at `w-24` he is 96 wide, and AceBody's 84:92 viewBox makes that
  * 105 tall. A 96 here let the bottom clamp cut his feet off.
  *
- * KNOWN GAP: on a target that sits at the very bottom of a long page
- * (Analytics' weak-topics panel) he still renders about 30px below the fold —
- * the clamp computes a legal position and the element measures lower than it,
- * and I could not account for the difference. Every other placement verified
- * clean. Worth a fresh look rather than another guess at a constant.
  */
 const W = 104, H = 112;
 
@@ -234,8 +239,9 @@ export default function AceRoam({
     }, [walking, reduce]);
 
     if (!ready || claimed || offscreen) return null;
+    if (typeof document === "undefined") return null;
 
-    return (
+    return createPortal(
         <motion.div
             ref={selfRef}
             data-ace-roam={walking ? "walking" : "arrived"}
@@ -260,6 +266,7 @@ export default function AceRoam({
                     step={step} title={label} idle={!walking} />
             </button>
             {children && <div className="pointer-events-auto pb-2">{children}</div>}
-        </motion.div>
+        </motion.div>,
+        document.body,
     );
 }
