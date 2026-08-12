@@ -67,6 +67,12 @@ const ARMS = {
     carry: { l: { x: 11, y: 57, r: 7 },    r: { x: 53, y: 57, r: 7 } },
     // One arm up behind his head. Reads as "hang on, I'm thinking".
     scratch: { l: TUCK.l,                  r: { x: 52, y: 8,  r: 6.4 } },
+    // Both mitts over the eyes. The whole peekaboo gag.
+    cover:   { l: { x: 21, y: 30, r: 7.5 }, r: { x: 43, y: 30, r: 7.5 } },
+    // Elbows out, fists in — a tiny bodybuilder.
+    flex:    { l: { x: 0,  y: 24, r: 7 },  r: { x: 64, y: 24, r: 7 } },
+    // Arms out sideways for balance, mid-stumble.
+    flail:   { l: { x: -4, y: 34, r: 6.5 }, r: { x: 68, y: 40, r: 6.5 } },
 };
 
 /**
@@ -106,20 +112,56 @@ const POSES = {
     ponder:  { look: [-0.4, -0.5],  lids: 0.85, mouth: "flat",  arms: "scratch", tilt: -7 },
     bounce:  { look: null,          lids: 1,    mouth: "grin",  arms: "up",    tilt: 0, blush: true, hop: -6 },
     yawn:    { look: [0, 0.2],      lids: 0.15, mouth: "o",     arms: "up",    tilt: -3 },
+    // Hands over the eyes, then off. Reads as a gag rather than a mood.
+    peekaboo:{ look: [0, 0],        lids: 0.5,  mouth: "grin",  arms: "cover", tilt: 0,  blush: true, front: true },
+    // The full-body stretch that follows a yawn.
+    stretch: { look: [0, -0.3],     lids: 0.25, mouth: "o",     arms: "up",    tilt: -4, hop: -3 },
+    // Looking anywhere but at you, entirely innocent.
+    whistle: { look: [-0.8, -0.6],  lids: 0.7,  mouth: "o",     arms: "hips",  tilt: 5 },
+    // Caught something out of the corner of his eye.
+    doubletake:{ look: [0.95, -0.3], lids: 1,   mouth: "o",     arms: "down",  tilt: 8,  brow: "up" },
+    // Losing his balance and getting it back.
+    trip:    { look: [0, -0.4],     lids: 1,    mouth: "o",     arms: "flail", tilt: -16, hop: -2, brow: "up" },
+    // He is a playing card. Riffling one is the most on-brand thing he can do.
+    shuffle: { look: [0, 0.3],      lids: 1,    mouth: "smile", arms: "carry", tilt: -5, sparkle: true },
+    // Very small, very pleased with himself.
+    flex:    { look: [0, 0],        lids: 0.05, mouth: "grin",  arms: "flex",  tilt: 0,  blush: true, arcs: true },
+    // A single decisive nod.
+    nod:     { look: [0, 0.5],      lids: 0.4,  mouth: "smile", arms: "down",  tilt: 0,  hop: 2 },
 };
 
 /** Poses he's allowed to fidget out of — i.e. the ones where he's just there. */
 const RESTING = new Set(["stand", "happy", "peek", "offer"]);
 /** What a fidget can be, and how long it holds. */
 const IDLES = [
-    { pose: "glanceL", ms: 1100 },
-    { pose: "glanceR", ms: 1100 },
-    { pose: "bounce",  ms: 700 },
-    { pose: "ponder",  ms: 1400 },
-    { pose: "glanceR", ms: 900 },
-    { pose: "yawn",    ms: 1200 },
+    { pose: "glanceL",    ms: 1000 },
+    { pose: "glanceR",    ms: 1000 },
+    { pose: "bounce",     ms: 700 },
+    { pose: "ponder",     ms: 1300 },
+    { pose: "yawn",       ms: 1200 },
+    { pose: "peekaboo",   ms: 1100 },
+    { pose: "stretch",    ms: 1300 },
+    { pose: "whistle",    ms: 1600 },
+    { pose: "doubletake", ms: 900 },
+    { pose: "trip",       ms: 700 },
+    { pose: "shuffle",    ms: 1200 },
+    { pose: "flex",       ms: 1000 },
+    { pose: "nod",        ms: 600 },
 ];
-const IDLE_MIN = 7000, IDLE_SPREAD = 7000;
+
+/**
+ * How often he does something.
+ *
+ * Was 7–14 seconds, which on a page you glance at meant you often never saw
+ * one. 3.5–7.5 roughly doubles the rate. The randomised spread matters more
+ * than the floor: a fidget on a fixed beat reads as a loop, and a loop is the
+ * thing that gets noticed and then resented.
+ *
+ * The guard rails are unchanged and they're what make a higher rate safe —
+ * idles fire ONLY from resting poses, so he never animates over a line he
+ * just asked you to read, and every one folds flat under reduced motion.
+ */
+const IDLE_MIN = 3500, IDLE_SPREAD = 4000;
 
 /** Irregular on purpose — a metronome blink reads as a machine. */
 const BLINK_MIN = 2800, BLINK_SPREAD = 3800;
@@ -254,8 +296,9 @@ export default function AceBody({
 
                 {/* Arms, BEHIND the body. At rest they're tucked inside the
                     silhouette and invisible, which is what lets them swing out
-                    rather than appear. */}
-                {["l", "r"].map((side) => {
+                    rather than appear — and what means a pose covering the
+                    face has to draw them a second time on top (see `front`). */}
+                {!p.front && ["l", "r"].map((side) => {
                     const a = arms[side], s = SHOULDER[side];
                     const strokeCls = tone.replace("fill-", "stroke-");
                     return (
@@ -326,6 +369,28 @@ export default function AceBody({
                         className={cardStroke} strokeWidth="3" strokeLinecap="round" />
                 )}
                 {p.mouth === "o" && <ellipse cx="32" cy="44" rx="3.6" ry="4.4" className={card} />}
+
+                {/* The front layer. Only for poses whose hands are meant to
+                    be over the face — otherwise the mitts vanish behind his
+                    own head, which is what peekaboo did on the first pass. */}
+                {p.front && ["l", "r"].map((side) => {
+                    const a = arms[side], sh = SHOULDER[side];
+                    const strokeCls = tone.replace("fill-", "stroke-");
+                    return (
+                        <g key={`f${side}`}>
+                            <motion.line x1={sh.x} y1={sh.y} x2={a.x} y2={a.y}
+                                strokeWidth={a.r * 1.25} strokeLinecap="round"
+                                className={strokeCls} stroke="currentColor"
+                                initial={false}
+                                animate={{ x2: a.x, y2: a.y, strokeWidth: a.r * 1.25 }}
+                                transition={reduce ? { duration: 0 } : SPRING} />
+                            <motion.circle cx={a.x} cy={a.y} r={a.r} className={tone}
+                                initial={false}
+                                animate={{ cx: a.x, cy: a.y, r: a.r }}
+                                transition={reduce ? { duration: 0 } : SPRING} />
+                        </g>
+                    );
+                })}
 
                 {p.sparkle && (
                     <g className={tone}>
