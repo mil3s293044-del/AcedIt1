@@ -962,12 +962,13 @@ export default function MindMaps({ user, subjects = [] }) {
 
             {/* ── A brand-new map gets the closed-book nudge, once ────────── */}
             {map.nodes.length <= 1 && (
-                <div className="rounded-2xl border-2 border-map/25 bg-map/5 p-3.5 flex items-start gap-2.5">
-                    <EyeOff className="w-4 h-4 text-map flex-shrink-0 mt-0.5" />
-                    <p className="text-xs text-muted-foreground leading-snug">
+                <div className="rounded-2xl border-2 border-map/25 bg-map/5 p-3.5 flex items-end gap-3"
+                    data-ace-mapnudge>
+                    <AceBody className="w-16 sm:w-20 flex-shrink-0" pose="alert" title="Ace" />
+                    <p className="text-xs text-muted-foreground leading-snug flex-1 min-w-0 pb-1">
                         <span className="font-bold text-foreground">Shut your notes first.</span> Built with them
-                        open this is note-taking with extra steps; built from memory it's retrieval practice, and
-                        that's the difference between it working and not.
+                        open this is note-taking with extra steps; built from memory it&rsquo;s retrieval practice, and
+                        that&rsquo;s the difference between it working and not.
                     </p>
                 </div>
             )}
