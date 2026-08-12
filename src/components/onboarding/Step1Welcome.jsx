@@ -1,5 +1,6 @@
 import React from "react";
 import { Button } from "@/components/ui/button";
+import AceBody from "@/components/ace/AceBody";
 
 const stats = [
     {
@@ -30,6 +31,22 @@ export default function Step1Welcome({ onNext }) {
 
     return (
         <div className="max-w-2xl mx-auto px-6 py-10">
+            {/* He introduces himself before the statistics do. A student's
+                first screen in this product was four research citations and no
+                sign of a person; meeting the guide first is what makes the
+                rest of it feel like it's being explained TO you. */}
+            <div className="flex items-end gap-3 mb-6">
+                <AceBody className="w-20 sm:w-24 flex-shrink-0" pose="wave" title="Ace" />
+                <div className="rounded-2xl bg-surface border-2 border-border shadow-soft px-4 py-3 mb-2">
+                    <p className="font-display font-extrabold text-foreground leading-snug">
+                        Hey — I'm Ace.
+                    </p>
+                    <p className="text-sm text-muted-foreground leading-snug mt-0.5">
+                        I'll be around the whole way. Let's get you set up.
+                    </p>
+                </div>
+            </div>
+
             <div className="mb-8">
                 <h1 className="text-2xl font-bold text-foreground leading-tight mb-3">
                     Before we set up your account — here's why most students work harder than they need to.

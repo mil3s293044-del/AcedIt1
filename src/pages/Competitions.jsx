@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
+import AceBody from "@/components/ace/AceBody";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -802,9 +803,7 @@ export default function Competitions() {
                         className="fixed inset-0 z-50 flex items-center justify-center bg-foreground/40 backdrop-blur-sm p-4">
                         <motion.div initial={{ scale: 0.9, y: 20 }} animate={{ scale: 1, y: 0 }} exit={{ scale: 0.9 }}
                             className="bg-surface rounded-2xl shadow-soft-lg p-7 max-w-sm w-full text-center space-y-4 border border-border/60">
-                            <div className="w-14 h-14 bg-chart-4/10 border border-chart-4/15 rounded-2xl flex items-center justify-center mx-auto">
-                                <Trophy className="w-7 h-7 text-chart-4" strokeWidth={2.5} />
-                            </div>
+                            <AceBody className="w-24 mx-auto" pose="offer" title="Ace" />
                             <div>
                                 <h2 className="font-display font-extrabold text-foreground text-xl">How do you want to compete?</h2>
                                 <p className="text-sm text-muted-foreground mt-1">Mirror their setup, or build your own path?</p>

@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Check } from "lucide-react";
+import AceBody from "@/components/ace/AceBody";
 
 // Three study days is what unlocks the AcedIt ATAR, so the first-session
 // checklist points at getting there rather than at four unrelated features.
@@ -25,7 +26,10 @@ export default function Step8Complete({ data, onComplete, saving }) {
 
     return (
         <div className="max-w-lg mx-auto px-6 py-12 text-center">
-            <div className="text-6xl mb-6">🎓</div>
+            {/* Was a 🎓 at 6xl. The one screen in the product that exists
+                purely to say "well done" should have the character who says
+                it, not a piece of clip art. */}
+            <AceBody className="w-28 mx-auto mb-3" pose="cheer" title="Ace" />
             <h2 className="text-2xl font-bold text-foreground mb-3">
                 You're all set{data.display_name ? `, ${data.display_name}` : ""}.
             </h2>
