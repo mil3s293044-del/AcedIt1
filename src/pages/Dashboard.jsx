@@ -23,7 +23,7 @@ import { fmtDate } from "@/lib/safeDate";
 import AceTip from "@/components/ace/AceTip";
 import AceShuffle from "@/components/ace/AceShuffle";
 import AceBody from "@/components/ace/AceBody";
-import AcePerch from "@/components/ace/AcePerch";
+import AceRoam from "@/components/ace/AceRoam";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 const fmtTime = (m) => {
@@ -853,20 +853,27 @@ export default function Dashboard() {
                                     </div>
                                 )}
                             </div>
-                            {/* The one action the Dashboard wants, so it gets
-                                the one perch. `relative` is what AcePerch
-                                positions against; he's pointer-events-none, so
-                                the whole link stays clickable through him. */}
+                            {/* The one action the Dashboard wants. He WALKS to
+                                it rather than being stuck on its corner —
+                                AceRoam measures this element and stands beside
+                                it, and keeps standing beside it as the page
+                                scrolls. */}
                             <Link to={createPageUrl(move.link)}
-                                className="relative w-full sm:w-auto flex-shrink-0">
+                                data-ace-target="move"
+                                className="w-full sm:w-auto flex-shrink-0">
                                 <Button className="w-full sm:w-auto">
                                     {move.cta} <ArrowRight className="w-4 h-4" />
                                 </Button>
-                                <AcePerch side="right" />
                             </Link>
                         </div>
                     </div>
                 </motion.section>
+
+                {/* He walks over and points at today's move. Mounted here
+                    rather than inside the card because he's fixed-position:
+                    he needs to be free of the section's stacking context to
+                    cross the page. */}
+                <AceRoam target="[data-ace-target='move']" pose="point" />
 
                 {/* Everything below runs in two columns so the right-hand
                     margin stops being dead space. The streak row keeps its own

@@ -1,36 +1,48 @@
 /**
- * AceBody — Ace as an actual character, not a logo in a circle.
+ * AceBody — Ace as an actual character, and one that MOVES.
  *
- * The old mark was a spade with a face knocked out of it, sitting in a 36px
- * disc. That reads as an icon, and an icon can't be a companion: it can't walk
- * in, point at something, sit on the edge of a card or look where you're
- * looking. This is the same spade given a body, arms, feet and a pair of eyes
- * big enough to carry an expression across a room.
+ * The first version of this drew him properly and then held him perfectly
+ * still. `POSES` was a table of static numbers, so switching pose was a cut,
+ * not a movement: the arm didn't swing up to wave, it teleported. Nothing
+ * inside the silhouette ever moved — only the whole SVG, as a block. That is
+ * the difference between a character and a sticker, and it's what he was.
  *
- * WHAT'S KEPT FROM THE OLD DRAWING, and why:
+ * FOUR THINGS MAKE HIM ALIVE, and they're worth naming because each one is a
+ * different trick:
  *
- * The face is still CUT OUT of the silhouette rather than painted on. The eye
- * whites are the surface colour and the pupils are the body colour, so the
- * whole character is two fills and it can never end up with black eyes on a
- * black body in dark mode. Every pose below is a change of numbers, not a
- * change of shapes — one drawing, many expressions.
+ * 1. EVERY POSE INTERPOLATES. Arms, tilt, gaze and lids are motion values, so
+ *    the transition between two poses is animated rather than swapped. The key
+ *    move that makes this work: arms are ALWAYS drawn, and "at rest" is a
+ *    position tucked inside the silhouette, behind the body path. He doesn't
+ *    grow an arm to wave — the arm was always there, hidden, and it swings out.
  *
- * WHAT'S NEW:
+ * 2. HE BREATHES. A slow squash on the body, about four seconds. Almost
+ *    invisible, and its absence is what makes a still drawing look dead.
  *
- * Pupils. The old eyes were solid knock-outs, which means they could only be
- * open, shut or squashed. A pupil can LOOK somewhere, and "looks at the thing
- * he's talking about" is most of what makes a mascot feel present.
+ * 3. HE LOOKS AT YOU. Pupils track the pointer, spring-damped and clamped so
+ *    he glances rather than stares. A drawing that follows you across a page
+ *    stops reading as a drawing.
  *
- * Arms and feet. They're what let him wave, point, carry something and walk.
- * They're deliberately simple — mitts and ovals, no joints — because a
- * character you have to rig is a character nobody adds a pose to later.
+ * 4. HE FIDGETS. While he's resting, an idle fires every ten seconds or so —
+ *    a glance around, a rock on his heels, a small hop. Randomised interval,
+ *    because anything on a fixed beat reads as a machine.
+ *
+ * WHAT HE STILL WON'T DO: move while you're reading something of his. The
+ * idles only fire from resting poses, and every one of them folds flat under
+ * prefers-reduced-motion. A mascot animating over the text it just asked you
+ * to read is a mascot you switch off.
+ *
+ * The face is still CUT OUT of the silhouette — eye whites are the surface
+ * colour, pupils the body colour — so he's two fills and can never end up with
+ * black eyes on a black body in dark mode.
  */
-import React, { useEffect, useState } from "react";
-import { useReducedMotion } from "framer-motion";
+import React, { useEffect, useRef, useState } from "react";
+import {
+    motion, useReducedMotion, useMotionValue, useSpring, useTransform,
+} from "framer-motion";
+import { watchPointer } from "@/components/ace/acePointer";
 
-/* ── The silhouette ──────────────────────────────────────────────────────
-   Drawn in a 64-wide space so the original spade path still fits, with room
-   left and right for arms and below for feet. */
+/* ── The silhouette ───────────────────────────────────────────────────── */
 const VIEW = "-10 0 84 92";
 
 const BODY = "M32 4 C32 4 4 25 4 37 C4 45.5 10.5 51.5 18 51.5 C23.5 51.5 28 48.5 30 44.5 "
@@ -39,75 +51,100 @@ const BODY = "M32 4 C32 4 4 25 4 37 C4 45.5 10.5 51.5 18 51.5 C23.5 51.5 28 48.5
 
 const EYE = { x: [23, 41], y: 31, rx: 8.2, ry: 9.4 };
 
-/**
- * Poses.
- *
- *   look      — where the pupils point, in eye-radius units
- *   lids      — 1 open, 0 shut. Below ~0.35 the highlight is dropped.
- *   mouth     — smile | grin | o | flat | null
- *   arms      — down | up | wave | point | hips | carry
- *   tilt      — head tilt in degrees, applied to the whole body
- *   brow      — up | down | null. Two strokes; the cheapest expression there is.
- */
-const POSES = {
-    stand:   { look: [0, 0],       lids: 1,    mouth: "smile", arms: "down",  tilt: 0 },
-    happy:   { look: [0, -0.1],    lids: 1,    mouth: "grin",  arms: "down",  tilt: 0,  blush: true },
-    wave:    { look: [0.15, -0.1], lids: 1,    mouth: "grin",  arms: "wave",  tilt: -4, blush: true },
-    point:   { look: [0.5, 0.35],  lids: 1,    mouth: "smile", arms: "point", tilt: 3 },
-    think:   { look: [-0.55, -0.4], lids: 0.8, mouth: "flat",  arms: "hips",  tilt: -6, brow: "down" },
-    cheer:   { look: [0, -0.25],   lids: 1,    mouth: "o",     arms: "up",    tilt: 0,  blush: true, sparkle: true },
-    proud:   { look: [0, 0],       lids: 0.05, mouth: "grin",  arms: "hips",  tilt: 0,  blush: true, arcs: true },
-    peek:    { look: [0, -0.5],    lids: 1,    mouth: null,    arms: "down",  tilt: 0 },
-    sleep:   { look: [0, 0],       lids: 0,    mouth: null,    arms: "down",  tilt: -14, blush: true, lids0: true },
-    alert:   { look: [0, -0.15],   lids: 1,    mouth: "o",     arms: "up",    tilt: 0,  brow: "up" },
-    wink:    { look: [0, 0],       lids: 1,    mouth: "grin",  arms: "wave",  tilt: -3, blush: true, winkRight: true },
-    // Mid-stride. The legs do the walking; this is the upper half of it.
-    walk:    { look: [0.25, 0],    lids: 1,    mouth: "smile", arms: "swing", tilt: 2 },
-    // Holding something out to you — the shape a check-in or a suggestion takes.
-    offer:   { look: [0.1, 0.25],  lids: 1,    mouth: "smile", arms: "carry", tilt: -2 },
-};
+/* ── Arms ─────────────────────────────────────────────────────────────────
+   Always drawn, always behind the body path. `tuck` is inside the silhouette,
+   which is what lets an arm swing OUT of him instead of appearing from
+   nowhere — the single change that turned the pose table into animation. */
+const TUCK = { l: { x: 22, y: 48, r: 6 }, r: { x: 42, y: 48, r: 6 } };
 
-/** Irregular on purpose — a metronome blink reads as a machine. */
-const BLINK_MIN = 2800, BLINK_SPREAD = 3800;
-
-/* ── Arms ────────────────────────────────────────────────────────────────
-   Each is a stub and a mitt. Written as explicit coordinates per pose rather
-   than as a transform, because a rotation about a shoulder that doesn't exist
-   looks like a detached limb sliding around. */
 const ARMS = {
-    // At rest he has none, and that is the point. The spade's two lobes
-    // already read as a folded-arms body; drawing limbs on top of them gave
-    // him four appendages at the bottom of the frame, competing with the feet
-    // and reading as a spider. Arms appear when they have a job.
-    down:  null,
-    hips:  null,
-    up:    { l: { x: -3,  y: 13, r: 7 },   r: { x: 67,  y: 13, r: 7 } },
-    wave:  { l: null,                       r: { x: 68,  y: 12, r: 7 } },
-    point: { l: null,                       r: { x: 70,  y: 44, r: 7 } },
-    swing: { l: { x: 3,   y: 55, r: 7 },   r: { x: 61,  y: 61, r: 7 } },
-    carry: { l: { x: 11,  y: 57, r: 7 },   r: { x: 53,  y: 57, r: 7 } },
+    down:  { l: TUCK.l,                    r: TUCK.r },
+    hips:  { l: { x: 13, y: 55, r: 5.6 },  r: { x: 51, y: 55, r: 5.6 } },
+    up:    { l: { x: -3, y: 13, r: 7 },    r: { x: 67, y: 13, r: 7 } },
+    wave:  { l: TUCK.l,                    r: { x: 68, y: 12, r: 7 } },
+    point: { l: TUCK.l,                    r: { x: 70, y: 44, r: 7 } },
+    swing: { l: { x: 3,  y: 55, r: 7 },    r: { x: 61, y: 61, r: 7 } },
+    carry: { l: { x: 11, y: 57, r: 7 },    r: { x: 53, y: 57, r: 7 } },
+    // One arm up behind his head. Reads as "hang on, I'm thinking".
+    scratch: { l: TUCK.l,                  r: { x: 52, y: 8,  r: 6.4 } },
 };
 
 /**
  * Where each arm attaches — at the BOTTOM of the lobes, not their widest
- * point. Attached at the waistline the arms sat inside the silhouette (the
- * lobes already reach x 4 and x 60 at y 37–51) and read as two lumps on his
- * shoulders rather than as limbs. From down here they cross the narrow tail
- * and come out against the background, where an arm can be seen.
+ * point. From the waistline the arms sat inside the silhouette (the lobes
+ * already reach x 4 and x 60 at y 37–51) and read as lumps on his shoulders.
  */
 const SHOULDER = { l: { x: 17, y: 49 }, r: { x: 47, y: 49 } };
 
-function Arm({ side, pose, tone }) {
-    const set = ARMS[pose];
-    const a = set && set[side];
-    if (!a) return null;
-    const s = SHOULDER[side];
+/**
+ * Poses.
+ *
+ *   look  — where the pupils point, in eye-radius units. `null` means "track
+ *           the pointer", which is the default for anything at rest.
+ *   lids  — 1 open, 0 shut. Under ~0.35 the catchlight is dropped.
+ *   mouth — smile | grin | o | flat | null
+ *   tilt  — degrees, whole body
+ *   hop   — a vertical offset, for poses that leave the ground
+ */
+const POSES = {
+    stand:   { look: null,          lids: 1,    mouth: "smile", arms: "down",  tilt: 0 },
+    happy:   { look: null,          lids: 1,    mouth: "grin",  arms: "down",  tilt: 0,  blush: true },
+    wave:    { look: null,          lids: 1,    mouth: "grin",  arms: "wave",  tilt: -4, blush: true },
+    point:   { look: [0.55, 0.3],   lids: 1,    mouth: "smile", arms: "point", tilt: 3 },
+    think:   { look: [-0.55, -0.4], lids: 0.8,  mouth: "flat",  arms: "scratch", tilt: -6, brow: "down" },
+    cheer:   { look: [0, -0.25],    lids: 1,    mouth: "o",     arms: "up",    tilt: 0,  blush: true, sparkle: true, hop: -4 },
+    proud:   { look: [0, 0],        lids: 0.05, mouth: "grin",  arms: "hips",  tilt: 0,  blush: true, arcs: true },
+    peek:    { look: null,          lids: 1,    mouth: null,    arms: "down",  tilt: 0 },
+    sleep:   { look: [0, 0],        lids: 0,    mouth: null,    arms: "down",  tilt: -14, blush: true, lids0: true },
+    alert:   { look: [0, -0.15],    lids: 1,    mouth: "o",     arms: "up",    tilt: 0,  brow: "up" },
+    wink:    { look: [0, 0],        lids: 1,    mouth: "grin",  arms: "wave",  tilt: -3, blush: true, winkRight: true },
+    walk:    { look: [0.25, 0],     lids: 1,    mouth: "smile", arms: "swing", tilt: 2 },
+    offer:   { look: null,          lids: 1,    mouth: "smile", arms: "carry", tilt: -2 },
+    // ── Idles. Never set by a caller; fired from within while he rests. ──
+    glanceL: { look: [-0.9, -0.15], lids: 1,    mouth: "smile", arms: "down",  tilt: -5 },
+    glanceR: { look: [0.9, -0.15],  lids: 1,    mouth: "smile", arms: "down",  tilt: 5 },
+    ponder:  { look: [-0.4, -0.5],  lids: 0.85, mouth: "flat",  arms: "scratch", tilt: -7 },
+    bounce:  { look: null,          lids: 1,    mouth: "grin",  arms: "up",    tilt: 0, blush: true, hop: -6 },
+    yawn:    { look: [0, 0.2],      lids: 0.15, mouth: "o",     arms: "up",    tilt: -3 },
+};
+
+/** Poses he's allowed to fidget out of — i.e. the ones where he's just there. */
+const RESTING = new Set(["stand", "happy", "peek", "offer"]);
+/** What a fidget can be, and how long it holds. */
+const IDLES = [
+    { pose: "glanceL", ms: 1100 },
+    { pose: "glanceR", ms: 1100 },
+    { pose: "bounce",  ms: 700 },
+    { pose: "ponder",  ms: 1400 },
+    { pose: "glanceR", ms: 900 },
+    { pose: "yawn",    ms: 1200 },
+];
+const IDLE_MIN = 7000, IDLE_SPREAD = 7000;
+
+/** Irregular on purpose — a metronome blink reads as a machine. */
+const BLINK_MIN = 2800, BLINK_SPREAD = 3800;
+
+const SPRING = { type: "spring", stiffness: 210, damping: 18, mass: 0.7 };
+
+/** One eye. Its own component so the pupil transforms can use hooks. */
+function Eye({ cx, gazeX, gazeY, open, tone, card, showPupil }) {
+    const px = useTransform(gazeX, (v) => cx + v * EYE.rx * 0.55);
+    const py = useTransform(gazeY, (v) => EYE.y + v * EYE.ry * 0.5);
+    const hx = useTransform(px, (v) => v + 1.8);
+    const hy = useTransform(py, (v) => v - 2);
     return (
-        <g className={tone}>
-            <line x1={s.x} y1={s.y} x2={a.x} y2={a.y}
-                stroke="currentColor" strokeWidth={a.r * 1.25} strokeLinecap="round"
-                style={{ color: "inherit" }} className={tone.replace("fill-", "stroke-")} />
-            <circle cx={a.x} cy={a.y} r={a.r} />
+        <g>
+            <motion.ellipse cx={cx} cy={EYE.y} rx={EYE.rx} ry={EYE.ry * open} initial={false}
+                animate={{ ry: EYE.ry * open }} transition={{ duration: 0.09 }}
+                className={card} />
+            {showPupil && (
+                <>
+                    <motion.circle cx={px} cy={py} r={EYE.rx * 0.52} className={tone} />
+                    {/* The catchlight. Without it a pupil is a hole; with it
+                        the eye looks wet. */}
+                    <motion.circle cx={hx} cy={hy} r={EYE.rx * 0.19} className={card} />
+                </>
+            )}
         </g>
     );
 }
@@ -119,13 +156,47 @@ export default function AceBody({
     card = "fill-surface",
     cardStroke = "stroke-surface",
     blink = true,
+    /** Fidget while resting. Off for anything decorative or repeated. */
+    idle = true,
+    /** Follow the pointer with his eyes. */
+    eyes = true,
     title,
     step = 0,
 }) {
-    const p = POSES[pose] || POSES.stand;
     const reduce = useReducedMotion();
+    const ref = useRef(null);
+    const [fidget, setFidget] = useState(null);
     const [blinking, setBlinking] = useState(false);
 
+    // The pose actually being drawn: a fidget wins, but only while resting.
+    const active = fidget && RESTING.has(pose) ? fidget : pose;
+    const p = POSES[active] || POSES.stand;
+
+    /* ── Gaze ──────────────────────────────────────────────────────────── */
+    const rawX = useMotionValue(0), rawY = useMotionValue(0);
+    const gazeX = useSpring(rawX, { stiffness: 140, damping: 16 });
+    const gazeY = useSpring(rawY, { stiffness: 140, damping: 16 });
+
+    const fixed = p.look;
+    useEffect(() => {
+        // A pose with an explicit gaze overrides tracking — when he's pointing
+        // at something he looks at THAT, not at your cursor.
+        if (fixed) { rawX.set(fixed[0]); rawY.set(fixed[1]); return; }
+        if (!eyes || reduce) { rawX.set(0); rawY.set(0); return; }
+        return watchPointer((mx, my) => {
+            const el = ref.current;
+            if (!el) return;
+            const b = el.getBoundingClientRect();
+            if (!b.width) return;
+            // Clamped hard: he glances toward you, he doesn't lock on.
+            const dx = (mx - (b.left + b.width / 2)) / (b.width * 2.2);
+            const dy = (my - (b.top + b.height * 0.38)) / (b.height * 2.2);
+            rawX.set(Math.max(-1, Math.min(1, dx)));
+            rawY.set(Math.max(-1, Math.min(1, dy)));
+        });
+    }, [fixed, eyes, reduce, rawX, rawY]);
+
+    /* ── Blink ─────────────────────────────────────────────────────────── */
     useEffect(() => {
         if (!blink || reduce || p.lids < 0.2) return;
         let t;
@@ -139,65 +210,89 @@ export default function AceBody({
         return () => clearTimeout(t);
     }, [blink, reduce, p.lids]);
 
+    /* ── Fidgets ───────────────────────────────────────────────────────── */
+    useEffect(() => {
+        if (!idle || reduce || !RESTING.has(pose)) { setFidget(null); return; }
+        let hold, next;
+        const schedule = () => {
+            next = setTimeout(() => {
+                const pick = IDLES[Math.floor(Math.random() * IDLES.length)];
+                setFidget(pick.pose);
+                hold = setTimeout(() => { setFidget(null); schedule(); }, pick.ms);
+            }, IDLE_MIN + Math.random() * IDLE_SPREAD);
+        };
+        schedule();
+        return () => { clearTimeout(next); clearTimeout(hold); };
+    }, [idle, reduce, pose]);
+
     const open = blinking ? 0.06 : p.lids;
     const shut = open < 0.12;
-    const [lx, ly] = p.look;
-
-    // Feet. `step` swings them for the walk cycle; at rest they're level.
+    const arms = ARMS[p.arms] || ARMS.down;
     const lift = reduce ? 0 : step;
-    const feet = [
-        { x: 23, y: 69 - Math.max(0, lift) * 4, rx: 9.5, ry: 5.4 },
-        { x: 41, y: 69 - Math.max(0, -lift) * 4, rx: 9.5, ry: 5.4 },
-    ];
 
     return (
-        <svg viewBox={VIEW} className={className}
+        <motion.svg ref={ref} viewBox={VIEW} className={className}
             role={title ? "img" : "presentation"}
-            aria-label={title || undefined} aria-hidden={title ? undefined : true}>
-            <g transform={`rotate(${p.tilt} 32 40)`}>
-                {/* Feet first so the body overlaps them — it reads as standing
-                    ON them rather than balanced above them. */}
-                {feet.map((f, i) => (
-                    <ellipse key={`f${i}`} cx={f.x} cy={f.y} rx={f.rx} ry={f.ry} className={tone} />
-                ))}
+            aria-label={title || undefined} aria-hidden={title ? undefined : true}
+            // Breathing. Four seconds, barely there, and the thing whose
+            // absence makes a still drawing look dead.
+            animate={reduce ? {} : { scaleY: [1, 1.018, 1], scaleX: [1, 0.994, 1] }}
+            transition={{ duration: 4.2, repeat: Infinity, ease: "easeInOut" }}
+            style={{ transformOrigin: "50% 88%", overflow: "visible" }}>
 
-                <Arm side="l" pose={p.arms} tone={tone} />
-                <Arm side="r" pose={p.arms} tone={tone} />
+            <motion.g
+                animate={{ rotate: p.tilt, y: p.hop || 0 }}
+                transition={reduce ? { duration: 0 } : SPRING}
+                style={{ transformOrigin: "32px 62px" }}>
+
+                {/* Feet first so the body overlaps them — he stands ON them
+                    rather than balancing above them. */}
+                <motion.ellipse cx={23} cy={69} rx={9.5} ry={5.4} className={tone}
+                    animate={{ y: -Math.max(0, lift) * 4 }} transition={{ duration: 0.14 }} />
+                <motion.ellipse cx={41} cy={69} rx={9.5} ry={5.4} className={tone}
+                    animate={{ y: -Math.max(0, -lift) * 4 }} transition={{ duration: 0.14 }} />
+
+                {/* Arms, BEHIND the body. At rest they're tucked inside the
+                    silhouette and invisible, which is what lets them swing out
+                    rather than appear. */}
+                {["l", "r"].map((side) => {
+                    const a = arms[side], s = SHOULDER[side];
+                    const strokeCls = tone.replace("fill-", "stroke-");
+                    return (
+                        <g key={side}>
+                            <motion.line x1={s.x} y1={s.y} x2={a.x} y2={a.y}
+                                strokeWidth={a.r * 1.25} strokeLinecap="round"
+                                className={strokeCls} stroke="currentColor"
+                                initial={false}
+                                animate={{ x2: a.x, y2: a.y, strokeWidth: a.r * 1.25 }}
+                                transition={reduce ? { duration: 0 } : SPRING} />
+                            <motion.circle cx={a.x} cy={a.y} r={a.r} className={tone}
+                                initial={false}
+                                animate={{ cx: a.x, cy: a.y, r: a.r }}
+                                transition={reduce ? { duration: 0 } : SPRING} />
+                        </g>
+                    );
+                })}
 
                 <path d={BODY} className={tone} />
 
                 {/* Cheeks, under the eyes, knocked out at low opacity so they
                     read as a blush rather than as two more holes. */}
-                {p.blush && EYE.x.map((x, i) => (
-                    <ellipse key={`b${i}`} cx={x + (i ? 7.5 : -7.5)} cy={EYE.y + 9} rx="4.6" ry="3"
-                        className={card} opacity="0.4" />
+                {EYE.x.map((x, i) => (
+                    <motion.ellipse key={`b${i}`} cx={x + (i ? 7.5 : -7.5)} cy={EYE.y + 9}
+                        rx="4.6" ry="3" className={card}
+                        animate={{ opacity: p.blush ? 0.4 : 0 }} transition={{ duration: 0.25 }} />
                 ))}
 
-                {/* Eyes. Whites knocked out of the body, pupils in the body
-                    colour on top — which is what lets him look at things. */}
-                {!shut && !p.arcs && EYE.x.map((x, i) => {
-                    const winking = p.winkRight && i === 1;
-                    if (winking) return (
+                {!shut && !p.arcs && EYE.x.map((x, i) => (
+                    p.winkRight && i === 1 ? (
                         <path key={i} d={`M${x - 5.5} ${EYE.y} Q${x} ${EYE.y - 5.5} ${x + 5.5} ${EYE.y}`}
                             fill="none" className={cardStroke} strokeWidth="3.4" strokeLinecap="round" />
-                    );
-                    return (
-                        <g key={i}>
-                            <ellipse cx={x} cy={EYE.y} rx={EYE.rx} ry={EYE.ry * open} className={card} />
-                            {open > 0.35 && (
-                                <>
-                                    <circle cx={x + lx * EYE.rx * 0.55} cy={EYE.y + ly * EYE.ry * 0.5}
-                                        r={EYE.rx * 0.52} className={tone} />
-                                    {/* The catchlight. Without it a pupil is a
-                                        hole; with it the eye looks wet. */}
-                                    <circle cx={x + lx * EYE.rx * 0.55 + 1.8}
-                                        cy={EYE.y + ly * EYE.ry * 0.5 - 2}
-                                        r={EYE.rx * 0.19} className={card} />
-                                </>
-                            )}
-                        </g>
-                    );
-                })}
+                    ) : (
+                        <Eye key={i} cx={x} gazeX={gazeX} gazeY={gazeY} open={open}
+                            tone={tone} card={card} showPupil={open > 0.35} />
+                    )
+                ))}
 
                 {/* Squeezed shut into happy arcs. */}
                 {p.arcs && EYE.x.map((x, i) => (
@@ -225,16 +320,12 @@ export default function AceBody({
                     <path d="M26 42.5 Q32 47.5 38 42.5" fill="none"
                         className={cardStroke} strokeWidth="3" strokeLinecap="round" />
                 )}
-                {p.mouth === "grin" && (
-                    <path d="M25 41.5 Q32 50 39 41.5 Z" className={card} />
-                )}
+                {p.mouth === "grin" && <path d="M25 41.5 Q32 50 39 41.5 Z" className={card} />}
                 {p.mouth === "flat" && (
                     <path d="M26 44 L38 44" fill="none"
                         className={cardStroke} strokeWidth="3" strokeLinecap="round" />
                 )}
-                {p.mouth === "o" && (
-                    <ellipse cx="32" cy="44" rx="3.6" ry="4.4" className={card} />
-                )}
+                {p.mouth === "o" && <ellipse cx="32" cy="44" rx="3.6" ry="4.4" className={card} />}
 
                 {p.sparkle && (
                     <g className={tone}>
@@ -242,9 +333,9 @@ export default function AceBody({
                         <path d="M48 6 l1.6 4 4 1.6 -4 1.6 -1.6 4 -1.6 -4 -4 -1.6 4 -1.6 Z" opacity="0.75" />
                     </g>
                 )}
-            </g>
-        </svg>
+            </motion.g>
+        </motion.svg>
     );
 }
 
-export { POSES };
+export { POSES, RESTING };

@@ -133,7 +133,7 @@ export default function AceBuddy({ page, userProfile, suppressed = false, onPlan
     // While the buddy is drawing him, the launcher stands down — otherwise
     // there are two of him in the same corner.
     const showing = Boolean(mode) && !yielding && !suppressed;
-    useEffect(() => (showing ? claimAce() : undefined), [showing]);
+    useEffect(() => (showing ? claimAce("buddy") : undefined), [showing]);
 
     if (suppressed) return null;
 

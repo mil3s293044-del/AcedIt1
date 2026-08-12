@@ -28,6 +28,7 @@ import { createPageUrl } from "@/utils";
 import { recIdOf, stratIdOf, durationOf, noteTextOf, buildNotes } from "@/lib/planTags";
 import { strategiesNeedingCheckIn } from "@/lib/strategyState";
 import StrategyCheckIn from "@/components/planner/StrategyCheckIn";
+import AceBody from "@/components/ace/AceBody";
 import WeekPlanDialog from "@/components/planner/WeekPlanDialog";
 import { fmtDate } from "@/lib/safeDate";
 
@@ -881,6 +882,26 @@ export default function Planner() {
                     report and something still changeable. */}
                 {checkIns.length > 0 && (
                     <div className="space-y-3">
+                        {/* Ace asks ONCE, above the group. He used to be drawn
+                            inside every card, so three plans needing a check-in
+                            put three identical Aces in a column — which stops
+                            reading as a character and starts reading as a
+                            repeated graphic. The question is the same for all
+                            of them, so it's asked once and the cards below are
+                            the answers. */}
+                        <div className="flex items-end gap-3">
+                            <AceBody className="w-20 sm:w-24 flex-shrink-0" pose="offer" title="Ace" />
+                            <div className="rounded-2xl bg-surface border-2 border-border shadow-soft px-4 py-3 mb-2">
+                                <p className="font-display font-extrabold text-foreground leading-snug">
+                                    How did the last few days go?
+                                </p>
+                                <p className="text-xs text-muted-foreground mt-0.5">
+                                    {checkIns.length === 1
+                                        ? "Tell me and I'll rebuild the rest of the plan around it."
+                                        : `${checkIns.length} plans to catch up on — one at a time.`}
+                                </p>
+                            </div>
+                        </div>
                         {checkIns.map(s => (
                             <StrategyCheckIn key={s.id} strategy={s}
                                 onRevised={() => { dismissCheckIn(s.id); if (user?.email) loadData(user.email); }}

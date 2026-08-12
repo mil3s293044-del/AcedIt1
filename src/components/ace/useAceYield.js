@@ -54,31 +54,46 @@ export default function useAceYield() {
  * 36px icon on it, and stopped being fine the moment both became the whole
  * character: two identical Aces, overlapping, both waving.
  *
- * So the buddy announces itself while it's on screen and the launcher stands
- * down. A count rather than a boolean, because two things could plausibly
- * claim him at once and the last one to leave should be the one that clears
- * it — a bare flag leaves him hidden forever if they unmount out of order.
+ * So whoever is drawing him says so, and everyone else defers.
+ *
+ * Claims carry an OWNER, and that isn't decoration. The first version counted
+ * claims, which works only for things that never claim him themselves: the
+ * roamer both claims him AND has to know whether someone else has him, and
+ * with a bare count it heard its own claim, hid itself, released, reappeared,
+ * and oscillated. An owner set lets each caller ask "is anyone OTHER than me
+ * holding him", which is the actual question.
  * ──────────────────────────────────────────────────────────────────────── */
 const BUSY = "ace:busy";
+const holders = new Set();
 
-/** Call from whatever is currently drawing him. Returns a release function. */
-export function claimAce() {
-    window.dispatchEvent(new CustomEvent(BUSY, { detail: { delta: 1 } }));
+function announce() {
+    window.dispatchEvent(new CustomEvent(BUSY, { detail: { holders: [...holders] } }));
+}
+
+/** Claim him under an owner id. Returns a release function. */
+export function claimAce(owner = "ace") {
+    holders.add(owner);
+    announce();
     let released = false;
     return () => {
         if (released) return;
         released = true;
-        window.dispatchEvent(new CustomEvent(BUSY, { detail: { delta: -1 } }));
+        holders.delete(owner);
+        announce();
     };
 }
 
-/** True while something else is drawing him. */
-export function useAceClaimed() {
-    const [n, setN] = useState(0);
+/**
+ * True while someone OTHER than `self` is drawing him. Pass the same owner id
+ * you claim with, or nothing at all if you never claim.
+ */
+export function useAceClaimed(self) {
+    const [list, setList] = useState(() => [...holders]);
     useEffect(() => {
-        const on = (e) => setN((v) => Math.max(0, v + (e.detail?.delta || 0)));
+        const on = (e) => setList(e.detail?.holders || []);
         window.addEventListener(BUSY, on);
+        setList([...holders]);
         return () => window.removeEventListener(BUSY, on);
     }, []);
-    return n > 0;
+    return list.some((o) => o !== self);
 }
