@@ -873,7 +873,11 @@ export default function Dashboard() {
                     rather than inside the card because he's fixed-position:
                     he needs to be free of the section's stacking context to
                     cross the page. */}
-                <AceRoam target="[data-ace-target='move']" pose="point" />
+                <AceRoam pose="point" target={[
+                    "[data-ace-target='move']",
+                    "[data-ace-target='goal']",
+                    "[data-ace-target='radar']",
+                ]} />
 
                 {/* Everything below runs in two columns so the right-hand
                     margin stops being dead space. The streak row keeps its own
@@ -992,7 +996,7 @@ export default function Dashboard() {
                             <div className="flex items-center justify-between mb-3">
                                 <div className="flex items-center gap-2">
                                     <Zap className="w-4 h-4 text-primary" />
-                                    <p className="stat-label text-primary/80">Daily goal</p>
+                                    <p className="stat-label text-primary/80" data-ace-target="goal">Daily goal</p>
                                 </div>
                                 {todayXP >= DAILY_XP_GOAL && (
                                     <span className="pill bg-primary/15 text-primary">Hit! 🎉</span>
@@ -1270,7 +1274,7 @@ export default function Dashboard() {
                             className="card-soft border-2 border-border p-5"
                         >
                             <div className="flex items-baseline justify-between gap-3 mb-3">
-                                <p className="stat-label">On your radar</p>
+                                <p className="stat-label" data-ace-target="radar">On your radar</p>
                                 {radar.length > RADAR_SHOWN && (
                                     <Link to={createPageUrl("Goals")} className="text-[11px] font-bold text-foreground/70 hover:text-foreground underline underline-offset-2 flex-shrink-0">
                                         See all {radar.length}

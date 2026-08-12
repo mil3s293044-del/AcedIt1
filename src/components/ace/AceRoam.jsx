@@ -77,7 +77,15 @@ function spotFor(b, vw, vh) {
     };
 }
 
+/**
+ * How long he stands at one place before wandering to the next, when given
+ * more than one. Long enough to read what he's next to; short enough that a
+ * page with three things worth seeing shows you all three.
+ */
+const DWELL_MS = 9000;
+
 export default function AceRoam({
+    /** A selector/element, or an array of them to wander between. */
     target,
     pose = "point",
     size = "w-20 sm:w-24",
@@ -96,12 +104,39 @@ export default function AceRoam({
     const [step, setStep] = useState(0);
     const [flip, setFlip] = useState(false);
     const [ready, setReady] = useState(false);
+    const [leg, setLeg] = useState(0);
     const placed = useRef(false);
+    // Bounds the skip below. Without it, a tour whose stops have ALL gone
+    // would advance the leg on every scroll frame forever.
+    const misses = useRef(0);
+
+    // A list means he tours. Normalised here so the rest of the component
+    // only ever deals with one destination at a time.
+    const stops = Array.isArray(target) ? target.filter(Boolean) : [target];
+    const here = stops[leg % Math.max(1, stops.length)];
+
+    useEffect(() => {
+        if (stops.length < 2 || reduce) return;
+        const t = setInterval(() => setLeg((n) => n + 1), DWELL_MS);
+        return () => clearInterval(t);
+    }, [stops.length, reduce]);
 
     const place = useCallback(() => {
-        const b = measure(target);
+        const b = measure(here);
         // A target that has gone: hold position rather than snapping to 0,0.
-        if (!b) return;
+        //
+        // On a tour, though, holding is wrong — a stop that isn't on this
+        // page (an empty "On your radar" renders nothing) would strand him
+        // there for good. He skips to the next one instead, at most once
+        // around the loop before giving up until the next dwell tick.
+        if (!b) {
+            if (stops.length > 1 && misses.current < stops.length) {
+                misses.current += 1;
+                setLeg((n) => n + 1);
+            }
+            return;
+        }
+        misses.current = 0;
         const s = spotFor(b, window.innerWidth, window.innerHeight);
         setFlip(s.flip);
         if (!placed.current) {
@@ -116,10 +151,9 @@ export default function AceRoam({
         }
         x.set(s.x);
         y.set(s.y);
-    }, [target, reduce, x, y]);
+    }, [here, reduce, x, y]);
 
     useEffect(() => {
-        placed.current = false;
         place();
         let frame = 0;
         const onScroll = () => {

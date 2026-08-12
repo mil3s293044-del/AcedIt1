@@ -239,6 +239,84 @@ export const STREAK_CHEER = [
     "You showed up again. Good.",
 ];
 
+/**
+ * How he reacts to a SAC getting closer.
+ *
+ * The countdown banner already shouts the number. What it never did was have
+ * an opinion about it, and the opinion is the useful half: "eleven days" means
+ * nothing to a student who doesn't know whether eleven days is fine.
+ *
+ * The escalation is deliberately NOT panic. He gets more focused as it closes,
+ * never more frightened — a mascot that looks scared about your SAC is a
+ * mascot that makes the SAC worse. Even the day-before line is calm.
+ */
+export const SAC_MOOD = [
+    { within: 1,  pose: "alert",  lines: [
+        "Tomorrow. Deep breath — cover the big stuff, skip the rest.",
+        "It's tomorrow. Past this point, sleep beats cramming. Genuinely.",
+    ] },
+    { within: 3,  pose: "think",  lines: [
+        "Three days. Enough, if we start with the weak bits.",
+        "Close now. Timed practice beats re-reading from here.",
+    ] },
+    { within: 7,  pose: "point",  lines: [
+        "About a week. This is the good window — the one people waste.",
+        "A week out. Everything you do now is worth double what it is on Thursday.",
+    ] },
+    { within: 14, pose: "happy",  lines: [
+        "Two weeks. Loads of room. Small and often, starting today.",
+        "Fortnight. Build the habit now and there's no panic later.",
+    ] },
+    { within: 999, pose: "stand", lines: [
+        "Ages away. Nice — a bit each week and it never becomes a thing.",
+        "Plenty of time. Which is exactly when it's easiest to get ahead.",
+    ] },
+];
+
+/** His pose and line for a SAC that's `days` away. */
+export function sacMood(days) {
+    const d = Number.isFinite(days) ? Math.max(0, days) : 999;
+    const band = SAC_MOOD.find(b => d <= b.within) || SAC_MOOD[SAC_MOOD.length - 1];
+    return { pose: band.pose, line: pick(band.lines, `sac-${d}`) };
+}
+
+/**
+ * What he says the moment you finish something.
+ *
+ * Keyed by how it went rather than by what it was, because "you got 8/10" is
+ * already on the screen — his job is the bit the number doesn't say.
+ */
+export const AFTER = {
+    great: [
+        "That's the one. Genuinely well done.",
+        "Nearly clean. You know this better than you think.",
+        "Strong. Bank it and move on to something harder.",
+    ],
+    good: [
+        "Solid. The misses are the useful bit — worth a second look.",
+        "Good run. A couple of gaps, nothing structural.",
+        "That'll do nicely. Want me to turn the misses into cards?",
+    ],
+    rough: [
+        "Rough one — which means you just found exactly what to study.",
+        "That's information, not a verdict. Now you know where the holes are.",
+        "Better to find that here than in the SAC. Seriously.",
+    ],
+    done: [
+        "Done. That counts.",
+        "Nice — that's on the board.",
+        "Logged. Small and often is the whole trick.",
+    ],
+};
+
+/** Which band a score falls into. `null` score means "no score, just done". */
+export function afterBand(pct) {
+    if (pct == null || !Number.isFinite(pct)) return "done";
+    if (pct >= 85) return "great";
+    if (pct >= 60) return "good";
+    return "rough";
+}
+
 /** He noticed something in the data. Warm, never guilt. */
 export const NUDGE = {
     slipping: [

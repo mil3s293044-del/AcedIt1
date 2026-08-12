@@ -10,6 +10,7 @@ import { PenTool, Play, Clock, CheckCircle, RotateCcw, Maximize, Wand2, Loader2,
 import { format } from "date-fns";
 import { useToast } from "@/components/ui/use-toast";
 import { base44 } from "@/api/base44Client";
+import { aceDone } from "@/components/ace/AceReacts";
 import WhatToTest from "./WhatToTest";
 import { FEATURES, checkLiveTier } from "@/lib/tierAccess";
 import { getExaminerPrompt } from "@/lib/subjectExaminerPrompts";
@@ -272,6 +273,7 @@ Reference Study Design requirements in your feedback.`,
 
     const completeSession = async (confidence) => {
         await saveSession();
+        aceDone("blurting", aiFeedback?.completeness_percentage ?? null);
         const totalDuration = sessionStartTime ? Math.floor((Date.now() - sessionStartTime) / 60000) : 0;
         await onSessionComplete({
             technique_name: "blurting",
