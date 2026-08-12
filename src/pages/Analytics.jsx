@@ -26,6 +26,7 @@ import {
 import AIPerformanceAnalyzer from "../components/analytics/AIPerformanceAnalyzer";
 import AtarPanel from "../components/analytics/AtarPanel";
 import WeakTopicsPanel from "../components/analytics/WeakTopicsPanel";
+import AceRoam from "@/components/ace/AceRoam";
 import CognitiveProfilePanel from "../components/analytics/CognitiveProfilePanel";
 import MemoryPanel from "../components/analytics/MemoryPanel";
 import AttentionPanel from "../components/analytics/AttentionPanel";
@@ -693,9 +694,15 @@ export default function Analytics() {
                 {/* The page counted weak cards and stopped there. Naming the
                     topics and handing each one a paper is the difference
                     between a statistic and a next action. */}
-                <motion.section initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.12 }}>
+                <motion.section initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.12 }}
+                    data-ace-target="weak">
                     <WeakTopicsPanel flashcards={data.flashcards} />
                 </motion.section>
+
+                {/* Analytics is six charts deep and the only section that says
+                    what to DO is this one. He walks to it, which is worth more
+                    than another highlight colour. */}
+                <AceRoam target="[data-ace-target='weak']" pose="point" />
 
                 {/* ── Time range selector ── */}
                 <motion.div initial={{ opacity:0, y:-8 }} animate={{ opacity:1, y:0 }} className="flex justify-end">

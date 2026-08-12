@@ -47,8 +47,17 @@ const STEP_MS = 150;
  * is 96px, and an 88 here put him 2px over the target's left edge on the
  * flipped side. Rounded up rather than measured, because measuring costs a
  * layout read on every scroll frame to save four pixels.
+ *
+ * H likewise: at `w-24` he is 96 wide, and AceBody's 84:92 viewBox makes that
+ * 105 tall. A 96 here let the bottom clamp cut his feet off.
+ *
+ * KNOWN GAP: on a target that sits at the very bottom of a long page
+ * (Analytics' weak-topics panel) he still renders about 30px below the fold —
+ * the clamp computes a legal position and the element measures lower than it,
+ * and I could not account for the difference. Every other placement verified
+ * clean. Worth a fresh look rather than another guess at a constant.
  */
-const W = 104, H = 96;
+const W = 104, H = 112;
 
 function measure(target) {
     if (!target) return null;
@@ -64,14 +73,20 @@ function measure(target) {
  * with the bottom of the element so he reads as standing next to it rather
  * than floating alongside.
  */
-function spotFor(b, vw, vh) {
+/** Is any of the target actually on screen? */
+function inView(b, vw, vh) {
+    return b.bottom > 0 && b.top < vh && b.right > 0 && b.left < vw;
+}
+
+function spotFor(b, vw, vh, size) {
+    const w = size?.w || W, h = size?.h || H;
     const right = vw - b.right;
-    const onLeft = right < W + 16 && b.left > W + 16;
-    const x = onLeft ? b.left - W - 6 : b.right + 4;
-    const y = b.bottom - H + 6;
+    const onLeft = right < w + 16 && b.left > w + 16;
+    const x = onLeft ? b.left - w - 6 : b.right + 4;
+    const y = b.bottom - h + 6;
     return {
-        x: Math.max(4, Math.min(vw - W - 4, x)),
-        y: Math.max(4, Math.min(vh - H - 4, y)),
+        x: Math.max(4, Math.min(vw - w - 4, x)),
+        y: Math.max(4, Math.min(vh - h - 4, y)),
         // He points back toward the target when he had to stand on its left.
         flip: onLeft,
     };
@@ -104,8 +119,15 @@ export default function AceRoam({
     const [step, setStep] = useState(0);
     const [flip, setFlip] = useState(false);
     const [ready, setReady] = useState(false);
+    const [offscreen, setOffscreen] = useState(false);
     const [leg, setLeg] = useState(0);
     const placed = useRef(false);
+    const selfRef = useRef(null);
+    // His real rendered size, measured once he exists. The constants below are
+    // only the bootstrap value — guessing a height put his feet 21px under the
+    // fold, and the guess has to change every time `size` does, which is
+    // exactly the kind of coupling that rots.
+    const box = useRef({ w: W, h: H });
     // Bounds the skip below. Without it, a tour whose stops have ALL gone
     // would advance the leg on every scroll frame forever.
     const misses = useRef(0);
@@ -137,7 +159,14 @@ export default function AceRoam({
             return;
         }
         misses.current = 0;
-        const s = spotFor(b, window.innerWidth, window.innerHeight);
+        // A target that's scrolled far off the page used to clamp him to the
+        // window edge, which reads as a mascot parked in a corner looking
+        // lost — you can't see what he's pointing at, so it just looks broken.
+        // He simply isn't there yet, and walks in when you scroll to it.
+        const visible = inView(b, window.innerWidth, window.innerHeight);
+        setOffscreen(!visible);
+        if (!visible) return;
+        const s = spotFor(b, window.innerWidth, window.innerHeight, box.current);
         setFlip(s.flip);
         if (!placed.current) {
             placed.current = true;
@@ -154,6 +183,12 @@ export default function AceRoam({
     }, [here, reduce, x, y]);
 
     useEffect(() => {
+        // Measure himself before placing, so the clamp works off what he
+        // actually is rather than off a constant that drifts from `size`.
+        if (selfRef.current) {
+            const r = selfRef.current.getBoundingClientRect();
+            if (r.width && r.height) box.current = { w: r.width, h: r.height };
+        }
         place();
         let frame = 0;
         const onScroll = () => {
@@ -189,7 +224,8 @@ export default function AceRoam({
     // He also CLAIMS him while he's out roaming, so the corner launcher
     // stands down. Claiming and yielding are two halves of the same rule:
     // whoever is drawing him says so, and everyone else defers.
-    useEffect(() => (ready && !claimed ? claimAce("roam") : undefined), [ready, claimed]);
+    useEffect(() => (ready && !claimed && !offscreen ? claimAce("roam") : undefined),
+        [ready, claimed, offscreen]);
 
     useEffect(() => {
         if (!walking || reduce) { setStep(0); return; }
@@ -197,10 +233,11 @@ export default function AceRoam({
         return () => clearInterval(t);
     }, [walking, reduce]);
 
-    if (!ready || claimed) return null;
+    if (!ready || claimed || offscreen) return null;
 
     return (
         <motion.div
+            ref={selfRef}
             data-ace-roam={walking ? "walking" : "arrived"}
             style={{ x: reduce ? x : sx, y: reduce ? y : sy }}
             className="fixed left-0 top-0 z-40 pointer-events-none flex items-end gap-2"
