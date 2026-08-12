@@ -73,6 +73,8 @@ const ARMS = {
     flex:    { l: { x: 0,  y: 24, r: 7 },  r: { x: 64, y: 24, r: 7 } },
     // Arms out sideways for balance, mid-stumble.
     flail:   { l: { x: -4, y: 34, r: 6.5 }, r: { x: 68, y: 40, r: 6.5 } },
+    // Follow-through of a flick — the throwing hand ends high and out.
+    toss:    { l: { x: 14, y: 54, r: 6 },  r: { x: 66, y: 22, r: 6.5 } },
 };
 
 /**
@@ -128,6 +130,9 @@ const POSES = {
     flex:    { look: [0, 0],        lids: 0.05, mouth: "grin",  arms: "flex",  tilt: 0,  blush: true, arcs: true },
     // A single decisive nod.
     nod:     { look: [0, 0.5],      lids: 0.4,  mouth: "smile", arms: "down",  tilt: 0,  hop: 2 },
+    // He flicks a card out of frame and watches it go. The most on-brand gag
+    // available to a character who IS a playing card.
+    toss:    { look: [0.85, -0.35], lids: 1,    mouth: "grin",  arms: "toss",  tilt: -6, blush: true, card: true },
 };
 
 /** Poses he's allowed to fidget out of — i.e. the ones where he's just there. */
@@ -147,6 +152,7 @@ const IDLES = [
     { pose: "shuffle",    ms: 1200 },
     { pose: "flex",       ms: 1000 },
     { pose: "nod",        ms: 600 },
+    { pose: "toss",       ms: 1400 },
 ];
 
 /**
@@ -391,6 +397,32 @@ export default function AceBody({
                         </g>
                     );
                 })}
+
+                {/* The thrown card. It leaves his hand, spins, and exits the
+                    frame — the svg is `overflow: visible`, so it can fly past
+                    the viewBox instead of being clipped at his shoulder.
+                    Drawn last so it passes in FRONT of him. */}
+                {p.card && !reduce && (
+                    <motion.g
+                        initial={{ x: 0, y: 0, rotate: 0, opacity: 0 }}
+                        animate={{
+                            x: [0, 34, 96],
+                            y: [0, -10, 4],
+                            rotate: [0, 220, 540],
+                            opacity: [0, 1, 0],
+                        }}
+                        transition={{
+                            duration: 0.85, times: [0, 0.35, 1],
+                            repeat: Infinity, repeatDelay: 0.55, ease: "easeOut",
+                        }}
+                        style={{ transformOrigin: "66px 22px" }}>
+                        <rect x="60" y="14" width="13" height="18" rx="2.5"
+                            strokeWidth="1.6"
+                            className={`${card} ${tone.replace("fill-", "stroke-")}`} />
+                        <path d={BODY} className={tone} opacity="0.9"
+                            transform="translate(63.2 18.6) scale(0.098)" />
+                    </motion.g>
+                )}
 
                 {p.sparkle && (
                     <g className={tone}>
