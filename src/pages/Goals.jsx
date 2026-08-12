@@ -930,9 +930,14 @@ export default function Planner() {
                                     someone who doesn't know if eleven is fine. */}
                                 <div className="absolute right-4 bottom-3 sm:right-6 sm:bottom-4 w-20 sm:w-28
                                     pointer-events-none" data-ace-sac={sacFeel.pose}>
+                                    {/* Black on the coloured banner rather than
+                                        white. The white silhouette washed out
+                                        against the orange half of the gradient;
+                                        the dark body with knocked-out white
+                                        eyes reads on both ends of it. */}
                                     <AceBody className="w-full" pose={sacFeel.pose} title="Ace"
-                                        tone="fill-white" card="fill-slate-900"
-                                        cardStroke="stroke-slate-900" />
+                                        tone="fill-slate-900" card="fill-white"
+                                        cardStroke="stroke-white" />
                                 </div>
                                 {/* Centred, because the intention card next to it sets the
                                     row height and the banner was pooling all the slack in a

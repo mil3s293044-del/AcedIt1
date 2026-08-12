@@ -35,7 +35,6 @@ import {
     standing, titlesFor, nextBand, weakestComponent, BAND_TONE,
 } from "@/lib/ranked";
 import AceTip from "@/components/ace/AceTip";
-import AceBody from "@/components/ace/AceBody";
 
 const TONE_PILL = {
     muted: "bg-secondary text-muted-foreground", xp: "bg-xp/15 text-xp",
@@ -133,19 +132,6 @@ export default function Ranked() {
 
     const gapLabel = mine.above ? `${meta.gap(mine.above.gap)} ${displayName(mine.above.row, data?.me)}` : null;
     const next = nextBand(data?.my_atar);
-    /**
-     * His face on the dial. Reading a number out of 99.95 needs you to know
-     * what the number means; a face doesn't. Never disappointed at the bottom
-     * end — this score is built from habits, and habits are the fixable kind.
-     */
-    const atarPose = (() => {
-        const a = data?.my_atar;
-        if (a == null) return "stand";
-        if (a >= 85) return "cheer";
-        if (a >= 70) return "proud";
-        if (a >= 50) return "happy";
-        return "think";
-    })();
     const weakest = weakestComponent(data?.my_components);
     const weakestMeta = COMPONENT_META.find(c => c.key === weakest?.key);
     const bandTone = BAND_TONE[data?.my_band] || "primary";
@@ -175,20 +161,7 @@ export default function Ranked() {
                     <div className="card-soft p-5 lg:p-6">
                         <div className="grid lg:grid-cols-[auto_1fr] gap-6 items-center">
                             <div className="flex flex-col items-center gap-3">
-                                <div className="relative">
-                                    <AtarDial atar={loading ? null : data?.my_atar} band={data?.my_band} size={230} />
-                                    {/* His face reads the dial so you don't
-                                        have to know what 71 means. Proud at the
-                                        top, thinking at the bottom — never
-                                        disappointed, because this score is
-                                        habits and habits are fixable. */}
-                                    {!loading && data?.my_atar != null && (
-                                        <span className="absolute -right-3 -bottom-1 w-16 sm:w-20"
-                                            data-ace-atar={atarPose}>
-                                            <AceBody className="w-full" pose={atarPose} title="Ace" />
-                                        </span>
-                                    )}
-                                </div>
+                                <AtarDial atar={loading ? null : data?.my_atar} band={data?.my_band} size={230} />
                                 <span className="inline-flex items-center gap-1 text-[11px] font-bold text-muted-foreground">
                                     AcedIt ATAR <AceTip term="atar" align="center" />
                                 </span>
@@ -303,7 +276,6 @@ export default function Ranked() {
                                     </div>
                                 ) : rows.length === 0 ? (
                                     <div className="card-soft p-8 text-center">
-                                        <AceBody className="w-24 mx-auto" pose="peek" title="Ace" />
                                         <p className="text-sm text-muted-foreground">
                                             {board === "atar"
                                                 ? "No ranked students in this scope yet — three study days gets you on the board."
