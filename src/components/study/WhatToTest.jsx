@@ -11,7 +11,8 @@
  */
 import React, { useMemo } from "react";
 import { motion } from "framer-motion";
-import { Target, ArrowRight, Layers, Network } from "lucide-react";
+import { ArrowRight, Layers, Network } from "lucide-react";
+import AceBody from "@/components/ace/AceBody";
 import { suggestTopics, ownMaterial, SUGGESTION_KIND } from "@/lib/recallSuggest";
 
 const KIND_STYLE = {
@@ -40,14 +41,18 @@ export default function WhatToTest({
 
     return (
         <div className="card-soft p-5">
-            <div className="flex items-center gap-2.5 mb-4">
-                <div className="w-9 h-9 rounded-xl bg-primary/10 flex items-center justify-center flex-shrink-0">
-                    <Target className="w-4.5 h-4.5 text-primary" />
-                </div>
-                <div className="min-w-0">
-                    <h3 className="font-display font-extrabold text-foreground text-base">What should I test?</h3>
-                    <p className="text-xs text-muted-foreground">
-                        From what you've actually logged — pick one and go
+            {/* Ace asks it. The heading was already a question — "What should
+                I test?" — sitting under a target icon in a rounded box, which
+                is a question nobody is being asked BY anyone. He's holding the
+                options out to you, which is what the list actually is. */}
+            <div className="flex items-end gap-3 mb-4">
+                <AceBody className="w-20 sm:w-24 flex-shrink-0" pose="offer" title="Ace" />
+                <div className="min-w-0 mb-1.5">
+                    <h3 className="font-display font-extrabold text-foreground text-base leading-snug">
+                        {verb === "Blurt" ? "Right — what are we blurting?" : "Right — what are we testing?"}
+                    </h3>
+                    <p className="text-xs text-muted-foreground leading-snug mt-0.5">
+                        These are from what you&rsquo;ve actually logged. Pick one and I&rsquo;ll build it.
                     </p>
                 </div>
             </div>
