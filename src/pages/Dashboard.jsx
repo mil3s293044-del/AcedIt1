@@ -23,7 +23,6 @@ import { fmtDate } from "@/lib/safeDate";
 import AceTip from "@/components/ace/AceTip";
 import AceShuffle from "@/components/ace/AceShuffle";
 import AceBody from "@/components/ace/AceBody";
-import AceRoam from "@/components/ace/AceRoam";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 const fmtTime = (m) => {
@@ -853,13 +852,7 @@ export default function Dashboard() {
                                     </div>
                                 )}
                             </div>
-                            {/* The one action the Dashboard wants. He WALKS to
-                                it rather than being stuck on its corner —
-                                AceRoam measures this element and stands beside
-                                it, and keeps standing beside it as the page
-                                scrolls. */}
                             <Link to={createPageUrl(move.link)}
-                                data-ace-target="move"
                                 className="w-full sm:w-auto flex-shrink-0">
                                 <Button className="w-full sm:w-auto">
                                     {move.cta} <ArrowRight className="w-4 h-4" />
@@ -869,15 +862,6 @@ export default function Dashboard() {
                     </div>
                 </motion.section>
 
-                {/* He walks over and points at today's move. Mounted here
-                    rather than inside the card because he's fixed-position:
-                    he needs to be free of the section's stacking context to
-                    cross the page. */}
-                <AceRoam pose="point" target={[
-                    "[data-ace-target='move']",
-                    "[data-ace-target='goal']",
-                    "[data-ace-target='radar']",
-                ]} />
 
                 {/* Everything below runs in two columns so the right-hand
                     margin stops being dead space. The streak row keeps its own
@@ -996,7 +980,7 @@ export default function Dashboard() {
                             <div className="flex items-center justify-between mb-3">
                                 <div className="flex items-center gap-2">
                                     <Zap className="w-4 h-4 text-primary" />
-                                    <p className="stat-label text-primary/80" data-ace-target="goal">Daily goal</p>
+                                    <p className="stat-label text-primary/80">Daily goal</p>
                                 </div>
                                 {todayXP >= DAILY_XP_GOAL && (
                                     <span className="pill bg-primary/15 text-primary">Hit! 🎉</span>
@@ -1274,7 +1258,7 @@ export default function Dashboard() {
                             className="card-soft border-2 border-border p-5"
                         >
                             <div className="flex items-baseline justify-between gap-3 mb-3">
-                                <p className="stat-label" data-ace-target="radar">On your radar</p>
+                                <p className="stat-label">On your radar</p>
                                 {radar.length > RADAR_SHOWN && (
                                     <Link to={createPageUrl("Goals")} className="text-[11px] font-bold text-foreground/70 hover:text-foreground underline underline-offset-2 flex-shrink-0">
                                         See all {radar.length}

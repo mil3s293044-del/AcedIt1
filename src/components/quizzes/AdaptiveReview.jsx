@@ -239,7 +239,7 @@ Give ONE short, directed hint (2-3 sentences max) that steers them toward the ri
                                 {current.question.type !== 'mcq' && current.question.model_answer && (
                                     <div className="card-soft bg-primary/10 border-primary/20 p-4">
                                         <p className="text-xs font-bold text-primary mb-2 uppercase tracking-wide">Model Answer</p>
-                                        <ReactMarkdown className="text-sm text-foreground prose prose-sm max-w-none">{current.question.model_answer}</ReactMarkdown>
+                                        <MarkdownMath className="text-sm text-foreground">{current.question.model_answer}</MarkdownMath>
                                     </div>
                                 )}
                                 {aiFeedback[current.originalIndex]?.how_to_improve && (

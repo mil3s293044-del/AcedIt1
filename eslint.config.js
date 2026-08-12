@@ -42,6 +42,13 @@ export default [
       // past both lint and build because of it; esbuild doesn't do
       // undefined-variable analysis either, so nothing was looking.
       "no-undef": "error",
+      // `no-undef` does NOT see JSX component references — `<AceBody />` with
+      // no import passes it cleanly, because to the base rule that's a JSX
+      // element name, not an identifier lookup. Deleting an import while
+      // leaving a usage behind therefore sailed through lint AND build, which
+      // is the exact shape of the blank screen `no-undef` was turned on for.
+      // This is the JSX half of the same rule.
+      "react/jsx-no-undef": "error",
       "no-unused-vars": "off",
       "react/jsx-uses-vars": "error",
       "react/jsx-uses-react": "error",
