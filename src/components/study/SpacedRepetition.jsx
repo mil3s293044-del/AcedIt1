@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useMemo } from "react";
 import { Flashcard, UserSubject } from "@/entities/all";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -25,6 +25,8 @@ import { format } from "date-fns";
 import { moderationPresets } from "@/components/shared/contentModeration";
 import { recordStudyAndGetStreak } from "@/components/shared/streakHelpers";
 import AceTip from "@/components/ace/AceTip";
+import AceBody from "@/components/ace/AceBody";
+import { aceDone } from "@/components/ace/AceReacts";
 import AceShuffle from "@/components/ace/AceShuffle";
 
 // Lucide alias — design system maps "alert" semantics to AlertTriangle.
@@ -340,6 +342,26 @@ export default function SpacedRepetition() {
     const [viewingStats, setViewingStats] = useState(null);
     const [reviewStartTime, setReviewStartTime] = useState(null);
     const [sessionStats, setSessionStats] = useState({ totalReviews: 0, againCount: 0, hardCount: 0, goodCount: 0, easyCount: 0 });
+
+    /**
+     * Ace's read on the session so far.
+     *
+     * Deliberately NOT a reaction per card. Rating happens dozens of times a
+     * sitting, and something that pops up on every one of them is the single
+     * fastest way to make a student turn the mascot off. He just stands there
+     * and his face changes — continuous presence, zero interruption.
+     *
+     * "Again" heavy gets `think`, not disappointment: a card you failed is a
+     * card the algorithm now knows to show you, which is the system working.
+     */
+    const acePose = useMemo(() => {
+        const n = sessionStats.totalReviews;
+        if (n < 3) return "stand";
+        const strong = (sessionStats.goodCount + sessionStats.easyCount) / n;
+        if (strong >= 0.8) return "proud";
+        if (strong >= 0.5) return "happy";
+        return "think";
+    }, [sessionStats]);
     // Real XP banked this session from per-card incremental awards.
     const sessionXPRef = React.useRef(0);
     const [isRating, setIsRating] = useState(false);
@@ -727,6 +749,11 @@ The documents provided may be PowerPoint slides, Word documents, PDFs or text fi
                 await base44.entities.StudyTechnique.create({ technique_name: "spaced_repetition", session_duration: durationMinutes, subject: selectedDeck.subject_name, topic: selectedDeck.topic, date: format(new Date(), 'yyyy-MM-dd'), notes: `Reviewed ${cardsReviewed} flashcards`, created_by: user.email });
             }
         } catch (error) { console.error(error); }
+        // Scored on recall, not on effort — "you got 9 of 12 back" is the
+        // thing worth reacting to at the end of a deck.
+        const n = sessionStats.totalReviews;
+        aceDone("revision", n ? Math.round(
+            ((sessionStats.goodCount + sessionStats.easyCount) / n) * 100) : null);
         setReviewStartTime(null);
     };
 
@@ -954,9 +981,17 @@ The documents provided may be PowerPoint slides, Word documents, PDFs or text fi
                                     </div>
                                     {/* Rating */}
                                     <div>
-                                        <p className="text-xs text-center text-muted-foreground/60 mb-3 inline-flex items-center justify-center gap-1 w-full">
-                                            How well did you recall this? <AceTip term="sm2_rating" align="center" />
-                                        </p>
+                                        <div className="flex items-center justify-center gap-2 mb-3">
+                                            {/* He watches the deck go by. His
+                                                face is the only thing that
+                                                changes — see acePose. */}
+                                            <span data-ace-review={acePose} className="hidden sm:block flex-shrink-0">
+                                                <AceBody className="w-11" pose={acePose} title="Ace" />
+                                            </span>
+                                            <p className="text-xs text-center text-muted-foreground/60 inline-flex items-center justify-center gap-1">
+                                                How well did you recall this? <AceTip term="sm2_rating" align="center" />
+                                            </p>
+                                        </div>
                                         <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
                                             {ratingConfig.map(r => (
                                                 <button
