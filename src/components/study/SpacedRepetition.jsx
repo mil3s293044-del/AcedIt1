@@ -10,7 +10,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Checkbox } from "@/components/ui/checkbox";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useToast } from "@/components/ui/use-toast";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion } from "framer-motion";
 import { Link } from "react-router-dom";
 import { createPageUrl } from "@/utils";
 import { FEATURES, canUseFeature } from "@/lib/tierAccess";
@@ -18,7 +18,7 @@ import AISkeleton from "../shared/AISkeleton";
 import {
     Plus, Play, Edit, Trash2, Share2, Check, X, Sparkles,
     Loader2, Brain, AlertTriangle, Search, Clock, BarChart3,
-    Users, UserPlus, ChevronLeft, FileText, Eye
+    Users, UserPlus, ChevronLeft, FileText
 } from "lucide-react";
 import { base44 } from "@/api/base44Client";
 import { format } from "date-fns";
@@ -28,6 +28,8 @@ import AceTip from "@/components/ace/AceTip";
 import AceBody from "@/components/ace/AceBody";
 import { aceDone } from "@/components/ace/AceReacts";
 import AceShuffle from "@/components/ace/AceShuffle";
+import ReviewTable from "@/components/cards/ReviewTable";
+import { rankFor, suitFor } from "@/components/cards/cardIdentity";
 
 // Lucide alias — design system maps "alert" semantics to AlertTriangle.
 const AlertCircle = AlertTriangle;
@@ -909,112 +911,119 @@ The documents provided may be PowerPoint slides, Word documents, PDFs or text fi
     // ─── REVIEW MODE ─────────────────────────────────────────────────────────
     if (reviewMode) {
         const currentCard = reviewCards[currentCardIndex];
-        const progress = ((currentCardIndex + 1) / reviewCards.length) * 100;
         const total = sessionStats.totalReviews;
         const accuracy = total > 0 ? Math.round(((sessionStats.goodCount + sessionStats.easyCount) / total) * 100) : 0;
+        // The two marks in the card's corner. Mastery is computed from the
+        // card as it stands right now, so a card you've just pulled up from
+        // "again" territory is visibly a better card next time it comes round.
+        const mastery = computeMasteryScore(currentCard);
+        const suit = suitFor(currentCard.subject_name);
+        const tone = userSubjects.find(s => s.subject_name === currentCard.subject_name)?.color || '#3B82F6';
 
         return (
-            <div className="max-w-3xl mx-auto space-y-4">
-                {/* Top bar */}
+            <div className="max-w-4xl mx-auto space-y-4">
+                {/* Top bar. The card counter that used to live here is gone —
+                    the two piles say the same thing, and saying it twice is
+                    how a screen ends up looking like a dashboard. */}
                 <div className="flex items-center justify-between">
                     <Button variant="ghost" onClick={handleExitReview} className="gap-2 text-muted-foreground hover:text-foreground">
                         <ChevronLeft className="w-4 h-4" /> Exit
                     </Button>
-                    <div className="flex items-center gap-3">
-                        {currentCard.is_weak_spot && (
-                            <span className="pill bg-streak/10 text-streak border border-streak/20">
-                                <AlertCircle className="w-3 h-3" /> Weak Spot
-                            </span>
-                        )}
-                        <span className="text-sm font-semibold text-muted-foreground tabular-nums">{currentCardIndex + 1} / {reviewCards.length}</span>
-                    </div>
+                    {currentCard.subject_name && (
+                        <span className="text-xs font-semibold text-muted-foreground truncate max-w-[50%]">
+                            {currentCard.subject_name}{currentCard.topic ? ` · ${currentCard.topic}` : ""}
+                        </span>
+                    )}
                 </div>
 
-                {/* Progress bar */}
-                <div className="h-2 bg-secondary rounded-full overflow-hidden">
-                    <motion.div className="h-full bg-chart-3 rounded-full" animate={{ width: `${progress}%` }} transition={{ duration: 0.3 }} />
-                </div>
-
-                {/* Card — large, tap anywhere to reveal */}
-                <AnimatePresence mode="wait">
-                    <motion.div
-                        key={currentCardIndex}
-                        initial={{ opacity: 0, y: 16 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        exit={{ opacity: 0, y: -16 }}
-                        transition={{ duration: 0.22 }}
-                    >
-                        <div className="card-soft overflow-hidden">
-                            <div className="h-1.5 bg-chart-3" />
-
-                            {!showAnswer ? (
-                                <button
-                                    type="button"
-                                    onClick={() => { setShowAnswer(true); }}
-                                    className="w-full p-8 sm:p-12 min-h-[56vh] flex flex-col items-center justify-center text-center gap-7 cursor-pointer hover:bg-chart-3/[0.03] transition-colors"
-                                >
-                                    <span className="pill bg-chart-3/10 text-chart-3 uppercase tracking-widest">Question</span>
-                                    <p className="text-2xl sm:text-3xl font-semibold text-foreground leading-relaxed max-w-2xl">
-                                        {currentCard.question}
-                                    </p>
-                                    {currentCard.question_image && (
-                                        <img src={currentCard.question_image} alt="Question" className="max-w-md rounded-2xl shadow-soft border border-border" />
-                                    )}
-                                    <span className="inline-flex items-center gap-2 text-chart-3 font-bold mt-2">
-                                        <Eye className="w-4 h-4" /> Tap to reveal · or press Space
-                                    </span>
-                                </button>
-                            ) : (
-                                <motion.div key="answer" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="p-6 sm:p-8 min-h-[56vh] flex flex-col gap-5">
-                                    {/* Question recap */}
-                                    <div className="bg-secondary/50 rounded-2xl p-4 border border-border">
-                                        <p className="stat-label text-muted-foreground/60 mb-1.5">Question</p>
-                                        <p className="text-base text-muted-foreground font-medium leading-relaxed">{currentCard.question}</p>
-                                    </div>
-                                    {/* Answer — prominent, scrolls if long */}
-                                    <div className="bg-chart-3/[0.07] rounded-2xl p-5 sm:p-6 border border-chart-3/20 flex-1 overflow-y-auto">
-                                        <p className="stat-label text-chart-3 mb-2">Answer</p>
-                                        <p className="text-lg sm:text-xl text-foreground leading-relaxed">{currentCard.answer}</p>
-                                        {currentCard.answer_image && (
-                                            <img src={currentCard.answer_image} alt="Answer" className="max-w-md rounded-xl mt-4 border border-chart-3/20" />
-                                        )}
-                                    </div>
-                                    {/* Rating */}
-                                    <div>
-                                        <div className="flex items-center justify-center gap-2 mb-3">
-                                            {/* He watches the deck go by. His
-                                                face is the only thing that
-                                                changes — see acePose. */}
-                                            <span data-ace-review={acePose} className="hidden sm:block flex-shrink-0">
-                                                <AceBody className="w-11" pose={acePose} title="Ace" />
-                                            </span>
-                                            <p className="text-xs text-center text-muted-foreground/60 inline-flex items-center justify-center gap-1">
-                                                How well did you recall this? <AceTip term="sm2_rating" align="center" />
-                                            </p>
-                                        </div>
-                                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
-                                            {ratingConfig.map(r => (
-                                                <button
-                                                    key={r.quality}
-                                                    onClick={() => handleRateCard(r.quality)}
-                                                    disabled={isRating}
-                                                    className={`relative flex flex-col items-center gap-0.5 py-4 px-2 rounded-2xl border-2 font-bold text-sm transition-all hover:scale-[1.03] active:scale-95 disabled:opacity-50 ${r.color}`}
-                                                >
-                                                    <span className="absolute top-1.5 right-2 text-[10px] font-black opacity-40">{r.quality}</span>
-                                                    <span>{r.label}</span>
-                                                    <span className="text-xs font-normal opacity-70">{r.sublabel}</span>
-                                                    <span className="text-[10px] font-semibold opacity-50 tabular-nums">
-                                                        {formatIntervalShort(calculateNextReview(r.quality, currentCard).interval_days)}
-                                                    </span>
-                                                </button>
-                                            ))}
-                                        </div>
-                                    </div>
-                                </motion.div>
+                <ReviewTable
+                    cardKey={currentCardIndex}
+                    rank={rankFor(mastery)} suit={suit} mastery={mastery} tone={tone}
+                    remaining={reviewCards.length - currentCardIndex}
+                    done={currentCardIndex}
+                    flipped={showAnswer}
+                    onFlip={() => setShowAnswer(true)}
+                    badge={currentCard.is_weak_spot ? (
+                        <span className="pill bg-streak/10 text-streak border border-streak/20">
+                            <AlertCircle className="w-3 h-3" /> Weak Spot
+                        </span>
+                    ) : null}
+                    front={(
+                        <>
+                            <p className="text-lg sm:text-xl font-semibold text-foreground leading-snug">
+                                {currentCard.question}
+                            </p>
+                            {currentCard.question_image && (
+                                <img src={currentCard.question_image} alt="Question"
+                                    className="max-w-full rounded-xl border border-border" />
                             )}
-                        </div>
-                    </motion.div>
-                </AnimatePresence>
+                        </>
+                    )}
+                    back={(
+                        <span className="absolute inset-0 flex flex-col gap-3 px-5 pt-11 pb-11">
+                            <span className="block text-xs text-muted-foreground leading-snug flex-shrink-0
+                                border-b border-border pb-2.5">
+                                {currentCard.question}
+                            </span>
+                            <span className="block relative flex-1 min-h-0">
+                                <span tabIndex={0} className="block h-full overflow-y-auto">
+                                    <span className="block text-base sm:text-lg text-foreground leading-relaxed">
+                                        {currentCard.answer}
+                                    </span>
+                                    {currentCard.answer_image && (
+                                        <img src={currentCard.answer_image} alt="Answer"
+                                            className="max-w-full rounded-xl mt-3 border border-border" />
+                                    )}
+                                </span>
+                                {/* A long answer runs out at the bottom edge of
+                                    the card, and a line cut in half reads as
+                                    broken rather than as "there's more". */}
+                                <span aria-hidden="true"
+                                    className="absolute inset-x-0 bottom-0 h-6 pointer-events-none
+                                        bg-gradient-to-t from-surface to-transparent" />
+                            </span>
+                        </span>
+                    )}
+                />
+
+                {/* Grading. Off the card on purpose — a card is a thing you
+                    read, and the buttons are what you do about it. */}
+                <div className="min-h-[8.5rem]">
+                    {showAnswer && (
+                        <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}>
+                            <div className="flex items-center justify-center gap-2 mb-3">
+                                {/* He watches the deck go by. His face is the
+                                    only thing that changes — see acePose. */}
+                                <span data-ace-review={acePose} className="hidden sm:block flex-shrink-0">
+                                    <AceBody className="w-11" pose={acePose} title="Ace" />
+                                </span>
+                                <p className="text-xs text-center text-muted-foreground/60 inline-flex items-center justify-center gap-1">
+                                    How well did you recall this? <AceTip term="sm2_rating" align="center" />
+                                </p>
+                            </div>
+                            {/* Capped, so the four grades read as belonging to
+                                the card rather than to the page. */}
+                            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 max-w-xl mx-auto">
+                                {ratingConfig.map(r => (
+                                    <button
+                                        key={r.quality}
+                                        data-grade={r.quality}
+                                        onClick={() => handleRateCard(r.quality)}
+                                        disabled={isRating}
+                                        className={`relative flex flex-col items-center gap-0.5 py-4 px-2 rounded-2xl border-2 font-bold text-sm transition-all hover:scale-[1.03] active:scale-95 disabled:opacity-50 ${r.color}`}
+                                    >
+                                        <span className="absolute top-1.5 right-2 text-[10px] font-black opacity-40">{r.quality}</span>
+                                        <span>{r.label}</span>
+                                        <span className="text-xs font-normal opacity-70">{r.sublabel}</span>
+                                        <span className="text-[10px] font-semibold opacity-50 tabular-nums">
+                                            {formatIntervalShort(calculateNextReview(r.quality, currentCard).interval_days)}
+                                        </span>
+                                    </button>
+                                ))}
+                            </div>
+                        </motion.div>
+                    )}
+                </div>
 
                 {/* Session mini stats — quiet, below the card */}
                 {total > 0 && (
