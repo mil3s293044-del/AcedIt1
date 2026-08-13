@@ -17,7 +17,7 @@ import { FEATURES, canUseFeature } from "@/lib/tierAccess";
 import AISkeleton from "../shared/AISkeleton";
 import {
     Plus, Play, Edit, Trash2, Share2, Check, X, Sparkles,
-    Loader2, Brain, AlertTriangle, Search, Clock, BarChart3,
+    Loader2, Brain, AlertTriangle, Search, Clock,
     Users, UserPlus, ChevronLeft, FileText
 } from "lucide-react";
 import { base44 } from "@/api/base44Client";
@@ -29,6 +29,7 @@ import AceBody from "@/components/ace/AceBody";
 import { aceDone } from "@/components/ace/AceReacts";
 import AceShuffle from "@/components/ace/AceShuffle";
 import ReviewTable from "@/components/cards/ReviewTable";
+import DeckStack from "@/components/cards/DeckStack";
 import { rankFor, suitFor } from "@/components/cards/cardIdentity";
 
 // Lucide alias — design system maps "alert" semantics to AlertTriangle.
@@ -236,82 +237,42 @@ const ratingConfig = [
     { quality: 4, label: "Easy", sublabel: "Perfect", color: "bg-primary/10 hover:bg-primary/20 text-primary border-primary/30 hover:border-primary/50" },
 ];
 
+/**
+ * The same four colours as raw CSS, for the flash the discard pile gives when
+ * a card lands on it. Deliberately not built from the class names above: a
+ * Tailwind class assembled at runtime is invisible to the scanner and compiles
+ * to nothing, which is a bug that only shows up in the production build.
+ */
+const GRADE_TONE = {
+    1: "hsl(var(--streak))",
+    2: "hsl(var(--xp))",
+    3: "hsl(var(--chart-3))",
+    4: "hsl(var(--primary))",
+};
+
 // ─── Deck card component ─────────────────────────────────────────────────────
-function DeckCard({ deck, subjectColor, onSelect, onDelete, onStats }) {
+// The presentation is DeckStack — an actual pack of cards. This is the thin
+// layer that works out what the numbers are; everything about how a deck looks
+// belongs with the rest of the card system, not in a 1,500-line screen.
+function DeckCard({ deck, subjectColor, onSelect, onDelete, onStats, index }) {
     const total = deck.cards.length;
-    const due = deck.cards.filter(isDue).length;
-    const weak = deck.cards.filter(c => c.is_weak_spot).length;
-    const mastered = deck.cards.filter(c => computeMasteryScore(c) >= 80 && !c.is_weak_spot).length;
-    const avgMastery = total > 0 ? Math.round(deck.cards.reduce((s, c) => s + computeMasteryScore(c), 0) / total) : 0;
-    const masteryPct = avgMastery;
-
     return (
-        <motion.div
-            initial={{ opacity: 0, y: 16 }}
-            animate={{ opacity: 1, y: 0 }}
-            whileHover={{ y: -2 }}
-            className="group relative card-soft card-soft-hover overflow-hidden cursor-pointer"
-            onClick={() => onSelect(deck)}
-        >
-            {/* Colour accent top bar */}
-            <div className="h-1.5 w-full" style={{ backgroundColor: subjectColor }} />
-
-            <div className="p-5">
-                {/* Header */}
-                <div className="flex items-start justify-between mb-4">
-                    <div className="flex-1 min-w-0">
-                        <h3 className="font-bold text-foreground text-base leading-tight truncate">{deck.topic}</h3>
-                        <div className="flex items-center gap-1.5 mt-1">
-                            <div className="w-2 h-2 rounded-full" style={{ backgroundColor: subjectColor }} />
-                            <span className="text-xs text-muted-foreground">{deck.unit}</span>
-                        </div>
-                    </div>
-                    <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                        <button onClick={e => { e.stopPropagation(); onStats(deck); }}
-                            className="w-7 h-7 flex items-center justify-center rounded-xl hover:bg-secondary text-muted-foreground">
-                            <BarChart3 className="w-3.5 h-3.5" />
-                        </button>
-                        <button onClick={e => { e.stopPropagation(); onDelete(deck.id); }}
-                            className="w-7 h-7 flex items-center justify-center rounded-xl hover:bg-streak/10 text-streak">
-                            <Trash2 className="w-3.5 h-3.5" />
-                        </button>
-                    </div>
-                </div>
-
-                {/* Stats row */}
-                <div className="grid grid-cols-3 gap-2 mb-4">
-                    <div className="text-center bg-secondary/50 rounded-xl p-2">
-                        <p className="text-lg font-bold text-foreground">{total}</p>
-                        <p className="text-xs text-muted-foreground">Total</p>
-                    </div>
-                    <div className="text-center bg-chart-3/10 rounded-xl p-2">
-                        <p className="text-lg font-bold text-chart-3">{due}</p>
-                        <p className="text-xs text-chart-3">Due</p>
-                    </div>
-                    <div className={`text-center rounded-xl p-2 ${weak > 0 ? 'bg-streak/10' : 'bg-primary/10'}`}>
-                        <p className={`text-lg font-bold ${weak > 0 ? 'text-streak' : 'text-primary'}`}>{weak > 0 ? weak : mastered}</p>
-                        <p className={`text-xs ${weak > 0 ? 'text-streak' : 'text-primary'}`}>{weak > 0 ? 'Weak' : 'Done'}</p>
-                    </div>
-                </div>
-
-                {/* Mastery bar */}
-                <div>
-                    <div className="flex items-center justify-between mb-1">
-                        <span className="text-xs text-muted-foreground">Mastery</span>
-                        <span className="text-xs font-semibold text-foreground">{masteryPct}%</span>
-                    </div>
-                    <div className="h-1.5 bg-secondary rounded-full overflow-hidden">
-                        <motion.div
-                            className="h-full rounded-full"
-                            style={{ backgroundColor: subjectColor }}
-                            initial={{ width: 0 }}
-                            animate={{ width: `${masteryPct}%` }}
-                            transition={{ duration: 0.8, delay: 0.1 }}
-                        />
-                    </div>
-                </div>
-            </div>
-        </motion.div>
+        <DeckStack
+            index={index}
+            topic={deck.topic}
+            unit={deck.unit}
+            subject={deck.subject_name}
+            tone={subjectColor}
+            total={total}
+            due={deck.cards.filter(isDue).length}
+            weak={deck.cards.filter(c => c.is_weak_spot).length}
+            mastery={total > 0
+                ? Math.round(deck.cards.reduce((s, c) => s + computeMasteryScore(c), 0) / total)
+                : 0}
+            onSelect={() => onSelect(deck)}
+            onDelete={() => onDelete(deck.id)}
+            onStats={() => onStats(deck)}
+        />
     );
 }
 
@@ -343,6 +304,8 @@ export default function SpacedRepetition() {
     const [userSubjects, setUserSubjects] = useState([]);
     const [viewingStats, setViewingStats] = useState(null);
     const [reviewStartTime, setReviewStartTime] = useState(null);
+    // How the card that just left was graded — the table throws it accordingly.
+    const [lastGrade, setLastGrade] = useState(3);
     const [sessionStats, setSessionStats] = useState({ totalReviews: 0, againCount: 0, hardCount: 0, goodCount: 0, easyCount: 0 });
 
     /**
@@ -813,6 +776,7 @@ The documents provided may be PowerPoint slides, Word documents, PDFs or text fi
     const handleRateCard = async (quality) => {
         if (isRating) return;
         setIsRating(true);
+        setLastGrade(quality);
         const card = reviewCards[currentCardIndex];
         const updates = calculateNextReview(quality, card);
         const newTotalReviews = (card.total_reviews || 0) + 1;
@@ -943,6 +907,7 @@ The documents provided may be PowerPoint slides, Word documents, PDFs or text fi
                     done={currentCardIndex}
                     flipped={showAnswer}
                     onFlip={() => setShowAnswer(true)}
+                    grade={lastGrade} gradeTone={GRADE_TONE[lastGrade]}
                     badge={currentCard.is_weak_spot ? (
                         <span className="pill bg-streak/10 text-streak border border-streak/20">
                             <AlertCircle className="w-3 h-3" /> Weak Spot
@@ -1200,12 +1165,19 @@ The documents provided may be PowerPoint slides, Word documents, PDFs or text fi
                                 <div className="flex items-center gap-3">
                                     <div className="w-3 h-3 rounded-full" style={{ backgroundColor: subjectColor }} />
                                     <h3 className="font-bold text-foreground">{subjectName}</h3>
-                                    <span className="text-xs text-muted-foreground/60">{subjectDecks.length} decks</span>
+                                    <span className="text-xs text-muted-foreground/60">
+                                        {subjectDecks.length} deck{subjectDecks.length === 1 ? "" : "s"}
+                                    </span>
                                     {totalDue > 0 && <span className="pill bg-chart-3/10 text-chart-3">{totalDue} due</span>}
                                 </div>
-                                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-                                    {subjectDecks.map(deck => (
+                                {/* Wrapped rather than gridded. A four-column
+                                    grid leaves a subject with one deck sitting
+                                    in an acre of nothing; decks laid out left
+                                    to right fill the space they need. */}
+                                <div className="flex flex-wrap gap-x-3 gap-y-3">
+                                    {subjectDecks.map((deck, i) => (
                                         <DeckCard key={deck.id} deck={deck} subjectColor={subjectColor}
+                                            index={i}
                                             onSelect={setSelectedDeck}
                                             onDelete={handleDeleteDeck}
                                             onStats={setViewingStats}

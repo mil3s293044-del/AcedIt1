@@ -32,8 +32,8 @@
  * still count. The metaphor survives the motion being switched off, which is
  * the test of whether it was structure or decoration.
  */
-import React from "react";
-import { motion, AnimatePresence, useReducedMotion } from "framer-motion";
+import React, { useEffect, useState } from "react";
+import { motion, AnimatePresence, useAnimationControls, useReducedMotion } from "framer-motion";
 import PlayingCard, { CardBack, CARD_H } from "@/components/cards/PlayingCard";
 
 /** Piles are sized off the same height as the card, so one number moves both. */
@@ -48,11 +48,24 @@ const MAX_DEPTH = 6;
  * capped, because past about six edges you cannot tell seven from eleven and
  * the stack just gets taller than the table.
  */
-function Pile({ count, tone, h, spent = false, className = "" }) {
+function Pile({ count, tone, h, spent = false, glow, className = "" }) {
     const depth = Math.min(count, MAX_DEPTH);
     return (
         <span className={`relative inline-block ${className}`}
             style={{ height: h, aspectRatio: "2.5 / 3.5" }}>
+            {/* The landing flash. It's the only confirmation of WHICH grade you
+                pressed when you graded with the keyboard and never looked at
+                the buttons — so it's feedback, not decoration. */}
+            <AnimatePresence>
+                {glow && (
+                    <motion.span key="glow" className="absolute -inset-1 rounded-[1.1rem] pointer-events-none"
+                        initial={{ opacity: 0, scale: 0.9 }}
+                        animate={{ opacity: 1, scale: 1 }}
+                        exit={{ opacity: 0, scale: 1.12 }}
+                        transition={{ duration: 0.22 }}
+                        style={{ boxShadow: `0 0 0 3px ${glow}, 0 0 22px 2px ${glow}` }} />
+                )}
+            </AnimatePresence>
             {Array.from({ length: depth }).map((_, i) => {
                 // Deepest card first, furthest down and right; the top card
                 // lands square at 0,0. Done the other way round the top of the
@@ -105,6 +118,24 @@ function jitter(seed) {
     return { rot: 6 + n * 14, dy: -30 - n * 30 };
 }
 
+/**
+ * How the card leaves, per grade. Not decoration: the throw is the only thing
+ * that acknowledges what you just pressed, and pressing "Again" should not
+ * feel identical to pressing "Easy". A missed card gets thrown down and away;
+ * an easy one gets flicked up onto the pile.
+ *
+ * `mult` scales the jittered arc so no two cards land quite the same.
+ */
+const THROW = {
+    1: { x: 215, dy: 46, spin: -1.5 },
+    2: { x: 190, dy: 6, spin: 0.7 },
+    3: { x: 178, dy: -6, spin: 1 },
+    4: { x: 172, dy: -34, spin: 1.5 },
+};
+
+/** How long the discard pile holds its landing flash. */
+const FLASH_MS = 420;
+
 export default function ReviewTable({
     /** Changes when the card changes. Drives the deal and the toss. */
     cardKey,
@@ -123,10 +154,58 @@ export default function ReviewTable({
     /** Sits above the card — the weak-spot flag and the like. */
     badge,
     revealHint = "Tap to turn over · or press Space",
+    /** 1–4: how the last card was graded. Shapes the throw and the flash. */
+    grade,
+    /** A colour for the flash, per grade. Inline, so the JIT can't miss it. */
+    gradeTone,
 }) {
     const reduce = useReducedMotion();
     const j = jitter(Number(cardKey) || 0);
     const inDeck = Math.max(0, remaining - 1);
+    const lift = useAnimationControls();
+    const [flash, setFlash] = useState(null);
+
+    // A card turning over lifts off the table for a moment. Run imperatively
+    // rather than as an `animate` keyframe array: framer only replays
+    // keyframes when the target CHANGES, and an array rebuilt every render is
+    // a coin toss as to whether it plays at all.
+    useEffect(() => {
+        if (reduce) return;
+        lift.start({ scale: [1, 1.055, 1], transition: { duration: 0.46, ease: "easeOut" } });
+    }, [flipped, cardKey, reduce, lift]);
+
+    // Keyed off `done` rather than off `grade`, so grading two cards the same
+    // way in a row still flashes twice.
+    useEffect(() => {
+        if (!done || reduce) return undefined;
+        setFlash(true);
+        const t = setTimeout(() => setFlash(false), FLASH_MS);
+        return () => clearTimeout(t);
+    }, [done, reduce]);
+
+    /**
+     * The exit animation is a VARIANT taking `custom`, not a plain object, and
+     * that is load-bearing. AnimatePresence renders the leaving child from the
+     * previous render tree, so a plain `exit={{…}}` built from the grade you
+     * just pressed would animate with the PREVIOUS grade — every throw one
+     * card behind. `custom` on AnimatePresence is re-read at exit time, which
+     * is the whole reason the hook exists.
+     */
+    const leaving = { t: THROW[grade] || THROW[3], j };
+    const variants = {
+        enter: reduce ? { opacity: 0 }
+            // Out of the draw pile, off to the left — not out of nowhere.
+            : { opacity: 0, x: -215, y: -34, rotate: -15, scale: 0.45 },
+        center: reduce ? { opacity: 1 }
+            : { opacity: 1, x: 0, y: 0, rotate: 0, scale: 1 },
+        exit: (c) => (reduce ? { opacity: 0 } : {
+            opacity: 0,
+            x: c.t.x,
+            y: c.j.dy * 0.5 + c.t.dy,
+            rotate: c.j.rot * c.t.spin,
+            scale: 0.42,
+        }),
+    };
 
     // Size only — the wrappers below own the positioning, for the reason in
     // Pile above.
@@ -145,7 +224,7 @@ export default function ReviewTable({
                 </div>
                 <div className="flex items-end gap-2">
                     <Count n={done} label="done" className="!text-right" />
-                    <Pile count={done} tone={tone} h={STRIP_H} spent />
+                    <Pile count={done} tone={tone} h={STRIP_H} spent glow={flash ? gradeTone : null} />
                 </div>
             </div>
 
@@ -162,24 +241,22 @@ export default function ReviewTable({
                         className="relative flex-shrink-0 max-w-[88vw]"
                         style={{ height: CARD_H, aspectRatio: "2.5 / 3.5", perspective: 1400 }}
                     >
-                        <AnimatePresence initial={false}>
+                        <AnimatePresence initial={false} custom={leaving}>
                             <motion.div
                                 key={cardKey}
                                 className="absolute inset-0"
-                                initial={reduce
-                                    ? { opacity: 0 }
-                                    : { opacity: 0, x: -150, y: -40, rotate: -14, scale: 0.5 }}
-                                animate={reduce
-                                    ? { opacity: 1 }
-                                    : { opacity: 1, x: 0, y: 0, rotate: 0, scale: 1 }}
-                                exit={reduce
-                                    ? { opacity: 0 }
-                                    : { opacity: 0, x: 170, y: j.dy, rotate: j.rot, scale: 0.42 }}
+                                custom={leaving}
+                                variants={variants}
+                                initial="enter"
+                                animate="center"
+                                exit="exit"
                                 transition={reduce
                                     ? { duration: 0.15 }
                                     : { type: "spring", stiffness: 260, damping: 26, mass: 0.9 }}
                                 style={{ transformStyle: reduce ? undefined : "preserve-3d" }}
                             >
+                              <motion.div className="absolute inset-0" animate={lift}
+                                  style={{ transformStyle: reduce ? undefined : "preserve-3d" }}>
                                 <motion.div
                                     className="absolute inset-0"
                                     // framer owns every key it animates: without
@@ -243,6 +320,7 @@ export default function ReviewTable({
                                         </div>
                                     )}
                                 </motion.div>
+                              </motion.div>
                             </motion.div>
                         </AnimatePresence>
                     </div>
@@ -250,7 +328,7 @@ export default function ReviewTable({
 
                 {/* Discard pile */}
                 <div className="hidden sm:flex flex-col items-center gap-2 flex-shrink-0">
-                    <Pile count={done} tone={tone} h={PILE_H} spent />
+                    <Pile count={done} tone={tone} h={PILE_H} spent glow={flash ? gradeTone : null} />
                     <Count n={done} label="done" />
                 </div>
             </div>
