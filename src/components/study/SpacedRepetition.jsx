@@ -904,7 +904,11 @@ The documents provided may be PowerPoint slides, Word documents, PDFs or text fi
                     cardKey={currentCardIndex}
                     rank={rankFor(mastery)} suit={suit} mastery={mastery} tone={tone}
                     remaining={reviewCards.length - currentCardIndex}
-                    done={currentCardIndex}
+                    // Only what you actually recalled is FINISHED. A card you
+                    // graded Again is due again — the pile it lands on should
+                    // agree with the scheduler, not just with the card counter.
+                    done={sessionStats.goodCount + sessionStats.easyCount}
+                    returning={sessionStats.againCount + sessionStats.hardCount}
                     flipped={showAnswer}
                     onFlip={() => setShowAnswer(true)}
                     grade={lastGrade} gradeTone={GRADE_TONE[lastGrade]}
