@@ -32,7 +32,7 @@
  * still count. The metaphor survives the motion being switched off, which is
  * the test of whether it was structure or decoration.
  */
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { motion, AnimatePresence, useAnimationControls, useReducedMotion } from "framer-motion";
 import PlayingCard, { CardBack, CARD_H } from "@/components/cards/PlayingCard";
 
@@ -48,11 +48,11 @@ const MAX_DEPTH = 6;
  * capped, because past about six edges you cannot tell seven from eleven and
  * the stack just gets taller than the table.
  */
-function Pile({ count, tone, h, spent = false, glow, className = "" }) {
+function Pile({ count, tone, h, spent = false, glow, className = "", ...rest }) {
     const depth = Math.min(count, MAX_DEPTH);
     return (
         <span className={`relative inline-block ${className}`}
-            style={{ height: h, aspectRatio: "2.5 / 3.5" }}>
+            style={{ height: h, aspectRatio: "2.5 / 3.5" }} {...rest}>
             {/* The landing flash. It's the only confirmation of WHICH grade you
                 pressed when you graded with the keyboard and never looked at
                 the buttons — so it's feedback, not decoration. */}
@@ -119,22 +119,90 @@ function jitter(seed) {
 }
 
 /**
- * How the card leaves, per grade. Not decoration: the throw is the only thing
- * that acknowledges what you just pressed, and pressing "Again" should not
- * feel identical to pressing "Easy". A missed card gets thrown down and away;
- * an easy one gets flicked up onto the pile.
+ * Two ways off the table, and the difference is the point.
  *
- * `mult` scales the jittered arc so no two cards land quite the same.
+ *   FILE (Good, Easy) — the card is flicked across and LANDS on the finished
+ *   pile. It travels to where the pile actually is, shrinks to the size the
+ *   pile actually is, and only fades in the last fraction of the throw, by
+ *   which time it's sitting exactly on top of a pile that has already grown by
+ *   one. It reads as the card becoming the new top of the stack.
+ *
+ *   AWAY (Again, Hard) — the card is thrown OFF the table, down and left,
+ *   tumbling, and it does not land anywhere. Which is the truth: you didn't
+ *   finish with it, it's coming back. Filing a card you just failed onto the
+ *   "done" pile would be the animation telling you something the scheduler
+ *   disagrees with.
  */
-const THROW = {
-    1: { x: 215, dy: 46, spin: -1.5 },
-    2: { x: 190, dy: 6, spin: 0.7 },
-    3: { x: 178, dy: -6, spin: 1 },
-    4: { x: 172, dy: -34, spin: 1.5 },
+const FILED = new Set([3, 4]);
+
+/**
+ * The two ways of being thrown off. Down and to the LEFT, deliberately: the
+ * finished pile is on the right, so a card flung to the right would read as
+ * being filed on it after all.
+ *
+ * Distances are FRACTIONS OF THE CARD, not pixels. A transform that runs past
+ * the bottom of the document grows the scroll height, and the page sprouts a
+ * scrollbar for half a second every time you press Again — measured at 112px
+ * of new page with a fixed 470px throw. Sized off the card, the throw stays
+ * inside the space the table already occupies at every viewport.
+ */
+const AWAY = {
+    1: { fx: -0.98, fy: 0.80, rotate: -112, scale: 0.5, dur: 0.48 },
+    2: { fx: -0.80, fy: 0.74, rotate: -74, scale: 0.55, dur: 0.5 },
 };
 
+/** How long the flick onto the pile takes. */
+const FILE_MS = 420;
 /** How long the discard pile holds its landing flash. */
-const FLASH_MS = 420;
+const FLASH_MS = 380;
+
+/**
+ * Where the finished pile is, right now, relative to the card.
+ *
+ * MEASURED rather than hardcoded, because the pile is in a completely
+ * different place on a phone — it's in the strip above the card, not out to
+ * the right — and a card "landing on the pile" that lands two hundred pixels
+ * away from it is worse than one that just fades. Both piles are in the DOM at
+ * all times with only one displayed, so the one with a real width is the one
+ * on screen.
+ *
+ * Returns null when it can't tell, and the caller falls back to a plain toss.
+ */
+/**
+ * How far down the card may be thrown without the document getting taller.
+ *
+ * Fractions of the card were still 4px over on some layouts, and 4px of new
+ * page is a scrollbar appearing and vanishing. This asks how much room there
+ * actually is below the card and clamps to it — with a floor, because a throw
+ * that barely moves is worse than a scrollbar.
+ */
+function roomBelow(box, h, a) {
+    const want = h * a.fy;
+    if (!box || typeof window === "undefined") return want;
+    const pageBottom = document.documentElement.scrollHeight - window.scrollY;
+    // The card shrinks as it goes, which lifts its bottom edge by half the
+    // height it loses — that headroom is real and worth spending.
+    const slack = (h - h * a.scale) / 2;
+    const most = (pageBottom - box.bottom) - 6 + slack;
+    return Math.max(h * 0.34, Math.min(want, most));
+}
+
+function landingFor(cardEl) {
+    if (!cardEl) return null;
+    const pile = [...document.querySelectorAll("[data-discard-pile]")]
+        .map((el) => el.getBoundingClientRect())
+        .find((r) => r.width > 0 && r.height > 0);
+    if (!pile) return null;
+    const card = cardEl.getBoundingClientRect();
+    if (!card.width) return null;
+    return {
+        // Centre to centre. Scaling happens about the centre too, so moving
+        // the centres together puts the card exactly on the pile.
+        x: (pile.left + pile.width / 2) - (card.left + card.width / 2),
+        y: (pile.top + pile.height / 2) - (card.top + card.height / 2),
+        scale: pile.width / card.width,
+    };
+}
 
 export default function ReviewTable({
     /** Changes when the card changes. Drives the deal and the toss. */
@@ -145,8 +213,10 @@ export default function ReviewTable({
     tone,
     /** Cards still to be seen, INCLUDING the one on the table. */
     remaining = 1,
-    /** Cards already graded. */
+    /** Cards filed on the finished pile — the ones you actually recalled. */
     done = 0,
+    /** Cards thrown back: graded Again or Hard, so they're due again. */
+    returning = 0,
     flipped = false,
     onFlip,
     front,
@@ -164,23 +234,29 @@ export default function ReviewTable({
     const inDeck = Math.max(0, remaining - 1);
     const lift = useAnimationControls();
     const [flash, setFlash] = useState(null);
+    const tableRef = useRef(null);
 
     // A card turning over lifts off the table for a moment. Run imperatively
     // rather than as an `animate` keyframe array: framer only replays
     // keyframes when the target CHANGES, and an array rebuilt every render is
     // a coin toss as to whether it plays at all.
+    // Only when a card is actually turned over. Firing it on every card change
+    // as well meant the LEAVING card got a lift too — both cards subscribe to
+    // the same controls while they overlap — so it swelled 5% in mid-throw and
+    // no longer matched the pile it was landing on.
     useEffect(() => {
-        if (reduce) return;
+        if (reduce || !flipped) return;
         lift.start({ scale: [1, 1.055, 1], transition: { duration: 0.46, ease: "easeOut" } });
-    }, [flipped, cardKey, reduce, lift]);
+    }, [flipped, reduce, lift]);
 
-    // Keyed off `done` rather than off `grade`, so grading two cards the same
-    // way in a row still flashes twice.
+    // The pile flashes when something lands ON it — so only for a filed card,
+    // and only once the card has arrived. Flashing as the card leaves would
+    // have the pile react before it was hit.
     useEffect(() => {
         if (!done || reduce) return undefined;
-        setFlash(true);
-        const t = setTimeout(() => setFlash(false), FLASH_MS);
-        return () => clearTimeout(t);
+        const land = setTimeout(() => setFlash(true), FILE_MS * 0.7);
+        const off = setTimeout(() => setFlash(false), FILE_MS * 0.7 + FLASH_MS);
+        return () => { clearTimeout(land); clearTimeout(off); };
     }, [done, reduce]);
 
     /**
@@ -191,20 +267,53 @@ export default function ReviewTable({
      * card behind. `custom` on AnimatePresence is re-read at exit time, which
      * is the whole reason the hook exists.
      */
-    const leaving = { t: THROW[grade] || THROW[3], j };
+    const leaving = { grade, j, el: tableRef };
     const variants = {
         enter: reduce ? { opacity: 0 }
             // Out of the draw pile, off to the left — not out of nowhere.
             : { opacity: 0, x: -215, y: -34, rotate: -15, scale: 0.45 },
         center: reduce ? { opacity: 1 }
             : { opacity: 1, x: 0, y: 0, rotate: 0, scale: 1 },
-        exit: (c) => (reduce ? { opacity: 0 } : {
-            opacity: 0,
-            x: c.t.x,
-            y: c.j.dy * 0.5 + c.t.dy,
-            rotate: c.j.rot * c.t.spin,
-            scale: 0.42,
-        }),
+        exit: (c) => {
+            if (reduce) return { opacity: 0 };
+            if (!FILED.has(c.grade)) {
+                // Thrown off the table. It isn't landing on anything, so it
+                // only needs the card's own size to scale the throw by.
+                const a = AWAY[c.grade] || AWAY[1];
+                const box = c.el?.current?.getBoundingClientRect();
+                const w = box?.width || 340, h = box?.height || 480;
+                return {
+                    opacity: [1, 1, 0], x: w * a.fx, y: roomBelow(box, h, a),
+                    rotate: a.rotate + c.j.rot, scale: a.scale,
+                    transition: {
+                        duration: a.dur, ease: [0.36, 0, 0.7, 0.4],
+                        opacity: { duration: a.dur, times: [0, 0.5, 1], ease: "linear" },
+                    },
+                };
+            }
+            const land = landingFor(c.el?.current);
+            // No pile to aim at (a layout we didn't foresee) — a plain toss to
+            // the right is still better than snapping out of existence.
+            if (!land) {
+                return {
+                    opacity: 0, x: 180, y: -20, rotate: c.j.rot, scale: 0.42,
+                    transition: { duration: FILE_MS / 1000 },
+                };
+            }
+            return {
+                // Held at full opacity almost the whole way, so you SEE it land.
+                opacity: [1, 1, 0],
+                x: land.x, y: land.y, scale: land.scale,
+                // A card thrown onto a pile lands askew, never square.
+                rotate: c.j.rot * 0.9,
+                transition: {
+                    duration: FILE_MS / 1000,
+                    // Fast out of the hand, easing into the landing.
+                    ease: [0.16, 0.72, 0.24, 1],
+                    opacity: { duration: FILE_MS / 1000, times: [0, 0.82, 1], ease: "linear" },
+                },
+            };
+        },
     };
 
     // Size only — the wrappers below own the positioning, for the reason in
@@ -223,8 +332,16 @@ export default function ReviewTable({
                     <Count n={inDeck} label="to go" className="!text-left" />
                 </div>
                 <div className="flex items-end gap-2">
-                    <Count n={done} label="done" className="!text-right" />
-                    <Pile count={done} tone={tone} h={STRIP_H} spent glow={flash ? gradeTone : null} />
+                    <div>
+                        <Count n={done} label="done" className="!text-right" />
+                        {returning > 0 && (
+                            <p className="text-[10px] text-muted-foreground/70 text-right leading-tight">
+                                {returning} coming back
+                            </p>
+                        )}
+                    </div>
+                    <Pile data-discard-pile count={done} tone={tone} h={STRIP_H} spent
+                        glow={flash ? gradeTone : null} />
                 </div>
             </div>
 
@@ -236,9 +353,17 @@ export default function ReviewTable({
                 </div>
 
                 <div className="flex flex-col items-center gap-3 min-w-0">
-                    {badge}
+                    {/* The badge slot is reserved whether or not there's a
+                        badge in it. Letting it collapse moved the card — and
+                        therefore the piles, which are centred against it — by
+                        about twenty pixels every time a weak-spot card was
+                        followed by an ordinary one. */}
+                    <div className="h-6 flex items-center">{badge}</div>
+                    {/* The flying card leaves this box and crosses the piles,
+                        so it has to sit above them. */}
                     <div
-                        className="relative flex-shrink-0 max-w-[88vw]"
+                        ref={tableRef}
+                        className="relative flex-shrink-0 max-w-[88vw] z-20"
                         style={{ height: CARD_H, aspectRatio: "2.5 / 3.5", perspective: 1400 }}
                     >
                         <AnimatePresence initial={false} custom={leaving}>
@@ -321,15 +446,48 @@ export default function ReviewTable({
                                     )}
                                 </motion.div>
                               </motion.div>
+
+                              {/* The card turns face-down as it leaves, so it
+                                  arrives on the pile as one of the pile rather
+                                  than as a shrunken page of text sitting on
+                                  top of it. Landing a face on a stack of backs
+                                  was the one thing that gave the flick away.
+
+                                  It rides the parent's variant labels — which
+                                  works precisely because this has `variants`
+                                  and no `animate` of its own. */}
+                              {!reduce && (
+                                  <motion.div
+                                      data-card-turning
+                                      className="absolute inset-0 pointer-events-none"
+                                      variants={{
+                                          enter: { opacity: 0 },
+                                          center: { opacity: 0 },
+                                          exit: {
+                                              opacity: [0, 1, 1],
+                                              transition: { duration: 0.3, times: [0, 0.45, 1] },
+                                          },
+                                      }}
+                                  >
+                                      <CardBack tone={tone} className="w-full h-full" />
+                                  </motion.div>
+                              )}
                             </motion.div>
                         </AnimatePresence>
                     </div>
                 </div>
 
-                {/* Discard pile */}
+                {/* The finished pile. Only cards you actually recalled land
+                    here — see FILED. */}
                 <div className="hidden sm:flex flex-col items-center gap-2 flex-shrink-0">
-                    <Pile count={done} tone={tone} h={PILE_H} spent glow={flash ? gradeTone : null} />
+                    <Pile data-discard-pile count={done} tone={tone} h={PILE_H} spent
+                        glow={flash ? gradeTone : null} />
                     <Count n={done} label="done" />
+                    {returning > 0 && (
+                        <p className="text-[10px] text-muted-foreground/70 text-center leading-tight -mt-1.5">
+                            {returning} coming back
+                        </p>
+                    )}
                 </div>
             </div>
         </div>
