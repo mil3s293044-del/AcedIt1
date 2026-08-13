@@ -79,15 +79,26 @@ export function alpha(hex, a) {
 /** The height ladder. Every card and pile on a table is sized off one of these. */
 export const CARD_H = "clamp(19rem, 56vh, 32rem)";
 
-/** A corner index: rank over pip, the way it's printed. */
-function Index({ rank, suit, flip }) {
+/**
+ * A corner index: rank over pip, the way it's printed.
+ *
+ * Two sizes, because the index has to stay in proportion to the card. The
+ * full-size mark on a 176px deck stack lands on top of the deck's own name —
+ * a real card prints its index at a fixed fraction of the card, not a fixed
+ * number of millimetres.
+ */
+function Index({ rank, suit, flip, small }) {
     return (
         <span aria-hidden="true"
             className={`absolute flex flex-col items-center leading-none z-10 ${
-                flip ? "bottom-2.5 right-3 rotate-180" : "top-2.5 left-3"}`}>
-            <span className={`font-display font-black text-sm sm:text-base tabular-nums ${
+                small
+                    ? (flip ? "bottom-1.5 right-2 rotate-180" : "top-1.5 left-2")
+                    : (flip ? "bottom-2.5 right-3 rotate-180" : "top-2.5 left-3")}`}>
+            <span className={`font-display font-black tabular-nums ${
+                small ? "text-[11px]" : "text-sm sm:text-base"} ${
                 SUIT_IS_RED[suit] ? "text-destructive" : "text-foreground"}`}>{rank}</span>
-            <SuitPip suit={suit} className="w-2.5 h-2.5 sm:w-3 sm:h-3 -mt-0.5" />
+            <SuitPip suit={suit}
+                className={small ? "w-2 h-2 mt-0.5" : "w-2.5 h-2.5 sm:w-3 sm:h-3 -mt-0.5"} />
         </span>
     );
 }
@@ -99,6 +110,8 @@ export default function PlayingCard({
     tone,
     /** Skip the corner marks — for a card too small to print them legibly. */
     indices = true,
+    /** Smaller corner marks, for a card rendered at deck-tile size. */
+    smallIndices = false,
     /** Explains the two corner marks on hover, and to a screen reader. */
     mastery,
     /**
@@ -138,8 +151,8 @@ export default function PlayingCard({
 
             {indices && (
                 <span title={rankTitle(rank, suit, mastery)}>
-                    <Index rank={rank} suit={suit} />
-                    <Index rank={rank} suit={suit} flip />
+                    <Index rank={rank} suit={suit} small={smallIndices} />
+                    <Index rank={rank} suit={suit} small={smallIndices} flip />
                 </span>
             )}
 
