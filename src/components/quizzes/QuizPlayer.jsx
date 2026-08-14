@@ -24,6 +24,9 @@ import MathText from "@/components/shared/LatexRenderer";
 import { getLatexRules } from "@/lib/subjectExaminerPrompts";
 import { FEATURES, checkLiveTier } from "@/lib/tierAccess";
 import { fireXPFeedback } from "../ranked/XPFeedback";
+import QuizTable from "@/components/cards/QuizTable";
+import ChoiceCard from "@/components/cards/ChoiceCard";
+import { suitFor } from "@/components/cards/cardIdentity";
 
 // ─── Static class lookup tables (no dynamic Tailwind interpolation) ──────────
 const CHOICE_STATE = {
@@ -245,6 +248,13 @@ export default function QuizPlayer({ quiz, onExit, mode = "standard", timeLimitM
     const [isGeneratingFeedback, setIsGeneratingFeedback] = useState(false);
     const [aiFeedback, setAiFeedback] = useState([]);
     const [showFeedback, setShowFeedback] = useState(false);
+    /**
+     * What the table shows: cards he's eaten, cards he wouldn't take, and the
+     * current run. Counted here rather than derived from `userAnswers`,
+     * because a run is about the ORDER you answered in and that isn't
+     * recoverable from a map of answers — you can revisit questions.
+     */
+    const [tally, setTally] = useState({ won: 0, missed: 0, run: 0 });
     const [isCorrect, setIsCorrect] = useState(null);
     const [pastAttempts, setPastAttempts] = useState([]);
     const [mathMode, setMathMode] = useState({});
@@ -290,12 +300,6 @@ export default function QuizPlayer({ quiz, onExit, mode = "standard", timeLimitM
 
     const currentQuestion = shuffledQuiz.questions[currentQuestionIndex];
     const totalQ = shuffledQuiz.questions.length;
-    const progress = ((currentQuestionIndex) / totalQ) * 100;
-    const answeredCount = Object.keys(userAnswers).filter(k => {
-        const a = userAnswers[k];
-        const q = shuffledQuiz.questions[parseInt(k)];
-        return q?.type === 'mcq' ? a !== undefined : (a?.length > 0);
-    }).length;
 
     const saveProgressToDatabase = async () => {
         try {
@@ -366,14 +370,46 @@ export default function QuizPlayer({ quiz, onExit, mode = "standard", timeLimitM
             setIsCorrect(correct);
             setShowFeedback(true);
             setSubmittedQuestions(prev => new Set([...prev, currentQuestionIndex]));
+            setTally(t => ({
+                won: t.won + (correct ? 1 : 0),
+                missed: t.missed + (correct ? 0 : 1),
+                run: correct ? t.run + 1 : 0,
+            }));
             correct ? playCorrectSound() : playIncorrectSound();
-            // Snappy when right (you nailed it), a touch longer when wrong so
-            // there's time to see the correct answer highlighted.
-            setTimeout(() => handleNext(), correct ? 750 : 1500);
+            // Snappy when right, a touch longer when wrong so there's time to
+            // see the correct answer highlighted. The 900 is the card reaching
+            // his mouth (400) plus enough of the chew to register — he keeps
+            // chewing over the top of the next question, which is fine.
+            setTimeout(() => handleNext(), correct ? 900 : 1500);
         } else {
             handleNext();
         }
     };
+
+    /**
+     * Number keys pick a suit; Enter plays it.
+     *
+     * Deliberately two steps. One keystroke that both chooses AND submits an
+     * MCQ is one fat-finger away from an irreversible wrong answer, and unlike
+     * a flashcard grade a quiz answer is marked.
+     */
+    useEffect(() => {
+        if (currentQuestion?.type !== 'mcq' || showFeedback) return undefined;
+        const onKey = (e) => {
+            const t = e.target;
+            if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return;
+            const n = Number(e.key);
+            if (n >= 1 && n <= (currentQuestion.options?.length || 0)) {
+                e.preventDefault();
+                handleAnswerChange(String(n - 1));
+            } else if (e.key === 'Enter') {
+                e.preventDefault();
+                handleSubmitAnswer();
+            }
+        };
+        window.addEventListener('keydown', onKey);
+        return () => window.removeEventListener('keydown', onKey);
+    });
 
     const handleNext = () => {
         setShowFeedback(false);
@@ -1024,47 +1060,55 @@ Return exactly ${questionsForAnalysis.length} items.`,
 
             <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="max-w-3xl mx-auto space-y-4">
 
-                {/* Header */}
-                <div className="bg-chart-3 rounded-2xl p-4 flex items-center justify-between gap-4 shadow-soft">
+                {/* Header. A slab of saturated blue across the top of a card
+                    table was the loudest thing on the screen and the least
+                    informative; it sits on the background now, so the table is
+                    what you look at. The "N/M answered" count went with it —
+                    the piles say that, and say it better. */}
+                <div className="flex items-center justify-between gap-4">
                     <div className="flex items-center gap-3 min-w-0">
                         <button onClick={() => { if (Object.keys(userAnswers).length > 0) setShowSaveProgressDialog(true); else onExit(); }}
-                            className="w-8 h-8 bg-surface/15 hover:bg-surface/25 rounded-xl flex items-center justify-center transition-colors flex-shrink-0">
-                            <X className="w-4 h-4 text-white" />
+                            aria-label="Leave this quiz"
+                            className="w-8 h-8 rounded-xl border-2 border-border text-muted-foreground
+                                hover:text-foreground hover:bg-secondary flex items-center justify-center
+                                transition-colors flex-shrink-0">
+                            <X className="w-4 h-4" />
                         </button>
                         <div className="min-w-0">
-                            <p className="text-white font-bold text-sm truncate">{shuffledQuiz.title}</p>
-                            <p className="text-white/70 text-xs">{shuffledQuiz.subject} · {answeredCount}/{totalQ} answered</p>
+                            <p className="text-foreground font-bold text-sm truncate">{shuffledQuiz.title}</p>
+                            <p className="text-muted-foreground text-xs truncate">{shuffledQuiz.subject}</p>
                         </div>
                     </div>
-                    <div className="flex items-center gap-3 flex-shrink-0">
+                    <div className="flex items-center gap-2 flex-shrink-0">
                         {isSAC ? (
                             // Countdown — turns amber under 5 min, red under 1 min.
                             <div className={`flex items-center gap-1.5 text-sm font-mono font-bold px-2.5 py-1 rounded-lg ${
-                                remainingMs <= 60000   ? "bg-streak/30 text-white animate-pulse"
-                                : remainingMs <= 300000 ? "bg-xp/30 text-white"
-                                : "bg-surface/15 text-white/95"
+                                remainingMs <= 60000   ? "bg-streak/15 text-streak animate-pulse"
+                                : remainingMs <= 300000 ? "bg-xp/15 text-xp"
+                                : "bg-secondary text-muted-foreground"
                             }`}>
                                 <Clock className="w-4 h-4" />
                                 {formatElapsed(remainingMs)}
                             </div>
                         ) : (
-                            <div className="flex items-center gap-1.5 text-white/80 text-sm font-mono font-bold">
+                            <div className="flex items-center gap-1.5 text-muted-foreground text-sm font-mono font-bold">
                                 <Clock className="w-4 h-4" />
                                 {formatElapsed(Date.now() - startTime)}
                             </div>
                         )}
                         <button onClick={() => setShowQuestionMap(v => !v)}
-                            className="w-8 h-8 bg-surface/15 hover:bg-surface/25 rounded-xl flex items-center justify-center transition-colors">
-                            <Layers className="w-4 h-4 text-white" />
+                            aria-label="Jump to a question"
+                            className="w-8 h-8 rounded-xl border-2 border-border text-muted-foreground
+                                hover:text-foreground hover:bg-secondary flex items-center justify-center
+                                transition-colors">
+                            <Layers className="w-4 h-4" />
                         </button>
                     </div>
                 </div>
 
-                {/* Progress bar */}
-                <div className="h-1.5 bg-secondary rounded-full overflow-hidden">
-                    <motion.div className="h-full bg-chart-3 rounded-full"
-                        animate={{ width: `${progress}%` }} transition={{ duration: 0.4, ease: "easeOut" }} />
-                </div>
+                {/* The progress bar is gone — the two piles on the table say
+                    the same thing, and saying it twice is how a screen ends up
+                    looking like a dashboard. */}
 
                 {/* Question map */}
                 <AnimatePresence>
@@ -1098,40 +1142,35 @@ Return exactly ${questionsForAnalysis.length} items.`,
                     )}
                 </AnimatePresence>
 
-                {/* Question card */}
-                <AnimatePresence mode="wait">
-                    <motion.div key={currentQuestionIndex}
-                        initial={{ opacity: 0, x: 40, scale: 0.96 }}
-                        animate={{ opacity: 1, x: 0, scale: 1 }}
-                        exit={{ opacity: 0, x: -40, scale: 0.96 }}
-                        transition={{ type: "spring", stiffness: 420, damping: 32, mass: 0.6 }}
-                        className="card-soft overflow-hidden">
-
-                        {/* Card header */}
-                        <div className="px-6 pt-5 pb-4 bg-chart-3/10 border-b border-border">
-                            <div className="flex items-center justify-between gap-3">
-                                <div className="flex items-center gap-2">
-                                    <span className={`pill ${currentQuestion.type === 'mcq' ? 'bg-chart-4/15 text-chart-4' : 'bg-chart-3/15 text-chart-3'}`}>
-                                        {currentQuestion.type === 'mcq' ? 'Multiple Choice' : `Short Answer · ${currentQuestion.marks || 5} marks`}
-                                    </span>
-                                    {showFeedback && (
-                                        <motion.span initial={{ scale: 0 }} animate={{ scale: 1 }}
-                                            className={`pill ${isCorrect ? 'bg-primary/15 text-primary' : 'bg-streak/15 text-streak'}`}>
-                                            {isCorrect ? <><Check className="w-3 h-3" /> Correct!</> : <><X className="w-3 h-3" /> Incorrect</>}
-                                        </motion.span>
-                                    )}
-                                </div>
-                                <span className="text-xs font-bold text-muted-foreground/60">{currentQuestionIndex + 1} / {totalQ}</span>
-                            </div>
-                        </div>
-
-                        <div className="p-6 sm:p-8 space-y-6">
-                            <div className="text-xl sm:text-2xl font-semibold text-foreground leading-relaxed">
+                {/* The table */}
+                <QuizTable
+                    questionKey={currentQuestionIndex}
+                    number={currentQuestionIndex + 1}
+                    suit={suitFor(shuffledQuiz.subject)}
+                    remaining={totalQ - currentQuestionIndex}
+                    won={tally.won} missed={tally.missed} run={tally.run}
+                    verdict={showFeedback ? (isCorrect ? "correct" : "wrong") : null}
+                    playedIndex={showFeedback ? parseInt(userAnswers[currentQuestionIndex], 10) : null}
+                    optionCount={currentQuestion.options?.length || 0}
+                    question={(
+                        <>
+                            {/* No "Correct!" pill and no "3 / 10". The option
+                                goes green, Ace eats it or bats it away, and the
+                                corner index is the question number — three ways
+                                of saying the same thing is how a screen starts
+                                looking generated. */}
+                            <span className={`pill mb-3 ${currentQuestion.type === 'mcq' ? 'bg-chart-4/15 text-chart-4' : 'bg-chart-3/15 text-chart-3'}`}>
+                                {currentQuestion.type === 'mcq' ? 'Multiple Choice' : `Short Answer · ${currentQuestion.marks || 5} marks`}
+                            </span>
+                            <div className="text-lg sm:text-xl font-semibold text-foreground leading-relaxed">
                                 <MarkdownMath>{currentQuestion.question || ""}</MarkdownMath>
                             </div>
-
+                        </>
+                    )}
+                >
+                    <div className="space-y-6">
                             {currentQuestion.type === 'mcq' ? (
-                                <div className="space-y-3">
+                                <div className="space-y-2.5">
                                     {currentQuestion.options?.map((option, index) => {
                                         const isSelected = getCurrentAnswer()?.toString() === index.toString();
                                         const isCorrectAnswer = index === currentQuestion.correct_answer;
@@ -1139,25 +1178,19 @@ Return exactly ${questionsForAnalysis.length} items.`,
                                         if (showFeedback) {
                                             if (isCorrectAnswer) stateKey = 'correct';
                                             else if (isSelected && !isCorrect) stateKey = 'incorrect';
-                                            else stateKey = 'disabled';
+                                            else stateKey = 'dimmed';
                                         } else if (isSelected) {
                                             stateKey = 'selected';
                                         } else {
                                             stateKey = 'default';
                                         }
-                                        const choiceCls = CHOICE_STATE[stateKey];
-                                        const badgeCls = CHOICE_BADGE[stateKey];
                                         return (
-                                            <motion.button key={index} type="button" disabled={showFeedback}
-                                                whileHover={!showFeedback ? { scale: 1.005 } : {}}
-                                                whileTap={!showFeedback ? { scale: 0.998 } : {}}
-                                                onClick={() => !showFeedback && handleAnswerChange(index.toString())}
-                                                className={`w-full flex items-center gap-4 px-5 py-4 rounded-2xl text-left transition-all duration-150 ${choiceCls} ${showFeedback ? 'cursor-default' : 'cursor-pointer'}`}>
-                                                <span className={`w-9 h-9 rounded-xl flex items-center justify-center text-sm font-black flex-shrink-0 transition-all ${badgeCls}`}>
-                                                    {showFeedback && isCorrectAnswer ? <Check className="w-4 h-4" /> : showFeedback && isSelected && !isCorrect ? <X className="w-4 h-4" /> : String.fromCharCode(65 + index)}
-                                                </span>
-                                                <span className="flex-1 font-medium text-base"><MathText>{option}</MathText></span>
-                                            </motion.button>
+                                            <ChoiceCard key={index} index={index}
+                                                count={currentQuestion.options.length}
+                                                state={stateKey} disabled={showFeedback}
+                                                onClick={() => !showFeedback && handleAnswerChange(index.toString())}>
+                                                <MathText>{option}</MathText>
+                                            </ChoiceCard>
                                         );
                                     })}
                                 </div>
@@ -1227,9 +1260,8 @@ Return exactly ${questionsForAnalysis.length} items.`,
                                     )}
                                 </div>
                             )}
-                        </div>
-                    </motion.div>
-                </AnimatePresence>
+                    </div>
+                </QuizTable>
 
                 {/* Navigation */}
                 <div className="flex items-center justify-between gap-3">

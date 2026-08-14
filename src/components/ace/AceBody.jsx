@@ -133,6 +133,15 @@ const POSES = {
     // He flicks a card out of frame and watches it go. The most on-brand gag
     // available to a character who IS a playing card.
     toss:    { look: [0.85, -0.35], lids: 1,    mouth: "grin",  arms: "toss",  tilt: -6, blush: true, card: true },
+    // ── Eating a card. The quiz feeds him the answer you played. ──
+    // Mouth wide, eyes on the incoming card, hands up ready to catch it.
+    gulp:    { look: [-0.5, 0.15],  lids: 1,    mouth: "o",     arms: "up",    tilt: -3, brow: "up" },
+    // Chewing, thoroughly pleased. Eyes squeezed into arcs so he reads as
+    // enjoying it rather than as merely having swallowed something.
+    munch:   { look: [0, 0],        lids: 0.05, mouth: "grin",  arms: "hips",  tilt: 0,  blush: true, arcs: true, sparkle: true },
+    // A card he won't take: batted out of the air. Not cross with you — the
+    // brow is up, not down. He's dodging a bad card, not telling you off.
+    swat:    { look: [-0.9, 0.1],   lids: 1,    mouth: "flat",  arms: "flail", tilt: 9,  brow: "up" },
 };
 
 /** Poses he's allowed to fidget out of — i.e. the ones where he's just there. */

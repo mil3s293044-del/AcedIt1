@@ -35,77 +35,11 @@
 import React, { useEffect, useRef, useState } from "react";
 import { motion, AnimatePresence, useAnimationControls, useReducedMotion } from "framer-motion";
 import PlayingCard, { CardBack, CARD_H } from "@/components/cards/PlayingCard";
+import { Pile, Count } from "@/components/cards/Pile";
 
 /** Piles are sized off the same height as the card, so one number moves both. */
 const PILE_H = `calc(${CARD_H} * 0.3)`;
 const STRIP_H = `calc(${CARD_H} * 0.15)`;
-
-/** How many card edges a pile shows before it stops getting visibly thicker. */
-const MAX_DEPTH = 6;
-
-/**
- * A stack of face-down cards. `count` is the real number; the visible depth is
- * capped, because past about six edges you cannot tell seven from eleven and
- * the stack just gets taller than the table.
- */
-function Pile({ count, tone, h, spent = false, glow, className = "", ...rest }) {
-    const depth = Math.min(count, MAX_DEPTH);
-    return (
-        <span className={`relative inline-block ${className}`}
-            style={{ height: h, aspectRatio: "2.5 / 3.5" }} {...rest}>
-            {/* The landing flash. It's the only confirmation of WHICH grade you
-                pressed when you graded with the keyboard and never looked at
-                the buttons — so it's feedback, not decoration. */}
-            <AnimatePresence>
-                {glow && (
-                    <motion.span key="glow" className="absolute -inset-1 rounded-[1.1rem] pointer-events-none"
-                        initial={{ opacity: 0, scale: 0.9 }}
-                        animate={{ opacity: 1, scale: 1 }}
-                        exit={{ opacity: 0, scale: 1.12 }}
-                        transition={{ duration: 0.22 }}
-                        style={{ boxShadow: `0 0 0 3px ${glow}, 0 0 22px 2px ${glow}` }} />
-                )}
-            </AnimatePresence>
-            {Array.from({ length: depth }).map((_, i) => {
-                // Deepest card first, furthest down and right; the top card
-                // lands square at 0,0. Done the other way round the top of the
-                // stack floats up off its own label.
-                const back = depth - 1 - i;
-                return (
-                    // The positioning lives on a wrapper, NOT on the card.
-                    // Passing `absolute` to something whose own class list says
-                    // `relative` loses: Tailwind emits position utilities in a
-                    // fixed order and `relative` comes last, so it wins however
-                    // the strings are concatenated. The card collapsed to a
-                    // 3px sliver.
-                    <span key={i} className="absolute inset-0"
-                        style={{
-                            transform: `translate(${back * 1.8}px, ${back * 1.8}px)`
-                                + (spent ? " rotate(5deg)" : ""),
-                            opacity: spent ? 0.5 : 1,
-                        }}>
-                        {/* Only the top card carries a shadow. Six stacked
-                            drop shadows make a pile look like a smudge. */}
-                        <CardBack tone={tone} flat={back > 0} className="w-full h-full" />
-                    </span>
-                );
-            })}
-            {/* An empty slot still holds its place — the table shouldn't
-                re-centre itself when you take the last card. */}
-            {depth === 0 && (
-                <span className="absolute inset-0 rounded-[0.9rem] border-2 border-dashed border-border/70" />
-            )}
-        </span>
-    );
-}
-
-function Count({ n, label, className = "" }) {
-    return (
-        <p className={`text-[11px] sm:text-xs text-muted-foreground text-center leading-tight ${className}`}>
-            <span className="font-bold text-foreground tabular-nums">{n}</span> {label}
-        </p>
-    );
-}
 
 /**
  * A deterministic wobble from the card's position in the deck. Cards thrown
@@ -157,18 +91,6 @@ const FILE_MS = 420;
 const FLASH_MS = 380;
 
 /**
- * Where the finished pile is, right now, relative to the card.
- *
- * MEASURED rather than hardcoded, because the pile is in a completely
- * different place on a phone — it's in the strip above the card, not out to
- * the right — and a card "landing on the pile" that lands two hundred pixels
- * away from it is worse than one that just fades. Both piles are in the DOM at
- * all times with only one displayed, so the one with a real width is the one
- * on screen.
- *
- * Returns null when it can't tell, and the caller falls back to a plain toss.
- */
-/**
  * How far down the card may be thrown without the document getting taller.
  *
  * Fractions of the card were still 4px over on some layouts, and 4px of new
@@ -187,6 +109,18 @@ function roomBelow(box, h, a) {
     return Math.max(h * 0.34, Math.min(want, most));
 }
 
+/**
+ * Where the finished pile is, right now, relative to the card.
+ *
+ * MEASURED rather than hardcoded, because the pile is in a completely
+ * different place on a phone — it's in the strip above the card, not out to
+ * the right — and a card "landing on the pile" that lands two hundred pixels
+ * away from it is worse than one that just fades. Both piles are in the DOM at
+ * all times with only one displayed, so the one with a real width is the one
+ * on screen.
+ *
+ * Returns null when it can't tell, and the caller falls back to a plain toss.
+ */
 function landingFor(cardEl) {
     if (!cardEl) return null;
     const pile = [...document.querySelectorAll("[data-discard-pile]")]
