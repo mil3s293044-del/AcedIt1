@@ -3,8 +3,10 @@ import { motion, useScroll, useReducedMotion } from "framer-motion";
 import { trackStartTrial } from "@/lib/analytics";
 import EmailCapture from "@/components/marketing/EmailCapture";
 import DealtHand from "@/components/marketing/DealtHand";
-import CardFlush from "@/components/marketing/CardFlush";
+import CardStorm from "@/components/marketing/CardStorm";
 import StepCards from "@/components/marketing/StepCards";
+import EvidenceSplit from "@/components/marketing/EvidenceSplit";
+import BrainShowcase from "@/components/marketing/BrainShowcase";
 import { Button } from "@/components/ui/button";
 import {
   Accordion,
@@ -102,11 +104,11 @@ export default function Landing() {
 
   return (
     <div className="min-h-screen bg-[#FBF7F0] text-[#0D1626] font-sans antialiased overflow-x-hidden scroll-smooth">
-      {/* The opening hand. Sits on top of a page that is already rendered and
-          interactive underneath, drops away after two seconds, skips on any
-          input, and runs once a session. See CardFlush for why each of those
-          rules exists. */}
-      <CardFlush />
+      {/* The opening. Hundreds of cards thrown at the screen, assembling into
+          the app's own brain, which then takes them in. Sits on top of a page
+          that is already rendered and interactive underneath, skips on any
+          input, and runs once a session. See CardStorm for the rest. */}
+      <CardStorm />
 
       {/* Scroll progress bar */}
       <motion.div
@@ -241,7 +243,7 @@ export default function Landing() {
           >
             <Sparkles className="w-3.5 h-3.5 text-primary" />
             <span className="text-xs font-semibold text-[#0D1626]/80 tracking-wide">
-              Built for VCE. Only VCE.
+              Built on 40 years of memory research
             </span>
           </motion.div>
 
@@ -251,17 +253,20 @@ export default function Landing() {
             transition={{ duration: 0.8, delay: 0.1, ease: [0.22, 1, 0.36, 1] }}
             className="font-display font-extrabold text-[#0D1626] text-4xl sm:text-5xl md:text-6xl lg:text-7xl leading-[0.98] tracking-tight"
           >
-            {/* THE HOOK IS THE MECHANISM, NOT THE OUTCOME. "Study like the
-                kids who get a 90+" was pure aspiration: it promised a result
-                and named nothing that would produce it, which is the shape of
-                every study-app headline ever written and is why none of them
-                are believed. The examiner reports are public documents in
-                which VCAA writes down, every year, exactly what it wanted and
-                exactly where students lost marks. Almost nobody reads them.
-                That is the unfair advantage, so that is the headline. */}
-            Study like you&rsquo;ve seen
+            {/* THE HOOK IS THE UNCOMFORTABLE TRUTH, and the sub-head is the
+                fix. Every study app opens by promising a score, which is the
+                one claim a student has already learned to discount. This opens
+                by describing what they did last night.
+
+                It is also, precisely, what the research says: Roediger and
+                Karpicke put rereading against self-testing and the rereaders
+                felt MORE confident and remembered less. Naming the thing
+                everyone does and telling them it does not work is a real
+                position, and a real position is the only thing on a landing
+                page that cannot be copied by the next one. */}
+            Rereading your notes
             <br />
-            the <span className="text-primary">marking guide</span>
+            <span className="text-primary">barely works</span>
             <span className="text-primary">.</span>
           </motion.h1>
 
@@ -271,9 +276,10 @@ export default function Landing() {
             transition={{ duration: 0.7, delay: 0.25, ease: [0.22, 1, 0.36, 1] }}
             className="mt-7 text-lg sm:text-xl text-[#0D1626]/70 max-w-2xl mx-auto leading-relaxed"
           >
-            Because AcedIt has read every one. It marks your work against the
-            real VCAA criteria across all 34 subjects, then shows you the exact
-            marks you left on the table.
+            It feels like studying, and the research is brutal about it.
+            AcedIt is built on the four techniques that do work, with an AI
+            examiner on top that marks every attempt against real VCAA criteria
+            across all 34 subjects.
           </motion.p>
 
           <motion.div
@@ -413,15 +419,81 @@ export default function Landing() {
             transition={{ ...fadeUp.transition, delay: 0.1 }}
             className="font-display font-extrabold text-3xl sm:text-4xl md:text-5xl leading-tight tracking-tight"
           >
-            You can study for six hours and still drop marks for a rule nobody
-            said out loud.
+            In 2006 two researchers ran the experiment every student should
+            be shown.
             <br />
             <span className="text-[#0D1626]/50">
-              Structure. Metalanguage. The command word in the question. VCE is
-              full of rules that cost real marks and never get taught. AcedIt
-              says them out loud, subject by subject.
+              One group reread the material. One group put it away and tested
+              themselves. The rereaders were more confident about how they
+              would do. A week later they remembered far less. Feeling
+              productive and being productive came apart completely, and almost
+              nothing about how VCE is taught has caught up.
             </span>
           </motion.h2>
+        </div>
+      </section>
+
+      {/* ============================================================== */}
+      {/* THE EVIDENCE                                                     */}
+      {/* ============================================================== */}
+      {/* Dark, because it is the serious part of the page and because the
+          cards in it need something to lie on. This is the section the whole
+          product argument rests on: two techniques rated high, two rated low,
+          and the fact that every student does the low ones. */}
+      <section id="evidence" className="relative py-24 px-6 bg-[#0D1626] text-white overflow-hidden">
+        <div className="relative max-w-6xl mx-auto">
+          <motion.div {...fadeUp} className="mb-14 max-w-2xl">
+            <p className="text-xs font-bold tracking-[0.2em] text-primary uppercase mb-4">
+              What the research says
+            </p>
+            <h2 className="font-display font-extrabold text-4xl sm:text-5xl tracking-tight text-white leading-[1.05]">
+              Ten techniques were ranked. Two came out on top.
+            </h2>
+            <p className="text-white/60 mt-5 leading-relaxed">
+              Dunlosky and colleagues reviewed the ten study techniques students
+              actually use and rated each for practical utility. The two that
+              scored highest are the two nobody is taught. The two that scored
+              lowest are the two everybody does.
+            </p>
+          </motion.div>
+
+          <EvidenceSplit />
+
+          <motion.p {...fadeUp} className="text-white/45 text-sm mt-14 max-w-2xl leading-relaxed">
+            AcedIt is the two on the left, built into a daily loop, for VCE. The
+            AI is not a replacement for any of it. It is the thing that marks
+            each attempt, so the practice you are doing is practice at the
+            standard you are actually being assessed against.
+          </motion.p>
+        </div>
+      </section>
+
+      {/* ============================================================== */}
+      {/* THE BRAIN                                                        */}
+      {/* ============================================================== */}
+      {/* The same rotating model the Study page and the Analytics cognition
+          tab render, driven by the same cited table. It is on the landing page
+          because "built on the research" is a claim, and showing the actual
+          model is the only cheap way to make a claim checkable. */}
+      <section id="brain" className="relative py-24 px-6 bg-[#0B1220] text-white overflow-hidden">
+        <div className="relative max-w-6xl mx-auto">
+          <motion.div {...fadeUp} className="mb-12 max-w-2xl">
+            <p className="text-xs font-bold tracking-[0.2em] text-primary uppercase mb-4">
+              Inside the app
+            </p>
+            <h2 className="font-display font-extrabold text-4xl sm:text-5xl tracking-tight text-white leading-[1.05]">
+              Every technique uses a different part of you.
+            </h2>
+            <p className="text-white/60 mt-5 leading-relaxed">
+              This is the model AcedIt actually ships, not an illustration of
+              one. Pick a technique and see which systems the work leans on. The
+              useful part is the dark regions: a term of nothing but timed focus
+              blocks leaves the memory systems barely touched, and that is a
+              diagnosis you can do something about.
+            </p>
+          </motion.div>
+
+          <BrainShowcase />
         </div>
       </section>
 
@@ -451,7 +523,7 @@ export default function Landing() {
               How it works
             </p>
             <h2 className="font-display font-extrabold text-4xl sm:text-5xl tracking-tight text-white">
-              Three steps. Then you just show up.
+              Three steps. Then you just turn up.
             </h2>
           </motion.div>
 
@@ -466,14 +538,14 @@ export default function Landing() {
               tone: "#58CC02",
             },
             {
-              title: "Write it, then get it marked",
-              body: "Answer like it is the real thing. AcedIt marks it against the actual VCAA criteria and shows you what an assessor would tick, and what they would not.",
+              title: "Practise the way that works",
+              body: "Active recall, spaced repetition, blurting, exam mode. The methods are the ones the research backs, and the AI marks every attempt against the actual VCAA criteria.",
               suit: "diamond",
               tone: "#8B5CF6",
             },
             {
-              title: "Come back tomorrow",
-              body: "XP, leaderboards and mates who can see whether you turned up. The part that turns \u2018I should study\u2019 into \u2018I am not losing this streak\u2019.",
+              title: "Come back before you forget",
+              body: "AcedIt tracks how fast each topic is fading and puts it back in front of you at the point where the review actually counts. Streaks and a leaderboard handle the rest.",
               suit: "heart",
               tone: "#FF4B4B",
             },

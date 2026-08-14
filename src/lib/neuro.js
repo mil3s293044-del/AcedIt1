@@ -27,7 +27,7 @@
  */
 
 export const REGION_NOTE =
-    "Schematic. Brain imaging shows these areas are consistently involved — not that thinking happens in one spot.";
+    "Schematic. Brain imaging shows these areas are consistently involved. It does not mean thinking happens in one spot.";
 
 export const REGIONS = {
     dlpfc:      { name: "Dorsolateral prefrontal cortex", short: "dlPFC",       xyz: [0.52, 0.34, 0.72] },
@@ -66,13 +66,13 @@ export const TECHNIQUE_NEURO = {
     pomodoro: {
         headline: "Focus is a resource that drains. Breaks are how it comes back.",
         network:
-            "Holding one goal steady is your prefrontal cortex suppressing everything else that wants attention. The default mode network — the daydreaming circuit — has to stay quiet for that, and it gets harder to keep quiet the longer you sit there.",
+            "Holding one goal steady is your prefrontal cortex suppressing everything else that wants attention. The default mode network, the daydreaming circuit, has to stay quiet for that, and it gets harder to keep quiet the longer you sit there.",
         regions: [
             { id: "dlpfc", tone: "primary", role: "Holds the goal in mind and blocks the competition" },
             { id: "acc",   tone: "xp",      role: "Notices the moment you've drifted off task" },
-            { id: "mpfc",  tone: "chart-4", role: "Default mode network — quiet when locked in, loud when mind-wandering" },
+            { id: "mpfc",  tone: "chart-4", role: "Default mode network. Quiet when locked in, loud when mind-wandering" },
             { id: "pcc",   tone: "chart-4", role: "The other half of that network" },
-            { id: "lc",    tone: "chart-3", role: "Noradrenaline — the arousal system vigilance runs on" },
+            { id: "lc",    tone: "chart-3", role: "Noradrenaline, the arousal system vigilance runs on" },
         ],
         chart: {
             kind: "line",
@@ -86,12 +86,12 @@ export const TECHNIQUE_NEURO = {
                 { name: "Straight through", tone: "streak",  values: [100, 97, 93, 90, 87, 85] },
                 { name: "With short breaks", tone: "primary", values: [100, 99, 99, 98, 99, 98] },
             ],
-            caption: "Ariga & Lleras found performance on a 50-minute task declined steadily — unless participants were given brief breaks, in which case it didn't decline at all.",
+            caption: "Ariga & Lleras found performance on a 50-minute task declined steadily, unless participants were given brief breaks, in which case it didn't decline at all.",
         },
         feelsLike:
             "The drop is invisible from the inside. You don't feel yourself getting worse; you just quietly stop noticing things.",
         caveat:
-            "Twenty-five minutes is not a research finding. Francesco Cirillo picked it with a kitchen tomato timer in the 1980s. What's actually supported is taking scheduled breaks before you fade — the length is yours to tune.",
+            "Twenty-five minutes is not a research finding. Francesco Cirillo picked it with a kitchen tomato timer in the 1980s. What's actually supported is taking scheduled breaks before you fade, the length is yours to tune.",
         utility: null,
         sources: [
             { ref: "Ariga & Lleras (2011), Cognition 118(3)", note: "Brief breaks from a prolonged task prevented the usual decline in performance." },
@@ -126,11 +126,11 @@ export const TECHNIQUE_NEURO = {
         effect: { g: 0.40, label: "spacing vs cramming", approx: true,
             source: "Cepeda et al. (2006) meta-analysis of 254 studies" },
         feelsLike:
-            "Cramming feels better because everything is right there while you're doing it. That fluency is the problem — it's a reading of how available the material is now, not of how much you'll have on the day.",
+            "Cramming feels better because everything is right there while you're doing it. That fluency is the problem, because it's a reading of how available the material is now, not of how much you'll have on the day.",
         utility: "high",
         sources: [
             { ref: "Cepeda, Pashler, Vul, Wixted & Rohrer (2006), Psychological Bulletin 132(3)", note: "254 studies: spacing beat massing in the large majority of comparisons." },
-            { ref: "Cepeda, Vul, Rohrer, Wixted & Pashler (2008), Psychological Science 19(11)", note: "The best gap scales with how long you need to remember — roughly 10–20% of the retention interval." },
+            { ref: "Cepeda, Vul, Rohrer, Wixted & Pashler (2008), Psychological Science 19(11)", note: "The best gap scales with how long you need to remember, roughly 10–20% of the retention interval." },
             { ref: "Xue et al. (2011), Journal of Neuroscience 31(21)", note: "Spaced repetitions produced more variable neural patterns than massed ones, and that variability predicted better later memory." },
             DUNLOSKY,
         ],
@@ -144,7 +144,7 @@ export const TECHNIQUE_NEURO = {
             { id: "hippocampus", tone: "primary", role: "Reconstructs the memory each time you pull on it" },
             { id: "vlpfc",       tone: "xp",      role: "Runs the search when it doesn't come straight away" },
             { id: "temporal",    tone: "chart-3", role: "Holds the content being retrieved" },
-            { id: "parietal",    tone: "chart-4", role: "Signals recollection — the feeling of actually having it" },
+            { id: "parietal",    tone: "chart-4", role: "Signals recollection, the feeling of actually having it" },
         ],
         chart: {
             kind: "bars",
@@ -156,7 +156,7 @@ export const TECHNIQUE_NEURO = {
                 { name: "After 5 minutes", values: [{ name: "Reread it", tone: "streak", value: 81 }, { name: "Tested yourself", tone: "primary", value: 75 }] },
                 { name: "After 1 week",    values: [{ name: "Reread it", tone: "streak", value: 40 }, { name: "Tested yourself", tone: "primary", value: 61 }] },
             ],
-            caption: "Rereading wins on the day and loses badly a week later. This crossover is the single most important graph in study science — and it's why the technique that feels worse is the one to use.",
+            caption: "Rereading wins on the day and loses badly a week later. This crossover is the single most important graph in study science, and it's why the technique that feels worse is the one to use.",
         },
         effect: { g: 0.50, label: "testing vs restudying", approx: true,
             source: "Rowland (2014) meta-analysis" },
@@ -174,7 +174,7 @@ export const TECHNIQUE_NEURO = {
     blurting: {
         headline: "An empty page is the most honest feedback you can get.",
         network:
-            "Free recall with nothing to cue you is the hardest version of retrieval, which is what makes it the most informative. Where the page stays blank is exactly where the gap is — and unlike rereading, you can't talk yourself out of it.",
+            "Free recall with nothing to cue you is the hardest version of retrieval, which is what makes it the most informative. Where the page stays blank is exactly where the gap is, and unlike rereading, you can't talk yourself out of it.",
         regions: [
             { id: "hippocampus", tone: "primary", role: "Reconstructs each item as you dig it out" },
             { id: "vlpfc",       tone: "xp",      role: "Searches when there's no prompt to work from" },
@@ -191,14 +191,14 @@ export const TECHNIQUE_NEURO = {
                 { name: "What they expect", values: [{ name: "Reread it", tone: "streak", value: 68 }, { name: "Recalled it", tone: "primary", value: 55 }] },
                 { name: "What happens",     values: [{ name: "Reread it", tone: "streak", value: 40 }, { name: "Recalled it", tone: "primary", value: 61 }] },
             ],
-            caption: "Students rate rereading higher than retrieval and then do worse with it. The confidence and the result point in opposite directions — which is why 'it feels like it's working' is not a usable signal.",
+            caption: "Students rate rereading higher than retrieval and then do worse with it. The confidence and the result point in opposite directions, which is why 'it feels like it's working' is not a usable signal.",
         },
         feelsLike:
             "Blurting feels like failing, because you're staring at what you can't do rather than at a page of things you can. That's the information. Rereading hides it.",
         utility: "high",
         sources: [
             { ref: "Roediger & Karpicke (2006), Psychological Science 17(3)", note: "Students predicted repeated study would serve them better, and it didn't." },
-            { ref: "Slamecka & Graf (1978), Journal of Experimental Psychology 4(6)", note: "The generation effect — material you produce yourself is remembered better than material you read." },
+            { ref: "Slamecka & Graf (1978), Journal of Experimental Psychology 4(6)", note: "The generation effect, material you produce yourself is remembered better than material you read." },
             DUNLOSKY,
         ],
     },
@@ -206,12 +206,12 @@ export const TECHNIQUE_NEURO = {
     exam: {
         headline: "Practise the thing you'll actually be asked to do.",
         network:
-            "Memory is picky about context. A trace laid down while reading is not the trace you need while answering a question under time pressure — which is why the closer practice looks to the real thing, the more of it transfers.",
+            "Memory is picky about context. A trace laid down while reading is not the trace you need while answering a question under time pressure, which is why the closer practice looks to the real thing, the more of it transfers.",
         regions: [
             { id: "vlpfc",       tone: "xp",      role: "Retrieval under load, with a clock running" },
             { id: "dlpfc",       tone: "primary", role: "Planning an answer and budgeting the time" },
             { id: "hippocampus", tone: "chart-3", role: "Pulling the content out cold" },
-            { id: "acc",         tone: "chart-4", role: "Monitors errors and time pressure — the part that settles with familiarity" },
+            { id: "acc",         tone: "chart-4", role: "Monitors errors and time pressure, the part that settles with familiarity" },
         ],
         chart: {
             kind: "bars",
@@ -223,14 +223,14 @@ export const TECHNIQUE_NEURO = {
                 { name: "Practice session", values: [{ name: "One topic at a time", tone: "streak", value: 89 }, { name: "Topics mixed up", tone: "primary", value: 60 }] },
                 { name: "Test a week later", values: [{ name: "One topic at a time", tone: "streak", value: 20 }, { name: "Topics mixed up", tone: "primary", value: 63 }] },
             ],
-            caption: "Doing one topic at a time looks far better during the session and collapses on the delayed test. Mixing topics is worse practice and better learning — the same trade as retrieval.",
+            caption: "Doing one topic at a time looks far better during the session and collapses on the delayed test. Mixing topics is worse practice and better learning, the same trade as retrieval.",
         },
         feelsLike:
             "A mixed paper feels messier because you have to work out what kind of question it is before you can answer it. On the day, that step is the exam.",
         utility: "moderate",
         sources: [
             { ref: "Rohrer & Taylor (2007), Applied Cognitive Psychology 21(9)", note: "Mixed practice was worse during the session and far better on a delayed test. Figures shown are approximate." },
-            { ref: "Morris, Bransford & Franks (1977), Journal of Verbal Learning and Verbal Behavior 16(5)", note: "Transfer-appropriate processing — practice helps most when it matches the demands of the final test." },
+            { ref: "Morris, Bransford & Franks (1977), Journal of Verbal Learning and Verbal Behavior 16(5)", note: "Transfer-appropriate processing, practice helps most when it matches the demands of the final test." },
             DUNLOSKY,
         ],
         caveat:
@@ -243,7 +243,7 @@ export const TECHNIQUE_NEURO = {
             "Building a map is only useful while the notes are shut. Done closed-book it's a retrieval task with a picture attached; done open-book it's copying, and copying leaves almost nothing behind.",
         regions: [
             { id: "hippocampus", tone: "primary", role: "Reconstructs each node as you place it" },
-            { id: "parietal",    tone: "chart-4", role: "Spatial layout — where things sit relative to each other" },
+            { id: "parietal",    tone: "chart-4", role: "Spatial layout, where things sit relative to each other" },
             { id: "dlpfc",       tone: "chart-3", role: "Holds the structure together while you build it" },
             { id: "temporal",    tone: "xp",      role: "Supplies the meaning of what you're connecting" },
         ],
@@ -257,14 +257,14 @@ export const TECHNIQUE_NEURO = {
                 { name: "Facts recalled",    values: [{ name: "Mapped from notes", tone: "streak", value: 45 }, { name: "Retrieval practice", tone: "primary", value: 67 }] },
                 { name: "Inference questions", values: [{ name: "Mapped from notes", tone: "streak", value: 44 }, { name: "Retrieval practice", tone: "primary", value: 62 }] },
             ],
-            caption: "Karpicke & Blunt put concept mapping head to head with retrieval practice and mapping lost — on facts, on inference, and even when the final test was itself a concept map. Which is exactly why AcedIt asks you to build it blind.",
+            caption: "Karpicke & Blunt put concept mapping head to head with retrieval practice and mapping lost, on facts, on inference, and even when the final test was itself a concept map. Which is exactly why AcedIt asks you to build it blind.",
         },
         feelsLike:
             "A map built with your notes open looks fantastic and teaches you almost nothing. The good-looking version and the useful version are not the same artefact.",
         utility: "moderate",
         sources: [
             { ref: "Karpicke & Blunt (2011), Science 331(6018)", note: "Concept mapping lost to retrieval practice on every measure they tested. Figures shown are approximate." },
-            { ref: "Blunt & Karpicke (2014), Journal of Educational Psychology 106(3)", note: "Mapping done as a closed-book retrieval task performed about as well as other retrieval formats — the version AcedIt implements." },
+            { ref: "Blunt & Karpicke (2014), Journal of Educational Psychology 106(3)", note: "Mapping done as a closed-book retrieval task performed about as well as other retrieval formats, the version AcedIt implements." },
         ],
         caveat:
             "This is the one technique where the popular version and the evidence disagree outright. Mapping is worth doing; mapping while looking at your notes is not.",

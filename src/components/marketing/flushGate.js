@@ -32,5 +32,5 @@ try {
 export const FLUSH_SEEN = seen;
 
 /** How long the curtain owns the screen, exit included. */
-export const FLUSH_MS = 1700;
+export const FLUSH_MS = 3120;
 export const FLUSH_EXIT_MS = 460;
