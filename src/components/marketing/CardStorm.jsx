@@ -45,7 +45,7 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { motion, AnimatePresence, useReducedMotion } from "framer-motion";
 import { brainCloud, rotate } from "@/lib/brainShape";
-import { FLUSH_SEEN } from "@/components/marketing/flushGate";
+import { FLUSH_SEEN, STORM_DONE } from "@/components/marketing/flushGate";
 
 /**
  * How many cards. "A thousand" is the feeling; 620 is what actually delivers
@@ -53,8 +53,8 @@ import { FLUSH_SEEN } from "@/components/marketing/flushGate";
  * the cards start reading as confetti. The phone count is lower for fill rate,
  * not for CPU: the same cards on a 390px screen overlap into a solid mass.
  */
-const COUNT_WIDE = 1000;
-const COUNT_NARROW = 440;
+const COUNT_WIDE = 520;
+const COUNT_NARROW = 260;
 
 /**
  * THE BEATS, and they are longer than an intro animation would normally get.
@@ -99,6 +99,19 @@ function rng(seed) {
 }
 
 const easeOut = (t) => 1 - Math.pow(1 - t, 3);
+
+/** Sort comparator, hoisted so it is not reallocated sixty times a second. */
+const byDepth = (a, b) => a.z - b.z;
+
+/**
+ * The card greys, quantised. Building `rgb(x,y,z)` per card per frame is a
+ * string allocation and a parse for every one of them; there are not 520
+ * distinguishable greys between 34% and 100% anyway.
+ */
+const GREYS = Array.from({ length: 24 }, (_, i) => {
+    const v = Math.round(255 * (0.34 + 0.66 * (i / 23)));
+    return `rgb(${v},${v},${v})`;
+});
 const easeInOut = (t) => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2);
 
 export default function CardStorm() {
@@ -144,7 +157,13 @@ export default function CardStorm() {
         if (!ctx) return undefined;
 
         let raf = 0, stopped = false;
-        const dpr = Math.min(2, window.devicePixelRatio || 1);
+        /**
+         * DPR IS CAPPED AT 1.5, NOT 2, and that alone is most of the frame
+         * budget back. At dpr 2 a 1440x900 window is 2880x1800 device pixels
+         * and every card is filled into all of them; the storm is moving fast
+         * enough that nobody is inspecting a 12px rectangle for aliasing.
+         */
+        const dpr = Math.min(1.5, window.devicePixelRatio || 1);
         let W = 0, H = 0;
         const size = () => {
             W = window.innerWidth; H = window.innerHeight;
@@ -326,32 +345,57 @@ export default function CardStorm() {
                 frame.push({ z: z3, px, py, rot, s, alpha, c, e });
             }
 
-            frame.sort((a, b) => a.z - b.z);
+            frame.sort(byDepth);
 
-            for (const f of frame) {
+            /**
+             * THE HOT LOOP, and it was running at 13fps before this. That is
+             * what "the cards jolt across the screen" actually was: not the
+             * easing, which had been rewritten twice, but every single frame
+             * being dropped. Measuring it took one evaluate; guessing at it
+             * had already cost two rounds of tuning curves that were fine.
+             *
+             * Four things were eating the budget, in order of cost:
+             *
+             *   save/restore per card. Replaced with a single setTransform,
+             *   which is one matrix write instead of pushing and popping the
+             *   whole context state a thousand times a frame.
+             *
+             *   roundRect + beginPath per card. Building a fresh path with
+             *   four arcs, for a shape 12 pixels wide where the rounding is
+             *   invisible. Plain fillRect for anything small.
+             *
+             *   stroke() per card. A second rasterisation pass over every
+             *   card for a hairline nobody can see at this size. The lighting
+             *   already separates near from far, so the outline was doing no
+             *   work the shading was not already doing.
+             *
+             *   Rebuilding the fill colour string per card per frame. There
+             *   are only so many distinguishable greys, so they are quantised
+             *   into a lookup table built once.
+             */
+            for (let i = 0; i < frame.length; i++) {
+                const f = frame[i];
                 const w = f.c.w * f.s, h = w * 1.4;
-                ctx.save();
-                ctx.translate(f.px, f.py);
-                ctx.rotate(f.rot);
+                const cos = Math.cos(f.rot), sin = Math.sin(f.rot);
+                ctx.setTransform(cos * dpr, sin * dpr, -sin * dpr, cos * dpr,
+                                 f.px * dpr, f.py * dpr);
                 ctx.globalAlpha = f.alpha;
                 // Far side of the brain sits in shadow, near side is lit. A
                 // uniform white on every card is what made the formed shape
-                // look like a flat sticker rather than a solid.
-                const lit = 0.34 + 0.66 * Math.pow((f.z + 1) / 2, 1.25);
-                const base = f.c.red ? RED : "#FFFFFF";
+                // read as a flat sticker rather than as a solid.
                 ctx.fillStyle = f.c.red
-                    ? base
-                    : `rgb(${Math.round(255 * lit)},${Math.round(255 * lit)},${Math.round(255 * lit)})`;
-                ctx.globalAlpha = f.alpha * (f.c.red ? 1 : 1);
-                ctx.strokeStyle = `rgba(13,22,38,${0.25 + 0.4 * lit})`;
-                ctx.lineWidth = 0.7;
-                const rr = Math.min(3, w * 0.2);
-                ctx.beginPath();
-                ctx.roundRect(-w / 2, -h / 2, w, h, rr);
-                ctx.fill();
-                if (w > 6) ctx.stroke();
-                ctx.restore();
+                    ? RED
+                    : GREYS[(Math.pow((f.z + 1) / 2, 1.25) * (GREYS.length - 1)) | 0];
+                if (w > 15) {
+                    ctx.beginPath();
+                    ctx.roundRect(-w / 2, -h / 2, w, h, 2.5);
+                    ctx.fill();
+                } else {
+                    ctx.fillRect(-w / 2, -h / 2, w, h);
+                }
             }
+            ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+            ctx.globalAlpha = 1;
 
             /**
              * THE CARDS THAT PASS THE LENS, drawn last so they are genuinely
@@ -382,9 +426,14 @@ export default function CardStorm() {
                 ctx.translate(px, py);
                 ctx.rotate(hro.rot0 + hro.spin * k);
                 ctx.globalAlpha = fade;
-                ctx.shadowColor = "rgba(0,0,0,0.55)";
-                ctx.shadowBlur = 30;
-                ctx.shadowOffsetY = 14;
+                // A blurred shadow is the most expensive operation on a 2D
+                // context, and there are twenty of these. Kept, because at
+                // this size it is what separates them from the storm behind,
+                // but the radius is halved and it is set and cleared once per
+                // card rather than left on for the fill that follows.
+                ctx.shadowColor = "rgba(0,0,0,0.5)";
+                ctx.shadowBlur = 16;
+                ctx.shadowOffsetY = 10;
                 ctx.fillStyle = "#FFFFFF";
                 ctx.beginPath();
                 ctx.roundRect(-w / 2, -h / 2, w, h, w * 0.075);
@@ -433,7 +482,12 @@ export default function CardStorm() {
     }, [open]);
 
     return (
-        <AnimatePresence>
+        <AnimatePresence
+            /* Announced when the sheet has actually left, not when the timer
+               said it should. Skipping fires it too, which is the case a
+               duration constant could never have covered. */
+            onExitComplete={() => window.dispatchEvent(new CustomEvent(STORM_DONE))}
+        >
             {open && (
                 <motion.div
                     key="storm"
