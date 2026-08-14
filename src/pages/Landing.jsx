@@ -2,6 +2,8 @@ import React, { useEffect, useState } from "react";
 import { motion, useScroll, useReducedMotion } from "framer-motion";
 import { trackStartTrial } from "@/lib/analytics";
 import EmailCapture from "@/components/marketing/EmailCapture";
+import DealtHand from "@/components/marketing/DealtHand";
+import StepCards from "@/components/marketing/StepCards";
 import { Button } from "@/components/ui/button";
 import {
   Accordion,
@@ -18,7 +20,6 @@ import {
   Flame,
   Trophy,
   Users,
-  Target,
   ShieldCheck,
   Clock,
   CreditCard,
@@ -161,29 +162,11 @@ export default function Landing() {
       {/* ============================================================== */}
       <section className="relative min-h-screen flex items-center justify-center overflow-hidden bg-[#0A0F1F]">
         <div className="absolute inset-0">
-          {/* Background video */}
-          <video
-            autoPlay
-            muted
-            loop
-            playsInline
-            preload="auto"
-            poster=""
-            className="absolute inset-0 w-full h-full object-cover"
-            aria-hidden
-          >
-            <source src="/videos/landing-hero.mp4" type="video/mp4" />
-          </video>
-
-          {/* Dark vignette for legibility */}
-          <div
-            aria-hidden
-            className="absolute inset-0"
-            style={{
-              background:
-                "linear-gradient(180deg, rgba(10,15,31,0.55) 0%, rgba(10,15,31,0.45) 40%, rgba(10,15,31,0.75) 100%)",
-            }}
-          />
+          {/* The video is gone. Half a megabyte of stock footage was making the
+              page's strongest claim — "this is different" — in the single most
+              interchangeable way available, and the hand of cards below says it
+              better and weighs nothing. The grid floor and the grain stay:
+              they were already a table, which is exactly what a hand needs. */}
 
           {/* Aurora colour wash — subtle, on top of video */}
           <motion.div
@@ -232,7 +215,7 @@ export default function Landing() {
           <div className="absolute inset-x-0 bottom-0 h-40 bg-gradient-to-b from-transparent to-[#FBF7F0]" />
         </div>
 
-        <div className="relative z-10 max-w-5xl mx-auto px-6 text-center pt-28 pb-32">
+        <div className="relative z-20 w-full max-w-5xl mx-auto px-6 text-center pt-24 pb-[23vh] sm:pb-[32vh]">
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
@@ -253,17 +236,11 @@ export default function Landing() {
           >
             Study like the kids
             <br />
-            who get a{" "}
-            <span
-              className="inline-block bg-clip-text text-transparent"
-              style={{
-                backgroundImage:
-                  "linear-gradient(135deg, #B6FF4E 0%, #58CC02 45%, #6CE0FF 100%)",
-                filter: "drop-shadow(0 0 28px rgba(88, 204, 2, 0.45))",
-              }}
-            >
-              90+
-            </span>
+            {/* "90+" was gradient-clipped with a 28px glow — the exact
+                treatment every generated landing page gives its key word.
+                Solid brand green says the same thing and reads as a decision
+                rather than as a default. */}
+            who get a <span className="text-primary">90+</span>
             <span className="text-primary">.</span>
           </motion.h1>
 
@@ -312,6 +289,24 @@ export default function Landing() {
           >
             7 days free  ·  No card required  ·  Built for Year 10–12
           </motion.p>
+
+        </div>
+
+        {/* The hand. Every card is a real object from inside the app, drawn by
+            the same component the app draws it with, so the hero shows the
+            product rather than describing it.
+
+            Pinned to the bottom of the section rather than placed at the end
+            of the centred column: in the column it pushed the headline up and
+            hung the fan off the fold. Cropped a little by the edge on purpose
+            — a hand you are holding is not fully in view. */}
+        {/* The positioning lives on a wrapper, NOT passed into the component.
+            DealtHand's own class list starts with `relative`, and Tailwind
+            emits position utilities in a fixed order where `relative` comes
+            last — so an `absolute` handed in loses, the hand stayed in flow,
+            and it squeezed the headline into the left half of the hero. */}
+        <div className="absolute inset-x-0 bottom-[1%] z-30 pointer-events-none">
+          <div className="pointer-events-auto"><DealtHand /></div>
         </div>
       </section>
 
@@ -409,73 +404,56 @@ export default function Landing() {
       {/* ============================================================== */}
       {/* HOW IT WORKS                                                     */}
       {/* ============================================================== */}
-      <section id="how" className="relative py-24 px-6 bg-surface">
-        <div className="max-w-7xl mx-auto">
+      {/* The band is dark because white cards on a white section are a shadow
+          and a hairline rule and nothing else — the whole point of a card is
+          that it is an object lying ON something. It also rhymes with the
+          hero, so the page opens and explains itself on the same table. */}
+      <section id="how" className="relative py-24 px-6 bg-[#0D1626] text-white overflow-hidden">
+        {/* The same perspective floor the hero uses, so this reads as the
+            table continuing rather than as an unrelated dark stripe. */}
+        <div aria-hidden className="absolute inset-x-0 bottom-0 h-[70%] opacity-[0.07] pointer-events-none"
+          style={{
+            backgroundImage:
+              "linear-gradient(to right, rgba(255,255,255,0.7) 1px, transparent 1px), linear-gradient(to bottom, rgba(255,255,255,0.7) 1px, transparent 1px)",
+            backgroundSize: "64px 64px",
+            transform: "perspective(800px) rotateX(62deg) translateY(18%)",
+            transformOrigin: "center bottom",
+            maskImage: "linear-gradient(to bottom, transparent 0%, black 40%, transparent 100%)",
+            WebkitMaskImage: "linear-gradient(to bottom, transparent 0%, black 40%, transparent 100%)",
+          }} />
+        <div className="relative max-w-7xl mx-auto">
           <motion.div {...fadeUp} className="max-w-2xl mb-16">
             <p className="text-xs font-bold tracking-[0.2em] text-primary uppercase mb-4">
               How it works
             </p>
-            <h2 className="font-display font-extrabold text-4xl sm:text-5xl tracking-tight">
+            <h2 className="font-display font-extrabold text-4xl sm:text-5xl tracking-tight text-white">
               Three steps to locked-in.
             </h2>
           </motion.div>
 
-          <div className="grid md:grid-cols-3 gap-6 lg:gap-8">
-            {[
-              {
-                num: "01",
-                title: "Pick your subjects",
-                body: "Tell us your Year and your VCE subjects. We auto-generate a roadmap to your exams — no setup, no menus.",
-                icon: Target,
-                accent: "from-primary/15 to-primary/0",
-              },
-              {
-                num: "02",
-                title: "Practice with the AI tutor",
-                body: "Every answer graded against the real VCAA marking criteria. The AI shows you what an examiner would tick — and what they wouldn’t.",
-                icon: Brain,
-                accent: "from-[hsl(280_65%_60%)]/15 to-transparent",
-              },
-              {
-                num: "03",
-                title: "Build the streak",
-                body: "XP, leaderboards, study mates keeping you accountable. The bit that turns ‘I should study’ into ‘I can’t lose my streak’.",
-                icon: Flame,
-                accent: "from-[#FF4B4B]/15 to-transparent",
-              },
-            ].map((step, i) => (
-              <motion.div
-                key={step.num}
-                {...fadeUp}
-                transition={{ ...fadeUp.transition, delay: i * 0.1 }}
-                className="relative rounded-3xl border border-black/5 bg-[#FBF7F0] p-8 hover:shadow-soft-lg transition-shadow"
-              >
-                <div className={`absolute inset-0 rounded-3xl bg-gradient-to-br ${step.accent} pointer-events-none`} />
-                <div className="relative">
-                  <div className="flex items-center justify-between mb-8">
-                    <span
-                      className="font-display font-extrabold text-6xl bg-clip-text text-transparent leading-none"
-                      style={{
-                        backgroundImage:
-                          "linear-gradient(135deg, rgba(13,22,38,0.18) 0%, rgba(13,22,38,0.05) 100%)",
-                      }}
-                    >
-                      {step.num}
-                    </span>
-                    <div className="w-12 h-12 rounded-2xl bg-surface shadow-soft flex items-center justify-center">
-                      <step.icon className="w-5 h-5 text-[#0D1626]" />
-                    </div>
-                  </div>
-                  <h3 className="font-display font-extrabold text-2xl mb-3 tracking-tight">
-                    {step.title}
-                  </h3>
-                  <p className="text-[#0D1626]/70 text-sm leading-relaxed">
-                    {step.body}
-                  </p>
-                </div>
-              </motion.div>
-            ))}
-          </div>
+          {/* The steps are three cards, turned over one at a time as you
+              reach them — not three boxes with ghosted numerals and icons in
+              rounded squares. Same words; the reveal is the app's own flip. */}
+          <StepCards steps={[
+            {
+              title: "Pick your subjects",
+              body: "Tell us your Year and your VCE subjects. We auto-generate a roadmap to your exams \u2014 no setup, no menus.",
+              suit: "spade",
+              tone: "#58CC02",
+            },
+            {
+              title: "Practice with the AI tutor",
+              body: "Every answer graded against the real VCAA marking criteria. The AI shows you what an examiner would tick \u2014 and what they wouldn\u2019t.",
+              suit: "diamond",
+              tone: "#8B5CF6",
+            },
+            {
+              title: "Build the streak",
+              body: "XP, leaderboards, study mates keeping you accountable. The bit that turns \u2018I should study\u2019 into \u2018I can\u2019t lose my streak\u2019.",
+              suit: "heart",
+              tone: "#FF4B4B",
+            },
+          ]} />
         </div>
       </section>
 
