@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -67,12 +67,38 @@ const markTier = (pct) => {
 };
 
 // AI feedback panel palette — uses chart-4 as the special/explanation accent.
+/**
+ * Themes, cleaned.
+ *
+ * The model is told twice not to invent a theme from one question, and it will
+ * do it anyway on a quiz where only one thing went wrong — "you struggle with
+ * redox" off a single miss is a confident-sounding guess, and a confident
+ * guess about what a student is bad at is worse than saying nothing. So the
+ * two-question rule is enforced here rather than trusted upstream. Question
+ * numbers are 1-based in the prompt and are also checked, because a theme that
+ * points at question 9 of a 5-question quiz is a hallucination in the parts we
+ * can see and probably in the parts we can't.
+ */
+function cleanThemes(raw, total) {
+    if (!Array.isArray(raw)) return [];
+    return raw
+        .map(t => ({
+            title: String(t?.title || "").trim(),
+            detail: String(t?.detail || "").trim(),
+            questions: [...new Set((Array.isArray(t?.questions) ? t.questions : [])
+                .map(n => Number(n))
+                .filter(n => Number.isInteger(n) && n >= 1 && n <= total))]
+                .sort((a, b) => a - b),
+        }))
+        .filter(t => t.title && t.questions.length >= 2)
+        .slice(0, 3);
+}
+
 const FEEDBACK_PANEL = {
-    explanation:   'bg-chart-3/10 border-chart-3/20 text-chart-3',
-    understanding: 'bg-chart-4/10 border-chart-4/20 text-chart-4',
-    strengths:     'bg-primary/10 border-primary/20 text-primary',
-    improve:       'bg-xp/10 border-xp/20 text-xp',
-    comparison:    'bg-chart-4/10 border-chart-4/20 text-chart-4',
+    wrong:       'bg-streak/10 border-streak/20 text-streak',
+    improve:     'bg-xp/10 border-xp/20 text-xp',
+    explanation: 'bg-chart-3/10 border-chart-3/20 text-chart-3',
+    comparison:  'bg-chart-4/10 border-chart-4/20 text-chart-4',
 };
 
 // Sound generation
@@ -247,6 +273,25 @@ export default function QuizPlayer({ quiz, onExit, mode = "standard", timeLimitM
     }, [isSAC, remainingMs, autoSubmitted, showResults]);
     const [isGeneratingFeedback, setIsGeneratingFeedback] = useState(false);
     const [aiFeedback, setAiFeedback] = useState([]);
+    /** Mistakes grouped across questions — see cleanThemes. */
+    const [themes, setThemes] = useState([]);
+    /**
+     * Results open on the verdict, not on question one. Going through the
+     * questions is a thing you choose to do, not the thing you land in.
+     */
+    const [resultsView, setResultsView] = useState("verdict");
+    /**
+     * "Why was I right?" answers, fetched only when asked. A correct answer
+     * gets a tick by default — writing a paragraph about twelve of those is
+     * what buried the eight that mattered, and it's paid for on every quiz
+     * whether anyone reads it or not. But a right answer you guessed is a real
+     * question, so it stays answerable.
+     */
+    const [whyRight, setWhyRight] = useState({});
+    const [askingWhy, setAskingWhy] = useState({});
+    /** Missed questions already written into a deck, so the button can't double up. */
+    const [cardsMade, setCardsMade] = useState(null);
+    const [makingCards, setMakingCards] = useState(false);
     const [showFeedback, setShowFeedback] = useState(false);
     /**
      * What the table shows: cards he's eaten, cards he wouldn't take, and the
@@ -270,6 +315,115 @@ export default function QuizPlayer({ quiz, onExit, mode = "standard", timeLimitM
 
     // Bookmark a question + model/correct answer into the revise-later library
     // (stored as an AISavedResult — no new table needed).
+    /**
+     * Which questions actually cost marks. Read off the AI marks where they
+     * exist and off the MCQ key where they don't, so it still works when
+     * marking was skipped for a tier limit.
+     */
+    const missedIndexes = useMemo(() => shuffledQuiz.questions
+        .map((q, i) => {
+            const fb = aiFeedback[i];
+            const max = q.type === 'mcq' ? 1 : (q.marks || 5);
+            if (fb) return (fb.marks || 0) >= max * (q.type === 'mcq' ? 1 : 0.8) ? -1 : i;
+            if (q.type !== 'mcq') return -1;
+            return parseInt(userAnswers[i], 10) === q.correct_answer ? -1 : i;
+        })
+        .filter(i => i >= 0), [shuffledQuiz.questions, aiFeedback, userAnswers]);
+
+    /**
+     * The missed questions become real flashcards in the subject's deck.
+     *
+     * This is the whole point of the results screen. Reading feedback once is
+     * not remembering it; the spaced-repetition engine next door is the only
+     * thing in this app that actually produces retention, and until now the
+     * results screen was a dead end that fed it nothing. Straight in as weak
+     * spots due today, because a question you just got wrong demonstrably is
+     * one — same as the blurting gaps do.
+     */
+    const makeCardsFromMisses = async () => {
+        if (makingCards || cardsMade !== null || !missedIndexes.length) return;
+        setMakingCards(true);
+        const today = new Date().toISOString().split('T')[0];
+        let made = 0;
+        for (const i of missedIndexes) {
+            const q = shuffledQuiz.questions[i];
+            const answer = q.type === 'mcq'
+                ? q.options?.[q.correct_answer]
+                : q.model_answer;
+            // A card with no answer on the back is not a card. Skip rather
+            // than file something that will waste a review when it comes up.
+            if (!q.question || !answer) continue;
+            try {
+                await base44.entities.Flashcard.create({
+                    subject_name: shuffledQuiz.subject || null,
+                    // Quizzes carry a subject but rarely a topic, so the deck
+                    // is named after the quiz. Better a findable deck called
+                    // "Redox check" than everything in one called "General".
+                    topic: shuffledQuiz.title || "Quiz misses",
+                    question: q.question,
+                    answer,
+                    is_active: true,
+                    is_weak_spot: true,
+                    next_review_date: today,
+                });
+                made += 1;
+            } catch { /* one bad card shouldn't lose the rest */ }
+        }
+        setMakingCards(false);
+        setCardsMade(made);
+        toast(made > 0
+            ? { title: `${made} card${made === 1 ? "" : "s"} added`, description: `They're in your ${shuffledQuiz.subject || "flashcard"} decks under "${shuffledQuiz.title}", due today.` }
+            : { title: "Nothing to add", description: "These questions have no model answer to put on the back.", variant: "destructive" });
+    };
+
+    /**
+     * The explanation for a question you got RIGHT, fetched on request.
+     * One short call, one question, and only when someone actually wants it.
+     */
+    const askWhyRight = async (idx) => {
+        if (whyRight[idx] || askingWhy[idx]) return;
+        const q = shuffledQuiz.questions[idx];
+        if (!q) return;
+        setAskingWhy(p => ({ ...p, [idx]: true }));
+        try {
+            const access = await checkLiveTier(FEATURES.QUIZ_AI_MARK);
+            if (!access.allowed) throw new Error(access.reason);
+            const answer = q.type === 'mcq' ? q.options?.[q.correct_answer] : q.model_answer;
+            const res = await base44.integrations.Core.InvokeLLM({
+                feature: "quiz_ai_mark",
+                prompt: `${getLatexRules()}
+
+A ${shuffledQuiz.subject} student answered this correctly but wants to know WHY it is right — they may have guessed.
+
+Question: ${q.question}
+Correct answer: ${answer}
+
+In two or three sentences, explain what makes that the right answer and what the question was testing. No praise, no preamble.`,
+            });
+            setWhyRight(p => ({ ...p, [idx]: typeof res === "string" ? res : (res?.text || String(res || "")) }));
+        } catch (e) {
+            toast({ title: "Couldn't explain that one", description: e?.message || "Try again in a moment.", variant: "destructive" });
+        } finally {
+            setAskingWhy(p => ({ ...p, [idx]: false }));
+        }
+    };
+
+    /** Anything that points at a question also switches to the question view. */
+    const openQuestion = (i) => { setCurrentFeedbackIndex(i); setResultsView("questions"); };
+
+    /**
+     * How many questions the adaptive drill will actually re-ask. Its own
+     * threshold, not `missedIndexes`': the drill counts a short answer as worth
+     * redoing below 60% where the verdict counts it as missed below 80%, and
+     * offering "redo the 3 you missed" on a drill that then loads two questions
+     * is the kind of small lie that makes a screen untrustworthy.
+     */
+    const drillCount = useMemo(() => shuffledQuiz.questions.filter((q, i) => {
+        const fb = aiFeedback[i];
+        if (!fb) return false;
+        return q.type === 'mcq' ? fb.marks < 1 : fb.marks < (q.marks || 5) * 0.6;
+    }).length, [shuffledQuiz.questions, aiFeedback]);
+
     const handleSaveAnswer = async (idx) => {
         if (savedQuestions.has(idx)) return;
         const q = shuffledQuiz.questions[idx];
@@ -280,7 +434,7 @@ export default function QuizPlayer({ quiz, onExit, mode = "standard", timeLimitM
             : (ua || 'No answer');
         const modelOrCorrect = q.type === 'mcq' ? q.options?.[q.correct_answer] : q.model_answer;
         const fb = aiFeedback[idx];
-        const content = `**Question**\n${q.question || ''}\n\n**Your answer**\n${yourAns}\n\n**${q.type === 'mcq' ? 'Correct answer' : 'Model answer'}**\n${modelOrCorrect || '—'}${fb?.correct_answer_explanation ? `\n\n**Why**\n${fb.correct_answer_explanation}` : ''}`;
+        const content = `**Question**\n${q.question || ''}\n\n**Your answer**\n${yourAns}\n\n**${q.type === 'mcq' ? 'Correct answer' : 'Model answer'}**\n${modelOrCorrect || '—'}${fb?.student_error_analysis ? `\n\n**What went wrong**\n${fb.student_error_analysis}` : ''}`;
         try {
             await base44.entities.AISavedResult.create({
                 tool_type: 'saved_answer',
@@ -572,8 +726,21 @@ Question: ${q.question}
 Student Answer: ${q.student_answer}${q.type === 'short' && q.previous_answer ? `\nPrevious Answer: ${q.previous_answer}` : ''}
 ${q.type === 'mcq' ? `Correct Answer: ${q.correct_answer}` : `Model Answer: ${q.model_answer}`}`).join('\n---\n')}
 
-For EACH question: marks, understanding, why_correct, what_wrong, strength, improve${hasShortWithPrevious ? ', comparison' : ''}.
-Return exactly ${questionsForAnalysis.length} items.`,
+For EACH question return: marks, what_wrong, improve${hasShortWithPrevious ? ', comparison' : ''}.
+For a question that scored full marks, leave what_wrong and improve as empty strings — do not write praise.
+Return exactly ${questionsForAnalysis.length} items.
+
+THEN look ACROSS every question that lost marks and find the THEMES.
+A theme is one underlying reason that cost marks on TWO OR MORE questions —
+the same confusion, the same missing step, the same misread command term.
+This is the most useful thing you will produce: a student who is told "these
+three were the same mistake" has one thing to fix instead of three.
+  - "questions" must list the question numbers it covers, and there must be at
+    least two of them.
+  - "title" is at most eight words and names the mistake, not the topic.
+  - "detail" is ONE sentence saying what to do differently.
+If no two lost questions share a cause, return an empty themes array. Never
+invent a theme from a single question.`,
                 file_urls: sourceFileUrl ? [sourceFileUrl] : undefined,
                 response_json_schema: {
                     type: "object",
@@ -584,14 +751,23 @@ Return exactly ${questionsForAnalysis.length} items.`,
                                 type: "object",
                                 properties: {
                                     marks: { type: "number" },
-                                    understanding: { type: "string" },
-                                    why_correct: { type: "string" },
                                     what_wrong: { type: "string" },
-                                    strength: { type: "string" },
                                     improve: { type: "string" },
                                     comparison: { type: "string" }
                                 },
-                                required: ["marks", "understanding", "why_correct", "what_wrong", "strength", "improve"]
+                                required: ["marks", "what_wrong", "improve"]
+                            }
+                        },
+                        themes: {
+                            type: "array",
+                            items: {
+                                type: "object",
+                                properties: {
+                                    title: { type: "string" },
+                                    detail: { type: "string" },
+                                    questions: { type: "array", items: { type: "number" } }
+                                },
+                                required: ["title", "detail", "questions"]
                             }
                         }
                     },
@@ -603,15 +779,16 @@ Return exactly ${questionsForAnalysis.length} items.`,
 
             const mappedFeedback = response.feedback.map(item => ({
                 marks: item.marks || 0,
-                student_understanding: item.understanding || "No analysis provided",
-                correct_answer_explanation: item.why_correct || "Explanation not provided",
-                student_error_analysis: item.what_wrong || "No errors noted",
-                strengths: item.strength || "N/A",
-                how_to_improve: item.improve || "Keep practicing",
+                // Empty rather than "No errors noted": a question you got right
+                // has nothing to say here, and a placeholder in a panel is
+                // indistinguishable from real feedback until you read it.
+                student_error_analysis: item.what_wrong?.trim() || null,
+                how_to_improve: item.improve?.trim() || null,
                 comparison_to_previous: item.comparison || null
             }));
 
             setAiFeedback(mappedFeedback);
+            setThemes(cleanThemes(response.themes, shuffledQuiz.questions.length));
 
             const finalScore = calcScoreFromFeedback(mappedFeedback);
             const questionsCorrect = mappedFeedback.filter((fb, idx) => {
@@ -812,8 +989,8 @@ Return exactly ${questionsForAnalysis.length} items.`,
                                     }
                                 }
                                 return (
-                                    <button key={index} onClick={() => setCurrentFeedbackIndex(index)}
-                                        className={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-left transition-all border ${isActive ? 'bg-chart-3 text-white border-chart-3 shadow-soft' : `${itemClass} hover:opacity-80`}`}>
+                                    <button key={index} onClick={() => openQuestion(index)}
+                                        className={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-left transition-all border ${isActive && resultsView === 'questions' ? 'bg-chart-3 text-white border-chart-3 shadow-soft' : `${itemClass} hover:opacity-80`}`}>
                                         <span className={`w-6 h-6 rounded-lg flex items-center justify-center text-xs font-bold flex-shrink-0 ${isActive ? 'bg-surface/20' : 'bg-surface/70'}`}>{index + 1}</span>
                                         <span className="text-xs font-medium flex-1 truncate">{q.type === 'mcq' ? 'MCQ' : 'Short Answer'}</span>
                                         {badge && <span className="text-xs font-bold inline-flex items-center">{badge}</span>}
@@ -841,8 +1018,8 @@ Return exactly ${questionsForAnalysis.length} items.`,
                                         }
                                     }
                                     return (
-                                        <button key={index} onClick={() => setCurrentFeedbackIndex(index)}
-                                            className={`w-8 h-8 rounded-lg flex items-center justify-center text-xs font-bold flex-shrink-0 transition-all ${pillClass} ${isActive ? 'ring-2 ring-chart-3 ring-offset-1' : ''}`}>
+                                        <button key={index} onClick={() => openQuestion(index)}
+                                            className={`w-8 h-8 rounded-lg flex items-center justify-center text-xs font-bold flex-shrink-0 transition-all ${pillClass} ${isActive && resultsView === 'questions' ? 'ring-2 ring-chart-3 ring-offset-1' : ''}`}>
                                             {index + 1}
                                         </button>
                                     );
@@ -852,32 +1029,120 @@ Return exactly ${questionsForAnalysis.length} items.`,
 
                         <div className="flex-1 overflow-y-auto">
                             <div className="max-w-2xl mx-auto p-4 lg:p-6 space-y-4">
-                                {/* Score hero (only on first question) */}
-                                {currentFeedbackIndex === 0 && !isGeneratingFeedback && aiFeedback.length > 0 && (
-                                    <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} className="space-y-3">
-                                        <div className={`card-soft p-6 text-center relative overflow-hidden ${tier.tile} ${tier.border}`}>
-                                            <div className="relative">
-                                                <div className={`w-14 h-14 mx-auto rounded-2xl flex items-center justify-center mb-2 ${tier.badge}`}>
-                                                    <TierIcon className="w-7 h-7" />
+                                {/* ── THE VERDICT ────────────────────────────
+                                    What happened, why, and one thing to do
+                                    about it. Results used to open on question
+                                    one's feedback, which answers "what did I
+                                    get wrong on Q1" — a question nobody has
+                                    before they know how the whole thing went. */}
+                                {resultsView === "verdict" && (
+                                    <motion.div data-verdict initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }}
+                                        className="space-y-4">
+                                        <div className={`card-soft p-6 text-center ${tier.tile} ${tier.border}`}>
+                                            <div className={`w-14 h-14 mx-auto rounded-2xl flex items-center justify-center mb-2 ${tier.badge}`}>
+                                                <TierIcon className="w-7 h-7" />
+                                            </div>
+                                            <p className={`text-5xl font-black ${tier.text}`}>
+                                                {isGeneratingFeedback ? "—" : `${overallScore}%`}
+                                            </p>
+                                            <p className="text-foreground/80 font-semibold mt-1">{tier.label}</p>
+                                            <div className="flex justify-center gap-8 mt-4 pt-4 border-t border-border text-center">
+                                                <div>
+                                                    <p className="stat-num text-primary">{totalQ - missedIndexes.length}</p>
+                                                    <p className="stat-label">Right</p>
                                                 </div>
-                                                <p className={`text-5xl font-black ${tier.text}`}>{overallScore}%</p>
-                                                <p className="text-foreground/80 font-semibold mt-1">{tier.label}</p>
-                                                <div className="flex justify-center gap-8 mt-4 pt-4 border-t border-border text-center">
-                                                    <div>
-                                                        <p className="stat-num text-primary">{aiFeedback.filter((fb, i) => shuffledQuiz.questions[i]?.type === 'mcq' ? fb.marks === 1 : fb.marks >= (shuffledQuiz.questions[i]?.marks || 5) * 0.8).length}</p>
-                                                        <p className="stat-label">Correct</p>
-                                                    </div>
-                                                    <div>
-                                                        <p className="stat-num text-foreground">{totalQ}</p>
-                                                        <p className="stat-label">Total</p>
-                                                    </div>
-                                                    <div>
-                                                        <p className="stat-num font-mono text-xp">{formatElapsed(Date.now() - startTime)}</p>
-                                                        <p className="stat-label">Time</p>
-                                                    </div>
+                                                <div>
+                                                    <p className="stat-num text-foreground">{totalQ}</p>
+                                                    <p className="stat-label">Total</p>
+                                                </div>
+                                                <div>
+                                                    <p className="stat-num font-mono text-xp">{formatElapsed(Date.now() - startTime)}</p>
+                                                    <p className="stat-label">Time</p>
                                                 </div>
                                             </div>
                                         </div>
+
+                                        {isGeneratingFeedback && (
+                                            <div className="card-soft p-6 flex items-center justify-center gap-2 text-muted-foreground">
+                                                <Loader2 className="w-4 h-4 animate-spin" />
+                                                <span className="text-sm">Marking, and looking for what these have in common&hellip;</span>
+                                            </div>
+                                        )}
+
+                                        {/* THE THEMES. The most useful thing on the screen:
+                                            three wrong answers for one reason is ONE thing to
+                                            fix, not three. */}
+                                        {themes.map((t, i) => (
+                                            <motion.div key={t.title} data-theme={i}
+                                                initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}
+                                                transition={{ delay: 0.08 + i * 0.06 }}
+                                                className="card-soft p-5 border-l-4 border-l-streak">
+                                                <p className="text-xs font-bold text-streak uppercase tracking-wider mb-1.5">
+                                                    {t.questions.length} questions, one reason
+                                                </p>
+                                                <h3 className="font-display font-extrabold text-foreground text-base leading-snug">
+                                                    {t.title}
+                                                </h3>
+                                                <p className="text-sm text-muted-foreground leading-relaxed mt-1.5">{t.detail}</p>
+                                                <div className="flex flex-wrap gap-1.5 mt-3">
+                                                    {t.questions.map(n => (
+                                                        <button key={n} onClick={() => openQuestion(n - 1)}
+                                                            className="px-2.5 py-1 rounded-lg bg-secondary text-xs font-bold text-foreground
+                                                                hover:bg-streak/15 hover:text-streak transition-colors">
+                                                            Q{n}
+                                                        </button>
+                                                    ))}
+                                                </div>
+                                            </motion.div>
+                                        ))}
+
+                                        {/* THE ONE BUTTON. Reading feedback is not
+                                            remembering it; the only thing in this app that
+                                            produces retention is the review deck, and until
+                                            now this screen fed it nothing. */}
+                                        {missedIndexes.length > 0 && !isGeneratingFeedback && (
+                                            <div className="card-soft p-5">
+                                                {cardsMade === null ? (
+                                                    <>
+                                                        <p className="text-sm text-muted-foreground leading-relaxed mb-3">
+                                                            You lost marks on <span className="font-bold text-foreground">{missedIndexes.length}</span>
+                                                            {" "}question{missedIndexes.length === 1 ? "" : "s"}. Put them in your deck and they&rsquo;ll
+                                                            keep coming back until you know them.
+                                                        </p>
+                                                        <Button data-make-cards onClick={makeCardsFromMisses} disabled={makingCards}
+                                                            className="btn-3d gap-2 bg-primary hover:bg-primary/90 text-white rounded-xl w-full sm:w-auto">
+                                                            {makingCards
+                                                                ? <><Loader2 className="w-4 h-4 animate-spin" /> Adding&hellip;</>
+                                                                : <><Layers className="w-4 h-4" /> Add {missedIndexes.length} to my {shuffledQuiz.subject || "flashcard"} deck</>}
+                                                        </Button>
+                                                    </>
+                                                ) : (
+                                                    <p data-cards-made={cardsMade} className="text-sm font-bold text-primary inline-flex items-center gap-2">
+                                                        <Check className="w-4 h-4" />
+                                                        {cardsMade} card{cardsMade === 1 ? "" : "s"} added to &ldquo;{shuffledQuiz.title}&rdquo; &mdash; due today.
+                                                    </p>
+                                                )}
+                                            </div>
+                                        )}
+
+                                        {/* Both of these are things you do with the WHOLE
+                                            quiz, so they live on the verdict. The drill used
+                                            to sit in the per-question footer, where it read
+                                            as a control for the question you were looking
+                                            at rather than for the attempt. */}
+                                        <div className="flex flex-wrap gap-2">
+                                            {drillCount > 0 && !isGeneratingFeedback && (
+                                                <Button data-drill onClick={() => setShowAdaptiveReview(true)}
+                                                    className="gap-2 rounded-xl bg-chart-4 hover:bg-chart-4/90 text-white font-bold btn-3d">
+                                                    <Brain className="w-4 h-4" /> Redo the {drillCount} you missed
+                                                </Button>
+                                            )}
+                                            <Button data-go-questions variant="outline" onClick={() => setResultsView("questions")}
+                                                className="gap-2 rounded-xl border-2 border-border font-semibold">
+                                                Go through the questions <ChevronRight className="w-4 h-4" />
+                                            </Button>
+                                        </div>
+
                                         {shuffledQuiz.subject && (
                                             <div className="card-soft p-4">
                                                 <DifficultyRating subjectName={shuffledQuiz.subject} />
@@ -885,6 +1150,13 @@ Return exactly ${questionsForAnalysis.length} items.`,
                                         )}
                                     </motion.div>
                                 )}
+
+                                {resultsView === "questions" && (<>
+                                <button data-back-to-verdict onClick={() => setResultsView("verdict")}
+                                    className="inline-flex items-center gap-1.5 text-xs font-bold text-muted-foreground
+                                        hover:text-foreground transition-colors">
+                                    <ChevronLeft className="w-3.5 h-3.5" /> Back to the verdict
+                                </button>
 
                                 {/* Question card */}
                                 <AnimatePresence mode="wait">
@@ -976,30 +1248,65 @@ Return exactly ${questionsForAnalysis.length} items.`,
                                                 </div>
                                             )}
 
-                                            {/* AI Feedback */}
+                                            {/* ── FEEDBACK ────────────────────
+                                                Two panels, not four. "Why This Answer",
+                                                "Your Understanding", "Strengths" and "How to
+                                                Improve" were four labels for two ideas, on
+                                                every question whether it went well or not,
+                                                and the volume is exactly what stopped anyone
+                                                reading the ones that mattered. */}
                                             {currentFeedback ? (
                                                 <div className="space-y-3 pt-2 border-t border-border">
-                                                    <p className="text-xs font-bold text-muted-foreground/60 uppercase tracking-wider flex items-center gap-1.5">
-                                                        <Wand2 className="w-3.5 h-3.5" /> AI Feedback
-                                                    </p>
-                                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-                                                        {[
-                                                            { label: "Why This Answer", content: currentFeedback.correct_answer_explanation, panel: FEEDBACK_PANEL.explanation },
-                                                            { label: "Your Understanding", content: currentFeedback.student_understanding, panel: FEEDBACK_PANEL.understanding },
-                                                            { label: "Strengths", content: currentFeedback.strengths, panel: FEEDBACK_PANEL.strengths },
-                                                            { label: "How to Improve", content: currentFeedback.how_to_improve, panel: FEEDBACK_PANEL.improve },
-                                                        ].map(item => (
-                                                            <div key={item.label} className={`${item.panel} border rounded-2xl p-3.5`}>
-                                                                <p className="text-xs font-bold uppercase tracking-wide mb-1.5">{item.label}</p>
-                                                                <div className="text-xs text-foreground leading-relaxed"><MarkdownMath>{item.content || ""}</MarkdownMath></div>
+                                                    {currentFeedback.student_error_analysis && (
+                                                        <div data-panel="wrong" className={`${FEEDBACK_PANEL.wrong} border rounded-2xl p-4`}>
+                                                            <p className="text-xs font-bold uppercase tracking-wide mb-1.5">What went wrong</p>
+                                                            <div className="text-sm text-foreground leading-relaxed">
+                                                                <MarkdownMath>{currentFeedback.student_error_analysis}</MarkdownMath>
                                                             </div>
-                                                        ))}
-                                                    </div>
+                                                        </div>
+                                                    )}
+                                                    {currentFeedback.how_to_improve && (
+                                                        <div data-panel="fix" className={`${FEEDBACK_PANEL.improve} border rounded-2xl p-4`}>
+                                                            <p className="text-xs font-bold uppercase tracking-wide mb-1.5">What to do about it</p>
+                                                            <div className="text-sm text-foreground leading-relaxed">
+                                                                <MarkdownMath>{currentFeedback.how_to_improve}</MarkdownMath>
+                                                            </div>
+                                                        </div>
+                                                    )}
                                                     {currentFeedback.comparison_to_previous && (
                                                         <div className={`${FEEDBACK_PANEL.comparison} border rounded-2xl p-3.5`}>
                                                             <p className="text-xs font-bold uppercase tracking-wide mb-1.5">vs Last Attempt</p>
                                                             <div className="text-xs text-foreground leading-relaxed"><MarkdownMath>{currentFeedback.comparison_to_previous}</MarkdownMath></div>
                                                         </div>
+                                                    )}
+
+                                                    {/* Nothing went wrong here, so nothing is
+                                                        written — but a right answer you guessed
+                                                        is a real question, so it stays askable.
+                                                        One short call, only when wanted. */}
+                                                    {!currentFeedback.student_error_analysis && !currentFeedback.how_to_improve && (
+                                                        whyRight[currentFeedbackIndex] ? (
+                                                            <div data-panel="why" className={`${FEEDBACK_PANEL.explanation} border rounded-2xl p-4`}>
+                                                                <p className="text-xs font-bold uppercase tracking-wide mb-1.5">Why this is the answer</p>
+                                                                <div className="text-sm text-foreground leading-relaxed">
+                                                                    <MarkdownMath>{whyRight[currentFeedbackIndex]}</MarkdownMath>
+                                                                </div>
+                                                            </div>
+                                                        ) : (
+                                                            <div className="flex flex-wrap items-center gap-3">
+                                                                <p className="text-sm text-primary font-bold inline-flex items-center gap-1.5">
+                                                                    <Check className="w-4 h-4" /> You got this one.
+                                                                </p>
+                                                                <button data-ask-why onClick={() => askWhyRight(currentFeedbackIndex)}
+                                                                    disabled={askingWhy[currentFeedbackIndex]}
+                                                                    className="inline-flex items-center gap-1.5 text-xs font-bold text-muted-foreground
+                                                                        hover:text-foreground underline underline-offset-4 disabled:opacity-60">
+                                                                    {askingWhy[currentFeedbackIndex]
+                                                                        ? <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Asking&hellip;</>
+                                                                        : <><Wand2 className="w-3.5 h-3.5" /> Guessed it? Ask why it&rsquo;s right</>}
+                                                                </button>
+                                                            </div>
+                                                        )
                                                     )}
                                                 </div>
                                             ) : isGeneratingFeedback ? (
@@ -1011,33 +1318,29 @@ Return exactly ${questionsForAnalysis.length} items.`,
                                         </div>
                                     </motion.div>
                                 </AnimatePresence>
+                                </>)}
                             </div>
                         </div>
 
-                        {/* Bottom nav */}
-                        <div className="flex-shrink-0 bg-surface/80 backdrop-blur-sm border-t border-border px-4 lg:px-6 py-3">
-                            <div className="max-w-2xl mx-auto flex items-center justify-between gap-3">
-                                <Button variant="outline" onClick={() => setCurrentFeedbackIndex(p => Math.max(0, p - 1))} disabled={currentFeedbackIndex === 0} className="gap-2 rounded-xl border-2 border-border font-semibold">
-                                    <ChevronLeft className="w-4 h-4" /> Prev
-                                </Button>
-                                {!isGeneratingFeedback && aiFeedback.length > 0 && (() => {
-                                    const wrongCount = shuffledQuiz.questions.filter((q, i) => {
-                                        const fb = aiFeedback[i];
-                                        if (!fb) return false;
-                                        return q.type === 'mcq' ? fb.marks < 1 : fb.marks < (q.marks || 5) * 0.6;
-                                    }).length;
-                                    return wrongCount > 0 ? (
-                                        <Button onClick={() => setShowAdaptiveReview(true)}
-                                            className="gap-2 rounded-xl bg-chart-4 hover:bg-chart-4/90 text-white font-bold text-xs px-3 btn-3d">
-                                            <Brain className="w-3.5 h-3.5" /> Review {wrongCount} Wrong
-                                        </Button>
-                                    ) : null;
-                                })()}
-                                <Button variant="outline" onClick={() => setCurrentFeedbackIndex(p => Math.min(totalQ - 1, p + 1))} disabled={currentFeedbackIndex === totalQ - 1} className="gap-2 rounded-xl border-2 border-border font-semibold">
-                                    Next <ChevronRight className="w-4 h-4" />
-                                </Button>
+                        {/* Bottom nav — only while going through the questions.
+                            Prev and Next on a summary screen are buttons for
+                            moving through something you aren't looking at. */}
+                        {resultsView === "questions" && (
+                            <div className="flex-shrink-0 bg-surface/80 backdrop-blur-sm border-t border-border px-4 lg:px-6 py-3">
+                                <div className="max-w-2xl mx-auto flex items-center justify-between gap-3">
+                                    <Button variant="outline" onClick={() => setCurrentFeedbackIndex(p => Math.max(0, p - 1))} disabled={currentFeedbackIndex === 0} className="gap-2 rounded-xl border-2 border-border font-semibold">
+                                        <ChevronLeft className="w-4 h-4" /> Prev
+                                    </Button>
+                                    <Button variant="outline" onClick={() => setResultsView("verdict")}
+                                        className="gap-2 rounded-xl border-2 border-border font-semibold text-xs">
+                                        Verdict
+                                    </Button>
+                                    <Button variant="outline" onClick={() => setCurrentFeedbackIndex(p => Math.min(totalQ - 1, p + 1))} disabled={currentFeedbackIndex === totalQ - 1} className="gap-2 rounded-xl border-2 border-border font-semibold">
+                                        Next <ChevronRight className="w-4 h-4" />
+                                    </Button>
+                                </div>
                             </div>
-                        </div>
+                        )}
                     </div>
                 </div>
             </div>

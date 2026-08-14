@@ -232,10 +232,17 @@ Give ONE short, directed hint (2-3 sentences max) that steers them toward the ri
                                         </p>
                                     </div>
                                 )}
-                                <div className="card-soft bg-chart-3/10 border-chart-3/20 p-4">
-                                    <p className="text-xs font-bold text-chart-3 mb-2 uppercase tracking-wide">Full Explanation</p>
-                                    <p className="text-sm text-foreground leading-relaxed">{aiFeedback[current.originalIndex]?.correct_answer_explanation || "Review the model answer below."}</p>
-                                </div>
+                                {/* What tripped them up the FIRST time, which is the
+                                    reason this question is in the drill at all. This used
+                                    to show a general explanation of the answer; the marking
+                                    pass no longer writes one, and the mistake is the more
+                                    useful half anyway. */}
+                                {aiFeedback[current.originalIndex]?.student_error_analysis && (
+                                    <div className="card-soft bg-chart-3/10 border-chart-3/20 p-4">
+                                        <p className="text-xs font-bold text-chart-3 mb-2 uppercase tracking-wide">What caught you last time</p>
+                                        <p className="text-sm text-foreground leading-relaxed">{aiFeedback[current.originalIndex].student_error_analysis}</p>
+                                    </div>
+                                )}
                                 {current.question.type !== 'mcq' && current.question.model_answer && (
                                     <div className="card-soft bg-primary/10 border-primary/20 p-4">
                                         <p className="text-xs font-bold text-primary mb-2 uppercase tracking-wide">Model Answer</p>
