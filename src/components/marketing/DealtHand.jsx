@@ -43,19 +43,25 @@ import AceBody from "@/components/ace/AceBody";
 import { FLUSH_SEEN, FLUSH_MS, FLUSH_EXIT_MS } from "@/components/marketing/flushGate";
 
 /**
- * The hand. Five things the app is, in the order they matter to someone who
- * has never seen it: the material, the marking, the plan, the habit, and him.
+ * The hand. FOUR TECHNIQUES AND THE AI, which is the product in one line: the
+ * methods are the proven ones, and the thing on top of them is the coach.
  *
- * `rank` and `suit` are the app's own two marks and they are not random here
- * either — the flashcard deck carries a mastery rank, the quiz card a question
- * number, and the last card is the Ace of Spades because that is the product.
+ * It used to be four app features and the mascot (flashcards, quizzes, your
+ * week, the streak). That showed a visitor what the screens were called and
+ * told them nothing about why any of it works, which is the one question the
+ * hero exists to answer. Naming the techniques instead means the first thing
+ * anyone reads is that this is built on something.
+ *
+ * The last card is the Ace of Spades because that is the product, and it comes
+ * last on purpose: the AI is what goes ON TOP of the methods, not instead of
+ * them.
  */
 const HAND = [
-    { rank: "Q", suit: "heart",   label: "Flashcards",  line: "142 due",             tone: "#8B5CF6" },
-    { rank: "7", suit: "diamond", label: "Quizzes",     line: "Marked like VCAA",    tone: "#3B82F6" },
-    { rank: "4", suit: "club",    label: "Your week",   line: "3 sessions today",    tone: "#10B981" },
-    { rank: "K", suit: "heart",   label: "The streak",  line: "41-day run",          tone: "#FF4B4B" },
-    { rank: "A", suit: "spade",   label: "Ace",         line: "Your coach",          tone: "#0D1626", ace: true },
+    { rank: "Q", suit: "heart",   label: "Active recall",     line: "Rated high utility",   tone: "#8B5CF6" },
+    { rank: "7", suit: "diamond", label: "Spaced repetition", line: "Reviewed as it fades", tone: "#3B82F6" },
+    { rank: "4", suit: "club",    label: "Blurting",          line: "The empty page test",  tone: "#10B981" },
+    { rank: "K", suit: "heart",   label: "Exam mode",         line: "Marked like VCAA",     tone: "#FF4B4B" },
+    { rank: "A", suit: "spade",   label: "Ace",               line: "The AI on top",        tone: "#0D1626", ace: true },
 ];
 
 /**
@@ -65,7 +71,7 @@ const HAND = [
  * collapsed into a pile in the middle of the hero. Expressed per-neighbour it
  * also stays right at every breakpoint, because the cards themselves scale.
  */
-const STEP = 78;
+const STEP = 90;
 const DROP = 30;
 const LEAN = 11;
 
@@ -284,8 +290,8 @@ export default function DealtHand({ className = "" }) {
                                     ) : (
                                         <span className="absolute inset-x-0 top-[46%] flex flex-col px-3">
                                             <span className="block font-display font-extrabold text-foreground
-                                                text-[13px] sm:text-[17px] leading-tight">{c.label}</span>
-                                            <span className="block text-[11px] sm:text-[14px] text-muted-foreground
+                                                text-[12px] sm:text-[15px] leading-tight">{c.label}</span>
+                                            <span className="block text-[10px] sm:text-[12px] text-muted-foreground
                                                 leading-tight mt-1">{c.line}</span>
                                         </span>
                                     )}
