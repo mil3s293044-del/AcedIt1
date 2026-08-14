@@ -3,6 +3,7 @@ import { motion, useScroll, useReducedMotion } from "framer-motion";
 import { trackStartTrial } from "@/lib/analytics";
 import EmailCapture from "@/components/marketing/EmailCapture";
 import DealtHand from "@/components/marketing/DealtHand";
+import CardFlush from "@/components/marketing/CardFlush";
 import StepCards from "@/components/marketing/StepCards";
 import { Button } from "@/components/ui/button";
 import {
@@ -51,7 +52,7 @@ const SUBJECTS = [
   "Health & HD",
   "PE",
   "Geography",
-  "History — Revolutions",
+  "History: Revolutions",
   "Philosophy",
   "Software Development",
   "Visual Communication",
@@ -64,10 +65,15 @@ const SUBJECTS = [
   "Texts & Traditions",
 ];
 
+/**
+ * Three numbers, and each one answers a different objection: does it cover my
+ * subject, can I afford it, is it there when I actually work. "100% VCAA
+ * aligned" answered nobody's question and could not be checked.
+ */
 const STATS = [
-  { num: "34", label: "VCE subjects covered" },
-  { num: "100%", label: "VCAA-aligned marking" },
-  { num: "2am", label: "Always open" },
+  { num: "34", label: "VCE subjects, every one" },
+  { num: "$5", label: "a week, not $90 an hour" },
+  { num: "2am", label: "open when you actually study" },
 ];
 
 export default function Landing() {
@@ -96,6 +102,12 @@ export default function Landing() {
 
   return (
     <div className="min-h-screen bg-[#FBF7F0] text-[#0D1626] font-sans antialiased overflow-x-hidden scroll-smooth">
+      {/* The opening hand. Sits on top of a page that is already rendered and
+          interactive underneath, drops away after two seconds, skips on any
+          input, and runs once a session. See CardFlush for why each of those
+          rules exists. */}
+      <CardFlush />
+
       {/* Scroll progress bar */}
       <motion.div
         aria-hidden
@@ -220,7 +232,7 @@ export default function Landing() {
           />
         </div>
 
-        <div className="relative z-20 w-full max-w-5xl mx-auto px-6 text-center pt-24 pb-[23vh] sm:pb-[32vh]">
+        <div className="relative z-20 w-full max-w-5xl mx-auto px-6 text-center pt-20 pb-[27vh] sm:pb-[37vh]">
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
@@ -229,7 +241,7 @@ export default function Landing() {
           >
             <Sparkles className="w-3.5 h-3.5 text-primary" />
             <span className="text-xs font-semibold text-[#0D1626]/80 tracking-wide">
-              AI study coach for VCE
+              Built for VCE. Only VCE.
             </span>
           </motion.div>
 
@@ -237,15 +249,19 @@ export default function Landing() {
             initial={{ opacity: 0, y: 30 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.8, delay: 0.1, ease: [0.22, 1, 0.36, 1] }}
-            className="font-display font-extrabold text-[#0D1626] text-5xl sm:text-6xl md:text-7xl lg:text-8xl leading-[0.95] tracking-tight"
+            className="font-display font-extrabold text-[#0D1626] text-4xl sm:text-5xl md:text-6xl lg:text-7xl leading-[0.98] tracking-tight"
           >
-            Study like the kids
+            {/* THE HOOK IS THE MECHANISM, NOT THE OUTCOME. "Study like the
+                kids who get a 90+" was pure aspiration: it promised a result
+                and named nothing that would produce it, which is the shape of
+                every study-app headline ever written and is why none of them
+                are believed. The examiner reports are public documents in
+                which VCAA writes down, every year, exactly what it wanted and
+                exactly where students lost marks. Almost nobody reads them.
+                That is the unfair advantage, so that is the headline. */}
+            Study like you&rsquo;ve seen
             <br />
-            {/* "90+" was gradient-clipped with a 28px glow — the exact
-                treatment every generated landing page gives its key word.
-                Solid brand green says the same thing and reads as a decision
-                rather than as a default. */}
-            who get a <span className="text-primary">90+</span>
+            the <span className="text-primary">marking guide</span>
             <span className="text-primary">.</span>
           </motion.h1>
 
@@ -255,8 +271,9 @@ export default function Landing() {
             transition={{ duration: 0.7, delay: 0.25, ease: [0.22, 1, 0.36, 1] }}
             className="mt-7 text-lg sm:text-xl text-[#0D1626]/70 max-w-2xl mx-auto leading-relaxed"
           >
-            AcedIt is the AI tutor trained on VCAA examiner reports — for every
-            VCE subject. Built for the kids who actually want to nail this.
+            Because AcedIt has read every one. It marks your work against the
+            real VCAA criteria across all 34 subjects, then shows you the exact
+            marks you left on the table.
           </motion.p>
 
           <motion.div
@@ -292,7 +309,7 @@ export default function Landing() {
             transition={{ duration: 0.7, delay: 0.6 }}
             className="mt-7 text-xs text-[#0D1626]/45 tracking-wide"
           >
-            7 days free  ·  No card required  ·  Built for Year 10–12
+            7 days free  ·  No card required  ·  Built for Year 10 to 12
           </motion.p>
 
         </div>
@@ -396,11 +413,13 @@ export default function Landing() {
             transition={{ ...fadeUp.transition, delay: 0.1 }}
             className="font-display font-extrabold text-3xl sm:text-4xl md:text-5xl leading-tight tracking-tight"
           >
-            Studying VCE shouldn’t feel like guessing what they want.
+            You can study for six hours and still drop marks for a rule nobody
+            said out loud.
             <br />
             <span className="text-[#0D1626]/50">
-              AcedIt knows exactly what VCAA examiners look for — and walks you
-              through it, subject by subject.
+              Structure. Metalanguage. The command word in the question. VCE is
+              full of rules that cost real marks and never get taught. AcedIt
+              says them out loud, subject by subject.
             </span>
           </motion.h2>
         </div>
@@ -432,7 +451,7 @@ export default function Landing() {
               How it works
             </p>
             <h2 className="font-display font-extrabold text-4xl sm:text-5xl tracking-tight text-white">
-              Three steps to locked-in.
+              Three steps. Then you just show up.
             </h2>
           </motion.div>
 
@@ -442,19 +461,19 @@ export default function Landing() {
           <StepCards steps={[
             {
               title: "Pick your subjects",
-              body: "Tell us your Year and your VCE subjects. We auto-generate a roadmap to your exams \u2014 no setup, no menus.",
+              body: "Tell us your year level and what you are taking. AcedIt builds the roadmap to your exams. No setup, no menus, no blank page to stare at.",
               suit: "spade",
               tone: "#58CC02",
             },
             {
-              title: "Practice with the AI tutor",
-              body: "Every answer graded against the real VCAA marking criteria. The AI shows you what an examiner would tick \u2014 and what they wouldn\u2019t.",
+              title: "Write it, then get it marked",
+              body: "Answer like it is the real thing. AcedIt marks it against the actual VCAA criteria and shows you what an assessor would tick, and what they would not.",
               suit: "diamond",
               tone: "#8B5CF6",
             },
             {
-              title: "Build the streak",
-              body: "XP, leaderboards, study mates keeping you accountable. The bit that turns \u2018I should study\u2019 into \u2018I can\u2019t lose my streak\u2019.",
+              title: "Come back tomorrow",
+              body: "XP, leaderboards and mates who can see whether you turned up. The part that turns \u2018I should study\u2019 into \u2018I am not losing this streak\u2019.",
               suit: "heart",
               tone: "#FF4B4B",
             },
@@ -472,7 +491,7 @@ export default function Landing() {
               What you get
             </p>
             <h2 className="font-display font-extrabold text-4xl sm:text-5xl tracking-tight">
-              Everything a top-of-state student does, in one app.
+              Everything a top of state student does, in one app.
             </h2>
           </motion.div>
 
@@ -503,9 +522,10 @@ export default function Landing() {
                   Trained on VCAA examiner reports.
                 </h3>
                 <p className="text-white/60 text-sm md:text-base max-w-md leading-relaxed">
-                  Subject-specific prompts for all 34 VCE subjects. The AI marks
-                  your SAC answers the way an examiner would — and tells you the
-                  exact words you’re missing.
+                  Every subject gets its own tutor, because marking Methods and
+                  marking English are not the same job. It grades your SAC
+                  answers the way an assessor would, then tells you the exact
+                  words you were supposed to use.
                 </p>
               </div>
               {/* Mock chat preview */}
@@ -544,14 +564,14 @@ export default function Landing() {
               </div>
               <div>
                 <div className="text-xs text-white/80 mb-2 font-semibold">
-                  Today&rsquo;s XP — 240 / 300
+                  Today&rsquo;s XP  ·  240 / 300
                 </div>
                 <div className="h-2 rounded-full bg-surface/20 overflow-hidden">
                   <div className="h-full w-[80%] bg-surface rounded-full" />
                 </div>
                 <p className="mt-4 text-xs text-white/80 leading-relaxed">
-                  Daily goals that turn study into a game your brain actually
-                  wants to play.
+                  Daily goals that make turning up the easy option, and make
+                  skipping the one that costs you something.
                 </p>
               </div>
             </motion.div>
@@ -574,8 +594,9 @@ export default function Landing() {
                   <span className="text-[hsl(217_91%_60%)]">your</span> notes.
                 </h3>
                 <p className="text-[#0D1626]/60 text-sm leading-relaxed">
-                  Upload class notes and the AI generates exam-style questions
-                  pitched to where you’re actually weak.
+                  Upload your class notes and get exam-style questions back,
+                  aimed at the topics you keep getting wrong rather than the
+                  ones you already know.
                 </p>
               </div>
               <div className="mt-6 flex gap-2">
@@ -605,7 +626,7 @@ export default function Landing() {
                   </span>
                 </div>
                 <h3 className="font-display font-extrabold text-2xl md:text-3xl tracking-tight mb-3 max-w-md">
-                  Study with your group, not against them.
+                  Study with your group, not alone at midnight.
                 </h3>
                 <p className="text-[#0D1626]/60 text-sm leading-relaxed max-w-md">
                   Compete on weekly XP, set score wagers, run goal challenges
@@ -658,7 +679,7 @@ export default function Landing() {
               Real students
             </p>
             <h2 className="font-display font-extrabold text-4xl sm:text-5xl tracking-tight">
-              Loved by VCE kids who want it.
+              What it actually changed.
             </h2>
           </motion.div>
 
@@ -666,21 +687,21 @@ export default function Landing() {
             {[
               {
                 quote:
-                  "It’s like having a private tutor open at 2am the night before a SAC. The way it marks my essays is genuinely scary good.",
+                  "It is a private tutor that happens to be awake at 2am the night before a SAC. The way it marks my essays is genuinely scary.",
                 name: "Sienna",
                 meta: "Year 12 · English & Methods",
                 avatarColor: "bg-[hsl(280_65%_60%)]",
               },
               {
                 quote:
-                  "I finally know what the examiner actually wants. My methods scores went from 60s to 80s in a term.",
+                  "I finally know what the examiner actually wants. My Methods scores went from the 60s to the 80s in a term.",
                 name: "Kai",
                 meta: "Year 12 · Methods & Chem",
                 avatarColor: "bg-primary",
               },
               {
                 quote:
-                  "The streak thing got me. I’ve studied every day for 3 months — that has literally never happened to me before.",
+                  "The streak got me. I have studied every day for three months, which has literally never happened to me before.",
                 name: "Aisha",
                 meta: "Year 11 · Bio & Psych",
                 avatarColor: "bg-[hsl(217_91%_60%)]",
@@ -775,9 +796,9 @@ export default function Landing() {
 
             <div className="grid sm:grid-cols-2 gap-x-6 gap-y-3 mb-8">
               {[
-                "AI marks essays & SACs like a VCAA examiner",
+                "Essays and SACs marked against real VCAA criteria",
                 "All 34 VCE subjects, each with its own tutor",
-                "Ace — your 24/7 AI study companion",
+                "Ace, your study companion, awake whenever you are",
                 "Unlimited quizzes, flashcards & practice",
                 "Active recall, blurting & spaced repetition",
                 "Compete: XP battles, wagers & friend leaderboards",
@@ -826,7 +847,7 @@ export default function Landing() {
             transition={{ ...fadeUp.transition, delay: 0.2 }}
             className="mt-8 text-xs text-white/45"
           >
-            Melbourne private tutors charge $60–$120/hr. AcedIt is $5 a week.
+            Melbourne tutors charge $60 to $120 an hour. AcedIt is $5 a week.
           </motion.p>
         </div>
       </section>
@@ -841,7 +862,7 @@ export default function Landing() {
               FAQ
             </p>
             <h2 className="font-display font-extrabold text-4xl sm:text-5xl tracking-tight">
-              The bits parents ask.
+              The questions worth asking.
             </h2>
           </motion.div>
 
@@ -850,27 +871,31 @@ export default function Landing() {
               {[
                 {
                   q: "Is the trial really free?",
-                  a: "Yes. 7 days, full access, no credit card needed to start. Cancel before day 7 and we’ll never charge you.",
+                  a: "Yes. Seven days, full access, no card needed to start. Cancel before day seven and we never charge you.",
                 },
                 {
                   q: "Which VCE subjects does it cover?",
-                  a: "All 34 of them. Each subject has its own examiner-trained AI tutor — Methods feels like Methods, English feels like English, the AI knows the difference.",
+                  a: "All 34. Each one has its own tutor trained on that subject’s examiner reports, so Methods feels like Methods and English feels like English. A single general-purpose chatbot cannot do that, which is the whole reason we built it this way.",
+                },
+                {
+                  q: "How is this different from just using ChatGPT?",
+                  a: "ChatGPT will tell you your answer is good. It has not read the VCAA criteria for your subject, so it cannot tell you that you have written a strong paragraph that scores 2 out of 5 because you never named the technique. AcedIt marks against the actual criteria and shows you the missing marks.",
                 },
                 {
                   q: "Will it actually help my ATAR?",
-                  a: "AcedIt doesn’t take the exam for you. What it does is make every hour you study count more — by marking your work the way an examiner would and showing you the exact bits you’re missing.",
+                  a: "It does not sit the exam for you. What it does is make each hour count for more, by marking your work the way an assessor would and naming the exact things you left out. Nobody can promise you a number, and you should not trust anyone who does.",
                 },
                 {
-                  q: "Is this worth it for my kid? (Parent question)",
-                  a: "Most Melbourne private tutors charge $60–$120 per hour. AcedIt is $5 a week. A whole month still costs less than one tutor session.",
+                  q: "Is this worth it for my kid? (the parent question)",
+                  a: "Most Melbourne tutors charge $60 to $120 an hour. AcedIt is $5 a week, so a whole month costs less than one session, and it is there on the Sunday night before a SAC when a tutor is not.",
                 },
                 {
                   q: "How do I cancel?",
-                  a: "Subscription settings, one tap. We’ll show you exactly when the trial ends so there are no surprises.",
+                  a: "Subscription settings, one tap. We show you the exact date the trial ends before you start, so there is nothing to be surprised by.",
                 },
                 {
                   q: "Is my data safe?",
-                  a: "Your work and notes stay yours. We never sell student data, and your account info is stored on encrypted Australian-region infrastructure.",
+                  a: "Your work and your notes stay yours. We never sell student data, and your account sits on encrypted Australian-region infrastructure.",
                 },
               ].map((item, i) => (
                 <AccordionItem
@@ -907,11 +932,11 @@ export default function Landing() {
           />
           <div className="relative">
             <h2 className="font-display font-extrabold text-4xl sm:text-5xl md:text-6xl tracking-tight mb-5">
-              Your best ATAR starts this week.
+              Find out what you have been missing.
             </h2>
             <p className="text-white/85 text-lg max-w-xl mx-auto mb-9">
-              Free for 7 days. Takes 30 seconds to set up. The kids who get
-              90+ are already doing this.
+              Free for seven days, about thirty seconds to set up. Bring the
+              last thing you wrote and see what an assessor would have said.
             </p>
             <Button
               onClick={startTrial}

@@ -23,7 +23,7 @@ export default function EmailCapture({
   source = "landing_roadmap",
   leadMagnet = "vce_study_roadmap",
   headline = "Not ready to start? Grab the free VCE study roadmap.",
-  subtext = "The weekly rhythm top students use — straight to your inbox.",
+  subtext = "The weekly rhythm top students use, straight to your inbox.",
   cta = "Send it to me",
 }) {
   const [email, setEmail] = useState("");
@@ -49,7 +49,7 @@ export default function EmailCapture({
       trackLeadMagnet({ pillar: pillar || undefined });
       setState("done");
     } catch {
-      setError("Something went wrong — try again in a moment.");
+      setError("Something went wrong. Try again in a moment.");
       setState("error");
     }
   };
@@ -60,7 +60,7 @@ export default function EmailCapture({
         <div className="w-8 h-8 rounded-full bg-primary flex items-center justify-center shrink-0">
           <Check className="w-4 h-4 text-white" />
         </div>
-        <p className="text-sm font-semibold">Check your inbox — your roadmap is on the way.</p>
+        <p className="text-sm font-semibold">Check your inbox. Your roadmap is on the way.</p>
       </div>
     );
   }

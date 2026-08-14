@@ -24,7 +24,7 @@ const quotes = [
     { text: "Dream big, work hard, stay focused, and surround yourself with good people.", author: "Unknown" },
     { text: "Don't stop when you're tired. Stop when you're done.", author: "Unknown" },
     { text: "The difference between ordinary and extraordinary is that little extra.", author: "Jimmy Johnson" },
-    { text: "Your limitation—it's only your imagination.", author: "Unknown" }
+    { text: "Your limitation is only your imagination.", author: "Unknown" }
 ];
 
 export default function MotivationalQuotes() {
