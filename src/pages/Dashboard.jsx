@@ -1,10 +1,10 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { base44 } from "@/api/base44Client";
 import { motion } from "framer-motion";
-import { BookOpen, Target, ArrowRight,
+import { Target, ArrowRight,
     GraduationCap, Zap, Flame, Brain, FileQuestion,
-    Sparkles, Trophy, Play, Layers, Timer, Users,
-    Map, Swords, BarChart3, Star, CheckCircle2, AlertTriangle,
+    Sparkles, Trophy, Play, Layers, Timer,
+    Map, BarChart3, Star, CheckCircle2, AlertTriangle,
     TrendingUp, Crown, Medal, Shield, Sprout
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -16,6 +16,9 @@ import { reconcileUserXP } from "@/lib/reconcileXP";
 import { getStreakMultiplier as getStreakMultiplierValue } from "@/components/shared/streakHelpers";
 import RetentionCard from "@/components/dashboard/RetentionCard";
 import DistanceToTarget from "@/components/dashboard/DistanceToTarget";
+import TodaysPlay from "@/components/dashboard/TodaysPlay";
+import HandRail from "@/components/dashboard/HandRail";
+import RunOfSeven from "@/components/dashboard/RunOfSeven";
 import { bestLever } from "@/lib/atarLift";
 import { atarBandOf } from "@/lib/atarBands";
 import { todaysIntent } from "@/lib/studyIntent";
@@ -253,6 +256,9 @@ function getTodaysMove({ todayMins, streakDays, dueFlashcards, urgentDays, urgen
             cta: "Open planner",
             link: "Goals",
             accent: "streak",
+            // The Ace, explicitly. It shares the streak accent but a deadline
+            // is not a streak — it is the one card nothing else beats.
+            card: { rank: "A", suit: "spade", tone: "#0D1626" },
             icon: AlertTriangle,
         };
     }
@@ -314,6 +320,31 @@ function getTodaysMove({ todayMins, streakDays, dueFlashcards, urgentDays, urgen
 }
 
 // Direction A — softer tints, lighter borders, shadow for depth.
+/**
+ * The move, as a card — and the RANK IS THE URGENCY, on the scale a card
+ * player already knows. Someone who reads none of the label still gets the
+ * ordering right, because a King outranks a Jack whether or not you were
+ * paying attention.
+ *
+ *   A♠  a deadline. You cannot beat it and you cannot play around it.
+ *   K♥  the streak is on the line tonight.
+ *   Q♦  a pile of cards has come due.
+ *   J♣  you have not started — the easiest opening.
+ *   10♦ you are going; now test what stuck.
+ *   9♠  you are well past the day's minimum, here is the bonus.
+ *
+ * Keyed on the accent each move already carries, so nothing has to be kept in
+ * sync by hand; the deadline move overrides it to the Ace explicitly, because
+ * it shares the streak accent and is not the same thing at all.
+ */
+const MOVE_CARD = {
+    streak:    { rank: "K",  suit: "heart",   tone: "#FF4B4B" },
+    "chart-3": { rank: "Q",  suit: "diamond", tone: "#3B82F6" },
+    primary:   { rank: "J",  suit: "club",    tone: "#58CC02" },
+    xp:        { rank: "10", suit: "diamond", tone: "#F59E0B" },
+    "chart-4": { rank: "9",  suit: "spade",   tone: "#8B5CF6" },
+};
+
 const MOVE_THEME = {
     primary:   { bg: "bg-primary/5",   border: "border-primary/15",   iconBg: "bg-primary/10",   iconText: "text-primary",   bar: "bg-primary"   },
     streak:    { bg: "bg-streak/5",    border: "border-streak/15",    iconBg: "bg-streak/10",    iconText: "text-streak",    bar: "bg-streak"    },
@@ -744,7 +775,7 @@ export default function Dashboard() {
         challenge: userProfile?.primary_challenge ?? null,
     });
     const moveTheme = MOVE_THEME[move.accent];
-    const MoveIcon = move.icon;
+    const moveCard = { ...(MOVE_CARD[move.accent] || MOVE_CARD.primary), ...(move.card || {}) };
 
     // The modal asks "how long?" and saves the answer, but nothing ever read it
     // back — a student committed to an hour and the app never mentioned it
@@ -810,56 +841,18 @@ export default function Dashboard() {
                     )}
                 </motion.section>
 
-                {/* ── TODAY'S MOVE (compact, single row) ──────────────── */}
+                {/* ── YOUR PLAY — the card Ace deals you today ────────── */}
                 <motion.section
                     initial={{ opacity: 0, y: 12 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ delay: 0.2 }}
                 >
-                    <div className={`rounded-2xl ${moveTheme.bg} border ${moveTheme.border} shadow-soft p-5 lg:p-6`}>
-                        <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
-                            <div className={`w-12 h-12 rounded-xl ${moveTheme.iconBg} flex items-center justify-center flex-shrink-0`}>
-                                <MoveIcon className={`w-6 h-6 ${moveTheme.iconText}`} />
-                            </div>
-                            <div className="flex-1 min-w-0">
-                                <p className="stat-label mb-1">Today's move · {move.label}</p>
-                                <h2 className="font-display font-extrabold text-foreground text-base lg:text-lg leading-snug">
-                                    {commitment?.met ? "You did what you said you'd do." : move.title}
-                                </h2>
-                                <p className="text-muted-foreground text-sm mt-0.5">
-                                    {commitment?.met
-                                        ? `${fmtTime(commitment.done)} against the ${fmtTime(commitment.target)} you committed to.`
-                                        : move.sub}
-                                </p>
-                                {commitment && !commitment.met && (
-                                    <div className="mt-2.5">
-                                        <div className="flex items-baseline justify-between mb-1">
-                                            <span className="text-[11px] font-bold text-foreground">
-                                                {fmtTime(commitment.done)} of {fmtTime(commitment.target)}
-                                            </span>
-                                            <span className="text-[11px] text-muted-foreground">
-                                                {commitment.done === 0 ? "you committed to this today" : `${commitment.pct}%`}
-                                            </span>
-                                        </div>
-                                        <div className="h-1.5 bg-secondary rounded-full overflow-hidden">
-                                            <motion.div
-                                                initial={{ width: 0 }}
-                                                animate={{ width: `${commitment.pct}%` }}
-                                                transition={{ duration: 0.7, delay: 0.2 }}
-                                                className={`h-full rounded-full ${moveTheme.bar}`}
-                                            />
-                                        </div>
-                                    </div>
-                                )}
-                            </div>
-                            <Link to={createPageUrl(move.link)}
-                                className="w-full sm:w-auto flex-shrink-0">
-                                <Button className="w-full sm:w-auto">
-                                    {move.cta} <ArrowRight className="w-4 h-4" />
-                                </Button>
-                            </Link>
-                        </div>
-                    </div>
+                    <TodaysPlay move={move} card={moveCard} theme={moveTheme}
+                        commitment={commitment} fmtTime={fmtTime}
+                        todayXP={todayXP} dailyGoal={DAILY_XP_GOAL}
+                        todayMins={todaysStudyTime} weekMins={weeklyStudyTime}
+                        weekGoalHours={goalHours} weekPct={weeklyPct}
+                        avgQuiz={avgQuizScore} />
                 </motion.section>
 
 
@@ -870,20 +863,22 @@ export default function Dashboard() {
                 <div className="grid xl:grid-cols-[minmax(0,1fr)_360px] gap-6 xl:gap-8 items-start">
                 <div className="min-w-0 space-y-8 lg:space-y-10">
 
-                {/* ── HERO ROW: Streak (2/3) + Today snapshot (1/3) ──── */}
+                {/* ── THE RUN ─────────────────────────────────────────── */}
+                {/* The day's numbers used to sit beside this in their own green
+                    panel. Two boxes both headed "today" is one box, and it now
+                    lives in Your Play with the move it belongs to — so the
+                    streak gets the full column instead of two thirds. */}
                 <motion.section
                     initial={{ opacity: 0, y: 12 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ delay: 0.05, duration: 0.4 }}
-                    className="grid grid-cols-1 lg:grid-cols-3 gap-5 lg:gap-6"
                 >
-                    {/* Streak hero */}
-                    <div className="lg:col-span-2">
+                    <div>
                         {streakDays > 0 ? (
-                            <div className="relative overflow-hidden rounded-2xl bg-streak/5 border border-streak/15 shadow-soft p-6 lg:p-8 h-full">
+                            <div className="relative overflow-hidden rounded-2xl bg-surface border border-border shadow-soft p-6 lg:p-8 h-full">
                                 <Flame className="absolute -top-6 -right-6 w-32 h-32 text-streak/[0.08] pointer-events-none" />
-                                <div className="relative grid grid-cols-1 sm:grid-cols-5 gap-5 items-center">
-                                    <div className="sm:col-span-3">
+                                <div className="relative grid grid-cols-1 sm:grid-cols-12 gap-5 items-center">
+                                    <div className="sm:col-span-8">
                                         <p className="stat-label text-streak/80 mb-1 inline-flex items-center gap-1">
                                             Day streak <AceTip term="streak" />
                                         </p>
@@ -904,19 +899,11 @@ export default function Dashboard() {
                                             </p>
                                         )}
 
-                                        {/* Last 7 days — did the flame get fed? */}
-                                        <div className="flex items-center gap-1.5 mt-4">
-                                            {last7Days.map((d, i) => (
-                                                <div key={i} className="flex flex-col items-center gap-1">
-                                                    <div className={`w-7 h-7 rounded-lg flex items-center justify-center ${
-                                                        d.studied ? 'bg-streak text-white' : d.isToday ? 'bg-surface border-2 border-dashed border-streak/40' : 'bg-streak/10'
-                                                    }`}>
-                                                        {d.studied ? <Flame className="w-3.5 h-3.5" fill="currentColor" /> : null}
-                                                    </div>
-                                                    <span className={`text-[10px] font-bold ${d.isToday ? 'text-streak' : 'text-muted-foreground/50'}`}>{d.label}</span>
-                                                </div>
-                                            ))}
-                                        </div>
+                                        {/* Last 7 days — the run. Face-up is a
+                                            day you showed up, face-down is a
+                                            gap, and today is the card still to
+                                            be played. */}
+                                        <RunOfSeven days={last7Days} />
 
                                         {/* Shields — insurance against one missed day */}
                                         <div className="inline-flex items-center gap-1.5 mt-3 bg-surface rounded-full px-3 py-1.5 border border-chart-3/20">
@@ -929,7 +916,7 @@ export default function Dashboard() {
                                             </span>
                                         </div>
                                     </div>
-                                    <div className="sm:col-span-2 grid grid-cols-2 sm:grid-cols-1 gap-3">
+                                    <div className="sm:col-span-4 grid grid-cols-2 sm:grid-cols-1 gap-3">
                                         <div className="bg-surface rounded-xl p-3 border border-streak/10 shadow-soft">
                                             <p className="stat-label">XP boost</p>
                                             <p className="font-display font-extrabold text-streak text-2xl mt-0.5 leading-none">{multiplier}</p>
@@ -974,75 +961,6 @@ export default function Dashboard() {
                         )}
                     </div>
 
-                    {/* Today snapshot — the daily XP goal is the loop */}
-                    <div className="lg:col-span-1">
-                        <div className="rounded-2xl bg-primary/5 border border-primary/15 shadow-soft p-6 h-full flex flex-col">
-                            <div className="flex items-center justify-between mb-3">
-                                <div className="flex items-center gap-2">
-                                    <Zap className="w-4 h-4 text-primary" />
-                                    <p className="stat-label text-primary/80">Daily goal</p>
-                                </div>
-                                {todayXP >= DAILY_XP_GOAL && (
-                                    <span className="pill bg-primary/15 text-primary">Hit! 🎉</span>
-                                )}
-                            </div>
-
-                            {/* XP goal ring */}
-                            <div className="relative w-36 h-36 mx-auto">
-                                <svg viewBox="0 0 100 100" className="w-full h-full -rotate-90">
-                                    <circle cx="50" cy="50" r="42" fill="none" strokeWidth="9"
-                                        className="stroke-primary/10" />
-                                    <motion.circle cx="50" cy="50" r="42" fill="none" strokeWidth="9"
-                                        strokeLinecap="round"
-                                        className={todayXP >= DAILY_XP_GOAL ? "stroke-primary" : "stroke-xp"}
-                                        strokeDasharray={2 * Math.PI * 42}
-                                        initial={{ strokeDashoffset: 2 * Math.PI * 42 }}
-                                        animate={{ strokeDashoffset: (2 * Math.PI * 42) * (1 - Math.min(1, todayXP / DAILY_XP_GOAL)) }}
-                                        transition={{ duration: 1.1, delay: 0.3, ease: "easeOut" }}
-                                    />
-                                </svg>
-                                <div className="absolute inset-0 flex flex-col items-center justify-center">
-                                    <p className="font-display font-extrabold text-foreground text-3xl leading-none tabular-nums">{fmtXP(todayXP)}</p>
-                                    <p className="text-xs font-bold text-muted-foreground mt-1">/ {DAILY_XP_GOAL} XP</p>
-                                </div>
-                            </div>
-                            <p className="text-xs text-muted-foreground text-center mt-2 leading-snug">
-                                {todayXP >= DAILY_XP_GOAL
-                                    ? "Goal smashed — everything from here is bonus."
-                                    : todayXP > 0
-                                        ? `${DAILY_XP_GOAL - todayXP} XP to go — one session covers it.`
-                                        : "Nothing banked yet — let's change that."}
-                            </p>
-
-                            <div className="space-y-2.5 mt-4 pt-4 border-t border-primary/10">
-                                <div className="flex items-baseline justify-between">
-                                    <p className="text-xs font-bold text-muted-foreground">Time today</p>
-                                    <p className="text-xs font-bold text-foreground">{fmtTime(todaysStudyTime)}</p>
-                                </div>
-                                <div>
-                                    <div className="flex items-baseline justify-between mb-1">
-                                        <p className="text-xs font-bold text-muted-foreground">This week</p>
-                                        <p className="text-xs font-bold text-foreground">{fmtTime(weeklyStudyTime)} <span className="text-muted-foreground/60">/ {goalHours}h</span></p>
-                                    </div>
-                                    <div className="h-1.5 bg-primary/10 rounded-full overflow-hidden">
-                                        <motion.div
-                                            initial={{ width: 0 }}
-                                            animate={{ width: `${weeklyPct}%` }}
-                                            transition={{ duration: 0.9, delay: 0.3 }}
-                                            className={`h-full rounded-full ${weeklyPct >= 100 ? 'bg-primary' : 'bg-xp'}`}
-                                        />
-                                    </div>
-                                </div>
-                                <div className="flex items-baseline justify-between">
-                                    <p className="text-xs font-bold text-muted-foreground">Avg quiz</p>
-                                    <p className="text-xs font-bold text-foreground">{avgQuizScore != null ? `${avgQuizScore}%` : '—'}</p>
-                                </div>
-                            </div>
-                            <Link to={createPageUrl("Study")} className="mt-4">
-                                <Button size="sm" className="w-full"><Play className="w-3.5 h-3.5" /> Study now</Button>
-                            </Link>
-                        </div>
-                    </div>
                 </motion.section>
 
                 {/* ── RANK & RIVALS ───────────────────────────────────── */}
@@ -1051,7 +969,7 @@ export default function Dashboard() {
                         initial={{ opacity: 0, y: 12 }}
                         animate={{ opacity: 1, y: 0 }}
                         transition={{ delay: 0.1 }}
-                        className="rounded-2xl bg-xp/[0.04] border border-xp/15 shadow-soft p-6 lg:p-7"
+                        className="rounded-2xl bg-surface border border-border shadow-soft p-6 lg:p-7"
                     >
                         <div className="flex items-start justify-between mb-5 flex-wrap gap-3">
                             <div className="flex items-center gap-3">
@@ -1203,6 +1121,21 @@ export default function Dashboard() {
 
                 </motion.section>
 
+                    {/* ── WHAT YOU'LL LOSE THIS WEEK ──────────────────────── */}
+                    {/* Moved out of the side rail to balance the columns. Folding
+                        the daily numbers into Your Play took ~300px off the left
+                        column and left it ending well short of the rail, so the
+                        bottom third of the page was empty on one side and dense on
+                        the other. This is the tallest panel of the set, so it is
+                        the one that squares them up.
+
+                        The brain picture stays off the dashboard — it lives on
+                        Study and in the Analytics cognition tab. Here it was one
+                        idea too many next to the streak, the goal and the rank:
+                        it pulled attention without the page having room for the
+                        explanation that makes it mean anything. */}
+                    <RetentionCard flashcards={flashcards} />
+
                 </div>
 
                 {/* ── SIDE RAIL ───────────────────────────────────────── */}
@@ -1282,13 +1215,6 @@ export default function Dashboard() {
                         </motion.section>
                     )}
 
-                    {/* The brain lives on Study and in the Analytics cognition
-                        tab, not here. On a dashboard it was one idea too many
-                        next to the streak, the goal and the rank — the picture
-                        pulled attention without the page having room for the
-                        explanation that makes it mean anything. */}
-                    <RetentionCard flashcards={flashcards} />
-
                     <div className="card-soft border-2 border-border p-5">
                         <div className="flex items-center justify-between mb-3">
                             <p className="stat-label">Last sessions</p>
@@ -1342,27 +1268,11 @@ export default function Dashboard() {
                     transition={{ delay: 0.3 }}
                     className="border-t border-border/60 pt-6"
                 >
-                    <p className="stat-label mb-3">Jump to</p>
-                    <div className="flex flex-wrap gap-2">
-                        {[
-                            { label: "Study",     icon: Brain,        link: "Study" },
-                            { label: "Quizzes",   icon: FileQuestion, link: "Quizzes" },
-                            { label: "AI Tools",  icon: Sparkles,     link: "AITools" },
-                            { label: "Ranked",    icon: Trophy,       link: "Ranked" },
-                            { label: "Subjects",  icon: BookOpen,     link: "Subjects" },
-                            { label: "Friends",   icon: Users,        link: "Friends" },
-                            { label: "Planner",   icon: Map,          link: "Goals" },
-                            { label: "Compete",   icon: Swords,       link: "Competitions" },
-                            { label: "Analytics", icon: BarChart3,    link: "Analytics" },
-                        ].map((d) => (
-                            <Link key={d.link} to={createPageUrl(d.link)}>
-                                <div className="group flex items-center gap-2 px-3.5 py-2 rounded-xl bg-surface border border-border/60 shadow-soft hover:border-primary/40 hover:bg-primary/5 transition-all">
-                                    <d.icon className="w-4 h-4 text-muted-foreground group-hover:text-primary transition-colors" />
-                                    <span className="text-sm font-bold text-foreground">{d.label}</span>
-                                </div>
-                            </Link>
-                        ))}
-                    </div>
+                    {/* Centred over the hand rather than parked at the far
+                        left, where the heading and the thing it headed sat at
+                        opposite ends of a 1376px row. */}
+                    <p className="stat-label mb-2 md:text-center">Jump to</p>
+                    <HandRail />
                 </motion.section>
 
             </div>
