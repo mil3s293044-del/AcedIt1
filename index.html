@@ -13,8 +13,67 @@
       rel="stylesheet"
     />
     <title>AcedIt</title>
+    <!--
+      THE BOOT LAYER. Painted from the first byte of HTML, before a line of
+      JavaScript parses, which is the only thing that can cover the gap
+      between the browser having the document and React having mounted. That
+      gap was a white flash followed by a bare spinner for roughly two
+      seconds, and no amount of work inside the app can reach it: by the time
+      any component renders, the flash has already happened.
+
+      It is deliberately the same navy and the same wordmark the card storm
+      opens on, so the handover is invisible. CardStorm removes this the frame
+      its own canvas first paints.
+    -->
+    <style>
+      #boot {
+        position: fixed;
+        inset: 0;
+        z-index: 99;
+        /* VISIBLE BY DEFAULT, and the script below takes it away when it is
+           not wanted. Defaulting to hidden and switching it on left exactly
+           the gap this element exists to close: the browser paints the
+           document before the inline script runs, so for those frames there
+           was nothing on screen. The script sits immediately after the div
+           and runs in the same parse tick, before first paint, so the routes
+           that should not have a curtain never show one. */
+        display: grid;
+        place-items: center;
+        background: #0D1626;
+      }
+      #boot span {
+        font-family: Nunito, system-ui, sans-serif;
+        font-weight: 800;
+        letter-spacing: 0.18em;
+        text-transform: uppercase;
+        font-size: clamp(13px, 2.1vw, 22px);
+        color: #7CFF3D;
+        text-shadow: 0 0 18px rgba(124, 255, 61, 0.55), 0 0 46px rgba(124, 255, 61, 0.3);
+        opacity: 0;
+        animation: bootIn 0.7s ease-out 0.15s forwards;
+      }
+      @keyframes bootIn { to { opacity: 1; } }
+      @media (prefers-reduced-motion: reduce) {
+        #boot { display: none !important; }
+      }
+    </style>
   </head>
   <body>
+    <div id="boot" aria-hidden="true"><span>The new age of studying</span></div>
+    <script>
+      // Only the marketing entry gets the curtain, and only the first time in
+      // a session. Read before the module bundle runs, so this sees the value
+      // flushGate is about to consume rather than the one it just wrote.
+      (function () {
+        var b = document.getElementById("boot");
+        if (!b) return;
+        var seen = false;
+        try { seen = sessionStorage.getItem("acedit:flush-seen") === "1"; } catch (e) { seen = true; }
+        var reduce = window.matchMedia
+          && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+        if (seen || reduce || window.location.pathname !== "/") b.remove();
+      })();
+    </script>
     <div id="root"></div>
     <script type="module" src="/src/main.jsx"></script>
   </body>

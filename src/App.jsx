@@ -18,6 +18,7 @@ import Privacy from './pages/Privacy';
 import Terms from './pages/Terms';
 import { AuthProvider, useAuth } from '@/lib/AuthContext';
 import UserNotRegisteredError from '@/components/UserNotRegisteredError';
+import CardStorm from '@/components/marketing/CardStorm';
 
 const { Pages, Layout, mainPage } = pagesConfig;
 const mainPageKey = mainPage ?? Object.keys(Pages)[0];
@@ -135,6 +136,18 @@ function App() {
         <MotionConfig reducedMotion="user">
           <Router>
             <NavigationTracker />
+            {/* ABOVE THE AUTH GATE ON PURPOSE.
+                Opening the site showed a white flash and then a bare spinner
+                for roughly two seconds while auth and public settings
+                resolved. The storm used to live inside Landing, which is on
+                the far side of that gate, so it could not start until the
+                exact moment the thing it should have been covering had
+                already finished.
+
+                Mounted here it starts as soon as React does, and the static
+                boot layer in index.html covers everything before that. The
+                spinner still runs underneath for anyone who skips. */}
+            <CardStorm />
             <AuthenticatedApp />
           </Router>
           <Toaster />
