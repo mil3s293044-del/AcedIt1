@@ -3,7 +3,6 @@ import { motion, useScroll, useReducedMotion } from "framer-motion";
 import { trackStartTrial } from "@/lib/analytics";
 import EmailCapture from "@/components/marketing/EmailCapture";
 import DealtHand from "@/components/marketing/DealtHand";
-import CardStorm from "@/components/marketing/CardStorm";
 import StepCards from "@/components/marketing/StepCards";
 import EvidenceSplit from "@/components/marketing/EvidenceSplit";
 import BrainShowcase from "@/components/marketing/BrainShowcase";
@@ -104,12 +103,6 @@ export default function Landing() {
 
   return (
     <div className="min-h-screen bg-[#FBF7F0] text-[#0D1626] font-sans antialiased overflow-x-hidden scroll-smooth">
-      {/* The opening. Hundreds of cards thrown at the screen, assembling into
-          the app's own brain, which then takes them in. Sits on top of a page
-          that is already rendered and interactive underneath, skips on any
-          input, and runs once a session. See CardStorm for the rest. */}
-      <CardStorm />
-
       {/* Scroll progress bar */}
       <motion.div
         aria-hidden

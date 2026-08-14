@@ -53,12 +53,40 @@ import { FLUSH_SEEN } from "@/components/marketing/flushGate";
  * the cards start reading as confetti. The phone count is lower for fill rate,
  * not for CPU: the same cards on a 390px screen overlap into a solid mass.
  */
-const COUNT_WIDE = 950;
-const COUNT_NARROW = 420;
+const COUNT_WIDE = 1000;
+const COUNT_NARROW = 440;
 
-const THROW_MS = 900;
-const FORM_MS = 2200;
-const ABSORB_MS = 3000;
+/**
+ * THE BEATS, and they are longer than an intro animation would normally get.
+ *
+ * Two reasons. The first is that this one is covering a real two-second gap
+ * between the browser having the document and the app being ready, so the
+ * time is being spent either way and the only question is whether the visitor
+ * spends it watching something or watching a spinner. The second is that a
+ * shape assembling out of chaos needs to be legible: at the old 2.2s the
+ * brain existed for about four hundred milliseconds before it was eaten, and
+ * people reported not knowing what they had just seen.
+ *
+ * There is now a real HOLD, which is the whole point. The brain sits there,
+ * formed and rotating, long enough to be recognised before anything happens
+ * to it.
+ */
+const THROW_MS = 1150;
+const FORM_MS = 2950;
+const HOLD_MS = 3950;
+const ABSORB_MS = 4950;
+
+/**
+ * The cards that pass close to the lens. This is where "bigger playing cards"
+ * lives: the storm itself has to stay small, because the brain is made of its
+ * density and cards big enough to read individually would be a pile of litter
+ * rather than a surface. So a dozen full-size cards fly PAST the camera
+ * instead, in front of everything, close enough to read the rank. It buys the
+ * scale without costing the shape, and it is the shot that makes it feel like
+ * a title sequence rather than a loader.
+ */
+const HERO_RANKS = ["A", "K", "Q", "J", "10", "9", "A", "7", "K", "4", "Q", "A"];
+const HERO_SUITS = ["\u2660", "\u2665", "\u2663", "\u2666"];
 
 /** Cheap deterministic noise, so the storm is the same storm every time. */
 function rng(seed) {
@@ -80,6 +108,15 @@ export default function CardStorm() {
 
     useEffect(() => {
         if (reduce || FLUSH_SEEN) return undefined;
+        /**
+         * THE MARKETING ENTRY ONLY, and the same test the boot layer in
+         * index.html makes, so the two can never disagree about whether a
+         * curtain is up. Mounting this above the auth gate is what lets it
+         * cover the spinner; without the path check it would also ambush a
+         * student who opened a bookmark straight to their planner with five
+         * seconds of title sequence.
+         */
+        if (typeof window !== "undefined" && window.location.pathname !== "/") return undefined;
         setOpen(true);
         return undefined;
     }, [reduce]);
@@ -142,28 +179,62 @@ export default function CardStorm() {
                 rot0: r() * Math.PI * 2,
                 // Staggered so the shape resolves out of the noise instead of
                 // snapping into it all at once.
-                lag: (i / N) * 0.42 + r() * 0.12,
+                lag: (i / N) * 0.30 + r() * 0.10,
                 // A FEW red cards, not a fifth of them. At 22% the storm read
                 // as confetti at a party rather than as a deck: the eye tracks
                 // the colour, and colour scattered evenly through a shape is
                 // the one thing guaranteed to stop it reading as a surface.
                 red: r() < 0.05,
-                w: 9 + r() * 5,
+                w: 11 + r() * 6,
                 // Small individual jitter around a common resting angle.
                 rest: (r() - 0.5) * 0.5,
             });
         }
 
+        /**
+         * A dozen big cards on a path across the lens. They start beyond one
+         * edge and finish beyond the opposite one, so each is only in frame
+         * for part of the throw, which is what makes them read as passing
+         * rather than as decoration parked on top.
+         */
+        const heroes = HERO_RANKS.map((rank, i) => {
+            const a = (i / HERO_RANKS.length) * Math.PI * 2 + r() * 0.5;
+            const reach = Math.max(W, H) * 0.95;
+            return {
+                rank,
+                suit: HERO_SUITS[Math.floor(r() * 4)],
+                fx: W / 2 + Math.cos(a) * reach,
+                fy: H / 2 + Math.sin(a) * reach,
+                tx: W / 2 - Math.cos(a) * reach,
+                ty: H / 2 - Math.sin(a) * reach,
+                // Off-centre, so they sweep past the brain instead of through it.
+                bow: (r() - 0.5) * H * 0.55,
+                w: 92 + r() * 74,
+                spin: (r() - 0.5) * 5,
+                rot0: r() * Math.PI * 2,
+                start: 0.02 + (i / HERO_RANKS.length) * 0.72,
+                dur: 0.34 + r() * 0.2,
+            };
+        });
+
         const t0 = performance.now();
         const RED = "#FF4B4B";
 
+        let handedOver = false;
         const draw = (now) => {
             if (stopped) return;
             const t = now - t0;
+            // The static boot layer goes the frame this canvas first paints,
+            // never before. Removing it on mount would open a hole between the
+            // HTML curtain and the first drawn frame.
+            if (!handedOver) {
+                handedOver = true;
+                document.getElementById("boot")?.remove();
+            }
             ctx.clearRect(0, 0, W, H);
 
             const cx = W / 2, cy = H / 2;
-            const scale = Math.min(W, H) * 0.33;
+            const scale = Math.min(W, H) * 0.46;
             /**
              * HELD IN PROFILE, and this is the single biggest thing that makes
              * it read as a brain at all. At a three-quarter angle the frontal
@@ -179,7 +250,11 @@ export default function CardStorm() {
 
             // Overall phase progress.
             const form = Math.min(1, Math.max(0, (t - THROW_MS * 0.45) / (FORM_MS - THROW_MS * 0.45)));
-            const absorb = Math.min(1, Math.max(0, (t - FORM_MS) / (ABSORB_MS - FORM_MS)));
+            // Nothing happens between FORM and HOLD. That gap is the point:
+            // the brain has to exist, formed and turning, for long enough to
+            // be recognised before it does anything.
+            const absorb = Math.min(1, Math.max(0, (t - HOLD_MS) / (ABSORB_MS - HOLD_MS)));
+            const throwK = Math.min(1, t / THROW_MS);
 
             /**
              * PAINTED BACK TO FRONT, which is most of what makes this read as
@@ -199,7 +274,12 @@ export default function CardStorm() {
 
                 // Per-card progress along the throw, staggered by lag.
                 const k = Math.min(1, Math.max(0, (form - c.lag) / (1 - c.lag || 1)));
-                const e = easeInOut(k);
+                // EASE OUT, NOT IN-OUT. With an in-out curve a card is only
+                // 11% of the way home at a third of its flight, so it sits
+                // just off the edge of the screen doing nothing while the
+                // clock runs, and the brain assembles in a panicked rush at
+                // the end. Thrown things leave fast and arrive slowly.
+                const e = easeOut(k);
                 let px = c.fx + (tx - c.fx) * e;
                 let py = c.fy + (ty - c.fy) * e;
 
@@ -264,6 +344,59 @@ export default function CardStorm() {
                 ctx.restore();
             }
 
+            /**
+             * THE CARDS THAT PASS THE LENS, drawn last so they are genuinely
+             * in front. Each one is only alive for a slice of the throw, and
+             * the face is drawn properly: rank in both corners, suit pip in
+             * the middle. At this size a blank rounded rectangle would read as
+             * a sheet of paper, and the whole point of the shot is that these
+             * are unmistakably playing cards.
+             */
+            for (const hro of heroes) {
+                const k = (throwK - hro.start) / hro.dur;
+                if (k <= 0 || k >= 1) continue;
+                const e = easeInOut(k);
+                const px = hro.fx + (hro.tx - hro.fx) * e;
+                // A shallow arc, so it passes the camera rather than sliding
+                // across it in a straight line.
+                const py = hro.fy + (hro.ty - hro.fy) * e + Math.sin(k * Math.PI) * hro.bow;
+                // Biggest at the middle of the pass, which is the moment it is
+                // closest to the lens.
+                const near = Math.sin(k * Math.PI);
+                const w = hro.w * (0.72 + 0.6 * near);
+                const h = w * 1.4;
+                const fade = Math.min(1, k * 5) * Math.min(1, (1 - k) * 5)
+                    * (1 - Math.max(0, (t - THROW_MS) / 500));
+                if (fade <= 0.01) continue;
+
+                ctx.save();
+                ctx.translate(px, py);
+                ctx.rotate(hro.rot0 + hro.spin * k);
+                ctx.globalAlpha = fade;
+                ctx.shadowColor = "rgba(0,0,0,0.55)";
+                ctx.shadowBlur = 30;
+                ctx.shadowOffsetY = 14;
+                ctx.fillStyle = "#FFFFFF";
+                ctx.beginPath();
+                ctx.roundRect(-w / 2, -h / 2, w, h, w * 0.075);
+                ctx.fill();
+                ctx.shadowColor = "transparent";
+                ctx.shadowBlur = 0;
+                ctx.shadowOffsetY = 0;
+
+                const red = hro.suit === "\u2665" || hro.suit === "\u2666";
+                ctx.fillStyle = red ? RED : "#0D1626";
+                ctx.textAlign = "center";
+                ctx.textBaseline = "middle";
+                ctx.font = `800 ${w * 0.18}px Nunito, system-ui, sans-serif`;
+                ctx.fillText(hro.rank, -w * 0.36, -h * 0.38);
+                ctx.font = `${w * 0.14}px system-ui, sans-serif`;
+                ctx.fillText(hro.suit, -w * 0.36, -h * 0.26);
+                ctx.font = `${w * 0.44}px system-ui, sans-serif`;
+                ctx.fillText(hro.suit, 0, h * 0.02);
+                ctx.restore();
+            }
+
             // The brain brightens as it takes them in.
             if (absorb > 0) {
                 const g = ctx.createRadialGradient(cx, cy, 0, cx, cy, scale * 2.1);
@@ -275,7 +408,7 @@ export default function CardStorm() {
                 ctx.fillRect(0, 0, W, H);
             }
 
-            if (t > ABSORB_MS + 120 && !doneRef.current) {
+            if (t > ABSORB_MS + 180 && !doneRef.current) {
                 doneRef.current = true;
                 setOpen(false);
             }
@@ -305,14 +438,26 @@ export default function CardStorm() {
                 >
                     <canvas ref={canvasRef} className="absolute inset-0" />
 
+                    {/* The line the boot layer already put on screen before a
+                        line of JavaScript ran, in the same place and the same
+                        colour, so the handover from static HTML to canvas is
+                        invisible. Luminous rather than white: it is the one
+                        piece of brand voice in the whole sequence and it has
+                        to look lit rather than printed. */}
                     <motion.p
-                        className="absolute inset-x-0 bottom-[13%] text-center text-white/50
-                            text-[11px] sm:text-xs font-semibold tracking-[0.22em] uppercase px-6"
+                        data-storm-line
+                        className="absolute inset-x-0 bottom-[13%] text-center px-6
+                            font-display font-extrabold uppercase
+                            text-[13px] sm:text-lg tracking-[0.18em]"
+                        style={{
+                            color: "#7CFF3D",
+                            textShadow: "0 0 18px rgba(124,255,61,0.55), 0 0 46px rgba(124,255,61,0.30)",
+                        }}
                         initial={{ opacity: 0 }}
-                        animate={{ opacity: 1, transition: { delay: FORM_MS / 1000 - 0.5, duration: 0.5 } }}
-                        exit={{ opacity: 0, transition: { duration: 0.2 } }}
+                        animate={{ opacity: 1, transition: { duration: 0.6 } }}
+                        exit={{ opacity: 0, transition: { duration: 0.25 } }}
                     >
-                        Study that your brain keeps
+                        The new age of studying
                     </motion.p>
                 </motion.div>
             )}
