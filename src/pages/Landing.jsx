@@ -113,37 +113,42 @@ export default function Landing() {
             : "bg-transparent"
         }`}
       >
+        {/* The nav used to switch from white ink to dark the moment you
+            scrolled, because it started life over a navy hero. Over cream
+            there is nothing to switch to — white on #FBF7F0 is invisible,
+            which is exactly what recolouring the hero would have shipped.
+            One ink, both states; only the bar behind it changes. */}
         <div className="max-w-7xl mx-auto px-6 lg:px-10 h-16 flex items-center justify-between">
           <div className="flex items-center gap-2">
             <div className="w-9 h-9 rounded-xl bg-primary flex items-center justify-center shadow-[0_0_24px_rgba(88,204,2,0.45)]">
               <GraduationCap className="w-5 h-5 text-white" />
             </div>
-            <span className={`font-display font-extrabold text-xl tracking-tight ${scrolled ? "text-[#0D1626]" : "text-white"}`}>
+            <span className="font-display font-extrabold text-xl tracking-tight text-[#0D1626]">
               AcedIt
             </span>
           </div>
           <div className="hidden md:flex items-center gap-8">
             <button
               onClick={() => scrollToId("how")}
-              className={`text-sm font-semibold hover:opacity-70 transition cursor-pointer ${scrolled ? "text-[#0D1626]" : "text-white/90"}`}
+              className="text-sm font-semibold text-[#0D1626]/80 hover:text-[#0D1626] transition cursor-pointer"
             >
               How it works
             </button>
             <button
               onClick={() => scrollToId("features")}
-              className={`text-sm font-semibold hover:opacity-70 transition cursor-pointer ${scrolled ? "text-[#0D1626]" : "text-white/90"}`}
+              className="text-sm font-semibold text-[#0D1626]/80 hover:text-[#0D1626] transition cursor-pointer"
             >
               Features
             </button>
             <button
               onClick={() => scrollToId("pricing")}
-              className={`text-sm font-semibold hover:opacity-70 transition cursor-pointer ${scrolled ? "text-[#0D1626]" : "text-white/90"}`}
+              className="text-sm font-semibold text-[#0D1626]/80 hover:text-[#0D1626] transition cursor-pointer"
             >
               Pricing
             </button>
             <button
               onClick={goToLogin}
-              className={`text-sm font-semibold hover:opacity-70 transition cursor-pointer ${scrolled ? "text-[#0D1626]" : "text-white/90"}`}
+              className="text-sm font-semibold text-[#0D1626]/80 hover:text-[#0D1626] transition cursor-pointer"
             >
               Login
             </button>
@@ -160,40 +165,42 @@ export default function Landing() {
       {/* ============================================================== */}
       {/* HERO                                                             */}
       {/* ============================================================== */}
-      <section className="relative min-h-screen flex items-center justify-center overflow-hidden bg-[#0A0F1F]">
+      {/* The hero is the app's own cream, not a navy slab.
+          #0A0F1F is literally the app's DARK-mode background, so the page was
+          matched to a theme most people never see: you went from a cold navy
+          marketing site into a warm cream product. Same ground now, same white
+          cards on it, and the drama comes from the hand rather than from the
+          contrast. The indigo wash went with it — #6366F1 is not a colour this
+          app owns. */}
+      <section className="relative min-h-screen flex items-center justify-center overflow-hidden bg-[#FBF7F0]">
         <div className="absolute inset-0">
-          {/* The video is gone. Half a megabyte of stock footage was making the
-              page's strongest claim — "this is different" — in the single most
-              interchangeable way available, and the hand of cards below says it
-              better and weighs nothing. The grid floor and the grain stay:
-              they were already a table, which is exactly what a hand needs. */}
-
-          {/* Aurora colour wash — subtle, on top of video */}
+          {/* Two soft washes, both in the app's own accents.
+              A light ground carries FAR less of these than a dark one did:
+              at the strength that read as a glow behind navy, the green
+              stained the whole left third and the corner of the nav sat on
+              it. Pushed out to the corners and dropped to roughly a third of
+              the opacity, they do what they are for — stop the cream being
+              flat — without becoming the first thing you see. */}
           <motion.div
-            className="absolute -top-40 -left-40 w-[600px] h-[600px] rounded-full blur-[120px] opacity-30 mix-blend-screen"
+            className="absolute -top-56 -left-56 w-[620px] h-[620px] rounded-full blur-[150px] opacity-[0.10]"
             style={{ background: "radial-gradient(circle, #58CC02 0%, transparent 70%)" }}
             animate={prefersReducedMotion ? undefined : { x: [0, 80, 0], y: [0, 40, 0] }}
             transition={{ duration: 14, repeat: Infinity, ease: "easeInOut" }}
           />
           <motion.div
-            className="absolute top-20 -right-32 w-[500px] h-[500px] rounded-full blur-[120px] opacity-25 mix-blend-screen"
-            style={{ background: "radial-gradient(circle, #6366F1 0%, transparent 70%)" }}
-            animate={prefersReducedMotion ? undefined : { x: [0, -60, 0], y: [0, 80, 0] }}
-            transition={{ duration: 18, repeat: Infinity, ease: "easeInOut" }}
-          />
-          <motion.div
-            className="absolute -bottom-40 left-1/3 w-[700px] h-[700px] rounded-full blur-[140px] opacity-20 mix-blend-screen"
+            className="absolute -bottom-48 right-[-14%] w-[700px] h-[700px] rounded-full blur-[160px] opacity-[0.07]"
             style={{ background: "radial-gradient(circle, #FF4B4B 0%, transparent 70%)" }}
-            animate={prefersReducedMotion ? undefined : { x: [0, 100, 0], y: [0, -60, 0] }}
-            transition={{ duration: 20, repeat: Infinity, ease: "easeInOut" }}
+            animate={prefersReducedMotion ? undefined : { x: [0, -70, 0], y: [0, -50, 0] }}
+            transition={{ duration: 19, repeat: Infinity, ease: "easeInOut" }}
           />
-          {/* Subtle perspective grid floor */}
+          {/* The table the hand is dealt onto. Dark lines on a light ground
+              now, rather than white ones on a dark one. */}
           <div
             aria-hidden
-            className="absolute inset-x-0 bottom-0 h-[55%] opacity-[0.08] pointer-events-none mix-blend-screen"
+            className="absolute inset-x-0 bottom-0 h-[55%] opacity-[0.06] pointer-events-none"
             style={{
               backgroundImage:
-                "linear-gradient(to right, rgba(255,255,255,0.7) 1px, transparent 1px), linear-gradient(to bottom, rgba(255,255,255,0.7) 1px, transparent 1px)",
+                "linear-gradient(to right, rgba(13,22,38,0.9) 1px, transparent 1px), linear-gradient(to bottom, rgba(13,22,38,0.9) 1px, transparent 1px)",
               backgroundSize: "64px 64px",
               transform: "perspective(800px) rotateX(60deg) translateY(20%)",
               transformOrigin: "center bottom",
@@ -203,16 +210,14 @@ export default function Landing() {
                 "linear-gradient(to bottom, transparent 0%, black 30%, black 80%, transparent 100%)",
             }}
           />
-          {/* Soft grain via SVG noise */}
+          {/* Soft grain */}
           <div
-            className="absolute inset-0 opacity-[0.07] mix-blend-overlay"
+            className="absolute inset-0 opacity-[0.05] mix-blend-multiply pointer-events-none"
             style={{
               backgroundImage:
                 "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2'/%3E%3C/filter%3E%3Crect width='200' height='200' filter='url(%23n)'/%3E%3C/svg%3E\")",
             }}
           />
-          {/* Bottom fade so content meets next section */}
-          <div className="absolute inset-x-0 bottom-0 h-40 bg-gradient-to-b from-transparent to-[#FBF7F0]" />
         </div>
 
         <div className="relative z-20 w-full max-w-5xl mx-auto px-6 text-center pt-24 pb-[23vh] sm:pb-[32vh]">
@@ -220,10 +225,10 @@ export default function Landing() {
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.7, ease: [0.22, 1, 0.36, 1] }}
-            className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-surface/10 border border-white/15 backdrop-blur-md mb-7"
+            className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-surface border border-black/5 shadow-soft mb-7"
           >
             <Sparkles className="w-3.5 h-3.5 text-primary" />
-            <span className="text-xs font-semibold text-white/90 tracking-wide">
+            <span className="text-xs font-semibold text-[#0D1626]/80 tracking-wide">
               AI study coach for VCE
             </span>
           </motion.div>
@@ -232,7 +237,7 @@ export default function Landing() {
             initial={{ opacity: 0, y: 30 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.8, delay: 0.1, ease: [0.22, 1, 0.36, 1] }}
-            className="font-display font-extrabold text-white text-5xl sm:text-6xl md:text-7xl lg:text-8xl leading-[0.95] tracking-tight"
+            className="font-display font-extrabold text-[#0D1626] text-5xl sm:text-6xl md:text-7xl lg:text-8xl leading-[0.95] tracking-tight"
           >
             Study like the kids
             <br />
@@ -248,7 +253,7 @@ export default function Landing() {
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.7, delay: 0.25, ease: [0.22, 1, 0.36, 1] }}
-            className="mt-7 text-lg sm:text-xl text-white/70 max-w-2xl mx-auto leading-relaxed"
+            className="mt-7 text-lg sm:text-xl text-[#0D1626]/70 max-w-2xl mx-auto leading-relaxed"
           >
             AcedIt is the AI tutor trained on VCAA examiner reports — for every
             VCE subject. Built for the kids who actually want to nail this.
@@ -275,7 +280,7 @@ export default function Landing() {
             </div>
             <button
               onClick={() => scrollToId("how")}
-              className="h-14 px-7 rounded-2xl text-white/90 font-semibold border border-white/20 bg-surface/5 backdrop-blur-md hover:bg-surface/10 transition cursor-pointer"
+              className="h-14 px-7 rounded-2xl text-[#0D1626] font-semibold border-2 border-black/10 bg-surface hover:bg-surface/70 shadow-soft transition cursor-pointer"
             >
               See how it works
             </button>
@@ -285,7 +290,7 @@ export default function Landing() {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             transition={{ duration: 0.7, delay: 0.6 }}
-            className="mt-7 text-xs text-white/50 tracking-wide"
+            className="mt-7 text-xs text-[#0D1626]/45 tracking-wide"
           >
             7 days free  ·  No card required  ·  Built for Year 10–12
           </motion.p>

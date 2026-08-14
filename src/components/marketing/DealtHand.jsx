@@ -125,9 +125,11 @@ export default function DealtHand({ className = "" }) {
     }, [px, py, reduce]);
 
     // The hand is dealt once, shortly after the headline has landed.
+    const [settled, setSettled] = useState(false);
     useEffect(() => {
-        const t = setTimeout(() => setDealt(true), reduce ? 0 : 420);
-        return () => clearTimeout(t);
+        const a = setTimeout(() => setDealt(true), reduce ? 0 : 420);
+        const b = setTimeout(() => setSettled(true), reduce ? 0 : 1500);
+        return () => { clearTimeout(a); clearTimeout(b); };
     }, [reduce]);
 
     useEffect(() => {
@@ -155,8 +157,19 @@ export default function DealtHand({ className = "" }) {
                 <AceBody className="w-full" pose="toss" title="Ace, your coach" />
             </motion.div>
 
+            {/* THE FAN ITSELF TAKES NO POINTER — ONLY THE SLOTS DO. This is
+                not belt-and-braces, it is the second half of the jitter fix.
+                `preserve-3d` puts this element's own plane into the same 3D
+                space as its children, and hit-testing in there is decided by
+                DEPTH, not by z-index. As the tilt springs to rest, an
+                off-centre slot rocks a fraction of a degree behind that plane
+                and back out again — so the topmost thing under a perfectly
+                STILL cursor alternates between the slot and this container
+                several times a second: enter, leave, enter, leave. Nothing
+                here is interactive, so the honest fix is to make the plane
+                untouchable and hand the pointer to the slots. */}
             <motion.div
-                className="relative h-[clamp(172px,27vw,340px)]"
+                className="relative h-[clamp(172px,27vw,340px)] pointer-events-none"
                 style={reduce ? undefined : { rotateX: rotX, rotateY: rotY, transformStyle: "preserve-3d" }}
             >
                 {hand.map((c, i) => {
@@ -167,34 +180,77 @@ export default function DealtHand({ className = "" }) {
                     // Offset from the middle of the hand, in card widths.
                     const off = (i - (hand.length - 1) / 2) * STEP;
                     const lifted = hover === i;
+                    const rest = t * t * DROP * 4;
+                    const lean = t * LEAN * 2;
                     return (
-                        <motion.div
+                        /* THE HIT AREA IS SEPARATE FROM THE CARD, and that is
+                           the whole fix for the hover jitter. When the pointer
+                           target is the thing that scales and lifts, hovering
+                           it moves it — often out from under the cursor, or far
+                           enough that the neighbour is now on top — so enter
+                           and leave fire against each other several times a
+                           second and the fan flickers.
+
+                           This outer element never moves. It sits at the
+                           card's resting position, owns the pointer, and the
+                           card animating inside it is inert to the mouse. */
+                        <div
                             key={c.label}
-                            data-hand-card={i}
-                            data-lifted={lifted ? "1" : "0"}
+                            data-hand-slot={i}
                             onPointerEnter={() => setHover(i)}
                             onPointerLeave={() => setHover(-1)}
-                            className="absolute left-1/2 bottom-4 sm:bottom-7 w-[clamp(96px,13vw,188px)]"
-                            style={{ zIndex: lifted ? 40 : 10 + i, transformStyle: "preserve-3d" }}
+                            className="absolute left-1/2 bottom-4 sm:bottom-7 w-[clamp(96px,13vw,188px)]
+                                pointer-events-auto"
+                            style={{
+                                zIndex: lifted ? 40 : 10 + i,
+                                transform: `translateX(calc(-50% + ${off}%)) translateY(${rest}px) rotate(${lean}deg)`,
+                                transformStyle: "preserve-3d",
+                            }}
+                        >
+                        <motion.div
+                            data-hand-card={i}
+                            data-lifted={lifted ? "1" : "0"}
+                            className="w-full pointer-events-none"
+                            style={{ transformStyle: "preserve-3d" }}
                             initial={reduce ? { opacity: 0 } : {
+                                // Relative to the slot it already sits in, so
+                                // the deal is a flight from Ace's hand into
+                                // place rather than a second positioning system.
                                 opacity: 0, x: "-460%", y: 40, rotate: -46, scale: 0.5,
                             }}
                             animate={dealt ? {
                                 opacity: 1,
-                                x: `calc(-50% + ${off}%)`,
-                                y: lifted && !reduce ? t * t * DROP * 4 - 10 : t * t * DROP * 4,
-                                rotate: lifted && !reduce ? 0 : t * LEAN * 2,
+                                x: 0,
+                                y: lifted && !reduce ? -10 : 0,
+                                rotate: lifted && !reduce ? -lean : 0,
                                 scale: lifted && !reduce ? 1.11 : 1,
                             } : {}}
                             transition={reduce ? { duration: 0.2 } : {
                                 type: "spring", stiffness: 190, damping: 20, mass: 0.9,
-                                delay: dealt && hover === -1 ? i * 0.085 : 0,
+                                // The stagger belongs to the deal and nothing
+                                // else. Left on, every hover-out replayed it and
+                                // the card crawled back into the fan.
+                                delay: settled ? 0 : i * 0.085,
                             }}
                         >
-                            {/* A card lying on a dark table throws a real
-                                shadow. Without it the fan reads as stickers. */}
+                            {/* A card lying on a table throws a real shadow.
+                                Without one the fan reads as stickers.
+
+                                TWO shadows, and both are INK rather than
+                                black. A single 0.45-black blur was tuned for
+                                a navy hero, where the darkest thing on screen
+                                was already dark; on cream the same shadow is
+                                the darkest thing in the frame and each card
+                                sits in a grey smudge. Real shadows on a light
+                                surface are tinted by what's around them and
+                                come in two parts — a tight contact shadow that
+                                says the card is touching, and a wide soft one
+                                that says how far off the table it is. */}
                             <div className="relative"
-                                style={{ filter: "drop-shadow(0 22px 26px rgba(0,0,0,0.45))" }}>
+                                style={{
+                                    filter: "drop-shadow(0 2px 2px rgba(13,22,38,0.10)) "
+                                        + "drop-shadow(0 16px 22px rgba(13,22,38,0.16))",
+                                }}>
                                 <PlayingCard rank={c.rank} suit={c.suit} tone={c.tone} smallIndices
                                     watermark={!c.ace}
                                     className="w-full aspect-[2.5/3.5]">
@@ -233,6 +289,7 @@ export default function DealtHand({ className = "" }) {
                                 )}
                             </div>
                         </motion.div>
+                        </div>
                     );
                 })}
             </motion.div>
