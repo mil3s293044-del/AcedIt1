@@ -6,6 +6,9 @@ import DealtHand from "@/components/marketing/DealtHand";
 import StepCards from "@/components/marketing/StepCards";
 import EvidenceSplit from "@/components/marketing/EvidenceSplit";
 import BrainShowcase from "@/components/marketing/BrainShowcase";
+import MarkedAnswer from "@/components/marketing/MarkedAnswer";
+import ForgettingCurve from "@/components/marketing/ForgettingCurve";
+import PriceAnchor from "@/components/marketing/PriceAnchor";
 import { Button } from "@/components/ui/button";
 import {
   Accordion,
@@ -25,7 +28,6 @@ import {
   ShieldCheck,
   Clock,
   CreditCard,
-  Quote,
 } from "lucide-react";
 
 const fadeUp = {
@@ -735,65 +737,74 @@ export default function Landing() {
       </section>
 
       {/* ============================================================== */}
-      {/* SOCIAL PROOF                                                     */}
+      {/* WHAT MARKING ACTUALLY LOOKS LIKE                                 */}
+      {/* ============================================================== */}
+      {/* This replaces three testimonials.
+
+          They were three unverifiable quotes attributed to first names, sitting
+          directly after a section built entirely on citations, and the contrast
+          made the citations look like decoration too. Nobody has ever believed
+          a landing page testimonial. Everybody believes a worked example. */}
+      <section id="marking" className="relative py-24 px-6 bg-[#0D1626] text-white overflow-hidden">
+        <div className="relative max-w-6xl mx-auto">
+          <motion.div {...fadeUp} className="mb-12 max-w-2xl">
+            <p className="text-xs font-bold tracking-[0.2em] text-primary uppercase mb-4">
+              The part you are paying for
+            </p>
+            <h2 className="font-display font-extrabold text-4xl sm:text-5xl tracking-tight text-white leading-[1.05]">
+              This answer is good. It still drops a mark.
+            </h2>
+            <p className="text-white/60 mt-5 leading-relaxed">
+              Here is a real question, an answer of the kind a strong student
+              actually writes, and what an assessor would tick. Nothing in it is
+              wrong, which is the point: the mark it loses is one you would
+              never catch on your own.
+            </p>
+          </motion.div>
+
+          <MarkedAnswer />
+        </div>
+      </section>
+
+      {/* ============================================================== */}
+      {/* WHAT YOU ARE ABOUT TO FORGET                                     */}
+      {/* ============================================================== */}
+      <section id="forgetting" className="relative py-24 px-6 bg-[#0B1220] text-white overflow-hidden">
+        <div className="relative max-w-5xl mx-auto">
+          <motion.div {...fadeUp} className="mb-12 max-w-2xl">
+            <p className="text-xs font-bold tracking-[0.2em] text-primary uppercase mb-4">
+              Why the timing matters
+            </p>
+            <h2 className="font-display font-extrabold text-4xl sm:text-5xl tracking-tight text-white leading-[1.05]">
+              A week after you studied it, most of it is gone.
+            </h2>
+            <p className="text-white/60 mt-5 leading-relaxed">
+              Not because you were careless. Memory decays on a curve, and a
+              single pass gives it nothing to hold onto. Four short reviews,
+              placed where the curve starts to fall, keep the same material
+              sitting near the top of the chart for the whole month.
+            </p>
+          </motion.div>
+
+          <ForgettingCurve />
+        </div>
+      </section>
+
+      {/* ============================================================== */}
+      {/* WHAT IT COSTS, NEXT TO WHAT IT REPLACES                          */}
       {/* ============================================================== */}
       <section className="relative py-24 px-6 bg-surface">
-        <div className="max-w-7xl mx-auto">
-          <motion.div {...fadeUp} className="max-w-2xl mb-14">
+        <div className="max-w-5xl mx-auto">
+          <motion.div {...fadeUp} className="mb-12 max-w-2xl">
             <p className="text-xs font-bold tracking-[0.2em] text-primary uppercase mb-4">
-              Real students
+              What it costs
             </p>
-            <h2 className="font-display font-extrabold text-4xl sm:text-5xl tracking-tight">
-              What it actually changed.
+            <h2 className="font-display font-extrabold text-4xl sm:text-5xl tracking-tight leading-[1.05]">
+              Two ways to get your work marked.
             </h2>
           </motion.div>
 
-          <div className="grid md:grid-cols-3 gap-6">
-            {[
-              {
-                quote:
-                  "It is a private tutor that happens to be awake at 2am the night before a SAC. The way it marks my essays is genuinely scary.",
-                name: "Sienna",
-                meta: "Year 12 · English & Methods",
-                avatarColor: "bg-[hsl(280_65%_60%)]",
-              },
-              {
-                quote:
-                  "I finally know what the examiner actually wants. My Methods scores went from the 60s to the 80s in a term.",
-                name: "Kai",
-                meta: "Year 12 · Methods & Chem",
-                avatarColor: "bg-primary",
-              },
-              {
-                quote:
-                  "The streak got me. I have studied every day for three months, which has literally never happened to me before.",
-                name: "Aisha",
-                meta: "Year 11 · Bio & Psych",
-                avatarColor: "bg-[hsl(217_91%_60%)]",
-              },
-            ].map((t, i) => (
-              <motion.div
-                key={t.name}
-                {...fadeUp}
-                transition={{ ...fadeUp.transition, delay: i * 0.08 }}
-                className="rounded-3xl border border-black/5 bg-[#FBF7F0] p-7 flex flex-col"
-              >
-                <Quote className="w-6 h-6 text-primary mb-5" />
-                <p className="text-[#0D1626]/85 leading-relaxed text-base flex-1">
-                  &ldquo;{t.quote}&rdquo;
-                </p>
-                <div className="mt-6 flex items-center gap-3">
-                  <div className={`w-10 h-10 rounded-full ${t.avatarColor} flex items-center justify-center text-white font-bold text-sm`}>
-                    {t.name.charAt(0)}
-                  </div>
-                  <div>
-                    <div className="text-sm font-semibold">{t.name}</div>
-                    <div className="text-xs text-[#0D1626]/55">{t.meta}</div>
-                  </div>
-                </div>
-              </motion.div>
-            ))}
-          </div>
+          <PriceAnchor />
         </div>
       </section>
 

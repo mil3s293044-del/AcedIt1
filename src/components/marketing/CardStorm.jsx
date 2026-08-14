@@ -85,7 +85,8 @@ const ABSORB_MS = 4950;
  * scale without costing the shape, and it is the shot that makes it feel like
  * a title sequence rather than a loader.
  */
-const HERO_RANKS = ["A", "K", "Q", "J", "10", "9", "A", "7", "K", "4", "Q", "A"];
+const HERO_RANKS = ["A", "K", "Q", "J", "10", "9", "A", "7", "K", "4", "Q", "A",
+                    "8", "J", "5", "K", "A", "6", "Q", "9"];
 const HERO_SUITS = ["\u2660", "\u2665", "\u2663", "\u2666"];
 
 /** Cheap deterministic noise, so the storm is the same storm every time. */
@@ -175,7 +176,13 @@ export default function CardStorm() {
             cards.push({
                 p: cloud[i % cloud.length],
                 fx, fy,
-                spin: (r() - 0.5) * 14,
+                // A SLOWER TUMBLE. At 14 radians of spin over the flight a
+                // card at 11px wide changes orientation faster than the eye
+                // can track, and several hundred of them doing it at once
+                // reads as static rather than as motion. Halved, so each card
+                // turns a couple of times on its way in and you can follow any
+                // one of them.
+                spin: (r() - 0.5) * 6.5,
                 rot0: r() * Math.PI * 2,
                 // Staggered so the shape resolves out of the noise instead of
                 // snapping into it all at once.
@@ -210,10 +217,10 @@ export default function CardStorm() {
                 // Off-centre, so they sweep past the brain instead of through it.
                 bow: (r() - 0.5) * H * 0.55,
                 w: 92 + r() * 74,
-                spin: (r() - 0.5) * 5,
+                spin: (r() - 0.5) * 2.6,
                 rot0: r() * Math.PI * 2,
-                start: 0.02 + (i / HERO_RANKS.length) * 0.72,
-                dur: 0.34 + r() * 0.2,
+                start: 0.0 + (i / HERO_RANKS.length) * 0.80,
+                dur: 0.40 + r() * 0.22,
             };
         });
 
@@ -284,7 +291,9 @@ export default function CardStorm() {
                 let py = c.fy + (ty - c.fy) * e;
 
                 let s = (0.55 + 0.9 * e) * depth * 1.5;
-                let alpha = Math.min(1, k * 3);
+                // Fades in over the first fifth of the flight rather than
+                // the first thirtieth, so cards arrive rather than appear.
+                let alpha = Math.min(1, k * 5) * Math.min(1, (1 - k) * 40 + 1);
 
                 if (absorb > 0) {
                     // Taken in: pulled to the middle, shrinking, going out.
@@ -312,7 +321,7 @@ export default function CardStorm() {
                 // PARALLEL, so they settle to a common angle with a little
                 // jitter, and the tumble decays into that.
                 const rot = c.rest * e
-                    + (c.rot0 + c.spin * (1 - e) + t * 0.0004) * (1 - e);
+                    + (c.rot0 + c.spin * (1 - e) + t * 0.00022) * (1 - e);
 
                 frame.push({ z: z3, px, py, rot, s, alpha, c, e });
             }
