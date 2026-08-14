@@ -184,21 +184,28 @@ export default function Landing() {
       <section className="relative min-h-screen flex items-center justify-center overflow-hidden bg-[#FBF7F0]">
         <div className="absolute inset-0">
           {/* Two soft washes, both in the app's own accents.
-              A light ground carries FAR less of these than a dark one did:
-              at the strength that read as a glow behind navy, the green
-              stained the whole left third and the corner of the nav sat on
-              it. Pushed out to the corners and dropped to roughly a third of
-              the opacity, they do what they are for — stop the cream being
-              flat — without becoming the first thing you see. */}
+
+              NO BLUR FILTER. These used to be `blur-[150px]` and
+              `blur-[160px]` on 620px and 700px elements, with their positions
+              animating on an infinite loop, which meant the browser
+              re-rasterised a 160-pixel gaussian over half a megapixel every
+              single frame. Measured: the hero ran at 11fps with them and
+              48fps without, and that was the whole of "the cards jolt across
+              the screen". The card storm on top was innocent; it inherited a
+              frame budget the page had already spent.
+
+              A blurred circle IS a radial gradient. Drawing it as one costs
+              nothing, looks the same, and lets the drift stay, because a
+              transform on an unfiltered element composites on the GPU. */}
           <motion.div
-            className="absolute -top-56 -left-56 w-[620px] h-[620px] rounded-full blur-[150px] opacity-[0.10]"
-            style={{ background: "radial-gradient(circle, #58CC02 0%, transparent 70%)" }}
+            className="absolute -top-56 -left-56 w-[760px] h-[760px] rounded-full opacity-[0.13]"
+            style={{ background: "radial-gradient(circle, #58CC02 0%, rgba(88,204,2,0.5) 32%, transparent 68%)" }}
             animate={prefersReducedMotion ? undefined : { x: [0, 80, 0], y: [0, 40, 0] }}
             transition={{ duration: 14, repeat: Infinity, ease: "easeInOut" }}
           />
           <motion.div
-            className="absolute -bottom-48 right-[-14%] w-[700px] h-[700px] rounded-full blur-[160px] opacity-[0.07]"
-            style={{ background: "radial-gradient(circle, #FF4B4B 0%, transparent 70%)" }}
+            className="absolute -bottom-48 right-[-14%] w-[840px] h-[840px] rounded-full opacity-[0.09]"
+            style={{ background: "radial-gradient(circle, #FF4B4B 0%, rgba(255,75,75,0.5) 32%, transparent 68%)" }}
             animate={prefersReducedMotion ? undefined : { x: [0, -70, 0], y: [0, -50, 0] }}
             transition={{ duration: 19, repeat: Infinity, ease: "easeInOut" }}
           />

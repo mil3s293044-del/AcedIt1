@@ -40,7 +40,7 @@ import React, { useEffect, useRef, useState } from "react";
 import { motion, useMotionValue, useSpring, useTransform, useReducedMotion } from "framer-motion";
 import PlayingCard from "@/components/cards/PlayingCard";
 import AceBody from "@/components/ace/AceBody";
-import { FLUSH_SEEN, FLUSH_MS, FLUSH_EXIT_MS } from "@/components/marketing/flushGate";
+import { FLUSH_SEEN, STORM_DONE, STORM_MAX_MS } from "@/components/marketing/flushGate";
 
 /**
  * The hand. FOUR TECHNIQUES AND THE AI, which is the product in one line: the
@@ -144,18 +144,37 @@ export default function DealtHand({ className = "" }) {
     }, [px, py, reduce]);
 
     /**
-     * The hand is dealt once, after the headline has landed — and, on a first
-     * visit, after the curtain has come off. Dealing on its own timer meant
-     * the best moment on the page happened behind an opaque sheet and the
-     * curtain lifted on a hand already lying there.
+     * ACE THROWS THE HAND WHEN THE CURTAIN IS OFF, not when a timer guesses it
+     * should be. It used to open at a time computed from the storm's declared
+     * duration, which meant two files had to agree about the length of an
+     * animation only one of them owned; the moment the storm got longer they
+     * drifted, the hand dealt behind the sheet, and the curtain lifted on five
+     * cards already lying on the table.
+     *
+     * On a return visit there is no curtain, so it deals on the short delay
+     * that lets the headline land first. The timeout is a backstop for the
+     * case where the storm never mounted at all and the event never comes.
      */
     const [settled, setSettled] = useState(false);
-    const openAt = reduce || FLUSH_SEEN ? 420 : FLUSH_MS + FLUSH_EXIT_MS - 180;
     useEffect(() => {
-        const a = setTimeout(() => setDealt(true), reduce ? 0 : openAt);
-        const b = setTimeout(() => setSettled(true), reduce ? 0 : openAt + 1100);
-        return () => { clearTimeout(a); clearTimeout(b); };
-    }, [reduce, openAt]);
+        if (reduce) { setDealt(true); setSettled(true); return undefined; }
+
+        let opened = false;
+        const open = () => {
+            if (opened) return;
+            opened = true;
+            setDealt(true);
+            setTimeout(() => setSettled(true), 1200);
+        };
+
+        if (FLUSH_SEEN) {
+            const t = setTimeout(open, 420);
+            return () => clearTimeout(t);
+        }
+        window.addEventListener(STORM_DONE, open);
+        const guard = setTimeout(open, STORM_MAX_MS);
+        return () => { window.removeEventListener(STORM_DONE, open); clearTimeout(guard); };
+    }, [reduce]);
 
     useEffect(() => {
         if (reduce || !dealt) return undefined;

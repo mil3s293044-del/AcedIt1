@@ -22,8 +22,8 @@
  *
  * The reviews are drawn as cards, because that is what they are in the app.
  */
-import React from "react";
-import { motion, useReducedMotion } from "framer-motion";
+import React, { useRef } from "react";
+import { motion, useReducedMotion, useScroll, useTransform } from "framer-motion";
 
 /** The same relation lib/retention pins stability with. */
 const K = Math.log(10 / 9);            // ≈ 0.10536
@@ -87,12 +87,46 @@ const { alone, spaced, marks, x, y } = build(W, H, PAD);
 
 export default function ForgettingCurve() {
     const reduce = useReducedMotion();
-    const draw = (delay) => (reduce
-        ? { pathLength: 1, transition: { duration: 0.2 } }
-        : { pathLength: 1, transition: { duration: 1.6, delay, ease: "easeInOut" } });
+    const ref = useRef(null);
+
+    /**
+     * DRAWN BY THE SCROLL, not by a timer.
+     *
+     * As a fire-once animation this had a real failure mode: it played the
+     * instant the panel crossed the threshold, so on a fast scroll it ran
+     * while the chart was still mostly below the fold and by the time you
+     * were looking at it, it had finished. You arrived at a finished picture
+     * and never saw the lines move, which is the entire value of drawing a
+     * decay curve rather than printing one.
+     *
+     * Tied to scroll position, the red line falls as you pull the panel up
+     * the screen. You are doing the drawing. It also cannot be missed: the
+     * progress is a function of where the section is, so any position that
+     * has it on screen has it drawn to the matching amount, and a visitor who
+     * lands mid-page sees a correct chart rather than an empty one.
+     *
+     * The two lines are offset so the collapse reads first and the rescue
+     * second, which is the order the argument goes in.
+     */
+    const { scrollYProgress } = useScroll({
+        target: ref,
+        // From the chart's top edge appearing at the bottom of the window, to
+        // its BOTTOM edge clearing it: the range is exactly the scroll during
+        // which the chart is coming into view, so it finishes drawing at the
+        // moment you can see all of it.
+        //
+        // These offsets are measured against the chart, not the section that
+        // contains it. Tuned against the section by mistake, the completion
+        // point sat 200px further down the page than intended and the green
+        // line was still two thirds drawn with the whole chart on screen.
+        offset: ["start 0.98", "end 0.92"],
+    });
+    const alonePath = useTransform(scrollYProgress, [0.04, 0.5], [0, 1]);
+    const spacedPath = useTransform(scrollYProgress, [0.22, 0.82], [0, 1]);
+    const marksIn = useTransform(scrollYProgress, [0.5, 0.86], [0, 1]);
 
     return (
-        <div data-forgetting-curve className="w-full">
+        <div data-forgetting-curve ref={ref} className="w-full">
             <div className="overflow-x-auto">
                 <svg viewBox={`0 0 ${W} ${H}`} className="w-full min-w-[560px]"
                     role="img"
@@ -123,24 +157,17 @@ export default function ForgettingCurve() {
                     {/* Read once, never again. */}
                     <motion.path d={alone} fill="none" stroke="#FF4B4B" strokeWidth="3"
                         strokeLinecap="round"
-                        initial={reduce ? false : { pathLength: 0 }}
-                        whileInView={draw(0.1)}
-                        viewport={{ once: true, margin: "-80px" }} />
+                        style={reduce ? undefined : { pathLength: alonePath }} />
 
                     {/* Reviewed as it fades. */}
                     <motion.path d={spaced} fill="none" stroke="#58CC02" strokeWidth="3"
                         strokeLinecap="round"
-                        initial={reduce ? false : { pathLength: 0 }}
-                        whileInView={draw(0.5)}
-                        viewport={{ once: true, margin: "-80px" }} />
+                        style={reduce ? undefined : { pathLength: spacedPath }} />
 
                     {/* Each review, as the card it is in the app. */}
                     {marks.map((m, i) => (
                         <motion.g key={m.day}
-                            initial={reduce ? false : { opacity: 0, y: -8 }}
-                            whileInView={{ opacity: 1, y: 0 }}
-                            viewport={{ once: true, margin: "-80px" }}
-                            transition={{ delay: 0.8 + i * 0.16, duration: 0.35 }}>
+                            style={reduce ? undefined : { opacity: marksIn }}>
                             <rect x={m.x - 7} y={m.y - 20} width="14" height="19" rx="2.5"
                                 fill="#fff" stroke="#0D1626" strokeWidth="1" />
                             <text x={m.x} y={m.y - 8} textAnchor="middle"

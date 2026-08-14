@@ -31,6 +31,19 @@ try {
 /** True when the curtain has already run this session, so it must not again. */
 export const FLUSH_SEEN = seen;
 
-/** How long the curtain owns the screen, exit included. */
-export const FLUSH_MS = 3120;
-export const FLUSH_EXIT_MS = 460;
+/**
+ * The event the curtain fires when it is actually gone, whether it ran to the
+ * end or was skipped.
+ *
+ * This replaces a pair of duration constants that DealtHand used to predict
+ * when the curtain would lift. Predicting it meant two files had to agree
+ * about the length of an animation only one of them owned, and they drifted
+ * the moment the storm was made longer: the hand dealt at 3.4s behind a
+ * curtain that lifted at 5.1s, so it was already lying on the table when the
+ * page appeared. The deal is the best moment on the page and nobody ever saw
+ * it happen.
+ */
+export const STORM_DONE = "acedit:storm-done";
+
+/** Ceiling for waiting on that event, in case the curtain never mounted. */
+export const STORM_MAX_MS = 7000;
