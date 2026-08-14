@@ -204,7 +204,7 @@ export default function TodaysPlay({
                         <div className="flex items-baseline justify-between">
                             <p className="text-xs font-bold text-muted-foreground">Avg quiz</p>
                             <p className="text-xs font-bold text-foreground">
-                                {avgQuiz != null ? `${avgQuiz}%` : "—"}
+                                {avgQuiz != null ? `${avgQuiz}%` : "-"}
                             </p>
                         </div>
                     </div>

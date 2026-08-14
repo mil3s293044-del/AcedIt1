@@ -153,7 +153,7 @@ export default function MemoryPanel({ techniques = [], cards = [] }) {
 
                 {!stability.hasData ? (
                     <p className="text-sm text-muted-foreground">
-                        No cards have been reviewed yet. Two rounds through a deck and this fills in —
+                        No cards have been reviewed yet. Two rounds through a deck and this fills in,
                         it's built from the schedule your reviews earn, not from anything you have to enter.
                     </p>
                 ) : (

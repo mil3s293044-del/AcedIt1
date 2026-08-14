@@ -40,6 +40,7 @@ import React, { useEffect, useRef, useState } from "react";
 import { motion, useMotionValue, useSpring, useTransform, useReducedMotion } from "framer-motion";
 import PlayingCard from "@/components/cards/PlayingCard";
 import AceBody from "@/components/ace/AceBody";
+import { FLUSH_SEEN, FLUSH_MS, FLUSH_EXIT_MS } from "@/components/marketing/flushGate";
 
 /**
  * The hand. Five things the app is, in the order they matter to someone who
@@ -64,9 +65,21 @@ const HAND = [
  * collapsed into a pile in the middle of the hero. Expressed per-neighbour it
  * also stays right at every breakpoint, because the cards themselves scale.
  */
-const STEP = 74;
-const DROP = 34;
-const LEAN = 12;
+const STEP = 78;
+const DROP = 30;
+const LEAN = 11;
+
+/**
+ * WHERE THE CARDS COME FROM, in card widths left of the middle of the hand.
+ *
+ * This is the difference between a deal and five cards sliding in. Each card's
+ * `x` is relative to ITS OWN slot, so one shared offset means five cards enter
+ * from five different points, spread across the width of the fan, which reads
+ * as a row assembling itself. A real deal has ONE origin: the dealer's hand.
+ * So the flight is computed per card as `ORIGIN - off`, and all five leave
+ * from the same place, which is where Ace is standing.
+ */
+const ORIGIN = -300;
 
 /** The sheen crosses this often, and takes this long. */
 const SHEEN_EVERY = 5200;
@@ -124,13 +137,19 @@ export default function DealtHand({ className = "" }) {
         };
     }, [px, py, reduce]);
 
-    // The hand is dealt once, shortly after the headline has landed.
+    /**
+     * The hand is dealt once, after the headline has landed — and, on a first
+     * visit, after the curtain has come off. Dealing on its own timer meant
+     * the best moment on the page happened behind an opaque sheet and the
+     * curtain lifted on a hand already lying there.
+     */
     const [settled, setSettled] = useState(false);
+    const openAt = reduce || FLUSH_SEEN ? 420 : FLUSH_MS + FLUSH_EXIT_MS - 180;
     useEffect(() => {
-        const a = setTimeout(() => setDealt(true), reduce ? 0 : 420);
-        const b = setTimeout(() => setSettled(true), reduce ? 0 : 1500);
+        const a = setTimeout(() => setDealt(true), reduce ? 0 : openAt);
+        const b = setTimeout(() => setSettled(true), reduce ? 0 : openAt + 1100);
         return () => { clearTimeout(a); clearTimeout(b); };
-    }, [reduce]);
+    }, [reduce, openAt]);
 
     useEffect(() => {
         if (reduce || !dealt) return undefined;
@@ -149,7 +168,7 @@ export default function DealtHand({ className = "" }) {
             {/* The dealer. He is mid-toss, which is the pose that launches a
                 card — the hand arrives from somewhere rather than appearing. */}
             <motion.div
-                className="absolute left-[1%] sm:left-[3%] bottom-[14%] z-30 pointer-events-none w-16 sm:w-28 lg:w-32"
+                className="absolute left-[1%] sm:left-[3%] bottom-[14%] z-30 pointer-events-none w-20 sm:w-36 lg:w-44"
                 initial={reduce ? { opacity: 0 } : { opacity: 0, x: -60, y: 20 }}
                 animate={{ opacity: 1, x: 0, y: 0 }}
                 transition={{ delay: 0.15, type: "spring", stiffness: 200, damping: 22 }}
@@ -169,7 +188,7 @@ export default function DealtHand({ className = "" }) {
                 here is interactive, so the honest fix is to make the plane
                 untouchable and hand the pointer to the slots. */}
             <motion.div
-                className="relative h-[clamp(172px,27vw,340px)] pointer-events-none"
+                className="relative h-[clamp(192px,30vw,376px)] pointer-events-none"
                 style={reduce ? undefined : { rotateX: rotX, rotateY: rotY, transformStyle: "preserve-3d" }}
             >
                 {hand.map((c, i) => {
@@ -199,7 +218,7 @@ export default function DealtHand({ className = "" }) {
                             data-hand-slot={i}
                             onPointerEnter={() => setHover(i)}
                             onPointerLeave={() => setHover(-1)}
-                            className="absolute left-1/2 bottom-4 sm:bottom-7 w-[clamp(96px,13vw,188px)]
+                            className="absolute left-1/2 bottom-4 sm:bottom-7 w-[clamp(112px,15vw,214px)]
                                 pointer-events-auto"
                             style={{
                                 zIndex: lifted ? 40 : 10 + i,
@@ -213,10 +232,13 @@ export default function DealtHand({ className = "" }) {
                             className="w-full pointer-events-none"
                             style={{ transformStyle: "preserve-3d" }}
                             initial={reduce ? { opacity: 0 } : {
-                                // Relative to the slot it already sits in, so
-                                // the deal is a flight from Ace's hand into
-                                // place rather than a second positioning system.
-                                opacity: 0, x: "-460%", y: 40, rotate: -46, scale: 0.5,
+                                // ORIGIN - off puts every card's start point at
+                                // the same spot on the table: Ace's hand. A
+                                // single shared offset would have each card
+                                // start beside its own slot instead, which is a
+                                // row assembling itself, not a deal.
+                                opacity: 0, x: `${ORIGIN - off}%`, y: 34,
+                                rotate: -190, scale: 0.42,
                             }}
                             animate={dealt ? {
                                 opacity: 1,
@@ -226,11 +248,13 @@ export default function DealtHand({ className = "" }) {
                                 scale: lifted && !reduce ? 1.11 : 1,
                             } : {}}
                             transition={reduce ? { duration: 0.2 } : {
-                                type: "spring", stiffness: 190, damping: 20, mass: 0.9,
+                                type: "spring", stiffness: 165, damping: 19, mass: 0.95,
                                 // The stagger belongs to the deal and nothing
                                 // else. Left on, every hover-out replayed it and
-                                // the card crawled back into the fan.
-                                delay: settled ? 0 : i * 0.085,
+                                // the card crawled back into the fan. Slower
+                                // than it was, because five cards arriving in
+                                // 340ms reads as one event rather than as five.
+                                delay: settled ? 0 : i * 0.125,
                             }}
                         >
                             {/* A card lying on a table throws a real shadow.
@@ -251,8 +275,7 @@ export default function DealtHand({ className = "" }) {
                                     filter: "drop-shadow(0 2px 2px rgba(13,22,38,0.10)) "
                                         + "drop-shadow(0 16px 22px rgba(13,22,38,0.16))",
                                 }}>
-                                <PlayingCard rank={c.rank} suit={c.suit} tone={c.tone} smallIndices
-                                    watermark={!c.ace}
+                                <PlayingCard rank={c.rank} suit={c.suit} tone={c.tone} watermark={!c.ace}
                                     className="w-full aspect-[2.5/3.5]">
                                     {c.ace ? (
                                         <span className="absolute inset-0 grid place-items-center pt-2">
@@ -261,9 +284,9 @@ export default function DealtHand({ className = "" }) {
                                     ) : (
                                         <span className="absolute inset-x-0 top-[46%] flex flex-col px-3">
                                             <span className="block font-display font-extrabold text-foreground
-                                                text-[11px] sm:text-[13px] leading-tight">{c.label}</span>
-                                            <span className="block text-[9px] sm:text-[11px] text-muted-foreground
-                                                leading-tight mt-0.5">{c.line}</span>
+                                                text-[13px] sm:text-[17px] leading-tight">{c.label}</span>
+                                            <span className="block text-[11px] sm:text-[14px] text-muted-foreground
+                                                leading-tight mt-1">{c.line}</span>
                                         </span>
                                     )}
                                 </PlayingCard>

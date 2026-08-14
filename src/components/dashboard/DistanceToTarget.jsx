@@ -63,7 +63,7 @@ export default function DistanceToTarget({ atar, goalAtar, components, courseNam
                     </p>
                     <p className="font-display font-extrabold text-foreground leading-none"
                         style={{ fontSize: "clamp(2.5rem, 6vw, 3.75rem)" }}>
-                        {Number.isFinite(goal) ? goal : "—"}
+                        {Number.isFinite(goal) ? goal : "-"}
                     </p>
                     {(courseName || university) && (
                         <div className="mt-2">
@@ -117,7 +117,7 @@ export default function DistanceToTarget({ atar, goalAtar, components, courseNam
                                 <div className="mt-3 flex flex-col sm:flex-row sm:items-center gap-2.5">
                                     <p className="text-xs text-foreground/70 leading-snug min-w-0 flex-1">
                                         <span className="font-bold text-foreground">{meta.label}</span> has the most
-                                        left on it — sitting at {lever.value}, worth up to{" "}
+                                        left on it. Sitting at {lever.value}, worth up to{" "}
                                         <span className="font-bold text-foreground tabular-nums">+{lever.maxGain.toFixed(2)}</span>.
                                         {" "}Ten points there is <span className="font-bold text-foreground tabular-nums">+{lever.stepGain.toFixed(2)}</span>,
                                         and {meta.how}.

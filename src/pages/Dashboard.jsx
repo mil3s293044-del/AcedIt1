@@ -4,8 +4,7 @@ import { motion } from "framer-motion";
 import { Target, ArrowRight,
     GraduationCap, Zap, Flame, Brain, FileQuestion,
     Sparkles, Trophy, Play, Layers, Timer,
-    Map, BarChart3, Star, CheckCircle2, AlertTriangle,
-    TrendingUp, Crown, Medal, Shield, Sprout
+    Map, BarChart3, Star, CheckCircle2, AlertTriangle, Shield, Sprout
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { format, startOfWeek, differenceInDays, parseISO, isToday, isYesterday } from "date-fns";
@@ -19,6 +18,8 @@ import DistanceToTarget from "@/components/dashboard/DistanceToTarget";
 import TodaysPlay from "@/components/dashboard/TodaysPlay";
 import HandRail from "@/components/dashboard/HandRail";
 import RunOfSeven from "@/components/dashboard/RunOfSeven";
+import RankTable from "@/components/dashboard/RankTable";
+import Placed from "@/components/dashboard/Placed";
 import { bestLever } from "@/lib/atarLift";
 import { atarBandOf } from "@/lib/atarBands";
 import { todaysIntent } from "@/lib/studyIntent";
@@ -70,11 +71,11 @@ const DAILY_XP_GOAL = 100;
 // weighs headroom by weight and is the number the strip prices, so both say
 // the same thing.
 const ATAR_LEVERS = {
-    mastery:     "Mastery has the most left on it — a quiz or a flashcard round does the most for it.",
-    consistency: "Consistency has the most left on it — showing up again tomorrow counts for more than a long session today.",
-    effort:      "Effort has the most left on it — one longer sitting lifts it faster than several short ones.",
-    breadth:     "Breadth has the most left on it — a technique you have not touched this month is the quickest lift.",
-    planning:    "Planning has the most left on it — setting a goal or blocking out tomorrow is the quickest lift.",
+    mastery:     "Mastery has the most left on it, and a quiz or a flashcard round does the most for it.",
+    consistency: "Consistency has the most left on it, and showing up again tomorrow counts for more than a long session today.",
+    effort:      "Effort has the most left on it, and one longer sitting lifts it faster than several short ones.",
+    breadth:     "Breadth has the most left on it, and a technique you have not touched this month is the quickest lift.",
+    planning:    "Planning has the most left on it, and setting a goal or blocking out tomorrow is the quickest lift.",
 };
 
 function weakestComponent(components) {
@@ -94,8 +95,8 @@ function getCoachLine({
     let line;
     if (urgentDays !== null && urgentDays === 0) {
         line = urgentTitle
-            ? `${period}, ${name}. ${urgentTitle} is due today — let's get on it.`
-            : `${period}, ${name}. You've got something due today — let's get on it.`;
+            ? `${period}, ${name}. ${urgentTitle} is due today. Let's get on it.`
+            : `${period}, ${name}. You've got something due today. Let's get on it.`;
     } else if (urgentDays !== null && urgentDays <= 3 && todayMins === 0) {
         line = urgentTitle
             ? `${period}, ${name}. ${urgentTitle} lands in ${urgentDays} day${urgentDays === 1 ? "" : "s"}.`
@@ -104,13 +105,13 @@ function getCoachLine({
         // They declared something this morning and then did it — close the loop
         // while it's still today, because that is the whole habit.
         line = atar != null
-            ? `${period}, ${name}. ${fmtTime(todayMins)} in on what you said you'd do — ${atar.toFixed(2)} on the board.`
+            ? `${period}, ${name}. ${fmtTime(todayMins)} in on what you said you'd do, ${atar.toFixed(2)} on the board.`
             : `${period}, ${name}. ${fmtTime(todayMins)} in on what you said you'd do.`;
     } else if (atar != null && band) {
         // The ATAR is the flagship number — lead with it once it exists.
         if (todayMins >= 90) line = `${period}, ${name}. ${fmtTime(todayMins)} in and sitting at ${atar.toFixed(2)}. Big day.`;
         else if (todayMins > 0) line = `${period}, ${name}. ${fmtTime(todayMins)} down, ${atar.toFixed(2)} on the board.`;
-        else line = `${period}, ${name}. You're at ${atar.toFixed(2)} — ${band}.`;
+        else line = `${period}, ${name}. You're at ${atar.toFixed(2)}, ${band}.`;
     } else if (streakDays >= 30 && todayMins > 0) {
         line = `${period}, ${name}. ${streakDays} days deep and still showing up. Keep cooking.`;
     } else if (streakDays >= 30) {
@@ -124,7 +125,7 @@ function getCoachLine({
     } else if (todayMins >= 30) {
         line = `${period}, ${name}. ${fmtTime(todayMins)} down. Want to stack another?`;
     } else if (todayMins > 0) {
-        line = `${period}, ${name}. Nice start — keep building.`;
+        line = `${period}, ${name}. Nice start. Keep building.`;
     } else {
         line = `${period}, ${name}. Let's make today count.`;
     }
@@ -140,7 +141,7 @@ function getCoachLine({
     if (atar == null) {
         sub = "Three study days puts you on the board and unlocks your AcedIt ATAR.";
     } else if (goalAtar && atar >= goalAtar) {
-        sub = `You're past your ${goalAtar} goal — hold it there and it stops being a fluke.`;
+        sub = `You're past your ${goalAtar} goal. Hold it there and it stops being a fluke.`;
     } else if (goalAtar) {
         // Just the gap. When a goal is set, the Distance-to-target strip is on
         // the page and says the lever properly — with what it's worth in ATAR
@@ -177,13 +178,13 @@ const INTENT_MOVES = {
     cramming: {
         label: "Cram mode",
         title: "You said cramming today",
-        sub: "Cover ground fast — quiz yourself as you go so it actually sticks.",
+        sub: "Cover ground fast, and quiz yourself as you go so it actually sticks.",
         cta: "Start a session", link: "Study", accent: "xp", icon: Zap,
     },
     free: {
         label: "Free study",
         title: "You said free study today",
-        sub: "No deadline pressure — good day to shore up a weak spot.",
+        sub: "No deadline pressure, so it is a good day to shore up a weak spot.",
         cta: "Pick a technique", link: "Study", accent: "primary", icon: Sprout,
     },
 };
@@ -197,37 +198,37 @@ const CHALLENGE_MOVES = {
     forget: {
         label: "Your sticking point",
         title: "Retrieval beats re-reading, every time",
-        sub: "You said it slips away after studying — pulling it back out from memory is what makes it stay.",
+        sub: "You said it slips away after studying, and pulling it back out from memory is what makes it stay.",
         cta: "Start active recall", link: "Study", accent: "chart-4", icon: Brain,
     },
     time: {
         label: "Your sticking point",
         title: "Map the week before it gets away",
-        sub: "You said there's never enough runway before a SAC — blocking it out now buys some back.",
+        sub: "You said there's never enough runway before a SAC, and blocking it out now buys some back.",
         cta: "Open the planner", link: "Goals", accent: "xp", icon: Map,
     },
     weak: {
         label: "Your sticking point",
         title: "Find out what you're actually shaky on",
-        sub: "You said it's hard to tell — your analytics already know which topics keep costing you marks.",
+        sub: "You said it's hard to tell, and your analytics already know which topics keep costing you marks.",
         cta: "See weak topics", link: "Analytics", accent: "chart-3", icon: BarChart3,
     },
     motivated: {
         label: "Your sticking point",
         title: "A short session still counts on the board",
-        sub: "You said staying motivated is the hard part — 25 minutes is enough to keep the streak and the score going.",
+        sub: "You said staying motivated is the hard part, and 25 minutes is enough to keep the streak and the score going.",
         cta: "Start a Pomodoro", link: "Study", accent: "primary", icon: Timer,
     },
     writing: {
         label: "Your sticking point",
         title: "Get a response marked properly",
-        sub: "You said writing strong answers is the gap — the English mentor marks to VCAA criteria and shows you the upgrade.",
+        sub: "You said writing strong answers is the gap, and the English mentor marks to VCAA criteria and shows you the upgrade.",
         cta: "Open AI Tools", link: "AITools", accent: "chart-4", icon: Sparkles,
     },
     burnout: {
         label: "Your sticking point",
         title: "One focused block, then genuinely stop",
-        sub: "You said the pressure is getting heavy — a short bounded session beats an open-ended one.",
+        sub: "You said the pressure is getting heavy, and a short bounded session beats an open-ended one.",
         cta: "Start 25 minutes", link: "Study", accent: "primary", icon: Timer,
     },
 };
@@ -277,7 +278,7 @@ function getTodaysMove({ todayMins, streakDays, dueFlashcards, urgentDays, urgen
         return {
             label: "Streak protection",
             title: `Quick session keeps your ${streakDays}-day streak alive`,
-            sub: `${24 - hour} hours left — a Pomodoro is all it takes.`,
+            sub: `${24 - hour} hours left, and a Pomodoro is all it takes.`,
             cta: "Start a Pomodoro",
             link: "Study",
             accent: "streak",
@@ -300,7 +301,7 @@ function getTodaysMove({ todayMins, streakDays, dueFlashcards, urgentDays, urgen
     if (todayMins < 60) {
         return {
             label: "Lock it in",
-            title: "Good start — let's test what you remember",
+            title: "Good start. Let's test what you remember",
             sub: "Active recall locks in what passive reading misses.",
             cta: "Take a quiz",
             link: "Quizzes",
@@ -310,7 +311,7 @@ function getTodaysMove({ todayMins, streakDays, dueFlashcards, urgentDays, urgen
     }
     return {
         label: "Stack the win",
-        title: "You've got momentum — let's make it count",
+        title: "You've got momentum. Let's make it count",
         sub: "Generate exam questions or hit your weak topics.",
         cta: "Open AI tools",
         link: "AITools",
@@ -367,15 +368,6 @@ function urgencyKey(daysAway) {
     return "later";
 }
 
-// Avatar token color, deterministic from name (matches Friends page)
-const AVATAR_COLORS = ["bg-chart-3", "bg-chart-4", "bg-primary", "bg-xp", "bg-streak"];
-function avatarColor(name) {
-    const c = (name || "?").charCodeAt(0) || 0;
-    return AVATAR_COLORS[c % AVATAR_COLORS.length];
-}
-function initials(name) {
-    return (name || "?").split(" ").map(w => w[0]).join("").slice(0, 2).toUpperCase();
-}
 
 // ─── Component ────────────────────────────────────────────────────────────────
 export default function Dashboard() {
@@ -787,6 +779,27 @@ export default function Dashboard() {
         return { target, done, pct: Math.min(100, Math.round((done / target) * 100)), met: done >= target };
     }, [todayIntentPlan, todaysStudyTime]);
 
+    /**
+     * The board, flattened into one ordered list: rivals above, then you, then
+     * the one below. Names are resolved here rather than in the row, because
+     * anonymity is an account rule and not a presentation detail.
+     */
+    const rankRows = useMemo(() => {
+        if (!rankInfo) return [];
+        const name = (e) => (e.is_anonymous && e.user_email !== user?.email
+            ? `Anon #${(e.id || "").slice(-4)}`
+            : (e.username || e.user_name || "Student"));
+        const out = rankInfo.rivals.map(r => ({ entry: r, isMe: false, display: name(r) }));
+        if (rankInfo.myEntry) out.push({
+            entry: { ...rankInfo.myEntry, rank: rankInfo.myRank, gap: 0 },
+            isMe: true, display: name(rankInfo.myEntry),
+        });
+        if (rankInfo.below) out.push({
+            entry: rankInfo.below, isMe: false, below: true, display: name(rankInfo.below),
+        });
+        return out;
+    }, [rankInfo, user]);
+
     const hasGoal = !!(userProfile?.goal_atar || userProfile?.goal_course_name);
     const onboardingTasks = userProfile?.onboarding_tasks || {};
     const onboardingComplete = onboardingTasks.username_set && onboardingTasks.subjects_selected && onboardingTasks.goals_set;
@@ -808,7 +821,7 @@ export default function Dashboard() {
             <div className="w-full px-4 lg:px-8 py-6 lg:py-10 max-w-[1600px] mx-auto space-y-8 lg:space-y-10">
 
                 {/* ── COACH STRIP ─────────────────────────────────────── */}
-                <motion.section initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.35 }}>
+                <Placed index={0}>
                     <div className="flex items-center justify-between mb-3">
                         <div className="flex items-center gap-2 text-xs">
                             <span className="font-bold text-muted-foreground uppercase tracking-wider">{format(new Date(), 'EEE · MMM d')}</span>
@@ -839,21 +852,17 @@ export default function Dashboard() {
                             {coachLine.sub}
                         </p>
                     )}
-                </motion.section>
+                </Placed>
 
                 {/* ── YOUR PLAY — the card Ace deals you today ────────── */}
-                <motion.section
-                    initial={{ opacity: 0, y: 12 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: 0.2 }}
-                >
+                <Placed index={1}>
                     <TodaysPlay move={move} card={moveCard} theme={moveTheme}
                         commitment={commitment} fmtTime={fmtTime}
                         todayXP={todayXP} dailyGoal={DAILY_XP_GOAL}
                         todayMins={todaysStudyTime} weekMins={weeklyStudyTime}
                         weekGoalHours={goalHours} weekPct={weeklyPct}
                         avgQuiz={avgQuizScore} />
-                </motion.section>
+                </Placed>
 
 
                 {/* Everything below runs in two columns so the right-hand
@@ -868,11 +877,7 @@ export default function Dashboard() {
                     panel. Two boxes both headed "today" is one box, and it now
                     lives in Your Play with the move it belongs to — so the
                     streak gets the full column instead of two thirds. */}
-                <motion.section
-                    initial={{ opacity: 0, y: 12 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: 0.05, duration: 0.4 }}
-                >
+                <Placed index={2}>
                     <div>
                         {streakDays > 0 ? (
                             <div className="relative overflow-hidden rounded-2xl bg-surface border border-border shadow-soft p-6 lg:p-8 h-full">
@@ -961,16 +966,11 @@ export default function Dashboard() {
                         )}
                     </div>
 
-                </motion.section>
+                </Placed>
 
                 {/* ── RANK & RIVALS ───────────────────────────────────── */}
                 {rankInfo && (rankInfo.rivals.length > 0 || rankInfo.below) && (
-                    <motion.section
-                        initial={{ opacity: 0, y: 12 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        transition={{ delay: 0.1 }}
-                        className="rounded-2xl bg-surface border border-border shadow-soft p-6 lg:p-7"
-                    >
+                    <Placed index={3} className="rounded-2xl bg-surface border border-border shadow-soft p-6 lg:p-7">
                         <div className="flex items-start justify-between mb-5 flex-wrap gap-3">
                             <div className="flex items-center gap-3">
                                 <div className="w-11 h-11 rounded-xl bg-xp/10 flex items-center justify-center flex-shrink-0">
@@ -987,7 +987,7 @@ export default function Dashboard() {
                                                 </span>
                                             </>
                                         ) : (
-                                            "Unranked — keep earning XP"
+                                            "Unranked, keep earning XP"
                                         )}
                                     </h2>
                                 </div>
@@ -1005,15 +1005,7 @@ export default function Dashboard() {
                                     {rankInfo.myRank && rankInfo.myRank <= 50 ? "Closest ahead of you" : "Top of the board"}
                                 </p>
                             )}
-                            {rankInfo.rivals.map((r, i) => (
-                                <RankRow key={r.id || r.user_email || i} entry={r} isMe={false} userEmail={user?.email} />
-                            ))}
-                            {rankInfo.myEntry && (
-                                <RankRow entry={{ ...rankInfo.myEntry, rank: rankInfo.myRank, gap: 0 }} isMe={true} userEmail={user?.email} />
-                            )}
-                            {rankInfo.below && (
-                                <RankRow entry={rankInfo.below} isMe={false} userEmail={user?.email} below />
-                            )}
+                            <RankTable fmtXP={fmtXP} rows={rankRows} />
                         </div>
 
                         {rankInfo.rivals.length > 0 && rankInfo.rivals[rankInfo.rivals.length - 1] && rankInfo.myRank && rankInfo.myRank <= 50 && (
@@ -1026,16 +1018,12 @@ export default function Dashboard() {
                                 </span>.
                             </p>
                         )}
-                    </motion.section>
+                    </Placed>
                 )}
 
                 {/* ── ONBOARDING NUDGE ────────────────────────────────── */}
                 {showOnboarding && (
-                    <motion.section
-                        initial={{ opacity: 0, y: 10 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        className="rounded-2xl bg-primary/5 border border-primary/15 shadow-soft p-5 lg:p-6"
-                    >
+                    <Placed index={4} className="rounded-2xl bg-primary/5 border border-primary/15 shadow-soft p-5 lg:p-6">
                         <div className="flex flex-col sm:flex-row sm:items-center gap-4">
                             <div className="flex items-center gap-3 flex-1 min-w-0">
                                 <div className="w-11 h-11 rounded-xl bg-primary/10 flex items-center justify-center flex-shrink-0">
@@ -1046,7 +1034,7 @@ export default function Dashboard() {
                                         Quick setup. Five minutes.
                                     </h3>
                                     <p className="text-muted-foreground text-sm">
-                                        Tell us who you are and what you're chasing — we'll tailor everything to you.
+                                        Tell us who you are and what you're chasing, and we'll tailor everything to you.
                                     </p>
                                 </div>
                             </div>
@@ -1068,7 +1056,7 @@ export default function Dashboard() {
                                 )}
                             </div>
                         </div>
-                    </motion.section>
+                    </Placed>
                 )}
 
                 {/* ── DISTANCE TO TARGET ──────────────────────────────── */}
@@ -1109,7 +1097,7 @@ export default function Dashboard() {
                                         What are you chasing?
                                     </h3>
                                     <p className="text-muted-foreground text-sm mt-0.5">
-                                        Set your ATAR target and dream course — we'll help you get there.
+                                        Set your ATAR target and dream course, and we'll help you get there.
                                     </p>
                                 </div>
                                 <Link to={createPageUrl("Goals")} className="flex-shrink-0">
@@ -1227,7 +1215,7 @@ export default function Dashboard() {
                                 </div>
                                 <div>
                                     <p className="font-bold text-foreground text-sm">No sessions yet</p>
-                                    <p className="text-xs text-muted-foreground mt-0.5">Knock out a quick session — it'll show up right here.</p>
+                                    <p className="text-xs text-muted-foreground mt-0.5">Knock out a quick session and it'll show up right here.</p>
                                 </div>
                                 <Link to={createPageUrl("Study")}>
                                     <Button size="sm" className="gap-1.5">
@@ -1298,53 +1286,3 @@ function ReminderRow({ icon: Icon, title, subtitle, badge, theme }) {
     );
 }
 
-function RankRow({ entry, isMe, userEmail, below }) {
-    const display = entry.is_anonymous && entry.user_email !== userEmail
-        ? `Anon #${(entry.id || '').slice(-4)}`
-        : (entry.username || entry.user_name || 'Student');
-    const xpDisplay = fmtXP(entry.total_xp || 0);
-    const gapStr = entry.gap > 0
-        ? `+${fmtXP(entry.gap)}`
-        : entry.gap < 0
-            ? `${fmtXP(Math.abs(entry.gap))} below`
-            : 'You';
-
-    const RankIcon = entry.rank === 1 ? Crown : entry.rank === 2 ? Medal : entry.rank === 3 ? Medal : null;
-    const rankIconColor = entry.rank === 1 ? 'text-xp' : entry.rank === 2 ? 'text-muted-foreground' : entry.rank === 3 ? 'text-streak' : '';
-
-    return (
-        <div className={`flex items-center gap-3 p-3 rounded-xl border shadow-soft transition-colors ${
-            isMe
-                ? 'bg-primary/5 border-primary/40'
-                : below
-                    ? 'bg-surface border-border/60 opacity-70'
-                    : 'bg-surface border-border/60 hover:border-xp/30'
-        }`}>
-            <div className={`flex items-center justify-center flex-shrink-0 w-10 ${isMe ? 'text-primary' : 'text-muted-foreground'} font-display font-extrabold text-lg`}>
-                #{entry.rank}
-            </div>
-            <div className={`w-9 h-9 rounded-lg ${avatarColor(display)} text-white flex items-center justify-center font-bold text-sm flex-shrink-0`}>
-                {RankIcon ? <RankIcon className={`w-4 h-4 ${rankIconColor === 'text-muted-foreground' ? 'text-white' : ''}`} /> : initials(display)}
-            </div>
-            <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2">
-                    <p className={`font-bold text-sm truncate ${isMe ? 'text-primary' : 'text-foreground'}`}>
-                        {isMe ? `${display} (you)` : display}
-                    </p>
-                    {entry.streak_days > 0 && (
-                        <span className="inline-flex items-center gap-0.5 text-xs font-bold text-streak flex-shrink-0">
-                            <Flame className="w-3 h-3" /> {entry.streak_days}
-                        </span>
-                    )}
-                </div>
-                <p className="text-xs text-muted-foreground truncate">{xpDisplay} XP</p>
-            </div>
-            {!isMe && entry.gap !== undefined && entry.gap !== 0 && (
-                <span className={`pill flex-shrink-0 ${entry.gap > 0 ? 'bg-xp/15 text-xp' : 'bg-secondary text-muted-foreground'}`}>
-                    <TrendingUp className="w-3 h-3" />
-                    {gapStr}
-                </span>
-            )}
-        </div>
-    );
-}

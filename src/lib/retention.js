@@ -169,7 +169,7 @@ export function retentionOutlook(cards = [], { days = 7, floor = RISK_FLOOR, now
  * say, and never phrased as a measurement of their memory.
  */
 export function retentionSummary(o) {
-    if (!o?.hasData) return "No cards have been reviewed yet — this fills in once you start a deck.";
+    if (!o?.hasData) return "No cards have been reviewed yet. This fills in once you start a deck.";
     if (o.atRisk === 0) {
         return `All ${o.learnedCount} of your cards are still holding. Nothing falls out of reach this week.`;
     }
