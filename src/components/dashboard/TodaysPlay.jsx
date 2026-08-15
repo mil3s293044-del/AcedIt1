@@ -113,7 +113,15 @@ export default function TodaysPlay({
                 </div>
 
                 {/* ── What it says, and the one button ──────────────────── */}
-                <div className="flex-1 min-w-0 flex flex-col justify-center">
+                {/* Capped, and the surplus goes to the gap rather than to the
+                    end of this column. `flex-1` alone gave the copy the whole
+                    remaining track, so on a wide screen the sentence ended
+                    around 600px in and the next seven hundred were blank before
+                    the stats divider — one enormous hole in the middle of the
+                    first thing on the page. A measure this long is unreadable
+                    anyway; text stops being comfortable somewhere around 75
+                    characters and the cap is roughly that. */}
+                <div className="flex-1 min-w-0 max-w-2xl flex flex-col justify-center">
                     <p className="stat-label mb-1.5">Your play</p>
                     <h2 className="font-display font-extrabold text-foreground
                         text-xl lg:text-2xl leading-snug tracking-tight">
@@ -154,7 +162,7 @@ export default function TodaysPlay({
                 </div>
 
                 {/* ── The day's numbers ─────────────────────────────────── */}
-                <div className="lg:w-[212px] flex-shrink-0 lg:border-l lg:border-border/70
+                <div className="lg:w-[212px] flex-shrink-0 lg:ml-auto lg:border-l lg:border-border/70
                     lg:pl-7 pt-5 lg:pt-0 border-t border-border/70 lg:border-t-0
                     flex flex-col justify-center">
                     <div className="flex items-center justify-between mb-2">
