@@ -18,7 +18,7 @@ import PlayingCard from "@/components/cards/PlayingCard";
 
 const ROWS = [
     { label: "Marks against VCAA criteria", tutor: true, acedit: true },
-    { label: "Covers all 34 subjects", tutor: false, acedit: true },
+    { label: "Covers every subject you take", tutor: false, acedit: true },
     { label: "There at 11pm the night before", tutor: false, acedit: true },
     { label: "Tracks what you are forgetting", tutor: false, acedit: true },
     { label: "Knows you personally", tutor: true, acedit: false },

@@ -74,7 +74,7 @@ const SUBJECTS = [
  * aligned" answered nobody's question and could not be checked.
  */
 const STATS = [
-  { num: "34", label: "VCE subjects, every one" },
+  { num: "Every", label: "VCE subject, not just the big ones" },
   { num: "$5", label: "a week, not $90 an hour" },
   { num: "2am", label: "open when you actually study" },
 ];
@@ -277,8 +277,8 @@ export default function Landing() {
           >
             It feels like studying, and the research is brutal about it.
             AcedIt is built on the four techniques that do work, with an AI
-            examiner on top that marks every attempt against real VCAA criteria
-            across all 34 subjects.
+            examiner on top that marks every attempt against real VCAA
+            criteria, in every subject you take.
           </motion.p>
 
           <motion.div
@@ -418,17 +418,28 @@ export default function Landing() {
             transition={{ ...fadeUp.transition, delay: 0.1 }}
             className="font-display font-extrabold text-3xl sm:text-4xl md:text-5xl leading-tight tracking-tight"
           >
-            In 2006 two researchers ran the experiment every student should
-            be shown.
-            <br />
-            <span className="text-[#0D1626]/50">
-              One group reread the material. One group put it away and tested
-              themselves. The rereaders were more confident about how they
-              would do. A week later they remembered far less. Feeling
-              productive and being productive came apart completely, and almost
-              nothing about how VCE is taught has caught up.
-            </span>
+            {/* Short on purpose. This used to spend five sentences narrating
+                a 2006 experiment, which is a story the evidence section below
+                tells properly with the citation attached. Here it only has to
+                land the position, and a position lands in two lines or not at
+                all. */}
+            Rereading does nothing. Letting AI think for you does worse.
           </motion.h2>
+
+          {/* AND THE SUPPORT IS BODY COPY, not more headline. It used to be a
+              muted span inside the h2, which was fine when it was one line and
+              became six lines of grey display type the moment the copy grew.
+              Cutting the words while leaving them at headline size made the
+              block visually LONGER than the thing it replaced. */}
+          <motion.p
+            {...fadeUp}
+            transition={{ ...fadeUp.transition, delay: 0.2 }}
+            className="text-lg sm:text-xl text-[#0D1626]/60 leading-relaxed mt-6 max-w-2xl mx-auto"
+          >
+            Your brain has spent thousands of years learning one way: drag it
+            back out just as you are about to lose it. AcedIt runs that process
+            properly and puts AI on top of it, not in place of it.
+          </motion.p>
         </div>
       </section>
 
@@ -877,7 +888,7 @@ export default function Landing() {
             <div className="grid sm:grid-cols-2 gap-x-6 gap-y-3 mb-8">
               {[
                 "Essays and SACs marked against real VCAA criteria",
-                "All 34 VCE subjects, each with its own tutor",
+                "Every VCE subject, each with its own tutor",
                 "Ace, your study companion, awake whenever you are",
                 "Unlimited quizzes, flashcards & practice",
                 "Active recall, blurting & spaced repetition",
@@ -955,7 +966,7 @@ export default function Landing() {
                 },
                 {
                   q: "Which VCE subjects does it cover?",
-                  a: "All 34. Each one has its own tutor trained on that subject’s examiner reports, so Methods feels like Methods and English feels like English. A single general-purpose chatbot cannot do that, which is the whole reason we built it this way.",
+                  a: "Every one of them, including the small ones. Each subject has its own tutor trained on that subject’s examiner reports, so Methods feels like Methods and Theatre Studies feels like Theatre Studies. A single general-purpose chatbot cannot do that, which is the whole reason we built it this way.",
                 },
                 {
                   q: "How is this different from just using ChatGPT?",
