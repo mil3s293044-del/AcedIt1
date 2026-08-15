@@ -159,6 +159,31 @@
     opacity: 0.6;
   }
 
+  /**
+   * The radar's motion, as three keyframes and no frame loop.
+   *
+   * `radar-sweep` turns the beam. `radar-flare` is the ping: every blip runs it
+   * on the SWEEP's period, delayed by its own bearing, so it lights exactly as
+   * the beam crosses and nothing has to measure where the beam is. `radar-late`
+   * is the separate, slower pulse on anything overdue, which is a state rather
+   * than an event and so is deliberately out of step with the sweep.
+   */
+  @keyframes radar-sweep {
+    from { transform: rotate(0deg); }
+    to   { transform: rotate(360deg); }
+  }
+  @keyframes radar-flare {
+    0%   { opacity: 0; transform: scale(1); }
+    2%   { opacity: 0.85; transform: scale(2.4); }
+    14%  { opacity: 0; transform: scale(3.1); }
+    100% { opacity: 0; transform: scale(1); }
+  }
+  @keyframes radar-late {
+    0%   { opacity: 0.75; transform: scale(0.85); }
+    70%  { opacity: 0; transform: scale(1.5); }
+    100% { opacity: 0; transform: scale(1.5); }
+  }
+
   /* Soft card: rounded, layered shadow, subtle border. Use as a default. */
   .card-soft {
     @apply bg-surface rounded-2xl border border-border;
