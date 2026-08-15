@@ -3,13 +3,22 @@
 //
 // Flow: Landing → /onboarding (this) → Google OAuth → Dashboard (personalised)
 //
-// 6 steps, ~60 seconds:
-//   1. Year level          ← six cards dealt on a table
-//   2. Subjects
-//   3. ATAR target (optional)
-//   4. Course / uni (optional)
-//   5. The reveal          ← the hand fans out, plan derived from the answers
+// 6 steps, ~90 seconds:
+//   1. Year level          ← six cards dealt on a table, pays out weeks left
+//   2. Subjects            ← pays out their VTAC scaling report
+//   3. The brain           ← asks nothing; the evidence, interactive
+//   4. Target              ← ATAR ace and course, merged, pays out the band
+//   5. The reveal          ← the hand fans out, plus the cost gap over a year
 //   6. Sign in → trial / free
+//
+// EVERY QUESTION PAYS OUT. Four of six screens used to take and give nothing
+// back, which is what makes a flow feel like a form however good it looks, and
+// it meant the entire persuasive load sat on one screen at the end where it
+// read as a pitch. Each answer now returns one true, checkable fact derived
+// from that answer: the weeks left before exams, the official scaling numbers
+// for exactly the subjects picked, the band a target falls in. None of it is a
+// claim about AcedIt, and that is why it works — a student who learns
+// something true at step two believes the graph at step five.
 //
 // IT IS A DEAL, NOT A FORM. Every answer puts a card in a hand held at the
 // bottom of the screen (HandOfAnswers), and that hand IS the progress
@@ -51,6 +60,10 @@ import HandOfAnswers from "@/components/onboarding/wizard/HandOfAnswers";
 import YearCards from "@/components/onboarding/wizard/YearCards";
 import AtarCut, { formatAtar } from "@/components/onboarding/wizard/AtarCut";
 import TheReveal from "@/components/onboarding/wizard/TheReveal";
+import TheBrain from "@/components/onboarding/wizard/TheBrain";
+import ScalingReport from "@/components/onboarding/wizard/ScalingReport";
+import Payout, { weeksUntilExams } from "@/components/onboarding/wizard/Payout";
+import { atarBandOf } from "@/lib/atarBands";
 
 const TOTAL_STEPS = 6;
 const STORAGE_KEY = "acedit_onboarding_v1";
@@ -234,8 +247,8 @@ export default function Onboarding() {
                     >
                         {step === 1 && <Step1Year answers={answers} update={update} onNext={goNext} />}
                         {step === 2 && <Step2Subjects answers={answers} update={update} onNext={goNext} canContinue={canContinueByStep[2]} />}
-                        {step === 3 && <Step3Atar answers={answers} update={update} onNext={goNext} />}
-                        {step === 4 && <Step4Course answers={answers} update={update} onNext={goNext} />}
+                        {step === 3 && <Step3Brain onNext={goNext} />}
+                        {step === 4 && <Step4Target answers={answers} update={update} onNext={goNext} />}
                         {step === 5 && <Step5Reveal answers={answers} onNext={goNext} />}
                         {step === 6 && <Step6Signin answers={answers} update={update} />}
                     </motion.div>
@@ -343,16 +356,41 @@ function SkipLink({ onClick }) {
 // its flight into the hand, and short enough that nobody taps twice. Advancing
 // on the same frame as the tap would deal a card the student never sees.
 function Step1Year({ answers, update, onNext }) {
+    // The pick no longer auto-advances. It used to, on a 340ms timer, and that
+    // was right when the screen had nothing to say back; now it pays out a
+    // fact and jumping to the next question would show it for a third of a
+    // second. Advancing is the student's move once they have read it.
+    const picked = !!answers.yearLevel;
+    const { weeks, label } = picked
+        ? weeksUntilExams(answers.yearLevel)
+        : { weeks: 0, label: "" };
+
     return (
         <StepShell
-            eyebrow="The deal · 1 of 4"
+            eyebrow="The deal · 1 of 3"
             title="What year are you in?"
             subtitle="Pick a card. This one sets the level everything is written at."
+            footer={picked ? (
+                <PrimaryCTA onClick={onNext}>
+                    Continue <ArrowRight className="w-4 h-4 ml-1" />
+                </PrimaryCTA>
+            ) : null}
         >
             <YearCards
                 value={answers.yearLevel}
-                onPick={(v) => { update({ yearLevel: v }); setTimeout(onNext, 340); }}
+                onPick={(v) => update({ yearLevel: v })}
             />
+
+            <Payout show={picked}>
+                <p className="font-display font-extrabold text-foreground text-lg leading-snug">
+                    <span className="text-primary tabular-nums">{weeks} weeks</span> {label}.
+                </p>
+                <p className="text-[13px] text-muted-foreground mt-1.5 leading-relaxed">
+                    That is the whole resource. Spacing only works if there are gaps left to
+                    put reviews in, which is why the first thing AcedIt does with a topic is
+                    work out when to come back to it, not how long to sit on it today.
+                </p>
+            </Payout>
         </StepShell>
     );
 }
@@ -563,70 +601,111 @@ function Step2Subjects({ answers, update, onNext, canContinue }) {
                 className="pointer-events-none absolute inset-x-0 bottom-0 h-8
                     bg-gradient-to-t from-background to-transparent" />
             </div>
+
+            {/* The payout. The VTAC scaling report, filtered to exactly this
+                line-up. Nothing on it is a claim about AcedIt, which is the
+                point: a student who learns something true here believes the
+                graphs three screens later. */}
+            {answers.subjects.length > 0 && (
+                <div className="mt-5">
+                    <ScalingReport subjects={answers.subjects} />
+                </div>
+            )}
         </StepShell>
     );
 }
 
-// ═══ STEP 3 — ATAR target ═══════════════════════════════════════════════════
-function Step3Atar({ answers, update, onNext }) {
-    const value = answers.goalAtar ?? 85;
+// ═══ STEP 3 — The brain ═════════════════════════════════════════════════════
+// The one screen that asks for nothing. See TheBrain for why it is here and
+// why it sits in the middle of the flow rather than on the marketing page
+// where it used to live alone.
+function Step3Brain({ onNext }) {
     return (
         <StepShell
-            eyebrow="The deal · 3 of 4"
+            eyebrow="Why any of this works"
+            title="Your brain already has a method"
+            subtitle="Four techniques, the evidence behind each one, and what they feel like. Pick one to look at."
+            footer={
+                <PrimaryCTA onClick={onNext}>
+                    Makes sense <ArrowRight className="w-4 h-4 ml-1" />
+                </PrimaryCTA>
+            }
+        >
+            <TheBrain />
+        </StepShell>
+    );
+}
+
+// ═══ STEP 4 — Target: ATAR and course ═══════════════════════════════════════
+// Two screens merged. Both were optional, both were one field's worth of
+// thinking, and splitting them meant a student who wanted to skip had to skip
+// twice. They are the same question — what are you aiming at — so they are one
+// screen with one skip.
+function Step4Target({ answers, update, onNext }) {
+    const value = answers.goalAtar ?? 85;
+    const band = atarBandOf(value);
+
+    const commit = () => { update({ goalAtar: value }); onNext(); };
+    const skip = () => {
+        update({ goalAtar: null, goalCourseName: "", goalUniversity: "" });
+        onNext();
+    };
+
+    return (
+        <StepShell
+            eyebrow="The deal · 3 of 3"
             title="What are you playing for?"
-            subtitle="Plant a flag. You can move it any time."
+            subtitle="Plant a flag. You can move it whenever you want."
             footer={
                 <div className="space-y-2">
-                    <PrimaryCTA onClick={() => { update({ goalAtar: value }); onNext(); }}>
+                    <PrimaryCTA onClick={commit}>
                         Continue <ArrowRight className="w-4 h-4 ml-1" />
                     </PrimaryCTA>
-                    <SkipLink onClick={() => { update({ goalAtar: null }); onNext(); }} />
+                    <SkipLink onClick={skip} />
                 </div>
             }
         >
             <AtarCut value={value} onChange={(v) => update({ goalAtar: v })} />
-        </StepShell>
-    );
-}
 
-// ═══ STEP 4 — Course / uni ══════════════════════════════════════════════════
-function Step4Course({ answers, update, onNext }) {
-    return (
-        <StepShell
-            eyebrow="The deal · 4 of 4"
-            title="Got a dream course?"
-            subtitle="Optional. It goes on the last card, and on your dashboard."
-            footer={
-                <div className="space-y-2">
-                    <PrimaryCTA onClick={onNext}>
-                        Continue <ArrowRight className="w-4 h-4 ml-1" />
-                    </PrimaryCTA>
-                    <SkipLink onClick={() => { update({ goalCourseName: "", goalUniversity: "" }); onNext(); }} />
-                </div>
-            }
-        >
-            <div className="card-soft p-6 space-y-5">
-                <div className="space-y-2">
-                    <label className="text-sm font-bold text-foreground flex items-center gap-2">
-                        <BookOpen className="w-4 h-4 text-primary" /> Course
-                    </label>
-                    <Input
-                        value={answers.goalCourseName}
-                        onChange={(e) => update({ goalCourseName: e.target.value })}
-                        placeholder="e.g. Bachelor of Commerce"
-                        className="h-11"
-                    />
-                </div>
-                <div className="space-y-2">
-                    <label className="text-sm font-bold text-foreground flex items-center gap-2">
-                        <MapPin className="w-4 h-4 text-primary" /> University
-                    </label>
-                    <Input
-                        value={answers.goalUniversity}
-                        onChange={(e) => update({ goalUniversity: e.target.value })}
-                        placeholder="e.g. University of Melbourne"
-                        className="h-11"
-                    />
+            <Payout show delay={0.25}>
+                <p className="font-display font-extrabold text-foreground text-lg leading-snug">
+                    That is <span className="text-primary">{band}</span> on the AcedIt ladder.
+                </p>
+                <p className="text-[13px] text-muted-foreground mt-1.5 leading-relaxed">
+                    The same words your dashboard will use, so the target you set here is a
+                    thing inside the product rather than a number in a form. It moves as your
+                    marks move, in both directions, because a target that only ever goes up is
+                    not measuring anything.
+                </p>
+            </Payout>
+
+            {/* The course, folded in. Optional, quiet, and clearly secondary to
+                the card above it. */}
+            <div className="card-soft p-5 mt-5 space-y-4">
+                <p className="stat-label text-muted-foreground">And where it is pointed</p>
+                <div className="grid sm:grid-cols-2 gap-4">
+                    <div className="space-y-1.5">
+                        <label className="text-xs font-bold text-foreground flex items-center gap-1.5">
+                            <BookOpen className="w-3.5 h-3.5 text-primary" /> Course
+                        </label>
+                        <Input
+                            value={answers.goalCourseName}
+                            onChange={(e) => update({ goalCourseName: e.target.value })}
+                            placeholder="e.g. Bachelor of Commerce"
+                            className="h-11"
+                        />
+                    </div>
+                    <div className="space-y-1.5">
+                        <label className="text-xs font-bold text-foreground flex items-center gap-1.5">
+                            <MapPin className="w-3.5 h-3.5 text-primary" /> University
+                        </label>
+                        <Input
+                            value={answers.goalUniversity}
+                            onChange={(e) => update({ goalUniversity: e.target.value })}
+                            placeholder="e.g. University of Melbourne"
+                            className="h-11"
+                        />
+                    </div>
                 </div>
             </div>
         </StepShell>
