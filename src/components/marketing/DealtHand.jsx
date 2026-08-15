@@ -337,16 +337,29 @@ export default function DealtHand({ className = "" }) {
                                         className="absolute inset-0 rounded-[0.9rem] overflow-hidden pointer-events-none">
                                         <motion.span
                                             className="absolute top-[-40%] h-[180%] w-[45%] -skew-x-12"
-                                            style={{
-                                                background: "linear-gradient(90deg, transparent, rgba(255,255,255,0.75), transparent)",
-                                            }}
-                                            /* TRANSFORM, NOT `left`. Animating
+                                            /* ONE style prop, and it has to be
+                                               one: there were two, JSX keeps
+                                               the last, so the gradient was
+                                               being thrown away and the sheen
+                                               swept a fully transparent box
+                                               across the card. Found by
+                                               esbuild's duplicate-attribute
+                                               warning rather than by looking,
+                                               which is the point — an
+                                               animation that draws nothing
+                                               looks exactly like one that has
+                                               not started yet.
+
+                                               TRANSFORM, NOT `left`. Animating
                                                `left` is a layout property, so
                                                every frame of the sweep forced
                                                a reflow, on five cards at once,
                                                for a decorative highlight. */
                                             initial={false}
-                                            style={{ left: 0 }}
+                                            style={{
+                                                left: 0,
+                                                background: "linear-gradient(90deg, transparent, rgba(255,255,255,0.75), transparent)",
+                                            }}
                                             animate={{ x: sheen ? "300%" : "-140%" }}
                                             transition={sheen
                                                 ? { duration: SHEEN_MS / 1000, ease: "easeInOut", delay: i * 0.06 }

@@ -445,7 +445,7 @@ export const AuthProvider = ({ children }) => {
   };
 
   // ─── Email + password helpers (Supabase-only) ───────────────────────────
-  // These power the /login, /onboarding (Step 8 email path), /forgot-password
+  // These power the /login, /onboarding (sign-in step, email path), /forgot-password
   // and /reset-password pages. They never touch the Base44 fallback path.
 
   const signUpWithPassword = async ({ email, password, fullName }) => {
