@@ -3,15 +3,29 @@
 //
 // Flow: Landing → /onboarding (this) → Google OAuth → Dashboard (personalised)
 //
-// 8 steps, ~90 seconds:
-//   1. Year level
+// 6 steps, ~60 seconds:
+//   1. Year level          ← six cards dealt on a table
 //   2. Subjects
 //   3. ATAR target (optional)
 //   4. Course / uni (optional)
-//   5. Personalised plan reveal      ← marketing
-//   6. Cost comparison               ← marketing
-//   7. Premium value stack           ← marketing
-//   8. Sign in → trial / free
+//   5. The reveal          ← the hand fans out, plan derived from the answers
+//   6. Sign in → trial / free
+//
+// IT IS A DEAL, NOT A FORM. Every answer puts a card in a hand held at the
+// bottom of the screen (HandOfAnswers), and that hand IS the progress
+// indicator: it grows as you go, and it shows what you said rather than how
+// many screens are left. The landing page ends with several hundred cards
+// forming a brain, and the flow immediately after it used to be a grey
+// questionnaire with a segmented bar, which threw all of that away at the door.
+//
+// WHY SIX AND NOT EIGHT. Steps 5, 6 and 7 used to be three consecutive selling
+// screens: plan reveal, price bars, feature stack. The landing page now anchors
+// the price against a private tutor and prints the free/premium split in full,
+// so two of the three were repeating a page the reader had just finished, and
+// the third listed four bullets identical for every student who ever saw it.
+// They collapse into one reveal built out of the actual answers. The tutor
+// anchor moves to the sign-in step, where the decision is being made rather
+// than two screens before it.
 //
 // Wizard answers are saved to localStorage on every change. After Google
 // OAuth completes, AuthContext reads them back and writes to user_profile
@@ -19,13 +33,13 @@
 // ════════════════════════════════════════════════════════════════════════════
 
 import React, { useState, useEffect, useMemo } from "react";
+import { createPortal } from "react-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { useNavigate } from "react-router-dom";
 import { Link } from "react-router-dom";
 import {
     ChevronLeft, ArrowRight, Check, X, Search, Plus,
-    GraduationCap, BookOpen, MapPin, Sparkles, Crown,
-    Brain, Layers, Map as MapIcon, Info,
+    BookOpen, MapPin, Crown, Info,
     Mail,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -33,19 +47,16 @@ import { Input } from "@/components/ui/input";
 import { VCE_SUBJECTS } from "@/data/vceSubjects";
 import { supabase } from "@/api/supabaseClient";
 import { useAuth } from "@/lib/AuthContext";
-import { TOOL_COUNT } from "@/components/ai_tools/chatTools";
+import HandOfAnswers from "@/components/onboarding/wizard/HandOfAnswers";
+import YearCards from "@/components/onboarding/wizard/YearCards";
+import AtarCut, { formatAtar } from "@/components/onboarding/wizard/AtarCut";
+import TheReveal from "@/components/onboarding/wizard/TheReveal";
 
-const TOTAL_STEPS = 8;
+const TOTAL_STEPS = 6;
 const STORAGE_KEY = "acedit_onboarding_v1";
 
-const YEAR_LEVELS = [
-    { value: "Year 7",            label: "Year 7",   sub: "Junior secondary" },
-    { value: "Year 8",            label: "Year 8",   sub: "Junior secondary" },
-    { value: "Year 9",            label: "Year 9",   sub: "Junior secondary" },
-    { value: "Year 10",           label: "Year 10",  sub: "Senior foundation" },
-    { value: "Year 11 Units 1&2", label: "Year 11",  sub: "VCE Units 1 & 2" },
-    { value: "Year 12 Units 3&4", label: "Year 12",  sub: "VCE Units 3 & 4 — counts toward ATAR" },
-];
+/** The step that shows the hand spread out in the content itself. */
+const REVEAL_STEP = 5;
 
 // Younger years (Year 7-10) won't see most of their subjects in the VCE catalog.
 // We show a hint nudging them toward the custom-subject flow.
@@ -53,14 +64,47 @@ function isPreVceYear(yearLevel) {
     return yearLevel && (yearLevel.startsWith("Year 7") || yearLevel.startsWith("Year 8") || yearLevel.startsWith("Year 9"));
 }
 
-// Pricing snapshot (AUD per week) — verifiable industry numbers as of 2026.
-// All sources documented in the marketing copy of step 6.
-const PRICING = {
-    tutor:      { label: "Private VCE tutor",  weekly: 80,  note: "1 hour per week, Melbourne median" },
-    edroloOne:  { label: "Edrolo (per subject)",weekly: 6,  note: "≈ $300/year per subject" },
-    chatgpt:    { label: "ChatGPT Plus",       weekly: 7,  note: "USD $20/month, not VCE-specific" },
-    acedit:     { label: "AcedIt Premium",     weekly: 5,  note: "All AI tools, every subject" },
-};
+// The one price comparison that survives, and it lives on the sign-in screen
+// now rather than on a screen of its own. A Melbourne VCE tutor is $80 to $90
+// an hour; the number is stated as the anchor it is, next to the plan picker,
+// at the moment someone is choosing.
+const TUTOR_HOURLY = 90;
+const ACEDIT_WEEKLY = 5;
+
+/**
+ * Where a step's actions get rendered.
+ *
+ * The six steps each declare their own footer, which is right: only the step
+ * knows whether it needs a skip link or a selection count. But the footer has
+ * to come out inside the pinned bottom bar, which the page owns. A context
+ * carrying the bar's DOM node lets StepShell portal into it without any of the
+ * steps knowing that is what is happening, and without threading a render prop
+ * through all six of them.
+ *
+ * It holds the element rather than a ref object on purpose: a ref does not
+ * cause a re-render when it is populated, so on the first paint the portal
+ * target would still be null and the first step would ship with no button.
+ */
+const ActionsSlot = React.createContext(null);
+
+/**
+ * Height of the pinned bar, so the content above it can leave exactly that
+ * much room. Watched rather than measured once, because the bar's contents
+ * change on every step and the hand grows a row taller the first time a card
+ * lands in it.
+ */
+function useBarHeight(node) {
+    const [h, setH] = useState(140);
+    useEffect(() => {
+        if (!node) return undefined;
+        const ro = new ResizeObserver(([e]) => {
+            setH(Math.ceil(e.contentRect.height));
+        });
+        ro.observe(node);
+        return () => ro.disconnect();
+    }, [node]);
+    return h;
+}
 
 // ─── Wizard state ────────────────────────────────────────────────────────────
 const DEFAULT_ANSWERS = {
@@ -69,7 +113,7 @@ const DEFAULT_ANSWERS = {
     goalAtar:        null,
     goalCourseName:  "",
     goalUniversity:  "",
-    intent:          null,       // "premium" | "free" — set on step 8
+    intent:          null,       // "premium" | "free" — set on the sign-in step
     completedAt:     null,
     email:           null,       // set on email+password path only — used as
                                  // the AuthContext email-match guard so the
@@ -96,6 +140,12 @@ function saveAnswers(answers) {
 export default function Onboarding() {
     const [step, setStep] = useState(1);
     const [answers, setAnswers] = useState(() => loadAnswers());
+    // Both are callback-ref state rather than refs: a ref does not re-render
+    // when it is populated, so the portal target and the measured height would
+    // both still be their initial values on the paint that matters.
+    const [actionsEl, setActionsEl] = useState(null);
+    const [barEl, setBarEl] = useState(null);
+    const barH = useBarHeight(barEl);
     const navigate = useNavigate();
 
     // Persist on every change.
@@ -121,31 +171,43 @@ export default function Onboarding() {
         3: true,
         4: true,
         5: true,
-        6: true,
-        7: true,
-        8: !!answers.intent,
+        6: !!answers.intent,
     };
+
+    // The hand is spread out inside the reveal itself. Holding a second copy
+    // of it in the rail at the same time would be two of the same object on
+    // one screen, which reads as a bug rather than as a flourish.
+    const railVisible = step !== REVEAL_STEP;
 
     return (
         <div className="min-h-screen bg-background flex flex-col">
-            {/* Progress strip */}
-            <header className="sticky top-0 z-10 bg-background/95 backdrop-blur border-b border-border/60">
+        <ActionsSlot.Provider value={actionsEl}>
+            {/* Progress. Card pips rather than a segmented bar: same
+                information, and it belongs to the same object as everything
+                else on the screen. */}
+            <header className="sticky top-0 z-20 bg-background/95 backdrop-blur border-b border-border/60">
                 <div className="max-w-2xl mx-auto px-4 lg:px-6 py-3 flex items-center gap-3">
                     {step > 1 && (
                         <button
                             type="button"
                             onClick={goBack}
-                            className="w-9 h-9 rounded-full flex items-center justify-center hover:bg-muted transition-colors text-muted-foreground"
+                            className="w-9 h-9 -ml-2 rounded-full flex items-center justify-center hover:bg-muted transition-colors text-muted-foreground"
                             aria-label="Back"
                         >
                             <ChevronLeft className="w-5 h-5" />
                         </button>
                     )}
-                    <div className="flex-1 flex items-center gap-1">
+                    <div className="flex-1 flex items-center gap-1.5"
+                        role="progressbar" aria-valuenow={step} aria-valuemin={1} aria-valuemax={TOTAL_STEPS}
+                        aria-label={`Step ${step} of ${TOTAL_STEPS}`}>
                         {Array.from({ length: TOTAL_STEPS }, (_, i) => i + 1).map((n) => (
-                            <div
+                            <span
                                 key={n}
-                                className={`h-1 flex-1 rounded-full transition-colors ${n <= step ? "bg-primary" : "bg-muted"}`}
+                                aria-hidden="true"
+                                className={`h-[18px] w-[13px] rounded-[3px] border transition-colors duration-300 ${
+                                    n < step  ? "bg-primary border-primary"
+                                  : n === step ? "bg-primary/20 border-primary"
+                                  :              "bg-muted border-border"}`}
                             />
                         ))}
                     </div>
@@ -153,8 +215,14 @@ export default function Onboarding() {
                 </div>
             </header>
 
-            {/* Step content */}
-            <main className="flex-1 flex flex-col">
+            {/* Step content. The bottom padding is measured off the bar rather
+                than hard-coded, because the bar's height changes per step: the
+                subjects step carries a count row above its button, two steps
+                carry a skip link below theirs, and the sign-in step has no
+                actions at all. A fixed number would clear the tallest and
+                leave a hole under the rest. */}
+            <main className="flex-1 flex flex-col"
+                style={{ paddingBottom: barH + 16 }}>
                 <AnimatePresence mode="wait">
                     <motion.div
                         key={step}
@@ -168,19 +236,63 @@ export default function Onboarding() {
                         {step === 2 && <Step2Subjects answers={answers} update={update} onNext={goNext} canContinue={canContinueByStep[2]} />}
                         {step === 3 && <Step3Atar answers={answers} update={update} onNext={goNext} />}
                         {step === 4 && <Step4Course answers={answers} update={update} onNext={goNext} />}
-                        {step === 5 && <Step5PlanReveal answers={answers} onNext={goNext} />}
-                        {step === 6 && <Step6Comparison answers={answers} onNext={goNext} />}
-                        {step === 7 && <Step7Premium onNext={goNext} />}
-                        {step === 8 && <Step8Signin answers={answers} update={update} />}
+                        {step === 5 && <Step5Reveal answers={answers} onNext={goNext} />}
+                        {step === 6 && <Step6Signin answers={answers} update={update} />}
                     </motion.div>
                 </AnimatePresence>
             </main>
+
+            {/* The bottom bar: the step's actions, and the hand under them.
+                THE ACTIONS LIVE HERE AND NOT IN THE PAGE FLOW, and that is a
+                bug fix rather than a preference. With the hand fixed and the
+                button in flow, any scroll position where the button had not
+                yet reached the bottom of the document put it underneath the
+                cards: on a 390px phone the primary call to action of the
+                subjects step was behind the hand at first paint. Pinning them
+                together is the only arrangement where that cannot happen, and
+                it has the side effect that the button is always reachable
+                without scrolling.
+
+                Pointer events are off on the bar and back on for the actions,
+                so the cards can never eat a tap meant for the button. */}
+            <div ref={setBarEl} className="fixed inset-x-0 bottom-0 z-10 pointer-events-none">
+                {/* A short fade into a SOLID bar, rather than a tall gradient
+                    over everything. A gradient alone left the subjects step's
+                    count row sitting on top of the still-visible tiles behind
+                    it, which reads as two layers of the page fighting. */}
+                <span aria-hidden="true"
+                    className="block h-7 bg-gradient-to-t from-background to-transparent" />
+                <div className="bg-background pb-2">
+                <div className="max-w-2xl mx-auto px-4 lg:px-6">
+                    <div ref={setActionsEl} className="pointer-events-auto empty:hidden pt-1 mb-2" />
+                    <AnimatePresence>
+                        {railVisible && (
+                            <motion.div
+                                initial={{ opacity: 0, y: 30 }}
+                                animate={{ opacity: 1, y: 0 }}
+                                exit={{ opacity: 0, y: 30 }}
+                                transition={{ duration: 0.3 }}
+                            >
+                                <HandOfAnswers answers={answers} />
+                            </motion.div>
+                        )}
+                    </AnimatePresence>
+                </div>
+                </div>
+            </div>
+        </ActionsSlot.Provider>
         </div>
     );
 }
 
 // ─── Shared layout helpers ───────────────────────────────────────────────────
+// The footer goes to the pinned bar at the bottom of the page, not into the
+// flow under the content. See the note on the bar itself for why. Steps
+// declare it exactly as they did before; the move is invisible to all six.
+// Until the slot exists (the very first paint, before the bar has mounted) the
+// footer renders in place, so a step is never briefly button-less.
 function StepShell({ eyebrow, title, subtitle, children, footer }) {
+    const slot = React.useContext(ActionsSlot);
     return (
         <div className="flex-1 flex flex-col w-full max-w-2xl mx-auto px-4 lg:px-6 py-8 lg:py-12">
             <div className="mb-6 lg:mb-8">
@@ -195,7 +307,9 @@ function StepShell({ eyebrow, title, subtitle, children, footer }) {
                 )}
             </div>
             <div className="flex-1">{children}</div>
-            {footer && <div className="mt-6 lg:mt-8">{footer}</div>}
+            {footer && (slot
+                ? createPortal(footer, slot)
+                : <div className="mt-6 lg:mt-8">{footer}</div>)}
         </div>
     );
 }
@@ -224,35 +338,21 @@ function SkipLink({ onClick }) {
 }
 
 // ═══ STEP 1 — Year level ════════════════════════════════════════════════════
+// The pause before advancing is deliberate and is tuned to the card, not to a
+// round number: 340ms is long enough to watch the pick take its ring and start
+// its flight into the hand, and short enough that nobody taps twice. Advancing
+// on the same frame as the tap would deal a card the student never sees.
 function Step1Year({ answers, update, onNext }) {
     return (
         <StepShell
-            eyebrow="About you · 1 of 4"
+            eyebrow="The deal · 1 of 4"
             title="What year are you in?"
-            subtitle="This shapes the recommendations you'll get."
+            subtitle="Pick a card. This one sets the level everything is written at."
         >
-            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                {YEAR_LEVELS.map((yl) => {
-                    const selected = answers.yearLevel === yl.value;
-                    return (
-                        <button
-                            key={yl.value}
-                            onClick={() => { update({ yearLevel: yl.value }); setTimeout(onNext, 200); }}
-                            className={`text-left p-4 sm:p-5 rounded-2xl border shadow-soft transition-all ${
-                                selected
-                                    ? "bg-primary/10 border-primary/40 ring-2 ring-primary/40"
-                                    : "bg-surface border-border/60 hover:border-primary/30"
-                            }`}
-                        >
-                            <div className="w-9 h-9 rounded-xl bg-primary/10 border border-primary/15 flex items-center justify-center mb-3">
-                                <GraduationCap className="w-4 h-4 text-primary" strokeWidth={2.5} />
-                            </div>
-                            <p className="font-display font-extrabold text-foreground text-base sm:text-lg">{yl.label}</p>
-                            <p className="text-[11px] sm:text-xs text-muted-foreground mt-1 leading-snug">{yl.sub}</p>
-                        </button>
-                    );
-                })}
-            </div>
+            <YearCards
+                value={answers.yearLevel}
+                onPick={(v) => { update({ yearLevel: v }); setTimeout(onNext, 340); }}
+            />
         </StepShell>
     );
 }
@@ -305,9 +405,9 @@ function Step2Subjects({ answers, update, onNext, canContinue }) {
 
     return (
         <StepShell
-            eyebrow="About you · 2 of 4"
+            eyebrow="The deal · 2 of 4"
             title="What subjects are you taking?"
-            subtitle="Pick what you study. You can change these later."
+            subtitle="Each one becomes a card. The suit is the subject, and it keeps it forever."
             footer={
                 <div className="space-y-3">
                     <div className="flex items-center justify-between text-sm">
@@ -348,7 +448,11 @@ function Step2Subjects({ answers, update, onNext, canContinue }) {
                 <Input
                     value={query}
                     onChange={(e) => setQuery(e.target.value)}
-                    placeholder={`Search ${VCE_SUBJECTS.length} VCE subjects…`}
+                    // Not a subject count. AcedIt works on anything you can
+                    // write a question about, and printing the length of the
+                    // VCE catalogue here reads as the ceiling rather than as
+                    // the contents of this one search box.
+                    placeholder="Search subjects, or add your own…"
                     className="pl-9 h-11"
                 />
             </div>
@@ -411,7 +515,12 @@ function Step2Subjects({ answers, update, onNext, canContinue }) {
                 </div>
             )}
 
-            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 max-h-[340px] overflow-y-auto pr-1">
+            {/* The catalogue scrolls, and the cut has to look deliberate. Left
+                to a hard edge it lands mid-row on a row of white tiles and
+                reads as content that failed to render rather than as a list
+                with more below it. */}
+            <div className="relative">
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 max-h-[340px] overflow-y-auto pr-1 pb-4">
                 {/* "Add your own" tile sits first so it's discoverable */}
                 {!showCustomForm && (
                     <button
@@ -450,6 +559,10 @@ function Step2Subjects({ answers, update, onNext, canContinue }) {
                     </p>
                 )}
             </div>
+            <span aria-hidden="true"
+                className="pointer-events-none absolute inset-x-0 bottom-0 h-8
+                    bg-gradient-to-t from-background to-transparent" />
+            </div>
         </StepShell>
     );
 }
@@ -459,39 +572,19 @@ function Step3Atar({ answers, update, onNext }) {
     const value = answers.goalAtar ?? 85;
     return (
         <StepShell
-            eyebrow="About you · 3 of 4"
-            title="What ATAR are you aiming for?"
-            subtitle="Plant a flag. You can change it any time."
+            eyebrow="The deal · 3 of 4"
+            title="What are you playing for?"
+            subtitle="Plant a flag. You can move it any time."
             footer={
                 <div className="space-y-2">
-                    <PrimaryCTA onClick={onNext}>
+                    <PrimaryCTA onClick={() => { update({ goalAtar: value }); onNext(); }}>
                         Continue <ArrowRight className="w-4 h-4 ml-1" />
                     </PrimaryCTA>
                     <SkipLink onClick={() => { update({ goalAtar: null }); onNext(); }} />
                 </div>
             }
         >
-            <div className="card-soft p-6 lg:p-8 text-center">
-                <p className="stat-label text-primary/80 mb-2">My target</p>
-                <div className="font-display font-extrabold text-primary leading-none mb-6"
-                     style={{ fontSize: 'clamp(4rem, 14vw, 7rem)' }}>
-                    {value.toFixed(value % 1 === 0 ? 0 : 2)}
-                </div>
-                <input
-                    type="range"
-                    min={50}
-                    max={99.95}
-                    step={0.05}
-                    value={value}
-                    onChange={(e) => update({ goalAtar: parseFloat(e.target.value) })}
-                    className="w-full accent-primary"
-                />
-                <div className="flex justify-between text-xs text-muted-foreground font-semibold mt-2">
-                    <span>50</span>
-                    <span>75</span>
-                    <span>99.95</span>
-                </div>
-            </div>
+            <AtarCut value={value} onChange={(v) => update({ goalAtar: v })} />
         </StepShell>
     );
 }
@@ -500,9 +593,9 @@ function Step3Atar({ answers, update, onNext }) {
 function Step4Course({ answers, update, onNext }) {
     return (
         <StepShell
-            eyebrow="About you · 4 of 4"
+            eyebrow="The deal · 4 of 4"
             title="Got a dream course?"
-            subtitle="Optional — just plants a flag on your dashboard."
+            subtitle="Optional. It goes on the last card, and on your dashboard."
             footer={
                 <div className="space-y-2">
                     <PrimaryCTA onClick={onNext}>
@@ -540,203 +633,50 @@ function Step4Course({ answers, update, onNext }) {
     );
 }
 
-// ═══ STEP 5 — Personalised plan reveal ══════════════════════════════════════
-function Step5PlanReveal({ answers, onNext }) {
+// ═══ STEP 5 — The reveal ════════════════════════════════════════════════════
+// Was three screens: plan reveal, price comparison, premium value stack. See
+// the note at the top of the file for why they are one, and TheReveal's own
+// header for what it actually shows.
+function Step5Reveal({ answers, onNext }) {
     const subjectsCount = answers.subjects.length;
     const personalLine = [
-        answers.yearLevel || "VCE",
+        answers.yearLevel ? answers.yearLevel.replace(/ Units.*$/, "") : "VCE",
         `${subjectsCount} subject${subjectsCount === 1 ? "" : "s"}`,
-        answers.goalAtar ? `ATAR ${answers.goalAtar.toFixed(answers.goalAtar % 1 === 0 ? 0 : 2)}` : null,
-        answers.goalCourseName ? `${answers.goalCourseName}${answers.goalUniversity ? ` at ${answers.goalUniversity}` : ""}` : null,
+        answers.goalAtar ? `ATAR ${formatAtar(answers.goalAtar)}` : null,
+        answers.goalCourseName || null,
     ].filter(Boolean).join(" · ");
-
-    const planItems = [
-        { Icon: Brain,         text: `Daily AI quizzes tailored to your ${subjectsCount > 0 ? subjectsCount : ""} subject${subjectsCount === 1 ? "" : "s"}`.replace("  ", " ").trim() },
-        { Icon: Layers,        text: "AI quiz marking with VCAA-aligned feedback" },
-        { Icon: MapIcon,       text: answers.goalAtar ? `Personalised plan to ATAR ${answers.goalAtar.toFixed(answers.goalAtar % 1 === 0 ? 0 : 2)}` : "Personalised plan to your target" },
-        { Icon: Sparkles,      text: `All ${TOOL_COUNT} AI study tools (Essay Planner, Math Tutor, Concept Explainer, more)` },
-    ];
 
     return (
         <StepShell
-            eyebrow="Your plan is ready"
-            title="Your AcedIt plan, ready to go"
+            eyebrow="Your hand"
+            title="This is what you are holding"
             subtitle={personalLine}
             footer={
                 <PrimaryCTA onClick={onNext}>
-                    See what's included <ArrowRight className="w-4 h-4 ml-1" />
+                    Keep this hand <ArrowRight className="w-4 h-4 ml-1" />
                 </PrimaryCTA>
             }
         >
-            <div className="card-soft p-6 lg:p-7 space-y-3">
-                {planItems.map((item, i) => (
-                    <motion.div
-                        key={i}
-                        initial={{ opacity: 0, y: 8 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        transition={{ delay: 0.1 + i * 0.08 }}
-                        className="flex items-start gap-3"
-                    >
-                        <div className="w-10 h-10 rounded-xl bg-primary/10 border border-primary/15 flex items-center justify-center flex-shrink-0">
-                            <item.Icon className="w-5 h-5 text-primary" strokeWidth={2.5} />
-                        </div>
-                        <p className="text-foreground text-sm lg:text-base leading-snug mt-1.5 font-medium">
-                            {item.text}
-                        </p>
-                    </motion.div>
-                ))}
-            </div>
+            <TheReveal answers={answers} />
         </StepShell>
     );
 }
-
-// ═══ STEP 6 — Cost comparison ═══════════════════════════════════════════════
-function Step6Comparison({ answers, onNext }) {
-    const subjectsCount = Math.max(1, answers.subjects.length);
-    const edroloTotal = Math.round(PRICING.edroloOne.weekly * subjectsCount);
-
-    const bars = [
-        { label: PRICING.tutor.label,    weekly: PRICING.tutor.weekly,    note: PRICING.tutor.note,   tone: "warn"   },
-        { label: `Edrolo (${subjectsCount} subject${subjectsCount === 1 ? "" : "s"})`, weekly: edroloTotal, note: `${PRICING.edroloOne.note}`, tone: "warn" },
-        { label: PRICING.chatgpt.label,  weekly: PRICING.chatgpt.weekly,  note: PRICING.chatgpt.note, tone: "warn"   },
-        { label: PRICING.acedit.label,   weekly: PRICING.acedit.weekly,   note: PRICING.acedit.note,  tone: "good"   },
-    ];
-    const maxWeekly = Math.max(...bars.map(b => b.weekly));
-
-    const tutorWeeks = Math.round(PRICING.tutor.weekly / PRICING.acedit.weekly);
-
-    return (
-        <StepShell
-            eyebrow="Honest comparison"
-            title="What VCE help usually costs"
-            subtitle="Real industry numbers, all weekly · AUD."
-            footer={
-                <PrimaryCTA onClick={onNext}>
-                    See what's in Premium <ArrowRight className="w-4 h-4 ml-1" />
-                </PrimaryCTA>
-            }
-        >
-            <div className="card-soft p-5 lg:p-6 space-y-4">
-                {bars.map((b, i) => {
-                    const pct = Math.max(4, (b.weekly / maxWeekly) * 100);
-                    const isGood = b.tone === "good";
-                    return (
-                        <motion.div
-                            key={b.label}
-                            initial={{ opacity: 0 }}
-                            animate={{ opacity: 1 }}
-                            transition={{ delay: 0.05 + i * 0.06 }}
-                        >
-                            <div className="flex items-baseline justify-between mb-1.5">
-                                <div className="min-w-0 pr-3">
-                                    <p className={`font-display font-extrabold text-sm leading-tight ${isGood ? "text-primary" : "text-foreground"}`}>
-                                        {b.label}
-                                    </p>
-                                    <p className="text-[11px] text-muted-foreground leading-snug">{b.note}</p>
-                                </div>
-                                <p className={`font-display font-extrabold text-lg tabular-nums flex-shrink-0 ${isGood ? "text-primary" : "text-foreground"}`}>
-                                    ${b.weekly}<span className="text-xs text-muted-foreground font-bold">/wk</span>
-                                </p>
-                            </div>
-                            <div className="h-3 bg-muted/60 rounded-full overflow-hidden">
-                                <motion.div
-                                    initial={{ width: 0 }}
-                                    animate={{ width: `${pct}%` }}
-                                    transition={{ duration: 0.7, delay: 0.2 + i * 0.08, ease: [0.2, 0.8, 0.2, 1] }}
-                                    className={`h-full rounded-full ${isGood ? "bg-primary" : "bg-xp"}`}
-                                />
-                            </div>
-                        </motion.div>
-                    );
-                })}
-            </div>
-            <div className="mt-5 p-4 rounded-2xl bg-primary/5 border border-primary/15">
-                <p className="font-display font-extrabold text-foreground text-lg leading-tight">
-                    One hour with a tutor pays for <span className="text-primary">{tutorWeeks} weeks</span> of AcedIt.
-                </p>
-            </div>
-        </StepShell>
-    );
-}
-
-// ═══ STEP 7 — Premium value stack ═══════════════════════════════════════════
-function Step7Premium({ onNext }) {
-    const FREE_FEATURES = [
-        "Pomodoro timer & study sessions",
-        "Manual quizzes & flashcards (unlimited)",
-        "XP, streaks, friends, leaderboards",
-        "5 AI-generated quizzes (lifetime)",
-        "5 AI-generated flashcard sets (lifetime)",
-        "5 AI tool uses (lifetime)",
-    ];
-    const PREMIUM_FEATURES = [
-        "Everything in Free",
-        "Daily AI-generated quizzes",
-        "AI quiz marking with VCAA feedback",
-        `All ${TOOL_COUNT} AI study tools (unlimited daily)`,
-        "Goal & Roadmap AI generation",
-        "Spaced repetition (SM-2 algorithm)",
-        "Blurting & Active Recall with AI marking",
-        "Advanced analytics & performance coach",
-        "Priority support",
-    ];
-    return (
-        <StepShell
-            eyebrow="The unlock"
-            title="Two ways to use AcedIt"
-            subtitle="Try Premium for $5/week — less than a coffee."
-            footer={
-                <PrimaryCTA onClick={onNext}>
-                    Sign in to start <ArrowRight className="w-4 h-4 ml-1" />
-                </PrimaryCTA>
-            }
-        >
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {/* Free column — visually de-emphasised */}
-                <div className="card-soft p-5 lg:p-6 opacity-95">
-                    <p className="stat-label text-muted-foreground mb-1">Free</p>
-                    <p className="font-display font-extrabold text-foreground text-3xl mb-1">$0</p>
-                    <p className="text-xs text-muted-foreground mb-4">per week</p>
-                    <ul className="space-y-2">
-                        {FREE_FEATURES.map((f, i) => (
-                            <li key={i} className="flex items-start gap-2 text-sm">
-                                <Check className="w-4 h-4 text-muted-foreground flex-shrink-0 mt-0.5" />
-                                <span className="text-foreground leading-snug">{f}</span>
-                            </li>
-                        ))}
-                    </ul>
-                </div>
-                {/* Premium column — highlighted */}
-                <div className="relative rounded-2xl bg-primary/5 border-2 border-primary shadow-soft p-5 lg:p-6">
-                    <span className="absolute -top-3 right-4 pill bg-primary text-primary-foreground text-[10px] px-3 py-1">
-                        <Crown className="w-3 h-3" /> RECOMMENDED
-                    </span>
-                    <p className="stat-label text-primary mb-1">Premium</p>
-                    <p className="font-display font-extrabold text-foreground text-3xl mb-1">
-                        $5<span className="text-base text-muted-foreground font-bold">/wk</span>
-                    </p>
-                    <p className="text-xs text-muted-foreground mb-4">Cancel anytime</p>
-                    <ul className="space-y-2">
-                        {PREMIUM_FEATURES.map((f, i) => (
-                            <li key={i} className="flex items-start gap-2 text-sm">
-                                <Check className="w-4 h-4 text-primary flex-shrink-0 mt-0.5" strokeWidth={3} />
-                                <span className="text-foreground leading-snug font-medium">{f}</span>
-                            </li>
-                        ))}
-                    </ul>
-                </div>
-            </div>
-        </StepShell>
-    );
-}
-
-// ═══ STEP 8 — Sign in ═══════════════════════════════════════════════════════
+// ═══ STEP 6 — Sign in ═══════════════════════════════════════════════════════
 // Two separate decisions, made in this order:
 //   1. Plan picker — Premium (default-selected, highlighted) vs Free
 //   2. Auth method — Continue with Google OR Continue with email
 // Picking the email button reveals an inline form below the choice; the plan
 // already chosen carries through, so the form has a single submit button.
-function Step8Signin({ answers, update }) {
+//
+// DELIBERATELY UNCHANGED MECHANICALLY. Everything else in the wizard got a
+// card treatment; this screen did not, beyond dropping a recap the hand rail
+// underneath now makes redundant. Sign-up is where a clever interface costs
+// real money, and the specific error branches below were each written after
+// something actually went wrong. The only addition is the tutor anchor, which
+// moved here from the screen it used to own, because a price comparison is
+// worth most at the moment of the decision and nothing at all two screens
+// earlier.
+function Step6Signin({ answers, update }) {
     const { signUpWithPassword } = useAuth();
     const [isStarting, setIsStarting] = useState(false);
 
@@ -757,9 +697,9 @@ function Step8Signin({ answers, update }) {
     const [emailSent, setEmailSent] = useState(false);
 
     const personalLine = [
-        answers.yearLevel,
+        answers.yearLevel ? answers.yearLevel.replace(/ Units.*$/, "") : null,
         answers.subjects.length > 0 ? `${answers.subjects.length} subject${answers.subjects.length === 1 ? "" : "s"}` : null,
-        answers.goalAtar ? `ATAR ${answers.goalAtar.toFixed(answers.goalAtar % 1 === 0 ? 0 : 2)}` : null,
+        answers.goalAtar ? `ATAR ${formatAtar(answers.goalAtar)}` : null,
         answers.goalCourseName || null,
     ].filter(Boolean).join(" · ");
 
@@ -891,14 +831,25 @@ function Step8Signin({ answers, update }) {
     return (
         <StepShell
             eyebrow="Last step"
-            title="Save your plan, start studying"
-            subtitle="Pick your plan, then sign in to keep everything."
+            title="Keep the hand"
+            subtitle="Sign in and it is saved. Nothing you just did carries over otherwise."
         >
-            {/* Personal plan recap */}
-            <div className="card-soft p-5 lg:p-6 mb-5">
-                <p className="stat-label text-muted-foreground mb-2">Your plan</p>
-                <p className="font-display font-extrabold text-foreground text-base lg:text-lg leading-tight">
-                    {personalLine || "VCE student"}
+            {/* The anchor. One line, at the point of the decision, and phrased
+                so it does not sneer at tutors: a good one is genuinely worth
+                the money, and the honest difference is availability, not value.
+                The hand rail under this screen is the recap that used to sit
+                here as a line of grey text. */}
+            <div className="rounded-2xl bg-primary/5 border border-primary/15 p-4 mb-5">
+                <p className="font-display font-extrabold text-foreground text-base lg:text-lg leading-snug">
+                    One hour with a tutor pays for{" "}
+                    <span className="text-primary">
+                        {Math.round(TUTOR_HOURLY / ACEDIT_WEEKLY)} weeks
+                    </span>{" "}
+                    of AcedIt.
+                </p>
+                <p className="text-xs text-muted-foreground mt-1.5 leading-relaxed">
+                    Melbourne VCE tutoring runs about ${TUTOR_HOURLY} an hour, once a week, in term time.
+                    {personalLine ? ` Your hand: ${personalLine}.` : ""}
                 </p>
             </div>
 
