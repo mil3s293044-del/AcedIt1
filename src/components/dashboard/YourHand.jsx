@@ -26,8 +26,8 @@
  * pretending to be subjects. Fake data on the one panel whose entire job is to
  * tell you the truth about where you stand would poison the rest of the page.
  */
-import React from "react";
-import { motion, useReducedMotion } from "framer-motion";
+import React, { useEffect, useRef, useState } from "react";
+import { motion, useMotionValue, useReducedMotion, useSpring, useTransform } from "framer-motion";
 import { Link } from "react-router-dom";
 import { createPageUrl } from "@/utils";
 import { ArrowRight, Layers } from "lucide-react";
@@ -47,8 +47,31 @@ function moveFor(row) {
     return { ...m, href: `${createPageUrl("Study")}${m.query}` };
 }
 
-/** One subject, face up, with its next move on it. */
-function SubjectCard({ row, i, n, reduce }) {
+/**
+ * One subject, in the hand.
+ *
+ * FLAT WAS THE COMPLAINT AND FLAT WAS THE BUILD: a row of divs that nudged on
+ * hover. Three things fix it, and all three are the app's own motion, lifted
+ * from the landing hero where they were already earning their keep.
+ *
+ *   PERSPECTIVE. The fan sits in a 3D context, so leaning a card actually
+ *   turns it rather than skewing a rectangle. Nothing else on this page reads
+ *   as having a near edge and a far one.
+ *
+ *   PARALLAX. The whole hand tilts with the pointer and cards further from the
+ *   middle travel further, which is the single cheapest signal of depth there
+ *   is: no flat picture moves like that.
+ *
+ *   THE FLIP. Click and the card turns over. The back is what the front cannot
+ *   fit — the topics inside, how many cards, when it is next up. Turning a card
+ *   over is the app's core gesture and the dashboard had never once used it.
+ *
+ * WHY A BUTTON AND A LINK, NOT ONE OR THE OTHER. The face flips (a button, an
+ * action on this page) and the back navigates (a link, a move to another). One
+ * element doing both would mean either a link that does not navigate or a
+ * button that does, and both are worse than the extra element.
+ */
+function SubjectCard({ row, i, n, reduce, flipped, onFlip }) {
     const rank = rankFor(row.mastery);
     const suit = suitFor(row.subject);
     const tone = colorFor(row.subject);
@@ -62,7 +85,9 @@ function SubjectCard({ row, i, n, reduce }) {
     return (
         <motion.div
             data-subject-card={row.subject}
+            data-flipped={flipped ? "1" : "0"}
             className="flex-shrink-0"
+            style={{ transformStyle: "preserve-3d" }}
             initial={reduce
                 ? { opacity: 0 }
                 : { opacity: 0, y: 26, rotate: off * 2 + 6, scale: 0.94 }}
@@ -70,54 +95,154 @@ function SubjectCard({ row, i, n, reduce }) {
             transition={reduce
                 ? { duration: 0.25, delay: i * 0.04 }
                 : { type: "spring", stiffness: 220, damping: 23, delay: 0.06 + i * 0.07 }}
-            whileHover={reduce ? undefined : { y: -10, rotate: 0, scale: 1.04, zIndex: 5 }}
+            // Cards further out ride further on the tilt. `z` rather than
+            // `scale` so the lift happens in the same space as the rotation.
+            whileHover={reduce ? undefined : { y: -12, rotate: 0, z: 40, zIndex: 5 }}
         >
-            <Link
-                to={move.href}
-                title={`${row.subject} — ${rankTitle(rank, suit, row.mastery)}. ${move.verb}, ${move.detail}.`}
-                className="block focus-visible:outline-none focus-visible:ring-2
-                    focus-visible:ring-primary rounded-[0.9rem]"
-            >
-                <PlayingCard
-                    rank={rank}
-                    suit={suit}
-                    tone={tone}
-                    mastery={row.mastery}
-                    smallIndices
-                    pips="compact"
-                    className="w-[92px] sm:w-[104px] aspect-[2.5/3.5]"
+            <div className="relative w-[92px] sm:w-[104px] aspect-[2.5/3.5]"
+                style={{ transformStyle: "preserve-3d" }}>
+                <motion.div
+                    className="absolute inset-0"
+                    style={{ transformStyle: "preserve-3d" }}
+                    animate={{ rotateY: flipped ? 180 : 0 }}
+                    transition={reduce
+                        ? { duration: 0 }
+                        : { type: "spring", stiffness: 260, damping: 26 }}
                 >
-                    {/* The name on a band in the subject's own colour, the same
-                        arrangement as the hand in onboarding, so a student who
-                        built one two minutes ago recognises this one. */}
-                    <span className="absolute inset-x-0 bottom-0 px-1.5 pt-1 pb-1.5 text-center"
-                        style={{ background: `${tone}22` }}>
-                        <span className="block text-[10px] font-extrabold leading-[1.15]
-                            text-foreground/80 line-clamp-2 break-words">
-                            {row.subject}
-                        </span>
-                        <span data-card-move={move.verb}
-                            className={`block text-[8.5px] font-bold leading-none mt-0.5
-                            ${move.urgent ? "text-streak" : "text-muted-foreground/70"}`}>
-                            {move.verb}
-                        </span>
-                    </span>
+                    {/* ── Face ─────────────────────────────────────────── */}
+                    <button
+                        type="button"
+                        onClick={() => onFlip(row.subject)}
+                        aria-label={`${row.subject}. ${rankTitle(rank, suit, row.mastery)}. Turn over.`}
+                        title={`${row.subject} — ${rankTitle(rank, suit, row.mastery)}. ${move.verb}, ${move.detail}.`}
+                        className="absolute inset-0 rounded-[0.9rem] focus-visible:outline-none
+                            focus-visible:ring-2 focus-visible:ring-primary"
+                        style={{ backfaceVisibility: "hidden" }}
+                    >
+                        <PlayingCard
+                            rank={rank}
+                            suit={suit}
+                            tone={tone}
+                            mastery={row.mastery}
+                            smallIndices
+                            pips="compact"
+                            className="w-full h-full"
+                        >
+                            {/* The name on a band in the subject's own colour,
+                                the same arrangement as the hand in onboarding,
+                                so a student who built one two minutes ago
+                                recognises this one. */}
+                            <span className="absolute inset-x-0 bottom-0 px-1.5 pt-1 pb-1.5 text-center"
+                                style={{ background: `${tone}22` }}>
+                                <span className="block text-[10px] font-extrabold leading-[1.15]
+                                    text-foreground/80 line-clamp-2 break-words">
+                                    {row.subject}
+                                </span>
+                                <span data-card-move={move.verb}
+                                    className={`block text-[8.5px] font-bold leading-none mt-0.5
+                                    ${move.urgent ? "text-streak" : "text-muted-foreground/70"}`}>
+                                    {move.verb}
+                                </span>
+                            </span>
 
-                    {/* The move, printed on the card. A count alone told you
-                        there was something to do and not what it was, so every
-                        card said the same thing in a different number. */}
-                    <span className={`absolute top-1.5 right-2 text-[9px] font-black
-                        tabular-nums ${move.urgent ? "text-streak" : "text-muted-foreground/50"}`}>
-                        {row.due > 0 ? row.due : row.cards}
-                    </span>
-                </PlayingCard>
-            </Link>
+                            {/* The move, printed on the card. A count alone told
+                                you there was something to do and not what it
+                                was, so every card said the same thing in a
+                                different number. */}
+                            <span className={`absolute top-1.5 right-2 text-[9px] font-black
+                                tabular-nums ${move.urgent ? "text-streak" : "text-muted-foreground/50"}`}>
+                                {row.due > 0 ? row.due : row.cards}
+                            </span>
+                        </PlayingCard>
+                    </button>
+
+                    {/* ── Back ─────────────────────────────────────────── */}
+                    {/* Pre-rotated 180 and back-face-hidden, so the two sides
+                        occupy the same space and exactly one is ever facing
+                        you. Rendering the back conditionally instead would pop
+                        it into existence mid-turn. */}
+                    <Link
+                        to={move.href}
+                        aria-label={`${move.verb} ${row.subject}, ${move.detail}`}
+                        className="absolute inset-0 rounded-[0.9rem] focus-visible:outline-none
+                            focus-visible:ring-2 focus-visible:ring-primary"
+                        style={{ backfaceVisibility: "hidden", transform: "rotateY(180deg)" }}
+                        tabIndex={flipped ? 0 : -1}
+                    >
+                        <span className="absolute inset-0 rounded-[0.9rem] bg-surface border
+                            overflow-hidden flex flex-col"
+                            style={{ borderColor: `${tone}66` }}>
+                            {/* The back wears the subject's colour along its
+                                top edge. Without it the reverse was a plain
+                                white rectangle and the card lost its identity
+                                exactly at the moment you turned it over to
+                                find out more about it. */}
+                            <span className="block h-1.5 flex-shrink-0"
+                                style={{ background: tone }} />
+                            <span className="flex flex-col flex-1 p-2">
+                            <span className="block text-[9px] font-black uppercase tracking-wider
+                                text-muted-foreground/70">
+                                {row.cards} cards
+                            </span>
+                            <span className="block text-[9px] leading-[1.25] text-foreground/70 mt-1
+                                line-clamp-4 flex-1">
+                                {row.topics.length
+                                    ? row.topics.slice(0, 4).join(", ")
+                                    : "No topics yet"}
+                            </span>
+                            <span className={`block text-[9px] font-bold leading-none
+                                ${move.urgent ? "text-streak" : "text-primary"}`}>
+                                {move.verb} →
+                            </span>
+                            </span>
+                        </span>
+                    </Link>
+                </motion.div>
+            </div>
         </motion.div>
     );
 }
 
 export default function YourHand({ hand = [], className = "" }) {
     const reduce = useReducedMotion();
+    // One card face down at a time. Turning a second one over turns the first
+    // back, because a hand with four backs showing is not a hand you can read.
+    const [flipped, setFlipped] = useState(null);
+    const fanRef = useRef(null);
+
+    /**
+     * The tilt, from the pointer.
+     *
+     * Sprung, so the fan has weight: a tilt that tracks the cursor exactly
+     * reads as a texture map rather than as objects on a table. Motion values
+     * rather than state — this updates on every pointer move and re-rendering
+     * the whole hand at that rate would be the most expensive thing on the
+     * page.
+     */
+    const px = useMotionValue(0);
+    const py = useMotionValue(0);
+    const sx = useSpring(px, { stiffness: 120, damping: 20, mass: 0.6 });
+    const sy = useSpring(py, { stiffness: 120, damping: 20, mass: 0.6 });
+    const rotY = useTransform(sx, [-0.5, 0.5], [-11, 11]);
+    const rotX = useTransform(sy, [-0.5, 0.5], [7, -7]);
+
+    useEffect(() => {
+        if (reduce) return undefined;
+        const el = fanRef.current;
+        if (!el) return undefined;
+        const onMove = (e) => {
+            const b = el.getBoundingClientRect();
+            px.set((e.clientX - b.left) / b.width - 0.5);
+            py.set((e.clientY - b.top) / b.height - 0.5);
+        };
+        const onLeave = () => { px.set(0); py.set(0); };
+        el.addEventListener("pointermove", onMove, { passive: true });
+        el.addEventListener("pointerleave", onLeave);
+        return () => {
+            el.removeEventListener("pointermove", onMove);
+            el.removeEventListener("pointerleave", onLeave);
+        };
+    }, [px, py, reduce]);
     const shown = hand.slice(0, 8);
     const totalDue = hand.reduce((s, r) => s + r.due, 0);
     // Do the ranks actually differ? Compared on RANK rather than on mastery,
@@ -168,11 +293,29 @@ export default function YourHand({ hand = [], className = "" }) {
                         card size is wider than a column on a laptop, and a hand
                         squeezed until the indices are unreadable is worse than
                         a hand you scroll. */}
-                    <div className="flex gap-2 sm:gap-2.5 overflow-x-auto pb-2 -mx-1 px-1">
-                        {shown.map((row, i) => (
-                            <SubjectCard key={row.subject} row={row} i={i}
-                                n={shown.length} reduce={reduce} />
-                        ))}
+                    {/* The stage. Perspective lives on the scroller so the
+                        vanishing point is the middle of the hand rather than
+                        the middle of each card — per-card perspective makes
+                        every card turn about its own centre and the fan reads
+                        as eight unrelated objects. */}
+                    <div ref={fanRef}
+                        className="overflow-x-auto overflow-y-visible pb-3 pt-1 -mx-1 px-1"
+                        style={reduce ? undefined : { perspective: 900 }}>
+                        <motion.div
+                            data-hand-fan
+                            className="flex gap-2 sm:gap-2.5"
+                            style={reduce ? undefined : {
+                                rotateX: rotX, rotateY: rotY, transformStyle: "preserve-3d",
+                            }}
+                        >
+                            {shown.map((row, i) => (
+                                <SubjectCard key={row.subject} row={row} i={i}
+                                    n={shown.length} reduce={reduce}
+                                    flipped={flipped === row.subject}
+                                    onFlip={(name) =>
+                                        setFlipped((cur) => (cur === name ? null : name))} />
+                            ))}
+                        </motion.div>
                     </div>
 
                     {/* The one card worth playing first, named. "Play a card"

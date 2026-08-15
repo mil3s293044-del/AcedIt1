@@ -16,6 +16,7 @@ import { subjectHand } from "@/lib/mastery";
 import { getStreakMultiplier as getStreakMultiplierValue } from "@/components/shared/streakHelpers";
 import RetentionCard from "@/components/dashboard/RetentionCard";
 import YourHand from "@/components/dashboard/YourHand";
+import DueRadar from "@/components/dashboard/DueRadar";
 import TableGround from "@/components/dashboard/TableGround";
 import DistanceToTarget from "@/components/dashboard/DistanceToTarget";
 import TodaysPlay from "@/components/dashboard/TodaysPlay";
@@ -356,16 +357,8 @@ const MOVE_THEME = {
 // The badge text is foreground, not the accent colour. Measured on the tinted
 // rows these sat at 2.43:1 in light mode — invisible. Urgency still reads from
 // the row tint and the icon, which are graphics and only owe 3:1.
-const URGENCY = {
-    today: { wrap: "bg-streak/5 border-streak/15 hover:bg-streak/10",   iconBg: "bg-streak/15",  iconText: "text-streak",  badge: "bg-streak/20 text-foreground"   },
-    soon:  { wrap: "bg-xp/5 border-xp/15 hover:bg-xp/10",               iconBg: "bg-xp/15",      iconText: "text-xp",      badge: "bg-xp/25 text-foreground"       },
-    later: { wrap: "bg-surface border-border/60 hover:bg-secondary/40", iconBg: "bg-chart-3/10", iconText: "text-chart-3", badge: "bg-chart-3/15 text-foreground"  },
-};
-function urgencyKey(daysAway) {
-    if (daysAway <= 1) return "today";
-    if (daysAway <= 5) return "soon";
-    return "later";
-}
+// URGENCY and urgencyKey coloured the reminder rows by how close a thing was.
+// The dial says that with distance now, so the palette had nothing left to do.
 
 
 // ─── Component ────────────────────────────────────────────────────────────────
@@ -568,7 +561,6 @@ export default function Dashboard() {
     const firstName = userProfile?.username || user?.full_name?.split(' ')[0] || 'friend';
     const goalHours = userProfile?.weekly_study_goal_hours || 20;
     const weeklyPct = Math.min(100, Math.round((weeklyStudyTime / (goalHours * 60)) * 100));
-    const totalReminders = assessments.length + flashcardReminders.length + plannerReminders.length;
 
     // ── The radar, as one ranked list ────────────────────────────────────────
     // This used to render each source as its own run of tiles — up to eleven
@@ -591,13 +583,17 @@ export default function Dashboard() {
             const days = daysTo(a.due_date);
             if (days == null) continue;
             items.push({ key: `as-${a.id}`, icon: Target, days, rank: 0,
-                title: a.title, subtitle: a.subject_name, to: "Goals" });
+                title: a.title, subtitle: a.subject_name, to: "Goals",
+                // The radar draws bearing and colour from the subject, and blip
+                // size from the pile. A deadline is one thing, so size 1.
+                subject: a.subject_name || a.title, kind: "deadline", count: 1 });
         }
         for (const ev of plannerReminders) {
             const days = daysTo(ev.date);
             if (days == null) continue;
             items.push({ key: `pl-${ev.id}`, icon: FileQuestion, days, rank: 1,
-                title: ev.title, subtitle: ev.event_type, to: "Goals" });
+                title: ev.title, subtitle: ev.event_type, to: "Goals",
+                subject: ev.subject_name || ev.title, kind: "task", count: 1 });
         }
 
         // Decks: one row per subject, with the topics that make up the pile.
@@ -615,14 +611,14 @@ export default function Dashboard() {
                 ? `${d.count} cards · ${d.topics.slice(0, 2).join(", ")}${d.topics.length > 2 ? ` +${d.topics.length - 2}` : ""}`
                 : `${d.count} cards due`;
             items.push({ key: `fc-${d.subject}`, icon: Layers, days: 0, rank: 2,
-                title: d.subject, subtitle: detail, to: "Study", badge: "Now" });
+                title: d.subject, subtitle: detail, to: "Study", badge: "Now",
+                subject: d.subject, kind: "deck", count: d.count });
         }
 
         // Soonest first; a deadline outranks a task outranks a deck on the same day.
         items.sort((a, b) => (a.days - b.days) || (a.rank - b.rank));
         return items;
     }, [assessments, plannerReminders, flashcardReminders]);
-    const RADAR_SHOWN = 4;
 
     const hour = new Date().getHours();
     // ── Study intent ─────────────────────────────────────────────────────────
@@ -1158,42 +1154,17 @@ export default function Dashboard() {
                         )}
                     </div>
 
-                    {/* Deadlines moved into the rail when the brain card came
-                        off the dashboard — the right column ran out ~480px
-                        above the main one, and this is a narrow list that reads
-                        better stacked anyway. It also puts what's due next in
-                        the column that stays visible. */}
-                    {totalReminders > 0 && (
-                        <motion.section
-                            initial={{ opacity: 0, y: 12 }}
-                            animate={{ opacity: 1, y: 0 }}
-                            transition={{ delay: 0.15 }}
-                            className="card-soft border-2 border-border p-5"
-                        >
-                            <div className="flex items-baseline justify-between gap-3 mb-3">
-                                <p className="stat-label">On your radar</p>
-                                {radar.length > RADAR_SHOWN && (
-                                    <Link to={createPageUrl("Goals")} className="text-[11px] font-bold text-foreground/70 hover:text-foreground underline underline-offset-2 flex-shrink-0">
-                                        See all {radar.length}
-                                    </Link>
-                                )}
-                            </div>
-                            <div className="space-y-2.5">
-                                {radar.slice(0, RADAR_SHOWN).map((item) => (
-                                    <Link key={item.key} to={createPageUrl(item.to)} className="block">
-                                        <ReminderRow
-                                            icon={item.icon}
-                                            title={item.title}
-                                            subtitle={item.subtitle}
-                                            badge={item.badge
-                                                || (item.days <= 0 ? 'Today' : item.days === 1 ? 'Tomorrow' : `${item.days}d`)}
-                                            theme={URGENCY[urgencyKey(item.days)]}
-                                        />
-                                    </Link>
-                                ))}
-                            </div>
-                        </motion.section>
-                    )}
+                    {/* The dial. It was a list of rows with pink pills under a
+                        heading that said "radar", which is a word doing the job
+                        a picture should — see DueRadar for why the geometry IS
+                        the data here rather than a skin over it.
+
+                        Rendered unconditionally: it owns its own empty state,
+                        and an empty dial saying "nothing inside a fortnight" is
+                        a useful thing to be told. The list it replaced had to
+                        be guarded because a panel with no rows in it is just a
+                        heading. */}
+                    <DueRadar items={radar} />
 
                     <div className="card-soft on-table border-2 border-border p-5">
                         <div className="flex items-center justify-between mb-3">
@@ -1266,20 +1237,5 @@ export default function Dashboard() {
 }
 
 // ─── Inline components ────────────────────────────────────────────────────────
-function ReminderRow({ icon: Icon, title, subtitle, badge, theme }) {
-    return (
-        <div className={`flex items-center gap-3 p-3 rounded-xl border shadow-soft transition-all cursor-pointer ${theme.wrap}`}>
-            <div className={`w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0 ${theme.iconBg}`}>
-                <Icon className={`w-4 h-4 ${theme.iconText}`} />
-            </div>
-            <div className="flex-1 min-w-0">
-                <p className="font-bold text-foreground text-sm truncate">{title}</p>
-                {/* foreground/70, not muted-foreground: on the urgency tints
-                    muted lands at 4.25:1, just under the 4.5 it needs. */}
-                <p className="text-xs text-foreground/70 truncate">{subtitle}</p>
-            </div>
-            {badge && <span className={`pill ${theme.badge} flex-shrink-0`}>{badge}</span>}
-        </div>
-    );
-}
+// ReminderRow drew one line of the old radar list. Deleted with it.
 
