@@ -141,7 +141,7 @@ export default function HandRail() {
                                             : "drop-shadow(0 4px 6px rgba(13,22,38,0.12))",
                                     }}>
                                         <PlayingCard rank={d.rank} suit={d.suit} tone={d.tone}
-                                            smallIndices watermark={false}
+                                            smallIndices watermark={false} pips="faint"
                                             className="w-full aspect-[2.5/3.5]">
                                             <span className="absolute inset-0 flex flex-col
                                                 items-center justify-center gap-1.5 px-1">

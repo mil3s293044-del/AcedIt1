@@ -29,6 +29,7 @@ import ReactMarkdown from 'react-markdown';
 import { Link } from 'react-router-dom';
 import { createPageUrl } from '@/utils';
 import AceShuffle from "@/components/ace/AceShuffle";
+import { subjectColor } from "@/components/cards/cardIdentity";
 
 const toolIcons = {
     essay_planner: Book,
@@ -288,14 +289,14 @@ export default function AIToolsHistory() {
                         <div className="space-y-6">
                             {Object.entries(resultsBySubject).map(([subjectName, subjectResults]) => {
                                 const userSubject = userSubjects.find(s => s.subject_name === subjectName);
-                                const subjectColor = userSubject?.color || '#3B82F6';
+                                const tone = subjectColor(userSubject, subjectName);
 
                                 return (
                                     <div key={subjectName} className="space-y-3">
                                         <div className="flex items-center gap-3 mb-4">
                                             <div
                                                 className="w-1 h-8 rounded-full"
-                                                style={{ backgroundColor: subjectColor }}
+                                                style={{ backgroundColor: tone }}
                                             />
                                             <h3 className="text-2xl font-bold text-foreground">{subjectName}</h3>
                                             <Badge variant="outline" className="text-purple-800 bg-purple-100">

@@ -30,7 +30,7 @@ import { aceDone } from "@/components/ace/AceReacts";
 import AceShuffle from "@/components/ace/AceShuffle";
 import ReviewTable from "@/components/cards/ReviewTable";
 import DeckStack from "@/components/cards/DeckStack";
-import { rankFor, suitFor } from "@/components/cards/cardIdentity";
+import { rankFor, suitFor, subjectColor } from "@/components/cards/cardIdentity";
 
 // Lucide alias — design system maps "alert" semantics to AlertTriangle.
 const AlertCircle = AlertTriangle;
@@ -882,7 +882,9 @@ The documents provided may be PowerPoint slides, Word documents, PDFs or text fi
         // "again" territory is visibly a better card next time it comes round.
         const mastery = computeMasteryScore(currentCard);
         const suit = suitFor(currentCard.subject_name);
-        const tone = userSubjects.find(s => s.subject_name === currentCard.subject_name)?.color || '#3B82F6';
+        const tone = subjectColor(
+            userSubjects.find(s => s.subject_name === currentCard.subject_name),
+            currentCard.subject_name);
 
         return (
             <div className="max-w-4xl mx-auto space-y-4">
@@ -1014,7 +1016,9 @@ The documents provided may be PowerPoint slides, Word documents, PDFs or text fi
     // ─── DECK DETAIL VIEW ────────────────────────────────────────────────────
     if (selectedDeck) {
         const stats = { total: selectedDeck.cards.length, due: selectedDeck.cards.filter(isDue).length, weak: selectedDeck.cards.filter(c => c.is_weak_spot).length };
-        const subjectColor = userSubjects.find(s => s.subject_name === selectedDeck.subject_name)?.color || '#3B82F6';
+        const deckColor = subjectColor(
+            userSubjects.find(s => s.subject_name === selectedDeck.subject_name),
+            selectedDeck.subject_name);
 
         return (
             <div className="space-y-5">
@@ -1035,13 +1039,13 @@ The documents provided may be PowerPoint slides, Word documents, PDFs or text fi
 
                 {/* Deck info + review buttons */}
                 <div className="card-soft overflow-hidden">
-                    <div className="h-1.5" style={{ backgroundColor: subjectColor }} />
+                    <div className="h-1.5" style={{ backgroundColor: deckColor }} />
                     <div className="p-6">
                         <div className="flex items-start justify-between gap-4">
                             <div>
                                 <h2 className="text-xl font-bold text-foreground">{selectedDeck.topic}</h2>
                                 <div className="flex items-center gap-2 mt-1">
-                                    <div className="w-2 h-2 rounded-full" style={{ backgroundColor: subjectColor }} />
+                                    <div className="w-2 h-2 rounded-full" style={{ backgroundColor: deckColor }} />
                                     <span className="text-sm text-muted-foreground">{selectedDeck.subject_name} · {selectedDeck.unit}</span>
                                 </div>
                             </div>
@@ -1162,12 +1166,13 @@ The documents provided may be PowerPoint slides, Word documents, PDFs or text fi
                     </div>
                 ) : (
                     Object.entries(decksBySubject).map(([subjectName, subjectDecks]) => {
-                        const subjectColor = userSubjects.find(s => s.subject_name === subjectName)?.color || '#3B82F6';
+                        const groupColor = subjectColor(
+                            userSubjects.find(s => s.subject_name === subjectName), subjectName);
                         const totalDue = subjectDecks.reduce((sum, d) => sum + d.cards.filter(isDue).length, 0);
                         return (
                             <div key={subjectName} className="space-y-3">
                                 <div className="flex items-center gap-3">
-                                    <div className="w-3 h-3 rounded-full" style={{ backgroundColor: subjectColor }} />
+                                    <div className="w-3 h-3 rounded-full" style={{ backgroundColor: groupColor }} />
                                     <h3 className="font-bold text-foreground">{subjectName}</h3>
                                     <span className="text-xs text-muted-foreground/60">
                                         {subjectDecks.length} deck{subjectDecks.length === 1 ? "" : "s"}
@@ -1180,7 +1185,7 @@ The documents provided may be PowerPoint slides, Word documents, PDFs or text fi
                                     to right fill the space they need. */}
                                 <div className="flex flex-wrap gap-x-3 gap-y-3">
                                     {subjectDecks.map((deck, i) => (
-                                        <DeckCard key={deck.id} deck={deck} subjectColor={subjectColor}
+                                        <DeckCard key={deck.id} deck={deck} subjectColor={groupColor}
                                             index={i}
                                             onSelect={setSelectedDeck}
                                             onDelete={handleDeleteDeck}
