@@ -9,6 +9,7 @@ import BrainShowcase from "@/components/marketing/BrainShowcase";
 import MarkedAnswer from "@/components/marketing/MarkedAnswer";
 import ForgettingCurve from "@/components/marketing/ForgettingCurve";
 import PriceAnchor from "@/components/marketing/PriceAnchor";
+import MarkedWord, { MarkingNote } from "@/components/marketing/MarkedWord";
 import { Button } from "@/components/ui/button";
 import {
   Accordion,
@@ -418,13 +419,26 @@ export default function Landing() {
             transition={{ ...fadeUp.transition, delay: 0.1 }}
             className="font-display font-extrabold text-3xl sm:text-4xl md:text-5xl leading-tight tracking-tight"
           >
-            {/* Short on purpose. This used to spend five sentences narrating
-                a 2006 experiment, which is a story the evidence section below
-                tells properly with the citation attached. Here it only has to
-                land the position, and a position lands in two lines or not at
-                all. */}
-            Rereading does nothing. Letting AI think for you does worse.
+            {/* THE PAGE MARKS ITS OWN SENTENCE.
+
+                Every other claim about marking on this page is a claim. The
+                section further down shows a worked example, which is better.
+                This is better still, because there is no example to trust: the
+                thing being corrected is the sentence you are reading, and you
+                can check the improvement against your own ear in a second.
+
+                It is a double showcase and it costs nothing extra, because the
+                sentence had to say something anyway. */}
+            Rereading does nothing. Letting AI think for you is{" "}
+            <MarkedWord was="bad" now="detrimental" />
           </motion.h2>
+
+          <MarkingNote
+            criterion="Word choice"
+            note="“Bad” labels it. “Detrimental” names the direction of the harm, which is
+              what the criterion is asking for. Assessors read for precision, and this is
+              exactly where a mark is won or lost."
+          />
 
           {/* AND THE SUPPORT IS BODY COPY, not more headline. It used to be a
               muted span inside the h2, which was fine when it was one line and
@@ -434,7 +448,7 @@ export default function Landing() {
           <motion.p
             {...fadeUp}
             transition={{ ...fadeUp.transition, delay: 0.2 }}
-            className="text-lg sm:text-xl text-[#0D1626]/60 leading-relaxed mt-6 max-w-2xl mx-auto"
+            className="text-lg sm:text-xl text-[#0D1626]/60 leading-relaxed mt-10 max-w-2xl mx-auto"
           >
             Your brain has spent thousands of years learning one way: drag it
             back out just as you are about to lose it. AcedIt runs that process
