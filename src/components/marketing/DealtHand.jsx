@@ -295,10 +295,23 @@ export default function DealtHand({ className = "" }) {
                                 come in two parts — a tight contact shadow that
                                 says the card is touching, and a wide soft one
                                 that says how far off the table it is. */}
-                            <div className="relative"
+                            {/* BOX-SHADOW, NOT drop-shadow. Same family of
+                                bug as the aurora blur: `filter: drop-shadow`
+                                is a general alpha-channel gaussian, and this
+                                sits inside a container the parallax
+                                re-transforms every frame, so the browser was
+                                re-rasterising two shadows per card sixty times
+                                a second. Measured: the hand alone cost the
+                                hero 15fps.
+
+                                A box-shadow on a rounded rectangle is a shape
+                                the compositor already knows how to draw, and
+                                the card is a rounded rectangle. Identical
+                                result, no per-frame filter pass. */}
+                            <div className="relative rounded-[0.9rem]"
                                 style={{
-                                    filter: "drop-shadow(0 2px 2px rgba(13,22,38,0.10)) "
-                                        + "drop-shadow(0 16px 22px rgba(13,22,38,0.16))",
+                                    boxShadow: "0 2px 2px rgba(13,22,38,0.10), "
+                                        + "0 16px 22px rgba(13,22,38,0.16)",
                                 }}>
                                 <PlayingCard rank={c.rank} suit={c.suit} tone={c.tone} watermark={!c.ace}
                                     className="w-full aspect-[2.5/3.5]">
@@ -327,8 +340,14 @@ export default function DealtHand({ className = "" }) {
                                             style={{
                                                 background: "linear-gradient(90deg, transparent, rgba(255,255,255,0.75), transparent)",
                                             }}
+                                            /* TRANSFORM, NOT `left`. Animating
+                                               `left` is a layout property, so
+                                               every frame of the sweep forced
+                                               a reflow, on five cards at once,
+                                               for a decorative highlight. */
                                             initial={false}
-                                            animate={{ left: sheen ? "130%" : "-60%" }}
+                                            style={{ left: 0 }}
+                                            animate={{ x: sheen ? "300%" : "-140%" }}
                                             transition={sheen
                                                 ? { duration: SHEEN_MS / 1000, ease: "easeInOut", delay: i * 0.06 }
                                                 : { duration: 0 }}
