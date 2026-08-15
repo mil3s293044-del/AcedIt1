@@ -48,8 +48,15 @@ export default function TodaysPlay({
     const hit = todayXP >= dailyGoal;
 
     return (
-        <div className="rounded-2xl bg-surface border border-border shadow-soft p-5 lg:p-6">
-            <div className="flex flex-col lg:flex-row items-stretch gap-6 lg:gap-8">
+        <div className="rounded-2xl bg-surface border border-border on-table p-5 lg:p-6">
+            {/* items-center, not items-stretch. The deck illustration is 208px
+                tall and the copy beside it is about 150, so stretching left the
+                text column top-aligned against a taller neighbour with a band
+                of nothing under the button — the panel's height was set by the
+                picture and the content did not fill it. Centring hangs
+                everything off the same axis and the surplus splits above and
+                below instead of pooling at the bottom. */}
+            <div className="flex flex-col lg:flex-row items-center gap-6 lg:gap-8">
 
                 {/* ── The deck, and the card off the top of it ──────────── */}
                 {/* The deck leans LEFT out of its own box, so the box is padded
@@ -57,7 +64,7 @@ export default function TodaysPlay({
                     clipped the bottom corner off the lowest back and it read as
                     a rendering bug rather than as a deck. */}
                 <div className="relative flex-shrink-0 mx-auto lg:mx-0"
-                    style={{ width: 168, height: 208 }}>
+                    style={{ width: 156, height: 194 }}>
                     {/* THE POSITIONING IS ON A WRAPPER, not on CardBack.
                         CardBack's own class list opens with `relative`, and
                         Tailwind emits position utilities in a fixed order where

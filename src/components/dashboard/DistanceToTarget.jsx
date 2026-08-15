@@ -52,7 +52,7 @@ export default function DistanceToTarget({ atar, goalAtar, components, courseNam
     const pct = hasScore ? Math.max(0, Math.min(100, ((score - FLOOR) / span) * 100)) : 0;
 
     return (
-        <div className="relative overflow-hidden rounded-2xl bg-surface border border-border shadow-soft p-5 lg:p-6">
+        <div className="relative overflow-hidden rounded-2xl bg-surface border border-border on-table p-5 lg:p-6">
             <GraduationCap className="absolute -top-4 -right-4 w-28 h-28 text-chart-3/[0.07] pointer-events-none" />
 
             <div className="relative flex flex-col lg:flex-row lg:items-center gap-5 lg:gap-8">

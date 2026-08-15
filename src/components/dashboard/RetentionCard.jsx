@@ -76,7 +76,7 @@ export default function RetentionCard({ flashcards = [], days = 7 }) {
     const o = useMemo(() => retentionOutlook(flashcards, { days }), [flashcards, days]);
 
     return (
-        <div className="card-soft border-2 border-border p-5">
+        <div className="card-soft on-table border-2 border-border p-5">
             <div className="flex items-center gap-2 mb-3">
                 <div className="w-8 h-8 rounded-xl bg-streak/10 flex items-center justify-center flex-shrink-0">
                     <TrendingDown className="w-4 h-4 text-streak" />
