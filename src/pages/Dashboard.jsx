@@ -59,9 +59,6 @@ function getNextStreakMilestone(days) {
     return null;
 }
 
-// Daily XP goal — the daily loop. 100 XP is roughly one solid session.
-const DAILY_XP_GOAL = 100;
-
 // Which lever actually lifts the ATAR right now. Naming one beats a generic
 // "study more" — the whole point of breaking the score into parts is that each
 // part has a different fix.
@@ -384,13 +381,12 @@ export default function Dashboard() {
     const [plannerReminders, setPlannerReminders] = useState([]);
     const [leaderboard, setLeaderboard] = useState([]);
     const [isLoading, setIsLoading] = useState(true);
-    const [todayXP, setTodayXP] = useState(0);
 
     const loadData = useCallback(async (userEmail) => {
         try {
             const today = format(new Date(), 'yyyy-MM-dd');
             const in14 = format(new Date(Date.now() + 14 * 24 * 60 * 60 * 1000), 'yyyy-MM-dd');
-            const [profileData, sessionsData, techniquesData, quizData, assessmentData, flashcardData, plannerData, lbData, xpEventsData] = await Promise.all([
+            const [profileData, sessionsData, techniquesData, quizData, assessmentData, flashcardData, plannerData, lbData] = await Promise.all([
                 base44.entities.UserProfile.filter({ created_by: userEmail }).catch(() => []),
                 base44.entities.StudySession.filter({ created_by: userEmail }, "-date", 30).catch(() => []),
                 base44.entities.StudyTechnique.filter({ created_by: userEmail }, "-date").catch(() => []),
@@ -399,7 +395,6 @@ export default function Dashboard() {
                 base44.entities.Flashcard.filter({ created_by: userEmail, is_active: true }, "next_review_date").catch(() => []),
                 base44.entities.StudyPlan.filter({ created_by: userEmail, is_completed: false, date: { $gte: today, $lte: in14 } }, "date", 8).catch(() => []),
                 base44.entities.Leaderboard.list('-total_xp', 200).catch(() => []),
-                base44.entities.XPEvent.filter({ user_email: userEmail }, "-created_date", 100).catch(() => []),
             ]);
 
             let profile = profileData[0] || null;
@@ -425,12 +420,10 @@ export default function Dashboard() {
             }
 
             setUserProfile(profile);
-            // Today's earned XP — powers the daily goal ring. Positive events
-            // only (escrow deductions shouldn't shrink the day's effort).
-            const todayStr = format(new Date(), 'yyyy-MM-dd');
-            setTodayXP((xpEventsData || [])
-                .filter(e => (e.xp_awarded || 0) > 0 && (e.created_date || '').slice(0, 10) === todayStr)
-                .reduce((sum, e) => sum + e.xp_awarded, 0));
+            // Today's XP used to be summed here for the daily goal ring, off a
+            // hundred-row XPEvent query fired on every dashboard load. The ring
+            // is gone and it was the only reader, so the query went with it —
+            // one fewer round trip before this page can paint.
             setStudySessions(sessionsData || []);
             setStudyTechniques(techniquesData || []);
             setQuizAttempts(quizData || []);
@@ -884,7 +877,6 @@ export default function Dashboard() {
                 <Placed index={1}>
                     <TodaysPlay move={move} card={moveCard} theme={moveTheme}
                         commitment={commitment} fmtTime={fmtTime}
-                        todayXP={todayXP} dailyGoal={DAILY_XP_GOAL}
                         todayMins={todaysStudyTime} weekMins={weeklyStudyTime}
                         weekGoalHours={goalHours} weekPct={weeklyPct}
                         avgQuiz={avgQuizScore} />

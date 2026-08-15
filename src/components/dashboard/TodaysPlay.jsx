@@ -25,27 +25,30 @@
  */
 import React from "react";
 import { motion, useReducedMotion } from "framer-motion";
-import { ArrowRight, Play } from "lucide-react";
+import { ArrowRight } from "lucide-react";
 import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { createPageUrl } from "@/utils";
 import PlayingCard, { CardBack } from "@/components/cards/PlayingCard";
+import CommitmentRun from "@/components/dashboard/CommitmentRun";
 
 /** How many backs sit under the dealt card. Enough to read as a deck. */
 const DEPTH = 3;
 const STEP = 4;
-const R = 42;
-const CIRC = 2 * Math.PI * R;
 
 export default function TodaysPlay({
     move, card, theme, commitment, fmtTime,
     // The day's numbers. They used to live in a separate green panel beside
-    // this one — two boxes both headed "today", which is one box.
-    todayXP, dailyGoal, todayMins, weekMins, weekGoalHours, weekPct, avgQuiz,
+    // this one — two boxes both headed "today", which is one box. The XP pair
+    // went with the ring: see the note where it used to be drawn.
+    todayMins, weekMins, weekGoalHours, weekPct, avgQuiz,
 }) {
     const reduce = useReducedMotion();
     const Icon = move.icon;
-    const hit = todayXP >= dailyGoal;
+    // The badge follows the target the panel actually SHOWS. It used to fire
+    // off the XP goal, which is no longer drawn anywhere, so "Hit" would have
+    // appeared against nothing the student could see they had hit.
+    const hit = !!commitment?.met;
 
     return (
         <div className="rounded-2xl bg-surface border border-border on-table p-5 lg:p-6">
@@ -140,28 +143,11 @@ export default function TodaysPlay({
                             : move.sub}
                     </p>
 
-                    {commitment && !commitment.met && (
-                        <div className="mt-3 max-w-md">
-                            <div className="flex items-baseline justify-between mb-1">
-                                <span className="text-[11px] font-bold text-foreground">
-                                    {fmtTime(commitment.done)} of {fmtTime(commitment.target)}
-                                </span>
-                                <span className="text-[11px] text-muted-foreground">
-                                    {commitment.done === 0
-                                        ? "you committed to this today"
-                                        : `${commitment.pct}%`}
-                                </span>
-                            </div>
-                            <div className="h-1.5 bg-secondary rounded-full overflow-hidden">
-                                <motion.div
-                                    initial={{ width: 0 }}
-                                    animate={{ width: `${commitment.pct}%` }}
-                                    transition={{ duration: 0.7, delay: 0.3 }}
-                                    className={`h-full rounded-full ${theme.bar}`}
-                                />
-                            </div>
-                        </div>
-                    )}
+                    {/* The commitment, as cards. It was a 1.5px bar under the
+                        copy while a ring three columns over drew a made-up XP
+                        target at 112px across — the honest number small and the
+                        invented one large. */}
+                    <CommitmentRun commitment={commitment} fmtTime={fmtTime} />
 
                     <Link to={createPageUrl(move.link)} className="inline-block mt-5">
                         <Button>{move.cta} <ArrowRight className="w-4 h-4" /></Button>
@@ -172,34 +158,21 @@ export default function TodaysPlay({
                 <div className="lg:w-[212px] flex-shrink-0 lg:ml-auto lg:border-l lg:border-border/70
                     lg:pl-7 pt-5 lg:pt-0 border-t border-border/70 lg:border-t-0
                     flex flex-col justify-center">
-                    <div className="flex items-center justify-between mb-2">
+                    {/* THE XP RING LIVED HERE. A hundred XP a day is a number
+                        the app invented, drawn as the biggest object in the
+                        panel, next to two other answers to the same question —
+                        "time today" underneath it and the commitment bar in the
+                        column to the left. Three readouts of how today is
+                        going, and the only one with a promise behind it was the
+                        smallest. The commitment took the job and this column
+                        went back to being what it says on the label: the
+                        numbers, in order of how much they matter. */}
+                    <div className="flex items-center justify-between mb-3">
                         <p className="stat-label">Today</p>
                         {hit && <span className="pill bg-primary/15 text-primary">Hit</span>}
                     </div>
 
-                    <div className="relative w-28 h-28 mx-auto">
-                        <svg viewBox="0 0 100 100" className="w-full h-full -rotate-90">
-                            <circle cx="50" cy="50" r={R} fill="none" strokeWidth="9"
-                                className="stroke-secondary" />
-                            <motion.circle cx="50" cy="50" r={R} fill="none" strokeWidth="9"
-                                strokeLinecap="round"
-                                className={hit ? "stroke-primary" : "stroke-xp"}
-                                strokeDasharray={CIRC}
-                                initial={{ strokeDashoffset: CIRC }}
-                                animate={{ strokeDashoffset: CIRC * (1 - Math.min(1, todayXP / dailyGoal)) }}
-                                transition={{ duration: 1.1, delay: 0.35, ease: "easeOut" }}
-                            />
-                        </svg>
-                        <div className="absolute inset-0 flex flex-col items-center justify-center">
-                            <p className="font-display font-extrabold text-foreground
-                                text-2xl leading-none tabular-nums">{(todayXP || 0).toLocaleString()}</p>
-                            <p className="text-[10px] font-bold text-muted-foreground mt-1">
-                                / {dailyGoal} XP
-                            </p>
-                        </div>
-                    </div>
-
-                    <div className="space-y-2 mt-3">
+                    <div className="space-y-3">
                         <div className="flex items-baseline justify-between">
                             <p className="text-xs font-bold text-muted-foreground">Time today</p>
                             <p className="text-xs font-bold text-foreground">{fmtTime(todayMins)}</p>
@@ -229,11 +202,8 @@ export default function TodaysPlay({
                         </div>
                     </div>
 
-                    <Link to={createPageUrl("Study")} className="mt-4">
-                        <Button size="sm" variant="outline" className="w-full">
-                            <Play className="w-3.5 h-3.5" /> Study now
-                        </Button>
-                    </Link>
+                    {/* "Study now" sat here and went to the same place the
+                        panel's own primary button goes. One panel, one play. */}
                 </div>
             </div>
         </div>
