@@ -96,21 +96,77 @@ export function suitFor(subject) {
  * collide on colour far more often than chance. Separate seeds keep the two
  * marks independent facts about the subject.
  */
-export const SUBJECT_COLORS = [
-    "#3B82F6", // blue
-    "#8B5CF6", // violet
-    "#10B981", // emerald
-    "#F0B429", // amber
-    "#EC4899", // pink
-    "#0EA5E9", // sky
-    "#F97316", // orange
-    "#14B8A6", // teal
-    "#A855F7", // purple
-    "#EF4444", // red
+export const SUBJECT_PALETTE = [
+    { key: "blue",    hex: "#3B82F6", label: "Blue" },
+    { key: "violet",  hex: "#8B5CF6", label: "Violet" },
+    { key: "emerald", hex: "#10B981", label: "Emerald" },
+    { key: "amber",   hex: "#F0B429", label: "Amber" },
+    { key: "pink",    hex: "#EC4899", label: "Pink" },
+    { key: "sky",     hex: "#0EA5E9", label: "Sky" },
+    { key: "orange",  hex: "#F97316", label: "Orange" },
+    { key: "teal",    hex: "#14B8A6", label: "Teal" },
+    { key: "purple",  hex: "#A855F7", label: "Purple" },
+    { key: "red",     hex: "#EF4444", label: "Red" },
 ];
+
+export const SUBJECT_COLORS = SUBJECT_PALETTE.map((c) => c.hex);
 
 export function colorFor(subject) {
     const s = String(subject || "");
     if (!s) return SUBJECT_COLORS[0];
     return SUBJECT_COLORS[fnv(s, 40389) % SUBJECT_COLORS.length];
+}
+
+/**
+ * What the Subjects page used to write into `user_subjects.color`.
+ *
+ * It stored a DESIGN TOKEN NAME — "primary", "xp", "chart-3" — while every
+ * card in the app read the same column expecting hex and handed it to
+ * PlayingCard's `tone`, where `alpha()` regex-matches six hex digits, got
+ * "primary", returned undefined, and fell back to the default border without
+ * complaining. That is why subject colour had never visibly worked on a card
+ * for anyone: not a missing value, a value in the wrong language, failing
+ * silently at the one place it was consumed.
+ *
+ * The hexes are the computed values of those tokens in the light theme, so a
+ * subject someone deliberately coloured years ago keeps the colour they chose
+ * instead of being silently reassigned.
+ */
+const LEGACY_TOKEN_HEX = {
+    primary:   "#58CC02",
+    xp:        "#FFA500",
+    streak:    "#FF4B4B",
+    "chart-3": "#3B82F6",
+    "chart-4": "#B45AE0",
+};
+
+const KEY_HEX = Object.fromEntries(SUBJECT_PALETTE.map((c) => [c.key, c.hex]));
+
+/**
+ * The one function every reader of a subject colour should call.
+ *
+ * Normalises on READ rather than migrating the column, which is deliberate:
+ * a backfill would have to run once, against every row, and would still leave
+ * every reader carrying its own `|| '#3B82F6'` fallback for rows written
+ * before it landed. Doing it here fixes existing users the moment they load a
+ * page, needs no migration, and means the fallback logic exists exactly once
+ * instead of in the seven places that each had their own copy of it.
+ *
+ * Accepts a row, or a bare string, or nothing. In order:
+ *   already hex        → use it
+ *   a palette key      → its hex
+ *   a legacy token     → the token's hex, so a deliberate choice survives
+ *   null / unknown     → derived from the subject's name
+ */
+export function subjectColor(rowOrColor, name) {
+    const row = typeof rowOrColor === "string" || rowOrColor == null
+        ? { color: rowOrColor }
+        : rowOrColor;
+    const raw = String(row?.color || "").trim();
+    const subject = name || row?.subject_name || row?.name || "";
+
+    if (/^#[0-9a-f]{6}$/i.test(raw)) return raw;
+    if (KEY_HEX[raw]) return KEY_HEX[raw];
+    if (LEGACY_TOKEN_HEX[raw]) return LEGACY_TOKEN_HEX[raw];
+    return colorFor(subject);
 }

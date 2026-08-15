@@ -47,6 +47,7 @@ import QuizPlayer from "../components/quizzes/QuizPlayer";
 import QuizInsightRail from "../components/quizzes/QuizInsightRail";
 import MarkdownMath from "@/components/shared/MarkdownMath";
 import QuizModePicker from "../components/quizzes/QuizModePicker";
+import { subjectColor } from "@/components/cards/cardIdentity";
 
 // ─── Coach voice helpers (chill + motivational) ──────────────────────────────
 function getCoachLine({ name, hour, totalQuizzes, recentAttempts, avgScore, lowScore }) {
@@ -1216,18 +1217,18 @@ Return valid JSON only.`,
                             <div className="space-y-6">
                                 {Object.entries(quizzesBySubject).map(([subjectName, subjectQuizzes]) => {
                                     const userSubject = userSubjects.find(s => s.subject_name === subjectName);
-                                    const subjectColor = userSubject?.color || '#3B82F6';
+                                    const tone = subjectColor(userSubject);
                                     return (
                                         <div key={subjectName}>
                                             <div className="flex items-center gap-2.5 mb-3">
-                                                <div className="w-3 h-3 rounded-full flex-shrink-0" style={{ backgroundColor: subjectColor }} />
+                                                <div className="w-3 h-3 rounded-full flex-shrink-0" style={{ backgroundColor: tone }} />
                                                 <h3 className="font-bold text-foreground">{subjectName}</h3>
                                                 <span className="text-xs text-muted-foreground/60">{subjectQuizzes.length} quiz{subjectQuizzes.length !== 1 ? 'zes' : ''}</span>
                                             </div>
                                             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                                                 {subjectQuizzes.map((quiz, index) => (
                                                     <motion.div key={quiz.id} initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: index * 0.04 }} className="h-full">
-                                                        <QuizCard quiz={quiz} pastAttempts={quizAttempts} subjectColor={subjectColor}
+                                                        <QuizCard quiz={quiz} pastAttempts={quizAttempts} subjectColor={tone}
                                                             onPlay={() => { setPendingQuiz(quiz); }}
                                                             onRetryWrong={(wrongIdx) => {
                                                                 const subset = {

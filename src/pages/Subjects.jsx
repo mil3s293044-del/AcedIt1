@@ -14,46 +14,46 @@ import { moderationPresets } from "@/components/shared/contentModeration";
 import HelpButton from "@/components/shared/HelpButton";
 import SubjectDetail from "../components/vce/SubjectDetail";
 import { VCE_SUBJECTS } from "@/data/vceSubjects";
+import { colorFor, subjectColor, SUBJECT_PALETTE } from "@/components/cards/cardIdentity";
+import { alpha } from "@/components/cards/PlayingCard";
 
-// ─── Static color palette mapped to design tokens ────────────────────────────
-// Pre-computed static class strings (Tailwind JIT can't see dynamic strings).
-const SUBJECT_COLORS = [
-    { key: "primary", tile: "bg-primary/10",  text: "text-primary",  border: "border-primary/30",  solid: "bg-primary",  ring: "ring-primary/40"  },
-    { key: "xp",      tile: "bg-xp/10",       text: "text-xp",       border: "border-xp/30",       solid: "bg-xp",       ring: "ring-xp/40"       },
-    { key: "streak",  tile: "bg-streak/10",   text: "text-streak",   border: "border-streak/30",   solid: "bg-streak",   ring: "ring-streak/40"   },
-    { key: "chart-3", tile: "bg-chart-3/10",  text: "text-chart-3",  border: "border-chart-3/30",  solid: "bg-chart-3",  ring: "ring-chart-3/40"  },
-    { key: "chart-4", tile: "bg-chart-4/10",  text: "text-chart-4",  border: "border-chart-4/30",  solid: "bg-chart-4",  ring: "ring-chart-4/40"  },
-];
-
-// Stable hash from a string id/name → palette index. Keeps deterministic per-subject color.
-const hashToIndex = (str) => {
-    if (!str) return 0;
-    let h = 0;
-    for (let i = 0; i < str.length; i++) h = (h * 31 + str.charCodeAt(i)) >>> 0;
-    return h % SUBJECT_COLORS.length;
-};
-
-const colorForSubject = (subject) =>
-    SUBJECT_COLORS[hashToIndex(subject?.id || subject?.code || subject?.name || "")];
-
-const colorByKey = (key) =>
-    SUBJECT_COLORS.find(c => c.key === key) || SUBJECT_COLORS[0];
-
-// Keep keyed values in user-facing color picker (5 token-driven swatches).
-const subjectColors = SUBJECT_COLORS.map(c => c.key);
+/**
+ * Subject colour comes from cardIdentity, and only from there.
+ *
+ * This page used to own a second, incompatible colour scheme: five entries
+ * keyed to design tokens ("primary", "xp", "chart-3"), hashed with h*31 over
+ * id-or-code-or-name, and written into `user_subjects.color` as the KEY. Every
+ * card elsewhere in the app read that same column expecting hex and handed it
+ * to PlayingCard's `tone`, where the hex regex rejected "primary" and the
+ * colour silently vanished. So a subject was one colour here, a different
+ * colour in the card deck's hash, and no colour at all on the card itself.
+ *
+ * One palette, one hash, one format: hex, from `colorFor`. The tiles that used
+ * pre-computed Tailwind classes are inline styles now, which is what let the
+ * palette grow from five to ten — a token class has to be a static string for
+ * the JIT to see it, and a hex does not.
+ */
+const swatch = (hex) => ({
+    solid:  { backgroundColor: hex },
+    tile:   { backgroundColor: alpha(hex, 0.10) },
+    text:   { color: hex },
+    border: { borderColor: alpha(hex, 0.30) },
+});
 
 // ─── Mini Subject Card for Browse ─────────────────────────────────────────────
 
 function BrowseSubjectCard({ subject, isSelected, onAdd, onRemove, onViewDetails }) {
-    const palette = colorForSubject(subject);
+    const hex = colorFor(subject?.name);
+    const palette = swatch(hex);
     return (
         <div className="group relative card-soft overflow-hidden hover:shadow-soft transition-all duration-300">
-            <div className={`h-2 w-full ${palette.solid}`} />
+            <div className="h-2 w-full" style={palette.solid} />
             <div className="p-4">
                 <div className="flex items-start justify-between gap-2 mb-2">
                     <div className="flex items-center gap-2.5 min-w-0">
-                        <div className={`w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 ${palette.tile}`}>
-                            <BookOpen className={`w-5 h-5 ${palette.text}`} />
+                        <div className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0"
+                            style={palette.tile}>
+                            <BookOpen className="w-5 h-5" style={palette.text} />
                         </div>
                         <div className="min-w-0">
                             <h3 className="font-bold text-foreground text-sm truncate">{subject.name}</h3>
@@ -100,20 +100,23 @@ function BrowseSubjectCard({ subject, isSelected, onAdd, onRemove, onViewDetails
 // ─── My Subject Card (larger, more info) ──────────────────────────────────────
 
 function MySubjectCard({ userSubject, fullSubject, onRemove, onViewDetails }) {
-    const palette = userSubject.color
-        ? colorByKey(userSubject.color)
-        : colorForSubject(fullSubject || { id: userSubject.vce_subject_id, name: userSubject.subject_name, code: userSubject.subject_code });
+    // subjectColor handles all three things this column has ever held: hex,
+    // a palette key, and one of the old design-token names.
+    const hex = subjectColor(userSubject);
+    const palette = swatch(hex);
     return (
         <div className="group relative card-soft overflow-hidden hover:shadow-soft transition-all duration-300">
-            <div className={`p-5 relative ${palette.tile}`}>
+            <div className="p-5 relative" style={palette.tile}>
                 <div className="flex items-start gap-3">
-                    <div className={`w-12 h-12 rounded-2xl flex items-center justify-center shadow-soft ${palette.solid}`}>
+                    <div className="w-12 h-12 rounded-2xl flex items-center justify-center shadow-soft"
+                        style={palette.solid}>
                         <BookOpen className="w-6 h-6 text-white" />
                     </div>
                     <div className="flex-1 min-w-0">
                         <h3 className="font-bold text-foreground text-base truncate">{userSubject.subject_name}</h3>
                         <div className="flex items-center gap-2 mt-1">
-                            <span className={`pill text-[10px] py-0.5 font-mono ${palette.tile} ${palette.text}`}>
+                            <span className="pill text-[10px] py-0.5 font-mono"
+                                style={{ ...palette.tile, ...palette.text }}>
                                 {userSubject.subject_code}
                             </span>
                             <span className="pill bg-xp/10 text-xp text-[10px] py-0.5">
@@ -175,7 +178,7 @@ export default function Subjects() {
     const [selectedYearLevel, setSelectedYearLevel] = useState("Year 12 Units 3&4");
     const [selectedSubjectColor, setSelectedSubjectColor] = useState("");
     const [showCreateDialog, setShowCreateDialog] = useState(false);
-    const [newSubjectForm, setNewSubjectForm] = useState({ name: "", code: "", year_level: "Year 12 Units 3&4", color: subjectColors[0] });
+    const [newSubjectForm, setNewSubjectForm] = useState({ name: "", code: "", year_level: "Year 12 Units 3&4", color: SUBJECT_PALETTE[0].hex });
     const { toast } = useToast();
 
     const isAdmin = user?.role === "admin";
@@ -222,7 +225,7 @@ export default function Subjects() {
 
     const handleAddSubject = (subject) => {
         setSelectedSubjectForYear(subject);
-        setSelectedSubjectColor(subject.color || colorForSubject(subject).key);
+        setSelectedSubjectColor(subjectColor(subject, subject?.name));
         setShowYearLevelDialog(true);
     };
 
@@ -284,7 +287,7 @@ export default function Subjects() {
                 const profiles = await UserProfile.filter({ created_by: user.email });
                 if (profiles[0]) await UserProfile.update(profiles[0].id, { onboarding_tasks: { ...profiles[0].onboarding_tasks, subjects_selected: true } });
             }
-            setNewSubjectForm({ name: "", code: "", year_level: "Year 12 Units 3&4", color: subjectColors[0] });
+            setNewSubjectForm({ name: "", code: "", year_level: "Year 12 Units 3&4", color: SUBJECT_PALETTE[0].hex });
             setShowCreateDialog(false);
             if (user?.email) await loadData(user.email);
             toast({ title: "Subject created", description: `${newSubject.name} added to your subjects.` });
@@ -316,7 +319,7 @@ export default function Subjects() {
 
     // ─── Main view ────────────────────────────────────────────────────────────
 
-    const newFormPalette = colorByKey(newSubjectForm.color);
+    const newFormPalette = swatch(newSubjectForm.color);
 
     return (
         <div className="min-h-screen bg-background">
@@ -480,9 +483,14 @@ export default function Subjects() {
                             <div>
                                 <label className="text-sm font-semibold text-foreground mb-2 block">Color</label>
                                 <div className="grid grid-cols-5 gap-2">
-                                    {SUBJECT_COLORS.map(c => (
-                                        <button key={c.key} onClick={() => setSelectedSubjectColor(c.key)}
-                                            className={`h-10 rounded-lg transition-all ${c.solid} ${selectedSubjectColor === c.key ? `ring-4 ring-offset-2 ${c.ring} scale-110` : "hover:scale-105"}`} />
+                                    {SUBJECT_PALETTE.map(c => (
+                                        <button key={c.key} type="button" title={c.label}
+                                            aria-label={c.label}
+                                            aria-pressed={selectedSubjectColor === c.hex}
+                                            onClick={() => setSelectedSubjectColor(c.hex)}
+                                            className={`h-10 rounded-lg transition-all ${selectedSubjectColor === c.hex
+                                                ? "ring-4 ring-offset-2 ring-foreground/20 scale-110" : "hover:scale-105"}`}
+                                            style={{ backgroundColor: c.hex }} />
                                     ))}
                                 </div>
                             </div>
@@ -528,15 +536,22 @@ export default function Subjects() {
                             <div>
                                 <label className="text-sm font-semibold text-foreground mb-1.5 block">Color</label>
                                 <div className="grid grid-cols-5 gap-2">
-                                    {SUBJECT_COLORS.map(c => (
-                                        <button key={c.key} onClick={() => setNewSubjectForm({ ...newSubjectForm, color: c.key })}
-                                            className={`h-10 rounded-lg transition-all ${c.solid} ${newSubjectForm.color === c.key ? `ring-4 ring-offset-2 ${c.ring} scale-110` : "hover:scale-105"}`} />
+                                    {SUBJECT_PALETTE.map(c => (
+                                        <button key={c.key} type="button" title={c.label}
+                                            aria-label={c.label}
+                                            aria-pressed={newSubjectForm.color === c.hex}
+                                            onClick={() => setNewSubjectForm({ ...newSubjectForm, color: c.hex })}
+                                            className={`h-10 rounded-lg transition-all ${newSubjectForm.color === c.hex
+                                                ? "ring-4 ring-offset-2 ring-foreground/20 scale-110" : "hover:scale-105"}`}
+                                            style={{ backgroundColor: c.hex }} />
                                     ))}
                                 </div>
                             </div>
                             {/* Preview */}
-                            <div className={`rounded-xl border-2 border-dashed p-3 flex items-center gap-3 ${newFormPalette.border} ${newFormPalette.tile}`}>
-                                <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${newFormPalette.solid}`}>
+                            <div className="rounded-xl border-2 border-dashed p-3 flex items-center gap-3"
+                                style={{ ...newFormPalette.border, ...newFormPalette.tile }}>
+                                <div className="w-10 h-10 rounded-lg flex items-center justify-center"
+                                    style={newFormPalette.solid}>
                                     <BookOpen className="w-5 h-5 text-white" />
                                 </div>
                                 <div>

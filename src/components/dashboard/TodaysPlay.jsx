@@ -93,8 +93,13 @@ export default function TodaysPlay({
                         }}
                         whileHover={reduce ? undefined : { rotate: 0, y: -6, scale: 1.04 }}
                     >
+                        {/* The only card left in the app still drawing the default
+                            ghost watermark. The move's icon and label sit dead
+                            centre, so the layout goes behind them at printing
+                            strength rather than in front. */}
                         <PlayingCard rank={card.rank} suit={card.suit} tone={card.tone}
-                            smallIndices className="w-full aspect-[2.5/3.5]">
+                            smallIndices watermark={false} pips="faint"
+                            className="w-full aspect-[2.5/3.5]">
                             <span className="absolute inset-0 flex flex-col items-center
                                 justify-center gap-2.5 px-3 text-center">
                                 <span className={`w-12 h-12 rounded-xl ${theme.iconBg}

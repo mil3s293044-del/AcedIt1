@@ -31,6 +31,7 @@ import CognitiveProfilePanel from "../components/analytics/CognitiveProfilePanel
 import MemoryPanel from "../components/analytics/MemoryPanel";
 import AttentionPanel from "../components/analytics/AttentionPanel";
 import HelpButton from "@/components/shared/HelpButton";
+import { subjectColor } from "@/components/cards/cardIdentity";
 
 const fmt = (mins) => {
     if (!mins) return "0m";
@@ -341,7 +342,7 @@ export default function Analytics() {
                 ...data.activeRecall.filter(t=>t.subject_name===sub.subject_name).map(t=>t.date),
             ].filter(Boolean)).size;
             return {
-                name: sub.subject_name, code: sub.subject_code, color: sub.color || TOKEN_HSL.chart3,
+                name: sub.subject_name, code: sub.subject_code, color: subjectColor(sub),
                 target: sub.goal_study_score, priority: sub.priority,
                 totalMins, quizAvg, cards: cards.length, mastered, weak,
                 sessions: data.techniques.filter(t=>t.subject===sub.subject_name).length + data.activeRecall.filter(t=>t.subject_name===sub.subject_name).length,

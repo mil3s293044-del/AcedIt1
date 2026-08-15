@@ -313,7 +313,17 @@ export default function DealtHand({ className = "" }) {
                                     boxShadow: "0 2px 2px rgba(13,22,38,0.10), "
                                         + "0 16px 22px rgba(13,22,38,0.16)",
                                 }}>
-                                <PlayingCard rank={c.rank} suit={c.suit} tone={c.tone} watermark={!c.ace}
+                                {/* Faint pips instead of the ghost watermark. The label sits
+                                    at 46% and the top half of these cards was
+                                    empty apart from one enormous pale suit,
+                                    which said nothing: it is the same mark on
+                                    all five, so it carried no information about
+                                    which card you were looking at. The real
+                                    layout at printing strength says "seven" and
+                                    "four" from across the room. Ace keeps its
+                                    mascot and gets no pips. */}
+                                <PlayingCard rank={c.rank} suit={c.suit} tone={c.tone}
+                                    watermark={false} pips={c.ace ? false : "faint"}
                                     className="w-full aspect-[2.5/3.5]">
                                     {c.ace ? (
                                         <span className="absolute inset-0 grid place-items-center pt-2">
