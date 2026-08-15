@@ -263,7 +263,19 @@ export default function SpacedRepetition() {
     const [isGenerating, setIsGenerating] = useState(false);
     const [generatedFlashcards, setGeneratedFlashcards] = useState(null);
     const [searchTerm, setSearchTerm] = useState('');
-    const [filterSubject, setFilterSubject] = useState('all');
+    /**
+     * Seeded from ?subject= so a card on the dashboard is a real action.
+     *
+     * Read once, at mount, into the filter this page already had rather than
+     * added as a second parallel filtering path — which means the student can
+     * see what was applied in the same Select they would have used themselves,
+     * and clear it there. A deep link that filters invisibly is a page that
+     * looks like it has lost half your decks.
+     */
+    const [filterSubject, setFilterSubject] = useState(() => {
+        if (typeof window === "undefined") return "all";
+        return new URLSearchParams(window.location.search).get("subject") || "all";
+    });
     const [userSubjects, setUserSubjects] = useState([]);
     const [viewingStats, setViewingStats] = useState(null);
     const [reviewStartTime, setReviewStartTime] = useState(null);

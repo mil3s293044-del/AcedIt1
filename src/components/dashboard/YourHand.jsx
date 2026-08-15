@@ -33,12 +33,26 @@ import { createPageUrl } from "@/utils";
 import { ArrowRight, Layers } from "lucide-react";
 import PlayingCard, { CardBack } from "@/components/cards/PlayingCard";
 import { rankFor, suitFor, colorFor, rankTitle } from "@/components/cards/cardIdentity";
+import { studyMove } from "@/lib/studyMove";
 
-/** One subject, face up. */
+/**
+ * The card's move, as a link.
+ *
+ * The choosing lives in lib/studyMove so it can be tested against all three of
+ * its branches; the fixture only ever produces cards that are due, so two of
+ * them would otherwise ship unverified. This just puts the route on the front.
+ */
+function moveFor(row) {
+    const m = studyMove(row);
+    return { ...m, href: `${createPageUrl("Study")}${m.query}` };
+}
+
+/** One subject, face up, with its next move on it. */
 function SubjectCard({ row, i, n, reduce }) {
     const rank = rankFor(row.mastery);
     const suit = suitFor(row.subject);
     const tone = colorFor(row.subject);
+    const move = moveFor(row);
 
     // The fan leans out from the middle, the way a held hand does. Small
     // angles: this one has to stay readable, unlike a decorative fan.
@@ -59,8 +73,8 @@ function SubjectCard({ row, i, n, reduce }) {
             whileHover={reduce ? undefined : { y: -10, rotate: 0, scale: 1.04, zIndex: 5 }}
         >
             <Link
-                to={createPageUrl("Study")}
-                title={`${row.subject} — ${rankTitle(rank, suit, row.mastery)}`}
+                to={move.href}
+                title={`${row.subject} — ${rankTitle(rank, suit, row.mastery)}. ${move.verb}, ${move.detail}.`}
                 className="block focus-visible:outline-none focus-visible:ring-2
                     focus-visible:ring-primary rounded-[0.9rem]"
             >
@@ -82,17 +96,20 @@ function SubjectCard({ row, i, n, reduce }) {
                             text-foreground/80 line-clamp-2 break-words">
                             {row.subject}
                         </span>
+                        <span data-card-move={move.verb}
+                            className={`block text-[8.5px] font-bold leading-none mt-0.5
+                            ${move.urgent ? "text-streak" : "text-muted-foreground/70"}`}>
+                            {move.verb}
+                        </span>
                     </span>
 
-                    {/* Due count, printed small under the index rather than as
-                        a badge floating over the face. A card with a sticker on
-                        it stops being a card. */}
-                    {row.due > 0 && (
-                        <span className="absolute top-1.5 right-2 text-[10px] font-black
-                            tabular-nums text-streak">
-                            {row.due}
-                        </span>
-                    )}
+                    {/* The move, printed on the card. A count alone told you
+                        there was something to do and not what it was, so every
+                        card said the same thing in a different number. */}
+                    <span className={`absolute top-1.5 right-2 text-[9px] font-black
+                        tabular-nums ${move.urgent ? "text-streak" : "text-muted-foreground/50"}`}>
+                        {row.due > 0 ? row.due : row.cards}
+                    </span>
                 </PlayingCard>
             </Link>
         </motion.div>
@@ -109,9 +126,20 @@ export default function YourHand({ hand = [], className = "" }) {
     const spread = shown.length > 1
         && rankFor(shown[0].mastery) !== rankFor(shown[shown.length - 1].mastery);
 
+    /**
+     * The card to play first.
+     *
+     * Most due, and the weakest subject breaks the tie — if two subjects have
+     * the same pile waiting, the one you know least is the one where the
+     * reviews are worth most. Falls back to the weakest subject outright when
+     * nothing is due at all, which is when "test yourself" is the move.
+     */
+    const urgent = [...shown].sort((a, b) =>
+        b.due - a.due || a.mastery - b.mastery)[0];
+
     return (
         <div data-your-hand className={`rounded-2xl bg-surface border border-border
-            shadow-soft p-5 lg:p-6 ${className}`}>
+            on-table p-5 lg:p-6 ${className}`}>
             <div className="flex items-baseline justify-between gap-3 mb-1">
                 <p className="stat-label text-muted-foreground">Your hand</p>
                 {totalDue > 0 && (
@@ -147,10 +175,17 @@ export default function YourHand({ hand = [], className = "" }) {
                         ))}
                     </div>
 
-                    <Link to={createPageUrl("Study")}
-                        className="inline-flex items-center gap-1 text-[11px] font-bold
+                    {/* The one card worth playing first, named. "Play a card"
+                        pointed at the Study page and left the choosing to you,
+                        which is the choosing this panel exists to do. */}
+                    <Link to={moveFor(urgent).href}
+                        className="inline-flex items-center gap-1.5 text-[11px] font-bold
                             text-primary hover:underline mt-2">
-                        Play a card <ArrowRight className="w-3 h-3" />
+                        {moveFor(urgent).verb} {urgent.subject}
+                        <span className="text-muted-foreground font-semibold">
+                            · {moveFor(urgent).detail}
+                        </span>
+                        <ArrowRight className="w-3 h-3" />
                     </Link>
                 </>
             ) : (

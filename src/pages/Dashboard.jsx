@@ -989,7 +989,7 @@ export default function Dashboard() {
                                 </div>
                             </div>
                         ) : (
-                            <div className="rounded-2xl bg-surface border border-dashed border-border p-6 lg:p-8 text-center h-full flex flex-col items-center justify-center shadow-soft">
+                            <div className="rounded-2xl bg-surface border border-dashed border-border p-6 lg:p-8 text-center h-full flex flex-col items-center justify-center on-table">
                                 <AceBody className="w-28 mb-1" pose="point" title="Ace" />
                                 <h2 className="font-display font-extrabold text-foreground text-xl lg:text-2xl mb-2">
                                     Ready to start a streak?
@@ -1023,7 +1023,7 @@ export default function Dashboard() {
 
                 {/* ── ONBOARDING NUDGE ────────────────────────────────── */}
                 {showOnboarding && (
-                    <Placed index={4} className="rounded-2xl bg-primary/5 border border-primary/15 shadow-soft p-5 lg:p-6">
+                    <Placed index={4} className="rounded-2xl bg-primary/5 border border-primary/15 on-table p-5 lg:p-6">
                         <div className="flex flex-col sm:flex-row sm:items-center gap-4">
                             <div className="flex items-center gap-3 flex-1 min-w-0">
                                 <div className="w-11 h-11 rounded-xl bg-primary/10 flex items-center justify-center flex-shrink-0">
@@ -1087,7 +1087,7 @@ export default function Dashboard() {
                                be a 2/5 column where stacking made sense, and at
                                full width the same markup became a tall box of
                                mostly nothing. */
-                            <div className="rounded-2xl bg-surface border border-dashed border-border p-5 lg:p-6 shadow-soft
+                            <div className="rounded-2xl bg-surface border border-dashed border-border p-5 lg:p-6 on-table
                                 flex flex-col sm:flex-row sm:items-center gap-4 text-center sm:text-left">
                                 <div className="w-12 h-12 rounded-2xl bg-chart-3/10 flex items-center justify-center flex-shrink-0 mx-auto sm:mx-0">
                                     <Target className="w-6 h-6 text-chart-3" />
@@ -1140,7 +1140,7 @@ export default function Dashboard() {
                     {/* Today's intention — set in the Planner, read here. It was
                         being written and then only ever shown on the page that
                         wrote it. */}
-                    <div className="card-soft border-2 border-border p-5">
+                    <div className="card-soft on-table border-2 border-border p-5">
                         <p className="stat-label text-chart-4/80 mb-1.5">Today's intention</p>
                         {todayIntention ? (
                             <>
@@ -1203,7 +1203,7 @@ export default function Dashboard() {
                         </motion.section>
                     )}
 
-                    <div className="card-soft border-2 border-border p-5">
+                    <div className="card-soft on-table border-2 border-border p-5">
                         <div className="flex items-center justify-between mb-3">
                             <p className="stat-label">Last sessions</p>
                             <Link to={createPageUrl("Study")} className="text-[11px] font-bold text-primary hover:underline">View all</Link>
@@ -1259,35 +1259,13 @@ export default function Dashboard() {
                     {/* Centred over the hand rather than parked at the far
                         left, where the heading and the thing it headed sat at
                         opposite ends of a 1376px row. */}
-                    {/* ACE DEALS IT. He was on this page for exactly one frame —
-                        the loading shuffle — and then gone, which is a strange
-                        way to treat the character the product is named after.
-                        Standing him at the edge of the table fills the corner
-                        the rail was floating alone in and makes the row read as
-                        a hand being held out rather than a nav bar drawn as
-                        cards.
-
-                        ABSOLUTE, NOT A FLEX SIBLING. HandRail's fan is
-                        `absolute left-1/2` inside a full-width box, so the
-                        cards are positioned against the container rather than
-                        laid out in it. Putting Ace in a flex row beside it
-                        collapsed that container to nothing and the fan spilled
-                        straight over the top of him. He gets his own corner of
-                        the table instead, and only on screens wide enough that
-                        the fan cannot reach him. */}
                     <p className="stat-label mb-2 md:text-center">Jump to</p>
-                    <div className="relative">
-                        <motion.div
-                            className="hidden xl:block absolute left-4 bottom-6 z-20"
-                            initial={{ opacity: 0, x: -18, rotate: -7 }}
-                            animate={{ opacity: 1, x: 0, rotate: 0 }}
-                            transition={{ type: "spring", stiffness: 170, damping: 20, delay: 0.5 }}
-                            aria-hidden="true"
-                        >
-                            <AceBody className="w-20 2xl:w-24" pose="point" idle title="Ace" />
-                        </motion.div>
-                        <HandRail />
-                    </div>
+                    {/* Ace is deliberately NOT here. He stood at the edge of
+                        the table for one revision and it was one Ace too many:
+                        AceBuddy already lives in the corner of every page and
+                        two of the same character on one screen makes the
+                        companion read as decoration. The corner is enough. */}
+                    <HandRail />
                 </motion.section>
 
             </div>

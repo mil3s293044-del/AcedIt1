@@ -166,6 +166,45 @@
       0 1px 2px rgba(13, 22, 38, 0.04),
       0 4px 12px rgba(13, 22, 38, 0.04);
   }
+
+  /**
+   * ON THE TABLE — a panel lying on a surface, rather than floating in a
+   * document.
+   *
+   * The dashboard grew a felt ground with light falling across it, and the
+   * panels kept a shadow tuned for a flat white page: one tight blur, almost
+   * no spread, no contact point. Against a lit surface that reads as a
+   * rectangle pasted on top — which is worse than it looked on flat cream,
+   * because the ground now says "depth" and the object still says "sticker".
+   *
+   * Three layers, in the order the eye needs them:
+   *   the CONTACT shadow, tight and barely offset. Where the object meets the
+   *   cloth, and the one thing that actually sells weight.
+   *   the CAST shadow, long and soft and low alpha, thrown down and away from
+   *   the light at the top of the table.
+   *   the TOP HIGHLIGHT, a single inset hairline of white along the upper
+   *   edge. This is the cheap trick and it does most of the work: a physical
+   *   object is brightest where it turns toward the light, and one inset pixel
+   *   is the whole of that.
+   */
+  .on-table {
+    box-shadow:
+      0 1px 2px rgba(13, 22, 38, 0.07),
+      0 10px 24px -12px rgba(13, 22, 38, 0.16),
+      0 28px 48px -32px rgba(13, 22, 38, 0.22),
+      inset 0 1px 0 rgba(255, 255, 255, 0.6);
+  }
+  /* No white lip in the dark: a bright edge on a dark panel reads as a border
+     somebody forgot to remove. The cast goes deeper instead, because the table
+     underneath is darker and a faint shadow on it is no shadow at all. */
+  .dark .on-table {
+    box-shadow:
+      0 1px 2px rgba(0, 0, 0, 0.30),
+      0 10px 24px -12px rgba(0, 0, 0, 0.42),
+      0 28px 48px -32px rgba(0, 0, 0, 0.55),
+      inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  }
+
   .card-soft-hover {
     transition: transform 200ms ease-out, box-shadow 200ms ease-out;
   }
