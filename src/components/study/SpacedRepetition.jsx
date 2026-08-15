@@ -31,6 +31,7 @@ import AceShuffle from "@/components/ace/AceShuffle";
 import ReviewTable from "@/components/cards/ReviewTable";
 import DeckStack from "@/components/cards/DeckStack";
 import { rankFor, suitFor, subjectColor } from "@/components/cards/cardIdentity";
+import { cardMastery, isCardDue } from "@/lib/mastery";
 
 // Lucide alias — design system maps "alert" semantics to AlertTriangle.
 const AlertCircle = AlertTriangle;
@@ -79,53 +80,15 @@ const generationSummary = (cardCount, coverage) => {
 };
 
 // ─── SM-2 based mastery algorithm ───────────────────────────────────────────
-// Mastery score (0–100) is a weighted composite:
-//   40% success rate (good+easy / total reviews)
-//   30% interval length (longer interval = more confident)
-//   20% ease factor (higher EF = easier to recall)
-//   10% recency (reviewed recently = relevant)
-// A card is "mastered" when mastery >= 80 and not a weak spot.
-// A card becomes weak spot if difficulty rate >= 50% over 3+ reviews,
-// and exits weak spot after 3 consecutive good/easy ratings.
-
-const computeMasteryScore = (card) => {
-    const again = card.review_count_again || 0;
-    const hard = card.review_count_hard || 0;
-    const good = card.review_count_good || 0;
-    const easy = card.review_count_easy || 0;
-    const total = again + hard + good + easy;
-    if (total === 0) return 0;
-
-    // 1. Success rate (0–1)
-    const successRate = (good + easy) / total;
-
-    // 2. Interval factor: cap at 30 days → score 0–1
-    const interval = card.interval_days || 1;
-    const intervalScore = Math.min(interval / 30, 1);
-
-    // 3. Ease factor: range 1.3–3.0 → normalise to 0–1
-    const ef = card.easiness_factor || 2.5;
-    const efScore = Math.max(0, Math.min((ef - 1.3) / (3.0 - 1.3), 1));
-
-    // 4. Recency: if reviewed in last 7 days = 1, else decay over 30 days
-    let recencyScore = 0;
-    if (card.last_reviewed_date) {
-        const daysSince = Math.floor((Date.now() - new Date(card.last_reviewed_date).getTime()) / 86400000);
-        recencyScore = Math.max(0, 1 - daysSince / 30);
-    }
-
-    const raw = successRate * 0.40 + intervalScore * 0.30 + efScore * 0.20 + recencyScore * 0.10;
-    return Math.round(raw * 100);
-};
-
-// A card is due when its scheduled next_review_date has arrived (today or
-// earlier). Brand-new cards with no next_review_date are always due. This is
-// the SM-2 contract — a skip counter is not a substitute for the schedule.
-const isDue = (card) => {
-    if (!card.next_review_date) return true;
-    const today = new Date().toISOString().split('T')[0];
-    return card.next_review_date <= today;
-};
+// Moved to src/lib/mastery.js so the dashboard can rank a subject without
+// importing this file. The formula is unchanged; see the note there for the
+// weights and for why a never-reviewed card scores zero.
+//
+// A card is "mastered" when mastery >= 80 and not a weak spot. A card becomes
+// a weak spot at a difficulty rate >= 50% over 3+ reviews, and leaves after
+// three consecutive good/easy ratings.
+const computeMasteryScore = cardMastery;
+const isDue = isCardDue;
 
 const calculateNextReview = (quality, card) => {
     let sessionSkipCount = 0;

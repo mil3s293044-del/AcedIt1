@@ -12,13 +12,15 @@ import { createPageUrl } from "@/utils";
 import { Link } from "react-router-dom";
 import HelpButton from "@/components/shared/HelpButton";
 import { reconcileUserXP } from "@/lib/reconcileXP";
+import { subjectHand } from "@/lib/mastery";
 import { getStreakMultiplier as getStreakMultiplierValue } from "@/components/shared/streakHelpers";
 import RetentionCard from "@/components/dashboard/RetentionCard";
+import YourHand from "@/components/dashboard/YourHand";
+import TableGround from "@/components/dashboard/TableGround";
 import DistanceToTarget from "@/components/dashboard/DistanceToTarget";
 import TodaysPlay from "@/components/dashboard/TodaysPlay";
 import HandRail from "@/components/dashboard/HandRail";
 import RunOfSeven from "@/components/dashboard/RunOfSeven";
-import RankTable from "@/components/dashboard/RankTable";
 import Placed from "@/components/dashboard/Placed";
 import { bestLever } from "@/lib/atarLift";
 import { atarBandOf } from "@/lib/atarBands";
@@ -780,25 +782,29 @@ export default function Dashboard() {
     }, [todayIntentPlan, todaysStudyTime]);
 
     /**
-     * The board, flattened into one ordered list: rivals above, then you, then
-     * the one below. Names are resolved here rather than in the row, because
-     * anonymity is an account rule and not a presentation detail.
+     * How far off the person immediately above you, as one phrase.
+     *
+     * This is what survives of the rank panel. That panel resolved four rows
+     * of names, handled anonymity for each and drew a card per row; the only
+     * thing a student ever took from it was whether they were close to passing
+     * someone. Anonymity still has to be honoured, but for one name instead of
+     * four.
      */
-    const rankRows = useMemo(() => {
-        if (!rankInfo) return [];
-        const name = (e) => (e.is_anonymous && e.user_email !== user?.email
-            ? `Anon #${(e.id || "").slice(-4)}`
-            : (e.username || e.user_name || "Student"));
-        const out = rankInfo.rivals.map(r => ({ entry: r, isMe: false, display: name(r) }));
-        if (rankInfo.myEntry) out.push({
-            entry: { ...rankInfo.myEntry, rank: rankInfo.myRank, gap: 0 },
-            isMe: true, display: name(rankInfo.myEntry),
-        });
-        if (rankInfo.below) out.push({
-            entry: rankInfo.below, isMe: false, below: true, display: name(rankInfo.below),
-        });
-        return out;
+    const rankGap = useMemo(() => {
+        const rival = rankInfo?.rivals?.[rankInfo.rivals.length - 1];
+        if (!rival || !rankInfo?.myRank || rankInfo.myRank > 50) return null;
+        const name = rival.is_anonymous && rival.user_email !== user?.email
+            ? `Anon #${(rival.id || "").slice(-4)}`
+            : (rival.username || rival.user_name || "Student");
+        return `${fmtXP(rival.gap)} XP off ${name}`;
     }, [rankInfo, user]);
+
+    /**
+     * Your subjects, ranked. Built from the flashcards this page already
+     * fetches, through the same mastery formula the review deck uses, so a
+     * subject that shows as a Queen here opens as a Queen over there.
+     */
+    const subjectCards = useMemo(() => subjectHand(flashcards), [flashcards]);
 
     const hasGoal = !!(userProfile?.goal_atar || userProfile?.goal_course_name);
     const onboardingTasks = userProfile?.onboarding_tasks || {};
@@ -817,8 +823,12 @@ export default function Dashboard() {
     }
 
     return (
-        <div className="min-h-screen bg-background">
-            <div className="w-full px-4 lg:px-8 py-6 lg:py-10 max-w-[1600px] mx-auto space-y-8 lg:space-y-10">
+        <div className="min-h-screen bg-background relative">
+            {/* The surface everything below is lying on. Static paint, behind
+                the content, and it is what stops a page full of playing cards
+                from still reading as a document. */}
+            <TableGround />
+            <div className="relative z-10 w-full px-4 lg:px-8 py-6 lg:py-10 max-w-[1600px] mx-auto space-y-8 lg:space-y-10">
 
                 {/* ── COACH STRIP ─────────────────────────────────────── */}
                 <Placed index={0}>
@@ -839,6 +849,22 @@ export default function Dashboard() {
                                     <span className="inline-flex items-center gap-1 font-extrabold text-chart-4">
                                         <GraduationCap className="w-3.5 h-3.5" /> {Number(userProfile.acedit_atar).toFixed(2)} ATAR
                                     </span>
+                                </>
+                            )}
+                            {/* What the Ranked panel was actually for. */}
+                            {rankInfo?.myRank && (
+                                <>
+                                    <span className="text-muted-foreground/40">·</span>
+                                    <Link to={createPageUrl("Ranked")}
+                                        className="inline-flex items-center gap-1 font-extrabold
+                                            text-xp hover:underline">
+                                        <Trophy className="w-3.5 h-3.5" /> #{rankInfo.myRank}
+                                        {rankGap && (
+                                            <span className="text-muted-foreground font-bold">
+                                                · {rankGap}
+                                            </span>
+                                        )}
+                                    </Link>
                                 </>
                             )}
                         </div>
@@ -872,18 +898,30 @@ export default function Dashboard() {
                 <div className="grid xl:grid-cols-[minmax(0,1fr)_360px] gap-6 xl:gap-8 items-start">
                 <div className="min-w-0 space-y-8 lg:space-y-10">
 
-                {/* ── THE RUN ─────────────────────────────────────────── */}
-                {/* The day's numbers used to sit beside this in their own green
-                    panel. Two boxes both headed "today" is one box, and it now
-                    lives in Your Play with the move it belongs to — so the
-                    streak gets the full column instead of two thirds. */}
-                <Placed index={2}>
+                {/* ── THE RUN, AND THE HAND ───────────────────────────── */}
+                {/* Paired, and that is the single biggest change to the shape
+                    of this page. The streak was a full-width panel using its
+                    left third: the number, the week and the shields all sat in
+                    eight of twelve columns and the remaining third held two
+                    small boxes and about four hundred pixels of nothing. Beside
+                    it now is the hand, which is the panel this dashboard was
+                    missing — the app is a deck and the page never showed you
+                    your deck. Two panels that were each half empty become one
+                    row that is full. */}
+                <div className="grid lg:grid-cols-2 gap-6 lg:gap-7 items-stretch">
+                <Placed index={2} className="min-w-0">
                     <div>
                         {streakDays > 0 ? (
                             <div className="relative overflow-hidden rounded-2xl bg-surface border border-border shadow-soft p-6 lg:p-8 h-full">
                                 <Flame className="absolute -top-6 -right-6 w-32 h-32 text-streak/[0.08] pointer-events-none" />
-                                <div className="relative grid grid-cols-1 sm:grid-cols-12 gap-5 items-center">
-                                    <div className="sm:col-span-8">
+                                {/* Was sm:grid-cols-12. Breakpoints are viewport-wide, not
+                                    container-wide, so at 1600px the `sm:` split stayed on
+                                    inside a column half the width it was written for and
+                                    squeezed the run of seven into four columns. It splits
+                                    at xl now, which is the width this panel is actually
+                                    wide again. */}
+                                <div className="relative grid grid-cols-1 xl:grid-cols-12 gap-5 items-center">
+                                    <div className="xl:col-span-8">
                                         <p className="stat-label text-streak/80 mb-1 inline-flex items-center gap-1">
                                             Day streak <AceTip term="streak" />
                                         </p>
@@ -921,7 +959,7 @@ export default function Dashboard() {
                                             </span>
                                         </div>
                                     </div>
-                                    <div className="sm:col-span-4 grid grid-cols-2 sm:grid-cols-1 gap-3">
+                                    <div className="xl:col-span-4 grid grid-cols-2 xl:grid-cols-1 gap-3">
                                         <div className="bg-surface rounded-xl p-3 border border-streak/10 shadow-soft">
                                             <p className="stat-label">XP boost</p>
                                             <p className="font-display font-extrabold text-streak text-2xl mt-0.5 leading-none">{multiplier}</p>
@@ -968,58 +1006,20 @@ export default function Dashboard() {
 
                 </Placed>
 
-                {/* ── RANK & RIVALS ───────────────────────────────────── */}
-                {rankInfo && (rankInfo.rivals.length > 0 || rankInfo.below) && (
-                    <Placed index={3} className="rounded-2xl bg-surface border border-border shadow-soft p-6 lg:p-7">
-                        <div className="flex items-start justify-between mb-5 flex-wrap gap-3">
-                            <div className="flex items-center gap-3">
-                                <div className="w-11 h-11 rounded-xl bg-xp/10 flex items-center justify-center flex-shrink-0">
-                                    <Trophy className="w-5 h-5 text-xp" />
-                                </div>
-                                <div>
-                                    <p className="stat-label text-xp/80 mb-0.5">Global rank</p>
-                                    <h2 className="font-display font-extrabold text-foreground text-xl lg:text-2xl leading-tight">
-                                        {rankInfo.myRank ? (
-                                            <>
-                                                #{rankInfo.myRank}
-                                                <span className="text-muted-foreground/50 text-base font-bold ml-2">
-                                                    of {rankInfo.total.toLocaleString()}
-                                                </span>
-                                            </>
-                                        ) : (
-                                            "Unranked, keep earning XP"
-                                        )}
-                                    </h2>
-                                </div>
-                            </div>
-                            <Link to={createPageUrl("Ranked")}>
-                                <Button variant="outline" size="sm">
-                                    See full board <ArrowRight className="w-3.5 h-3.5" />
-                                </Button>
-                            </Link>
-                        </div>
+                {/* The hand. Same row, same height. */}
+                <Placed index={3} className="min-w-0">
+                    <YourHand hand={subjectCards} className="h-full" />
+                </Placed>
+                </div>
 
-                        <div className="space-y-1.5">
-                            {rankInfo.rivals.length > 0 && (
-                                <p className="stat-label mb-2">
-                                    {rankInfo.myRank && rankInfo.myRank <= 50 ? "Closest ahead of you" : "Top of the board"}
-                                </p>
-                            )}
-                            <RankTable fmtXP={fmtXP} rows={rankRows} />
-                        </div>
-
-                        {rankInfo.rivals.length > 0 && rankInfo.rivals[rankInfo.rivals.length - 1] && rankInfo.myRank && rankInfo.myRank <= 50 && (
-                            <p className="text-sm text-muted-foreground mt-4 leading-snug">
-                                <span className="font-bold text-foreground">{fmtXP(rankInfo.rivals[rankInfo.rivals.length - 1].gap)} XP</span> from passing{' '}
-                                <span className="font-bold text-foreground">
-                                    {rankInfo.rivals[rankInfo.rivals.length - 1].is_anonymous && rankInfo.rivals[rankInfo.rivals.length - 1].user_email !== user?.email
-                                        ? `Anon #${(rankInfo.rivals[rankInfo.rivals.length - 1].id || '').slice(-4)}`
-                                        : (rankInfo.rivals[rankInfo.rivals.length - 1].username || rankInfo.rivals[rankInfo.rivals.length - 1].user_name || 'Student')}
-                                </span>.
-                            </p>
-                        )}
-                    </Placed>
-                )}
+                {/* RANK & RIVALS lived here and took 230px of the best space on
+                    the page to say "#3 of 5". Its two real facts — where you
+                    sit, and how far off the person above — are one line in the
+                    header strip now. Everything else it drew was a leaderboard
+                    widget of the shape every app has, and for most students it
+                    was four rows of people they have never met. The full board
+                    is still a click away on Ranked, where someone who wants a
+                    leaderboard goes to look at one. */}
 
                 {/* ── ONBOARDING NUDGE ────────────────────────────────── */}
                 {showOnboarding && (
@@ -1259,8 +1259,35 @@ export default function Dashboard() {
                     {/* Centred over the hand rather than parked at the far
                         left, where the heading and the thing it headed sat at
                         opposite ends of a 1376px row. */}
+                    {/* ACE DEALS IT. He was on this page for exactly one frame —
+                        the loading shuffle — and then gone, which is a strange
+                        way to treat the character the product is named after.
+                        Standing him at the edge of the table fills the corner
+                        the rail was floating alone in and makes the row read as
+                        a hand being held out rather than a nav bar drawn as
+                        cards.
+
+                        ABSOLUTE, NOT A FLEX SIBLING. HandRail's fan is
+                        `absolute left-1/2` inside a full-width box, so the
+                        cards are positioned against the container rather than
+                        laid out in it. Putting Ace in a flex row beside it
+                        collapsed that container to nothing and the fan spilled
+                        straight over the top of him. He gets his own corner of
+                        the table instead, and only on screens wide enough that
+                        the fan cannot reach him. */}
                     <p className="stat-label mb-2 md:text-center">Jump to</p>
-                    <HandRail />
+                    <div className="relative">
+                        <motion.div
+                            className="hidden xl:block absolute left-4 bottom-6 z-20"
+                            initial={{ opacity: 0, x: -18, rotate: -7 }}
+                            animate={{ opacity: 1, x: 0, rotate: 0 }}
+                            transition={{ type: "spring", stiffness: 170, damping: 20, delay: 0.5 }}
+                            aria-hidden="true"
+                        >
+                            <AceBody className="w-20 2xl:w-24" pose="point" idle title="Ace" />
+                        </motion.div>
+                        <HandRail />
+                    </div>
                 </motion.section>
 
             </div>
