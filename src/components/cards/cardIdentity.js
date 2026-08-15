@@ -60,13 +60,57 @@ export function rankTitle(rank, suit, mastery) {
  * (so "Methods" and "Setmohd" differ) and stable across sessions, which a
  * sum-of-char-codes would not be.
  */
-export function suitFor(subject) {
-    const s = String(subject || "");
-    if (!s) return "spade";
-    let h = 2166136261;
+function fnv(s, seed) {
+    let h = seed;
     for (let i = 0; i < s.length; i += 1) {
         h ^= s.charCodeAt(i);
         h = Math.imul(h, 16777619);
     }
-    return SUITS[Math.abs(h) % SUITS.length];
+    return Math.abs(h);
+}
+
+export function suitFor(subject) {
+    const s = String(subject || "");
+    if (!s) return "spade";
+    return SUITS[fnv(s, 2166136261) % SUITS.length];
+}
+
+/**
+ * Subject name → colour.
+ *
+ * Until this existed, every subject in the app was `#3B82F6`. Nothing ever
+ * wrote a colour at signup and every reader fell back to the same blue, so a
+ * student with five subjects had five identical blue decks. The subject colour
+ * was in the schema, in PlayingCard's API and drawn in half a dozen
+ * components, and it had never once actually been a colour.
+ *
+ * Derived from the name for the same reason the suit is: a subject keeps its
+ * colour forever, on any device, before it has a database row, and adding a
+ * new subject never recolours the others. Onboarding can therefore print the
+ * real colour of a real subject before the student has an account, and it will
+ * still be that colour on their dashboard a year later.
+ *
+ * A DIFFERENT SEED FROM THE SUIT, which is not a detail. One shared hash would
+ * lock colour to suit: with ten colours and four suits, every spade would draw
+ * from the same two or three, and any two subjects that collided on suit would
+ * collide on colour far more often than chance. Separate seeds keep the two
+ * marks independent facts about the subject.
+ */
+export const SUBJECT_COLORS = [
+    "#3B82F6", // blue
+    "#8B5CF6", // violet
+    "#10B981", // emerald
+    "#F0B429", // amber
+    "#EC4899", // pink
+    "#0EA5E9", // sky
+    "#F97316", // orange
+    "#14B8A6", // teal
+    "#A855F7", // purple
+    "#EF4444", // red
+];
+
+export function colorFor(subject) {
+    const s = String(subject || "");
+    if (!s) return SUBJECT_COLORS[0];
+    return SUBJECT_COLORS[fnv(s, 40389) % SUBJECT_COLORS.length];
 }

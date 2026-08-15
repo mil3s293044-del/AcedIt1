@@ -28,13 +28,17 @@ import React from "react";
 import { motion, useReducedMotion } from "framer-motion";
 import PlayingCard from "@/components/cards/PlayingCard";
 
+// Each card carries a tone as well as a rank, so six of these on a table read
+// as a spread and not as six copies of the same white rectangle. The tones run
+// cool to warm up the years, which is not meaningful and is not pretending to
+// be: it is what stops the grid being monochrome.
 export const YEAR_CARDS = [
-    { value: "Year 7",            rank: "7",  suit: "club",    label: "Year 7",  sub: "Junior secondary" },
-    { value: "Year 8",            rank: "8",  suit: "diamond", label: "Year 8",  sub: "Junior secondary" },
-    { value: "Year 9",            rank: "9",  suit: "heart",   label: "Year 9",  sub: "Junior secondary" },
-    { value: "Year 10",           rank: "10", suit: "club",    label: "Year 10", sub: "Senior foundation" },
-    { value: "Year 11 Units 1&2", rank: "J",  suit: "diamond", label: "Year 11", sub: "VCE Units 1 & 2" },
-    { value: "Year 12 Units 3&4", rank: "Q",  suit: "spade",   label: "Year 12", sub: "Units 3 & 4, counts toward your ATAR" },
+    { value: "Year 7",            rank: "7",  suit: "club",    tone: "#0EA5E9", label: "Year 7",  sub: "Junior secondary" },
+    { value: "Year 8",            rank: "8",  suit: "diamond", tone: "#14B8A6", label: "Year 8",  sub: "Junior secondary" },
+    { value: "Year 9",            rank: "9",  suit: "heart",   tone: "#8B5CF6", label: "Year 9",  sub: "Junior secondary" },
+    { value: "Year 10",           rank: "10", suit: "club",    tone: "#3B82F6", label: "Year 10", sub: "Senior foundation" },
+    { value: "Year 11 Units 1&2", rank: "J",  suit: "diamond", tone: "#F97316", label: "Year 11", sub: "VCE Units 1 & 2" },
+    { value: "Year 12 Units 3&4", rank: "Q",  suit: "spade",   tone: "#F0B429", label: "Year 12", sub: "Units 3 & 4, counts toward your ATAR" },
 ];
 
 export default function YearCards({ value, onPick }) {
@@ -78,11 +82,14 @@ export default function YearCards({ value, onPick }) {
                                 rank={y.rank}
                                 suit={y.suit}
                                 smallIndices
-                                // The watermark sits behind the year, and at
-                                // 3.5% on cream it reads as a smudge on the
-                                // print rather than as a suit mark.
-                                watermark={false}
-                                tone={on ? "#58CC02" : undefined}
+                                // The real layout, at printing strength, behind
+                                // the year. Seven club pips arranged the way
+                                // sevens are arranged still say "seven" at 13%
+                                // opacity; the single giant ghost suit the
+                                // watermark used to draw said nothing at any
+                                // opacity and read as a smudge on the print.
+                                pips="faint"
+                                tone={on ? "#58CC02" : y.tone}
                                 className={`w-full aspect-[2.5/3.5] transition-shadow ${
                                     on
                                         ? "ring-2 ring-primary ring-offset-2 ring-offset-background"

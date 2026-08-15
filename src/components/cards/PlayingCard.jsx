@@ -103,6 +103,125 @@ function Index({ rank, suit, flip, small }) {
     );
 }
 
+/**
+ * THE PIP LAYOUTS. The reason a blank card reads as blank.
+ *
+ * A rounded rectangle with a rank in the corner is not a playing card, it is a
+ * label. What makes a five a five, at a glance, from across a table, is that
+ * there are five marks arranged in the way fives have been arranged since the
+ * fifteenth century. Nobody has to count them; the shape of the arrangement IS
+ * the number. Leaving the middle empty throws away the one piece of visual
+ * information the object was designed around, and every card in the app read
+ * as unfinished stock because of it.
+ *
+ * Positions are [column, row] on a 3 × 7 grid: column 0 left, 1 centre, 2
+ * right; row 0 top, 6 bottom. Fractional rows are the classic off-grid pips in
+ * the sevens and eights. Everything below the midline is printed upside down,
+ * exactly as it is on a real card, which is what lets a hand be read from
+ * either end.
+ */
+const PIP_LAYOUT = {
+    A:  [[1, 3]],
+    2:  [[1, 0], [1, 6]],
+    3:  [[1, 0], [1, 3], [1, 6]],
+    4:  [[0, 0], [2, 0], [0, 6], [2, 6]],
+    5:  [[0, 0], [2, 0], [1, 3], [0, 6], [2, 6]],
+    6:  [[0, 0], [2, 0], [0, 3], [2, 3], [0, 6], [2, 6]],
+    7:  [[0, 0], [2, 0], [1, 1.5], [0, 3], [2, 3], [0, 6], [2, 6]],
+    8:  [[0, 0], [2, 0], [1, 1.5], [0, 3], [2, 3], [1, 4.5], [0, 6], [2, 6]],
+    9:  [[0, 0], [2, 0], [0, 2], [2, 2], [1, 3], [0, 4], [2, 4], [0, 6], [2, 6]],
+    10: [[0, 0], [2, 0], [1, 1], [0, 2], [2, 2], [0, 4], [2, 4], [1, 5], [0, 6], [2, 6]],
+};
+
+/** Court cards get a panel, not twelve pips. Same as the real thing. */
+const COURT = { J: true, Q: true, K: true };
+
+/**
+ * The face of a numbered card.
+ *
+ * `inset` keeps the pips clear of the corner indices; without it the top-left
+ * pip of a four sits under its own rank. Sized as a percentage of the card so
+ * one component serves a 62px card in a fan and a 32rem card on a table.
+ */
+function PipFace({ rank, suit, compact }) {
+    const layout = PIP_LAYOUT[String(rank)];
+    if (!layout) return null;
+
+    // `compact` pulls the face up into the top two thirds, for a card that
+    // also has to print a name along its bottom edge. Without it the row-6
+    // pips land underneath the label and the card reads as a printing fault.
+    const top = compact ? 17 : 20;
+    const span = compact ? 44 : 60;
+    const size = compact ? 13 : 15;
+
+    // One big mark, centred, for an ace. It is the whole convention.
+    if (String(rank) === "A") {
+        return (
+            <span aria-hidden="true"
+                className="absolute inset-0 grid place-items-center pointer-events-none"
+                style={compact ? { paddingBottom: "22%" } : undefined}>
+                <SuitPip suit={suit} className="w-[34%] h-[34%]" />
+            </span>
+        );
+    }
+
+    // The pip is positioned by a wrapper rather than by passing `style` into
+    // SuitPip. SuitPip forwards to SpadePip for spades and takes className
+    // only, so a style prop would silently apply to three suits and not the
+    // fourth — the exact class of bug that is invisible until someone picks a
+    // subject that hashes to spades.
+    return (
+        <span aria-hidden="true" className="absolute inset-0 pointer-events-none">
+            {layout.map(([c, r], i) => (
+                <span
+                    key={i}
+                    className="absolute"
+                    style={{
+                        width: `${size}%`,
+                        height: `${size}%`,
+                        left: `${22 + c * 28}%`,
+                        top: `${top + (r / 6) * span}%`,
+                        transform: `translate(-50%,-50%)${r > 3 ? " rotate(180deg)" : ""}`,
+                    }}
+                >
+                    <SuitPip suit={suit} className="w-full h-full" />
+                </span>
+            ))}
+        </span>
+    );
+}
+
+/**
+ * A court card's panel: a framed box with the suit twice, mirrored.
+ *
+ * Deliberately not a drawn king. A real court card is an illustration, and a
+ * bad illustration is far worse than none — the frame plus the mirrored pip is
+ * the part of a court card that reads at a glance, and it is the part that
+ * still reads at 62 pixels wide in a fan. The rank is already printed in both
+ * corners, so nothing is lost by leaving it off the panel.
+ */
+function CourtFace({ suit, tone, compact }) {
+    const ink = alpha(tone, 0.5);
+    return (
+        <span aria-hidden="true"
+            className={`absolute rounded-[0.35rem] border-2 pointer-events-none
+                flex flex-col overflow-hidden ${
+                // Same reason PipFace has a compact mode: the panel's lower
+                // edge lands under the name band otherwise, and a court card
+                // with its bottom sliced off looks broken rather than framed.
+                compact ? "left-[18%] right-[18%] top-[13%] bottom-[31%]" : "inset-[18%]"}`}
+            style={{ borderColor: ink || "hsl(var(--border))" }}>
+            <span className="flex-1 grid place-items-center border-b"
+                style={{ borderColor: ink || "hsl(var(--border))" }}>
+                <SuitPip suit={suit} className="w-[40%] h-[40%]" />
+            </span>
+            <span className="flex-1 grid place-items-center rotate-180">
+                <SuitPip suit={suit} className="w-[40%] h-[40%]" />
+            </span>
+        </span>
+    );
+}
+
 export default function PlayingCard({
     rank = "A",
     suit = "spade",
@@ -121,12 +240,31 @@ export default function PlayingCard({
      * threshold of visibility so it can never compete with the text.
      */
     watermark = true,
+    /**
+     * Print the real pip layout in the middle: five marks for a five, a panel
+     * for a court card, one big mark for an ace. Off by default because most
+     * cards in the app are flashcards whose middle is the question, and pips
+     * behind a paragraph are noise. On wherever the card is being a CARD —
+     * a hand, a fan, a pick — which is where the empty middle was making
+     * everything look like unprinted stock.
+     *
+     *   true      full layout, nothing else in the middle
+     *   "compact" layout pulled into the top two thirds, for a card that also
+     *             prints a name along its bottom edge
+     *   "faint"   full layout at printing-ink strength behind other content,
+     *             for a card whose middle is a word. This is what the old
+     *             `watermark` was reaching for and getting wrong: one giant
+     *             ghost suit says nothing, whereas seven small marks in the
+     *             seven-arrangement still say "seven" even at a whisper.
+     */
+    pips = false,
     className = "",
     style,
     children,
     ...rest
 }) {
     const ink = alpha(tone, 0.34);
+    const court = COURT[String(rank)];
     return (
         <div
             className={`relative rounded-[0.9rem] bg-surface border border-border overflow-hidden
@@ -142,12 +280,25 @@ export default function PlayingCard({
                 className="absolute inset-[6px] rounded-[0.6rem] border pointer-events-none z-10"
                 style={{ borderColor: ink || "hsl(var(--border))" }} />
 
-            {watermark && (
-                <span aria-hidden="true"
-                    className="absolute inset-0 grid place-items-center pointer-events-none opacity-[0.035]">
-                    <SuitPip suit={suit} className="w-[42%] h-[42%]" />
-                </span>
-            )}
+            {/* Pips win over the watermark. They are the same idea done
+                properly, and printing both would put a giant ghost suit behind
+                a correctly laid-out face. */}
+            {pips
+                ? (
+                    <span aria-hidden="true"
+                        className={`absolute inset-0 pointer-events-none ${
+                            pips === "faint" ? "opacity-[0.13]" : ""}`}>
+                        {court
+                            ? <CourtFace suit={suit} tone={tone} compact={pips === "compact"} />
+                            : <PipFace rank={rank} suit={suit} compact={pips === "compact"} />}
+                    </span>
+                )
+                : watermark && (
+                    <span aria-hidden="true"
+                        className="absolute inset-0 grid place-items-center pointer-events-none opacity-[0.035]">
+                        <SuitPip suit={suit} className="w-[42%] h-[42%]" />
+                    </span>
+                )}
 
             {indices && (
                 <span title={rankTitle(rank, suit, mastery)}>

@@ -40,6 +40,7 @@ import { motion, useReducedMotion } from "framer-motion";
 import { Check, Crown } from "lucide-react";
 import { handFrom, FanCard } from "./HandOfAnswers";
 import { formatAtar } from "./AtarCut";
+import CostGap from "./CostGap";
 import { TOOL_COUNT } from "@/components/ai_tools/chatTools";
 
 /**
@@ -193,6 +194,12 @@ export default function TheReveal({ answers }) {
                     </p>
                 </div>
             </div>
+
+            {/* The price, as a shape. "$90 an hour versus $5 a week" is a true
+                sentence that lands as two numbers and is gone by the next
+                screen; the same fact drawn over forty school weeks is a gap you
+                cannot un-see. */}
+            <CostGap />
 
             {/* The split, compressed. Only what differs, because the reader is
                 one screen away from choosing and does not need the shared half

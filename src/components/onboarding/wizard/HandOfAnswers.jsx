@@ -33,8 +33,8 @@
  */
 import React from "react";
 import { motion, AnimatePresence, useReducedMotion } from "framer-motion";
-import PlayingCard, { SuitPip } from "@/components/cards/PlayingCard";
-import { suitFor, SUIT_IS_RED } from "@/components/cards/cardIdentity";
+import PlayingCard, { SuitPip, alpha } from "@/components/cards/PlayingCard";
+import { suitFor, colorFor, SUIT_IS_RED } from "@/components/cards/cardIdentity";
 
 /** Face cards for the years that count, so seniority reads off the rank. */
 const YEAR_RANK = {
@@ -71,13 +71,19 @@ const MAX_FANNED = 7;
  */
 export function FanCard({ card, strip, labelSize }) {
     const red = SUIT_IS_RED[card.suit];
+    const tone = card.tone || (card.gold ? "#F0B429" : undefined);
     return (
         <PlayingCard
             rank={card.rank}
             suit={card.suit}
             indices={false}
-            watermark={false}
-            tone={card.gold ? "#F0B429" : undefined}
+            // The real face: two marks for a two, a framed panel for a court
+            // card, one big mark for the ace. Compact, so the layout sits in
+            // the top two thirds and leaves the bottom edge for the name.
+            // Printing a rank in a corner and nothing else is what made every
+            // card in this hand read as unused stock.
+            pips="compact"
+            tone={tone}
             className="w-full h-full"
         >
             <span aria-hidden="true"
@@ -89,10 +95,17 @@ export function FanCard({ card, strip, labelSize }) {
                 <SuitPip suit={card.suit} className="w-2 h-2 mt-0.5" />
             </span>
 
-            <span className="absolute bottom-1.5 left-0 px-1 text-center"
-                style={{ width: strip }}>
-                <span className={`block font-bold leading-[1.15] text-muted-foreground
-                    line-clamp-2 break-words hyphens-auto`}
+            {/* The name sits on a band in the subject's own colour, opaque so
+                the pips above cannot show through it. That colour is not
+                decoration: it is what this subject looks like everywhere in
+                the app from the moment the account exists. */}
+            <span className="absolute bottom-0 left-0 pt-1 pb-1.5 px-1 text-center"
+                style={{
+                    width: strip,
+                    background: tone ? alpha(tone, 0.16) : "hsl(var(--muted))",
+                }}>
+                <span className="block font-bold leading-[1.15] text-foreground/75
+                    line-clamp-2 break-words hyphens-auto"
                     style={{ fontSize: labelSize }}>
                     {card.label}
                 </span>
@@ -128,6 +141,10 @@ export function handFrom(answers) {
             // app and no card has been reviewed yet.
             rank: "2",
             suit: suitFor(s.name),
+            // The colour this subject will still have on the dashboard next
+            // year, derived from its name so it can be shown before there is
+            // an account to store it against.
+            tone: colorFor(s.name),
             label: s.name,
             title: `${s.name} — every subject starts at a two`,
         });

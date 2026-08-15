@@ -10,6 +10,7 @@ import { createAxiosClient } from '@base44/sdk/dist/utils/axios-client';
 import { supabase } from '@/api/supabaseClient';
 import { getAttribution } from '@/lib/attribution';
 import { trackSignup } from '@/lib/analytics';
+import { colorFor } from '@/components/cards/cardIdentity';
 
 // Native (Capacitor) OAuth deep-link helpers — no-ops on web.
 import { isNative, nativeGoogleSignIn, initNativeAuthListener } from '@/lib/nativeAuth';
@@ -178,6 +179,11 @@ async function applyOnboardingFromStorage(userEmail) {
         vce_subject_id: vceSubjectId,
         year_level:     answers.yearLevel || null,
         is_active:      true,
+        // Nothing wrote this before, so every reader fell back to the same
+        // blue and a student with five subjects had five identical decks.
+        // Derived from the name, so it matches the colour they were already
+        // shown on their card during onboarding, and matches on any device.
+        color:          colorFor(s.name),
       });
     }
 
