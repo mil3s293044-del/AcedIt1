@@ -199,13 +199,18 @@ export default function Landing() {
               transform on an unfiltered element composites on the GPU. */}
           <motion.div
             className="absolute -top-56 -left-56 w-[760px] h-[760px] rounded-full opacity-[0.13]"
-            style={{ background: "radial-gradient(circle, #58CC02 0%, rgba(88,204,2,0.5) 32%, transparent 68%)" }}
+            /* Promoted to its own compositor layer, so the drift is a matrix on an
+               already-rasterised texture rather than a repaint of a 760px
+               gradient every frame. */
+            style={{ background: "radial-gradient(circle, #58CC02 0%, rgba(88,204,2,0.5) 32%, transparent 68%)",
+                     willChange: "transform" }}
             animate={prefersReducedMotion ? undefined : { x: [0, 80, 0], y: [0, 40, 0] }}
             transition={{ duration: 14, repeat: Infinity, ease: "easeInOut" }}
           />
           <motion.div
             className="absolute -bottom-48 right-[-14%] w-[840px] h-[840px] rounded-full opacity-[0.09]"
-            style={{ background: "radial-gradient(circle, #FF4B4B 0%, rgba(255,75,75,0.5) 32%, transparent 68%)" }}
+            style={{ background: "radial-gradient(circle, #FF4B4B 0%, rgba(255,75,75,0.5) 32%, transparent 68%)",
+                     willChange: "transform" }}
             animate={prefersReducedMotion ? undefined : { x: [0, -70, 0], y: [0, -50, 0] }}
             transition={{ duration: 19, repeat: Infinity, ease: "easeInOut" }}
           />
@@ -237,22 +242,14 @@ export default function Landing() {
         </div>
 
         <div className="relative z-20 w-full max-w-5xl mx-auto px-6 text-center pt-20 pb-[27vh] sm:pb-[37vh]">
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.7, ease: [0.22, 1, 0.36, 1] }}
-            className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-surface border border-black/5 shadow-soft mb-7"
-          >
-            <Sparkles className="w-3.5 h-3.5 text-primary" />
-            <span className="text-xs font-semibold text-[#0D1626]/80 tracking-wide">
-              Built on 40 years of memory research
-            </span>
-          </motion.div>
-
+          {/* The eyebrow pill is gone. It was a claim the page goes on to make
+              properly three times over, with citations, and putting it in a
+              little badge above the headline made it read as a slogan instead.
+              The headline is stronger arriving cold. */}
           <motion.h1
             initial={{ opacity: 0, y: 30 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.8, delay: 0.1, ease: [0.22, 1, 0.36, 1] }}
+            transition={{ duration: 0.8, ease: [0.22, 1, 0.36, 1] }}
             className="font-display font-extrabold text-[#0D1626] text-4xl sm:text-5xl md:text-6xl lg:text-7xl leading-[0.98] tracking-tight"
           >
             {/* THE HOOK IS THE UNCOMFORTABLE TRUTH, and the sub-head is the
