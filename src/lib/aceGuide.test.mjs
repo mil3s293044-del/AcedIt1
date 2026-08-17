@@ -74,6 +74,26 @@ check("the what-should-I-do intent still returns the hand", () => {
     assert.equal(kindOf("i'm stuck"), "hand");
 });
 
+check("'what should I do' inside a real message reaches the model [REGRESSION]", () => {
+    // The hand renders the whole first-open screen — cards plus the opener
+    // buttons. Returned mid-conversation it reads as Ace ignoring the question
+    // and starting over, which is what this student got.
+    const q = "okay I have an English essay about ransom in like a week and a day "
+            + "but idk anything about ransom what should I do";
+    assert.ok(goesToModel(q), "a paragraph ending in 'what should I do' is a question, not a menu");
+});
+
+check("longer stuck-sounding messages still reach the model [REGRESSION]", () => {
+    assert.ok(goesToModel(
+        "i'm stuck on this practice exam question about projectile motion and the "
+        + "worked solution skips three steps so I cannot follow it at all",
+    ));
+    assert.ok(goesToModel(
+        "there is nothing to do in my planner but I still feel behind on everything "
+        + "and I do not know which subject to start with tonight",
+    ));
+});
+
 check("an empty or whitespace message returns null", () => {
     assert.equal(answer("", opts), null);
     assert.equal(answer("   ", opts), null);

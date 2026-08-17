@@ -289,6 +289,24 @@ function coverageOf(q, f) {
     return qt.filter(t => own.has(t)).length / qt.length;
 }
 
+/**
+ * True when the message is short enough to BE a query rather than contain one.
+ *
+ * The `next` intent matches the phrase "what should I do", which is the whole
+ * question in "what should I do right now" and a fragment in "I have an English
+ * essay about Ransom in a week and I don't know anything about Ransom, what
+ * should I do". The second is a student asking for help and used to be answered
+ * with the first-open screen — the hand of cards plus the opener buttons —
+ * pasted into the conversation as if it were a reply.
+ *
+ * The hand and the openers are the EMPTY state. Once someone is typing
+ * sentences at Ace, they are in a conversation, and a conversation is answered
+ * with words.
+ */
+function readsAsShortQuery(q) {
+    return tokens(q).length <= LOOKUP_MAX_TOKENS;
+}
+
 /** True when the feature is the subject of the question rather than a word in it. */
 function readsAsLookup(q, f) {
     const qt = tokens(q);
@@ -312,7 +330,13 @@ export function answer(query, { ready = null, premium = false } = {}) {
     if (!q) return null;
     const intent = intentOf(q);
 
-    if (intent === "next") return { kind: "hand" };
+    // "what should I do" as the entire question deserves the hand. Buried in a
+    // paragraph about an essay due next week, it's a fragment, and the answer
+    // is a reply rather than the opening screen.
+    if (intent === "next") {
+        if (readsAsShortQuery(q)) return { kind: "hand" };
+        return null;
+    }
 
     const hits = findFeatures(q, 3);
     if (!hits.length) return null;

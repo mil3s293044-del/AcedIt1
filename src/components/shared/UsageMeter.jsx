@@ -8,9 +8,11 @@ import {
     FEATURES,
     PREMIUM_DAILY_CAPS,
     FREE_LIFETIME_CAPS,
-    WEEKLY_COST_CAP_CENTS,
+    WEEKLY_COST_CAP_MICROS,
+    weeklySpendMicros,
     isPremium as checkPremium,
 } from "@/lib/tierAccess";
+import { TIERS, tierOf, saverNudge } from "@/lib/aiModels";
 
 // Rows the user sees, in display order. Each row resolves its used/cap
 // dynamically based on tier + the daily_ai_counters jsonb on the profile.
@@ -75,6 +77,7 @@ function midnightCountdown() {
 export default function UsageMeter() {
     const [open, setOpen] = useState(false);
     const [profile, setProfile] = useState(null);
+    const [saving, setSaving] = useState(false);
     const intervalRef = useRef(null);
 
     // Fetch when popover opens, and refresh every 5s while open so the
@@ -104,8 +107,29 @@ export default function UsageMeter() {
     const premium = checkPremium(profile);
     const counters = profile?.daily_ai_counters ?? {};
     const countersValid = counters.date === todayUTC();
-    const weeklyCostCents = profile?.weekly_ai_cost_cents ?? 0;
-    const costPct = Math.min(100, (weeklyCostCents / WEEKLY_COST_CAP_CENTS) * 100);
+    const spentMicros = weeklySpendMicros(profile);
+    const costPct = Math.min(100, (spentMicros / WEEKLY_COST_CAP_MICROS) * 100);
+    const tier = tierOf(profile?.ai_model_preference);
+    const nudge = saverNudge({
+        preference: tier,
+        spentMicros,
+        capMicros: WEEKLY_COST_CAP_MICROS,
+    });
+
+    // Optimistic: the switch is reversible and instant, and waiting on a round
+    // trip to move a toggle reads as a broken toggle.
+    const setTier = async (next) => {
+        if (!profile || saving || next === tier) return;
+        setSaving(true);
+        setProfile(p => ({ ...p, ai_model_preference: next }));
+        try {
+            await base44.entities.UserProfile.update(profile.id, { ai_model_preference: next });
+        } catch {
+            setProfile(p => ({ ...p, ai_model_preference: tier }));   // put it back
+        } finally {
+            setSaving(false);
+        }
+    };
 
     return (
         <Popover open={open} onOpenChange={setOpen}>
@@ -183,12 +207,17 @@ export default function UsageMeter() {
                     <div className="px-4 py-3 border-t border-border bg-muted/40">
                         <div className="flex items-center gap-1.5 mb-1.5">
                             <Zap className="w-3.5 h-3.5 text-foreground" />
-                            <div className="text-[13px] font-semibold text-foreground">Weekly cost ceiling</div>
+                            <div className="text-[13px] font-semibold text-foreground">This week's AI</div>
                         </div>
                         <div className="space-y-1">
+                            {/* A percentage, not a dollar figure. The old meter
+                                read "$1.37 of $2.50", which is our cost of
+                                goods rather than anything the student bought,
+                                and gives them no way to judge whether that is
+                                a lot. A proportion they can act on. */}
                             <div className="flex items-baseline justify-between text-xs">
                                 <span className="text-muted-foreground">
-                                    ${(weeklyCostCents / 100).toFixed(2)} of ${(WEEKLY_COST_CAP_CENTS / 100).toFixed(2)}
+                                    {Math.round(costPct)}% used
                                 </span>
                                 <span className="font-medium text-foreground">Resets Monday</span>
                             </div>
@@ -197,6 +226,75 @@ export default function UsageMeter() {
                                     className={`h-full rounded-full transition-all ${barColor(costPct)}`}
                                     style={{ width: `${costPct}%` }}
                                 />
+                            </div>
+                        </div>
+
+                        {/* ── The recommendation ──────────────────────────
+                            Only appears while it can still pay out. The
+                            ceiling counts money already spent, so offering
+                            the cheaper model AT the ceiling would be a
+                            button that does nothing — saverNudge() returns
+                            null there, and at 100% the bar and "Resets
+                            Monday" are the whole honest story. */}
+                        {nudge && (
+                            <div className="mt-3 rounded-xl border border-primary/25 bg-primary/5 p-3">
+                                <p className="text-[13px] font-bold text-foreground leading-snug">
+                                    {nudge.headline}
+                                </p>
+                                <p className="text-[12px] text-muted-foreground mt-1 leading-relaxed">
+                                    {nudge.body}
+                                </p>
+                                <button
+                                    type="button"
+                                    onClick={() => setTier("saver")}
+                                    disabled={saving}
+                                    className="mt-2.5 w-full h-9 rounded-lg bg-primary text-primary-foreground
+                                        font-bold text-[13px] hover:brightness-105 disabled:opacity-60
+                                        transition-all"
+                                >
+                                    Switch to Saver
+                                </button>
+                            </div>
+                        )}
+
+                        {/* ── The control ─────────────────────────────────
+                            Named for what it does to their week, not for
+                            the model behind it. "Haiku" means nothing to a
+                            seventeen-year-old; "your allowance goes further"
+                            is the thing they're actually choosing. */}
+                        <div className="mt-3">
+                            <div className="text-[11px] font-semibold uppercase tracking-wider
+                                text-muted-foreground mb-1.5">
+                                Answer quality
+                            </div>
+                            <div role="radiogroup" aria-label="AI answer quality"
+                                className="grid grid-cols-2 gap-1.5">
+                                {[TIERS.standard, TIERS.saver].map(t => {
+                                    const active = tier === t.id;
+                                    return (
+                                        <button
+                                            key={t.id}
+                                            type="button"
+                                            role="radio"
+                                            aria-checked={active}
+                                            disabled={saving}
+                                            onClick={() => setTier(t.id)}
+                                            className={`rounded-lg border px-2.5 py-2 text-left transition-colors
+                                                disabled:opacity-60 ${active
+                                                    ? "border-primary bg-primary/10"
+                                                    : "border-border bg-surface hover:bg-muted/60"}`}
+                                        >
+                                            <span className={`block text-[13px] font-bold ${
+                                                active ? "text-primary" : "text-foreground"}`}>
+                                                {t.label}
+                                            </span>
+                                            <span className="block text-[11px] text-muted-foreground
+                                                leading-snug mt-0.5">
+                                                {t.blurb}
+                                            </span>
+                                        </button>
+                                    );
+                                })}
                             </div>
                         </div>
                     </div>
