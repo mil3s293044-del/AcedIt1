@@ -18,6 +18,9 @@ import { knowledgeForPrompt } from "./src/lib/aceKnowledge.js";
 // against known token counts (`node src/lib/aiCost.test.mjs`). Money maths that
 // only ever runs inside a 7,000-line server is money maths nobody checks.
 import { estimateCostMicros, isUnpricedModel, formatMicros } from "./src/lib/aiCost.js";
+// Which model a student's work runs on. The tier lives on their profile, so it
+// is resolved here rather than trusted from the request body.
+import { modelFor } from "./src/lib/aiModels.js";
 import Stripe from "stripe";
 import { Resend } from "resend";
 
@@ -2196,7 +2199,15 @@ app.post("/local-ai/invokeAIStream", async (req, res) => {
     // tools (essay plans, explanations) still get the full 8192.
     const maxTokens = feature === "ai_chat" ? 2048 : 8192;
     const request = {
-      model: MODEL,
+      // Honours the student's tier the same way the non-streaming path does.
+      // This path previously ignored `fast` entirely, so a tool passing it got
+      // the full model here and the cheap one there — same tool, two prices,
+      // depending only on whether it happened to stream.
+      model: modelFor(tierProfile?.ai_model_preference, feature, {
+        fast: params.fast,
+        standardModel: MODEL,
+        fastModel: FAST_MODEL,
+      }),
       max_tokens: maxTokens,
       messages: [{ role: "user", content: userContent }],
     };
@@ -2228,7 +2239,7 @@ app.post("/local-ai/invokeAIStream", async (req, res) => {
     }
 
     if (tierProfile) {
-      recordTierUsage(tierProfile, feature, finalMessage.usage).catch((e) =>
+      recordTierUsage(tierProfile, feature, finalMessage.usage, { model: request.model }).catch((e) =>
         console.error("[local-ai] (stream) recordTierUsage failed:", e?.message || e),
       );
     }
@@ -2479,7 +2490,14 @@ app.post("/local-ai/invokeAI", async (req, res) => {
     // max_tokens bumped to 32k — 8k truncates structured outputs like the Exam
     // Question Generator (15 questions × marking_criteria + model_answer is big).
     const request = {
-      model: params.fast ? FAST_MODEL : MODEL,
+      // The student's own choice of model tier. Read server-side from the
+      // profile rather than taken from the request body — a client-supplied
+      // model id is a client-supplied bill.
+      model: modelFor(tierProfile?.ai_model_preference, feature, {
+        fast: params.fast,
+        standardModel: MODEL,
+        fastModel: FAST_MODEL,
+      }),
       max_tokens: 32000,
       messages: [{ role: "user", content: userContent }],
     };
