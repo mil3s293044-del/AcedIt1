@@ -59,6 +59,8 @@ const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 // arithmetic flips somewhere in the low hundreds of paying users, at which
 // point this is one env var and one branch to revisit.
 const ACE_MODEL = process.env.ACE_MODEL || "claude-haiku-4-5";
+// Ace writes at most 1024 tokens. Past this it is broken, not thinking.
+const ACE_TIMEOUT_MS = Number(process.env.ACE_TIMEOUT_MS || 45_000);
 if (isUnpricedModel(ACE_MODEL)) {
   console.warn(
     `[local-ai] ACE_MODEL "${ACE_MODEL}" is not in the price table — its calls will be billed at the dearest known rate.`,
@@ -2385,10 +2387,12 @@ app.post("/local-ai/studyCoachChat", async (req, res) => {
 
     const lastUser = [...history].reverse().find((m) => m.role === "user");
     if (!lastUser) {
+      console.log("[local-ai] (ace) rejected: empty message");
       sse("error", { message: "Say something to Ace to get started." });
       return;
     }
     if (detectThreat(lastUser.content)) {
+      console.log("[local-ai] (ace) rejected: threat pattern matched");
       sse("error", { message: "🚫 That request was flagged and can't be processed." });
       return;
     }
@@ -2403,6 +2407,7 @@ app.post("/local-ai/studyCoachChat", async (req, res) => {
     const tierUser = await authenticateRequest(req);
     const authMs = Date.now() - tAuth;
     if (!tierUser) {
+      console.log(`[local-ai] (ace) rejected: not authenticated (auth=${authMs}ms)`);
       sse("error", { message: "Couldn't reach your account just then. Try that again." });
       return;
     }
@@ -2428,6 +2433,13 @@ app.post("/local-ai/studyCoachChat", async (req, res) => {
     // the threshold, and not before.
     const system = buildAceSystemPrompt(body.context);
 
+    // BOUNDED, because the SDK's default is ten minutes.
+    //
+    // The Supabase calls in front of this got deadlines and this did not, which
+    // is the wrong way round: a hung model call holds the socket open with the
+    // heartbeat still pinging, logs nothing at all, and shows the student a
+    // typing indicator until something else kills the process. Ace writes at
+    // most 1024 tokens, so anything past this is broken rather than slow.
     const stream = anthropic.messages.stream(
       {
         model: ACE_MODEL,
@@ -2436,7 +2448,7 @@ app.post("/local-ai/studyCoachChat", async (req, res) => {
         system,
         messages: history,
       },
-      { signal: upstream.signal },
+      { signal: upstream.signal, timeout: ACE_TIMEOUT_MS },
     );
 
     // Time to first token is the number the student actually experiences —
@@ -2452,13 +2464,17 @@ app.post("/local-ai/studyCoachChat", async (req, res) => {
     const finalMessage = await stream.finalMessage();
     const usage = finalMessage?.usage ?? null;
 
-    if (usage) {
-      const micros = estimateCostMicros(usage, ACE_MODEL);
+    // Logged unconditionally, not only when `usage` came back. A turn that
+    // finishes without usage is exactly the sort of thing worth seeing, and
+    // gating the line on it meant a completed request could still leave the
+    // log looking like a request that vanished.
+    {
+      const micros = usage ? estimateCostMicros(usage, ACE_MODEL) : 0;
       const ttft = firstTokenAt ? firstTokenAt - tAuth : null;
       console.log(
-        `[local-ai] (ace) in=${usage.input_tokens ?? 0} out=${usage.output_tokens ?? 0} `
+        `[local-ai] (ace) done in=${usage?.input_tokens ?? "?"} out=${usage?.output_tokens ?? "?"} `
         + `cost=${formatMicros(micros)} | auth=${authMs}ms profile=${profileMs}ms `
-        + `ttft=${ttft === null ? "n/a" : `${ttft}ms`} total=${Date.now() - tAuth}ms`,
+        + `ttft=${ttft === null ? "none" : `${ttft}ms`} total=${Date.now() - tAuth}ms`,
       );
     }
     if (tierProfile) {
@@ -2483,8 +2499,22 @@ app.post("/local-ai/studyCoachChat", async (req, res) => {
       res.end();
       return;
     }
-    console.error("[local-ai] (ace) stream error:", err);
-    try { sse("error", { message: err?.message || String(err) }); } catch {}
+    // A timeout gets its own branch. It is the failure most likely to recur,
+    // the one the raw SDK message describes worst, and the only one where the
+    // right advice to the student is simply "try again".
+    const timedOut = err instanceof Anthropic.APIConnectionTimeoutError
+      || /timed? ?out/i.test(err?.message || "");
+    console.error(
+      `[local-ai] (ace) ${timedOut ? `TIMEOUT after ${ACE_TIMEOUT_MS}ms` : "stream error"}:`,
+      err?.message || err,
+    );
+    try {
+      sse("error", {
+        message: timedOut
+          ? "Ace took too long to answer that one. Give it another go."
+          : (err?.message || String(err)),
+      });
+    } catch {}
   } finally {
     clearInterval(heartbeat);
     res.end();
