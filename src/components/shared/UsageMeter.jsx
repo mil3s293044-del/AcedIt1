@@ -8,7 +8,8 @@ import {
     FEATURES,
     PREMIUM_DAILY_CAPS,
     FREE_LIFETIME_CAPS,
-    WEEKLY_COST_CAP_CENTS,
+    WEEKLY_COST_CAP_MICROS,
+    weeklySpendMicros,
     isPremium as checkPremium,
 } from "@/lib/tierAccess";
 
@@ -104,8 +105,8 @@ export default function UsageMeter() {
     const premium = checkPremium(profile);
     const counters = profile?.daily_ai_counters ?? {};
     const countersValid = counters.date === todayUTC();
-    const weeklyCostCents = profile?.weekly_ai_cost_cents ?? 0;
-    const costPct = Math.min(100, (weeklyCostCents / WEEKLY_COST_CAP_CENTS) * 100);
+    const spentMicros = weeklySpendMicros(profile);
+    const costPct = Math.min(100, (spentMicros / WEEKLY_COST_CAP_MICROS) * 100);
 
     return (
         <Popover open={open} onOpenChange={setOpen}>
@@ -183,12 +184,17 @@ export default function UsageMeter() {
                     <div className="px-4 py-3 border-t border-border bg-muted/40">
                         <div className="flex items-center gap-1.5 mb-1.5">
                             <Zap className="w-3.5 h-3.5 text-foreground" />
-                            <div className="text-[13px] font-semibold text-foreground">Weekly cost ceiling</div>
+                            <div className="text-[13px] font-semibold text-foreground">This week's AI</div>
                         </div>
                         <div className="space-y-1">
+                            {/* A percentage, not a dollar figure. The old meter
+                                read "$1.37 of $2.50", which is our cost of
+                                goods rather than anything the student bought,
+                                and gives them no way to judge whether that is
+                                a lot. A proportion they can act on. */}
                             <div className="flex items-baseline justify-between text-xs">
                                 <span className="text-muted-foreground">
-                                    ${(weeklyCostCents / 100).toFixed(2)} of ${(WEEKLY_COST_CAP_CENTS / 100).toFixed(2)}
+                                    {Math.round(costPct)}% used
                                 </span>
                                 <span className="font-medium text-foreground">Resets Monday</span>
                             </div>

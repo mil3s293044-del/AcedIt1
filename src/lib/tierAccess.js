@@ -78,8 +78,23 @@ export const PREMIUM_DAILY_CAPS = {
   [FEATURES.STUDY_COACH]:      30,
 };
 
-export const WEEKLY_COST_CAP_CENTS  = 250;     // $2.50 hard ceiling
-export const WEEKLY_COST_WARN_CENTS = 200;     // $2.00 soft notice
+// ─── Weekly spend ceiling, mirrored from the server ────────────────────────
+// The server is the real boundary (TIER_WEEKLY_CAP_MICROS in server.mjs); these
+// exist so the UI can draw a bar and warn early. They MUST track the server, or
+// the meter tells students they have headroom the server has already refused —
+// which is exactly what happened when the ceiling moved from $2.50 to $1.95 and
+// this mirror was left behind.
+//
+// Micro-dollars, matching the server, because whole cents were too coarse to
+// hold a sub-cent call and silently recorded zero. See src/lib/aiCost.js.
+export const WEEKLY_COST_CAP_MICROS  = 1_950_000;   // $1.95 USD ≈ $3.00 AUD
+export const WEEKLY_COST_WARN_MICROS = 1_365_000;   // 70% — early enough to still act on
+
+/** Spend so far, in micro-dollars, tolerating a profile written before 0030. */
+export function weeklySpendMicros(profile) {
+    const micros = profile?.weekly_ai_cost_micros ?? 0;
+    return micros > 0 ? micros : (profile?.weekly_ai_cost_cents ?? 0) * 10_000;
+}
 
 // Maps each feature to the daily-counter bucket it deducts from.
 // (Quizzes and flashcards have their own buckets; the 10 tools share `tools`;
@@ -157,8 +172,8 @@ function checkFreeTier(profile, feature) {
 // ─── Premium tier limits ───────────────────────────────────────────────────
 function checkPremiumTier(profile, feature) {
   // Weekly cost ceiling (hard backstop).
-  const cost = profile?.weekly_ai_cost_cents ?? 0;
-  if (cost >= WEEKLY_COST_CAP_CENTS) {
+  const cost = weeklySpendMicros(profile);
+  if (cost >= WEEKLY_COST_CAP_MICROS) {
     return {
       allowed: false,
       reason: 'You\'ve hit your weekly AI usage limit. Resets Monday.',
@@ -190,9 +205,11 @@ function checkPremiumTier(profile, feature) {
     };
   }
 
-  // Soft warn near weekly cap.
-  const warning = cost >= WEEKLY_COST_WARN_CENTS
-    ? `You're approaching your weekly AI limit ($${(cost / 100).toFixed(2)} of $${(WEEKLY_COST_CAP_CENTS / 100).toFixed(2)}).`
+  // Soft warn near the weekly ceiling. Stated as a proportion rather than in
+  // dollars: a student has no way to judge whether $1.37 is a lot, and the raw
+  // figure is our cost of goods rather than anything they bought.
+  const warning = cost >= WEEKLY_COST_WARN_MICROS
+    ? `You've used ${Math.round((cost / WEEKLY_COST_CAP_MICROS) * 100)}% of this week's AI. Resets Monday.`
     : null;
 
   return { allowed: true, remaining, cap: dailyCap, used, warning };
