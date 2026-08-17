@@ -12,6 +12,7 @@
     "lint": "eslint . --quiet",
     "lint:fix": "eslint . --fix",
     "typecheck": "tsc -p ./jsconfig.json",
+    "test:cost": "node src/lib/aiCost.test.mjs",
     "preview": "vite preview"
   },
   "dependencies": {

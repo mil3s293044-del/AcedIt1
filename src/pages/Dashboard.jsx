@@ -4,7 +4,7 @@ import { motion } from "framer-motion";
 import { Target, ArrowRight,
     GraduationCap, Zap, Flame, Brain, FileQuestion,
     Sparkles, Trophy, Play, Layers, Timer,
-    Map, BarChart3, Star, CheckCircle2, AlertTriangle, Shield, Sprout
+    Map, BarChart3, CheckCircle2, AlertTriangle, Shield, Sprout
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { format, startOfWeek, differenceInDays, parseISO, isToday, isYesterday } from "date-fns";
@@ -17,6 +17,7 @@ import { getStreakMultiplier as getStreakMultiplierValue } from "@/components/sh
 import RetentionCard from "@/components/dashboard/RetentionCard";
 import YourHand from "@/components/dashboard/YourHand";
 import DueRadar from "@/components/dashboard/DueRadar";
+import ClearedPile from "@/components/dashboard/ClearedPile";
 import TableGround from "@/components/dashboard/TableGround";
 import DistanceToTarget from "@/components/dashboard/DistanceToTarget";
 import TodaysPlay from "@/components/dashboard/TodaysPlay";
@@ -26,7 +27,6 @@ import Placed from "@/components/dashboard/Placed";
 import { bestLever } from "@/lib/atarLift";
 import { atarBandOf } from "@/lib/atarBands";
 import { todaysIntent } from "@/lib/studyIntent";
-import { fmtDate } from "@/lib/safeDate";
 import AceTip from "@/components/ace/AceTip";
 import AceShuffle from "@/components/ace/AceShuffle";
 import AceBody from "@/components/ace/AceBody";
@@ -1166,49 +1166,14 @@ export default function Dashboard() {
                         heading. */}
                     <DueRadar items={radar} />
 
-                    <div className="card-soft on-table border-2 border-border p-5">
-                        <div className="flex items-center justify-between mb-3">
-                            <p className="stat-label">Last sessions</p>
-                            <Link to={createPageUrl("Study")} className="text-[11px] font-bold text-primary hover:underline">View all</Link>
-                        </div>
-                        {studySessions.length === 0 ? (
-                            <div className="flex flex-col items-center text-center gap-3 py-2">
-                                <div className="w-10 h-10 rounded-xl bg-primary/5 flex items-center justify-center border border-primary/10">
-                                    <Brain className="w-5 h-5 text-primary" />
-                                </div>
-                                <div>
-                                    <p className="font-bold text-foreground text-sm">No sessions yet</p>
-                                    <p className="text-xs text-muted-foreground mt-0.5">Knock out a quick session and it'll show up right here.</p>
-                                </div>
-                                <Link to={createPageUrl("Study")}>
-                                    <Button size="sm" className="gap-1.5">
-                                        <Brain className="w-3.5 h-3.5" />
-                                        Start a session
-                                    </Button>
-                                </Link>
-                            </div>
-                        ) : (
-                            <ul className="space-y-3">
-                                {studySessions.slice(0, 4).map((s) => (
-                                    <li key={s.id} className="flex items-baseline justify-between gap-3 border-b border-border pb-3 last:border-0 last:pb-0">
-                                        <div className="min-w-0">
-                                            <p className="font-bold text-foreground text-sm truncate">{s.subject || 'Study'}</p>
-                                            <p className="text-xs text-muted-foreground">
-                                                {fmtDate(s.date, 'MMM d')} · {s.duration_minutes || 0}m
-                                            </p>
-                                        </div>
-                                        {s.productivity_rating && (
-                                            <div className="flex gap-0.5 flex-shrink-0">
-                                                {Array.from({ length: s.productivity_rating }).map((_, j) => (
-                                                    <Star key={j} className="w-3 h-3 fill-xp text-xp" />
-                                                ))}
-                                            </div>
-                                        )}
-                                    </li>
-                                ))}
-                            </ul>
-                        )}
-                    </div>
+                    {/* "Last sessions" was here: four rows of subject, date
+                        and minutes, each with one to three orange stars and no
+                        legend anywhere saying the stars were a self-rated
+                        productivity score. A log, in the second most valuable
+                        column on the page, answering a question nobody opens a
+                        dashboard to ask. The pile answers the one they do. */}
+                    <ClearedPile sessions={studySessions} />
+
                 </motion.div>
                 </div>
 

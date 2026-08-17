@@ -142,8 +142,9 @@ export async function invokeLLMStream(params, onText, options = {}) {
 }
 
 // ─── Ace study companion ────────────────────────────────────────────────────
-// Streams a reply from the premium-only "Ace" chat (cheap DeepSeek-backed
-// model on the server). Same SSE wire format as invokeLLMStream.
+// Streams a reply from the premium-only "Ace" chat (Haiku on the server — the
+// cheap tier, since a study buddy doesn't need Sonnet-grade reasoning). Same
+// SSE wire format as invokeLLMStream.
 //   messages: [{ role: 'user' | 'assistant', content: string }, ...]
 //   context:  { name, subjects[], streak, xp, level, goals[], upcomingAssessments[] }
 //   onText:   (delta, soFar) => void

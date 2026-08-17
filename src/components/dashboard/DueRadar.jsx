@@ -29,7 +29,7 @@
  * IT NEVER PRETENDS TO BE FULL. Nothing due means an empty dial and a sentence
  * saying so, not a scattering of decorative dots.
  */
-import React from "react";
+import React, { useState } from "react";
 import { Link } from "react-router-dom";
 import { useReducedMotion } from "framer-motion";
 import { createPageUrl } from "@/utils";
@@ -46,11 +46,15 @@ const dayLabel = (d) => (d <= 0 ? "now" : d === 1 ? "tomorrow" : `in ${d} days`)
 
 export default function DueRadar({ items = [], className = "" }) {
     const reduce = useReducedMotion();
+    // Which blip is being pointed at or focused. One at a time, and the same
+    // state for both, so a keyboard tab shows exactly what a hover shows.
+    const [lit, setLit] = useState(null);
     // Past the horizon it is not "coming up", it is just term. The cap keeps
     // the dial from turning into a rim of dots that never move.
     const near = items.filter((i) => Number(i.days) <= HORIZON_DAYS);
     const blips = plotRadar(near);
     const overdue = blips.filter((b) => b.overdue).length;
+    const litBlip = blips.find((b) => b.key === lit) || null;
 
     return (
         <div data-due-radar={blips.length} className={`card-soft on-table p-5 ${className}`}>
@@ -152,8 +156,11 @@ export default function DueRadar({ items = [], className = "" }) {
                             to={createPageUrl(b.to)}
                             data-blip={b.key}
                             data-blip-overdue={b.overdue ? "1" : "0"}
-                            title={`${b.title} — ${b.subtitle || ""} · ${dayLabel(b.days)}`}
                             aria-label={`${b.title}, ${b.subtitle || ""}, due ${dayLabel(b.days)}`}
+                            onPointerEnter={() => setLit(b.key)}
+                            onPointerLeave={() => setLit((k) => (k === b.key ? null : k))}
+                            onFocus={() => setLit(b.key)}
+                            onBlur={() => setLit((k) => (k === b.key ? null : k))}
                             className="absolute -translate-x-1/2 -translate-y-1/2 rounded-full
                                 grid place-items-center group focus-visible:outline-none"
                             style={{ left: `${b.left}%`, top: `${b.top}%`,
@@ -189,6 +196,45 @@ export default function DueRadar({ items = [], className = "" }) {
                         </Link>
                     );
                 })}
+
+                {/* ── What that blip is ────────────────────────────────
+                    A dot you cannot identify is a decoration. There was a
+                    `title` on each blip, which is the browser's own tooltip:
+                    about a second of delay, no styling, and nothing at all on
+                    a touch screen. This appears on the first frame of the
+                    hover, and on focus too, so tabbing the dial tells you the
+                    same thing pointing at it does.
+
+                    Drawn once, for whichever blip is lit, rather than one
+                    hidden label per blip — eight absolutely positioned popovers
+                    stacked under the dial is eight things to keep in sync and
+                    eight more nodes for the sweep to composite over. */}
+                {litBlip && (
+                    <div
+                        data-blip-label={litBlip.key}
+                        className="absolute z-20 pointer-events-none -translate-x-1/2
+                            rounded-lg bg-foreground text-background px-2 py-1
+                            shadow-lg whitespace-nowrap"
+                        style={{
+                            left: `${Math.min(88, Math.max(12, litBlip.left))}%`,
+                            // Above the blip, unless the blip is near the top of
+                            // the dial, in which case the label would be cut off
+                            // by the panel and it flips underneath instead.
+                            top: `${litBlip.top}%`,
+                            transform: litBlip.top < 24
+                                ? `translate(-50%, ${litBlip.size / 2 + 8}px)`
+                                : `translate(-50%, calc(-100% - ${litBlip.size / 2 + 8}px))`,
+                        }}
+                    >
+                        <span className="block text-[11px] font-bold leading-tight">
+                            {litBlip.title}
+                        </span>
+                        <span className="block text-[10px] leading-tight opacity-70">
+                            {litBlip.subtitle ? `${litBlip.subtitle} · ` : ""}
+                            {litBlip.overdue ? "due now" : dayLabel(litBlip.days)}
+                        </span>
+                    </div>
+                )}
 
                 {blips.length === 0 && (
                     <div className="absolute inset-0 grid place-items-center text-center px-6">

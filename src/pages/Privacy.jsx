@@ -71,7 +71,7 @@ export default function Privacy() {
         <ul className="list-disc pl-6 space-y-1.5">
           <li><strong>Supabase</strong> — database, authentication and hosting;</li>
           <li><strong>Stripe</strong> — payment processing;</li>
-          <li><strong>Anthropic and DeepSeek</strong> — AI processing of study prompts to generate responses;</li>
+          <li><strong>Anthropic</strong> — AI processing of study prompts to generate responses;</li>
           <li><strong>Resend</strong> — sending service and support emails;</li>
           <li><strong>Meta, TikTok and Google</strong> — analytics and advertising measurement.</li>
         </ul>

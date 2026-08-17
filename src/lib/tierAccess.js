@@ -45,7 +45,7 @@ export const FEATURES = {
   ACTIVE_RECALL:    'active_recall',     // free: blocked, premium: 8/day
   SPACED_REP:       'spaced_repetition', // free: blocked, premium: unlimited (no AI cost)
   ADVANCED_ANALYTICS: 'advanced_analytics', // free: blocked, premium: unlimited (no AI cost)
-  STUDY_COACH:      'study_coach',       // Ace companion — premium-only, 30 msgs/day (cheap DeepSeek model)
+  STUDY_COACH:      'study_coach',       // Ace companion — premium-only, 30 msgs/day (Haiku, the cheap tier)
 };
 
 // ─── Limits config ─────────────────────────────────────────────────────────

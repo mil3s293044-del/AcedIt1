@@ -14,6 +14,10 @@ import { QUEST_BY_ID, questMultiplier } from "./src/lib/quests.js";
 // here means the model and the interface cannot tell a student two different
 // stories about the same button.
 import { knowledgeForPrompt } from "./src/lib/aceKnowledge.js";
+// The spend ceiling's arithmetic, kept in its own module so it can be asserted
+// against known token counts (`node src/lib/aiCost.test.mjs`). Money maths that
+// only ever runs inside a 7,000-line server is money maths nobody checks.
+import { estimateCostMicros, isUnpricedModel, formatMicros } from "./src/lib/aiCost.js";
 import Stripe from "stripe";
 import { Resend } from "resend";
 
@@ -38,25 +42,26 @@ if (!process.env.ANTHROPIC_API_KEY) {
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
-// ─── Ace study-companion model (cheap, OpenAI-compatible) ───────────────────
-// Ace is a chatty premium-only study buddy. Claude is ~25-50x more expensive
-// per token than DeepSeek, and a casual companion doesn't need Claude-grade
-// reasoning, so Ace runs on DeepSeek (OpenAI-compatible /chat/completions).
-// DeepSeek/Groq/OpenAI all share the same wire shape, so swapping providers is
-// just three env vars. The real (tiny) cost is still billed into the user's
-// weekly $-cap so Ace can't be spammed for free.
-const ACE_API_KEY  = process.env.DEEPSEEK_API_KEY || process.env.ACE_API_KEY || "";
-const ACE_BASE_URL = process.env.ACE_BASE_URL || "https://api.deepseek.com";
-const ACE_MODEL    = process.env.ACE_MODEL || "deepseek-chat";
-// DeepSeek deepseek-chat pricing per 1M tokens (USD, cache-miss rate):
-//   input $0.27, output $1.10.  (~40x cheaper than Sonnet's $3 / $15.)
-const ACE_PRICE_IN_PER_M  = Number(process.env.ACE_PRICE_IN_PER_M  || 0.27);
-const ACE_PRICE_OUT_PER_M = Number(process.env.ACE_PRICE_OUT_PER_M || 1.10);
-if (ACE_API_KEY) {
-  console.log(`[local-ai] Ace companion ready (model: ${ACE_MODEL} @ ${ACE_BASE_URL}).`);
-} else {
-  console.warn("[local-ai] DEEPSEEK_API_KEY not set — Ace study companion will reject calls.");
+// ─── Ace study-companion model ─────────────────────────────────────────────
+// Ace is a chatty premium-only study buddy that doesn't need Sonnet-grade
+// reasoning, so it runs on Haiku: $1/$5 per million tokens against Sonnet's
+// $3/$15, which is roughly a third of the cost per turn.
+//
+// WHY NOT DEEPSEEK, which this used to run on. DeepSeek is about 3.8x cheaper
+// again per turn, and on raw token price it wins. It lost on everything around
+// the token price: a second provider account, a second key to rotate, a second
+// price table to keep in step, a second failure mode in the uptime story, and
+// student answers leaving the country. At our user count the saving is a few
+// dollars a week — less than the carrying cost of the second integration. That
+// arithmetic flips somewhere in the low hundreds of paying users, at which
+// point this is one env var and one branch to revisit.
+const ACE_MODEL = process.env.ACE_MODEL || "claude-haiku-4-5";
+if (isUnpricedModel(ACE_MODEL)) {
+  console.warn(
+    `[local-ai] ACE_MODEL "${ACE_MODEL}" is not in the price table — its calls will be billed at the dearest known rate.`,
+  );
 }
+console.log(`[local-ai] Ace companion ready (model: ${ACE_MODEL}).`);
 
 // ─── Supabase admin client + JWT auth helper ───────────────────────────────
 // Used by ported server functions (updateStreak, awardXP, etc.) to verify
@@ -190,12 +195,11 @@ async function callInvokeAI({ prompt, response_json_schema, feature, req }) {
 //   • quiz_ai_gen / flashcard_ai_gen → 3 lifetime each.
 //   • Everything else → blocked.
 //
-// Premium tier ($5/week):
-//   • Per-feature daily caps sized so typical heavy use lands ~$1-2/wk in
-//     estimated Anthropic spend. Spaced-repetition and advanced-analytics
-//     have no daily cap because they don't make AI calls.
-//   • Weekly hard ceiling at 250 cents ($2.50) is the backstop for outliers.
-//     Resets every Monday UTC.
+// Premium tier ($5 AUD/week):
+//   • Per-feature daily caps sized so typical heavy use lands well under the
+//     weekly ceiling. Spaced-repetition and advanced-analytics have no daily
+//     cap because they don't make AI calls.
+//   • Weekly hard ceiling is the backstop for outliers. Resets Monday UTC.
 //
 // If a request arrives WITHOUT a Supabase JWT (legacy Base44 path), we allow
 // it but log a warning — phase 3d ships all users onto Supabase auth.
@@ -208,8 +212,19 @@ const TIER_FREE_CAPS    = { quiz_ai_gen: 5, quiz_ai_mark: 5, flashcard_ai_gen: 5
 const TIER_FREE_COUNTER = { quiz_ai_gen: "free_ai_quizzes_used", quiz_ai_mark: "free_ai_quiz_marks_used", flashcard_ai_gen: "free_ai_flashcards_used", ai_tool: "free_ai_tools_used", ai_chat: "free_ai_tools_used" };
 const TIER_PREMIUM_CAPS = { quiz_ai_gen: 3, quiz_ai_mark: 10, flashcard_ai_gen: 3, ai_tool: 6, ai_chat: 8, goal_ai_gen: 1, roadmap_ai_gen: 5, blurting: 5, active_recall: 8, study_coach: 30, mindmap_gaps: 6 };
 const TIER_COUNTER_KEY  = { quiz_ai_gen: "quizzes", quiz_ai_mark: "quiz_marks", flashcard_ai_gen: "flashcards", ai_tool: "tools", ai_chat: "chat", goal_ai_gen: "goal", roadmap_ai_gen: "goal", blurting: "blurting", active_recall: "active_recall", study_coach: "coach", mindmap_gaps: "mindmap" };
-const TIER_WEEKLY_CAP_CENTS = 250;
-const TIER_FREE_LIFETIME_COST_CAP_CENTS = 100;   // $1 hard ceiling per free user, lifetime
+// ─── Spend ceilings, in micro-dollars (1e-6 USD) ───────────────────────────
+// Providers bill in USD; the business plans in AUD. These are stated in USD
+// because that is the currency that actually leaves the account, with the AUD
+// intent recorded beside it. The conversion is deliberately pessimistic (0.65
+// AUD/USD): if the dollar strengthens the AUD cost of a full week drifts UP,
+// so budgeting at a weak-AUD rate is what keeps the real ceiling under the
+// number the business signed off on.
+//
+// Cents were too coarse to hold these — see src/lib/aiCost.js. A sub-half-cent
+// call rounded to zero, so the busiest feature in the app contributed nothing
+// to its own ceiling.
+const TIER_WEEKLY_CAP_MICROS = Number(process.env.TIER_WEEKLY_CAP_MICROS || 1_950_000);   // $1.95 USD ≈ $3.00 AUD
+const TIER_FREE_LIFETIME_CAP_MICROS = Number(process.env.TIER_FREE_LIFETIME_CAP_MICROS || 1_000_000); // $1.00 USD, lifetime
 
 // Returns YYYY-MM-DD for the Monday of the current ISO week, in UTC.
 function currentWeekStartUTC() {
@@ -625,6 +640,21 @@ async function loadUserProfile(userEmail) {
 const UNLIMITED_EMAILS = (process.env.UNLIMITED_ACCESS_EMAILS || "mil3s293044@gmail.com")
   .split(",").map((s) => s.trim().toLowerCase()).filter(Boolean);
 
+// Recorded spend, in micro-dollars.
+//
+// Falls back to the legacy cents columns when the micro columns are still zero,
+// so a server that deploys before migration 0030 lands enforces a coarse
+// ceiling rather than none at all. Once 0030 has run the backfill makes the
+// micro column authoritative and the fallback stops firing.
+function weeklySpendMicros(profile) {
+  const micros = profile?.weekly_ai_cost_micros ?? 0;
+  return micros > 0 ? micros : (profile?.weekly_ai_cost_cents ?? 0) * 10_000;
+}
+function lifetimeSpendMicros(profile) {
+  const micros = profile?.lifetime_ai_cost_micros ?? 0;
+  return micros > 0 ? micros : (profile?.lifetime_ai_cost_cents ?? 0) * 10_000;
+}
+
 function checkTierAccess(profile, feature) {
   // Dev-only bypass — set VITE_TIER_BYPASS=true in .env.local to disable all
   // caps for testing. The frontend has its own copy of this check so the UI
@@ -636,7 +666,7 @@ function checkTierAccess(profile, feature) {
   }
   if (!profile) return { allowed: false, status: 401, reason: "Sign in to use AI features." };
   if (tierIsPremium(profile)) {
-    if ((profile.weekly_ai_cost_cents ?? 0) >= TIER_WEEKLY_CAP_CENTS) {
+    if (weeklySpendMicros(profile) >= TIER_WEEKLY_CAP_MICROS) {
       return { allowed: false, status: 429, reason: "Weekly AI usage limit reached. Resets Monday." };
     }
     const cap = TIER_PREMIUM_CAPS[feature];
@@ -650,7 +680,7 @@ function checkTierAccess(profile, feature) {
     return { allowed: true };
   }
   // Free-tier lifetime cost ceiling — first check, $1 hard backstop.
-  if ((profile.lifetime_ai_cost_cents ?? 0) >= TIER_FREE_LIFETIME_COST_CAP_CENTS) {
+  if (lifetimeSpendMicros(profile) >= TIER_FREE_LIFETIME_CAP_MICROS) {
     return { allowed: false, status: 402, reason: "You've reached your free AI usage limit. Upgrade to Premium for daily access." };
   }
   const cap = TIER_FREE_CAPS[feature];
@@ -665,25 +695,17 @@ function checkTierAccess(profile, feature) {
   return { allowed: true };
 }
 
-function estimateCostCents(usage) {
-  if (!usage) return 0;
-  // Sonnet 4.6 pricing per 1M tokens (USD):
-  //   input $3.00, cache_read $0.30, cache_create $3.75, output $15.00
-  const inT  = usage.input_tokens ?? 0;
-  const cR   = usage.cache_read_input_tokens ?? 0;
-  const cC   = usage.cache_creation_input_tokens ?? 0;
-  const outT = usage.output_tokens ?? 0;
-  const dollars =
-    ((inT - cR - cC) * 3.00 + cR * 0.30 + cC * 3.75 + outT * 15.00) / 1_000_000;
-  return Math.max(0, Math.round(dollars * 100));
-}
-
 async function recordTierUsage(profile, feature, usage, options = {}) {
   if (!supabaseAdmin || !profile) return;
-  // Some features (e.g. Ace, which runs on DeepSeek not Claude) bill a cost
-  // computed from a different price table. Callers pass `costCentsOverride`
-  // so we don't mis-price them with the Sonnet-based estimateCostCents.
-  const costCents = options.costCentsOverride ?? estimateCostCents(usage);
+  // Features run on different models at different rates, so the caller says
+  // which one it used. Defaulting to MODEL preserves the old behaviour for the
+  // callers that don't override it.
+  const costMicros = estimateCostMicros(usage, options.model || MODEL);
+  // The legacy cents columns are still written so a rollback to the previous
+  // server keeps a working ceiling. They remain lossy by construction — a
+  // sub-half-cent call still floors to 0 here — which is exactly why the
+  // micro columns exist and why the gate reads those.
+  const costCents = Math.floor(costMicros / 10_000);
   const updates = {};
   if (tierIsPremium(profile)) {
     const today = new Date().toISOString().slice(0, 10);
@@ -700,14 +722,16 @@ async function recordTierUsage(profile, feature, usage, options = {}) {
       ? new Date(profile.weekly_cost_period_start).toISOString().slice(0, 10)
       : null;
     const sameWeek = prevStartStr && prevStartStr >= weekStartStr;
-    const baseCost = sameWeek ? (profile.weekly_ai_cost_cents ?? 0) : 0;
-    updates.weekly_ai_cost_cents = baseCost + costCents;
+    // A new week zeroes the running total rather than adding to last week's.
+    updates.weekly_ai_cost_micros = (sameWeek ? weeklySpendMicros(profile) : 0) + costMicros;
+    updates.weekly_ai_cost_cents  = (sameWeek ? (profile.weekly_ai_cost_cents ?? 0) : 0) + costCents;
     updates.weekly_cost_period_start = weekStartStr;
   } else {
     // Free user — increment the matching counter AND the lifetime cost.
     const counterKey = TIER_FREE_COUNTER[feature];
     if (counterKey) updates[counterKey] = (profile[counterKey] ?? 0) + 1;
-    updates.lifetime_ai_cost_cents = (profile.lifetime_ai_cost_cents ?? 0) + costCents;
+    updates.lifetime_ai_cost_micros = lifetimeSpendMicros(profile) + costMicros;
+    updates.lifetime_ai_cost_cents  = (profile.lifetime_ai_cost_cents ?? 0) + costCents;
   }
   if (Object.keys(updates).length > 0) {
     await supabaseAdmin.from("user_profiles").update(updates).eq("id", profile.id);
@@ -2221,19 +2245,12 @@ app.post("/local-ai/invokeAIStream", async (req, res) => {
   }
 });
 
-// ─── Ace — premium study companion (DeepSeek-backed chat) ───────────────────
+// ─── Ace — premium study companion (Haiku-backed chat) ─────────────────────
 // A chatty, on-brand study buddy premium users can open anywhere in the app.
-// Runs on a cheap OpenAI-compatible model (DeepSeek) but bills its real cost
-// into the same weekly $-cap as every other AI feature, and counts against a
-// generous daily 'coach' bucket. Free users are blocked (premium-only feature).
-function estimateAceCostCents(usage) {
-  if (!usage) return 0;
-  const inT  = usage.prompt_tokens ?? 0;
-  const outT = usage.completion_tokens ?? 0;
-  const dollars = (inT * ACE_PRICE_IN_PER_M + outT * ACE_PRICE_OUT_PER_M) / 1_000_000;
-  return Math.max(0, Math.round(dollars * 100));
-}
-
+// Runs on Haiku rather than Sonnet — a study buddy doesn't need Sonnet-grade
+// reasoning and costs about a third as much per turn — and bills its real cost
+// into the same weekly ceiling as every other AI feature, on top of a generous
+// daily 'coach' bucket. Free users are blocked (premium-only feature).
 function buildAceSystemPrompt(context = {}) {
   const c = context || {};
   const name     = (c.name || "").toString().slice(0, 40).trim();
@@ -2308,19 +2325,24 @@ app.post("/local-ai/studyCoachChat", async (req, res) => {
   req.on("close", () => { try { upstream.abort(); } catch {} });
 
   try {
-    if (!ACE_API_KEY) {
-      sse("error", { message: "Ace isn't available right now — try again later." });
-      return;
-    }
-
     const body = req.body || {};
     const rawMessages = Array.isArray(body.messages) ? body.messages : [];
 
     // Sanitise + clamp history: only user/assistant turns, last 12, trimmed.
-    const history = rawMessages
+    // Empty content is dropped rather than sent — the Messages API rejects an
+    // empty text block, and an empty turn carries nothing anyway.
+    const trimmed = rawMessages
       .filter((m) => m && (m.role === "user" || m.role === "assistant") && typeof m.content === "string")
-      .slice(-12)
-      .map((m) => ({ role: m.role, content: m.content.slice(0, 4000) }));
+      .map((m) => ({ role: m.role, content: m.content.slice(0, 4000).trim() }))
+      .filter((m) => m.content.length > 0)
+      .slice(-12);
+
+    // The Messages API requires the conversation to OPEN on a user turn.
+    // Taking the last 12 of a long chat can easily land on an assistant reply,
+    // which the previous OpenAI-shaped endpoint accepted and this one rejects
+    // with a 400, so drop any leading assistant turns from the window.
+    const firstUser = trimmed.findIndex((m) => m.role === "user");
+    const history = firstUser === -1 ? [] : trimmed.slice(firstUser);
 
     const lastUser = [...history].reverse().find((m) => m.role === "user");
     if (!lastUser) {
@@ -2346,65 +2368,41 @@ app.post("/local-ai/studyCoachChat", async (req, res) => {
       return;
     }
 
+    // The system prompt is a top-level parameter on the Messages API, not a
+    // message with role "system" the way the OpenAI-shaped endpoint took it.
+    //
+    // cache_control is set even though Ace's prompt usually sits under Haiku's
+    // 4,096-token minimum cacheable prefix and so will not engage. It costs
+    // nothing when it doesn't (no error, simply no cache entry), and the prompt
+    // grows with the student's subject and goal list, so the longest prompts —
+    // the ones worth caching across a multi-turn session — get it for free.
     const system = buildAceSystemPrompt(body.context);
-    const messages = [{ role: "system", content: system }, ...history];
 
-    const upstreamRes = await fetch(`${ACE_BASE_URL}/chat/completions`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${ACE_API_KEY}`,
-      },
-      body: JSON.stringify({
+    const stream = anthropic.messages.stream(
+      {
         model: ACE_MODEL,
-        messages,
         max_tokens: 1024,
         temperature: 0.8,
-        stream: true,
-        stream_options: { include_usage: true },
-      }),
-      signal: upstream.signal,
-    });
+        system: [{ type: "text", text: system, cache_control: { type: "ephemeral" } }],
+        messages: history,
+      },
+      { signal: upstream.signal },
+    );
 
-    if (!upstreamRes.ok || !upstreamRes.body) {
-      const errText = await upstreamRes.text().catch(() => "");
-      console.error(`[local-ai] (ace) upstream error ${upstreamRes.status}: ${errText.slice(0, 300)}`);
-      sse("error", { message: "Ace had trouble responding — give it another go." });
-      return;
-    }
+    stream.on("text", (delta) => sse("text", { text: delta }));
 
-    // Parse the upstream OpenAI-style SSE and re-emit in our wire format.
-    const reader = upstreamRes.body.getReader();
-    const decoder = new TextDecoder();
-    let buffer = "";
-    let usage = null;
-
-    while (true) {
-      const { value, done } = await reader.read();
-      if (done) break;
-      buffer += decoder.decode(value, { stream: true });
-      const parts = buffer.split("\n\n");
-      buffer = parts.pop() ?? "";
-      for (const part of parts) {
-        const dataLine = part.split("\n").find((l) => l.startsWith("data:"));
-        if (!dataLine) continue;
-        const payload = dataLine.slice(5).trim();
-        if (!payload || payload === "[DONE]") continue;
-        let json;
-        try { json = JSON.parse(payload); } catch { continue; }
-        const delta = json?.choices?.[0]?.delta?.content;
-        if (delta) sse("text", { text: delta });
-        if (json?.usage) usage = json.usage;
-      }
-    }
+    const finalMessage = await stream.finalMessage();
+    const usage = finalMessage?.usage ?? null;
 
     if (usage) {
-      console.log(`[local-ai] (ace) in=${usage.prompt_tokens ?? 0} out=${usage.completion_tokens ?? 0} cost=${estimateAceCostCents(usage)}c`);
+      const micros = estimateCostMicros(usage, ACE_MODEL);
+      console.log(
+        `[local-ai] (ace) in=${usage.input_tokens ?? 0} cache_read=${usage.cache_read_input_tokens ?? 0} out=${usage.output_tokens ?? 0} cost=${formatMicros(micros)}`,
+      );
     }
     if (tierProfile) {
-      recordTierUsage(tierProfile, "study_coach", null, {
-        costCentsOverride: estimateAceCostCents(usage),
-      }).catch((e) => console.error("[local-ai] (ace) recordTierUsage failed:", e?.message || e));
+      recordTierUsage(tierProfile, "study_coach", usage, { model: ACE_MODEL })
+        .catch((e) => console.error("[local-ai] (ace) recordTierUsage failed:", e?.message || e));
     }
 
     sse("done", { ok: true });
@@ -2588,8 +2586,11 @@ app.post("/local-ai/invokeAI", async (req, res) => {
     }
 
     // Fire-and-forget usage tracking (don't block the response on Supabase write).
+    // Pass the model actually used — `fast: true` routes to FAST_MODEL, which
+    // may be a cheaper tier than MODEL, and billing it at MODEL's rate would
+    // burn a user's ceiling faster than their calls really cost.
     if (tierProfile) {
-      recordTierUsage(tierProfile, feature, response.usage).catch((e) =>
+      recordTierUsage(tierProfile, feature, response.usage, { model: request.model }).catch((e) =>
         console.error("[local-ai] recordTierUsage failed:", e?.message || e),
       );
     }
