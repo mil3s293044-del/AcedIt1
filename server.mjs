@@ -127,6 +127,31 @@ function escapeHtml(s) {
 // authenticated Supabase user, or null. The supabase-js admin call hits
 // auth.getUser() which validates signature + expiry against the project's
 // JWT secret.
+/**
+ * Bound a Supabase round trip so a slow dependency cannot hang a stream.
+ *
+ * Every AI endpoint verifies the caller and loads their profile before calling
+ * the model, and neither call had a deadline. If Supabase is slow the student
+ * watches a typing indicator with nothing behind it and no way to tell whether
+ * anything is coming.
+ *
+ * Resolves to `null` on timeout, which every caller already treats as "not
+ * signed in" — a spend ceiling that fails OPEN is a bill, so this fails closed
+ * on purpose. The student gets a retry message instead of a silent hang.
+ */
+const SUPABASE_DEADLINE_MS = Number(process.env.SUPABASE_DEADLINE_MS || 4000);
+
+function withDeadline(promise, label) {
+  let timer;
+  const deadline = new Promise((resolve) => {
+    timer = setTimeout(() => {
+      console.warn(`[local-ai] ${label} exceeded ${SUPABASE_DEADLINE_MS}ms — treating as unauthenticated`);
+      resolve(null);
+    }, SUPABASE_DEADLINE_MS);
+  });
+  return Promise.race([promise, deadline]).finally(() => clearTimeout(timer));
+}
+
 async function authenticateRequest(req) {
   if (!supabaseAdmin) return null;
   const auth = req.headers.authorization || "";
@@ -134,9 +159,9 @@ async function authenticateRequest(req) {
   const token = auth.slice(7).trim();
   if (!token) return null;
   try {
-    const { data, error } = await supabaseAdmin.auth.getUser(token);
-    if (error || !data?.user) return null;
-    return data.user;
+    const res = await withDeadline(supabaseAdmin.auth.getUser(token), "auth.getUser");
+    if (!res || res.error || !res.data?.user) return null;
+    return res.data.user;
   } catch {
     return null;
   }
@@ -628,13 +653,16 @@ function tierIsPremium(profile) {
 
 async function loadUserProfile(userEmail) {
   if (!supabaseAdmin || !userEmail) return null;
-  const { data } = await supabaseAdmin
-    .from("user_profiles")
-    .select("*")
-    .eq("created_by", userEmail)
-    .limit(1)
-    .maybeSingle();
-  return data || null;
+  const res = await withDeadline(
+    supabaseAdmin
+      .from("user_profiles")
+      .select("*")
+      .eq("created_by", userEmail)
+      .limit(1)
+      .maybeSingle(),
+    "loadUserProfile",
+  );
+  return res?.data || null;
 }
 
 // Owner/allowlisted accounts get unlimited AI access (demos, content recording,
@@ -2310,7 +2338,7 @@ Rules:
 You are drawn as the ace of spades. If it comes up, that's all there is to it — don't lean on the card thing or make puns out of it.
 
 EVERY FEATURE ACEDIT HAS. This is exhaustive; anything not here does not exist.
-${knowledgeForPrompt()}${profileBlock}`;
+${knowledgeForPrompt({ compact: true })}${profileBlock}`;
 }
 
 app.post("/local-ai/studyCoachChat", async (req, res) => {
@@ -2366,12 +2394,21 @@ app.post("/local-ai/studyCoachChat", async (req, res) => {
     }
 
     // ─── Tier gate — premium only, counts against weekly $-cap ──────────────
+    // Two sequential Supabase round trips stand between the student pressing
+    // send and the model being called, and the second needs the email from the
+    // first so they cannot be overlapped. Timed individually because "Ace feels
+    // slow" is otherwise unattributable — the model is the obvious suspect and
+    // frequently not the culprit.
+    const tAuth = Date.now();
     const tierUser = await authenticateRequest(req);
+    const authMs = Date.now() - tAuth;
     if (!tierUser) {
-      sse("error", { message: "Sign in to chat with Ace." });
+      sse("error", { message: "Couldn't reach your account just then. Try that again." });
       return;
     }
+    const tProfile = Date.now();
     const tierProfile = await loadUserProfile(tierUser.email);
+    const profileMs = Date.now() - tProfile;
     const access = checkTierAccess(tierProfile, "study_coach");
     if (!access.allowed) {
       console.log(`[local-ai] (ace) tier-gate blocked: ${tierUser.email} status=${access.status}`);
@@ -2382,11 +2419,13 @@ app.post("/local-ai/studyCoachChat", async (req, res) => {
     // The system prompt is a top-level parameter on the Messages API, not a
     // message with role "system" the way the OpenAI-shaped endpoint took it.
     //
-    // cache_control is set even though Ace's prompt usually sits under Haiku's
-    // 4,096-token minimum cacheable prefix and so will not engage. It costs
-    // nothing when it doesn't (no error, simply no cache entry), and the prompt
-    // grows with the student's subject and goal list, so the longest prompts —
-    // the ones worth caching across a multi-turn session — get it for free.
+    // NO cache_control here, deliberately. Haiku's minimum cacheable prefix is
+    // 4,096 tokens and this prompt is around 1,500, so a breakpoint on it can
+    // never produce a cache entry — it would be configuration that reads like
+    // an optimisation and does nothing. For a chat the breakpoint that WOULD
+    // pay is on the last history message, so system plus history caches as the
+    // conversation grows; worth doing once a typical session is seen to cross
+    // the threshold, and not before.
     const system = buildAceSystemPrompt(body.context);
 
     const stream = anthropic.messages.stream(
@@ -2394,21 +2433,32 @@ app.post("/local-ai/studyCoachChat", async (req, res) => {
         model: ACE_MODEL,
         max_tokens: 1024,
         temperature: 0.8,
-        system: [{ type: "text", text: system, cache_control: { type: "ephemeral" } }],
+        system,
         messages: history,
       },
       { signal: upstream.signal },
     );
 
-    stream.on("text", (delta) => sse("text", { text: delta }));
+    // Time to first token is the number the student actually experiences —
+    // everything before it is a typing indicator with nothing behind it. Logged
+    // next to the two round trips that precede it so a slow Ace can be
+    // attributed rather than guessed at.
+    let firstTokenAt = null;
+    stream.on("text", (delta) => {
+      if (firstTokenAt === null) firstTokenAt = Date.now();
+      sse("text", { text: delta });
+    });
 
     const finalMessage = await stream.finalMessage();
     const usage = finalMessage?.usage ?? null;
 
     if (usage) {
       const micros = estimateCostMicros(usage, ACE_MODEL);
+      const ttft = firstTokenAt ? firstTokenAt - tAuth : null;
       console.log(
-        `[local-ai] (ace) in=${usage.input_tokens ?? 0} cache_read=${usage.cache_read_input_tokens ?? 0} out=${usage.output_tokens ?? 0} cost=${formatMicros(micros)}`,
+        `[local-ai] (ace) in=${usage.input_tokens ?? 0} out=${usage.output_tokens ?? 0} `
+        + `cost=${formatMicros(micros)} | auth=${authMs}ms profile=${profileMs}ms `
+        + `ttft=${ttft === null ? "n/a" : `${ttft}ms`} total=${Date.now() - tAuth}ms`,
       );
     }
     if (tierProfile) {
