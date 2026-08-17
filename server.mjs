@@ -2407,7 +2407,21 @@ app.post("/local-ai/studyCoachChat", async (req, res) => {
 
     sse("done", { ok: true });
   } catch (err) {
-    if (err?.name === "AbortError") { res.end(); return; }
+    // A stop is not a failure, and must not paint a red error into the chat.
+    //
+    // The old DeepSeek path used raw fetch, which throws a DOMException named
+    // "AbortError" — so a bare name check was enough. The Anthropic SDK throws
+    // its own APIUserAbortError, whose name is NOT "AbortError" and whose
+    // message is the literal string "Request was aborted.". Porting the call
+    // without porting this check meant every time a student hit stop, that
+    // sentence was relayed to them as an error.
+    //
+    // Keyed off the signal as well as the error type, so any future transport
+    // that reports an abort differently still lands here.
+    if (upstream.signal.aborted || err?.name === "AbortError" || err instanceof Anthropic.APIUserAbortError) {
+      res.end();
+      return;
+    }
     console.error("[local-ai] (ace) stream error:", err);
     try { sse("error", { message: err?.message || String(err) }); } catch {}
   } finally {

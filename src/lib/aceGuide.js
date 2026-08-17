@@ -16,7 +16,7 @@
  * The LLM keeps the half it's actually needed for — explaining photosynthesis,
  * marking an essay, talking someone off a ledge at 11pm.
  */
-import { FEATURES, BY_ID, findFeatures, readiness, blockedBy, NEEDS } from "@/lib/aceKnowledge";
+import { FEATURES, BY_ID, findFeatures, readiness, blockedBy, NEEDS, tokens } from "@/lib/aceKnowledge";
 import { retentionOutlook, reviewMinutes } from "@/lib/retention";
 import { weakTopicsFrom } from "@/lib/weakTopics";
 import { bestLever } from "@/lib/atarLift";
@@ -264,6 +264,40 @@ function intentOf(q) {
     return null;
 }
 
+// ── Is this a question about the app, or a student talking about their life? ──
+//
+// The guide matches on keywords, and several features claim a single common
+// word — English Mentor lists "english" among its aka, which alone scores over
+// the confidence bar. That is right for "where's the english marker" and badly
+// wrong for "I have an English SAC for Ransom in a week and I don't know the
+// book at all", which is a real question from a frightened student that used to
+// come back as a card advertising a marking tool.
+//
+// The discriminator is COVERAGE, not keywords: how much of what they wrote does
+// the matched feature actually account for? A lookup is mostly the feature's
+// own words. A message about their week mentions a feature in passing. Nothing
+// here needs a list of school nouns to keep up to date — a message that is
+// mostly about something else fails on its own shape.
+const LOOKUP_MAX_TOKENS = 10;   // beyond this it reads as a message, not a query
+const LOOKUP_MIN_COVERAGE = 0.25;
+const DOMINANT_COVERAGE = 0.5;  // a long question can still BE the feature
+
+function coverageOf(q, f) {
+    const qt = tokens(q);
+    if (!qt.length) return 0;
+    const own = new Set([...tokens(f.name), ...(f.aka || []).flatMap(a => tokens(a))]);
+    return qt.filter(t => own.has(t)).length / qt.length;
+}
+
+/** True when the feature is the subject of the question rather than a word in it. */
+function readsAsLookup(q, f) {
+    const qt = tokens(q);
+    if (!qt.length) return false;
+    const coverage = coverageOf(q, f);
+    if (qt.length <= LOOKUP_MAX_TOKENS) return coverage >= LOOKUP_MIN_COVERAGE;
+    return coverage >= DOMINANT_COVERAGE;
+}
+
 /**
  * Answer a question about the app, with no model call.
  *
@@ -284,6 +318,9 @@ export function answer(query, { ready = null, premium = false } = {}) {
     if (!hits.length) return null;
 
     const f = hits[0];
+    // Matched a feature, but only in passing — this is a question for the
+    // model, not a card. Returning null is the established handover signal.
+    if (!readsAsLookup(q, f)) return null;
     const blocked = ready ? blockedBy(f, ready) : null;
     const locked = f.premium && !premium;
 
