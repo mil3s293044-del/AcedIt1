@@ -543,13 +543,15 @@ export function findFeatures(query, limit = 4) {
  * shows, which means the model and the interface can't tell a student two
  * different stories.
  */
-export function knowledgeForPrompt() {
+export function knowledgeForPrompt({ compact = false } = {}) {
     const lines = [];
     for (const [section, ids] of Object.entries(SECTIONS)) {
         lines.push(`\n${section}:`);
         for (const id of ids) {
             const f = BY_ID[id];
-            lines.push(`- ${f.name} (${f.to}) — ${f.what} Worth opening when: ${f.when}`);
+            lines.push(compact
+                ? `- ${f.name} (${f.to}) — ${f.what}`
+                : `- ${f.name} (${f.to}) — ${f.what} Worth opening when: ${f.when}`);
         }
     }
     return lines.join("\n");
