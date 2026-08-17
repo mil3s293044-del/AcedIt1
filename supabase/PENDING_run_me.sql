@@ -1,7 +1,7 @@
 -- ════════════════════════════════════════════════════════════════════════════
 -- AcedIt — everything still to apply, in one script.
 --
--- Covers migrations 0022 through 0029. Paste the whole thing into the Supabase
+-- Covers migrations 0022 through 0030. Paste the whole thing into the Supabase
 -- SQL editor and run it once.
 --
 -- SAFE TO RUN TWICE. Every statement is guarded, so if some of these were
@@ -12,8 +12,10 @@
 -- running this file twice — second pass clean, and the expected columns,
 -- tables, indexes and policies all present afterwards.
 --
--- Nothing here drops or rewrites existing data. The only UPDATE is a
--- backfill that touches rows where xp_amount is null.
+-- Nothing here drops or rewrites existing data. There are two UPDATEs, both
+-- backfills: one touches rows where xp_amount is null, the other copies the
+-- existing AI-spend cents into the new micro-dollar columns (0030) and is
+-- guarded so a second run cannot clobber spend recorded since the first.
 -- ════════════════════════════════════════════════════════════════════════════
 
 begin;
@@ -255,5 +257,38 @@ create index if not exists mind_maps_drill_idx
 
 create index if not exists mind_maps_subject_idx
     on public.mind_maps (created_by, subject_name, updated_date desc);
+
+-- ── 0030 — AI spend tracked in micro-dollars ────────────────────────────────
+-- The weekly ceiling was leaking. Spend was stored as an integer number of
+-- cents and every estimate rounded to the nearest cent, so anything under half
+-- a cent recorded as zero. A typical Ace chat turn costs $0.0007 — it recorded
+-- nothing, every time, and the only thing bounding the busiest AI feature in
+-- the app was its daily message counter.
+--
+-- A micro-dollar is one millionth of a dollar, fine enough that the cheapest
+-- call we can make still registers in the hundreds.
+--
+--   weekly_ai_cost_micros    premium rolling weekly spend; ceiling 1,950,000
+--                            (= $1.95 USD, about $3.00 AUD)
+--   lifetime_ai_cost_micros  free-tier lifetime spend; ceiling 1,000,000 ($1.00)
+--
+-- The cents columns stay and are still written by the server, so rolling back
+-- to the previous release keeps a working (if coarse) ceiling rather than none.
+alter table public.user_profiles
+    add column if not exists weekly_ai_cost_micros   bigint not null default 0,
+    add column if not exists lifetime_ai_cost_micros bigint not null default 0;
+
+-- Backfill so nobody's accrued spend resets on deploy. Guarded on BOTH columns
+-- being zero, so re-running this script cannot overwrite spend the new server
+-- has already recorded. Understates real history — the cents figure was itself
+-- missing every sub-half-cent call — but never overstates it.
+update public.user_profiles
+   set weekly_ai_cost_micros   = coalesce(weekly_ai_cost_cents, 0)   * 10000,
+       lifetime_ai_cost_micros = coalesce(lifetime_ai_cost_cents, 0) * 10000
+ where weekly_ai_cost_micros = 0
+   and lifetime_ai_cost_micros = 0;
+
+create index if not exists user_profiles_lifetime_micros_idx
+    on public.user_profiles (lifetime_ai_cost_micros);
 
 commit;
