@@ -2187,7 +2187,10 @@ app.post("/local-ai/invokeAIStream", async (req, res) => {
   const heartbeat = setInterval(() => {
     try { res.write(": ping\n\n"); } catch { /* socket gone */ }
   }, 15000);
-  req.on("close", () => clearInterval(heartbeat));
+  // res, not req — see the note in studyCoachChat. On a POST the request
+  // stream closes as soon as the body is read, which here killed the keepalive
+  // seconds into a generation that needs it most.
+  res.on("close", () => clearInterval(heartbeat));
 
   try {
     const params = req.body || {};
@@ -2360,10 +2363,33 @@ app.post("/local-ai/studyCoachChat", async (req, res) => {
   const heartbeat = setInterval(() => {
     try { res.write(": ping\n\n"); } catch { /* socket gone */ }
   }, 15000);
-  req.on("close", () => clearInterval(heartbeat));
 
   const upstream = new AbortController();
-  req.on("close", () => { try { upstream.abort(); } catch {} });
+
+  // ─── res, NOT req. This one line was the whole bug. ─────────────────────
+  //
+  // On a POST, `req` is the REQUEST stream, and Node destroys it the moment
+  // express.json() finishes reading the body — which emits 'close' about nine
+  // milliseconds in, while the response is still wide open and no work has
+  // started. Measured, not assumed:
+  //
+  //     req.on('close')  fired at +9ms
+  //     work finished    at +1508ms
+  //     res.on('close')  fired at +1509ms
+  //
+  // So `upstream.abort()` ran before the model was ever called. The SDK got a
+  // signal that was already aborted, threw immediately, and the abort branch
+  // in the catch returned silently — no completion log, no error log, and a
+  // stream that ended without a `done` event. The client kept an empty
+  // assistant bubble on screen, which renders as a typing indicator that never
+  // resolves. Every symptom of "Ace takes forever" is this.
+  //
+  // `res` closes when the client actually goes away, which is the thing we
+  // wanted to know all along.
+  res.on("close", () => {
+    clearInterval(heartbeat);
+    try { upstream.abort(); } catch { /* already gone */ }
+  });
 
   try {
     const body = req.body || {};
