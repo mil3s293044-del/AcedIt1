@@ -12,7 +12,9 @@
     "lint": "eslint . --quiet",
     "lint:fix": "eslint . --fix",
     "typecheck": "tsc -p ./jsconfig.json",
+    "test": "npm run test:cost && npm run test:ace",
     "test:cost": "node src/lib/aiCost.test.mjs",
+    "test:ace": "node --import ./src/lib/_aliasLoader.mjs src/lib/aceGuide.test.mjs",
     "preview": "vite preview"
   },
   "dependencies": {
