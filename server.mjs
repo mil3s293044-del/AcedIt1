@@ -21,6 +21,7 @@ import { estimateCostMicros, isUnpricedModel, formatMicros } from "./src/lib/aiC
 // Which model a student's work runs on. The tier lives on their profile, so it
 // is resolved here rather than trusted from the request body.
 import { modelFor } from "./src/lib/aiModels.js";
+import { priceOf, stackOf, spendableFor, WEEKLY_CHIPS, chipsSpent } from "./src/lib/chips.js";
 import Stripe from "stripe";
 import { Resend } from "resend";
 
@@ -240,7 +241,13 @@ async function callInvokeAI({ prompt, response_json_schema, feature, req }) {
 // real cost backstop. Free users' chat shares the free tools lifetime cap.
 const TIER_FREE_CAPS    = { quiz_ai_gen: 5, quiz_ai_mark: 5, flashcard_ai_gen: 5, ai_tool: 5, ai_chat: 5 };
 const TIER_FREE_COUNTER = { quiz_ai_gen: "free_ai_quizzes_used", quiz_ai_mark: "free_ai_quiz_marks_used", flashcard_ai_gen: "free_ai_flashcards_used", ai_tool: "free_ai_tools_used", ai_chat: "free_ai_tools_used" };
-const TIER_PREMIUM_CAPS = { quiz_ai_gen: 3, quiz_ai_mark: 10, flashcard_ai_gen: 3, ai_tool: 6, ai_chat: 8, goal_ai_gen: 1, roadmap_ai_gen: 5, blurting: 5, active_recall: 8, study_coach: 30, mindmap_gaps: 6 };
+// Premium is gated by the chip stack now, not by eleven per-feature daily
+// caps. Those caps were sized independently of the dollar ceiling they were
+// meant to protect and, priced against the real cost table, permitted 4.5x
+// what it allowed — so they stopped light users doing a big Saturday session
+// while letting heavy ones walk into the money wall on day two. See
+// src/lib/chips.js. The counter keys stay: they no longer gate anything, but
+// they are the only per-feature usage record the app keeps.
 const TIER_COUNTER_KEY  = { quiz_ai_gen: "quizzes", quiz_ai_mark: "quiz_marks", flashcard_ai_gen: "flashcards", ai_tool: "tools", ai_chat: "chat", goal_ai_gen: "goal", roadmap_ai_gen: "goal", blurting: "blurting", active_recall: "active_recall", study_coach: "coach", mindmap_gaps: "mindmap" };
 // ─── Spend ceilings, in micro-dollars (1e-6 USD) ───────────────────────────
 // Providers bill in USD; the business plans in AUD. These are stated in USD
@@ -688,6 +695,40 @@ function lifetimeSpendMicros(profile) {
   return micros > 0 ? micros : (profile?.lifetime_ai_cost_cents ?? 0) * 10_000;
 }
 
+// ─── Burst window ──────────────────────────────────────────────────────────
+// How many chips may be spent inside one window.
+//
+// SIZED AGAINST WHAT A PERSON CAN PHYSICALLY DO, not against a round number.
+// Every generation is a round trip, so nobody can start the next one until the
+// last comes back. At the real latencies — roughly 18s for a flashcard deck,
+// 22s for a quiz, 12s for a tool — the fastest a human can spend, clicking the
+// instant each result lands, is about 400 chips in five minutes.
+//
+// The first draft of this was 300, which would have throttled a student having
+// a genuinely big Saturday. 500 sits above anything a person can reach and far
+// below what a script firing requests in parallel does in seconds, which is the
+// only thing this is here to stop. The weekly stack is what bounds cost; this
+// only bounds the rate.
+const TIER_BURST_CHIPS = Number(process.env.TIER_BURST_CHIPS || 500);
+const TIER_BURST_MS = Number(process.env.TIER_BURST_MS || 5 * 60_000);
+
+/**
+ * The current burst window, expired ones read as empty.
+ *
+ * A rolling window that resets wholesale rather than a sliding log: a sliding
+ * window would need every timestamp kept per user, and the difference between
+ * the two only matters to someone trying to sit exactly on the boundary, who
+ * is by then rate-limited to the same average either way.
+ */
+function burstState(profile, now = Date.now()) {
+  const b = profile?.ai_burst;
+  const since = b?.since ? Date.parse(b.since) : NaN;
+  if (!Number.isFinite(since) || now - since >= TIER_BURST_MS) {
+    return { since: new Date(now).toISOString(), chips: 0 };
+  }
+  return { since: b.since, chips: Number(b.chips) || 0 };
+}
+
 function checkTierAccess(profile, feature) {
   // Dev-only bypass — set VITE_TIER_BYPASS=true in .env.local to disable all
   // caps for testing. The frontend has its own copy of this check so the UI
@@ -699,18 +740,53 @@ function checkTierAccess(profile, feature) {
   }
   if (!profile) return { allowed: false, status: 401, reason: "Sign in to use AI features." };
   if (tierIsPremium(profile)) {
+    // ─── THE MONEY BACKSTOP, still first ────────────────────────────────
+    // Chips are the gate a student sees and plans against, and their prices
+    // are rounded up so a full stack always costs less than this ceiling.
+    // This stays anyway: if a price in chips.js is ever set below its real
+    // cost, or a model gets dearer between deploys, the dollars still stop.
     if (weeklySpendMicros(profile) >= TIER_WEEKLY_CAP_MICROS) {
       return { allowed: false, status: 429, reason: "Weekly AI usage limit reached. Resets Monday." };
     }
-    const cap = TIER_PREMIUM_CAPS[feature];
-    if (cap === undefined) return { allowed: true };
-    const counters = profile.daily_ai_counters ?? {};
-    const today = new Date().toISOString().slice(0, 10);
-    const used = counters.date === today ? (counters[TIER_COUNTER_KEY[feature]] ?? 0) : 0;
-    if (used >= cap) {
-      return { allowed: false, status: 429, reason: `Daily limit reached (${cap}/day). Resets at midnight.` };
+
+    // ─── THE CHIP STACK ─────────────────────────────────────────────────
+    // One pool for everything, replacing eleven per-feature daily caps that
+    // between them permitted 4.5x what the dollar ceiling above allowed. A
+    // heavy student used to hit that ceiling on day two while the counters
+    // still claimed they had three quizzes left; a light student was stopped
+    // at three flashcard decks having spent a seventh of their budget.
+    const tier = profile.ai_model_preference === "saver" ? "saver" : "standard";
+    const price = priceOf(feature, tier);
+    const stack = stackOf(profile);
+    // spendableFor, not stack.remaining: the bottom of the stack is kept for
+    // Ace so the app never goes completely silent in exam week. Using the raw
+    // remainder here would let a generator eat the reserve and make the meter
+    // a liar. See ACE_RESERVE in src/lib/chips.js.
+    const spendable = spendableFor(profile, feature);
+    if (spendable < price) {
+      return {
+        allowed: false, status: 429,
+        reason: stack.empty
+          ? "That's this week's stack. It refills Monday."
+          : `Not enough chips left for this (${price} needed, ${spendable} spendable). Refills Monday.`,
+        chips: { price, remaining: spendable, total: WEEKLY_CHIPS },
+      };
     }
-    return { allowed: true };
+
+    // ─── BURST ──────────────────────────────────────────────────────────
+    // The one useful job the daily caps were doing. A rolling window rather
+    // than per-feature counts, so it catches a script hammering any mix of
+    // endpoints while never being felt by a person: nobody generates a third
+    // of a week's allowance inside five minutes by hand.
+    const burst = burstState(profile);
+    if (burst.chips + price > TIER_BURST_CHIPS) {
+      return {
+        allowed: false, status: 429,
+        reason: "That's a lot at once. Give it a minute and try again.",
+      };
+    }
+
+    return { allowed: true, chips: { price, remaining: spendable, total: WEEKLY_CHIPS } };
   }
   // Free-tier lifetime cost ceiling — first check, $1 hard backstop.
   if (lifetimeSpendMicros(profile) >= TIER_FREE_LIFETIME_CAP_MICROS) {
@@ -746,6 +822,10 @@ async function recordTierUsage(profile, feature, usage, options = {}) {
     if (counters.date !== today) {
       counters = { date: today, quizzes: 0, flashcards: 0, tools: 0, chat: 0, marker: 0, goal: 0, blurting: 0, active_recall: 0, coach: 0, mindmap: 0 };
     }
+    // The per-feature counters no longer gate anything — chips do — but they
+    // are still written, because they are the only per-feature usage record
+    // the app has and they cost one jsonb field to keep. Deleting them would
+    // throw away the data that says which features people actually use.
     const counterKey = TIER_COUNTER_KEY[feature];
     if (counterKey) counters = { ...counters, [counterKey]: (counters[counterKey] ?? 0) + 1 };
     updates.daily_ai_counters = counters;
@@ -759,6 +839,19 @@ async function recordTierUsage(profile, feature, usage, options = {}) {
     updates.weekly_ai_cost_micros = (sameWeek ? weeklySpendMicros(profile) : 0) + costMicros;
     updates.weekly_ai_cost_cents  = (sameWeek ? (profile.weekly_ai_cost_cents ?? 0) : 0) + costCents;
     updates.weekly_cost_period_start = weekStartStr;
+
+    // ─── CHIPS ────────────────────────────────────────────────────────────
+    // The PUBLISHED price, not what the call happened to cost. A student who
+    // was told a quiz costs 30 chips before they pressed the button must be
+    // charged 30, whether the model was chatty that time or terse. The real
+    // cost is recorded above; this is the thing they were quoted.
+    const tier = profile.ai_model_preference === "saver" ? "saver" : "standard";
+    const chipPrice = priceOf(feature, tier);
+    updates.weekly_chips_spent = (sameWeek ? chipsSpent(profile) : 0) + chipPrice;
+
+    // Roll the burst window forward on the same write.
+    const burst = burstState(profile);
+    updates.ai_burst = { since: burst.since, chips: burst.chips + chipPrice };
   } else {
     // Free user — increment the matching counter AND the lifetime cost.
     const counterKey = TIER_FREE_COUNTER[feature];
