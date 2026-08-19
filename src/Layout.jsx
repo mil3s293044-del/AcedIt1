@@ -1,6 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
-import OnboardingModal from "@/components/onboarding/OnboardingModal";
 import { useToast } from "@/components/ui/use-toast";
 import { createPageUrl } from "@/utils";
 import { Clock, Coffee, Move } from "lucide-react";
@@ -96,7 +95,6 @@ export default function Layout({ children }) {
     const [userProfile, setUserProfile] = useState(null);
     const [navigationGuard, setNavigationGuard] = useState({ show: false, targetUrl: null, onSave: null });
     const [pendingNavigation, setPendingNavigation] = useState(null);
-    const [showOnboarding, setShowOnboarding] = useState(false);
     const { toast } = useToast();
 
     useEffect(() => {
@@ -319,33 +317,15 @@ export default function Layout({ children }) {
             {/* One mount for the whole app rather than a call on each of the
                 ten pages that carry a help button — the route already tells us
                 where we are, and this way a page added later is covered the
-                moment it gets a knowledge-map entry. Suppressed while
-                onboarding is up; being introduced to a page you can't see is
-                the sort of thing that makes people close both. */}
-            <AceIntro page={pageKey} suppressed={showOnboarding} />
-            {/* He asks what the plan is once a day and then travels with you.
-                Suppressed during onboarding — two of Ace talking at once in the
-                same corner is what makes a companion feel like a popup. */}
-            <AceBuddy page={pageKey} userProfile={userProfile} suppressed={showOnboarding} />
-
-            {showOnboarding && (
-                <OnboardingModal
-                    userProfile={userProfile || {}}
-                    onComplete={async (completedData) => {
-                        if (userProfile?.id) {
-                            await base44.entities.UserProfile.update(userProfile.id, {
-                                onboarding_completed: true,
-                                onboarding_completed_at: new Date().toISOString()
-                            });
-                        }
-                        setShowOnboarding(false);
-                        setUserProfile(prev => ({ ...(prev || {}), ...completedData, onboarding_completed: true }));
-                        const name = completedData.display_name || completedData.username || "";
-                        toast({ title: `Welcome to AcedIt${name ? `, ${name}` : ""}! 🎓` });
-                        navigate("/Dashboard");
-                    }}
-                />
-            )}
+                moment it gets a knowledge-map entry. */}
+            <AceIntro page={pageKey} />
+            {/* He asks what the plan is once a day and then travels with you. */}
+            <AceBuddy page={pageKey} userProfile={userProfile} />
+            {/* There is no second onboarding to suppress these for any more.
+                Signup runs the wizard at /Onboarding, which is its own route —
+                by the time Layout is on screen that conversation is over. The
+                modal that used to mount here was a nine-step duplicate of it,
+                gated on a flag nothing ever set, so it never opened. */}
         </div>
     );
 }

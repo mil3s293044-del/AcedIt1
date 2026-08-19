@@ -12,10 +12,12 @@
     "lint": "eslint . --quiet",
     "lint:fix": "eslint . --fix",
     "typecheck": "tsc -p ./jsconfig.json",
-    "test": "npm run test:cost && npm run test:ace && npm run test:models",
+    "test": "npm run test:cost && npm run test:ace && npm run test:models && npm run test:zoom && npm run test:onboarding",
     "test:cost": "node src/lib/aiCost.test.mjs",
     "test:ace": "node --import ./src/lib/_aliasLoader.mjs src/lib/aceGuide.test.mjs",
     "test:models": "node --import ./src/lib/_aliasLoader.mjs src/lib/aiModels.test.mjs",
+    "test:zoom": "node --import ./src/lib/_aliasLoader.mjs src/lib/zoom.test.mjs",
+    "test:onboarding": "node --import ./src/lib/_aliasLoader.mjs src/lib/onboardingTasks.test.mjs",
     "preview": "vite preview"
   },
   "dependencies": {
