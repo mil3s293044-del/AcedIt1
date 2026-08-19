@@ -107,8 +107,15 @@ async function applyOnboardingFromStorage(userEmail) {
   if (answers.goalCourseName)  updates.goal_course_name   = answers.goalCourseName;
   if (answers.goalUniversity)  updates.goal_university    = answers.goalUniversity;
 
+  // `username_set` used to be written only by the Settings page, so a student
+  // who came through this wizard — with a name already on the account from
+  // signup — was nagged on the dashboard forever to go and set one. The
+  // dashboard now derives all three from the profile rather than trusting these
+  // flags, but recording the truth here keeps the two in agreement.
+  const hasName = !!(profile.username || profile.display_name || profile.full_name || answers.displayName);
   const onboardingTasks = {
     ...(profile.onboarding_tasks || {}),
+    username_set: !!(profile.onboarding_tasks?.username_set || hasName),
     subjects_selected: (answers.subjects?.length ?? 0) > 0,
     goals_set: !!(answers.goalAtar || answers.goalCourseName),
   };

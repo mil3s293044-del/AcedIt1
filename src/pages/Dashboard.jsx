@@ -27,6 +27,7 @@ import Placed from "@/components/dashboard/Placed";
 import { bestLever } from "@/lib/atarLift";
 import { atarBandOf } from "@/lib/atarBands";
 import { todaysIntent } from "@/lib/studyIntent";
+import { needsSetup, outstandingTasks, setupCopy } from "@/lib/onboardingTasks";
 import AceTip from "@/components/ace/AceTip";
 import AceShuffle from "@/components/ace/AceShuffle";
 import AceBody from "@/components/ace/AceBody";
@@ -796,9 +797,16 @@ export default function Dashboard() {
     const subjectCards = useMemo(() => subjectHand(flashcards), [flashcards]);
 
     const hasGoal = !!(userProfile?.goal_atar || userProfile?.goal_course_name);
-    const onboardingTasks = userProfile?.onboarding_tasks || {};
-    const onboardingComplete = onboardingTasks.username_set && onboardingTasks.subjects_selected && onboardingTasks.goals_set;
-    const showOnboarding = userProfile && !userProfile.onboarding_completed && !onboardingComplete;
+
+    /**
+     * What setup is genuinely outstanding, derived from the profile rather than
+     * read off three booleans. The signup wizard only ever wrote two of those
+     * three, so every student who came through the funnel was permanently told
+     * to go and do a "quick setup" they had already done. See onboardingTasks.js.
+     */
+    const setupLeft = useMemo(() => outstandingTasks(userProfile), [userProfile]);
+    const setup = useMemo(() => setupCopy(userProfile), [userProfile]);
+    const showOnboarding = needsSetup(userProfile) && !!setup;
 
     if (isLoading) {
         return (
@@ -1019,25 +1027,25 @@ export default function Dashboard() {
                                 </div>
                                 <div>
                                     <h3 className="font-display font-extrabold text-foreground text-base">
-                                        Quick setup. Five minutes.
+                                        {setup.title}
                                     </h3>
                                     <p className="text-muted-foreground text-sm">
-                                        Tell us who you are and what you're chasing, and we'll tailor everything to you.
+                                        {setup.body}
                                     </p>
                                 </div>
                             </div>
                             <div className="flex flex-wrap gap-2">
-                                {!onboardingTasks.username_set && (
+                                {setupLeft.includes("username_set") && (
                                     <Link to={createPageUrl("Settings")}>
                                         <Button size="sm" variant="outline"><CheckCircle2 className="w-3.5 h-3.5" /> Username</Button>
                                     </Link>
                                 )}
-                                {!onboardingTasks.subjects_selected && (
+                                {setupLeft.includes("subjects_selected") && (
                                     <Link to={createPageUrl("Subjects")}>
                                         <Button size="sm" variant="outline"><CheckCircle2 className="w-3.5 h-3.5" /> Subjects</Button>
                                     </Link>
                                 )}
-                                {!onboardingTasks.goals_set && (
+                                {setupLeft.includes("goals_set") && (
                                     <Link to={createPageUrl("Goals")}>
                                         <Button size="sm" variant="outline"><CheckCircle2 className="w-3.5 h-3.5" /> Plan</Button>
                                     </Link>

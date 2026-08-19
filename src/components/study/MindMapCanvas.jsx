@@ -20,6 +20,7 @@
  */
 import React, { useMemo, useState, useRef, useEffect, useCallback } from "react";
 import { layout, subtreeIds, branchTones, TYPE_BY_ID } from "@/lib/mindmap";
+import { wheelZoomFactor } from "@/lib/zoom";
 import { ZoomIn, ZoomOut, Maximize2, Minimize2, Scan } from "lucide-react";
 
 // Static class strings — Tailwind never sees a class built by a template
@@ -264,9 +265,13 @@ export default function MindMapCanvas({
     useEffect(() => {
         const el = wrapRef.current;
         if (!el || compact) return;
+        // The factor comes from how far the wheel actually moved. Reading only
+        // the sign of deltaY meant a trackpad's twenty-odd tiny events each
+        // counted as a full mouse notch, so one two-finger flick was a 17x
+        // jump. See src/lib/zoom.js.
         const onWheel = (e) => {
             e.preventDefault();
-            zoomBy(e.deltaY < 0 ? 1.12 : 1 / 1.12, clientToSvg(e.clientX, e.clientY));
+            zoomBy(wheelZoomFactor(e), clientToSvg(e.clientX, e.clientY));
         };
         el.addEventListener("wheel", onWheel, { passive: false });
         return () => el.removeEventListener("wheel", onWheel);
