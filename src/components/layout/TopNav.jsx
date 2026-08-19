@@ -4,6 +4,7 @@ import { Flame, Zap, Crown } from "lucide-react";
 import { createPageUrl } from "@/utils";
 import { base44 } from "@/api/base44Client";
 import UsageMeter from "@/components/shared/UsageMeter";
+import ThemeToggle from "@/components/layout/ThemeToggle";
 
 // Page slug → display title. Anything missing falls back to a humanized slug.
 const PAGE_TITLES = {
@@ -79,6 +80,11 @@ export default function TopNav() {
 
                 {/* ── Stats pills + premium chip ──────────────────────── */}
                 <div className="flex items-center gap-1.5">
+                    {/* First, because the moment anybody wants this is the
+                        moment the screen is too bright, and that is never
+                        while they happen to be on the settings page. All four
+                        options live there; this is the one-tap version. */}
+                    <ThemeToggle />
                     {/* Click to see all daily AI caps + weekly cost ceiling. */}
                     {userProfile && <UsageMeter />}
                     {streak > 0 && (

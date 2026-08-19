@@ -74,7 +74,7 @@ const MessageBubble = ({ message, isUser }) => (
             )}
         </div>
         {isUser && (
-            <div className="w-8 h-8 bg-gray-300 rounded-full flex items-center justify-center flex-shrink-0">
+            <div className="w-8 h-8 bg-muted rounded-full flex items-center justify-center flex-shrink-0">
                 <UserIcon className="w-4 h-4 text-muted-foreground" />
             </div>
         )}

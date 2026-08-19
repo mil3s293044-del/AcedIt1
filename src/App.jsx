@@ -17,6 +17,7 @@ import ResetPassword from './pages/ResetPassword';
 import Privacy from './pages/Privacy';
 import Terms from './pages/Terms';
 import { AuthProvider, useAuth } from '@/lib/AuthContext';
+import { ThemeProvider } from '@/lib/useTheme';
 import UserNotRegisteredError from '@/components/UserNotRegisteredError';
 import CardStorm from '@/components/marketing/CardStorm';
 
@@ -36,7 +37,7 @@ const AuthenticatedApp = () => {
   if (isLoadingPublicSettings || isLoadingAuth) {
     return (
       <div className="fixed inset-0 flex items-center justify-center">
-        <div className="w-8 h-8 border-4 border-slate-200 border-t-slate-800 rounded-full animate-spin"></div>
+        <div className="w-8 h-8 border-4 border-border border-t-primary rounded-full animate-spin"></div>
       </div>
     );
   }
@@ -131,6 +132,13 @@ function App() {
 
   return (
     <AuthProvider>
+      {/* Outside the auth gate, because the landing page, the login screen
+          and the onboarding wizard all render on the far side of it and all
+          three should honour the theme. The inline script in index.html has
+          already applied it before this mounts; this keeps it true afterwards
+          — when the setting changes, when the device flips, and when the
+          clock crosses seven on the by-time-of-day setting. */}
+      <ThemeProvider>
       <QueryClientProvider client={queryClientInstance}>
         {/* Respect OS-level reduced-motion for every framer-motion animation */}
         <MotionConfig reducedMotion="user">
@@ -153,6 +161,7 @@ function App() {
           <Toaster />
         </MotionConfig>
       </QueryClientProvider>
+      </ThemeProvider>
     </AuthProvider>
   )
 }

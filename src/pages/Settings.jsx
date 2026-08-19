@@ -29,6 +29,7 @@ import {
 import DataExportModal from "@/components/shared/DataExportModal";
 import HelpButton from "@/components/shared/HelpButton";
 import { useToast } from "@/components/ui/use-toast";
+import AppearanceSettings from "@/components/settings/AppearanceSettings";
 
 const TIER_META = {
     free:    { label: "Free",    icon: Sparkles, accent: "muted-foreground", bg: "bg-secondary",       text: "text-foreground" },
@@ -648,11 +649,19 @@ export default function Settings() {
                     </div>
                 </motion.section>
 
+                {/* ── APPEARANCE ───────────────────────────────────────── */}
+                {/* This panel has existed for months, with a working toggle in
+                    it and no importer anywhere, so it was never once on screen.
+                    It sits above the danger zone rather than below it: picking
+                    a theme is the most harmless thing on this page and deleting
+                    your account is the least, and they should not be neighbours. */}
+                <AppearanceSettings delay={0.28} />
+
                 {/* ── DANGER ZONE ──────────────────────────────────────── */}
                 <motion.section
                     initial={{ opacity: 0, y: 10 }}
                     animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: 0.3 }}
+                    transition={{ delay: 0.34 }}
                     className="card-soft p-6 border-streak/30 bg-streak/5"
                 >
                     <div className="flex items-center gap-3 mb-4">
