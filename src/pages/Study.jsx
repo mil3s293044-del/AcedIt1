@@ -32,6 +32,7 @@ import MindMaps from "../components/study/MindMaps";
 import HelpButton from "@/components/shared/HelpButton";
 import NeuroPanel from "../components/study/NeuroPanel";
 import { todaysIntent } from "@/lib/studyIntent";
+import { isDue } from "@/lib/due";
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 const fmtTime = (m) => {
@@ -156,7 +157,9 @@ export default function Study() {
             setRecentSessions(sessionsData || []);
             setUserSubjects(subjectsData || []);
             setStudySessions(studySessionsData || []);
-            setFlashcards((flashcardData || []).filter(c => c.next_review_date && c.next_review_date <= today));
+            // Genuinely due, which is not the same as "has a date in the past".
+            // A card nobody has opened yet is new material; see lib/due.js.
+            setFlashcards((flashcardData || []).filter(c => isDue(c, today)));
             setAssessments(assessmentData || []);
         } catch (error) {
             console.error("Error loading data:", error);

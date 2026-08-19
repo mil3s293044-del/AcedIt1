@@ -9,6 +9,7 @@ import { createPageUrl } from "@/utils";
 import { Flashcard } from "@/entities/all";
 import { format, subDays } from "date-fns";
 import AceShuffle from "@/components/ace/AceShuffle";
+import { isDue } from "@/lib/due";
 
 export default function FlashcardPerformance({ user }) {
     const [performance, setPerformance] = useState({
@@ -54,8 +55,9 @@ export default function FlashcardPerformance({ user }) {
                 )
                 : 0;
 
-            // Calculate due cards
-            const dueCards = allCards.filter(c => c.next_review_date && c.next_review_date <= today).length;
+            // Genuinely due — see lib/due.js. Unopened cards are new material,
+            // and cards the student marked known are out of the queue.
+            const dueCards = allCards.filter(c => isDue(c, today)).length;
 
             // Group by subject and calculate performance
             const subjectPerformance = {};

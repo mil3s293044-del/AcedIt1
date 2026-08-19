@@ -391,6 +391,12 @@ export const PAGES = {
     Strategise:   { route: "/Strategise",   title: "Strategise",   intro: "A short check-in that turns how you're going into the next concrete move." },
     Guides:       { route: "/Guides",       title: "Guides",       intro: "Written guides on study technique and VCE specifics." },
     StudyGroups:  { route: "/StudyGroups",  title: "Study Groups", intro: "A shared space for a class or a group, with shared resources and a chat." },
+    Review:       { route: "/Review",       title: "Your pile",    intro: "Everything the app is keeping track of, why it thinks each thing is due, and how to tell it otherwise.", notes: [
+        "A card you have never opened is new, not overdue. When the due number looked frightening, it was usually mostly that.",
+        "\"I know this\" takes a card out of the queue without deleting it, and it is one button to undo.",
+        "\"Not this week\" is the honest way to clear a pile you have not learnt yet. It does not count as a lapse when the card comes back.",
+        "The day's queue is capped so a backlog stays a session rather than a wall. Whatever is behind it is always shown, never hidden.",
+    ] },
 
     // Plumbing. Deliberately absent from FEATURES — a guide that offers to
     // walk you through the billing page has misunderstood the job — but these

@@ -60,11 +60,15 @@ export default function DueRadar({ items = [], className = "" }) {
         <div data-due-radar={blips.length} className={`card-soft on-table p-5 ${className}`}>
             <div className="flex items-baseline justify-between gap-3 mb-1">
                 <p className="stat-label">On your radar</p>
+                {/* The dial says what is coming. This says "and if you think it
+                    is wrong, here is where you argue" — which is the thing the
+                    panel could not do before, and the reason its numbers were
+                    allowed to grow until people stopped reading them. */}
                 {blips.length > 0 && (
-                    <Link to={createPageUrl("Goals")}
+                    <Link to={createPageUrl("Review")}
                         className="text-[11px] font-bold text-muted-foreground hover:text-foreground
                             underline underline-offset-2">
-                        See all {items.length}
+                        Check the pile
                     </Link>
                 )}
             </div>

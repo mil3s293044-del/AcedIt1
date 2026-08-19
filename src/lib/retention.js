@@ -96,6 +96,11 @@ export function retentionOutlook(cards = [], { days = 7, floor = RISK_FLOOR, now
     const learned = [];
     for (const c of cards) {
         if (c?.is_active === false) continue;
+        // A card the student has marked known is one they have told us to stop
+        // raising. Warning them it is about to decay is exactly the nagging
+        // that button exists to end, and the forgetting curve has no opinion
+        // they did not already overrule.
+        if (c?.retired_at) continue;
         const rNow = recallAt(c, now);
         if (rNow == null) continue;
         learned.push({ card: c, rNow, rThen: recallAt(c, now + days * DAY) });

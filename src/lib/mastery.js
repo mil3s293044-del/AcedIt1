@@ -22,6 +22,7 @@
  * A card with no reviews scores 0 and comes out a two. That is correct and it
  * is the whole basis of the promise onboarding makes: ranks are earned.
  */
+import { isDue } from "./due.js";
 
 /** Mastery 0–100 for a single card. */
 export function cardMastery(card) {
@@ -48,11 +49,20 @@ export function cardMastery(card) {
     return Math.round(raw * 100);
 }
 
-/** Due today, or overdue. A card that has never been scheduled is due now. */
-export function isCardDue(card, today = new Date().toISOString().split("T")[0]) {
-    if (!card?.next_review_date) return true;
-    return card.next_review_date <= today;
-}
+/**
+ * Due today, or overdue.
+ *
+ * This used to be its own rule, and a wrong one: it treated a card with no
+ * next_review_date as due, so a freshly generated deck reported every card in
+ * it as overdue before anybody opened one. Three other files had three other
+ * versions of the same test. There is one now, in due.js, and it also knows
+ * about the cards a student has marked known or put off — which this could not,
+ * because those states did not exist.
+ *
+ * Re-exported rather than replaced at every call site so the name that six
+ * files already import keeps working.
+ */
+export { isDue as isCardDue };
 
 /**
  * Roll a pile of flashcards up into one row per subject.
@@ -79,7 +89,7 @@ export function subjectHand(flashcards = [], today) {
         const row = bySubject.get(name);
         row.cards += 1;
         row.sum += cardMastery(c);
-        if (isCardDue(c, today)) row.due += 1;
+        if (isDue(c, today)) row.due += 1;
         if (c.is_weak_spot) row.weak += 1;
         if (c.topic) row.topics.add(c.topic);
     });
