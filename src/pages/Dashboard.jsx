@@ -28,6 +28,7 @@ import { bestLever } from "@/lib/atarLift";
 import { atarBandOf } from "@/lib/atarBands";
 import { todaysIntent } from "@/lib/studyIntent";
 import { needsSetup, outstandingTasks, setupCopy } from "@/lib/onboardingTasks";
+import { isDue } from "@/lib/due";
 import AceTip from "@/components/ace/AceTip";
 import AceShuffle from "@/components/ace/AceShuffle";
 import AceBody from "@/components/ace/AceBody";
@@ -440,7 +441,13 @@ export default function Dashboard() {
             // forgetting curve is built from.
             setFlashcards(flashcardData || []);
 
-            const dueCards = (flashcardData || []).filter(c => c.next_review_date && c.next_review_date <= today);
+            // GENUINELY due, not "has a date that has passed". A card is
+            // created with next_review_date set to today, so this line used to
+            // report a deck generated ten minutes ago as a full backlog, and
+            // once a card went past its date it stayed counted forever. Both
+            // are fixed in lib/due.js, along with the two states — marked known
+            // and put off — that let a student answer back. See /Review.
+            const dueCards = (flashcardData || []).filter(c => isDue(c, today));
             const deckMap = {};
             dueCards.forEach(card => {
                 const key = card.deck_id || `${card.subject_name}_${card.topic}`;

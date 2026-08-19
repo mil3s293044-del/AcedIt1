@@ -32,6 +32,7 @@ import MemoryPanel from "../components/analytics/MemoryPanel";
 import AttentionPanel from "../components/analytics/AttentionPanel";
 import HelpButton from "@/components/shared/HelpButton";
 import { subjectColor } from "@/components/cards/cardIdentity";
+import { isDue } from "@/lib/due";
 
 const fmt = (mins) => {
     if (!mins) return "0m";
@@ -357,7 +358,9 @@ export default function Analytics() {
         const mastered= data.flashcards.filter(f=>(f.review_count_good||0)+(f.review_count_easy||0)>=3&&!f.is_weak_spot).length;
         const weak    = data.flashcards.filter(f=>f.is_weak_spot).length;
         const today   = new Date().toISOString().split('T')[0];
-        const due     = data.flashcards.filter(f=>!f.next_review_date || f.next_review_date <= today).length;
+        // This counted an unscheduled card as due, so it disagreed with the
+        // Dashboard about the same deck. One rule now, in lib/due.js.
+        const due     = data.flashcards.filter(f=>isDue(f, today)).length;
         const unreviewed = data.flashcards.filter(f=>(f.total_reviews||0)===0).length;
         return { total, mastered, weak, due, unreviewed };
     }, [data.flashcards]);

@@ -8,6 +8,7 @@ import { base44 } from "@/api/base44Client";
 import { format, differenceInDays, parseISO } from "date-fns";
 import { useNavigate } from "react-router-dom";
 import { createPageUrl } from "@/utils";
+import { isDue } from "@/lib/due";
 
 export default function UpcomingAssessments({ user }) {
     const [assessments, setAssessments] = useState([]);
@@ -40,7 +41,8 @@ export default function UpcomingAssessments({ user }) {
             });
             
             const today = format(new Date(), 'yyyy-MM-dd');
-            const dueFlashcards = allFlashcards.filter(card => card.next_review_date && card.next_review_date <= today);
+            // Genuinely due — see lib/due.js.
+            const dueFlashcards = allFlashcards.filter(card => isDue(card, today));
             
             const deckMap = {};
             dueFlashcards.forEach(card => {

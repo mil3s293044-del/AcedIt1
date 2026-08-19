@@ -62,6 +62,7 @@ import PaymentSuccess from './pages/PaymentSuccess';
 import Premium from './pages/Premium';
 import Quizzes from './pages/Quizzes';
 import Ranked from './pages/Ranked';
+import Review from './pages/Review';
 import Settings from './pages/Settings';
 import Study from './pages/Study';
 import StudyGroups from './pages/StudyGroups';
@@ -88,6 +89,7 @@ export const PAGES = {
     "Premium": Premium,
     "Quizzes": Quizzes,
     "Ranked": Ranked,
+    "Review": Review,
     "Settings": Settings,
     "Study": Study,
     "StudyGroups": StudyGroups,

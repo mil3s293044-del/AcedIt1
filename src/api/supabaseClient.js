@@ -176,6 +176,29 @@ function makeEntity(entityName) {
       return { id };
     },
 
+    /**
+     * One payload applied to many rows in a single round trip.
+     *
+     * The audit screen exists to let somebody clear a pile of two hundred
+     * cards in one gesture, and looping .update() would be two hundred
+     * requests for one button press. Chunked because a PostgREST `in` list
+     * goes into the URL and a few thousand uuids will exceed what the server
+     * accepts.
+     */
+    async bulkUpdate(ids, payload) {
+      const list = [...new Set((ids || []).filter(Boolean))];
+      if (list.length === 0) return [];
+      const CHUNK = 200;
+      const out = [];
+      for (let i = 0; i < list.length; i += CHUNK) {
+        const { data, error } = await supabase
+          .from(table).update(payload).in('id', list.slice(i, i + CHUNK)).select();
+        if (error) throw error;
+        out.push(...(data ?? []));
+      }
+      return out;
+    },
+
     async bulkCreate(rows) {
       if (!Array.isArray(rows) || rows.length === 0) return [];
       const email = await currentUserEmail();

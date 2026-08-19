@@ -18,7 +18,7 @@ import AISkeleton from "../shared/AISkeleton";
 import {
     Plus, Play, Edit, Trash2, Share2, Check, X, Sparkles,
     Loader2, Brain, AlertTriangle, Search, Clock,
-    Users, UserPlus, ChevronLeft, FileText
+    Users, UserPlus, ChevronLeft, FileText, ListChecks
 } from "lucide-react";
 import { base44 } from "@/api/base44Client";
 import { format } from "date-fns";
@@ -1120,6 +1120,15 @@ The documents provided may be PowerPoint slides, Word documents, PDFs or text fi
                         </SelectContent>
                     </Select>
                     <div className="flex gap-2">
+                        {/* The way out of a pile that has got away from you.
+                            Every other control here makes MORE cards; this is
+                            the only one that lets you tell the app it is wrong
+                            about the ones you already have. */}
+                        <Link to={createPageUrl("Review")}>
+                            <Button variant="outline" className="gap-2 border-2 border-border rounded-xl h-11 text-foreground">
+                                <ListChecks className="w-4 h-4" /> Check the pile
+                            </Button>
+                        </Link>
                         <Button onClick={() => setIsCreatingDeck(true)} variant="outline" className="gap-2 border-2 border-border rounded-xl h-11 text-foreground">
                             <Plus className="w-4 h-4" /> New Deck
                         </Button>

@@ -1,7 +1,7 @@
 -- ════════════════════════════════════════════════════════════════════════════
 -- AcedIt — everything still to apply, in one script.
 --
--- Covers migrations 0022 through 0031. Paste the whole thing into the Supabase
+-- Covers migrations 0022 through 0032. Paste the whole thing into the Supabase
 -- SQL editor and run it once.
 --
 -- SAFE TO RUN TWICE. Every statement is guarded, so if some of these were
@@ -319,5 +319,39 @@ begin
       check (ai_model_preference in ('standard', 'saver'));
   end if;
 end $$;
+
+-- ────────────────────────────────────────────────────────────────────────────
+-- 0032 — let a student put a card away without destroying it
+-- ────────────────────────────────────────────────────────────────────────────
+-- The review queue had exactly one exit: is_active = false, which is deletion.
+-- So somebody who genuinely knows the definition of osmosis could either keep
+-- being asked forever, or lose the card. Neither is what they meant, and the
+-- result was a due count that only ever climbed until students stopped
+-- reading it.
+--
+--   retired_at     "I know this." Out of the queue indefinitely, reversible,
+--                  and timestamped so the audit screen can say when they
+--                  decided that.
+--   snoozed_until  "Not today." Clears a pile without claiming knowledge they
+--                  do not have, which is what keeps the scheduler's data
+--                  honest. Lateness is measured from the later of this and
+--                  next_review_date, so a deliberate deferral never reads as
+--                  a lapse.
+--
+-- Both nullable with no default, so every existing row behaves exactly as it
+-- does today and there is nothing to backfill.
+alter table public.flashcards
+    add column if not exists retired_at    timestamptz,
+    add column if not exists snoozed_until date;
+
+-- The due query runs per user on every dashboard load. A partial index keeps
+-- it off the retired pile entirely, which is the part that only ever grows.
+create index if not exists flashcards_due_queue_idx
+    on public.flashcards (created_by, next_review_date)
+    where is_active and retired_at is null;
+
+create index if not exists flashcards_retired_idx
+    on public.flashcards (created_by, retired_at)
+    where retired_at is not null;
 
 commit;
