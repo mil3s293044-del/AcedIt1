@@ -53,11 +53,11 @@ const FloatingTimer = React.memo(({ currentTime, timerPosition, isDragging, hand
                             <div className="font-mono font-bold text-lg text-foreground">
                                 {formatTime(currentTime.timeLeft)}
                             </div>
-                            <div className="text-xs text-gray-600">
+                            <div className="text-xs text-muted-foreground">
                                 {currentTime.isBreak ? 'Break Time' : `Session #${currentTime.session}`}
                             </div>
                             {currentTime.subject && !currentTime.isBreak && (
-                                <div className="text-xs text-gray-500 truncate max-w-32">
+                                <div className="text-xs text-muted-foreground truncate max-w-32">
                                     {currentTime.subject}
                                 </div>
                             )}
@@ -297,7 +297,7 @@ export default function Layout({ children }) {
                     <DialogHeader>
                         <DialogTitle>You have unsaved work</DialogTitle>
                     </DialogHeader>
-                    <p className="text-gray-600">Your current work will be lost if you leave without saving.</p>
+                    <p className="text-muted-foreground">Your current work will be lost if you leave without saving.</p>
                     <div className="flex justify-end gap-2 mt-4">
                         <Button variant="outline" onClick={() => {
                             setNavigationGuard({ show: false, targetUrl: null, onSave: null });

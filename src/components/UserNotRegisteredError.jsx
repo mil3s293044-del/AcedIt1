@@ -14,7 +14,7 @@ const UserNotRegisteredError = () => {
           <p className="text-muted-foreground mb-8">
             You are not registered to use this application. Please contact the app administrator to request access.
           </p>
-          <div className="p-4 bg-slate-50 rounded-md text-sm text-muted-foreground">
+          <div className="p-4 bg-muted rounded-md text-sm text-muted-foreground">
             <p>If you believe this is an error, you can:</p>
             <ul className="list-disc list-inside mt-2 space-y-1">
               <li>Verify you are logged in with the correct account</li>

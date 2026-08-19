@@ -14,6 +14,57 @@
     />
     <title>AcedIt</title>
     <!--
+      THE THEME, SETTLED BEFORE ANYTHING PAINTS.
+
+      This has to be inline, in the head, ahead of the module bundle. If React
+      applied the theme instead, every page load would paint light and then
+      snap dark a moment later, on every refresh and every navigation, forever.
+      That flash is the difference between an app that has a dark mode and one
+      that has a good dark mode, and it cannot be reached from inside the app:
+      by the time any component renders, it has already happened.
+
+      The rule below is a hand copy of resolveTheme() in src/lib/theme.js,
+      because a script that must run before any bundle parses cannot import
+      one. src/lib/theme.test.mjs pulls this script back out and runs it
+      against every preference, device setting and hour, comparing each answer
+      to the module's — so the copy cannot quietly drift from the original.
+    -->
+    <script id="theme-boot">
+      (function () {
+        var pref = "system";
+        try {
+          var saved = localStorage.getItem("acedit:theme");
+          if (saved === "light" || saved === "dark" || saved === "auto" || saved === "system") pref = saved;
+        } catch (e) { /* private mode; system it is */ }
+
+        var dark;
+        if (pref === "light") dark = false;
+        else if (pref === "dark") dark = true;
+        else if (pref === "auto") {
+          var h = new Date().getHours();
+          dark = h >= 19 || h < 6;          // DARK_FROM_HOUR / LIGHT_FROM_HOUR
+        } else {
+          dark = !!(window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches);
+        }
+
+        var root = document.documentElement;
+        if (dark) root.classList.add("dark"); else root.classList.remove("dark");
+        // Without this the browser goes on painting scrollbars, form controls
+        // and autofill in light colours over a dark page — the detail that
+        // makes an otherwise finished dark mode feel unfinished.
+        root.style.colorScheme = dark ? "dark" : "light";
+        // And the ground, painted inline. The class alone is not enough: the
+        // stylesheet that interprets it is a separate request, and the browser
+        // paints its own white canvas in the frames before that request lands.
+        // Recording the real build frame by frame showed it plainly — one
+        // white frame, then the dark page. These two values are the
+        // --background token, and src/lib/theme.js keeps them honest.
+        root.style.backgroundColor = dark ? "#0A121F" : "#FBF6EF";
+        var meta = document.querySelector('meta[name="theme-color"]');
+        if (meta) meta.setAttribute("content", dark ? "#0E1417" : "#58CC02");
+      })();
+    </script>
+    <!--
       THE BOOT LAYER. Painted from the first byte of HTML, before a line of
       JavaScript parses, which is the only thing that can cover the gap
       between the browser having the document and React having mounted. That

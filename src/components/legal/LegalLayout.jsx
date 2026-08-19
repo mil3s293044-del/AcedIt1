@@ -12,7 +12,7 @@ export default function LegalLayout({ title, lastUpdated, children }) {
   }, []);
 
   return (
-    <div className="min-h-screen bg-white text-[#0D1626]">
+    <div className="min-h-screen bg-background text-foreground">
       {/* Header */}
       <header className="border-b border-black/5">
         <div className="max-w-3xl mx-auto px-6 py-5 flex items-center justify-between">

@@ -1,3 +1,5 @@
+import { canAfford, stackOf, stackWarning, priceOf, WEEKLY_CHIPS } from './chips.js';
+
 // ════════════════════════════════════════════════════════════════════════════
 // Tier access — single source of truth for what each subscription tier can do.
 //
@@ -9,16 +11,17 @@
 //   • All other AI features   → BLOCKED (premium-only)
 //
 // Premium tier ($5/week):
-//   • AI quiz generation      → 3/day (creating a new quiz from notes)
-//   • AI quiz marking         → 10/day (grading played quizzes — Miles, your call)
-//   • AI flashcards           → 3/day
-//   • AI tools (combined)     → 6/day across all 10 tools
-//   • Goal/Roadmap AI         → 1/day (shared bucket)
-//   • Blurting                → 5/day
-//   • Active recall           → 8/day
-//   • Spaced repetition / advanced analytics → unlimited
-//   • Weekly cost ceiling     → 250 cents ($2.50) backstop (token-based estimate)
-//                                resets every Monday UTC
+//   • ONE WEEKLY STACK of 1,000 chips, spent on whatever they like.
+//     A quiz from notes is 30, a flashcard deck 25, an AI tool 15, an Ace
+//     message 2. Saver runs the cheap model and makes the stack go 3x further.
+//   • Spaced repetition / advanced analytics → unlimited (no AI cost)
+//   • Weekly dollar ceiling → kept as a hard backstop behind the chips,
+//     resets every Monday UTC
+//
+// The chips replaced eleven per-feature daily caps that were sized
+// independently of that dollar ceiling and, priced against the real cost
+// table, permitted 4.5x what it allowed. See src/lib/chips.js for the whole
+// argument and the price list.
 //
 // Usage on the frontend:
 //   import { isPremium, canUseFeature, FEATURES } from '@/lib/tierAccess';
@@ -34,18 +37,18 @@
 // ════════════════════════════════════════════════════════════════════════════
 
 export const FEATURES = {
-  QUIZ_AI_GEN:      'quiz_ai_gen',       // free: 3 lifetime, premium: 3/day (create quiz from notes)
-  QUIZ_AI_MARK:     'quiz_ai_mark',      // free: blocked, premium: 10/day (mark a played quiz)
-  FLASHCARD_AI_GEN: 'flashcard_ai_gen',  // free: 3 lifetime, premium: 3/day
-  AI_TOOL:          'ai_tool',           // one-shot AI tools (free: 5 lifetime, premium: 6/day combined)
-  AI_CHAT:          'ai_chat',           // conversational tools (Math Tutor, Teaching Assistant) — premium: 8 msgs/day, free: shares the tools lifetime cap
-  GOAL_AI_GEN:      'goal_ai_gen',       // free: blocked, premium: 1/day (shares 'goal' bucket)
-  ROADMAP_AI_GEN:   'roadmap_ai_gen',    // free: blocked, premium: 1/day (shares 'goal' bucket)
-  BLURTING:         'blurting',          // free: blocked, premium: 5/day (uses AI for marking)
-  ACTIVE_RECALL:    'active_recall',     // free: blocked, premium: 8/day
+  QUIZ_AI_GEN:      'quiz_ai_gen',       // free: 5 lifetime, premium: 30 chips
+  QUIZ_AI_MARK:     'quiz_ai_mark',      // free: 5 lifetime, premium: 10 chips
+  FLASHCARD_AI_GEN: 'flashcard_ai_gen',  // free: 5 lifetime, premium: 25 chips
+  AI_TOOL:          'ai_tool',           // one-shot AI tools (free: 5 lifetime, premium: 15 chips)
+  AI_CHAT:          'ai_chat',           // conversational tools (Math Tutor, Teaching Assistant) — 8 chips a message; free shares the tools lifetime cap
+  GOAL_AI_GEN:      'goal_ai_gen',       // free: blocked, premium: 15 chips
+  ROADMAP_AI_GEN:   'roadmap_ai_gen',    // free: blocked, premium: 15 chips
+  BLURTING:         'blurting',          // free: blocked, premium: 8 chips
+  ACTIVE_RECALL:    'active_recall',     // free: blocked, premium: 8 chips
   SPACED_REP:       'spaced_repetition', // free: blocked, premium: unlimited (no AI cost)
   ADVANCED_ANALYTICS: 'advanced_analytics', // free: blocked, premium: unlimited (no AI cost)
-  STUDY_COACH:      'study_coach',       // Ace companion — premium-only, 30 msgs/day (Haiku, the cheap tier)
+  STUDY_COACH:      'study_coach',       // Ace companion — premium-only, 2 chips a message (Haiku, the cheap tier)
 };
 
 // ─── Limits config ─────────────────────────────────────────────────────────
@@ -63,20 +66,17 @@ export const FREE_LIFETIME_CAPS = {
 // call above the typical ~5-10c.
 export const FREE_LIFETIME_COST_CAP_CENTS = 100;
 
-// Daily caps sized to land typical heavy-user spend around $1-2/week, with the
-// $2.50 weekly $-ceiling as the backstop for outliers.
-export const PREMIUM_DAILY_CAPS = {
-  [FEATURES.QUIZ_AI_GEN]:      3,
-  [FEATURES.QUIZ_AI_MARK]:     10,
-  [FEATURES.FLASHCARD_AI_GEN]: 3,
-  [FEATURES.AI_TOOL]:          6,
-  [FEATURES.AI_CHAT]:          8,
-  [FEATURES.GOAL_AI_GEN]:      1,
-  [FEATURES.ROADMAP_AI_GEN]:   1,
-  [FEATURES.BLURTING]:         5,
-  [FEATURES.ACTIVE_RECALL]:    8,
-  [FEATURES.STUDY_COACH]:      30,
-};
+/**
+ * RETIRED AS A GATE. Kept only so nothing importing it breaks mid-refactor.
+ *
+ * These were sized independently of the weekly dollar ceiling they were meant
+ * to protect, and priced against the real cost table they permitted 4.5x what
+ * it allowed. Premium is gated by the chip stack now — one pool, published
+ * prices, spend it however you like. See src/lib/chips.js.
+ *
+ * @deprecated use priceOf()/canAfford() from chips.js
+ */
+export const PREMIUM_DAILY_CAPS = {};
 
 // ─── Weekly spend ceiling, mirrored from the server ────────────────────────
 // The server is the real boundary (TIER_WEEKLY_CAP_MICROS in server.mjs); these
@@ -170,8 +170,21 @@ function checkFreeTier(profile, feature) {
 }
 
 // ─── Premium tier limits ───────────────────────────────────────────────────
+//
+// ONE POOL. This used to check a per-feature daily counter and, separately, a
+// weekly dollar ceiling — two limits sized independently, where the counters
+// permitted 4.5x what the dollars allowed. The counters stopped a light user
+// after three flashcard decks on a seventh of their budget, and let a heavy
+// one walk into the money wall on day two while still claiming they had
+// quizzes left. Chips replace them: one stack, published prices, spend it on
+// whatever you like. See src/lib/chips.js.
+//
+// This mirror MUST track server.mjs. When it drifted before, students were
+// shown headroom the server had already refused.
 function checkPremiumTier(profile, feature) {
-  // Weekly cost ceiling (hard backstop).
+  // The money backstop stays first, same as the server. Chip prices are
+  // rounded up so a full stack costs less than this, but if a price is ever
+  // set wrong the dollars still stop.
   const cost = weeklySpendMicros(profile);
   if (cost >= WEEKLY_COST_CAP_MICROS) {
     return {
@@ -181,38 +194,35 @@ function checkPremiumTier(profile, feature) {
     };
   }
 
-  const dailyCap = PREMIUM_DAILY_CAPS[feature];
-  if (dailyCap === undefined) {
-    // Feature has no daily cap (blurting, active recall, etc.) — always allowed for premium.
-    return { allowed: true };
-  }
+  const tier = profile?.ai_model_preference === 'saver' ? 'saver' : 'standard';
+  const verdict = canAfford(profile, feature, tier);
+  const stack = stackOf(profile);
 
-  const counters = profile?.daily_ai_counters ?? {};
-  const today = new Date().toISOString().slice(0, 10); // YYYY-MM-DD UTC
-  const counterDate = counters.date;
-  // If the date stamp is stale, treat usage as zero for today (server resets on next call).
-  const used = counterDate === today ? (counters[COUNTER_KEY[feature]] ?? 0) : 0;
-  const remaining = Math.max(0, dailyCap - used);
-
-  if (remaining <= 0) {
+  if (!verdict.ok) {
     return {
       allowed: false,
-      reason: `Daily limit reached (${dailyCap}/day). Resets at midnight.`,
-      dailyCapHit: true,
-      cap: dailyCap,
-      used,
-      remaining: 0,
+      // A refusal that names the way through, when there is one.
+      reason: verdict.saverWouldWork
+        ? `Not enough chips for this (${verdict.price} needed, ${verdict.remaining} left). Saver would make it ${verdict.saverPrice}.`
+        : stack.empty
+          ? 'That\'s this week\'s stack. It refills Monday.'
+          : `Not enough chips left for this (${verdict.price} needed, ${verdict.remaining} left). Refills Monday.`,
+      chipsHit: true,
+      price: verdict.price,
+      remaining: verdict.remaining,
+      saverWouldWork: verdict.saverWouldWork,
+      saverPrice: verdict.saverPrice,
     };
   }
 
-  // Soft warn near the weekly ceiling. Stated as a proportion rather than in
-  // dollars: a student has no way to judge whether $1.37 is a lot, and the raw
-  // figure is our cost of goods rather than anything they bought.
-  const warning = cost >= WEEKLY_COST_WARN_MICROS
-    ? `You've used ${Math.round((cost / WEEKLY_COST_CAP_MICROS) * 100)}% of this week's AI. Resets Monday.`
-    : null;
-
-  return { allowed: true, remaining, cap: dailyCap, used, warning };
+  const warn = stackWarning(profile, tier);
+  return {
+    allowed: true,
+    price: verdict.price,
+    remaining: verdict.remaining,
+    total: WEEKLY_CHIPS,
+    warning: warn ? `${warn.title}. ${warn.body}` : null,
+  };
 }
 
 // Dev-only bypass — VITE_TIER_BYPASS=true disables all caps so you can test

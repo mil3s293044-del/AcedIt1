@@ -1,7 +1,7 @@
 -- ════════════════════════════════════════════════════════════════════════════
 -- AcedIt — everything still to apply, in one script.
 --
--- Covers migrations 0022 through 0032. Paste the whole thing into the Supabase
+-- Covers migrations 0022 through 0033. Paste the whole thing into the Supabase
 -- SQL editor and run it once.
 --
 -- SAFE TO RUN TWICE. Every statement is guarded, so if some of these were
@@ -353,5 +353,34 @@ create index if not exists flashcards_due_queue_idx
 create index if not exists flashcards_retired_idx
     on public.flashcards (created_by, retired_at)
     where retired_at is not null;
+
+-- ────────────────────────────────────────────────────────────────────────────
+-- 0033 — one weekly stack of chips, replacing eleven per-feature daily caps
+-- ────────────────────────────────────────────────────────────────────────────
+-- The app had two limits, sized separately, that contradicted each other:
+-- per-feature daily counters and a weekly dollar ceiling. Priced against the
+-- real cost table, maxing every daily cap for a week came to 4.5x what the
+-- dollar ceiling permitted. So a heavy student hit the money wall on day two
+-- having been told all week they had three quizzes a day, and a light student
+-- could not do a big Saturday session on 15% of their budget.
+--
+-- Chips are one pool, spent however the student likes, at published prices
+-- that are rounded UP from measured cost — so a full stack always costs us
+-- less than the ceiling, never more.
+--
+-- weekly_ai_cost_micros is untouched and keeps recording what calls actually
+-- cost, backstopping the chip gate. If a price in src/lib/chips.js were ever
+-- set below its real cost, the micro ceiling still catches it.
+--
+-- Not backfilled on purpose: the app derives a chip count from the existing
+-- micro ledger for any row still at zero, so students mid-week keep the spend
+-- they have already made rather than being handed a fresh stack on deploy day.
+alter table public.user_profiles
+    add column if not exists weekly_chips_spent int not null default 0;
+
+-- Burst protection, the one useful job the daily caps were doing. A rolling
+-- window rather than per-feature counts: {"since": iso, "chips": n}.
+alter table public.user_profiles
+    add column if not exists ai_burst jsonb not null default '{}'::jsonb;
 
 commit;

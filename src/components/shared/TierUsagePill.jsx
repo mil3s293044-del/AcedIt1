@@ -6,9 +6,10 @@ import {
     isPremium,
     canUseFeature,
     FEATURES,
-    PREMIUM_DAILY_CAPS,
     FREE_LIFETIME_CAPS,
 } from "@/lib/tierAccess";
+import { priceOf, stackOf, spendableFor, PRICE as CHIP_PRICE, DEFAULT_PRICE as DEFAULT_CHIP_PRICE, WEEKLY_CHIPS } from "@/lib/chips";
+import { tierOf } from "@/lib/aiModels";
 import { createPageUrl } from "@/utils";
 
 // Friendly short label per feature, used in the pill.
@@ -66,6 +67,7 @@ export default function TierUsagePill({ feature, userProfile: profileProp, compa
 
     const access = canUseFeature(profile, feature);
     const premium = isPremium(profile);
+    const tier = tierOf(profile?.ai_model_preference);
     const label = FEATURE_LABEL[feature] ?? "AI";
 
     // Free user, blocked feature
@@ -82,21 +84,49 @@ export default function TierUsagePill({ feature, userProfile: profileProp, compa
         );
     }
 
-    // Premium user, uncapped feature (spaced rep, advanced analytics)
-    if (premium && PREMIUM_DAILY_CAPS[feature] === undefined) {
+    // ── PREMIUM: the PRICE, not a countdown ─────────────────────────────
+    //
+    // This used to say "3 left today" against a per-feature daily cap. It was
+    // counting the wrong thing: those caps permitted 4.5x what the weekly
+    // dollar ceiling allowed, so the number a student watched here was never
+    // what actually stopped them.
+    //
+    // The useful thing to know, standing in front of a button that is about to
+    // spend from one shared pool, is what THIS costs. So that is what it says.
+    if (premium) {
+        const price = priceOf(feature, tier);
+        const stack = stackOf(profile);
+        // A feature with no AI cost behind it (spaced repetition, analytics).
+        if (CHIP_PRICE[feature] === undefined && price === DEFAULT_CHIP_PRICE) {
+            return (
+                <span className={`pill bg-primary/10 text-primary gap-1.5 ${className}`}
+                    title={`${label}: unlimited on Premium`}>
+                    <InfinityIcon className="w-3 h-3" />
+                    <span className="font-bold">{compact ? "\u221e" : `${label}: Unlimited`}</span>
+                </span>
+            );
+        }
+        const affordable = spendableFor(profile, feature) >= price;
+        const colorClasses = affordable
+            ? "bg-primary/10 text-primary"
+            : "bg-streak/15 text-streak";
+        const tooltip = affordable
+            ? `${label} costs ${price} chips. You have ${stack.remaining} of ${WEEKLY_CHIPS} left this week.`
+            : `${label} costs ${price} chips and you have ${stack.remaining} left. Refills Monday.`;
         return (
-            <span className={`pill bg-primary/10 text-primary gap-1.5 ${className}`} title={`${label}: unlimited on Premium`}>
-                <InfinityIcon className="w-3 h-3" />
-                <span className="font-bold">{compact ? "∞" : `${label}: Unlimited`}</span>
+            <span className={`pill ${colorClasses} gap-1.5 ${className}`} title={tooltip}>
+                {affordable ? <Sparkles className="w-3 h-3" /> : <Crown className="w-3 h-3" />}
+                <span className="font-bold tabular-nums">
+                    {compact ? price : `${price} chips`}
+                </span>
             </span>
         );
     }
 
-    // Capped premium or capped free → show "X left" so the meaning is obvious
+    // ── FREE: still lifetime counts. Chips are a premium thing. ─────────
     const used = access.used ?? 0;
-    const cap = access.cap ?? (premium ? PREMIUM_DAILY_CAPS[feature] : FREE_LIFETIME_CAPS[feature]);
+    const cap = access.cap ?? FREE_LIFETIME_CAPS[feature];
     const remaining = Math.max(0, cap - used);
-    const period = premium ? "today" : "lifetime";
     const exhausted = remaining <= 0;
     const colorClasses = exhausted
         ? "bg-streak/15 text-streak"
@@ -104,30 +134,10 @@ export default function TierUsagePill({ feature, userProfile: profileProp, compa
             ? "bg-xp/15 text-xp"
             : "bg-primary/10 text-primary";
     const tooltip = exhausted
-        ? `${label}: ${cap}/${cap} used ${period} — ${premium ? "resets at midnight" : "upgrade for daily access"}`
-        : `${label}: ${remaining} of ${cap} left ${period}`;
-
-    const text = compact
-        ? `${remaining}/${cap}`
-        : `${label}: ${remaining}/${cap} left ${period}`;
+        ? `${label}: ${cap}/${cap} used — upgrade for a weekly chip stack`
+        : `${label}: ${remaining} of ${cap} left lifetime`;
 
     if (exhausted) {
-        // Premium at cap → no upgrade CTA (they already are premium). Just a
-        // static pill telling them to wait until reset.
-        if (premium) {
-            return (
-                <span
-                    className={`pill ${colorClasses} gap-1.5 ${className}`}
-                    title={tooltip}
-                >
-                    <Crown className="w-3 h-3" />
-                    <span className="font-bold tabular-nums">
-                        {compact ? `0/${cap}` : `${label}: 0 left — resets midnight`}
-                    </span>
-                </span>
-            );
-        }
-        // Free at cap → upgrade CTA links to Subscription.
         return (
             <Link
                 to={createPageUrl("Subscription")}
@@ -135,7 +145,7 @@ export default function TierUsagePill({ feature, userProfile: profileProp, compa
                 title={tooltip}
             >
                 <Lock className="w-3 h-3" />
-                <span className="font-bold tabular-nums">{compact ? `0/${cap}` : `${label}: 0 left — upgrade`}</span>
+                <span className="font-bold tabular-nums">{compact ? `0/${cap}` : `${label}: 0 left \u2014 upgrade`}</span>
             </Link>
         );
     }
@@ -143,7 +153,9 @@ export default function TierUsagePill({ feature, userProfile: profileProp, compa
     return (
         <span className={`pill ${colorClasses} gap-1.5 ${className}`} title={tooltip}>
             <Sparkles className="w-3 h-3" />
-            <span className="font-bold tabular-nums">{text}</span>
+            <span className="font-bold tabular-nums">
+                {compact ? `${remaining}/${cap}` : `${label}: ${remaining}/${cap} left`}
+            </span>
         </span>
     );
 }
