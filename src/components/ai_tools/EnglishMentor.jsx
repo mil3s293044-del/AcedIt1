@@ -12,6 +12,7 @@ import {
 } from "lucide-react";
 import { useAIToolSidePanel } from "./sidePanelContext";
 import { base44 } from "@/api/base44Client";
+import { saveResult, deleteResult, loadSavedResults } from '@/lib/saveResult';
 import { useToast } from "@/components/ui/use-toast";
 import { recordStudyAndGetStreak } from "@/components/shared/streakHelpers";
 import MarkdownMath from "@/components/shared/MarkdownMath";
@@ -117,9 +118,7 @@ export default function EnglishMentor() {
         const loadHistory = async () => {
             try {
                 const user = await base44.auth.me();
-                const results = await base44.entities.AISavedResult
-                    .filter({ created_by: user.email, tool_type: "english_mentor" }, "-date_created")
-                    .catch(() => []);
+                const results = await loadSavedResults('english_mentor', user.email);
                 setSavedResults(results || []);
             } catch {
                 /* signed-out or load failure — leave history empty */
@@ -251,7 +250,7 @@ Provide expert VCE English guidance following the 2024–2027 Study Design. Use 
             const taskName = currentSection.isMarker
                 ? `Essay Mark: ${essayTopic || "Section " + essaySection}`
                 : (currentSection.tasks?.find((t) => t.id === selectedTask[activeSection])?.name || currentSection.name);
-            await base44.entities.AISavedResult.create({
+            const { ok, source } = await saveResult('create', {
                 tool_type: "english_mentor",
                 title: taskName,
                 subject_name: "VCE English",
@@ -260,11 +259,9 @@ Provide expert VCE English guidance following the 2024–2027 Study Design. Use 
                 input_data: { activeSection, selectedTask, mode: currentMode, essayTopic, essayPrompt, essaySection, userInput },
                 date_created: new Date().toISOString().split("T")[0],
             });
-            toast({ title: "Saved!" });
+            toast({ title: ok ? (source === 'local' ? 'Saved locally (will sync later)' : 'Saved!') : 'Save failed' });
             const user = await base44.auth.me();
-            const results = await base44.entities.AISavedResult
-                .filter({ created_by: user.email, tool_type: "english_mentor" }, "-date_created")
-                .catch(() => []);
+            const results = await loadSavedResults('english_mentor', user.email);
             setSavedResults(results || []);
         } finally {
             setIsSaving(false);
@@ -594,7 +591,7 @@ Provide expert VCE English guidance following the 2024–2027 Study Design. Use 
                                                 </button>
                                                 <button
                                                     onClick={() =>
-                                                        base44.entities.AISavedResult.delete(r.id).then(() =>
+                                                        deleteResult('english_mentor', r.id).then(() =>
                                                             setSavedResults((prev) => prev.filter((x) => x.id !== r.id))
                                                         )
                                                     }

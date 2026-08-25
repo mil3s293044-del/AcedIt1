@@ -7,6 +7,7 @@ import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { base44 } from '@/api/base44Client';
+import { deleteResult } from '@/lib/saveResult';
 import { useToast } from '@/components/ui/use-toast';
 import {
     FolderOpen,
@@ -109,7 +110,7 @@ export default function AIToolsHistory() {
 
     const handleDelete = async (resultId) => {
         try {
-            await base44.entities.AISavedResult.delete(resultId);
+            await deleteResult(null, resultId);
             toast({ title: 'Deleted', description: 'Result removed from history.' });
             await loadData();
         } catch (error) {

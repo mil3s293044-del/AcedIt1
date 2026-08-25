@@ -17,6 +17,7 @@ import {
     Loader2, History, X, Archive, Wand2
 } from "lucide-react";
 import { base44 } from "@/api/base44Client";
+import { saveResult, deleteResult, loadSavedResults } from "@/lib/saveResult";
 import { invokeLLMStream } from "@/lib/streamingAI";
 import { useToast } from "@/components/ui/use-toast";
 import { recordStudyAndGetStreak } from "@/components/shared/streakHelpers";
@@ -90,7 +91,7 @@ export default function UnifiedChat() {
             if (!u?.email) return;
             const [subs, convs, profiles] = await Promise.all([
                 base44.entities.UserSubject.filter({ created_by: u.email, is_active: true }).catch(() => []),
-                base44.entities.AISavedResult.filter({ created_by: u.email }, "-created_date", 120).catch(() => []),
+                loadSavedResults(null, u.email).catch(() => []),
                 base44.entities.UserProfile.filter({ created_by: u.email }).catch(() => []),
             ]);
             // Open on the tool that fits what they said today is for. Safe to
@@ -105,8 +106,15 @@ export default function UnifiedChat() {
             const seen = new Set();
             setSubjects((subs || []).filter(s => !seen.has(s.subject_name) && seen.add(s.subject_name)));
             // Only chat-format rows join the sidebar (legacy saved results
-            // live on the History page).
-            setConversations((convs || []).filter(c => Array.isArray(c.input_data?.messages) && c.input_data.messages.length));
+            // live on the History page). Merge DB + localStorage.
+            const allConvs = (convs || []).filter(c => Array.isArray(c.input_data?.messages) && c.input_data.messages.length);
+            // Dedupe by id (might have both DB and local copies)
+            const deduped = [];
+            const seenIds = new Set();
+            for (const c of allConvs) {
+                if (!seenIds.has(c.id)) { seenIds.add(c.id); deduped.push(c); }
+            }
+            setConversations(deduped);
         }).catch(() => {});
     }, []);
 
@@ -151,7 +159,7 @@ export default function UnifiedChat() {
 
     const deleteConversation = async (conv) => {
         try {
-            await base44.entities.AISavedResult.delete(conv.id);
+            await deleteResult(conv.tool_type || 'ai_chat', conv.id);
             setConversations(prev => prev.filter(c => c.id !== conv.id));
             if (conv.id === activeConvId) newChat();
         } catch { toast({ title: "Couldn't delete", variant: "destructive" }); }
@@ -172,14 +180,14 @@ export default function UnifiedChat() {
         };
         try {
             if (convIdRef.current) {
-                await base44.entities.AISavedResult.update(convIdRef.current, payload);
-                setConversations(prev => prev.map(c => c.id === convIdRef.current ? { ...c, ...payload } : c));
+                const { ok } = await saveResult('update', payload, convIdRef.current);
+                if (ok) setConversations(prev => prev.map(c => c.id === convIdRef.current ? { ...c, ...payload } : c));
             } else {
-                const created = await base44.entities.AISavedResult.create(payload);
-                if (created?.id) {
-                    convIdRef.current = created.id;
-                    setActiveConvId(created.id);
-                    setConversations(prev => [{ ...payload, id: created.id, created_date: new Date().toISOString() }, ...prev]);
+                const { ok, id } = await saveResult('create', payload);
+                if (ok && id) {
+                    convIdRef.current = id;
+                    setActiveConvId(id);
+                    setConversations(prev => [{ ...payload, id, created_date: new Date().toISOString() }, ...prev]);
                 }
             }
         } catch (e) { console.error("Chat persist failed:", e); }

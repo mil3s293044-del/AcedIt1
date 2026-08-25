@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from "react";
 import { base44 } from "@/api/base44Client";
+import { deleteResult } from "@/lib/saveResult";
 import { useAuth } from "@/lib/AuthContext";
 import { motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
@@ -297,7 +298,7 @@ export default function Settings() {
                 ...assessments.map(r => base44.entities.SubjectAssessment.delete(r.id)),
                 ...userSubjects.map(r => base44.entities.UserSubject.delete(r.id)),
                 ...studyPlans.map(r => base44.entities.StudyPlan.delete(r.id)),
-                ...aiResults.map(r => base44.entities.AISavedResult.delete(r.id)),
+                ...aiResults.map(r => deleteResult('ai_saved_results', r.id)),
                 ...friendshipsReq.map(r => base44.entities.Friendship.delete(r.id)),
                 ...friendshipsRec.map(r => base44.entities.Friendship.delete(r.id)),
                 ...sharedQuizzes.map(r => base44.entities.SharedQuiz.delete(r.id)),

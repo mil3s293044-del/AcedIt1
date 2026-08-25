@@ -13,6 +13,7 @@ import AdaptiveReview from "./AdaptiveReview";
 import DifficultyRating from "@/components/shared/DifficultyRating";
 import { useToast } from "@/components/ui/use-toast";
 import { base44 } from "@/api/base44Client";
+import { saveResult } from "@/lib/saveResult";
 import { aceDone } from "@/components/ace/AceReacts";
 import { commandTermOf } from "@/lib/quizInsight";
 import { recordStudyAndGetStreak } from "@/components/shared/streakHelpers";
@@ -436,7 +437,7 @@ In two or three sentences, explain what makes that the right answer and what the
         const fb = aiFeedback[idx];
         const content = `**Question**\n${q.question || ''}\n\n**Your answer**\n${yourAns}\n\n**${q.type === 'mcq' ? 'Correct answer' : 'Model answer'}**\n${modelOrCorrect || '—'}${fb?.student_error_analysis ? `\n\n**What went wrong**\n${fb.student_error_analysis}` : ''}`;
         try {
-            await base44.entities.AISavedResult.create({
+            const { ok, source } = await saveResult('create', {
                 tool_type: 'saved_answer',
                 title: (q.question || 'Saved answer').slice(0, 80),
                 subject_name: shuffledQuiz.subject || '',
@@ -445,8 +446,10 @@ In two or three sentences, explain what makes that the right answer and what the
                 input_data: { quiz_title: shuffledQuiz.title, type: q.type },
                 date_created: new Date().toISOString().split('T')[0],
             });
-            setSavedQuestions(s => new Set([...s, idx]));
-            toast({ title: 'Saved to your library', description: 'Find it under Saved answers on the Quizzes page.' });
+            if (ok) {
+                setSavedQuestions(s => new Set([...s, idx]));
+                toast({ title: 'Saved to your library', description: source === 'local' ? 'Saved locally (will sync later)' : 'Find it under Saved answers on the Quizzes page.' });
+            }
         } catch (e) {
             toast({ title: "Couldn't save", description: e.message, variant: "destructive" });
         }

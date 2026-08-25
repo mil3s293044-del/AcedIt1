@@ -7,6 +7,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/components/ui/use-toast';
 import { base44 } from '@/api/base44Client';
+import { saveResult, deleteResult, loadSavedResults } from '@/lib/saveResult';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Send, Loader2, GraduationCap, Brain, Upload, Sparkles, Save, Trash2, MessageCircle, FolderOpen, ChevronDown, Square } from 'lucide-react';
 import { moderationPresets } from '@/components/shared/contentModeration';
@@ -50,7 +51,7 @@ export default function TeachingAssistant() {
             const currentUser = await base44.auth.me();
             setUser(currentUser);
             const [results, subjects] = await Promise.all([
-                base44.entities.AISavedResult.filter({ created_by: currentUser.email, tool_type: 'teaching_assistant' }, '-date_created').catch(() => []),
+                loadSavedResults('teaching_assistant', currentUser.email),
                 base44.entities.UserSubject.filter({ created_by: currentUser.email, is_active: true }).catch(() => [])
             ]);
             setSavedSessions(results || []);
@@ -65,7 +66,7 @@ export default function TeachingAssistant() {
     useEffect(() => {
         if (!loadedResultId || !messages.length) return;
         autoSaveRef.current = setInterval(async () => {
-            await base44.entities.AISavedResult.update(loadedResultId, { content: JSON.stringify({ messages, mode }), input_data: { mode, message_count: messages.length } }).catch(() => {});
+            await saveResult('update', { content: JSON.stringify({ messages, mode }), input_data: { mode, message_count: messages.length } }, loadedResultId).catch(() => {});
         }, 30000);
         return () => clearInterval(autoSaveRef.current);
     }, [loadedResultId, messages, mode]);
@@ -235,10 +236,10 @@ Respond in markdown.`;
         if (!user || !messages.length) return;
         try {
             if (loadedResultId) {
-                await base44.entities.AISavedResult.update(loadedResultId, { content: JSON.stringify({ messages, mode }), input_data: { mode, message_count: messages.length } });
+                await saveResult('update', { content: JSON.stringify({ messages, mode }), input_data: { mode, message_count: messages.length } }, loadedResultId);
             } else {
-                const r = await base44.entities.AISavedResult.create({ tool_type: 'teaching_assistant', subject_name: subject, topic, title: `${topic} — ${subject}`, content: JSON.stringify({ messages, mode }), input_data: { mode, message_count: messages.length }, date_created: new Date().toISOString().split('T')[0] });
-                setLoadedResultId(r.id);
+                const { ok, id } = await saveResult('create', { tool_type: 'teaching_assistant', subject_name: subject, topic, title: `${topic} — ${subject}`, content: JSON.stringify({ messages, mode }), input_data: { mode, message_count: messages.length }, date_created: new Date().toISOString().split('T')[0] });
+                if (ok && id) setLoadedResultId(id);
             }
             toast({ title: 'Session saved!' });
             setQuizTitle(`${topic} — Practice Quiz`);
@@ -352,7 +353,7 @@ Respond in markdown.`;
                                                 <Button size="sm" onClick={() => { try { const d = JSON.parse(s.content); setMessages(d.messages || []); setMode(d.mode || 'concept'); setSubject(s.subject_name); setTopic(s.topic); setHasStarted(true); setLoadedResultId(s.id); if (d.messages?.length) setConversationContext(d.messages.map(m => m.content).join('\n')); toast({ title: 'Session resumed!' }); } catch { toast({ title: 'Could not resume', variant: 'destructive' }); } }} className="h-7 text-xs bg-amber-600 hover:bg-amber-700">
                                                     <MessageCircle className="w-3 h-3 mr-1" />Resume
                                                 </Button>
-                                                <button onClick={() => base44.entities.AISavedResult.delete(s.id).then(() => setSavedSessions(prev => prev.filter(x => x.id !== s.id)))} className="p-1.5 text-muted-foreground/70 hover:text-red-500 hover:bg-red-50 rounded-lg"><Trash2 className="w-3.5 h-3.5" /></button>
+                                                <button onClick={() => deleteResult('teaching_assistant', s.id).then(() => setSavedSessions(prev => prev.filter(x => x.id !== s.id)))} className="p-1.5 text-muted-foreground/70 hover:text-red-500 hover:bg-red-50 rounded-lg"><Trash2 className="w-3.5 h-3.5" /></button>
                                             </div>
                                         </div>
                                     ))}

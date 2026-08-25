@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { base44 } from "@/api/base44Client";
+import { deleteResult } from "@/lib/saveResult";
 import { motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -1024,7 +1025,7 @@ Return valid JSON only.`,
                                         </div>
                                         <div className="flex gap-1 flex-shrink-0">
                                             <button onClick={() => setViewingSaved(s)} className="p-1.5 text-muted-foreground hover:text-chart-4 hover:bg-chart-4/10 rounded-lg transition-colors"><Eye className="w-3.5 h-3.5" /></button>
-                                            <button onClick={() => base44.entities.AISavedResult.delete(s.id).then(() => setSavedAnswers(prev => prev.filter(x => x.id !== s.id)))} className="p-1.5 text-muted-foreground hover:text-streak hover:bg-streak/10 rounded-lg transition-colors"><Trash2 className="w-3.5 h-3.5" /></button>
+                                            <button onClick={() => deleteResult('saved_answer', s.id).then(() => setSavedAnswers(prev => prev.filter(x => x.id !== s.id)))} className="p-1.5 text-muted-foreground hover:text-streak hover:bg-streak/10 rounded-lg transition-colors"><Trash2 className="w-3.5 h-3.5" /></button>
                                         </div>
                                     </div>
                                 ))}

@@ -1,0 +1,290 @@
+/* ─────────────────────────────────────────────────────────────────────────
+   Acedit — social ad brand kit
+   Tokens mirror src/index.css exactly. Change them there first, then here.
+   ────────────────────────────────────────────────────────────────────── */
+@import url("fonts/fonts.css");
+
+:root {
+  --green:      #58CC02;
+  --green-dark: #46A302;
+  --green-lite: #B6FF4E;
+  --cyan:       #6CE0FF;
+  --cream:      #FBF7F0;
+  --ink:        #0D1626;
+  --night:      #0A0F1F;
+  --xp:         #FF9600;
+  --streak:     #FF4B4B;
+  --indigo:     #6366F1;
+  --line:       #E5E7EB;
+  --mute:       #6B7280;
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+html, body {
+  background: #000;
+  font-family: "Inter", system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+  font-feature-settings: "ss01", "cv11";
+}
+
+/* ── Frame ───────────────────────────────────────────────────────────── */
+.frame {
+  position: relative;
+  width: 1080px;
+  height: 1920px;
+  overflow: hidden;
+  display: none;
+}
+.frame.post { height: 1350px; }
+
+.dark { background: var(--night); color: #fff; }
+.lite { background: var(--cream); color: var(--ink); }
+
+/* Landing-hero atmosphere: aurora washes + perspective floor + grain */
+.aurora, .grain, .floor { position: absolute; inset: 0; pointer-events: none; }
+.aurora::before, .aurora::after {
+  content: ""; position: absolute; border-radius: 50%;
+  filter: blur(140px); mix-blend-mode: screen;
+}
+.aurora::before {
+  width: 1000px; height: 1000px; top: -300px; left: -320px; opacity: .5;
+  background: radial-gradient(circle, var(--green) 0%, transparent 70%);
+}
+.aurora::after {
+  width: 900px; height: 900px; bottom: -260px; right: -300px; opacity: .38;
+  background: radial-gradient(circle, var(--indigo) 0%, transparent 70%);
+}
+.floor {
+  top: 52%; opacity: .09; mix-blend-mode: screen;
+  background-image:
+    linear-gradient(to right, rgba(255,255,255,.7) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(255,255,255,.7) 1px, transparent 1px);
+  background-size: 96px 96px;
+  transform: perspective(900px) rotateX(62deg);
+  transform-origin: center bottom;
+  -webkit-mask-image: linear-gradient(to bottom, transparent 0%, #000 35%, #000 80%, transparent 100%);
+}
+.grain {
+  opacity: .07; mix-blend-mode: overlay;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2'/%3E%3C/filter%3E%3Crect width='200' height='200' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+
+/* ── Safe area ───────────────────────────────────────────────────────────
+   Instagram covers roughly the top 220px and the bottom 330px of a Reel.
+   Everything that must be read lives inside .stage.
+   ─────────────────────────────────────────────────────────────────────── */
+.stage {
+  position: absolute; left: 0; right: 0;
+  top: 260px; bottom: 340px;
+  padding: 0 92px;
+  display: flex; flex-direction: column; justify-content: center;
+}
+.stage.top    { justify-content: flex-start; }
+.stage.bottom { justify-content: flex-end; }
+.post .stage  { top: 96px; bottom: 96px; padding: 0 88px; }
+
+/* ── Type ────────────────────────────────────────────────────────────── */
+.eyebrow {
+  font: 800 27px/1 "Inter", sans-serif;
+  letter-spacing: .24em; text-transform: uppercase;
+  color: var(--green); margin-bottom: 34px;
+  display: flex; align-items: center; gap: 18px;
+}
+.eyebrow.mono { color: rgba(255,255,255,.42); }
+.lite .eyebrow.mono { color: rgba(13,22,38,.42); }
+.eyebrow .tick { width: 10px; height: 10px; border-radius: 50%; background: currentColor; }
+
+h1 {
+  font: 900 128px/0.92 "Nunito", sans-serif;
+  letter-spacing: -.035em;
+}
+h1.sm  { font-size: 98px;  line-height: .96; }
+h1.xs  { font-size: 78px;  line-height: 1.04; }
+h1.big { font-size: 176px; line-height: .86; }
+
+.sub {
+  margin-top: 38px;
+  font: 600 40px/1.42 "Inter", sans-serif;
+  color: rgba(255,255,255,.66);
+  letter-spacing: -.01em;
+}
+.lite .sub { color: rgba(13,22,38,.6); }
+
+.g     { color: var(--green); }
+.grad  {
+  background: linear-gradient(135deg, var(--green-lite) 0%, var(--green) 45%, var(--cyan) 100%);
+  -webkit-background-clip: text; background-clip: text; color: transparent;
+  filter: drop-shadow(0 0 34px rgba(88,204,2,.42));
+}
+.dim   { color: rgba(255,255,255,.38); }
+.lite .dim { color: rgba(13,22,38,.34); }
+.strike { text-decoration: line-through; text-decoration-thickness: 7px; }
+
+.fine {
+  font: 600 24px/1.5 "Inter", sans-serif;
+  color: rgba(255,255,255,.34); letter-spacing: .01em;
+}
+.lite .fine { color: rgba(13,22,38,.4); }
+
+/* ── Logo lockup ─────────────────────────────────────────────────────── */
+.logo { display: flex; align-items: center; gap: 22px; }
+.logo .mark {
+  width: 96px; height: 96px; border-radius: 26px;
+  background: var(--green);
+  display: flex; align-items: center; justify-content: center;
+  box-shadow: 0 0 52px rgba(88,204,2,.5), inset 0 -7px 0 rgba(0,0,0,.14);
+}
+.logo .mark svg { width: 52px; height: 52px; stroke: #fff; fill: none;
+  stroke-width: 2.1; stroke-linecap: round; stroke-linejoin: round; }
+.logo .word {
+  font: 900 68px/1 "Nunito", sans-serif; letter-spacing: -.035em; color: #fff;
+}
+.lite .logo .word { color: var(--ink); }
+.logo.sm .mark { width: 66px; height: 66px; border-radius: 19px; }
+.logo.sm .mark svg { width: 36px; height: 36px; }
+.logo.sm .word { font-size: 48px; }
+
+/* ── 3D button (the app's signature control) ─────────────────────────── */
+.btn {
+  display: inline-flex; align-items: center; gap: 16px;
+  background: var(--green); color: #fff;
+  font: 800 42px/1 "Inter", sans-serif; letter-spacing: -.01em;
+  padding: 34px 54px; border-radius: 26px;
+  border-bottom: 10px solid var(--green-dark);
+  box-shadow: 0 0 60px rgba(88,204,2,.34);
+}
+.btn.ghost {
+  background: rgba(255,255,255,.06); border: 2px solid rgba(255,255,255,.18);
+  border-bottom-width: 2px; color: #fff; box-shadow: none;
+}
+
+/* ── Phone mock ──────────────────────────────────────────────────────── */
+.phone {
+  width: 620px; height: 1280px; border-radius: 68px;
+  background: #0D1626; padding: 13px;
+  box-shadow: 0 60px 130px rgba(0,0,0,.45), 0 0 0 2px rgba(255,255,255,.07);
+  position: relative;
+}
+.lite .phone { box-shadow: 0 46px 96px rgba(13,22,38,.22), 0 0 0 2px rgba(13,22,38,.08); }
+.phone .screen {
+  width: 100%; height: 100%; border-radius: 56px; overflow: hidden;
+  background: var(--cream); position: relative;
+}
+.phone .notch {
+  position: absolute; top: 25px; left: 50%; transform: translateX(-50%);
+  width: 168px; height: 34px; border-radius: 20px; background: #0D1626; z-index: 5;
+}
+
+/* App chrome inside the phone */
+.app {
+  position: absolute; inset: 0;
+  padding: 78px 30px 132px;
+  font-family: "Inter", sans-serif; color: var(--ink);
+}
+
+/* Bottom tab bar — mirrors the app's mobile nav */
+.tabbar {
+  position: absolute; left: 0; right: 0; bottom: 0; height: 116px;
+  background: #fff; border-top: 2px solid var(--line);
+  display: flex; align-items: center; justify-content: space-around;
+  padding: 0 12px 18px;
+}
+.tabbar div {
+  display: flex; flex-direction: column; align-items: center; gap: 7px;
+  font: 700 16px/1 "Inter", sans-serif; color: #9CA3AF;
+}
+.tabbar div.on { color: var(--green-dark); }
+.tabbar svg { width: 30px; height: 30px; stroke: currentColor; fill: none;
+  stroke-width: 2.1; stroke-linecap: round; stroke-linejoin: round; }
+.app-top { display: flex; align-items: center; justify-content: space-between; margin-bottom: 26px; }
+.app-title { font: 900 40px/1 "Nunito", sans-serif; letter-spacing: -.03em; }
+.pill {
+  display: inline-flex; align-items: center; gap: 8px; white-space: nowrap;
+  font: 800 21px/1 "Inter", sans-serif; padding: 12px 17px; border-radius: 999px;
+}
+.pill.streak { background: rgba(255,75,75,.12); color: var(--streak); }
+.pill.xp     { background: rgba(255,150,0,.13); color: var(--xp); }
+.pill.green  { background: rgba(88,204,2,.14); color: var(--green-dark); }
+
+.card {
+  background: #fff; border: 2px solid var(--line); border-radius: 26px;
+  padding: 26px; margin-bottom: 18px;
+  box-shadow: 0 1px 2px rgba(13,22,38,.04), 0 5px 14px rgba(13,22,38,.045);
+}
+.card.flat { box-shadow: none; }
+.card-label {
+  font: 800 18px/1 "Inter", sans-serif; letter-spacing: .16em;
+  text-transform: uppercase; color: var(--mute); margin-bottom: 14px;
+}
+.card h3 { font: 800 30px/1.2 "Nunito", sans-serif; letter-spacing: -.02em; }
+.card p  { font: 500 23px/1.45 "Inter", sans-serif; color: #4B5563; }
+
+.bar { height: 18px; border-radius: 999px; background: #EEF0F3; overflow: hidden; }
+.bar > i { display: block; height: 100%; border-radius: 999px; background: var(--green); }
+
+.row { display: flex; align-items: center; gap: 14px; }
+.spread { display: flex; align-items: center; justify-content: space-between; }
+
+.tick-row {
+  display: flex; gap: 14px; align-items: flex-start;
+  font: 600 23px/1.4 "Inter", sans-serif; color: #374151; margin-bottom: 14px;
+}
+.tick-row .dot {
+  flex: none; width: 32px; height: 32px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font: 800 20px/1 "Inter", sans-serif; margin-top: 1px;
+}
+.tick-row .dot.ok  { background: rgba(88,204,2,.16);  color: var(--green-dark); }
+.tick-row .dot.no  { background: rgba(255,150,0,.18); color: #B26A00; }
+
+.score {
+  font: 900 92px/1 "Nunito", sans-serif; letter-spacing: -.04em; color: var(--green-dark);
+}
+.score small { font-size: 40px; color: var(--mute); font-weight: 800; }
+
+/* Chat bubbles for the tutor mock */
+.bubble {
+  max-width: 84%; padding: 22px 26px; border-radius: 26px;
+  font: 500 24px/1.42 "Inter", sans-serif; margin-bottom: 16px;
+}
+.bubble.me  { margin-left: auto; background: var(--ink); color: #fff; border-bottom-right-radius: 10px; }
+.bubble.ai  { background: #fff; border: 2px solid var(--line); border-bottom-left-radius: 10px; color: var(--ink); }
+
+/* Subject chips */
+.chips { display: flex; flex-wrap: wrap; gap: 12px; }
+.chip {
+  font: 700 22px/1 "Inter", sans-serif; padding: 15px 20px; border-radius: 16px;
+  background: #fff; border: 2px solid var(--line); color: #374151;
+}
+.chip.on { background: rgba(88,204,2,.1); border-color: rgba(88,204,2,.45); color: var(--green-dark); }
+
+/* ── Stat strip / comparison ─────────────────────────────────────────── */
+.versus { display: flex; gap: 26px; margin-top: 56px; }
+.versus > div {
+  flex: 1; border-radius: 30px; padding: 40px 36px;
+  border: 2px solid rgba(255,255,255,.12); background: rgba(255,255,255,.04);
+}
+.versus .win { border-color: rgba(88,204,2,.5); background: rgba(88,204,2,.1); }
+.versus .k { font: 800 25px/1 "Inter", sans-serif; letter-spacing: .16em;
+  text-transform: uppercase; color: rgba(255,255,255,.44); margin-bottom: 20px; }
+.versus .win .k { color: var(--green); }
+.versus .v { font: 900 76px/1 "Nunito", sans-serif; letter-spacing: -.04em; }
+.versus .n { margin-top: 14px; font: 600 25px/1.35 "Inter", sans-serif; color: rgba(255,255,255,.5); }
+
+/* ── Carousel / post furniture ───────────────────────────────────────── */
+.swipe {
+  position: absolute; right: 88px; bottom: 78px;
+  display: flex; align-items: center; gap: 14px;
+  font: 800 26px/1 "Inter", sans-serif; letter-spacing: .1em; text-transform: uppercase;
+  color: rgba(255,255,255,.42);
+}
+.lite .swipe { color: rgba(13,22,38,.36); }
+.pagenum {
+  position: absolute; left: 88px; bottom: 78px;
+  font: 800 26px/1 "Inter", sans-serif; letter-spacing: .18em;
+  color: rgba(255,255,255,.3);
+}
+.lite .pagenum { color: rgba(13,22,38,.28); }
+.brandbar { position: absolute; left: 88px; top: 76px; }

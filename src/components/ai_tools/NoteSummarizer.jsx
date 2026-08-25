@@ -5,6 +5,7 @@ import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useToast } from '@/components/ui/use-toast';
 import { base44 } from '@/api/base44Client';
+import { saveResult, deleteResult, loadSavedResults } from '@/lib/saveResult';
 import {
     Upload, Wand2, Loader2, Save, Trash2, Eye, FolderOpen, ChevronDown,
     FileText, X, Zap, Send, Square, Edit2, MessageSquare
@@ -80,7 +81,7 @@ export default function NoteSummarizer() {
             const currentUser = await base44.auth.me();
             setUser(currentUser);
             const [results, subjects] = await Promise.all([
-                base44.entities.AISavedResult.filter({ created_by: currentUser.email, tool_type: 'note_summarizer' }, '-date_created').catch(() => []),
+                loadSavedResults('note_summarizer', currentUser.email),
                 base44.entities.UserSubject.filter({ created_by: currentUser.email, is_active: true }).catch(() => []),
             ]);
             const unique = subjects.reduce((acc, s) => { if (!acc.find(x => x.subject_name === s.subject_name)) acc.push(s); return acc; }, []);
@@ -258,7 +259,7 @@ Apply the refinement and return the COMPLETE updated summary from start to finis
 
     const handleSave = async () => {
         if (!currentSummary || !user || !saveTitle.trim()) return;
-        await base44.entities.AISavedResult.create({
+        const { ok, source } = await saveResult('create', {
             tool_type: 'note_summarizer',
             title: saveTitle.trim(),
             subject_name: subject,
@@ -267,10 +268,10 @@ Apply the refinement and return the COMPLETE updated summary from start to finis
             input_data: { subject, topic, summaryType, refinements },
             date_created: new Date().toISOString().split('T')[0],
         });
-        toast({ title: 'Summary saved!' });
+        toast({ title: ok ? (source === 'local' ? 'Saved locally (will sync later)' : 'Summary saved!') : 'Save failed' });
         setIsSaveDialogOpen(false);
         setSaveTitle('');
-        const results = await base44.entities.AISavedResult.filter({ created_by: user.email, tool_type: 'note_summarizer' }, '-date_created').catch(() => []);
+        const results = await loadSavedResults('note_summarizer', user.email);
         setSavedResults(results);
     };
 
@@ -612,7 +613,7 @@ Apply the refinement and return the COMPLETE updated summary from start to finis
                                             </div>
                                             <div className="flex gap-1 ml-2 flex-shrink-0">
                                                 <button onClick={() => setViewingResult(r)} className="p-1.5 text-muted-foreground hover:text-primary hover:bg-primary/10 rounded-lg transition-colors"><Eye className="w-3.5 h-3.5" /></button>
-                                                <button onClick={() => base44.entities.AISavedResult.delete(r.id).then(() => setSavedResults(prev => prev.filter(x => x.id !== r.id)))} className="p-1.5 text-muted-foreground hover:text-destructive hover:bg-destructive/10 rounded-lg transition-colors"><Trash2 className="w-3.5 h-3.5" /></button>
+                                                <button onClick={() => deleteResult('note_summarizer', r.id).then(() => setSavedResults(prev => prev.filter(x => x.id !== r.id)))} className="p-1.5 text-muted-foreground hover:text-destructive hover:bg-destructive/10 rounded-lg transition-colors"><Trash2 className="w-3.5 h-3.5" /></button>
                                             </div>
                                         </div>
                                     ))}
