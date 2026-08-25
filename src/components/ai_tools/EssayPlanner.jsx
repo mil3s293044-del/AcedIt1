@@ -5,6 +5,7 @@ import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useToast } from '@/components/ui/use-toast';
 import { base44 } from '@/api/base44Client';
+import { saveResult, deleteResult, loadSavedResults } from '@/lib/saveResult';
 import { invokeLLMStream } from '@/lib/streamingAI';
 import {
     Sparkles, Loader2, Save, Trash2, Eye, FolderOpen, ChevronDown, RefreshCw,
@@ -90,7 +91,7 @@ export default function EssayPlanner() {
             const currentUser = await base44.auth.me();
             setUser(currentUser);
             const [results, subjects] = await Promise.all([
-                base44.entities.AISavedResult.filter({ created_by: currentUser.email, tool_type: 'essay_planner' }, '-date_created').catch(() => []),
+                loadSavedResults('essay_planner', currentUser.email),
                 base44.entities.UserSubject.filter({ created_by: currentUser.email, is_active: true }).catch(() => []),
             ]);
             const unique = subjects.reduce((acc, s) => { if (!acc.find(x => x.subject_name === s.subject_name)) acc.push(s); return acc; }, []);
@@ -260,7 +261,7 @@ Apply the refinement faithfully and return the COMPLETE updated essay plan from 
 
     const handleSave = async () => {
         if (!currentPlan || !user || !saveTitle.trim()) return;
-        await base44.entities.AISavedResult.create({
+        const { ok, source } = await saveResult('create', {
             tool_type: 'essay_planner',
             title: saveTitle.trim(),
             subject_name: subject,
@@ -269,11 +270,11 @@ Apply the refinement faithfully and return the COMPLETE updated essay plan from 
             input_data: { topic, subject, essayType, wordCount, requirements, refinements },
             date_created: new Date().toISOString().split('T')[0],
         });
-        toast({ title: 'Essay plan saved!' });
+        toast({ title: ok ? (source === 'local' ? 'Saved locally (will sync later)' : 'Essay plan saved!') : 'Save failed' });
         setIsSaveDialogOpen(false);
         setSaveTitle('');
         setHasUnsavedChanges(false);
-        const results = await base44.entities.AISavedResult.filter({ created_by: user.email, tool_type: 'essay_planner' }, '-date_created').catch(() => []);
+        const results = await loadSavedResults('essay_planner', user.email);
         setSavedResults(results);
     };
 
@@ -560,7 +561,7 @@ Apply the refinement faithfully and return the COMPLETE updated essay plan from 
                                             <div className="flex gap-1 ml-2 flex-shrink-0">
                                                 <button onClick={() => setViewingResult(r)} className="p-1.5 text-muted-foreground hover:text-primary hover:bg-primary/10 rounded-lg transition-colors" title="View"><Eye className="w-3.5 h-3.5" /></button>
                                                 <button onClick={() => loadSaved(r)} className="px-2 py-1.5 text-muted-foreground hover:text-primary hover:bg-primary/10 rounded-lg transition-colors text-xs font-bold">Load</button>
-                                                <button onClick={() => base44.entities.AISavedResult.delete(r.id).then(() => setSavedResults(prev => prev.filter(x => x.id !== r.id)))} className="p-1.5 text-muted-foreground hover:text-destructive hover:bg-destructive/10 rounded-lg transition-colors" title="Delete"><Trash2 className="w-3.5 h-3.5" /></button>
+                                                <button onClick={() => deleteResult('essay_planner', r.id).then(() => setSavedResults(prev => prev.filter(x => x.id !== r.id)))} className="p-1.5 text-muted-foreground hover:text-destructive hover:bg-destructive/10 rounded-lg transition-colors" title="Delete"><Trash2 className="w-3.5 h-3.5" /></button>
                                             </div>
                                         </div>
                                     ))}

@@ -14,6 +14,7 @@ import AdaptiveReview from "./AdaptiveReview";
 import DifficultyRating from "@/components/shared/DifficultyRating";
 import { useToast } from "@/components/ui/use-toast";
 import { base44 } from "@/api/base44Client";
+import { saveResult } from "@/lib/saveResult";
 import { recordStudyAndGetStreak } from "@/components/shared/streakHelpers";
 import ReactMarkdown from 'react-markdown';
 import MathKeyboard from "../shared/MathKeyboard";
@@ -275,7 +276,7 @@ export default function QuizPlayer({ quiz, onComplete, onExit, mode = "standard"
         const fb = aiFeedback[idx];
         const content = `**Question**\n${q.question || ''}\n\n**Your answer**\n${yourAns}\n\n**${q.type === 'mcq' ? 'Correct answer' : 'Model answer'}**\n${modelOrCorrect || '—'}${fb?.correct_answer_explanation ? `\n\n**Why**\n${fb.correct_answer_explanation}` : ''}`;
         try {
-            await base44.entities.AISavedResult.create({
+            const { ok, source } = await saveResult('create', {
                 tool_type: 'saved_answer',
                 title: (q.question || 'Saved answer').slice(0, 80),
                 subject_name: shuffledQuiz.subject || '',
@@ -284,8 +285,10 @@ export default function QuizPlayer({ quiz, onComplete, onExit, mode = "standard"
                 input_data: { quiz_title: shuffledQuiz.title, type: q.type },
                 date_created: new Date().toISOString().split('T')[0],
             });
-            setSavedQuestions(s => new Set([...s, idx]));
-            toast({ title: 'Saved to your library', description: 'Find it under Saved answers on the Quizzes page.' });
+            if (ok) {
+                setSavedQuestions(s => new Set([...s, idx]));
+                toast({ title: 'Saved to your library', description: source === 'local' ? 'Saved locally (will sync later)' : 'Find it under Saved answers on the Quizzes page.' });
+            }
         } catch (e) {
             toast({ title: "Couldn't save", description: e.message, variant: "destructive" });
         }

@@ -8,6 +8,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Switch } from "@/components/ui/switch";
 import { Send, Upload, X, History, Eye, Trash2, FileText, Printer, Play, Save, Maximize2, Minimize2, Square, Plus, Sigma } from "lucide-react";
 import { base44 } from "@/api/base44Client";
+import { saveResult, deleteResult, loadSavedResults } from '@/lib/saveResult';
 import { useToast } from "@/components/ui/use-toast";
 import { recordStudyAndGetStreak } from "@/components/shared/streakHelpers";
 import MarkdownMath from "@/components/shared/MarkdownMath";
@@ -96,14 +97,14 @@ export default function MathTutor() {
     useEffect(() => {
         if (!loadedResultId || !chatMessages.length) { clearInterval(autoSaveRef.current); return; }
         autoSaveRef.current = setInterval(async () => {
-            await base44.entities.AISavedResult.update(loadedResultId, { content: chatMessages.map(m => `${m.role === 'student' ? 'Student' : 'Tutor'}: ${m.content}`).join('\n\n'), input_data: { subject: selectedSubject, topic: selectedTopic, isTechFree, messages: chatMessages } }).catch(() => {});
+            await saveResult('update', { content: chatMessages.map(m => `${m.role === 'student' ? 'Student' : 'Tutor'}: ${m.content}`).join('\n\n'), input_data: { subject: selectedSubject, topic: selectedTopic, isTechFree, messages: chatMessages } }, loadedResultId).catch(() => {});
         }, 30000);
         return () => clearInterval(autoSaveRef.current);
     }, [loadedResultId, chatMessages]);
 
     const loadHistory = async () => {
         const user = await base44.auth.me();
-        const results = await base44.entities.AISavedResult.filter({ created_by: user.email, tool_type: 'math_tutor' }, '-date_created').catch(() => []);
+        const results = await loadSavedResults('math_tutor', user.email);
         setSavedResults(results || []);
     };
 
@@ -204,8 +205,8 @@ export default function MathTutor() {
         if (!chatMessages.length) return;
         const conversationText = chatMessages.map(m => `${m.role === 'student' ? 'Student' : 'Tutor'}: ${m.content}`).join('\n\n');
         const data = { tool_type: "math_tutor", title: saveTitle || "Math Session", subject_name: SUBJECTS[selectedSubject].name, topic: selectedSubject, content: conversationText, input_data: { subject: selectedSubject, topic: selectedTopic, isTechFree, messages: chatMessages }, date_created: new Date().toISOString().split('T')[0] };
-        if (loadedResultId) await base44.entities.AISavedResult.update(loadedResultId, data);
-        else await base44.entities.AISavedResult.create(data);
+        if (loadedResultId) await saveResult('update', data, loadedResultId);
+        else await saveResult('create', data);
         toast({ title: 'Saved!' }); setIsSaveDialogOpen(false); setSaveTitle(''); setChatMessages([]); setLoadedResultId(null); await loadHistory();
     };
 
@@ -388,7 +389,7 @@ export default function MathTutor() {
                                         <Play className="w-3 h-3 mr-1" />Resume
                                     </Button>
                                     <button onClick={() => setViewingResult(r)} className="p-1.5 text-muted-foreground hover:text-primary hover:bg-primary/10 rounded-lg"><Eye className="w-3.5 h-3.5" /></button>
-                                    <button onClick={() => base44.entities.AISavedResult.delete(r.id).then(loadHistory)} className="p-1.5 text-muted-foreground hover:text-destructive hover:bg-destructive/10 rounded-lg"><Trash2 className="w-3.5 h-3.5" /></button>
+                                    <button onClick={() => deleteResult('math_tutor', r.id).then(loadHistory)} className="p-1.5 text-muted-foreground hover:text-destructive hover:bg-destructive/10 rounded-lg"><Trash2 className="w-3.5 h-3.5" /></button>
                                 </div>
                             </div>
                         ))}

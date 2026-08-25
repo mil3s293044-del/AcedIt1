@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react';
-import { base44 } from '@/api/base44Client';
+import { saveResult } from '@/lib/saveResult';
 
 /**
  * Custom hook for autosaving AI tool conversations
@@ -27,10 +27,10 @@ export function useAutoSave({ toolType, savedResultId, data, enabled = false, in
                     return; // No changes, skip save
                 }
 
-                await base44.entities.AISavedResult.update(savedResultId, {
+                await saveResult('update', {
                     content: typeof data === 'string' ? data : JSON.stringify(data),
                     input_data: data
-                });
+                }, savedResultId);
 
                 lastSaveRef.current = dataString;
                 console.log(`Autosaved ${toolType} at ${new Date().toLocaleTimeString()}`);

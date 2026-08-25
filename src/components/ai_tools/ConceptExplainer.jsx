@@ -6,6 +6,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/components/ui/use-toast';
 import { base44 } from '@/api/base44Client';
+import { saveResult, deleteResult, loadSavedResults } from '@/lib/saveResult';
 import { Loader2, Save, FolderOpen, Trash2, Eye, RefreshCw, Brain, Zap, ChevronDown, ExternalLink, CheckCircle2, Square } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import AIFeedbackModal from './AIFeedbackModal';
@@ -52,7 +53,7 @@ export default function ConceptExplainer() {
             const currentUser = await base44.auth.me();
             setUser(currentUser);
             const [results, subjects] = await Promise.all([
-                base44.entities.AISavedResult.filter({ created_by: currentUser.email, tool_type: 'concept_explainer' }, '-date_created').catch(() => []),
+                loadSavedResults('concept_explainer', currentUser.email),
                 base44.entities.UserSubject.filter({ created_by: currentUser.email, is_active: true }).catch(() => [])
             ]);
             const unique = subjects.reduce((acc, s) => {
@@ -133,24 +134,24 @@ Make it genuinely educational and accurate for VCE Year 12 level.`;
 
     const handleSave = async () => {
         if (!result || !user || !saveTitle.trim()) return;
-        await base44.entities.AISavedResult.create({
+        const { ok, source } = await saveResult('create', {
             tool_type: 'concept_explainer',
             title: saveTitle.trim(),
             subject_name: subject,
             topic: concept,
             content: result,
             input_data: { concept, subject, depth, style },
-            date_created: new Date().toISOString().split('T')[0]
+            date_created: new Date().toISOString().split('T')[0],
         });
-        toast({ title: 'Explanation saved!' });
+        toast({ title: ok ? (source === 'local' ? 'Saved locally (will sync later)' : 'Explanation saved!') : 'Save failed' });
         setIsSaveDialogOpen(false);
         setSaveTitle('');
-        const results = await base44.entities.AISavedResult.filter({ created_by: user.email, tool_type: 'concept_explainer' }, '-date_created').catch(() => []);
+        const results = await loadSavedResults('concept_explainer', user.email);
         setSavedResults(results);
     };
 
     const handleDelete = async (id) => {
-        await base44.entities.AISavedResult.delete(id);
+        await deleteResult('concept_explainer', id);
         setSavedResults(prev => prev.filter(r => r.id !== id));
     };
 

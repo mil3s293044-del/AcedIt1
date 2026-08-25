@@ -17,6 +17,7 @@ import {
     Check // Added Check icon
 } from "lucide-react";
 import { GroupSharedResource, Flashcard, Quiz, AISavedResult, GroupMessage } from "@/entities/all";
+import { saveResult } from '@/lib/saveResult';
 import { useToast } from "@/components/ui/use-toast";
 import { format, addDays } from "date-fns";
 
@@ -234,14 +235,13 @@ export default function GroupResources({ group, user }) {
                 });
                 toast({ title: "Quiz imported! 📝", description: "Added to your quizzes" });
             } else if (resource.resource_type === "ai_result") {
-                await AISavedResult.create({
+                await saveResult('create', {
                     tool_type: resource.resource_data.tool_type,
                     subject_name: resource.subject_name,
                     topic: resource.topic,
-                    title: resource.title, // Added title
+                    title: resource.title,
                     content: resource.resource_data.content,
                     input_data: resource.resource_data.input_data,
-                    created_by: user.email // Ensure user's email is set for new AI results
                 });
                 toast({ title: "AI result saved! ✨", description: "Added to your saved results" });
             }
