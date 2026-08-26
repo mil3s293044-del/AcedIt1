@@ -13,6 +13,7 @@
 // ════════════════════════════════════════════════════════════════════════════
 
 import { base44 } from '@/api/base44Client';
+import { supabase } from '@/api/supabaseClient';
 
 const LS_PREFIX = 'acedit_saved_';
 const RETRY_MS = 800;
@@ -43,6 +44,21 @@ function lsRemove(toolType, id) {
 
 function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
 
+// ── Auth helper ─────────────────────────────────────────────────────────
+// Ensure the payload always has `created_by` set so the NOT NULL constraint
+// and RLS policy (`created_by = auth.email()`) both pass. Without this, a
+// transient session glitch causes makeEntity.create() to omit created_by,
+// triggering a 400 from PostgREST before RLS is even evaluated.
+async function ensureCreatedBy(payload) {
+  if (payload.created_by) return payload;           // already set
+  try {
+    const { data: { session } } = await supabase.auth.getSession();
+    const email = session?.user?.email;
+    if (email) return { ...payload, created_by: email };
+  } catch {}
+  return payload;                                    // let the caller fail with a clear error
+}
+
 // ── Public API ───────────────────────────────────────────────────────────
 
 /**
@@ -55,15 +71,18 @@ function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
 export async function saveResult(mode, payload, id) {
   const toolType = payload.tool_type || 'unknown';
 
+  // Always stamp created_by from the local session so NOT NULL + RLS pass.
+  const safePayload = await ensureCreatedBy(payload);
+
   // Attempt 1 — direct entity call
   try {
     let res;
     if (mode === 'update' && id) {
-      res = await base44.entities.AISavedResult.update(id, payload);
+      res = await base44.entities.AISavedResult.update(id, safePayload);
     } else {
-      res = await base44.entities.AISavedResult.create(payload);
+      res = await base44.entities.AISavedResult.create(safePayload);
     }
-    const saved = res || { ...payload, id: id || payload.id };
+    const saved = res || { ...safePayload, id: id || safePayload.id };
     lsUpsert(toolType, saved);            // keep localStorage in sync
     return { ok: true, source: 'db', id: saved.id };
   } catch (err1) {
@@ -72,17 +91,17 @@ export async function saveResult(mode, payload, id) {
       await sleep(RETRY_MS);
       let res;
       if (mode === 'update' && id) {
-        res = await base44.entities.AISavedResult.update(id, payload);
+        res = await base44.entities.AISavedResult.update(id, safePayload);
       } else {
-        res = await base44.entities.AISavedResult.create(payload);
+        res = await base44.entities.AISavedResult.create(safePayload);
       }
-      const saved = res || { ...payload, id: id || payload.id };
+      const saved = res || { ...safePayload, id: id || safePayload.id };
       lsUpsert(toolType, saved);
       return { ok: true, source: 'db', id: saved.id };
     } catch (err2) {
       // Attempt 3 — localStorage fallback (never lose the student's work)
-      const localId = id || payload.id || crypto.randomUUID?.() || `${Date.now()}`;
-      const row = { ...payload, id: localId, _local: true, created_date: new Date().toISOString() };
+      const localId = id || safePayload.id || crypto.randomUUID?.() || `${Date.now()}`;
+      const row = { ...safePayload, id: localId, _local: true, created_date: new Date().toISOString() };
       lsUpsert(toolType, row);
       console.warn(`[saveResult] DB save failed, stored locally:`, err2?.message || err2);
       return { ok: true, source: 'local', id: localId, error: err2?.message };
@@ -102,21 +121,35 @@ export async function deleteResult(toolType, id) {
 
 /**
  * Load saved results for a tool. Merges DB + localStorage, deduped by id.
+ * When toolType is null, loads ALL tool results (used by UnifiedChat sidebar).
  */
 export async function loadSavedResults(toolType, userEmail) {
+  const filter = { created_by: userEmail };
+  if (toolType) filter.tool_type = toolType;  // null → skip filter, load all tools
+
   let dbRows = [];
   try {
-    dbRows = await base44.entities.AISavedResult.filter(
-      { created_by: userEmail, tool_type: toolType },
-      '-date_created'
-    );
+    dbRows = await base44.entities.AISavedResult.filter(filter, '-date_created');
   } catch {}
 
-  const localRows = lsRead(toolType);
+  // Read from localStorage — all tools or a specific one.
+  let localRows;
+  if (toolType) {
+    localRows = lsRead(toolType);
+  } else {
+    // Scan all acedit_saved_* keys for the UnifiedChat sidebar.
+    localRows = [];
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      if (key?.startsWith(LS_PREFIX)) {
+        try { localRows.push(...JSON.parse(localStorage.getItem(key) || '[]')); } catch {}
+      }
+    }
+  }
 
   // Merge: DB rows first, then local-only rows (not in DB)
   const seen = new Set((dbRows || []).map(r => r.id));
-  const localOnly = localRows.filter(r => !seen.has(r.id));
+  const localOnly = localRows.filter(r => r.id && !seen.has(r.id));
 
   return [...(dbRows || []), ...localOnly];
 }

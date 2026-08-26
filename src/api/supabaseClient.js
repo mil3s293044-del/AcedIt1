@@ -95,7 +95,7 @@ function applyWhere(query, where) {
     // PostgREST to return 400 ("expected value after operator") on URLs like
     // `?key=eq.` or `?key=eq.undefined`. Base44 silently ignored them; do the
     // same so half-initialized component state doesn't crash queries.
-    if (value === undefined || value === '' || value === 'undefined') continue;
+    if (value === undefined || value === null || value === '' || value === 'undefined') continue;
     if (Array.isArray(value)) {
       if (value.length === 0) continue;
       query = query.in(key, value);
@@ -108,7 +108,7 @@ function applyWhere(query, where) {
       // "analytics not synced" bug. Map each to its PostgREST equivalent.
       const OP = { $gte: 'gte', $lte: 'lte', $gt: 'gt', $lt: 'lt', $ne: 'neq', $eq: 'eq' };
       for (const [op, opVal] of Object.entries(value)) {
-        if (opVal === undefined || opVal === '' || opVal === 'undefined') continue;
+        if (opVal === undefined || opVal === null || opVal === '' || opVal === 'undefined') continue;
         const pgOp = OP[op];
         if (pgOp) query = query[pgOp](key, opVal);
       }
@@ -120,8 +120,16 @@ function applyWhere(query, where) {
 }
 
 async function currentUserEmail() {
-  const { data: { user } } = await supabase.auth.getUser();
-  return user?.email ?? null;
+  // Prefer getSession() (fast, cached) over getUser() (network round-trip that
+  // can fail during token-refresh races or when the tab has been backgrounded).
+  const { data: { session } } = await supabase.auth.getSession();
+  if (session?.user?.email) return session.user.email;
+  // Fallback: validate against the Auth server (handles edge cases where the
+  // cached session is stale).
+  try {
+    const { data: { user } } = await supabase.auth.getUser();
+    return user?.email ?? null;
+  } catch { return null; }
 }
 
 function makeEntity(entityName) {
