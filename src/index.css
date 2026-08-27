@@ -76,7 +76,6 @@
     --sidebar-ring: 89 97% 40%;
   }
 
-  /* Dark mode tokens kept for future; not active yet. */
   .dark {
     --background: 218 50% 8%;
     --foreground: 0 0% 98%;
@@ -105,6 +104,34 @@
     --border: 218 25% 20%;
     --input: 218 25% 20%;
     --ring: 89 97% 45%;
+  }
+
+  /* Pins every token back to its light value regardless of an ancestor
+     `.dark` — for surfaces like the public landing page that must read the
+     same to every visitor rather than following the viewer's app theme. */
+  .theme-locked-light {
+    --background: 38 60% 96%;
+    --foreground: 218 50% 11%;
+    --surface: 0 0% 100%;
+    --card: 0 0% 100%;
+    --card-foreground: 218 50% 11%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 218 50% 11%;
+    --primary: 89 97% 40%;
+    --primary-foreground: 0 0% 100%;
+    --primary-dark: 89 97% 32%;
+    --secondary: 220 14% 96%;
+    --secondary-foreground: 218 50% 11%;
+    --muted: 220 14% 96%;
+    --muted-foreground: 220 9% 46%;
+    --accent: 35 100% 50%;
+    --accent-foreground: 0 0% 100%;
+    --xp: 35 100% 50%;
+    --streak: 0 100% 65%;
+    --success: 89 97% 40%;
+    --border: 220 13% 91%;
+    --input: 220 13% 91%;
+    --ring: 89 97% 40%;
   }
 }
 

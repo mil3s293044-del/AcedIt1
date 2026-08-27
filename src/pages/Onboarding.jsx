@@ -55,7 +55,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { VCE_SUBJECTS } from "@/data/vceSubjects";
 import { supabase } from "@/api/supabaseClient";
-import { useAuth } from "@/lib/AuthContext";
+import { useAuth, applyOnboardingUpdateForCurrentUser } from "@/lib/AuthContext";
 import HandOfAnswers from "@/components/onboarding/wizard/HandOfAnswers";
 import YearCards from "@/components/onboarding/wizard/YearCards";
 import AtarCut, { formatAtar } from "@/components/onboarding/wizard/AtarCut";
@@ -150,9 +150,17 @@ function saveAnswers(answers) {
 }
 
 // ─── Page ────────────────────────────────────────────────────────────────────
-export default function Onboarding() {
+// `existingUser`: rendered for someone who already has an account, retaking
+// the wizard on purpose from Settings → Study setup. The pre-signup path
+// (default) is unchanged below; this prop only switches two things — where
+// the starting answers come from, and what step 6 does with them.
+export default function Onboarding({ existingUser = false }) {
     const [step, setStep] = useState(1);
-    const [answers, setAnswers] = useState(() => loadAnswers());
+    const [answers, setAnswers] = useState(() => (existingUser ? { ...DEFAULT_ANSWERS } : loadAnswers()));
+    // Existing users start from their live profile/subjects, not localStorage
+    // (that key belongs to the pre-signup flow) — so the wizard stays blank
+    // until the fetch below lands.
+    const [isPrefilling, setIsPrefilling] = useState(existingUser);
     // Both are callback-ref state rather than refs: a ref does not re-render
     // when it is populated, so the portal target and the measured height would
     // both still be their initial values on the paint that matters.
@@ -161,18 +169,80 @@ export default function Onboarding() {
     const barH = useBarHeight(barEl);
     const navigate = useNavigate();
 
-    // Persist on every change.
-    useEffect(() => { saveAnswers(answers); }, [answers]);
-
-    // Already signed in? Skip the wizard entirely.
+    // Persist on every change — pre-signup flow only. An existing user's
+    // in-progress redo has nowhere to resume from anyway (it's read fresh
+    // from the DB every time), and writing it here would risk colliding with
+    // the pre-signup apply, which keys off the very same storage slot.
     useEffect(() => {
+        if (existingUser) return;
+        saveAnswers(answers);
+    }, [answers, existingUser]);
+
+    // Already signed in? Skip the wizard entirely — but only on the
+    // pre-signup path. An existing user reaching /onboarding did so on
+    // purpose (the Settings link), so a live session here is expected, not a
+    // stray one to bounce away from.
+    useEffect(() => {
+        if (existingUser) return;
         (async () => {
             try {
                 const { data } = await supabase.auth.getSession();
                 if (data?.session?.user) navigate("/", { replace: true });
             } catch { /* ignore */ }
         })();
-    }, [navigate]);
+    }, [navigate, existingUser]);
+
+    // Pull the wizard's starting point from what's actually saved, so
+    // retaking it reads as "edit your hand" rather than "start over" — a
+    // subject you don't touch stays; one you deselect on step 2 is removed
+    // on save, exactly like unchecking it in Subjects would.
+    useEffect(() => {
+        if (!existingUser) return;
+        let cancelled = false;
+        (async () => {
+            try {
+                const { data: { user } } = await supabase.auth.getUser();
+                const email = user?.email;
+                if (!email) return;
+                const [{ data: profile }, { data: subjectRows }] = await Promise.all([
+                    supabase.from('user_profiles')
+                        .select('goal_atar, goal_course_name, goal_university, extra')
+                        .eq('created_by', email)
+                        .maybeSingle(),
+                    supabase.from('user_subjects')
+                        .select('subject_name, subject_code, vce_subject_id')
+                        .eq('created_by', email),
+                ]);
+                if (cancelled) return;
+                setAnswers({
+                    ...DEFAULT_ANSWERS,
+                    yearLevel: profile?.extra?.year_level || null,
+                    goalAtar: profile?.goal_atar || null,
+                    goalCourseName: profile?.goal_course_name || "",
+                    goalUniversity: profile?.goal_university || "",
+                    subjects: (subjectRows || []).map((r) => ({
+                        id: r.vce_subject_id || `existing_${r.subject_code}`,
+                        name: r.subject_name,
+                        code: r.subject_code,
+                        is_custom: !VCE_SUBJECTS.some((c) => c.code === r.subject_code),
+                    })),
+                });
+            } catch (e) {
+                console.error('[onboarding:redo] prefill failed:', e);
+            } finally {
+                if (!cancelled) setIsPrefilling(false);
+            }
+        })();
+        return () => { cancelled = true; };
+    }, [existingUser]);
+
+    if (isPrefilling) {
+        return (
+            <div className="min-h-screen bg-background flex items-center justify-center">
+                <div className="w-8 h-8 border-4 border-border border-t-primary rounded-full animate-spin" />
+            </div>
+        );
+    }
 
     const update = (patch) => setAnswers((a) => ({ ...a, ...patch }));
     const goNext = () => setStep((s) => Math.min(TOTAL_STEPS, s + 1));
@@ -250,7 +320,9 @@ export default function Onboarding() {
                         {step === 3 && <Step3Brain onNext={goNext} />}
                         {step === 4 && <Step4Target answers={answers} update={update} onNext={goNext} />}
                         {step === 5 && <Step5Reveal answers={answers} onNext={goNext} />}
-                        {step === 6 && <Step6Signin answers={answers} update={update} />}
+                        {step === 6 && (existingUser
+                            ? <Step6SaveExisting answers={answers} onSaved={() => navigate("/", { replace: true })} />
+                            : <Step6Signin answers={answers} update={update} />)}
                     </motion.div>
                 </AnimatePresence>
             </main>
@@ -740,6 +812,52 @@ function Step5Reveal({ answers, onNext }) {
         </StepShell>
     );
 }
+
+// ═══ STEP 6 (existing user) — Save, don't sign up ═══════════════════════════
+// Reached only via the existingUser prop. There is no plan or auth decision
+// left to make — this just writes the hand back to the account that's
+// already signed in, via applyOnboardingUpdateForCurrentUser, and returns to
+// the app.
+function Step6SaveExisting({ answers, onSaved }) {
+    const [isSaving, setIsSaving] = useState(false);
+    const [error, setError] = useState(null);
+
+    const handleSave = async () => {
+        setIsSaving(true);
+        setError(null);
+        try {
+            const { data: { user } } = await supabase.auth.getUser();
+            const email = user?.email;
+            if (!email) throw new Error("You're not signed in.");
+            const result = await applyOnboardingUpdateForCurrentUser(email, answers);
+            if (!result.ok) throw new Error(result.error || "Couldn't save. Try again.");
+            onSaved();
+        } catch (e) {
+            setError(e.message || "Something went wrong. Try again.");
+            setIsSaving(false);
+        }
+    };
+
+    return (
+        <StepShell
+            eyebrow="Update your setup"
+            title="Save this hand to your account?"
+            subtitle="This updates your subjects and goals — your plan and login stay exactly as they are."
+            footer={
+                <div className="space-y-2">
+                    {error && <p className="text-sm text-destructive font-medium">{error}</p>}
+                    <PrimaryCTA onClick={handleSave} disabled={isSaving}>
+                        {isSaving ? "Saving…" : "Save changes"}
+                        {!isSaving && <ArrowRight className="w-4 h-4 ml-1" />}
+                    </PrimaryCTA>
+                </div>
+            }
+        >
+            <TheReveal answers={answers} />
+        </StepShell>
+    );
+}
+
 // ═══ STEP 6 — Sign in ═══════════════════════════════════════════════════════
 // Two separate decisions, made in this order:
 //   1. Plan picker — Premium (default-selected, highlighted) vs Free

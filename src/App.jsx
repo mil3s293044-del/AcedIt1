@@ -76,13 +76,14 @@ const AuthenticatedApp = () => {
     return <ResetPassword />;
   }
 
-  // Once authenticated, the public auth/onboarding pages must not render —
-  // after OAuth/email sign-in the browser can land back on /login or
-  // /onboarding, which would otherwise 404 (no authed /login route) or
-  // re-show the wizard to someone who's already signed up. Send them into
-  // the app instead. (Onboarding answers are already applied by the
-  // SIGNED_IN handler in AuthContext before this redirect.)
-  if (isAuthenticated && ['/login', '/forgot-password', '/onboarding'].includes(location.pathname)) {
+  // Once authenticated, the sign-up/sign-in pages must not render — after
+  // OAuth/email sign-in the browser can land back on /login, which would
+  // otherwise 404 (no authed /login route). Send them into the app instead.
+  // /onboarding is deliberately NOT in this list: an authenticated visitor
+  // there is retaking the wizard on purpose (see the Settings "Study setup"
+  // link), and the route below renders it in existing-user mode rather than
+  // the pre-signup one.
+  if (isAuthenticated && ['/login', '/forgot-password'].includes(location.pathname)) {
     return <Navigate to="/" replace />;
   }
 
@@ -116,7 +117,7 @@ const AuthenticatedApp = () => {
           }
         />
       ))}
-      <Route path="/onboarding" element={<Onboarding />} />
+      <Route path="/onboarding" element={<Onboarding existingUser />} />
       {/* Roadmap retired — old links land on the Planner */}
       <Route path="/StudyRoadmap" element={<Navigate to="/Goals" replace />} />
       <Route path="/Paywall" element={<Paywall />} />

@@ -232,8 +232,23 @@ function makeEntity(entityName) {
 // ─── Auth surface — matches base44.auth.* shape used in the codebase ────────
 const authApi = {
   async me() {
-    const { data: { user }, error } = await supabase.auth.getUser();
-    if (error) throw error;
+    // Prefer getSession() (reads the session already restored from storage,
+    // no network round trip) over getUser() alone — called this early, right
+    // after a fresh page load, the client can still be mid-restore and
+    // getUser() throws AuthSessionMissingError. Same race already fixed in
+    // currentUserEmail() above; this one matters more, because nearly every
+    // page's mount effect calls auth.me() first and silently swallows a
+    // throw here (`.catch(() => {})`) — so this one function failing
+    // intermittently on load looked like a dozen unrelated features being
+    // broken (AI tool chat history not loading among them), when it was
+    // really always this.
+    const { data: { session } } = await supabase.auth.getSession();
+    let user = session?.user ?? null;
+    if (!user) {
+      const { data, error } = await supabase.auth.getUser();
+      if (error) throw error;
+      user = data.user;
+    }
     if (!user) throw new Error('Not authenticated');
     return {
       id: user.id,

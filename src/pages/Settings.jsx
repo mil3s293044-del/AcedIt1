@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from "react";
+import { useNavigate } from "react-router-dom";
 import { base44 } from "@/api/base44Client";
 import { deleteResult } from "@/lib/saveResult";
 import { useAuth } from "@/lib/AuthContext";
@@ -25,7 +26,8 @@ import {
     Sparkles,
     LogOut,
     AlertTriangle,
-    ExternalLink
+    ExternalLink,
+    GraduationCap
 } from "lucide-react";
 import DataExportModal from "@/components/shared/DataExportModal";
 import HelpButton from "@/components/shared/HelpButton";
@@ -50,6 +52,7 @@ export default function Settings() {
     const [isLoadingPortal, setIsLoadingPortal] = useState(false);
     const [showExport, setShowExport] = useState(false);
     const { toast } = useToast();
+    const navigate = useNavigate();
 
     const loadUserData = useCallback(async () => {
         try {
@@ -465,6 +468,32 @@ export default function Settings() {
                             </div>
                             <p className="text-xs text-muted-foreground mt-1">3–20 characters. Letters, numbers, and underscores only.</p>
                         </div>
+                    </div>
+                </motion.section>
+
+                {/* ── STUDY SETUP ──────────────────────────────────────── */}
+                <motion.section
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: 0.08 }}
+                    className="card-soft p-6"
+                >
+                    <div className="flex items-center gap-3 mb-5">
+                        <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center flex-shrink-0">
+                            <GraduationCap className="w-5 h-5 text-primary" />
+                        </div>
+                        <div>
+                            <h2 className="font-display font-extrabold text-foreground text-base">Study setup</h2>
+                            <p className="text-xs text-muted-foreground mt-0.5">Year level, subjects and goals.</p>
+                        </div>
+                    </div>
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                        <p className="text-sm text-muted-foreground max-w-md">
+                            Retake the setup wizard to update your year level, subjects and ATAR goal in one pass — the same one you saw when you signed up.
+                        </p>
+                        <Button onClick={() => navigate("/onboarding")} variant="outline" className="flex-shrink-0">
+                            Retake study setup
+                        </Button>
                     </div>
                 </motion.section>
 

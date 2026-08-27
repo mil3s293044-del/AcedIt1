@@ -99,7 +99,15 @@ export default function UnifiedChat() {
             // conversation has been opened.
             const intent = todaysIntent(profiles?.[0]);
             const wanted = intent && toolById(intent.plan.tool);
-            if (wanted?.id === intent.plan.tool) {
+            // `intent` is null on any day the student hasn't set one (the
+            // common case) — the old `intent.plan.tool` on the right of this
+            // comparison dereferenced it unconditionally, throwing inside
+            // this .then() and aborting the whole effect silently (the outer
+            // catch swallows it with no log). Everything below this line —
+            // subjects, and critically setConversations() — never ran, which
+            // is why the sidebar looked permanently empty regardless of what
+            // had actually been saved.
+            if (intent && wanted?.id === intent.plan.tool) {
                 setActiveTool(wanted.id);
                 setToolOptions(defaultOptions(wanted));
             }
@@ -137,6 +145,7 @@ export default function UnifiedChat() {
     };
 
     const newChat = () => {
+        flushPersistRef.current();
         abortRef.current?.abort();
         setActiveConvId(null); convIdRef.current = null;
         setMessages([]); setInput(""); setAttachment(null); setConvFiles([]); setStreaming(false);
@@ -145,6 +154,7 @@ export default function UnifiedChat() {
     };
 
     const openConversation = (conv) => {
+        flushPersistRef.current();
         abortRef.current?.abort();
         setActiveConvId(conv.id); convIdRef.current = conv.id;
         setActiveTool(conv.tool_type && CHAT_TOOLS.some(t => t.id === conv.tool_type) ? conv.tool_type : CHAT_TOOLS[0].id);
@@ -192,6 +202,36 @@ export default function UnifiedChat() {
             }
         } catch (e) { console.error("Chat persist failed:", e); }
     }, [user]);
+
+    // ── Save-on-exit safety net ──────────────────────────────────────────────
+    // persist() above already autosaves after every completed AI reply, which
+    // covers the normal case. This catches what a per-turn autosave can't:
+    // starting a New chat, opening a different saved conversation, or
+    // navigating away from the page entirely (unmount) while the current
+    // thread has messages that finished but haven't been flushed yet. It
+    // deliberately skips a conversation that's still streaming or ends on a
+    // dangling partial reply — there's nothing finished to save, and the
+    // in-flight turn will persist itself once it completes.
+    const flushPersist = useCallback(() => {
+        if (streaming) return;
+        if (messages.length === 0) return;
+        if (messages.some(m => m.streaming)) return;
+        persist(messages, tool, subjectName);
+    }, [streaming, messages, tool, subjectName, persist]);
+
+    // Read via a ref everywhere flushPersist is called from a closure that
+    // was created on an earlier render (newChat/openConversation above, and
+    // the unmount cleanup below) — otherwise those calls would flush whatever
+    // messages/tool/subject existed when THAT closure was made, not what's
+    // actually on screen right now.
+    const flushPersistRef = useRef(flushPersist);
+    useEffect(() => { flushPersistRef.current = flushPersist; }, [flushPersist]);
+
+    // "Exits their chat" without clicking New chat or another conversation —
+    // i.e. navigates elsewhere in the app. React runs this cleanup when the
+    // route change unmounts UnifiedChat, which is the one moment nothing else
+    // in this component gets a chance to save first.
+    useEffect(() => () => { flushPersistRef.current(); }, []);
 
     const attachFile = async (file) => {
         if (!file) return;

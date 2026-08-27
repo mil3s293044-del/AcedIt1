@@ -105,7 +105,7 @@ export default function Landing() {
   };
 
   return (
-    <div className="min-h-screen bg-[#FBF7F0] text-[#0D1626] font-sans antialiased overflow-x-hidden scroll-smooth">
+    <div className="theme-locked-light min-h-screen bg-[#FBF7F0] text-[#0D1626] font-sans antialiased overflow-x-hidden scroll-smooth">
       {/* Scroll progress bar */}
       <motion.div
         aria-hidden

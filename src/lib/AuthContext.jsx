@@ -209,6 +209,106 @@ async function applyOnboardingFromStorage(userEmail) {
   return answers.intent || null;
 }
 
+// ─── Onboarding wizard, retaken by an existing user ──────────────────────
+// Same wizard, reached deliberately from Settings by someone who already has
+// an account (see the "Study setup" section) rather than by a brand-new
+// signup. Unlike applyOnboardingFromStorage above, this:
+//   - updates a profile that already exists, instead of waiting for the
+//     signup trigger to create one
+//   - merges into `extra` rather than overwriting it — an existing user can
+//     already have daily_intent / intent_log / attribution sitting in there
+//   - reconciles user_subjects against what's currently saved (add what's
+//     new, remove what was dropped) instead of only ever inserting, which
+//     would duplicate every subject the wizard was pre-filled with
+//   - never fires the signup conversion pixel
+export async function applyOnboardingUpdateForCurrentUser(userEmail, answers) {
+  const { data: profile, error: profileFetchErr } = await supabase
+    .from('user_profiles')
+    .select('id, extra, onboarding_tasks')
+    .eq('created_by', userEmail)
+    .maybeSingle();
+  if (profileFetchErr || !profile) {
+    return { ok: false, error: profileFetchErr?.message || 'No profile found for this account.' };
+  }
+
+  const updates = {};
+  if (answers.goalAtar)       updates.goal_atar        = answers.goalAtar;
+  if (answers.goalCourseName) updates.goal_course_name = answers.goalCourseName;
+  if (answers.goalUniversity) updates.goal_university  = answers.goalUniversity;
+
+  updates.onboarding_tasks = {
+    ...(profile.onboarding_tasks || {}),
+    subjects_selected: (answers.subjects?.length ?? 0) > 0 || !!profile.onboarding_tasks?.subjects_selected,
+    goals_set: !!(answers.goalAtar || answers.goalCourseName) || !!profile.onboarding_tasks?.goals_set,
+  };
+
+  updates.extra = {
+    ...(profile.extra || {}),
+    ...(answers.yearLevel ? { year_level: answers.yearLevel } : {}),
+  };
+
+  const { error: updateErr } = await supabase.from('user_profiles').update(updates).eq('id', profile.id);
+  if (updateErr) return { ok: false, error: updateErr.message };
+
+  // Reconcile user_subjects against the wizard's final list, matched by
+  // subject_code — the same key Step2Subjects itself de-dupes on.
+  const { data: existingRows } = await supabase
+    .from('user_subjects')
+    .select('id, subject_code')
+    .eq('created_by', userEmail);
+  const existing = existingRows || [];
+  const wanted = Array.isArray(answers.subjects) ? answers.subjects : [];
+
+  const wantedCodes = new Set(wanted.map((s) => s.code));
+  const toRemove = existing.filter((row) => !wantedCodes.has(row.subject_code));
+  const existingCodes = new Set(existing.map((row) => row.subject_code));
+  const toAdd = wanted.filter((s) => !existingCodes.has(s.code));
+
+  if (toRemove.length > 0) {
+    try {
+      await supabase.from('user_subjects').delete().in('id', toRemove.map((r) => r.id));
+    } catch (e) {
+      console.error('[onboarding:redo] user_subjects delete failed:', e);
+    }
+  }
+
+  if (toAdd.length > 0) {
+    const rows = [];
+    for (const s of toAdd) {
+      let vceSubjectId = s.is_custom ? null : (s.id || null);
+      if (s.is_custom) {
+        try {
+          const { data: created, error: createErr } = await supabase
+            .from('vce_subjects')
+            .insert({ name: s.name, code: s.code, overview: s.name, is_private: true, created_by: userEmail })
+            .select('id')
+            .single();
+          if (createErr) console.error('[onboarding:redo] custom vce_subjects insert failed:', createErr);
+          else vceSubjectId = created?.id || null;
+        } catch (e) {
+          console.error('[onboarding:redo] custom subject create error:', e);
+        }
+      }
+      rows.push({
+        created_by: userEmail,
+        subject_name: s.name,
+        subject_code: s.code,
+        vce_subject_id: vceSubjectId,
+        year_level: answers.yearLevel || null,
+        is_active: true,
+        color: colorFor(s.name),
+      });
+    }
+    try {
+      await supabase.from('user_subjects').insert(rows);
+    } catch (e) {
+      console.error('[onboarding:redo] user_subjects insert failed:', e);
+    }
+  }
+
+  return { ok: true };
+}
+
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
