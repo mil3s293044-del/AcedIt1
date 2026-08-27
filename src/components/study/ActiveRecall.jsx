@@ -369,8 +369,16 @@ export default function ActiveRecall({ onSessionComplete, userSubjects: initialU
             const directFiles = uploaded.filter(f => f.ext !== 'docx' && f.ext !== 'pptx');
             let documentContext = '';
             for (const f of docxPptx) {
-                const textResult = await base44.functions.invoke('extractDocumentText', { file_url: f.url });
-                documentContext += `\n\n[${f.name}]:\n${textResult.data?.text || ''}`;
+                try {
+                    const textResult = await base44.functions.invoke('extractDocumentText', { file_url: f.url });
+                    if (textResult.data?.error) {
+                        toast({ title: "File read issue", description: "Could not read " + f.name + ": " + textResult.data.error, variant: "destructive" });
+                    } else {
+                        documentContext += `\n\n[${f.name}]:\n${textResult.data?.text || ''}`;
+                    }
+                } catch (e) {
+                    toast({ title: "File read failed", description: "Could not read " + f.name + ": " + e.message, variant: "destructive" });
+                }
             }
             const response = await base44.integrations.Core.InvokeLLM({
                 feature: "active_recall",
@@ -534,8 +542,16 @@ Questions should:
             const directFiles = uploaded.filter(f => f.ext !== 'docx' && f.ext !== 'pptx');
             let documentContext = '';
             for (const f of docxPptx) {
-                const textResult = await base44.functions.invoke('extractDocumentText', { file_url: f.url });
-                documentContext += `\n\n[${f.name}]:\n${textResult.data?.text || ''}`;
+                try {
+                    const textResult = await base44.functions.invoke('extractDocumentText', { file_url: f.url });
+                    if (textResult.data?.error) {
+                        toast({ title: "File read issue", description: "Could not read " + f.name + ": " + textResult.data.error, variant: "destructive" });
+                    } else {
+                        documentContext += `\n\n[${f.name}]:\n${textResult.data?.text || ''}`;
+                    }
+                } catch (e) {
+                    toast({ title: "File read failed", description: "Could not read " + f.name + ": " + e.message, variant: "destructive" });
+                }
             }
             const allAnswers = userAnswers.map((ans, idx) => `Question ${idx + 1}: ${questions[idx]}\nYour Answer: ${ans}`).join("\n\n");
             const response = await base44.integrations.Core.InvokeLLM({

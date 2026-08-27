@@ -153,8 +153,16 @@ export default function NoteSummarizer() {
 
         let extractedTexts = '';
         for (const f of docxPptxFiles) {
-            const textResult = await base44.functions.invoke('extractDocumentText', { file_url: f.url });
-            extractedTexts += `\n\n[${f.name}]:\n${textResult.data?.text || ''}`;
+            try {
+                const textResult = await base44.functions.invoke('extractDocumentText', { file_url: f.url });
+                if (textResult.data?.error) {
+                    toast({ title: "File read issue", description: "Could not read " + f.name + ": " + textResult.data.error, variant: "destructive" });
+                } else {
+                    extractedTexts += `\n\n[${f.name}]:\n${textResult.data?.text || ''}`;
+                }
+            } catch (e) {
+                toast({ title: "File read failed", description: "Could not read " + f.name + ": " + e.message, variant: "destructive" });
+            }
         }
 
         // Cache for refinements

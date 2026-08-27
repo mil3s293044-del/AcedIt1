@@ -335,8 +335,13 @@ export default function Quizzes() {
         setIsGenerating(true);
 
         try {
-            // Upload all files
-            const uploadedUrls = await Promise.all(uploadedFiles.map(f => base44.integrations.Core.UploadFile({ file: f }).then(r => ({ file_url: r.file_url, name: f.name, ext: f.name.split('.').pop()?.toLowerCase() }))));
+            // Upload all files (per-file error isolation — one failure doesn't kill all)
+            const uploadResults = await Promise.allSettled(uploadedFiles.map(f => base44.integrations.Core.UploadFile({ file: f }).then(r => ({ file_url: r.file_url, name: f.name, ext: f.name.split('.').pop()?.toLowerCase() }))));
+            const uploadedUrls = uploadResults.filter(r => r.status === 'fulfilled').map(r => r.value);
+            if (uploadedUrls.length === 0) {
+                const errMsg = uploadResults.map(r => r.reason?.message || 'Upload failed').join('; ');
+                throw new Error(`All file uploads failed: ${errMsg}`);
+            }
             const file_url = uploadedUrls[0].file_url; // primary file for source_file_url
 
             // Determine question type mix — strict counts
@@ -372,8 +377,16 @@ export default function Quizzes() {
             const docFiles = uploadedUrls.filter(f => f.ext === 'docx' || f.ext === 'pptx');
             let documentContentPrompt = '';
             for (const df of docFiles) {
-                const textResult = await base44.functions.invoke('extractDocumentText', { file_url: df.file_url });
-                if (textResult.data?.text) documentContentPrompt += `\n\n[${df.name}]:\n${textResult.data.text}`;
+                try {
+                    const textResult = await base44.functions.invoke('extractDocumentText', { file_url: df.file_url });
+                    if (textResult.data?.error) {
+                        toast({ title: "File read issue", description: `Could not read ${df.name}: ${textResult.data.error}. Quiz will use other sources.`, variant: "destructive" });
+                    } else if (textResult.data?.text) {
+                        documentContentPrompt += `\n\n[${df.name}]:\n${textResult.data.text}`;
+                    }
+                } catch (e) {
+                    toast({ title: "File read failed", description: `Could not read ${df.name}: ${e.message}. Quiz will use other sources.`, variant: "destructive" });
+                }
             }
 
             const marksValue = parseInt(aiSettings.marks_per_short) || 5;

@@ -105,8 +105,16 @@ export default function CheatSheetMaker() {
         const direct = uploaded.filter((f) => f.ext !== "docx" && f.ext !== "pptx");
         let extracted = "";
         for (const f of docxPptx) {
-            const r = await base44.functions.invoke("extractDocumentText", { file_url: f.url });
-            extracted += `\n\n[${f.name}]:\n${r.data?.text || ""}`;
+            try {
+                const r = await base44.functions.invoke("extractDocumentText", { file_url: f.url });
+                if (r.data?.error) {
+                    toast({ title: "File read issue", description: "Could not read " + f.name + ": " + r.data.error, variant: "destructive" });
+                } else {
+                    extracted += `\n\n[${f.name}]:\n${r.data?.text || ""}`;
+                }
+            } catch (e) {
+                toast({ title: "File read failed", description: "Could not read " + f.name + ": " + e.message, variant: "destructive" });
+            }
         }
         return { directUrls: direct.map((f) => f.url), extracted };
     };

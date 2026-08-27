@@ -129,7 +129,7 @@ export async function loadSavedResults(toolType, userEmail) {
 
   let dbRows = [];
   try {
-    dbRows = await base44.entities.AISavedResult.filter(filter, '-date_created');
+    dbRows = await base44.entities.AISavedResult.filter(filter, '-created_date');
   } catch {}
 
   // Read from localStorage — all tools or a specific one.

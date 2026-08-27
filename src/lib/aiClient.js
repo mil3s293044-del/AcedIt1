@@ -58,25 +58,35 @@ async function getAuthHeader() {
 // whether response_json_schema was passed).
 export async function invokeLLM(params) {
   const authHeaders = await getAuthHeader();
-  const r = await fetch(apiUrl('/local-ai/invokeAI'), {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...authHeaders },
-    body: JSON.stringify(params || {}),
-  });
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 120_000); // 2 min timeout
+  try {
+    const r = await fetch(apiUrl('/local-ai/invokeAI'), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...authHeaders },
+      body: JSON.stringify(params || {}),
+      signal: controller.signal,
+    });
 
-  if (!r.ok) {
-    let body = {};
-    try { body = await r.json(); } catch {}
-    if (r.status === 402 || r.status === 403 || r.status === 429) {
-      throw new TierBlockedError(body.message || 'Upgrade to Premium to use this feature.', {
-        upgradeRequired: !!body.upgradeRequired || r.status === 402,
-        status: r.status,
-      });
+    if (!r.ok) {
+      let body = {};
+      try { body = await r.json(); } catch {}
+      if (r.status === 402 || r.status === 403 || r.status === 429) {
+        throw new TierBlockedError(body.message || 'Upgrade to Premium to use this feature.', {
+          upgradeRequired: !!body.upgradeRequired || r.status === 402,
+          status: r.status,
+        });
+      }
+      throw new Error(body.message || `AI request failed (${r.status})`);
     }
-    throw new Error(body.message || `AI request failed (${r.status})`);
-  }
 
-  return await r.json();
+    return await r.json();
+  } catch (err) {
+    if (err.name === 'AbortError') throw new Error('AI request timed out — the document may be too large. Try a smaller file or fewer questions.');
+    throw err;
+  } finally {
+    clearTimeout(timeout);
+  }
 }
 
 // Streaming — onText fires for each chunk. Returns full text at the end.

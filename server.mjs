@@ -886,7 +886,16 @@ const THREAT_PATTERNS = [
 
 function detectThreat(text) {
   if (!text || typeof text !== "string") return false;
-  return THREAT_PATTERNS.some((p) => p.test(text));
+  // Strip embedded document content before scanning — study materials often
+  // contain phrases like "act as", "pretend you are", "ignore", "system" that
+  // are harmless in context but match threat patterns. Document blocks are
+  // always wrapped in known prefixes injected by convertFileForClaude and
+  // extractDocumentText callers.
+  const stripped = text
+    .replace(/Contents of file "[^"]*":\n\n[\s\S]*?(?=\n\n(?:\[[^\]]+\]:|$)|$)/g, '')
+    .replace(/\[[^\]]+\]:\n[\s\S]*?(?=\n\n|$)/g, '')
+    .slice(0, 2000);  // only scan the first 2k chars (prompt preamble), not megabytes of doc text
+  return THREAT_PATTERNS.some((p) => p.test(stripped));
 }
 
 // Mirror of VCE_EXPERT_SYSTEM_PROMPT from src/components/shared/vceExpertPrompt.jsx.
@@ -944,8 +953,8 @@ function splitSystemAndUser(prompt) {
 // we'd swap this for real storage (Supabase Storage, S3, etc.).
 const fileStore = new Map();
 
-// Cap memory: keep at most 50 files; evict oldest first.
-const MAX_FILES = 50;
+// Cap memory: keep at most 150 files; evict oldest first.
+const MAX_FILES = 150;
 function storeFile(buffer, mimeType, originalName) {
   if (fileStore.size >= MAX_FILES) {
     const oldestKey = fileStore.keys().next().value;
@@ -959,6 +968,10 @@ function storeFile(buffer, mimeType, originalName) {
 // Anthropic only accepts these image media types. HEIC (iPhone default) needs
 // transcoding to JPEG before Claude will read it.
 const CLAUDE_IMAGE_TYPES = new Set(["image/jpeg", "image/png", "image/gif", "image/webp"]);
+
+// Max chars to extract from a document before sending to Claude. 150k chars ≈
+// 37k tokens — leaves room for system prompt + output within 200k context.
+const MAX_EXTRACTED_CHARS = 150_000;
 
 async function convertFileForClaude(file) {
   const mt = file.mimeType || "application/octet-stream";
@@ -998,9 +1011,12 @@ async function convertFileForClaude(file) {
     console.log(`[local-ai] extracting DOCX text from ${file.originalName} (${file.buffer.length} bytes)`);
     const { value: text } = await mammoth.extractRawText({ buffer: file.buffer });
     console.log(`[local-ai] DOCX extracted: ${text.length} chars`);
+    const truncated = text.length > MAX_EXTRACTED_CHARS
+      ? text.slice(0, MAX_EXTRACTED_CHARS) + `\n\n[...truncated — file is ${text.length} chars, capped at ${MAX_EXTRACTED_CHARS}]`
+      : text;
     return {
       type: "text",
-      text: `Contents of file "${file.originalName}":\n\n${text}`,
+      text: `Contents of file "${file.originalName}":\n\n${truncated}`,
     };
   }
 
@@ -1018,17 +1034,25 @@ async function convertFileForClaude(file) {
       if (slideText.trim()) slideTexts.push(slideText.trim());
     }
     console.log(`[local-ai] PPTX extracted: ${slideTexts.length} slides from ${file.originalName}`);
+    const joined = slideTexts.join("\n\n");
+    const truncated = joined.length > MAX_EXTRACTED_CHARS
+      ? joined.slice(0, MAX_EXTRACTED_CHARS) + `\n\n[...truncated — file is ${joined.length} chars, capped at ${MAX_EXTRACTED_CHARS}]`
+      : joined;
     return {
       type: "text",
-      text: `Contents of file "${file.originalName}" (slide by slide):\n\n${slideTexts.join("\n\n")}`,
+      text: `Contents of file "${file.originalName}" (slide by slide):\n\n${truncated}`,
     };
   }
 
   // Plain text → just include directly.
   if (mt.startsWith("text/")) {
+    const raw = file.buffer.toString("utf8");
+    const truncated = raw.length > MAX_EXTRACTED_CHARS
+      ? raw.slice(0, MAX_EXTRACTED_CHARS) + `\n\n[...truncated — file is ${raw.length} chars, capped at ${MAX_EXTRACTED_CHARS}]`
+      : raw;
     return {
       type: "text",
-      text: `Contents of file "${file.originalName}":\n\n${file.buffer.toString("utf8")}`,
+      text: `Contents of file "${file.originalName}":\n\n${truncated}`,
     };
   }
 
@@ -1158,7 +1182,7 @@ app.get("/health", (_req, res) => {
 // later in InvokeLLM and serve the cached bytes inline as base64.
 const upload = multer({
   storage: multer.memoryStorage(),
-  limits: { fileSize: 20 * 1024 * 1024 }, // 20 MB
+  limits: { fileSize: 30 * 1024 * 1024 }, // 30 MB
 });
 // Mirrors Base44's `extractDocumentText` server function. Quizzes calls this
 // for DOCX/PPTX files (it asks Base44 to convert them to text before passing
@@ -1211,6 +1235,10 @@ app.post("/local-ai/extractDocumentText", async (req, res) => {
     }
 
     console.log(`[local-ai] extracted ${text.length} chars from ${file.originalName} (${ext})`);
+    if (text.length > MAX_EXTRACTED_CHARS) {
+      console.log(`[local-ai] truncating ${text.length} chars → ${MAX_EXTRACTED_CHARS} for ${file.originalName}`);
+      text = text.slice(0, MAX_EXTRACTED_CHARS) + `\n\n[...truncated — file is ${text.length} chars, capped at ${MAX_EXTRACTED_CHARS}]`;
+    }
     return res.json({ text });
   } catch (err) {
     console.error("[local-ai] extractDocumentText error:", err);
@@ -2350,7 +2378,7 @@ app.post("/local-ai/invokeAIStream", async (req, res) => {
       ];
     }
 
-    const stream = anthropic.messages.stream(request);
+    const stream = anthropic.messages.stream(request, { timeout: 120_000 });
 
     stream.on("text", (delta) => {
       sse("text", { text: delta });
@@ -2740,7 +2768,7 @@ app.post("/local-ai/invokeAI", async (req, res) => {
     // to the caller — the streaming is purely for connection-level reliability.
     let response;
     try {
-      const stream = anthropic.messages.stream(request);
+      const stream = anthropic.messages.stream(request, { timeout: 120_000 });
       response = await stream.finalMessage();
     } catch (err) {
       // Fallback: schema rejected by Anthropic's grammar compiler.
@@ -2771,7 +2799,7 @@ app.post("/local-ai/invokeAI", async (req, res) => {
         request.system = request.system
           ? [...request.system, schemaInstruction]
           : [schemaInstruction];
-        const stream = anthropic.messages.stream(request);
+        const stream = anthropic.messages.stream(request, { timeout: 120_000 });
         response = await stream.finalMessage();
       } else {
         throw err;

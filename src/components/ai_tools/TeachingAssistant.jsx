@@ -92,7 +92,11 @@ export default function TeachingAssistant() {
                 const ext = uploadedFile.name.split('.').pop()?.toLowerCase();
                 if (ext === 'docx' || ext === 'pptx') {
                     const textResult = await base44.functions.invoke('extractDocumentText', { file_url });
-                    docContext = textResult.data?.text || '';
+                    if (textResult.data?.error) {
+                        toast({ title: "File read issue", description: "Could not read " + uploadedFile.name + ": " + textResult.data.error, variant: "destructive" });
+                    } else {
+                        docContext = textResult.data?.text || '';
+                    }
                 } else {
                     // For PDF/images we keep the file_url so the model reads it on first turn.
                     docContext = `(uploaded file: ${file_url})`;
@@ -100,11 +104,7 @@ export default function TeachingAssistant() {
                 setConversationContext(docContext);
             }
         } catch (e) {
-            setIsAIThinking(false);
-            setMessages([]);
-            setHasStarted(false);
-            toast({ title: 'Could not read your file', description: e.message, variant: 'destructive' });
-            return;
+            toast({ title: "File read failed", description: "Could not read " + uploadedFile.name + ": " + e.message, variant: "destructive" });
         }
 
         const welcomePrompt = `${getExaminerPrompt(subject)}
