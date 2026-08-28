@@ -11,13 +11,11 @@
  * 
  *   import HomePage from './pages/HomePage';
  *   import Dashboard from './pages/Dashboard';
-import Explore from './pages/Explore';
  *   import Settings from './pages/Settings';
  *   
  *   export const PAGES = {
  *       "HomePage": HomePage,
  *       "Dashboard": Dashboard,
-    "Explore": Explore,
  *       "Settings": Settings,
  *   }
  *   
@@ -72,11 +70,13 @@ import Subjects from './pages/Subjects';
 import Subscription from './pages/Subscription';
 import Support from './pages/Support';
 import Timer from './pages/Timer';
+import Explore from './pages/Explore';
 import __Layout from './Layout.jsx';
 
 
 export const PAGES = {
     "AITools": AITools,
+    "Explore": Explore,
     "AIToolsHistory": AIToolsHistory,
     "Analytics": Analytics,
     "Checkout": Checkout,
