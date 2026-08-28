@@ -216,7 +216,7 @@ export default function LoadingQuiz() {
                         <div className="h-4 text-center">
                             {answered && (
                                 <motion.p initial={{ opacity: 0 }} animate={{ opacity: 1 }} className={`text-xs font-bold ${selected === current.correctIndex ? "text-primary" : "text-muted-foreground"}`}>
-                                    {selected === current.correctIndex ? "Correct! 🎉" : selected === -1 ? "Time's up — moving on" : "Not quite — next one coming up"}
+                                    {selected === current.correctIndex ? "Correct!" : selected === -1 ? "Time's up — moving on" : "Not quite — next one coming up"}
                                 </motion.p>
                             )}
                         </div>

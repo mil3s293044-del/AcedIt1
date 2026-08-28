@@ -259,7 +259,7 @@ export default function UnifiedChat() {
         if (pending) setConvFiles(files);
 
         const promptText = text || `I've attached "${pending.name}". Please read it and help me with it.`;
-        const userMsg = { role: "user", content: pending ? `${text ? `${text}\n\n` : ""}📎 ${pending.name}` : text };
+        const userMsg = { role: "user", content: pending ? `${text ? `${text}\n\n` : ""} ${pending.name}` : text };
         const history = messages;
         setMessages(prev => [...prev, userMsg, { role: "assistant", content: "", streaming: true }]);
         setStreaming(true);

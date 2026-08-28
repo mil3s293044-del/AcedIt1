@@ -97,7 +97,7 @@ export default function StudyGoalsProgress({ user, userProfile }) {
             setWeeklyProgress(prev => ({ ...prev, goal: newWeeklyGoal }));
             setShowEditGoal(false);
             
-            toast({ title: "Goal updated! 🎯", description: `New weekly goal: ${newWeeklyGoal} hours` });
+            toast({ title: "Goal updated!", description: `New weekly goal: ${newWeeklyGoal} hours` });
         } catch (error) {
             console.error("Error updating goal:", error);
             toast({ title: "Error", description: "Could not update goal. Please try again.", variant: "destructive" });
@@ -200,7 +200,7 @@ export default function StudyGoalsProgress({ user, userProfile }) {
                             <div className="bg-green-50 border border-green-200 rounded-lg p-4 flex items-center gap-3">
                                 <Award className="w-6 h-6 text-green-600 flex-shrink-0" />
                                 <div>
-                                    <p className="font-semibold text-green-900">Goal Achieved! 🎉</p>
+                                    <p className="font-semibold text-green-900">Goal Achieved!</p>
                                     <p className="text-sm text-green-700">You've hit your weekly study target!</p>
                                 </div>
                             </div>

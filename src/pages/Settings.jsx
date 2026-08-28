@@ -218,7 +218,7 @@ export default function Settings() {
 
     const handleDeleteAccount = async () => {
         const confirmed = window.confirm(
-            "⚠️ DELETE ACCOUNT - This action is PERMANENT!\n\n" +
+            "⚠ DELETE ACCOUNT - This action is PERMANENT!\n\n" +
             "This will permanently delete:\n" +
             "• Your profile and all settings\n" +
             "• All study sessions and progress\n" +

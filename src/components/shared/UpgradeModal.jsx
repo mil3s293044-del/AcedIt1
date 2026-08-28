@@ -1,7 +1,10 @@
 import React from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
-import { Crown, Zap, Lock, ArrowRight } from 'lucide-react';
+import {
+    Crown, Zap, Lock, ArrowRight,
+    BookOpen, Trophy, FileQuestion, Sparkles, Target, Brain, PenTool, Users, BarChart3, Check,
+} from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { createPageUrl } from '@/utils';
 import { Card, CardContent } from '@/components/ui/card';
@@ -10,55 +13,55 @@ const FEATURE_DESCRIPTIONS = {
     'Guides': {
         title: 'Study Guides',
         description: 'Access comprehensive VCE study guides covering all subjects and exam techniques.',
-        icon: '📚',
+        icon: BookOpen,
         benefits: ['VCE system guides', 'Subject-specific strategies', 'Exam preparation tips', 'Study technique guides']
     },
     'Ranked': {
         title: 'Ranked Leaderboard',
         description: 'Compete with other students and track your progress on the global leaderboard.',
-        icon: '👑',
+        icon: Trophy,
         benefits: ['Global rankings', 'Compare study stats', 'Achievement badges', 'Motivation boost']
     },
     'Quizzes': {
         title: 'AI Quiz Generator',
         description: 'Generate unlimited quizzes from your notes using AI technology.',
-        icon: '🧠',
+        icon: FileQuestion,
         benefits: ['Unlimited quiz generation', 'Custom practice questions', 'Multiple choice & short answer', 'Progress tracking']
     },
     'AITools': {
         title: 'AI Study Tools',
         description: 'Unlock powerful AI-powered study tools to accelerate your learning.',
-        icon: '🤖',
+        icon: Sparkles,
         benefits: ['Essay planner', 'Concept explainer', 'Question generator', 'Note summarizer', 'Line memoriser', 'Mind mapper']
     },
     'Goals': {
         title: 'Goals & Planning',
         description: 'Advanced goal setting, course planning, and study scheduling tools.',
-        icon: '🎯',
+        icon: Target,
         benefits: ['ATAR goal planning', 'University course planner', 'Interactive calendar', 'Custom milestones', 'AI planning assistant']
     },
     'ActiveRecall': {
         title: 'Active Recall Technique',
         description: 'Master advanced study techniques to boost your learning efficiency.',
-        icon: '🧠',
+        icon: Brain,
         benefits: ['AI-powered question generation', 'Personalized feedback', 'Progress tracking', 'Evidence-based learning']
     },
     'Blurting': {
         title: 'Blurting Method',
         description: 'Advanced memory technique for deep learning and retention.',
-        icon: '✍️',
+        icon: PenTool,
         benefits: ['Free-form knowledge testing', 'AI comparison analysis', 'Gap identification', 'Mastery tracking']
     },
     'ContentSharing': {
         title: 'Content Sharing',
         description: 'Share flashcards, quizzes, and study materials with friends.',
-        icon: '🤝',
+        icon: Users,
         benefits: ['Share flashcards', 'Share quizzes', 'Collaborate with friends', 'Build study groups']
     },
     'Analytics': {
         title: 'Advanced Analytics',
         description: 'Deep insights into your study patterns and performance.',
-        icon: '📊',
+        icon: BarChart3,
         benefits: ['AI performance analysis', 'Study trend tracking', 'Subject performance breakdown', 'Personalized recommendations']
     }
 };
@@ -66,6 +69,7 @@ const FEATURE_DESCRIPTIONS = {
 export default function UpgradeModal({ isOpen, onClose, feature, requiredTier, userProfile, isBlocking = false }) {
     const navigate = useNavigate();
     const featureInfo = FEATURE_DESCRIPTIONS[feature] || FEATURE_DESCRIPTIONS['AITools'];
+    const FeatureIcon = featureInfo.icon;
     const currentTier = userProfile?.subscription_tier || 'free';
 
     const handleUpgrade = () => {
@@ -82,8 +86,13 @@ export default function UpgradeModal({ isOpen, onClose, feature, requiredTier, u
             <DialogContent className="max-w-2xl" hideClose={isBlocking}>
                 <DialogHeader>
                     <div className="flex items-center justify-center mb-4">
-                        <div className="w-20 h-20 bg-gradient-to-br from-purple-100 to-pink-100 rounded-full flex items-center justify-center text-4xl">
-                            {featureInfo.icon}
+                        {/* Was a 4xl emoji on a pink gradient. The icon set the
+                            rest of the app already uses, on the token that
+                            actually means "premium" here, reads as part of the
+                            product rather than as decoration. */}
+                        <div className="w-20 h-20 bg-chart-4/10 border-2 border-chart-4/20 rounded-2xl
+                            flex items-center justify-center">
+                            <FeatureIcon className="w-9 h-9 text-chart-4" strokeWidth={2.2} />
                         </div>
                     </div>
                     <DialogTitle className="text-2xl text-center">
@@ -128,7 +137,7 @@ export default function UpgradeModal({ isOpen, onClose, feature, requiredTier, u
                             {featureInfo.benefits.map((benefit, index) => (
                                 <div key={index} className="flex items-center gap-3 text-muted-foreground">
                                     <div className="w-5 h-5 bg-green-100 rounded-full flex items-center justify-center flex-shrink-0">
-                                        <span className="text-green-600 text-xs">✓</span>
+                                        <Check className="w-3.5 h-3.5 text-primary flex-shrink-0" />
                                     </div>
                                     <span>{benefit}</span>
                                 </div>

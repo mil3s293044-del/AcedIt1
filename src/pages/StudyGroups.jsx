@@ -138,7 +138,7 @@ export default function StudyGroups() {
                 timestamp: new Date().toISOString()
             });
 
-            toast({ title: "Study group created! 🎉", description: `Share code: ${joinCode}` });
+            toast({ title: "Study group created!", description: `Share code: ${joinCode}` });
             setIsCreatingGroup(false);
             setNewGroup({ name: "", description: "", subject: "", is_private: false });
             await loadGroups(user.email);
@@ -237,7 +237,7 @@ export default function StudyGroups() {
             await Promise.all(messagePromises);
 
             toast({ 
-                title: "Friends invited! 🎉", 
+                title: "Friends invited!", 
                 description: `Added ${newFriendsToAdd.length} friend${newFriendsToAdd.length > 1 ? 's' : ''} to the group.` 
             });
 
@@ -528,7 +528,7 @@ export default function StudyGroups() {
                     className="text-center mb-8"
                 >
                     <h1 className="text-3xl lg:text-4xl font-bold text-foreground mb-2">
-                        Study Groups 👥
+                        Study Groups 
                     </h1>
                     <p className="text-muted-foreground text-lg">
                         Collaborate with peers, share resources, and study together

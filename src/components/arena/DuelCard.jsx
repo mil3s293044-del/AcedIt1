@@ -77,7 +77,7 @@ export default function DuelCard({ duel, currentUserEmail, spectator = false, ba
                 backed_email: backing,
                 wagered_xp: stake,
             });
-            toast({ title: "Side bet placed! 🎯", description: `${stake} XP on ${firstName(backing === duel.challenger_email ? duel.challenger_name : duel.opponent_name)}` });
+            toast({ title: "Side bet placed!", description: `${stake} XP on ${firstName(backing === duel.challenger_email ? duel.challenger_name : duel.opponent_name)}` });
             setBetOpen(false);
             onUpdate?.();
         } catch (e) {
@@ -141,7 +141,7 @@ export default function DuelCard({ duel, currentUserEmail, spectator = false, ba
                         className={`mt-3 flex items-center justify-between rounded-xl px-3 py-2.5 text-xs font-bold border-2 transition-all group ${
                             t?.urgent ? "border-streak/40 bg-streak/5 text-streak hover:bg-streak/10" : "border-primary/30 bg-primary/5 text-primary hover:bg-primary/10"
                         }`}>
-                        <span>⚡ {METRIC_ROUTE[duel.metric].label}</span>
+                        <span>{METRIC_ROUTE[duel.metric].label}</span>
                         <ArrowRight className="w-3.5 h-3.5 group-hover:translate-x-0.5 transition-transform" />
                     </Link>
                 )}
@@ -154,7 +154,7 @@ export default function DuelCard({ duel, currentUserEmail, spectator = false, ba
                         <Trophy className={`w-4 h-4 ${isTie ? "text-muted-foreground" : "text-xp"}`} />
                         {isTie
                             ? "Dead heat — both antes refunded."
-                            : `${firstName(duel.winner_email === duel.challenger_email ? duel.challenger_name : duel.opponent_name)} takes the ${pot} XP pot${iWon ? " — that's you! 🎉" : ""}`}
+                            : `${firstName(duel.winner_email === duel.challenger_email ? duel.challenger_name : duel.opponent_name)} takes the ${pot} XP pot${iWon ? " — that's you!" : ""}`}
                     </div>
                 )}
 
@@ -171,7 +171,7 @@ export default function DuelCard({ duel, currentUserEmail, spectator = false, ba
                         </span>
                         <span>
                             {myBet.status === "open" ? "Riding…" :
-                             myBet.status === "won" ? `+${myBet.xp_outcome} XP 🎉` :
+                             myBet.status === "won" ? `+${myBet.xp_outcome} XP` :
                              myBet.status === "refunded" ? "Refunded (tie)" : `${myBet.xp_outcome} XP`}
                         </span>
                     </div>

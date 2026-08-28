@@ -86,6 +86,10 @@ export default function CheatSheetArtifact({ initialItems, subject = "", title =
         return `<!doctype html><html><head><meta charset="utf-8"><title>${docTitle()} — Cheat Sheet</title>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">
 <style>
+  /* Hex on purpose. This stylesheet is written into a separate document
+     (window.open + document.write) which has none of the app's CSS
+     variables, so a token here resolves to nothing and the sheet prints
+     black on white. #58CC02 is the brand green, #0D1626 the ink. */
   @page { size: A4; margin: 9mm; }
   * { box-sizing: border-box; }
   body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif; font-size: 9.5px; line-height: 1.35; color: #0D1626; margin: 0; padding: 14px; }

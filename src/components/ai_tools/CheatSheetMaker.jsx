@@ -229,6 +229,10 @@ ${sourceText ? `\nEXTRACTED CONTENT:${sourceText}` : ""}`;
         return `<!doctype html><html><head><meta charset="utf-8"><title>${docTitle()} — Cheat Sheet</title>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">
 <style>
+  /* Hex on purpose. This stylesheet is written into a separate document
+     (window.open + document.write) which has none of the app's CSS
+     variables, so a token here resolves to nothing and the sheet prints
+     black on white. #58CC02 is the brand green, #0D1626 the ink. */
   @page { size: A4; margin: 9mm; }
   * { box-sizing: border-box; }
   body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif; font-size: 9.5px; line-height: 1.35; color: #0D1626; margin: 0; padding: 14px; }
@@ -470,7 +474,12 @@ ${sourceText ? `\nEXTRACTED CONTENT:${sourceText}` : ""}`;
             <Dialog open={showPreview} onOpenChange={setShowPreview}>
                 <DialogContent className="max-w-4xl max-h-[88vh] overflow-y-auto">
                     <DialogHeader><DialogTitle>Preview · {title || subject || "Cheat Sheet"}</DialogTitle></DialogHeader>
-                    <div className="bg-surface text-[#0D1626] rounded-lg border border-border shadow-soft p-6">
+                    {/* Themed surface, themed ink. This carried text-[#0D1626] — the print
+                        stylesheet's hard-coded near-black — so in dark mode the
+                        preview was black text on a dark card. The exported PDF is a
+                        separate document and keeps its own colours; the preview is
+                        part of the app and should follow the app. */}
+                    <div className="bg-surface text-foreground rounded-lg border border-border shadow-soft p-6">
                         <h1 className="text-lg font-extrabold mb-3">{title || subject || "Cheat Sheet"}</h1>
                         <div className="columns-1 sm:columns-2 gap-6 text-[12px] leading-snug">
                             {sections.map((sec) => (

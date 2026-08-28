@@ -4,12 +4,27 @@ import { Button } from "@/components/ui/button";
 import { base44 } from "@/api/base44Client";
 import { Flame } from "lucide-react";
 
+// A five-step ramp, carried by colour rather than by five faces. It ran on raw
+// Tailwind palette classes (bg-blue-100, bg-red-100) which are invisible to the
+// theme and rendered as bright slabs in dark mode; these are design tokens, so
+// the scale reads the same way in both. `dot` is the intensity, `on` is the
+// selected state — the whole reason the emoji were there was to make the ends
+// of the scale distinguishable, and a colour ramp does that better.
+// A five-step ramp, carried by colour rather than by five faces. It ran on raw
+// Tailwind palette classes (bg-blue-100, bg-red-100) which are invisible to the
+// theme and rendered as bright slabs in dark mode; these are design tokens, so
+// the scale reads the same way in both.
+//
+// `dim` matters as much as `dot`: with every unselected dot the same grey, the
+// row was five identical pills and the SCALE — the thing the faces were
+// actually communicating — only appeared once you'd already answered. Held at
+// low opacity, the ramp runs cool-to-hot left to right before you touch it.
 const LEVELS = [
-    { value: 1, label: "Too Easy", emoji: "😴", color: "bg-blue-100 text-blue-700 border-blue-300 hover:bg-blue-200" },
-    { value: 2, label: "Easy", emoji: "🙂", color: "bg-green-100 text-green-700 border-green-300 hover:bg-green-200" },
-    { value: 3, label: "Just Right", emoji: "😊", color: "bg-emerald-100 text-emerald-700 border-emerald-300 hover:bg-emerald-200" },
-    { value: 4, label: "Hard", emoji: "😤", color: "bg-orange-100 text-orange-700 border-orange-300 hover:bg-orange-200" },
-    { value: 5, label: "Too Hard", emoji: "🤯", color: "bg-red-100 text-red-700 border-red-300 hover:bg-red-200" },
+    { value: 1, label: "Too Easy",   dot: "bg-chart-3", dim: "bg-chart-3/40", on: "bg-chart-3/10 text-chart-3 border-chart-3/40" },
+    { value: 2, label: "Easy",       dot: "bg-primary", dim: "bg-primary/40", on: "bg-primary/10 text-primary border-primary/40" },
+    { value: 3, label: "Just Right", dot: "bg-primary", dim: "bg-primary/40", on: "bg-primary/10 text-primary border-primary/40" },
+    { value: 4, label: "Hard",       dot: "bg-xp",      dim: "bg-xp/40",      on: "bg-xp/10 text-xp border-xp/40" },
+    { value: 5, label: "Too Hard",   dot: "bg-streak",  dim: "bg-streak/40",  on: "bg-streak/10 text-streak border-streak/40" },
 ];
 
 // Maps difficulty rating to a suggested quiz difficulty level
@@ -60,7 +75,7 @@ export default function DifficultyRating({ subjectName, onDone }) {
         return (
             <motion.div initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }}
                 className="flex flex-col items-center gap-1 py-2 text-center">
-                <span className="text-2xl">✅</span>
+                <span className="text-2xl"></span>
                 <p className="text-sm font-semibold text-emerald-700">Difficulty saved! Your future quizzes will be adjusted.</p>
             </motion.div>
         );
@@ -69,14 +84,20 @@ export default function DifficultyRating({ subjectName, onDone }) {
     return (
         <div className="space-y-3">
             <div className="flex items-center gap-2">
-                <Flame className="w-4 h-4 text-orange-500" />
+                <Flame className="w-4 h-4 text-xp" />
                 <p className="text-sm font-semibold text-foreground">How difficult was this for you?</p>
             </div>
             <div className="flex flex-wrap gap-2">
                 {LEVELS.map((lvl) => (
                     <button key={lvl.value} onClick={() => setSelected(lvl.value)}
-                        className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl border-2 text-xs font-bold transition-all ${selected === lvl.value ? lvl.color + " ring-2 ring-offset-1 ring-current scale-105" : "border-border bg-surface text-muted-foreground hover:border-border"}`}>
-                        <span>{lvl.emoji}</span> {lvl.label}
+                        aria-pressed={selected === lvl.value}
+                        className={`flex items-center gap-2 px-3 py-1.5 rounded-xl border-2 text-xs font-bold transition-all ${
+                            selected === lvl.value
+                                ? `${lvl.on} scale-105`
+                                : "border-border bg-surface text-muted-foreground hover:border-border"}`}>
+                        <span className={`w-2 h-2 rounded-full ${
+                            selected === lvl.value ? lvl.dot : lvl.dim}`} aria-hidden="true" />
+                        {lvl.label}
                     </button>
                 ))}
             </div>
@@ -84,7 +105,7 @@ export default function DifficultyRating({ subjectName, onDone }) {
                 {selected && (
                     <motion.div initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}>
                         <Button size="sm" onClick={handleSave} disabled={saving}
-                            className="bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs">
+                            className="bg-primary hover:bg-primary/90 text-white rounded-xl text-xs">
                             {saving ? "Saving..." : "Save Rating"}
                         </Button>
                     </motion.div>

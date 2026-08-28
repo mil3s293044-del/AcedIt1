@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { motion } from "framer-motion";
 import { Card, CardContent } from "@/components/ui/card";
-import { CheckCircle, Sparkles, Loader2 } from "lucide-react";
+import { CheckCircle, Sparkles, Loader2 , AlertCircle} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { base44 } from "@/api/base44Client";
 import { trackPurchase } from "@/lib/analytics";
@@ -103,8 +103,10 @@ export default function PaymentSuccess() {
                 <Card className="max-w-md w-full">
                     <CardContent className="p-8 text-center">
                         <div className={`w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4 ${
-                            paid ? "bg-amber-100" : "bg-red-100"}`}>
-                            <span className="text-3xl">{paid ? "⏳" : "❌"}</span>
+                            paid ? "bg-xp/15" : "bg-streak/15"}`}>
+                            {paid
+                                ? <Loader2 className="w-8 h-8 text-xp animate-spin" />
+                                : <AlertCircle className="w-8 h-8 text-streak" />}
                         </div>
                         <h2 className={`text-xl font-bold mb-2 ${paid ? "text-amber-900" : "text-red-900"}`}>
                             {paid ? "Payment received — activating" : "Payment Verification Failed"}
@@ -153,7 +155,7 @@ export default function PaymentSuccess() {
                         >
                             <CheckCircle className="w-16 h-16 text-green-600" />
                         </motion.div>
-                        <h1 className="text-4xl font-black text-white mb-3">Success! 🎉</h1>
+                        <h1 className="text-4xl font-black text-white mb-3">Success!</h1>
                         <p className="text-xl text-green-50">Welcome to Premium!</p>
                     </div>
                     <CardContent className="p-8 text-center space-y-4">

@@ -48,7 +48,7 @@ export default function CreateDuelDialog({ open, onOpenChange, currentUser, bala
                 window_hours: windowHours,
                 ante_xp: ante,
             });
-            toast({ title: "⚔️ Challenge sent!", description: `${firstName(rival.name)} has 48h to accept. Your ${ante} XP ante is in the pot.` });
+            toast({ title: "Challenge sent!", description: `${firstName(rival.name)} has 48h to accept. Your ${ante} XP ante is in the pot.` });
             onOpenChange(false);
             setRival(null);
             onCreated?.();
@@ -149,7 +149,7 @@ export default function CreateDuelDialog({ open, onOpenChange, currentUser, bala
                     {/* Slip */}
                     <div className="bg-chart-4/5 border-2 border-chart-4/20 rounded-2xl p-3.5">
                         <p className="text-sm font-black text-foreground">
-                            ⚔️ {rival ? firstName(rival.name) : "Your rival"} · {METRICS[metric].label} · {winLabel}
+ {rival ? firstName(rival.name) : "Your rival"} · {METRICS[metric].label} · {winLabel}
                         </p>
                         <div className="flex justify-between text-xs font-semibold mt-1">
                             <span className="text-primary">Win: take the {ante * 2} XP pot</span>

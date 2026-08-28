@@ -43,6 +43,7 @@ import MindMapCanvas from "./MindMapCanvas";
 import {
     parseOutline, toOutline, emptyMap, mapStats, exportCards, exportPrompts, diffMaps,
     NODE_TYPES, TYPE_BY_ID, newNode, removeNode, subtreeIds, freeSpotNear, nodeId,
+    shouldPromptRebuild,
 } from "@/lib/mindmap";
 import AceTip from "@/components/ace/AceTip";
 import AceShuffle from "@/components/ace/AceShuffle";
@@ -211,6 +212,9 @@ function SaveState({ state, onRetry }) {
     );
 }
 
+/** Per-map, per-device dismissal of the rebuild prompt. */
+const REBUILD_DISMISSED = "acedit_mindmap_rebuild_dismissed_v1";
+
 export default function MindMaps({ user, subjects = [] }) {
     const { toast } = useToast();
     const [allMaps, setAllMaps] = useState([]);
@@ -250,6 +254,20 @@ export default function MindMaps({ user, subjects = [] }) {
     const selected = useMemo(
         () => map?.nodes.find(n => n.id === selectedId) || null, [map, selectedId]);
     const stats = useMemo(() => (map ? mapStats(map) : null), [map]);
+
+    // Dismissal is per map and per device. The app's own first-run doctrine is
+    // that anything a student can't put down teaches them to stop reading it.
+    const [dismissedRebuild, setDismissedRebuild] = useState(() => {
+        try { return JSON.parse(localStorage.getItem(REBUILD_DISMISSED) || "{}"); }
+        catch { return {}; }
+    });
+    const dismissRebuild = useCallback((id) => {
+        setDismissedRebuild((prev) => {
+            const next = { ...prev, [id]: Date.now() };
+            try { localStorage.setItem(REBUILD_DISMISSED, JSON.stringify(next)); } catch { /* private mode */ }
+            return next;
+        });
+    }, []);
 
     // The maps that hang off nodes of this one — the layer below.
     const childMapRows = useMemo(
@@ -961,7 +979,7 @@ export default function MindMaps({ user, subjects = [] }) {
             </div>
 
             {/* ── A brand-new map gets the closed-book nudge, once ────────── */}
-            {map.nodes.length <= 1 && (
+            {!recallOf && map.nodes.length <= 1 && (
                 <div className="rounded-2xl border-2 border-map/25 bg-map/5 p-3.5 flex items-end gap-3"
                     data-ace-mapnudge>
                     <AceBody className="w-16 sm:w-20 flex-shrink-0" pose="alert" title="Ace" />
@@ -970,6 +988,42 @@ export default function MindMaps({ user, subjects = [] }) {
                         open this is note-taking with extra steps; built from memory it&rsquo;s retrieval practice, and
                         that&rsquo;s the difference between it working and not.
                     </p>
+                </div>
+            )}
+
+            {/* ── And a built map gets the prompt that used to be missing ──── */}
+            {/* Two moments, two messages. The advice above is right while there
+                is nothing on the canvas; it is also the ONLY thing that was
+                ever shown, because it was gated on `nodes <= 1` — so the
+                closed-book prompt appeared when there was nothing to rebuild
+                and vanished at exactly the point rebuilding became the next
+                move. Six students in ten have built a map. None has rebuilt
+                one. Advice with no button, shown at the wrong moment, is the
+                whole explanation.
+
+                It goes away by itself the moment they do it once, so nobody
+                who has understood the technique keeps being told about it. */}
+            {shouldPromptRebuild({ map, allMaps, recallOf, dismissed: dismissedRebuild }) && (
+                <div className="rounded-2xl border-2 border-xp/30 bg-xp/5 p-3.5 flex items-end gap-3"
+                    data-ace-rebuildnudge>
+                    <AceBody className="w-16 sm:w-20 flex-shrink-0" pose="alert" title="Ace" />
+                    <div className="flex-1 min-w-0 pb-1">
+                        <p className="text-xs text-muted-foreground leading-snug">
+                            <span className="font-bold text-foreground">There&rsquo;s a map here now. Rebuild it from memory.</span>{" "}
+                            That&rsquo;s the step that turns this from drawing into retrieval practice — and it
+                            scores what came back. Your real map stays exactly where it is.
+                        </p>
+                        <div className="flex flex-wrap items-center gap-2 mt-2.5">
+                            <Button size="sm" onClick={startRecall}
+                                className="rounded-xl gap-1.5 text-xs h-8 bg-xp hover:bg-xp/90 text-white">
+                                <EyeOff className="w-3.5 h-3.5" /> Rebuild from memory
+                            </Button>
+                            <button onClick={() => dismissRebuild(map.id)}
+                                className="text-xs font-bold text-muted-foreground hover:text-foreground px-1">
+                                Not now
+                            </button>
+                        </div>
+                    </div>
                 </div>
             )}
 

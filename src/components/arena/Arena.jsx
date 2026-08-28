@@ -104,7 +104,7 @@ export default function Arena({ view = "all" }) {
         try {
             await base44.functions.invoke('respondDuel', { duel_id: duelId, accept });
             toast(accept
-                ? { title: "⚔️ Duel on!", description: "The clock starts now. Every study action counts." }
+                ? { title: "Duel on!", description: "The clock starts now. Every study action counts." }
                 : { title: "Challenge declined", description: "Their ante has been returned." });
             await refresh();
         } catch (e) {
@@ -168,7 +168,7 @@ export default function Arena({ view = "all" }) {
                     <div className="flex flex-wrap items-center gap-3">
                         <div className="flex-1 min-w-[200px]">
                             <p className="font-black text-foreground">
-                                ⚔️ {firstName(d.challenger_name)} challenged you!
+ {firstName(d.challenger_name)} challenged you!
                             </p>
                             <p className="text-xs text-muted-foreground mt-0.5">
                                 {METRICS[d.metric]?.label} · {d.window_hours === 168 ? "1 week" : d.window_hours === 72 ? "3 days" : "24 hours"} ·{" "}

@@ -172,7 +172,7 @@ export default function GroupResources({ group, user }) {
                 timestamp: new Date().toISOString()
             });
 
-            toast({ title: "Resource shared! 🎉", description: "Your content is now available to the group" });
+            toast({ title: "Resource shared!", description: "Your content is now available to the group" });
             setIsSharing(false);
             setSelectedItemToShare(null);
             await loadResources();
@@ -225,7 +225,7 @@ export default function GroupResources({ group, user }) {
                         created_by: user.email // Ensure user's email is set for new flashcards
                     });
                 }
-                toast({ title: "Flashcards imported! 📚", description: `Added ${cards.length} cards to your collection` });
+                toast({ title: "Flashcards imported!", description: `Added ${cards.length} cards to your collection` });
             } else if (resource.resource_type === "quiz") {
                 await Quiz.create({
                     title: resource.resource_data.title,
@@ -235,7 +235,7 @@ export default function GroupResources({ group, user }) {
                     category: resource.resource_data.category,
                     created_by: user.email // Ensure user's email is set for new quizzes
                 });
-                toast({ title: "Quiz imported! 📝", description: "Added to your quizzes" });
+                toast({ title: "Quiz imported!", description: "Added to your quizzes" });
             } else if (resource.resource_type === "ai_result") {
                 await saveResult('create', {
                     tool_type: resource.resource_data.tool_type,
@@ -245,7 +245,7 @@ export default function GroupResources({ group, user }) {
                     content: resource.resource_data.content,
                     input_data: resource.resource_data.input_data,
                 });
-                toast({ title: "AI result saved! ✨", description: "Added to your saved results" });
+                toast({ title: "AI result saved!", description: "Added to your saved results" });
             }
 
             // Update import count and add user to imported_by_emails

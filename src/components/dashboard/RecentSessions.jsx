@@ -3,7 +3,7 @@ import React from "react";
 import { motion } from "framer-motion";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Clock, BookOpen, Brain, Eye, FileText } from "lucide-react";
+import { Clock, BookOpen, Brain, Eye, FileText , Star} from "lucide-react";
 import { fmtDate } from "@/lib/safeDate";
 
 const techniqueIcons = {
@@ -90,8 +90,13 @@ export default function RecentSessions({ sessions = [], isLoading }) {
                                                 {session.productivity_rating && (
                                                     <>
                                                         <span>•</span>
-                                                        <span className="flex items-center gap-1">
-                                                            {"⭐".repeat(session.productivity_rating)}
+                                                        <span className="flex items-center gap-0.5"
+                                                            aria-label={`${session.productivity_rating} out of 5`}>
+                                                            {[1, 2, 3, 4, 5].map((n) => (
+                                                                <Star key={n} className={`w-3 h-3 ${
+                                                                    n <= session.productivity_rating
+                                                                        ? "text-xp fill-current" : "text-muted-foreground/25"}`} />
+                                                            ))}
                                                         </span>
                                                     </>
                                                 )}

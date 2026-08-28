@@ -205,7 +205,7 @@ export default function FlashcardPerformance({ user }) {
                             </div>
                             <div>
                                 <p className="font-bold text-orange-900">
-                                    {performance.streak} Day Streak! 🔥
+                                    {performance.streak} Day Streak! 
                                 </p>
                                 <p className="text-sm text-orange-700">Keep reviewing to maintain your streak</p>
                             </div>
@@ -276,7 +276,7 @@ export default function FlashcardPerformance({ user }) {
                         </div>
                         <div className="mt-3 p-3 bg-blue-50 border border-blue-200 rounded-lg">
                             <p className="text-sm text-blue-900">
-                                💡 <strong>Tip:</strong> Focus your next study session on these subjects to improve your retention!
+ <strong>Tip:</strong> Focus your next study session on these subjects to improve your retention!
                             </p>
                         </div>
                     </div>

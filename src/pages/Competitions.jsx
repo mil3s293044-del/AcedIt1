@@ -84,7 +84,7 @@ export default function Competitions() {
                 subject_name: newBattleSubject || undefined,
             });
             const data = res?.data ?? res;
-            toast({ title: "⚔️ Battle created!", description: data?.invite_code ? `Share code ${data.invite_code} with your friends.` : "Open it to grab the invite code." });
+            toast({ title: "Battle created!", description: data?.invite_code ? `Share code ${data.invite_code} with your friends.` : "Open it to grab the invite code." });
             setNewBattleTitle(""); setNewBattleSubject("");
             loadData();
         } catch (e) {
@@ -196,7 +196,7 @@ export default function Competitions() {
             if (data?.error) {
                 toast({ title: "Couldn't start rematch", description: data.error, variant: "destructive" });
             } else {
-                toast({ title: `Rematch on! 🔥`, description: `${rival.name?.split(' ')[0]} has been challenged on “${base.goal_title}”.` });
+                toast({ title: `Rematch on!`, description: `${rival.name?.split(' ')[0]} has been challenged on “${base.goal_title}”.` });
                 await loadData();
             }
         } catch (e) {

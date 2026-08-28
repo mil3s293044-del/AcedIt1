@@ -7,7 +7,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
-import { ArrowLeft, Clock, BookOpen, Target, CheckCircle2, Play, Edit, Save, X } from 'lucide-react';
+import { ArrowLeft, Clock, BookOpen, Target, CheckCircle2, Play, Edit, Save, X , Check} from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import GuideQuizPlayer from './GuideQuizPlayer';
 import { base44 } from '@/api/base44Client';
@@ -231,7 +231,7 @@ export default function GuideReader({ guide, onClose }) {
                                     <ul className="space-y-2">
                                         {guide.key_points.map((point, idx) => (
                                             <li key={idx} className="flex items-start gap-3">
-                                                <span className="text-purple-500 text-lg mt-0.5">✓</span>
+                                                <Check className="w-4 h-4 text-primary mt-0.5 flex-shrink-0" />
                                                 <span className="text-muted-foreground leading-relaxed">{point}</span>
                                             </li>
                                         ))}

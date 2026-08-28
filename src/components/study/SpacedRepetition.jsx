@@ -805,7 +805,7 @@ The documents provided may be PowerPoint slides, Word documents, PDFs or text fi
                 setIsRating(false);
             } else {
                 await handleCompleteReview();
-                toast({ title: "Session complete! 🎉", description: `You reviewed ${reviewCards.length} cards${sessionXPRef.current > 0 ? ` and banked +${sessionXPRef.current} XP` : ''}.` });
+                toast({ title: "Session complete!", description: `You reviewed ${reviewCards.length} cards${sessionXPRef.current > 0 ? ` and banked +${sessionXPRef.current} XP` : ''}.` });
                 sessionXPRef.current = 0;
                 setReviewMode(false); await loadDecks(user.email); setSelectedDeck(null); setIsRating(false);
             }
@@ -1392,7 +1392,7 @@ The documents provided may be PowerPoint slides, Word documents, PDFs or text fi
                                             <SelectTrigger className="border-2 rounded-xl h-10"><SelectValue /></SelectTrigger>
                                             <SelectContent>
                                                 <SelectItem value="easy">Easy</SelectItem>
-                                                <SelectItem value="mixed">Mixed ⭐</SelectItem>
+                                                <SelectItem value="mixed">Mixed</SelectItem>
                                                 <SelectItem value="challenging">Challenging</SelectItem>
                                             </SelectContent>
                                         </Select>
