@@ -6099,6 +6099,10 @@ const ATAR_WINDOW_DAYS = 28;
 // Days of study before the score is presented as final rather than provisional.
 const ATAR_MIN_STUDY_DAYS = 3;
 const ATAR_REFRESH_MINUTES = 30;
+// Most minutes one day can contribute to effort. A sanity bound on a
+// client-supplied duration, not an anti-farm measure — farming is bounded by
+// the XP economy, and this sits well above any genuine study day.
+const EFFORT_DAILY_MINUTE_CAP = 600;
 
 export function atarBand(atar) {
   if (atar == null) return null;
@@ -6326,7 +6330,7 @@ async function computeAcedItATAR(email) {
   try {
     events = await fetchAllRows(() => supabaseAdmin
       .from("xp_events")
-      .select("source, xp_awarded, metadata, created_date")
+      .select("source, xp_awarded, capped, integrity_flags, metadata, created_date")
       .eq("user_email", email)
       .gte("created_date", since)
       .order("created_date", { ascending: false }));
@@ -6335,7 +6339,21 @@ async function computeAcedItATAR(email) {
   }
 
   const windowEvents = events.filter((e) => ARENA_STUDY_SOURCES.includes(e.source));
-  const studyEvents = windowEvents.filter((e) => (e.xp_awarded || 0) > 0);
+
+  // Did the student actually study this? — the question every component below
+  // is really asking, and `xp_awarded > 0` was the wrong proxy for it. A paid
+  // event counts. So does a capped one: the caps govern the XP economy, not
+  // the study log, and awardXP writes the zero-XP row precisely so the
+  // counting can carry on ("capping the payout must not stop the counting").
+  // Reading only paid events meant a student's best days — the ones that ran
+  // into a daily or velocity cap — partly vanished from their own score.
+  // What doesn't count is a zero-content session: raw XP of zero and no cap,
+  // which is a session with no work in it to measure.
+  const studyEvents = windowEvents.filter((e) =>
+    (e.xp_awarded || 0) > 0 ||
+    e.capped === true ||
+    (Array.isArray(e.integrity_flags) && e.integrity_flags.length > 0),
+  );
 
   // ── Consistency (27%): distinct study days, target 20 of 28 ─────────────
   const days = new Set(studyEvents.map((e) => (e.created_date || "").slice(0, 10)));
@@ -6347,9 +6365,21 @@ async function computeAcedItATAR(email) {
   const consistency = Math.min(1, days.size / 20);
 
   // ── Effort (22%): study minutes, log-scaled diminishing returns ─────────
-  let minutes = 0;
+  // Minutes are totalled per day and clamped, because duration_minutes is a
+  // number the client sends. The daily XP cap used to bound this incidentally,
+  // and badly — where it landed depended on the student's streak multiplier,
+  // which has nothing to do with how long they studied. Ten hours is past any
+  // real day, so no honest student ever meets this.
+  const minutesByDay = new Map();
   for (const e of studyEvents) {
-    minutes += Number(e.metadata?.duration_minutes) || (e.metadata?.type === "focus_minute" ? 1 : 0);
+    const m = Number(e.metadata?.duration_minutes) || (e.metadata?.type === "focus_minute" ? 1 : 0);
+    if (!(m > 0)) continue;
+    const d = (e.created_date || "").slice(0, 10);
+    minutesByDay.set(d, (minutesByDay.get(d) || 0) + m);
+  }
+  let minutes = 0;
+  for (const dayMinutes of minutesByDay.values()) {
+    minutes += Math.min(dayMinutes, EFFORT_DAILY_MINUTE_CAP);
   }
   // ~1200 min in 28 days (≈43 min/day) earns full effort marks.
   const effort = Math.min(1, Math.log1p(minutes) / Math.log1p(1200));
@@ -6384,12 +6414,11 @@ async function computeAcedItATAR(email) {
   mastery *= masterySample;
 
   // ── Breadth (13%): technique variety ────────────────────────────────────
-  // Built from every study event in the window, not only the ones that paid
-  // XP. A zero-XP row is a real session that hit a daily or velocity cap (or a
-  // quiz retry) — scoring only paid events meant a student who genuinely used
-  // every technique lost the ones they had already maxed out that day, and the
-  // breadth bar sat below full no matter what they did.
-  const families = new Set(windowEvents.map((e) => techniqueFamily(e.source)));
+  // Built from every session the student actually did, not only the ones that
+  // paid XP — a student who used every technique was losing the ones they had
+  // already maxed out that day, and the breadth bar sat below full no matter
+  // what they did.
+  const families = new Set(studyEvents.map((e) => techniqueFamily(e.source)));
   families.delete("challenge");   // retired feature; kept out of the count
   const breadth = Math.min(1, families.size / BREADTH_TARGET_FAMILIES);
 

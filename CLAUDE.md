@@ -65,11 +65,21 @@ Two traps this component has fallen into already, both fixed 2026-08-28:
   its weight is redistributed when there isn't one, rather than banked as a
   zero. Same rule for grading an assessment that's still two weeks out.
 
-Breadth counts technique *variety*, so it reads every study event in the window,
-including the zero-XP rows a daily or velocity cap writes — a capped session is
-still a session the student did. And every window query pages (`fetchAllRows`):
-an unordered `.limit(n)` on `xp_events` handed heavy users an arbitrary prefix
-of their own log.
+- **`xp_awarded > 0` is not "did they study".** All five components read one
+  predicate now: an event counts if it paid XP *or* was capped. The caps govern
+  the XP economy, not the study log — `awardXPIncremental` says as much where it
+  writes the row ("capping the payout must not stop the counting") — so gating
+  on payout quietly deleted a student's *best* days from consistency, effort,
+  mastery and breadth. A zero-content session (raw XP zero, uncapped) still
+  doesn't count; there's no work in it to measure. Velocity-capped rows count
+  too: 600 XP/hour is reachable honestly with a 2× streak on a long session.
+
+Effort totals minutes per day and clamps each day at `EFFORT_DAILY_MINUTE_CAP`,
+because `duration_minutes` comes from the client. The daily XP cap used to bound
+this incidentally, and badly — where it landed moved with the student's streak
+multiplier. And every window query pages (`fetchAllRows`): an unordered
+`.limit(n)` on `xp_events` handed heavy users an arbitrary prefix of their own
+log, which cost them breadth, effort and mastery at once.
 
 Client mirror of the band thresholds is `src/lib/atarBands.js`. Server is the
 source of truth; keep them in sync.
