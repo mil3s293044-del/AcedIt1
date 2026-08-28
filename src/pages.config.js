@@ -11,11 +11,13 @@
  * 
  *   import HomePage from './pages/HomePage';
  *   import Dashboard from './pages/Dashboard';
+import Explore from './pages/Explore';
  *   import Settings from './pages/Settings';
  *   
  *   export const PAGES = {
  *       "HomePage": HomePage,
  *       "Dashboard": Dashboard,
+    "Explore": Explore,
  *       "Settings": Settings,
  *   }
  *   

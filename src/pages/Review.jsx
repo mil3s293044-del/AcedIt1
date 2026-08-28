@@ -188,7 +188,7 @@ export default function Review() {
                     className="card-soft on-table p-5 lg:p-6">
                     <div className="flex items-start justify-between gap-3 mb-4">
                         <div>
-                            <h1 className="font-display font-extrabold text-2xl text-foreground">Your pile</h1>
+                            <h1 className="font-display font-extrabold text-2xl text-foreground">Your review queue</h1>
                             <p className="text-sm text-muted-foreground mt-0.5">
                                 Everything the app is keeping track of, and what it is actually asking of you.
                             </p>
@@ -210,7 +210,7 @@ export default function Review() {
                         the entire fix: the alarming number was never review debt. */}
                     {counts.new > counts.active && counts.new > 0 && (
                         <p className="mt-4 text-sm text-muted-foreground border-t border-border pt-3">
-                            Most of your pile is material you have not started yet. That is not you falling
+                            Most of your queue is material you have not started yet. That is not you falling
                             behind, and nothing here is counting it against you.
                         </p>
                     )}

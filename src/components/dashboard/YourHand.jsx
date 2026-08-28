@@ -266,7 +266,7 @@ export default function YourHand({ hand = [], className = "" }) {
         <div data-your-hand className={`rounded-2xl bg-surface border border-border
             on-table p-5 lg:p-6 ${className}`}>
             <div className="flex items-baseline justify-between gap-3 mb-1">
-                <p className="stat-label text-muted-foreground">Your hand</p>
+                <p className="stat-label text-muted-foreground">Your subjects</p>
                 {totalDue > 0 && (
                     <span className="pill bg-streak/10 text-streak text-[10px]">
                         {totalDue} due
