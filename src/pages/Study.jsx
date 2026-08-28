@@ -716,6 +716,7 @@ export default function Study() {
                             return (
                                 <button
                                     key={t.id}
+                                    data-run-target={t.id === "active_recall" ? "active_recall" : undefined}
                                     onClick={() => setActiveTab(t.id)}
                                     className={`relative text-left rounded-2xl border-2 p-4 transition-all hover:-translate-y-0.5 ${th.bg} ${th.border} ${isTop ? 'shadow-soft' : ''}`}
                                 >

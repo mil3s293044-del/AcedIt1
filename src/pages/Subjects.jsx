@@ -363,6 +363,7 @@ export default function Subjects() {
                             </div>
                         </div>
                         <Button onClick={() => setShowCreateDialog(true)}
+                            data-run-target="subjects"
                             className="bg-chart-4 hover:bg-chart-4/90 text-white shadow-soft rounded-xl gap-2 font-bold">
                             <Plus className="w-4 h-4" /> New Subject
                         </Button>
