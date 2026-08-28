@@ -160,6 +160,7 @@ export default function GoalCompetitionDetail({ competition, currentUserEmail, o
                         competition={competition}
                         currentUserEmail={currentUserEmail}
                         onUpdate={onUpdate}
+                        embedded={embedded}
                     />
                 </TabsContent>
 

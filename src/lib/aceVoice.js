@@ -251,6 +251,13 @@ export const STREAK_CHEER = [
  * mascot that makes the SAC worse. Even the day-before line is calm.
  */
 export const SAC_MOOD = [
+    // The day itself. It used to fall into the "within: 1" band and be told
+    // "it's tomorrow" on the morning of the SAC, which is the one day the
+    // countdown has to get right.
+    { within: 0,  pose: "alert",  lines: [
+        "Today. You've done the work — go and use it.",
+        "It's today. Skim what you know, then leave it alone.",
+    ] },
     { within: 1,  pose: "alert",  lines: [
         "Tomorrow. Deep breath — cover the big stuff, skip the rest.",
         "It's tomorrow. Past this point, sleep beats cramming. Genuinely.",

@@ -37,14 +37,37 @@ const MODEL = process.env.ANTHROPIC_MODEL || "claude-sonnet-4-6";
 // id is set in the Render dashboard.
 const FAST_MODEL = process.env.ANTHROPIC_FAST_MODEL || MODEL;
 
-if (!process.env.ANTHROPIC_API_KEY) {
+// A missing key used to be process.exit(1). On a laptop that reads as a helpful
+// nudge; on a host it means one absent secret takes the entire site down — no
+// app, no login, no XP, no ATAR — because the AI proxy couldn't authenticate.
+// That is exactly how a production deploy fails: the build is green, the server
+// starts, and it kills itself before serving a byte.
+//
+// So the three routes that actually need the model answer 503 and say why, and
+// everything else runs. The log line is loud because a silently degraded AI is
+// its own kind of bad day.
+const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY;
+if (!ANTHROPIC_API_KEY) {
   console.error(
-    "[local-ai] ANTHROPIC_API_KEY is not set. Add it to .env.local and restart.",
+    "[local-ai] ANTHROPIC_API_KEY is not set — every AI endpoint will answer 503.\n" +
+    "[local-ai] Everything else (the app, auth, XP, streaks, the ATAR) serves normally.\n" +
+    "[local-ai] Set it in the host's environment (Render: Environment tab) or in .env.local for dev.",
   );
-  process.exit(1);
 }
+const anthropic = ANTHROPIC_API_KEY ? new Anthropic({ apiKey: ANTHROPIC_API_KEY }) : null;
 
-const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+/**
+ * Guard for the handlers that need the model. Returns true when it has already
+ * answered, so a caller is one line: `if (aiUnavailable(res)) return;`.
+ */
+function aiUnavailable(res) {
+  if (anthropic) return false;
+  res.status(503).json({
+    error: "AI is unavailable on this server right now.",
+    detail: "ANTHROPIC_API_KEY is not configured. Everything else still works.",
+  });
+  return true;
+}
 
 // ─── Ace study-companion model ─────────────────────────────────────────────
 // Ace is a chatty premium-only study buddy that doesn't need Sonnet-grade
@@ -2282,6 +2305,7 @@ app.post("/local-ai/uploadFile", upload.any(), (req, res) => {
 // response_json_schema, keep using the batch /local-ai/invokeAI endpoint —
 // streaming partial JSON isn't useful until it's complete.
 app.post("/local-ai/invokeAIStream", async (req, res) => {
+  if (aiUnavailable(res)) return;
   console.log(`[local-ai] invokeAIStream received (file_urls=${(req.body?.file_urls || []).length})`);
 
   res.setHeader("Content-Type", "text/event-stream");
@@ -2468,6 +2492,7 @@ ${knowledgeForPrompt({ compact: true })}${profileBlock}`;
 }
 
 app.post("/local-ai/studyCoachChat", async (req, res) => {
+  if (aiUnavailable(res)) return;
   console.log(`[local-ai] studyCoachChat received (msgs=${(req.body?.messages || []).length})`);
 
   res.setHeader("Content-Type", "text/event-stream");
@@ -2669,6 +2694,7 @@ app.post("/local-ai/studyCoachChat", async (req, res) => {
 });
 
 app.post("/local-ai/invokeAI", async (req, res) => {
+  if (aiUnavailable(res)) return;
   console.log(`[local-ai] invokeAI received (file_urls=${(req.body?.file_urls || []).length}, has_schema=${!!req.body?.response_json_schema}, feature=${req.body?.feature || "(none)"})`);
   try {
     const params = req.body || {};

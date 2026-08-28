@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
     Trophy, Swords, Crown, Activity, ClipboardList, Settings as SettingsIcon,
-    LogIn, Loader2, ArrowRight, TrendingUp, Coins, RotateCcw, Target, Users, ShieldAlert
+    LogIn, Loader2, ArrowRight, RotateCcw, Target, Users, ShieldAlert, Flame,
 } from "lucide-react";
 import { base44 } from "@/api/base44Client";
 import { useToast } from "@/components/ui/use-toast";
@@ -19,6 +19,10 @@ import { momentumOf } from "@/components/competition/battleOdds";
 import { allBattles } from "@/components/competition/normaliseBattle";
 import BattleRow from "@/components/competition/BattleRow";
 import BattleDashboard from "@/components/competition/BattleDashboard";
+import BookPanel from "@/components/competition/BookPanel";
+import MoversPanel from "@/components/competition/MoversPanel";
+import { bookOdds, bookSeries, bookExposure, movers, rivalFeed }
+    from "@/components/competition/portfolio";
 import CalloutQuiz from "@/components/competition/CalloutQuiz";
 import { fmtDate } from "@/lib/safeDate";
 import HelpButton from "@/components/shared/HelpButton";
@@ -212,6 +216,31 @@ export default function Competitions() {
     const liveBattleCount = allBattles_.filter(b => b.status === "live").length;
 
     // ─── Derived stats ────────────────────────────────────────────────────────
+    // ── The book ────────────────────────────────────────────────────────────
+    // Six equal stat tiles is a table, not a dashboard: nothing on it was THE
+    // number. The book is one price across every live battle, weighted by what
+    // is at stake, with the line it moved along — and the old counters live
+    // under it as supporting text.
+    const book = useMemo(() => {
+        const series = bookSeries(allBattles_);
+        const odds = bookOdds(allBattles_);
+        // "Today" is the last 24h of the line, which is the window the movers
+        // list uses too — one definition, so the two panels agree.
+        const dayAgo = Date.now() - 24 * 3600 * 1000;
+        const then = [...series].reverse().find((d) => new Date(d.t).getTime() <= dayAgo);
+        return {
+            odds, series,
+            delta: odds != null && then ? Math.round(odds - then.p) : null,
+            exposure: bookExposure(allBattles_),
+            liveCount: allBattles_.filter((b) => b.status === "live").length,
+        };
+    }, [allBattles_]);
+
+    const bigMovers = useMemo(() => movers(allBattles_, { hours: 24 }), [allBattles_]);
+    const rivals = useMemo(
+        () => rivalFeed({ battles: allBattles_, ticker, myEmail: user?.email }),
+        [allBattles_, ticker, user?.email]);
+
     const stats = useMemo(() => {
         const myEmail = user?.email;
         const active = competitions.filter(c => c.status === 'active' || c.status === 'pending');
@@ -285,12 +314,17 @@ export default function Competitions() {
         const sorted = [...stats.active].sort((a, b) => {
             const am = (a.participants || []).find(p => p.email === user?.email);
             const bm = (b.participants || []).find(p => p.email === user?.email);
-            return (am?.progress_percent || 0) - (bm?.progress_percent || 0);
+            return rankVal(am) - rankVal(bm);
         });
         const target = sorted[0];
         const me = (target.participants || []).find(p => p.email === user?.email);
         const accepted = (target.participants || []).filter(p => p.status === 'accepted' || p.status === 'completed');
-        const ranked = [...accepted].sort((a, b) => (b.progress_percent || 0) - (a.progress_percent || 0));
+        // rankVal, not progress_percent. Battles have ranked by Compete Score
+        // since the scoring rewrite; this block kept reading the legacy field,
+        // which is zero on every current battle. So the most prominent card on
+        // the page picked its target by a number that no longer moves and then
+        // reported "0% done. Priya is at 0%" under a live 412-448 race.
+        const ranked = [...accepted].sort((a, b) => rankVal(b) - rankVal(a));
         const myIdx = ranked.findIndex(p => p.email === user?.email);
         const leader = ranked[0];
         const isLeading = myIdx === 0;
@@ -313,7 +347,7 @@ export default function Competitions() {
             return {
                 label: "You're leading",
                 title: `Hold the lead in "${target.goal_title}"`,
-                sub: `${Math.round(me?.progress_percent || 0)}% done. ${ranked[1].name?.split(' ')[0]} is at ${Math.round(ranked[1].progress_percent || 0)}%.`,
+                sub: `${Math.round(rankVal(me))} pts. ${ranked[1].name?.split(' ')[0]} is on ${Math.round(rankVal(ranked[1]))}.`,
                 accent: "xp",
                 icon: Crown,
                 comp: target,
@@ -322,7 +356,7 @@ export default function Competitions() {
         return {
             label: leader ? `${leader.name?.split(' ')[0]} is ahead` : "Time to focus",
             title: `Catch up on "${target.goal_title}"`,
-            sub: `You're at ${Math.round(me?.progress_percent || 0)}%. ${leader ? `${leader.name?.split(' ')[0]} is at ${Math.round(leader.progress_percent || 0)}% — ${Math.round((leader.progress_percent || 0) - (me?.progress_percent || 0))}pp gap.` : ''}`,
+            sub: `You're on ${Math.round(rankVal(me))} pts.${leader ? ` ${leader.name?.split(' ')[0]} is on ${Math.round(rankVal(leader))} — ${Math.round(rankVal(leader) - rankVal(me))} to close.` : ''}`,
             accent: "chart-3",
             icon: Swords,
             comp: target,
@@ -494,49 +528,27 @@ export default function Competitions() {
                     </h1>
                 </motion.section>
 
-                {/* ── SCOREBOARD ──────────────────────────────────────── */}
-                {/* Replaces the tier ladder. Every number here is about the
-                    battles on this page, not a lifetime-XP rank that moved
-                    whether or not you were competing. */}
-                <motion.section
-                    initial={{ opacity: 0, y: 12 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: 0.05 }}
-                >
-                    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
-                        {[
-                            { label: "Record", value: `${stats.recentWins}\u2013${Math.max(0, stats.completed.length - stats.recentWins)}`,
-                              icon: Trophy, iconBg: "bg-xp/15", iconColor: "text-xp", tone: "text-foreground" },
-                            { label: "Win rate", value: `${winRate}%`,
-                              icon: Target, iconBg: "bg-primary/15", iconColor: "text-primary",
-                              tone: winRate >= 50 ? "text-primary" : "text-foreground" },
-                            { label: "Live now", value: `${stats.active.length}`,
-                              icon: Activity, iconBg: "bg-chart-3/15", iconColor: "text-chart-3", tone: "text-foreground" },
-                            { label: "Leading", value: `${stats.leading}/${stats.active.length}`,
-                              icon: Crown, iconBg: "bg-xp/15", iconColor: "text-xp",
-                              tone: stats.leading > 0 ? "text-xp" : "text-muted-foreground" },
-                            { label: "Points today", value: stats.pointsToday > 0 ? `+${stats.pointsToday}` : "0",
-                              icon: TrendingUp, iconBg: "bg-chart-4/15", iconColor: "text-chart-4",
-                              tone: stats.pointsToday > 0 ? "text-chart-4" : "text-muted-foreground" },
-                            { label: "XP at stake", value: stats.xpAtStake.toLocaleString(),
-                              icon: Coins, iconBg: "bg-streak/15", iconColor: "text-streak",
-                              tone: stats.xpAtStake > 0 ? "text-streak" : "text-muted-foreground" },
-                        ].map(({ label, value, icon: Icon, iconBg, iconColor, tone }) => (
-                            <div key={label} className="card-soft p-4 flex flex-col gap-2">
-                                <div className={`w-9 h-9 rounded-xl ${iconBg} flex items-center justify-center`}>
-                                    <Icon className={`w-4 h-4 ${iconColor}`} />
-                                </div>
-                                <p className={`font-display font-extrabold text-2xl leading-none tabular-nums ${tone}`}>{value}</p>
-                                <p className="stat-label">{label}</p>
-                            </div>
-                        ))}
-                    </div>
-                    {stats.winStreak > 1 && (
-                        <p className="mt-3 inline-flex items-center gap-1.5 pill bg-xp/15 text-xp">
-                            \ud83d\udd25 {stats.winStreak} battle win streak
-                        </p>
-                    )}
-                </motion.section>
+                {/* ── THE BOOK ───────────────────────────────────────── */}
+                {/* One price, one line, and the counters underneath. Six tiles
+                    of equal weight gave the eye nowhere to land and answered a
+                    question nobody arrives with; a market opens with its price. */}
+                <BookPanel
+                    odds={book.odds}
+                    delta={book.delta}
+                    series={book.series}
+                    exposure={book.exposure}
+                    liveCount={book.liveCount}
+                    record={`${stats.recentWins}\u2013${Math.max(0, stats.completed.length - stats.recentWins)}`}
+                    winRate={stats.completed.length ? winRate : null}
+                />
+                {stats.winStreak > 1 && (
+                    <p className="inline-flex items-center gap-1.5 pill bg-xp/15 text-xp">
+                        <Flame className="w-3.5 h-3.5" /> {stats.winStreak} battle win streak
+                    </p>
+                )}
+
+                {/* ── WHAT MOVED WHILE YOU WEREN'T LOOKING ───────────────── */}
+                <MoversPanel movers={bigMovers} feed={rivals} onOpen={(b) => setOpenBattle(b)} />
 
                 {/* ── ONE PAGE, THREE CLEAR MODES ──────────────────────── */}
                 <Tabs value={competeTab} onValueChange={setCompeteTab} className="space-y-5">
@@ -590,8 +602,16 @@ export default function Competitions() {
                                     </h2>
                                     <p className="text-muted-foreground text-sm mt-0.5">{focus.sub}</p>
                                 </div>
+                                {/* setOpenBattle, not setSelectedComp. The rows below open
+                                    the market dashboard — probability, the chart, the book —
+                                    and this button, the most prominent call to action on the
+                                    page, opened the legacy panel instead. */}
                                 <Button
-                                    onClick={() => setSelectedComp(focus.comp)}
+                                    onClick={() => {
+                                        const b = allBattles_.find(
+                                            (x) => x.kind === "battle" && x.id === focus.comp?.id);
+                                        if (b) setOpenBattle(b); else setSelectedComp(focus.comp);
+                                    }}
                                     className="w-full sm:w-auto flex-shrink-0"
                                 >
                                     Open battle <ArrowRight className="w-4 h-4" />

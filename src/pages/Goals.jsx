@@ -15,7 +15,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { DragDropContext, Droppable, Draggable } from "@hello-pangea/dnd";
 import {
-    CalendarDays, Plus, Check, X, GraduationCap, Sparkles,
+    CalendarDays, Plus, Check, X, Sparkles,
     Loader2, ArrowRight, Edit2, Flag, BookOpen, Trash2, ChevronLeft,
     ChevronRight, Repeat, Scale,
     Brain, Circle, Clock, FileQuestion, Layers, Lightbulb, NotebookPen, PenTool, Timer,
@@ -31,6 +31,7 @@ import { strategiesNeedingCheckIn } from "@/lib/strategyState";
 import StrategyCheckIn from "@/components/planner/StrategyCheckIn";
 import AceBody from "@/components/ace/AceBody";
 import { sacMood } from "@/lib/aceVoice";
+import SacHero from "@/components/planner/SacHero";
 import WeekPlanDialog from "@/components/planner/WeekPlanDialog";
 import { fmtDate } from "@/lib/safeDate";
 
@@ -43,15 +44,39 @@ const TYPE_OPTIONS = [
 const REPEAT_OPTIONS = [2, 4, 8, 12];
 const MAX_WEEKS_AHEAD = 8;
 
-// Daily intention presets — one line to aim the day at. Students can also
-// write their own.
-const PRESET_INTENTIONS = [
+// Daily intention prompts — one line to aim the day at.
+//
+// They used to be five fixed strings, which meant the card offered "beat
+// yesterday by ten minutes" to someone with a SAC tomorrow. The distance to
+// the next assessment is right there on the same row of the page, so the
+// options now come from it: the night before is not the day to suggest
+// starting a new topic, and three weeks out is not the day to suggest a mock.
+const GENERIC_INTENTIONS = [
     "One focused session before dinner",
     "Start with the subject I avoid",
-    "Beat yesterday by ten minutes",
     "Show up for 20 minutes, minimum",
     "Finish today's plan — then switch off",
 ];
+function intentionsFor(days, subject) {
+    const s = subject ? `${subject}` : "the subject it's for";
+    if (!Number.isFinite(days)) return GENERIC_INTENTIONS;
+    if (days <= 1) return [
+        `Cover the big ${s} topics, skip the rest`,
+        "One timed run, then stop for the night",
+        "Sleep beats cramming — finish by 9",
+    ];
+    if (days <= 3) return [
+        `A timed ${s} question set today`,
+        "Start with the weakest topic, not the easiest",
+        "Twenty minutes on the thing I keep avoiding",
+    ];
+    if (days <= 7) return [
+        `Blurt everything I know about ${s}`,
+        `One ${s} session before dinner`,
+        "Turn today's mistakes into cards",
+    ];
+    return GENERIC_INTENTIONS;
+}
 
 // Session types — the prefix keeps sessionLink() routing to the right tool.
 const SESSION_TYPES = [
@@ -824,12 +849,42 @@ export default function Planner() {
         ? profile.extra.daily_intention.text
         : null;
 
+    // How many of the last seven declared days were followed by real study.
+    // Same log and same rule the ATAR's planning component uses, so the number
+    // on the card and the number in the score can't tell different stories.
+    const intentsKept = useMemo(() => {
+        const log = Array.isArray(profile?.extra?.intent_log) ? profile.extra.intent_log : [];
+        const since = format(addDays(new Date(), -7), "yyyy-MM-dd");
+        // `actuals` is already the union of study_techniques and study_sessions
+        // with real minutes on them — the same two tables, and the same "was
+        // there study that day" test, the ATAR applies.
+        const studied = new Set((actuals || []).map((r) => r.date));
+        return log.filter((e) => e?.d && e.d >= since && studied.has(e.d)).length;
+    }, [profile, actuals]);
+
     const saveIntention = async (text) => {
         const t = (text || "").trim();
         if (!t || !profile) return;
         setSavingIntention(true);
         try {
-            const extra = { ...(profile.extra || {}), daily_intention: { date: todayStr, text: t.slice(0, 80) } };
+            // Also log the day, so a kept intention counts.
+            //
+            // The Planner's intention was a sticky note: you set it and nothing
+            // in the app ever knew. The ATAR's planning component scores
+            // declared intents that were actually followed, and it reads
+            // intent_log — which only the Dashboard's modal wrote to. Same
+            // behaviour, same evidence, so the same credit. One entry per day;
+            // re-setting overwrites rather than stacking, matching the
+            // Dashboard's own write.
+            const prevExtra = profile.extra || {};
+            const log = Array.isArray(prevExtra.intent_log) ? [...prevExtra.intent_log] : [];
+            const withoutToday = log.filter((e) => e?.d !== todayStr);
+            withoutToday.push({ d: todayStr, m: "planner" });
+            const extra = {
+                ...prevExtra,
+                daily_intention: { date: todayStr, text: t.slice(0, 80) },
+                intent_log: withoutToday.slice(-30),
+            };
             await base44.entities.UserProfile.update(profile.id, { extra });
             setProfile(prev => ({ ...prev, extra }));
             setEditingIntention(false);
@@ -907,56 +962,13 @@ export default function Planner() {
                     className="grid grid-cols-1 lg:grid-cols-3 gap-5">
                     <div className="lg:col-span-2">
                         {nextSac ? (
-                            <div className={`relative overflow-hidden rounded-3xl p-6 lg:p-8 text-white shadow-soft h-full ${
-                                nextSacDays <= 3 ? "bg-gradient-to-br from-streak to-xp" : "bg-gradient-to-br from-chart-3 to-chart-4"
-                            }`}>
-                                <Flag className="absolute -top-8 -right-8 w-44 h-44 text-white/10 pointer-events-none" />
-                                {/* Ace, reacting to how close it is. The banner
-                                    already shouts the number; what it never did
-                                    was have an opinion, and the opinion is the
-                                    useful half — "eleven days" means nothing to
-                                    someone who doesn't know if eleven is fine. */}
-                                <div className="absolute right-4 bottom-3 sm:right-6 sm:bottom-4 w-20 sm:w-28
-                                    pointer-events-none" data-ace-sac={sacFeel.pose}>
-                                    {/* Black on the coloured banner rather than
-                                        white. The white silhouette washed out
-                                        against the orange half of the gradient;
-                                        the dark body with knocked-out white
-                                        eyes reads on both ends of it. */}
-                                    <AceBody className="w-full" pose={sacFeel.pose} title="Ace"
-                                        tone="fill-slate-900" card="fill-white"
-                                        cardStroke="stroke-white" />
-                                </div>
-                                {/* Centred, because the intention card next to it sets the
-                                    row height and the banner was pooling all the slack in a
-                                    dead block under the buttons. */}
-                                <div className="relative h-full flex flex-col justify-center">
-                                    <p className="text-xs font-bold uppercase tracking-widest text-white/70 mb-1">
-                                        {nextSacDays <= 3 ? "Crunch time" : "Next assessment"}
-                                    </p>
-                                    <div className="flex items-end gap-4 flex-wrap">
-                                        <p className="font-display font-black leading-none" style={{ fontSize: "clamp(3rem, 8vw, 5rem)" }}>
-                                            {daysLabel(nextSacDays)}
-                                        </p>
-                                        <div className="mb-2 min-w-0">
-                                            <p className="font-extrabold text-white truncate text-lg">{nextSac.subject_name} — {nextSac.title}</p>
-                                            <p className="text-sm text-white/75">{fmtDate(nextSac.due_date, "EEEE d MMMM")}</p>
-                                            <p className="text-sm font-bold text-white/90 mt-1 max-w-md"
-                                                data-ace-sac-line>{sacFeel.line}</p>
-                                        </div>
-                                    </div>
-                                    <div className="flex gap-2 mt-5 flex-wrap">
-                                        <Link to="/Study?tab=exam"
-                                            className="inline-flex items-center gap-1.5 bg-white/20 hover:bg-white/30 rounded-xl px-4 py-2 text-sm font-bold transition-colors">
-                                            <GraduationCap className="w-4 h-4" /> Run a timed mock
-                                        </Link>
-                                        <Link to="/Study?tab=spaced_repetition"
-                                            className="inline-flex items-center gap-1.5 bg-white/20 hover:bg-white/30 rounded-xl px-4 py-2 text-sm font-bold transition-colors">
-                                            <BookOpen className="w-4 h-4" /> Review cards
-                                        </Link>
-                                    </div>
-                                </div>
-                            </div>
+                            <SacHero
+                                sac={nextSac}
+                                days={nextSacDays}
+                                daysLabel={daysLabel(nextSacDays)}
+                                dateLabel={fmtDate(nextSac.due_date, "EEEE d MMMM")}
+                                feel={sacFeel}
+                            />
                         ) : (
                             <div className="rounded-3xl bg-surface border border-dashed border-border p-6 lg:p-8 text-center h-full flex flex-col items-center justify-center shadow-soft">
                                 <AceBody className="w-24 mb-1" pose="point" title="Ace" />
@@ -988,18 +1000,27 @@ export default function Planner() {
 
                         {todayIntention && !editingIntention ? (
                             <div className="flex-1 flex flex-col">
-                                <p className="font-display font-extrabold text-chart-4 leading-snug text-2xl lg:text-[1.7rem]">
-                                    “{todayIntention}”
+                                {/* A set intention should look decided. It was the same
+                                    weight as the picker it replaced, so the card read the
+                                    same whether you had committed to something or not. */}
+                                <span aria-hidden className="font-display font-black text-chart-4/25
+                                    text-5xl leading-[0.6] select-none">&ldquo;</span>
+                                <p className="font-display font-extrabold text-chart-4 leading-snug
+                                    text-2xl lg:text-[1.7rem] mt-1">
+                                    {todayIntention}
                                 </p>
-                                <p className="text-xs text-muted-foreground mt-auto pt-3">
-                                    One line, one day. Tomorrow you set a fresh one.
+                                <p className="text-xs text-muted-foreground mt-auto pt-3 flex items-center gap-1.5">
+                                    <Check className="w-3.5 h-3.5 text-primary flex-shrink-0" />
+                                    Set for today. {intentsKept > 0
+                                        ? `Kept ${intentsKept} of the last 7 \u2014 it counts toward planning.`
+                                        : "Follow it with a session and it counts toward planning."}
                                 </p>
                             </div>
                         ) : (
                             <div className="space-y-2">
                                 <p className="text-xs text-muted-foreground mb-1">Pick one — or write your own:</p>
                                 <div className="flex flex-wrap gap-1.5">
-                                    {PRESET_INTENTIONS.map(p => (
+                                    {intentionsFor(nextSacDays, nextSac?.subject_name).map(p => (
                                         <button key={p} onClick={() => saveIntention(p)} disabled={savingIntention}
                                             className="px-2.5 py-1.5 rounded-xl text-xs font-bold border-2 border-chart-4/25 bg-surface text-chart-4 hover:bg-chart-4/10 transition-colors text-left">
                                             {p}
