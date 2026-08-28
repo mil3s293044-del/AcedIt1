@@ -100,7 +100,7 @@ export const FEATURES = [
         when: "A week or so out from a SAC, to find the gaps while there's still time to close them.",
         needs: null,
         proof: "Free recall — the missing items are the finding.",
-        aka: ["blurt", "brain dump", "everything I know", "gaps", "blind spots"],
+        aka: ["blurt", "brain dump", "everything I know", "gaps", "blind spots", "sac"],
     },
     {
         id: "exam", name: "Revision Mode", section: "Study", suit: "spade",
@@ -185,7 +185,7 @@ export const FEATURES = [
         what: "A short daily check-in that turns how you're actually going into the next concrete move.",
         when: "Start of a study session when you don't know what to pick up.",
         needs: null,
-        aka: ["strategy", "check in", "what now", "advice", "stuck"],
+        aka: ["strategy", "check in", "what now", "advice", "stuck", "sac", "exam", "run up"],
     },
 
     // ── Testing yourself ────────────────────────────────────────────────
@@ -377,6 +377,7 @@ export const BY_ID = Object.fromEntries(FEATURES.map(f => [f.id, f]));
  * is one place to be wrong in rather than fourteen.
  */
 export const PAGES = {
+    Explore:      { route: "/Explore",      title: "Explore",      intro: "Everything AcedIt can do, what each thing is for, and when it's worth opening." },
     Dashboard:    { route: "/Dashboard",    title: "Home",         intro: "What's worth doing today, and how the last month has actually gone." },
     Study:        { route: "/Study",        title: "Study",        intro: "Six techniques doing six different jobs. Which tab you want depends on what's going wrong, not on which one you like." },
     Quizzes:      { route: "/Quizzes",      title: "Quizzes",      intro: "Exam-shaped questions, written by you or generated from your notes." },
@@ -391,10 +392,10 @@ export const PAGES = {
     Strategise:   { route: "/Strategise",   title: "Strategise",   intro: "A short check-in that turns how you're going into the next concrete move." },
     Guides:       { route: "/Guides",       title: "Guides",       intro: "Written guides on study technique and VCE specifics." },
     StudyGroups:  { route: "/StudyGroups",  title: "Study Groups", intro: "A shared space for a class or a group, with shared resources and a chat." },
-    Review:       { route: "/Review",       title: "Your pile",    intro: "Everything the app is keeping track of, why it thinks each thing is due, and how to tell it otherwise.", notes: [
+    Review:       { route: "/Review",       title: "Your review queue",    intro: "Everything the app is keeping track of, why it thinks each thing is due, and how to tell it otherwise.", notes: [
         "A card you have never opened is new, not overdue. When the due number looked frightening, it was usually mostly that.",
         "\"I know this\" takes a card out of the queue without deleting it, and it is one button to undo.",
-        "\"Not this week\" is the honest way to clear a pile you have not learnt yet. It does not count as a lapse when the card comes back.",
+        "\"Not this week\" is the honest way to clear a backlog you have not learnt yet. It does not count as a lapse when the card comes back.",
         "The day's queue is capped so a backlog stays a session rather than a wall. Whatever is behind it is always shown, never hidden.",
     ] },
 
@@ -453,6 +454,13 @@ const STOP = new Set([
     "explain", "tell", "show", "help", "get", "got", "use", "using", "make", "want", "need",
     "please", "thanks", "hey", "hi", "ace", "app", "acedit", "some", "any", "there", "here",
     "dont", "doesnt", "cant", "wont", "not", "no", "yes", "ok", "okay", "just", "really",
+    // Prepositions and filler that survived because they're two letters or
+    // more. "I've got a SAC coming up" was matching Ranked on "up" alone,
+    // which is the kind of result that teaches a student the search guesses.
+    // Deliberately NOT here: "down", "keep" and "much", each of which is load-
+    // bearing in a real keyword ("drill down", "keep getting wrong", "how much
+    // stuck") — a stop word that eats a keyword is a worse bug than the noise.
+    "up", "out", "off", "over", "coming", "keeps", "lot", "many", "thing", "things", "stuff",
 ]);
 
 /** Lowercase, drop punctuation, drop the words that don't narrow anything. */
@@ -505,12 +513,31 @@ export function blockedBy(feature, ready) {
  * is the entire reason it's rules and not a prompt.
  */
 export function findFeatures(query, limit = 4) {
+    return scoreFeatures(query).filter(x => x.score >= CONFIDENT).slice(0, limit).map(x => x.f);
+}
+
+/**
+ * The same ranking, at browse confidence.
+ *
+ * Ace needs a high bar because a wrong guess there interrupts someone who was
+ * asking about the Krebs cycle. A search box is the opposite situation: the
+ * student has explicitly asked what the app has, a near-miss costs them a
+ * glance, and an empty result costs them the belief that searching works. So
+ * the threshold drops, and the ordering does the rest.
+ */
+const BROWSING = 5;
+export function searchFeatures(query, limit = 40) {
+    return scoreFeatures(query).filter(x => x.score >= BROWSING).slice(0, limit).map(x => x.f);
+}
+
+/** Every feature scored against a phrase, best first. Shared by both readers. */
+function scoreFeatures(query) {
     const qt = tokens(query);
     if (!qt.length) return [];
     const has = new Set(qt);
     const joined = qt.join(" ");
 
-    const scored = FEATURES.map(f => {
+    return FEATURES.map(f => {
         let score = 0;
         const nameT = tokens(f.name);
         const nameJoined = nameT.join(" ");
@@ -526,7 +553,16 @@ export function findFeatures(query, limit = 4) {
             if (at.every(t => has.has(t))) score += at.length > 1 ? 30 : 20;
         }
         for (const w of qt) {
+            // Exact token against the name is safe at any length.
             if (nameT.includes(w)) score += 8;
+            // The description checks are SUBSTRING, so that "memoris" still
+            // finds "memorise" — which means a short token matches inside
+            // unrelated words. "I've got a SAC coming up" tokenised to "ve",
+            // and "ve" is inside "everyone", so Ranked came back as a result
+            // for a question about SACs. Three is the line: it kills the
+            // two-letter fragments and keeps the short words that carry a
+            // whole question here — "sac", "xp", "due".
+            if (w.length < 3) continue;
             if (norm(f.what).includes(w)) score += 3;
             if (norm(f.when).includes(w)) score += 2;
         }
@@ -534,11 +570,7 @@ export function findFeatures(query, limit = 4) {
         // equal match — you can't use "Map layers" without opening Mind Maps.
         if (f.parent) score -= 4;
         return { f, score };
-    }).filter(x => x.score >= CONFIDENT)
-        .sort((a, b) => b.score - a.score)
-        .slice(0, limit);
-
-    return scored.map(x => x.f);
+    }).sort((a, b) => b.score - a.score);
 }
 
 /**

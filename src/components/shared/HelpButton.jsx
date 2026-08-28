@@ -110,7 +110,17 @@ export default function HelpButton({ page, className = "" }) {
                                 ))}
                             </div>
 
-                            <div className="p-3 border-t-2 border-border">
+                            {/* This panel only ever answers "what is on THIS
+                                page", which is no help at all to a student who
+                                is on the wrong page — the commonest way to be
+                                lost here. Explore is the same descriptions for
+                                the whole app, so the panel now opens onto it
+                                rather than dead-ending in a support form. */}
+                            <div className="p-3 border-t-2 border-border space-y-2">
+                                <Link to="/Explore" onClick={() => setOpen(false)}
+                                    className="flex items-center justify-center gap-1.5 text-xs font-bold text-primary hover:underline">
+                                    Looking for something else? Explore everything <ArrowRight className="w-3 h-3" />
+                                </Link>
                                 <Link to="/Support" onClick={() => setOpen(false)}
                                     className="flex items-center justify-center gap-1.5 text-xs font-bold text-muted-foreground hover:text-foreground transition-colors">
                                     Still stuck? Contact support <ArrowRight className="w-3 h-3" />

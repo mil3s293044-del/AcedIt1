@@ -132,7 +132,7 @@ export default function TodaysPlay({
                     anyway; text stops being comfortable somewhere around 75
                     characters and the cap is roughly that. */}
                 <div className="flex-1 min-w-0 max-w-2xl flex flex-col justify-center">
-                    <p className="stat-label mb-1.5">Your play</p>
+                    <p className="stat-label mb-1.5">Do this next</p>
                     <h2 className="font-display font-extrabold text-foreground
                         text-xl lg:text-2xl leading-snug tracking-tight">
                         {commitment?.met ? "You did what you said you'd do." : move.title}

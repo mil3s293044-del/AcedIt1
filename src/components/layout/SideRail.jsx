@@ -5,7 +5,7 @@ import {
     GraduationCap,
     Brain, FileQuestion, Sparkles, Map, BarChart3, Trophy,
     Users, Swords,
-    BookOpen, CreditCard, Settings as SettingsIcon, HelpCircle,
+    BookOpen, CreditCard, Settings as SettingsIcon, HelpCircle, Compass,
 } from "lucide-react";
 import { createPageUrl } from "@/utils";
 
@@ -13,6 +13,7 @@ const NAV_SECTIONS = [
     {
         label: "Study",
         items: [
+            { label: "Explore",       path: "Explore",      icon: Compass },
             { label: "Study Session", path: "Study",        icon: Brain },
             { label: "Quizzes",       path: "Quizzes",      icon: FileQuestion },
             { label: "AI Tools",      path: "AITools",      icon: Sparkles },

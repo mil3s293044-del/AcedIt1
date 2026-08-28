@@ -64,7 +64,7 @@ export default function ClearedPile({ sessions = [], className = "" }) {
                         <Brain className="w-5 h-5 text-primary" />
                     </div>
                     <div>
-                        <p className="font-bold text-foreground text-sm">Nothing on the pile yet</p>
+                        <p className="font-bold text-foreground text-sm">Nothing cleared yet</p>
                         <p className="text-xs text-muted-foreground mt-0.5">
                             Every session you finish lands here for the week.
                         </p>
