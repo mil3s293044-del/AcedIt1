@@ -285,12 +285,17 @@ export default function Competitions() {
         const sorted = [...stats.active].sort((a, b) => {
             const am = (a.participants || []).find(p => p.email === user?.email);
             const bm = (b.participants || []).find(p => p.email === user?.email);
-            return (am?.progress_percent || 0) - (bm?.progress_percent || 0);
+            return rankVal(am) - rankVal(bm);
         });
         const target = sorted[0];
         const me = (target.participants || []).find(p => p.email === user?.email);
         const accepted = (target.participants || []).filter(p => p.status === 'accepted' || p.status === 'completed');
-        const ranked = [...accepted].sort((a, b) => (b.progress_percent || 0) - (a.progress_percent || 0));
+        // rankVal, not progress_percent. Battles have ranked by Compete Score
+        // since the scoring rewrite; this block kept reading the legacy field,
+        // which is zero on every current battle. So the most prominent card on
+        // the page picked its target by a number that no longer moves and then
+        // reported "0% done. Priya is at 0%" under a live 412-448 race.
+        const ranked = [...accepted].sort((a, b) => rankVal(b) - rankVal(a));
         const myIdx = ranked.findIndex(p => p.email === user?.email);
         const leader = ranked[0];
         const isLeading = myIdx === 0;
@@ -313,7 +318,7 @@ export default function Competitions() {
             return {
                 label: "You're leading",
                 title: `Hold the lead in "${target.goal_title}"`,
-                sub: `${Math.round(me?.progress_percent || 0)}% done. ${ranked[1].name?.split(' ')[0]} is at ${Math.round(ranked[1].progress_percent || 0)}%.`,
+                sub: `${Math.round(rankVal(me))} pts. ${ranked[1].name?.split(' ')[0]} is on ${Math.round(rankVal(ranked[1]))}.`,
                 accent: "xp",
                 icon: Crown,
                 comp: target,
@@ -322,7 +327,7 @@ export default function Competitions() {
         return {
             label: leader ? `${leader.name?.split(' ')[0]} is ahead` : "Time to focus",
             title: `Catch up on "${target.goal_title}"`,
-            sub: `You're at ${Math.round(me?.progress_percent || 0)}%. ${leader ? `${leader.name?.split(' ')[0]} is at ${Math.round(leader.progress_percent || 0)}% — ${Math.round((leader.progress_percent || 0) - (me?.progress_percent || 0))}pp gap.` : ''}`,
+            sub: `You're on ${Math.round(rankVal(me))} pts.${leader ? ` ${leader.name?.split(' ')[0]} is on ${Math.round(rankVal(leader))} — ${Math.round(rankVal(leader) - rankVal(me))} to close.` : ''}`,
             accent: "chart-3",
             icon: Swords,
             comp: target,
@@ -590,8 +595,16 @@ export default function Competitions() {
                                     </h2>
                                     <p className="text-muted-foreground text-sm mt-0.5">{focus.sub}</p>
                                 </div>
+                                {/* setOpenBattle, not setSelectedComp. The rows below open
+                                    the market dashboard — probability, the chart, the book —
+                                    and this button, the most prominent call to action on the
+                                    page, opened the legacy panel instead. */}
                                 <Button
-                                    onClick={() => setSelectedComp(focus.comp)}
+                                    onClick={() => {
+                                        const b = allBattles_.find(
+                                            (x) => x.kind === "battle" && x.id === focus.comp?.id);
+                                        if (b) setOpenBattle(b); else setSelectedComp(focus.comp);
+                                    }}
                                     className="w-full sm:w-auto flex-shrink-0"
                                 >
                                     Open battle <ArrowRight className="w-4 h-4" />

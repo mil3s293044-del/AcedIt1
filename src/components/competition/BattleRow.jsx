@@ -8,7 +8,34 @@
  */
 import React from "react";
 import { motion } from "framer-motion";
-import { Swords, Trophy, Coins, Clock, Users, ChevronRight, TrendingUp } from "lucide-react";
+import { Swords, Trophy, Coins, Clock, Users, ChevronRight, TrendingUp, TrendingDown } from "lucide-react";
+
+/**
+ * The row's price history, drawn small.
+ *
+ * A percentage on its own is a standing; the shape is what tells a student
+ * whether the number is coming for them. `market` is already computed for
+ * every battle (oddsSeries in battleOdds) and, until now, only the detail view
+ * rendered it — so the list, the screen people actually live on, was the one
+ * place the race looked static.
+ */
+function Spark({ series, tone }) {
+    if (!series || series.length < 3) return null;
+    const ps = series.map((d) => d.p);
+    const lo = Math.min(...ps, 0), hi = Math.max(...ps, 100);
+    const span = Math.max(1, hi - lo);
+    const pts = series.map((d, i) => {
+        const x = (i / (series.length - 1)) * 100;
+        const y = 20 - ((d.p - lo) / span) * 20;
+        return `${x.toFixed(1)},${y.toFixed(1)}`;
+    }).join(" ");
+    return (
+        <svg viewBox="0 0 100 20" preserveAspectRatio="none" className="w-full h-5" aria-hidden="true">
+            <polyline points={pts} fill="none" stroke="currentColor" strokeWidth="1.5"
+                strokeLinejoin="round" strokeLinecap="round" className={tone} vectorEffect="non-scaling-stroke" />
+        </svg>
+    );
+}
 
 function timeLeftLabel(endsAt) {
     if (!endsAt) return null;
@@ -21,7 +48,7 @@ function timeLeftLabel(endsAt) {
 }
 
 export default function BattleRow({ battle, onClick }) {
-    const { odds, sides, potXP, endsAt, status, unit, momentum, kind } = battle;
+    const { odds, sides, potXP, endsAt, status, unit, momentum, kind, market } = battle;
     const settled = status === "settled";
     const ranked = [...sides].sort((a, b) => b.score - a.score);
     const me = battle.me;
@@ -32,6 +59,10 @@ export default function BattleRow({ battle, onClick }) {
 
     const oddsTone = odds == null ? "text-muted-foreground"
         : odds >= 60 ? "text-primary" : odds >= 40 ? "text-xp" : "text-streak";
+    // How far the price has travelled since the battle opened — the number a
+    // market puts next to the price, and the one that says "this is moving".
+    const oddsMove = Array.isArray(market) && market.length > 1
+        ? Math.round(market[market.length - 1].p - market[0].p) : null;
     const oddsBar = odds == null ? "bg-muted-foreground/30"
         : odds >= 60 ? "bg-primary" : odds >= 40 ? "bg-xp" : "bg-streak";
 
@@ -107,13 +138,23 @@ export default function BattleRow({ battle, onClick }) {
             </div>
             )}
 
-            {/* Line 3 — the market read */}
+            {/* Line 3 — the market read: the price, the move, and the shape */}
             {!settled && odds != null && (
                 <div className="mb-2.5">
-                    <div className="flex items-baseline justify-between mb-1">
+                    <div className="flex items-baseline justify-between mb-1 gap-2">
                         <span className="stat-label">Your chance</span>
-                        <span className={`font-display font-black text-base tabular-nums ${oddsTone}`}>{odds}%</span>
+                        <span className="flex items-baseline gap-1.5">
+                            {oddsMove != null && Math.abs(oddsMove) >= 1 && (
+                                <span className={`inline-flex items-center gap-0.5 text-[11px] font-bold tabular-nums ${
+                                    oddsMove > 0 ? "text-primary" : "text-streak"}`}>
+                                    {oddsMove > 0 ? <TrendingUp className="w-3 h-3" /> : <TrendingDown className="w-3 h-3" />}
+                                    {oddsMove > 0 ? "+" : ""}{oddsMove}
+                                </span>
+                            )}
+                            <span className={`font-display font-black text-base tabular-nums ${oddsTone}`}>{odds}%</span>
+                        </span>
                     </div>
+                    <Spark series={market} tone={oddsTone} />
                     <div className="h-1.5 bg-secondary rounded-full overflow-hidden">
                         <motion.div initial={{ width: 0 }} animate={{ width: `${odds}%` }}
                             transition={{ duration: 0.8 }} className={`h-full rounded-full ${oddsBar}`} />

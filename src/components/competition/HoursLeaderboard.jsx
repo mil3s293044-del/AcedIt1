@@ -114,7 +114,13 @@ function ParticipantRow({ participant, rank, currentUserEmail, isCompleted, maxS
     );
 }
 
-export default function HoursLeaderboard({ competition, currentUserEmail, onUpdate }) {
+// `embedded` means this is sitting UNDER the market dashboard, which already
+// shows the score, the rank, the countdown, the pot, the pressure line and the
+// full standings. Repeating them is what made a battle read as two designs
+// glued together — the standings rendered twice and the score three times. In
+// that mode only what the dashboard has no equivalent for survives: the prize
+// ladder, and the creator's settle control.
+export default function HoursLeaderboard({ competition, currentUserEmail, onUpdate, embedded = false }) {
     const { toast } = useToast();
     const [syncing, setSyncing] = useState(false);
     const [settling, setSettling] = useState(false);
@@ -211,7 +217,7 @@ export default function HoursLeaderboard({ competition, currentUserEmail, onUpda
             </div>
 
             {/* My stats strip */}
-            {me && (
+            {!embedded && me && (
                 <div className="bg-chart-4/5 border-2 border-chart-4/20 rounded-2xl p-4">
                     <div className="grid grid-cols-3 gap-3">
                         <div className="text-center">
@@ -236,7 +242,7 @@ export default function HoursLeaderboard({ competition, currentUserEmail, onUpda
             )}
 
             {/* The Pot — total XP on the line */}
-            {!isCompleted && pot.total > 0 && (
+            {!embedded && !isCompleted && pot.total > 0 && (
                 <div className="flex items-center gap-3 rounded-2xl bg-xp/5 border-2 border-xp/25 px-4 py-3">
                     <div className="w-10 h-10 rounded-xl bg-xp/15 flex items-center justify-center flex-shrink-0">
                         <Coins className="w-5 h-5 text-xp" />
@@ -255,7 +261,7 @@ export default function HoursLeaderboard({ competition, currentUserEmail, onUpda
             )}
 
             {/* Live pressure line */}
-            {pressure && (
+            {!embedded && pressure && (
                 <motion.div
                     key={pressure.text}
                     initial={{ opacity: 0, y: -6 }}
@@ -285,6 +291,7 @@ export default function HoursLeaderboard({ competition, currentUserEmail, onUpda
             )}
 
             {/* Leaderboard */}
+            {!embedded && (
             <div className="space-y-2">
                 {accepted.length === 0 ? (
                     <div className="text-center py-8 text-muted-foreground text-sm">No participants yet.</div>
@@ -305,6 +312,7 @@ export default function HoursLeaderboard({ competition, currentUserEmail, onUpda
                     </AnimatePresence>
                 )}
             </div>
+            )}
 
             {/* Settle button for creator */}
             {isCreator && !isCompleted && isPastDeadline && (
