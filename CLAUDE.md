@@ -50,7 +50,36 @@ prep started before an assessment, and declared study intents actually followed
 
 Every component reports the evidence behind it in `atar_components`, and Ranked
 renders it under each bar. If you add a component, add its counts too — a bare
-percentage tells a student nothing they can act on.
+percentage tells a student nothing they can act on. `planningEvidence` in
+`src/lib/atarBands.js` is the one wording, shared by Ranked and AtarPanel.
+
+Two traps this component has fallen into already, both fixed 2026-08-28:
+
+- **Read every table the behaviour lands in.** Pomodoro, active recall,
+  blurting and spaced repetition write to `study_techniques`; only quizzes and
+  the activity tracker write to `study_sessions`. Planning read just the latter,
+  so kept blocks, prep and kept intents all scored near zero for students who
+  used the Study page — the exact "planning is 22" the Ranked comment cites.
+- **Never score a student on a signal they can't reach.** Prep is only
+  applicable once an assessment is on the calendar and its lead-up has begun;
+  its weight is redistributed when there isn't one, rather than banked as a
+  zero. Same rule for grading an assessment that's still two weeks out.
+
+- **`xp_awarded > 0` is not "did they study".** All five components read one
+  predicate now: an event counts if it paid XP *or* was capped. The caps govern
+  the XP economy, not the study log — `awardXPIncremental` says as much where it
+  writes the row ("capping the payout must not stop the counting") — so gating
+  on payout quietly deleted a student's *best* days from consistency, effort,
+  mastery and breadth. A zero-content session (raw XP zero, uncapped) still
+  doesn't count; there's no work in it to measure. Velocity-capped rows count
+  too: 600 XP/hour is reachable honestly with a 2× streak on a long session.
+
+Effort totals minutes per day and clamps each day at `EFFORT_DAILY_MINUTE_CAP`,
+because `duration_minutes` comes from the client. The daily XP cap used to bound
+this incidentally, and badly — where it landed moved with the student's streak
+multiplier. And every window query pages (`fetchAllRows`): an unordered
+`.limit(n)` on `xp_events` handed heavy users an arbitrary prefix of their own
+log, which cost them breadth, effort and mastery at once.
 
 Client mirror of the band thresholds is `src/lib/atarBands.js`. Server is the
 source of truth; keep them in sync.

@@ -6099,6 +6099,10 @@ const ATAR_WINDOW_DAYS = 28;
 // Days of study before the score is presented as final rather than provisional.
 const ATAR_MIN_STUDY_DAYS = 3;
 const ATAR_REFRESH_MINUTES = 30;
+// Most minutes one day can contribute to effort. A sanity bound on a
+// client-supplied duration, not an anti-farm measure — farming is bounded by
+// the XP economy, and this sits well above any genuine study day.
+const EFFORT_DAILY_MINUTE_CAP = 600;
 
 export function atarBand(atar) {
   if (atar == null) return null;
@@ -6112,6 +6116,18 @@ export function atarBand(atar) {
   return "Foundation";
 }
 
+// ── Breadth: which technique families a student's events map to ─────────────
+// Reachable families are focus, quiz, mock, flashcard, active_recall and
+// blurting — six. `challenge` is retired and mind maps emit no XP event, so
+// neither can be earned; five of the six earns full breadth.
+const BREADTH_TARGET_FAMILIES = 5;
+function techniqueFamily(source) {
+  if (source === "study_session" || source === "focus_session") return "focus";
+  if (source === "quiz" || source === "practice_questions" || source === "loading_quiz") return "quiz";
+  if (source === "mini_test") return "mock";
+  return source;
+}
+
 // ── Planning (10%): does the student decide what to study before doing it? ──
 // Three signals, none of which live in xp_events: goals set and then met,
 // planned blocks actually kept, and prep started before an assessment rather
@@ -6120,9 +6136,37 @@ export function atarBand(atar) {
 // slips still scores, but never as well as one that lands.
 const PLAN_LEAD_DAYS = 14;   // window before a due date that counts as prep
 const ASSESSMENT_LOOKAHEAD_DAYS = 14;
+const PREP_TARGET_DAYS = 5;  // separate days of prep that earn full prep marks
+
+// Planning's four signals and their share of the component. `prep` is the only
+// one a student can't reach by choosing to: with nothing on the assessment
+// calendar there is nothing to start early on. When none is tracked its weight
+// is spread across the rest instead of scored as a zero — that single hard zero
+// was holding most students' planning under 40 no matter how well they planned.
+// The other three stay applicable always: not setting a goal IS the result.
+const PLANNING_WEIGHTS = { goals: 0.30, blocks: 0.30, prep: 0.20, intents: 0.20 };
+
+// Read every row a query matches instead of the first page. These windows hold
+// thousands of rows for a heavy user, and an unordered `.limit(n)` hands back
+// an arbitrary prefix — which is how students were losing whole techniques off
+// breadth and whole weeks off planning. Takes a factory, not a query: a
+// PostgREST builder can only be awaited once.
+const ROW_PAGE = 1000;
+async function fetchAllRows(buildQuery, cap = 20000) {
+  const out = [];
+  for (let from = 0; from < cap; from += ROW_PAGE) {
+    const { data, error } = await buildQuery().range(from, from + ROW_PAGE - 1);
+    if (error) throw error;
+    if (!data?.length) break;
+    out.push(...data);
+    if (data.length < ROW_PAGE) break;
+  }
+  return out;
+}
 
 async function computePlanning(email, sinceDate) {
   const sinceDay = sinceDate.toISOString().slice(0, 10);
+  const today = new Date().toISOString().slice(0, 10);
   // Sessions reach further back than the ATAR window so prep for an
   // assessment due early in the window is still visible.
   const sessionsFrom = new Date(sinceDate.getTime() - PLAN_LEAD_DAYS * 86400000)
@@ -6130,46 +6174,62 @@ async function computePlanning(email, sinceDate) {
   const lookahead = new Date(Date.now() + ASSESSMENT_LOOKAHEAD_DAYS * 86400000)
     .toISOString().slice(0, 10);
 
-  const [goalsQ, plansQ, sessionsQ, assessmentsQ, profileQ] = await Promise.all([
-    supabaseAdmin.from("goals")
+  const [goals, plans, sessionRows, techniqueRows, assessmentRows, profileQ] = await Promise.all([
+    fetchAllRows(() => supabaseAdmin.from("goals")
       .select("created_date, is_completed, completed_at")
-      .eq("created_by", email).limit(500),
-    supabaseAdmin.from("study_plans")
+      .eq("created_by", email).order("created_date", { ascending: false }), 5000),
+    // Bounded at today: a block booked for next Tuesday cannot have been kept
+    // yet, and counting it as missed meant planning further ahead lowered the
+    // planning score. Recurring series made that worse — one weekly block can
+    // write a dozen future rows.
+    fetchAllRows(() => supabaseAdmin.from("study_plans")
       .select("date, subject_name, is_completed")
-      .eq("created_by", email).gte("date", sinceDay).limit(500),
-    supabaseAdmin.from("study_sessions")
+      .eq("created_by", email).gte("date", sinceDay).lte("date", today), 5000),
+    fetchAllRows(() => supabaseAdmin.from("study_sessions")
       .select("date, subject")
-      .eq("created_by", email).gte("date", sessionsFrom).limit(1000),
-    supabaseAdmin.from("subject_assessments")
+      .eq("created_by", email).gte("date", sessionsFrom)),
+    // Pomodoro, active recall, blurting and spaced repetition all record to
+    // study_techniques, not study_sessions — reading only the latter meant the
+    // four techniques students actually use on the Study page were invisible
+    // here, so kept blocks, prep and kept intents all scored near zero.
+    fetchAllRows(() => supabaseAdmin.from("study_techniques")
+      .select("date, subject")
+      .eq("created_by", email).gte("date", sessionsFrom)),
+    fetchAllRows(() => supabaseAdmin.from("subject_assessments")
       .select("due_date, subject_name")
-      .eq("created_by", email).gte("due_date", sinceDay).lte("due_date", lookahead).limit(200),
+      .eq("created_by", email).gte("due_date", sinceDay).lte("due_date", lookahead), 2000),
     // .limit(1) before .maybeSingle() — without it, a duplicate user_profiles
     // row makes maybeSingle throw, which takes the whole ATAR computation down
     // with it. loadUserProfile and refreshAcedItATAR both guard the same way.
     supabaseAdmin.from("user_profiles").select("extra").eq("created_by", email).limit(1).maybeSingle(),
   ]);
 
+  const sessions = [...sessionRows, ...techniqueRows];
+
   // ── Goals: set, then met ──────────────────────────────────────────────
-  const goals = goalsQ.data || [];
   // Parse rather than string-compare: Postgres may hand back +00:00 or Z.
   const inWindow = (ts) => {
     const t = ts ? Date.parse(ts) : NaN;
     return Number.isFinite(t) && t >= sinceDate.getTime();
   };
-  const set = goals.filter((g) => inWindow(g.created_date)).length;
-  const met = goals.filter((g) => g.is_completed && inWindow(g.completed_at)).length;
+  const setGoals = goals.filter((g) => inWindow(g.created_date));
+  const metGoals = goals.filter((g) => g.is_completed && inWindow(g.completed_at));
+  // Every goal in play during the window, not only the ones opened inside it.
+  // A goal set five weeks ago and finished this week is planning that worked;
+  // the old denominator (goals created in-window) scored it a flat zero.
+  const inPlay = new Set([...setGoals, ...metGoals]);
+  const set = setGoals.length;
+  const met = metGoals.length;
   // ~3 goals in 28 days is a healthy planning cadence.
-  const goalEngagement = Math.min(1, set / 3);
-  const goalFollowThrough = set > 0 ? Math.min(1, met / set) : 0;
-  const goalScore = set === 0 && met === 0 ? 0 : 0.4 * goalEngagement + 0.6 * goalFollowThrough;
+  const goalEngagement = Math.min(1, inPlay.size / 3);
+  const goalFollowThrough = inPlay.size > 0 ? Math.min(1, met / inPlay.size) : 0;
+  const goalScore = inPlay.size === 0 ? 0 : 0.4 * goalEngagement + 0.6 * goalFollowThrough;
 
   // ── Planned blocks kept ───────────────────────────────────────────────
-  const sessions = sessionsQ.data || [];
   const sessionKeys = new Set(
     sessions.filter((s) => s.date && s.subject)
       .map((s) => `${s.date}|${String(s.subject).toLowerCase()}`),
   );
-  const plans = plansQ.data || [];
   const kept = plans.filter((p) =>
     p.is_completed ||
     (p.date && p.subject_name && sessionKeys.has(`${p.date}|${String(p.subject_name).toLowerCase()}`)),
@@ -6180,26 +6240,33 @@ async function computePlanning(email, sinceDate) {
   const planScore = plans.length === 0 ? 0 : 0.4 * planEngagement + 0.6 * planFollowThrough;
 
   // ── Prep started before the due date, not on it ───────────────────────
-  const assessments = (assessmentsQ.data || []).filter((a) => a.due_date && a.subject_name);
-  let prepScore = 0;
-  if (assessments.length > 0) {
-    const perAssessment = assessments.map((a) => {
-      const due = new Date(`${a.due_date}T00:00:00Z`).getTime();
-      const from = due - PLAN_LEAD_DAYS * 86400000;
-      const subject = String(a.subject_name).toLowerCase();
-      const prepDays = new Set(
-        sessions.filter((s) => {
-          if (!s.date || !s.subject) return false;
-          if (String(s.subject).toLowerCase() !== subject) return false;
-          const t = new Date(`${s.date}T00:00:00Z`).getTime();
-          return t >= from && t < due;
-        }).map((s) => s.date),
-      );
-      // Five separate days of prep before it lands earns full marks.
-      return Math.min(1, prepDays.size / 5);
-    });
-    prepScore = perAssessment.reduce((a, b) => a + b, 0) / perAssessment.length;
+  const assessments = assessmentRows.filter((a) => a.due_date && a.subject_name);
+  const now = Date.now();
+  const prepScores = [];
+  for (const a of assessments) {
+    const due = Date.parse(`${a.due_date}T00:00:00Z`);
+    if (!Number.isFinite(due)) continue;
+    const from = due - PLAN_LEAD_DAYS * 86400000;
+    // An assessment still ahead has only had part of its lead-up so far. Grade
+    // it against the days that have actually passed, so putting a SAC three
+    // weeks out on the calendar can't drag prep down before it's prep time.
+    const elapsedDays = Math.floor((Math.min(now, due) - from) / 86400000);
+    const target = Math.min(PREP_TARGET_DAYS, elapsedDays);
+    if (target <= 0) continue;
+    const subject = String(a.subject_name).toLowerCase();
+    const prepDays = new Set(
+      sessions.filter((s) => {
+        if (!s.date || !s.subject) return false;
+        if (String(s.subject).toLowerCase() !== subject) return false;
+        const t = Date.parse(`${s.date}T00:00:00Z`);
+        return Number.isFinite(t) && t >= from && t < due;
+      }).map((s) => s.date),
+    );
+    prepScores.push(Math.min(1, prepDays.size / target));
   }
+  const prepScore = prepScores.length
+    ? prepScores.reduce((a, b) => a + b, 0) / prepScores.length
+    : 0;
 
   // ── Declared an intent, then actually studied ─────────────────────────────
   // The Dashboard's study-intent modal writes one entry per day. On its own a
@@ -6215,18 +6282,38 @@ async function computePlanning(email, sinceDate) {
   // ~3 a week over the window earns full marks.
   const intentScore = Math.min(1, keptIntents / 12);
 
-  const planning =
-    0.30 * goalScore + 0.30 * planScore + 0.20 * prepScore + 0.20 * intentScore;
+  // Score across the signals that apply, then rescale to what was available.
+  const scores = { goals: goalScore, blocks: planScore, prep: prepScore, intents: intentScore };
+  const applies = { goals: true, blocks: true, prep: prepScores.length > 0, intents: true };
+  let weighted = 0, weightUsed = 0;
+  for (const [key, weight] of Object.entries(PLANNING_WEIGHTS)) {
+    if (!applies[key]) continue;
+    weighted += weight * scores[key];
+    weightUsed += weight;
+  }
+  const planning = weightUsed > 0 ? weighted / weightUsed : 0;
+
+  const pct = (v) => Number((v * 100).toFixed(0));
   return {
     planning: Math.max(0, Math.min(1, planning)),
     detail: {
       goals_set: set,
       goals_met: met,
+      goals_in_play: inPlay.size,
       blocks_planned: plans.length,
       blocks_kept: kept,
       assessments_tracked: assessments.length,
+      assessments_graded: prepScores.length,
       intents_declared: intentDays.size,
       intents_kept: keptIntents,
+      // Per-signal scores, so the student can see which part of planning is
+      // pulling the bar down instead of guessing at one number.
+      planning_signals: {
+        goals: pct(goalScore),
+        blocks: pct(planScore),
+        prep: applies.prep ? pct(prepScore) : null,
+        intents: pct(intentScore),
+      },
     },
   };
 }
@@ -6234,18 +6321,41 @@ async function computePlanning(email, sinceDate) {
 async function computeAcedItATAR(email) {
   const sinceDate = new Date(Date.now() - ATAR_WINDOW_DAYS * 86400000);
   const since = sinceDate.toISOString();
-  const { data: events } = await supabaseAdmin
-    .from("xp_events")
-    .select("source, xp_awarded, metadata, created_date")
-    .eq("user_email", email)
-    .gte("created_date", since)
-    .limit(4000);
+  // Paged and newest-first. The old unordered `.limit(4000)` fit a light user's
+  // month but not a heavy one's: per-card and per-minute drips alone can pass
+  // 4000 rows in 28 days, and without an ORDER BY the rows that survived were
+  // an arbitrary prefix. Students who studied the most were scored off a stale
+  // slice of their log, losing techniques from breadth and marks from mastery.
+  let events = [];
+  try {
+    events = await fetchAllRows(() => supabaseAdmin
+      .from("xp_events")
+      .select("source, xp_awarded, capped, integrity_flags, metadata, created_date")
+      .eq("user_email", email)
+      .gte("created_date", since)
+      .order("created_date", { ascending: false }));
+  } catch (e) {
+    console.warn("[acedit_atar] xp_events fetch failed:", e?.message);
+  }
 
-  const studyEvents = (events || []).filter(
-    (e) => (e.xp_awarded || 0) > 0 && ARENA_STUDY_SOURCES.includes(e.source),
+  const windowEvents = events.filter((e) => ARENA_STUDY_SOURCES.includes(e.source));
+
+  // Did the student actually study this? — the question every component below
+  // is really asking, and `xp_awarded > 0` was the wrong proxy for it. A paid
+  // event counts. So does a capped one: the caps govern the XP economy, not
+  // the study log, and awardXP writes the zero-XP row precisely so the
+  // counting can carry on ("capping the payout must not stop the counting").
+  // Reading only paid events meant a student's best days — the ones that ran
+  // into a daily or velocity cap — partly vanished from their own score.
+  // What doesn't count is a zero-content session: raw XP of zero and no cap,
+  // which is a session with no work in it to measure.
+  const studyEvents = windowEvents.filter((e) =>
+    (e.xp_awarded || 0) > 0 ||
+    e.capped === true ||
+    (Array.isArray(e.integrity_flags) && e.integrity_flags.length > 0),
   );
 
-  // ── Consistency (30%): distinct study days, target 20 of 28 ─────────────
+  // ── Consistency (27%): distinct study days, target 20 of 28 ─────────────
   const days = new Set(studyEvents.map((e) => (e.created_date || "").slice(0, 10)));
   // Under three study days the score isn't stable enough to stand behind, but
   // returning nothing left the student with a blank panel and no idea what to
@@ -6254,15 +6364,27 @@ async function computeAcedItATAR(email) {
   const ranked = days.size >= ATAR_MIN_STUDY_DAYS;
   const consistency = Math.min(1, days.size / 20);
 
-  // ── Effort (25%): study minutes, log-scaled diminishing returns ─────────
-  let minutes = 0;
+  // ── Effort (22%): study minutes, log-scaled diminishing returns ─────────
+  // Minutes are totalled per day and clamped, because duration_minutes is a
+  // number the client sends. The daily XP cap used to bound this incidentally,
+  // and badly — where it landed depended on the student's streak multiplier,
+  // which has nothing to do with how long they studied. Ten hours is past any
+  // real day, so no honest student ever meets this.
+  const minutesByDay = new Map();
   for (const e of studyEvents) {
-    minutes += Number(e.metadata?.duration_minutes) || (e.metadata?.type === "focus_minute" ? 1 : 0);
+    const m = Number(e.metadata?.duration_minutes) || (e.metadata?.type === "focus_minute" ? 1 : 0);
+    if (!(m > 0)) continue;
+    const d = (e.created_date || "").slice(0, 10);
+    minutesByDay.set(d, (minutesByDay.get(d) || 0) + m);
+  }
+  let minutes = 0;
+  for (const dayMinutes of minutesByDay.values()) {
+    minutes += Math.min(dayMinutes, EFFORT_DAILY_MINUTE_CAP);
   }
   // ~1200 min in 28 days (≈43 min/day) earns full effort marks.
   const effort = Math.min(1, Math.log1p(minutes) / Math.log1p(1200));
 
-  // ── Mastery (30%): quiz accuracy + flashcard retention ──────────────────
+  // ── Mastery (28%): quiz accuracy + flashcard retention ──────────────────
   let quizWeighted = 0, quizWeight = 0;
   let cardsCorrect = 0, cardsTotal = 0;
   for (const e of studyEvents) {
@@ -6291,13 +6413,14 @@ async function computeAcedItATAR(email) {
   const masterySample = Math.min(1, (quizWeight + cardsTotal) / 20);
   mastery *= masterySample;
 
-  // ── Breadth (15%): technique variety ────────────────────────────────────
-  const families = new Set(studyEvents.map((e) =>
-    ["study_session", "focus_session"].includes(e.source) ? "focus" :
-    ["quiz", "practice_questions", "loading_quiz"].includes(e.source) ? "quiz" :
-    e.source === "mini_test" ? "mock" : e.source,
-  ));
-  const breadth = Math.min(1, families.size / 5);
+  // ── Breadth (13%): technique variety ────────────────────────────────────
+  // Built from every session the student actually did, not only the ones that
+  // paid XP — a student who used every technique was losing the ones they had
+  // already maxed out that day, and the breadth bar sat below full no matter
+  // what they did.
+  const families = new Set(studyEvents.map((e) => techniqueFamily(e.source)));
+  families.delete("challenge");   // retired feature; kept out of the count
+  const breadth = Math.min(1, families.size / BREADTH_TARGET_FAMILIES);
 
   // ── Planning (10%): goals set and met, blocks kept, prep started early ──
   // Four tables' worth of queries for 10% of the score — a failure in any of
@@ -6338,6 +6461,7 @@ async function computeAcedItATAR(email) {
       quiz_marks: quizWeight,
       cards_reviewed: cardsTotal,
       technique_families: families.size,
+      technique_target: BREADTH_TARGET_FAMILIES,
       ranked,
       days_needed: Math.max(0, ATAR_MIN_STUDY_DAYS - days.size),
       ...planningDetail,
