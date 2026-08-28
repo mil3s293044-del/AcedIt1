@@ -85,17 +85,17 @@ export default function CreateCompetitionDialog({ open, onClose, goal, onCreated
 
                     {goal?.subject_code && (
                         <div className="bg-indigo-50 border border-indigo-200 rounded-xl p-3">
-                            <p className="text-xs font-semibold text-indigo-800 mb-1">⏱️ How it works</p>
+                            <p className="text-xs font-semibold text-indigo-800 mb-1">How it works</p>
                             <p className="text-xs text-indigo-700">Participants compete on <strong>{goal.subject_code}</strong> study hours from now until the goal deadline. More hours = more XP per hour earned.</p>
                         </div>
                     )}
                     <div className="bg-amber-50 border border-amber-200 rounded-xl p-3">
-                        <p className="text-xs font-semibold text-amber-800 mb-2">🏆 XP Reward Rates</p>
+                        <p className="text-xs font-semibold text-amber-800 mb-2">XP Reward Rates</p>
                         <div className="grid grid-cols-4 gap-1 text-xs text-amber-700 text-center">
-                            <div><p className="font-black">🥇 1st</p><p>75 XP/hr</p></div>
-                            <div><p className="font-black">🥈 2nd</p><p>50 XP/hr</p></div>
-                            <div><p className="font-black">🥉 3rd</p><p>30 XP/hr</p></div>
-                            <div><p className="font-black">📚 4th+</p><p>15 XP/hr</p></div>
+                            <div><p className="font-black">1st</p><p>75 XP/hr</p></div>
+                            <div><p className="font-black">2nd</p><p>50 XP/hr</p></div>
+                            <div><p className="font-black">3rd</p><p>30 XP/hr</p></div>
+                            <div><p className="font-black">4th+</p><p>15 XP/hr</p></div>
                         </div>
                     </div>
 

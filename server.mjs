@@ -1450,16 +1450,16 @@ function levelProgress(totalXP) {
 
 // All-time rank tiers (keyed by total_xp)
 const XP_RANKS = [
-  { name: "Slackademic",            minXP: 0,       maxXP: 800,    tier: 1,  color: "#64748b", emoji: "😴" },
-  { name: "Barely Literate Bandit", minXP: 800,     maxXP: 3000,   tier: 2,  color: "#78716c", emoji: "📖" },
-  { name: "Wikipedia Warrior",      minXP: 3000,    maxXP: 8000,   tier: 3,  color: "#f97316", emoji: "🖱️" },
-  { name: "Flash Card Finesser",    minXP: 8000,    maxXP: 18000,  tier: 4,  color: "#f59e0b", emoji: "🗂️" },
-  { name: "Highlighter Hoarder",    minXP: 18000,   maxXP: 35000,  tier: 5,  color: "#84cc16", emoji: "🖍️" },
-  { name: "Grind Gremlin",          minXP: 35000,   maxXP: 65000,  tier: 6,  color: "#10b981", emoji: "🧠" },
-  { name: "Pomodoro Prodigy",       minXP: 65000,   maxXP: 120000, tier: 7,  color: "#06b6d4", emoji: "⏱️" },
-  { name: "Academic Weapon",        minXP: 120000,  maxXP: 220000, tier: 8,  color: "#8b5cf6", emoji: "🚀" },
-  { name: "VCE Demigod",            minXP: 220000,  maxXP: 400000, tier: 9,  color: "#f43f5e", emoji: "⚡" },
-  { name: "Legend of the HSC",      minXP: 400000,  maxXP: Infinity, tier: 10, color: "#f59e0b", emoji: "👑" },
+  { name: "Slackademic",            minXP: 0,       maxXP: 800,    tier: 1,  color: "#64748b" },
+  { name: "Barely Literate Bandit", minXP: 800,     maxXP: 3000,   tier: 2,  color: "#78716c" },
+  { name: "Wikipedia Warrior",      minXP: 3000,    maxXP: 8000,   tier: 3,  color: "#f97316" },
+  { name: "Flash Card Finesser",    minXP: 8000,    maxXP: 18000,  tier: 4,  color: "#f59e0b" },
+  { name: "Highlighter Hoarder",    minXP: 18000,   maxXP: 35000,  tier: 5,  color: "#84cc16" },
+  { name: "Grind Gremlin",          minXP: 35000,   maxXP: 65000,  tier: 6,  color: "#10b981" },
+  { name: "Pomodoro Prodigy",       minXP: 65000,   maxXP: 120000, tier: 7,  color: "#06b6d4" },
+  { name: "Academic Weapon",        minXP: 120000,  maxXP: 220000, tier: 8,  color: "#8b5cf6" },
+  { name: "VCE Demigod",            minXP: 220000,  maxXP: 400000, tier: 9,  color: "#f43f5e" },
+  { name: "Legend of the HSC",      minXP: 400000,  maxXP: Infinity, tier: 10, color: "#f59e0b" },
 ];
 function getRankFromXP(totalXP) {
   return XP_RANKS.find(r => totalXP >= r.minXP && totalXP < r.maxXP) || XP_RANKS[XP_RANKS.length - 1];
@@ -1467,23 +1467,23 @@ function getRankFromXP(totalXP) {
 
 // Seasonal rank tiers (keyed by season_xp, resets each ~20-week season)
 const SEASON_RANKS = [
-  { name: "Bronze I",    minXP: 0,     maxXP: 1200,   tier: 1,  color: "#92400e", emoji: "🥉" },
-  { name: "Bronze II",   minXP: 1200,  maxXP: 2800,   tier: 2,  color: "#b45309", emoji: "🥉" },
-  { name: "Bronze III",  minXP: 2800,  maxXP: 5000,   tier: 3,  color: "#d97706", emoji: "🥉" },
-  { name: "Silver I",    minXP: 5000,  maxXP: 9000,   tier: 4,  color: "#6b7280", emoji: "🥈" },
-  { name: "Silver II",   minXP: 9000,  maxXP: 15000,  tier: 5,  color: "#9ca3af", emoji: "🥈" },
-  { name: "Silver III",  minXP: 15000, maxXP: 24000,  tier: 6,  color: "#d1d5db", emoji: "🥈" },
-  { name: "Gold I",      minXP: 24000, maxXP: 38000,  tier: 7,  color: "#f59e0b", emoji: "🥇" },
-  { name: "Gold II",     minXP: 38000, maxXP: 58000,  tier: 8,  color: "#fbbf24", emoji: "🥇" },
-  { name: "Gold III",    minXP: 58000, maxXP: 85000,  tier: 9,  color: "#fde68a", emoji: "🥇" },
-  { name: "Platinum I",  minXP: 85000, maxXP: 120000, tier: 10, color: "#0891b2", emoji: "💠" },
-  { name: "Platinum II", minXP: 120000, maxXP: 170000, tier: 11, color: "#22d3ee", emoji: "💠" },
-  { name: "Platinum III",minXP: 170000, maxXP: 240000, tier: 12, color: "#7dd3fc", emoji: "💠" },
-  { name: "Diamond I",   minXP: 240000, maxXP: 330000, tier: 13, color: "#8b5cf6", emoji: "💎" },
-  { name: "Diamond II",  minXP: 330000, maxXP: 440000, tier: 14, color: "#a78bfa", emoji: "💎" },
-  { name: "Diamond III", minXP: 440000, maxXP: 600000, tier: 15, color: "#c084fc", emoji: "💎" },
-  { name: "Elite",       minXP: 600000, maxXP: 800000, tier: 16, color: "#f43f5e", emoji: "⚔️" },
-  { name: "Legend",      minXP: 800000, maxXP: Infinity, tier: 17, color: "#fbbf24", emoji: "👑" },
+  { name: "Bronze I",    minXP: 0,     maxXP: 1200,   tier: 1,  color: "#92400e" },
+  { name: "Bronze II",   minXP: 1200,  maxXP: 2800,   tier: 2,  color: "#b45309" },
+  { name: "Bronze III",  minXP: 2800,  maxXP: 5000,   tier: 3,  color: "#d97706" },
+  { name: "Silver I",    minXP: 5000,  maxXP: 9000,   tier: 4,  color: "#6b7280" },
+  { name: "Silver II",   minXP: 9000,  maxXP: 15000,  tier: 5,  color: "#9ca3af" },
+  { name: "Silver III",  minXP: 15000, maxXP: 24000,  tier: 6,  color: "#d1d5db" },
+  { name: "Gold I",      minXP: 24000, maxXP: 38000,  tier: 7,  color: "#f59e0b" },
+  { name: "Gold II",     minXP: 38000, maxXP: 58000,  tier: 8,  color: "#fbbf24" },
+  { name: "Gold III",    minXP: 58000, maxXP: 85000,  tier: 9,  color: "#fde68a" },
+  { name: "Platinum I",  minXP: 85000, maxXP: 120000, tier: 10, color: "#0891b2" },
+  { name: "Platinum II", minXP: 120000, maxXP: 170000, tier: 11, color: "#22d3ee" },
+  { name: "Platinum III",minXP: 170000, maxXP: 240000, tier: 12, color: "#7dd3fc" },
+  { name: "Diamond I",   minXP: 240000, maxXP: 330000, tier: 13, color: "#8b5cf6" },
+  { name: "Diamond II",  minXP: 330000, maxXP: 440000, tier: 14, color: "#a78bfa" },
+  { name: "Diamond III", minXP: 440000, maxXP: 600000, tier: 15, color: "#c084fc" },
+  { name: "Elite",       minXP: 600000, maxXP: 800000, tier: 16, color: "#f43f5e" },
+  { name: "Legend",      minXP: 800000, maxXP: Infinity, tier: 17, color: "#fbbf24" },
 ];
 function getSeasonRankFromXP(seasonXP) {
   return SEASON_RANKS.find(r => seasonXP >= r.minXP && seasonXP < r.maxXP) || SEASON_RANKS[SEASON_RANKS.length - 1];
@@ -5779,7 +5779,7 @@ app.post("/local-ai/fn/createStudyQuest", async (req, res) => {
         quest_id, stake_xp, multiplier,
         // Snapshot the terms, so editing the catalogue later can't change a
         // promise already in flight.
-        quest_snapshot: { title: quest.title, blurb: quest.blurb, emoji: quest.emoji,
+        quest_snapshot: { title: quest.title, blurb: quest.blurb, icon: quest.icon,
           check: quest.check, difficulty: quest.difficulty },
         metric: quest.check.kind === "metric" ? quest.check.metric : null,
         target: quest.check.kind === "metric" ? quest.check.target : null,

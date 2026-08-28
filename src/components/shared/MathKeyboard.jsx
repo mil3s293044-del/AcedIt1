@@ -201,12 +201,12 @@ const MathKeyboard = ({ onInput }) => {
                 {Object.entries(sections).map(([sectionName, keys]) => (
                     <div key={sectionName} className="space-y-2">
                         <h4 className="text-xs font-bold text-muted-foreground uppercase tracking-wider px-1">
-                            {sectionName === 'operations' ? '📐 Operations' : 
-                             sectionName === 'exponents' ? '⚡ Exponents & Roots' :
-                             sectionName === 'trigonometry' ? '📊 Trigonometry' :
-                             sectionName === 'logs' ? '📈 Logarithms & Constants' :
+                            {sectionName === 'operations' ? 'Operations' : 
+                             sectionName === 'exponents' ? 'Exponents & Roots' :
+                             sectionName === 'trigonometry' ? 'Trigonometry' :
+                             sectionName === 'logs' ? 'Logarithms & Constants' :
                              sectionName === 'calculus' ? '∫ Calculus' :
-                             sectionName === 'linear_algebra' ? '⬜ Linear Algebra' :
+                             sectionName === 'linear_algebra' ? 'Linear Algebra' :
                              sectionName === 'imaginary' ? 'i Complex Numbers' : sectionName}
                         </h4>
                         <div className="flex flex-wrap gap-2">

@@ -227,7 +227,7 @@ export default function SubjectDetail({ subject, onBack, onEdit, onDelete }) {
                                             </div>
                                             <div className="mt-4 p-3 bg-surface/70 rounded-lg">
                                                 <p className="text-xs text-muted-foreground">
-                                                    💡 <strong>Remember:</strong> Scaling is based on the academic strength of students taking the subject. Choose subjects you're genuinely interested in and can perform well in!
+ <strong>Remember:</strong> Scaling is based on the academic strength of students taking the subject. Choose subjects you're genuinely interested in and can perform well in!
                                                 </p>
                                             </div>
                                         </div>
@@ -322,7 +322,7 @@ export default function SubjectDetail({ subject, onBack, onEdit, onDelete }) {
                                             </div>
                                             <div className="mt-4 p-3 bg-surface/70 rounded-lg">
                                                 <p className="text-xs text-muted-foreground">
-                                                    💡 These are just some of the many career opportunities available. Talk to a career counselor for personalized advice!
+ These are just some of the many career opportunities available. Talk to a career counselor for personalized advice!
                                                 </p>
                                             </div>
                                         </div>

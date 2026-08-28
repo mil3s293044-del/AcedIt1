@@ -28,21 +28,21 @@ const verdictConfig = {
         text: "text-primary",
         bg: "bg-primary/10",
         border: "border-primary/30",
-        label: "Correct ✓",
+        label: "Correct",
     },
     "Partially Correct": {
         dot: "bg-xp",
         text: "text-xp",
         bg: "bg-xp/10",
         border: "border-xp/30",
-        label: "Partial ◐",
+        label: "Partial",
     },
     "Incorrect": {
         dot: "bg-streak",
         text: "text-streak",
         bg: "bg-streak/10",
         border: "border-streak/30",
-        label: "Incorrect ✗",
+        label: "Incorrect",
     },
 };
 
@@ -813,7 +813,7 @@ For each answer:
 
                     <div className="bg-surface rounded-xl p-3 border border-chart-4/20">
                         <p className="text-xs text-chart-4 leading-relaxed">
-                            <span className="font-semibold">💡 Tip:</span> AI generates VCE-aligned questions using command terms like <em>Explain</em>, <em>Evaluate</em> and <em>Compare</em> — matching real VCAA criteria.
+                            <span className="font-semibold">Tip:</span> AI generates VCE-aligned questions using command terms like <em>Explain</em>, <em>Evaluate</em> and <em>Compare</em> — matching real VCAA criteria.
                         </p>
                     </div>
                 </div>

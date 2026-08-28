@@ -17,7 +17,8 @@ import { DragDropContext, Droppable, Draggable } from "@hello-pangea/dnd";
 import {
     CalendarDays, Plus, Check, X, GraduationCap, Sparkles,
     Loader2, ArrowRight, Edit2, Flag, BookOpen, Trash2, ChevronLeft,
-    ChevronRight, Repeat, Scale
+    ChevronRight, Repeat, Scale,
+    Brain, Circle, Clock, FileQuestion, Layers, Lightbulb, NotebookPen, PenTool, Timer,
 } from "lucide-react";
 import { base44 } from "@/api/base44Client";
 import { useToast } from "@/components/ui/use-toast";
@@ -54,20 +55,20 @@ const PRESET_INTENTIONS = [
 
 // Session types — the prefix keeps sessionLink() routing to the right tool.
 const SESSION_TYPES = [
-    { value: "Flashcards", emoji: "🃏" },
-    { value: "Active recall", emoji: "🧠" },
-    { value: "Quiz", emoji: "❓" },
-    { value: "Timed mock", emoji: "⏱️" },
-    { value: "Blurting", emoji: "✍️" },
-    { value: "Notes review", emoji: "📖" },
-    { value: "Homework", emoji: "📚" },
-    { value: "Other", emoji: "✨" },
+    { value: "Flashcards", icon: Layers },
+    { value: "Active recall", icon: Brain },
+    { value: "Quiz", icon: FileQuestion },
+    { value: "Timed mock", icon: Timer },
+    { value: "Blurting", icon: PenTool },
+    { value: "Notes review", icon: BookOpen },
+    { value: "Homework", icon: NotebookPen },
+    { value: "Other", icon: Circle },
 ];
 
 // Strategise names its own techniques, and three of them aren't in the list
 // above: "Focused block", "Concept explainer" and "Revision Mode" (the planner
 // calls the last one "Timed mock"). Sessions it wrote were therefore invisible
-// to the type system — no emoji, no prefix stripped, so the board showed
+// to the type system — no icon, no prefix stripped, so the board showed
 // "Focused block: Acids and bases — core concepts (pH scale, strong vs weak
 // acids/bases, neutralisation)" in full, and clicking it opened the generic
 // Study page instead of the tool it names.
@@ -75,9 +76,9 @@ const SESSION_TYPES = [
 // They're recognised here but deliberately not offered in the add form: they
 // are what the planner *understands*, not what it asks a student to pick.
 const AI_SESSION_TYPES = [
-    { value: "Focused block", emoji: "⏳" },
-    { value: "Concept explainer", emoji: "💡" },
-    { value: "Revision Mode", emoji: "⏱️" },
+    { value: "Focused block", icon: Clock },
+    { value: "Concept explainer", icon: Lightbulb },
+    { value: "Revision Mode", icon: Timer },
 ];
 const ALL_SESSION_TYPES = [...SESSION_TYPES, ...AI_SESSION_TYPES];
 const DURATION_OPTIONS = [25, 40, 60, 90];
@@ -114,7 +115,7 @@ const subjectRailClass = (name) => SUBJECT_RAIL[hashName(name) % SUBJECT_RAIL.le
 
 // Sessions are stored as "Flashcards: Redox half-equations" so sessionLink()
 // can route them. On a 150px column that prefix eats the line that should be
-// showing the actual topic, so the board shows the emoji and drops the word.
+// showing the actual topic, so the board shows the icon and drops the word.
 const typeOf = (title) => ALL_SESSION_TYPES.find(t => (title || "").startsWith(`${t.value}: `)) || null;
 const shortTitle = (title) => {
     const t = typeOf(title);
@@ -525,7 +526,7 @@ export default function Planner() {
                 title: title.trim(), subject_name: subject, assessment_type: type,
                 due_date: date, is_completed: false,
             });
-            toast({ title: "SAC tracked 🎯", description: "Study, Revision Mode and your Dashboard now plan around it." });
+            toast({ title: "SAC tracked", description: "Study, Revision Mode and your Dashboard now plan around it." });
             loadData(user.email);
             return true;
         } catch (e) {
@@ -579,7 +580,7 @@ export default function Planner() {
                     notes,
                 });
             }
-            if (repeatWeekly) toast({ title: `🔁 Weekly for ${weeks} weeks`, description: "The series is on the board — delete any one to trim it." });
+            if (repeatWeekly) toast({ title: `Weekly for ${weeks} weeks`, description: "The series is on the board — delete any one to trim it." });
             setPlanTitle(""); setPlanType(""); setPlanNote(""); setRepeatWeekly(false);
             closePlanDialog();
             loadData(user.email);
@@ -833,7 +834,7 @@ export default function Planner() {
             setProfile(prev => ({ ...prev, extra }));
             setEditingIntention(false);
             setIntentionDraft("");
-            toast({ title: "Intention set 🌱" });
+            toast({ title: "Intention set" });
         } catch (e) {
             toast({ title: "Couldn't save", description: e.message, variant: "destructive" });
         } finally {
@@ -1241,7 +1242,7 @@ export default function Planner() {
                                             {day.sacs.map(a => (
                                                 <div key={a.id} className="rounded-xl bg-gradient-to-br from-streak to-streak/80 text-white px-2.5 py-2 shadow-soft">
                                                     <p className="text-[10px] font-black uppercase tracking-wider text-white/70 leading-tight">
-                                                        🚩 {(a.assessment_type || "SAC")}
+ {(a.assessment_type || "SAC")}
                                                     </p>
                                                     <p className="text-xs font-black leading-tight mt-0.5 truncate">{a.subject_name}</p>
                                                     <p className="text-[11px] font-bold text-white/80 leading-tight truncate">{a.title}</p>
@@ -1251,7 +1252,7 @@ export default function Planner() {
                                             {day.plans.map((p, i) => {
                                                 const dur = durationOf(p);
                                                 const t = typeOf(p.title);
-                                                // Two lines, never more: the type emoji and the topic on
+                                                // Two lines, never more: the type icon and the topic on
                                                 // one, the clock time on the other. Everything else —
                                                 // subject, note, duration, recurrence, the actions — lives
                                                 // in the detail card a click away, because at seven columns
@@ -1294,7 +1295,7 @@ export default function Planner() {
                                                                         half. The taller columns can afford the third line. */}
                                                                     <p className={`text-[13px] font-bold leading-snug line-clamp-3 ${
                                                                         p.is_completed ? "text-muted-foreground line-through" : "text-foreground"}`}>
-                                                                        {t && <span className="mr-1">{t.emoji}</span>}{chipTitle(p.title, 32)}
+                                                                        {t?.icon && <t.icon className="w-3.5 h-3.5 inline-block mr-1 -mt-0.5 text-muted-foreground" />}{chipTitle(p.title, 32)}
                                                                     </p>
                                                                     {/* Real minutes are recorded per day, not per
                                                                         session, so they belong on the day header —
@@ -1352,7 +1353,7 @@ export default function Planner() {
                                             className={`flex flex-col items-center gap-0.5 py-2 rounded-xl text-[11px] font-bold border-2 transition-all ${
                                                 planType === t.value ? "bg-primary/10 border-primary/50 text-primary" : "bg-surface border-border text-muted-foreground hover:border-muted-foreground/40"
                                             }`}>
-                                            <span className="text-base leading-none">{t.emoji}</span>
+                                            <t.icon className="w-4 h-4 text-muted-foreground" />
                                             {t.value}
                                         </button>
                                     ))}
@@ -1469,7 +1470,7 @@ export default function Planner() {
                                 <>
                                     <DialogHeader>
                                         <DialogTitle className="font-display flex items-start gap-2 text-left pr-6">
-                                            {t && <span className="text-xl leading-none mt-0.5">{t.emoji}</span>}
+                                            {t?.icon && <t.icon className="w-5 h-5 mt-0.5 text-muted-foreground" />}
                                             <span className="min-w-0">{shortTitle(s.title)}</span>
                                         </DialogTitle>
                                     </DialogHeader>
@@ -1617,7 +1618,7 @@ export default function Planner() {
                                             <Link to={sessionLink(p.title)} className="flex-1 min-w-0">
                                                 <p className={`text-sm font-bold leading-snug line-clamp-2 ${
                                                     p.is_completed ? "line-through text-muted-foreground" : "text-foreground"}`}>
-                                                    {t && <span className="mr-1">{t.emoji}</span>}
+                                                    {t?.icon && <t.icon className="w-3.5 h-3.5 inline-block mr-1 -mt-0.5 text-muted-foreground" />}
                                                     {/* There's more room here than on the board, but
                                                         not unlimited — an AI-written title can run to
                                                         a hundred characters and swallow the row. */}
@@ -1696,7 +1697,7 @@ export default function Planner() {
                                     {daySacs.map(a => (
                                         <div key={a.id} className="rounded-2xl bg-gradient-to-br from-streak to-streak/80 text-white px-3.5 py-2.5 shadow-soft">
                                             <p className="text-[10px] font-black uppercase tracking-wider text-white/70">
-                                                🚩 {(a.assessment_type || "SAC")} today
+ {(a.assessment_type || "SAC")} today
                                             </p>
                                             <p className="text-sm font-black leading-tight mt-0.5">{a.subject_name} — {a.title}</p>
                                         </div>

@@ -43,16 +43,16 @@ const SOURCE_ICONS = {
 
 // Fun taunt messages to stoke competitiveness
 const TAUNT_MESSAGES = [
-    "Pulling ahead of your friends! 😤",
-    "They can't catch you now! 🚀",
-    "The leaderboard is watching 👀",
-    "Gap widening! 📈",
-    "On a heater! 🔥",
-    "Untouchable! ⚡",
-    "This is your moment! 💪",
-    "Climbing the ranks! 🏔️",
-    "Your friends are shaking 😅",
-    "No days off! 💎",
+    "Pulling ahead of your friends!",
+    "They can't catch you now!",
+    "The leaderboard is watching",
+    "Gap widening!",
+    "On a heater!",
+    "Untouchable!",
+    "This is your moment!",
+    "Climbing the ranks!",
+    "Your friends are shaking",
+    "No days off!",
 ];
 
 function getRandomTaunt() {
@@ -274,10 +274,10 @@ function LevelUpBanner({ level, rankUp, rank }) {
                     <Star className="absolute -top-1 -right-1 w-4 h-4 text-yellow-300 fill-yellow-300" />
                 </motion.div>
                 <div>
-                    <p className="font-black text-lg leading-tight">Level Up! 🎉</p>
+                    <p className="font-black text-lg leading-tight">Level Up!</p>
                     <p className="text-purple-200 text-sm font-bold">→ Level {level}</p>
-                    {rankUp && rank && <p className="text-yellow-300 text-xs font-semibold">{rank.emoji} {rank.name}</p>}
-                    <p className="text-purple-300 text-xs mt-0.5">Keep crushing it! 🚀</p>
+                    {rankUp && rank && <p className="text-xs font-semibold" style={{ color: rank.color }}>{rank.name}</p>}
+                    <p className="text-purple-300 text-xs mt-0.5">Keep crushing it!</p>
                 </div>
             </div>
         </div>

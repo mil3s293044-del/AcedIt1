@@ -258,7 +258,7 @@ Respond in markdown.`;
             });
             const cleaned = (response.questions || []).map(q => q.type === 'mcq' ? { type: 'mcq', question: q.question, options: q.options, correct_answer: q.correct_answer, explanation: q.explanation } : { type: 'short_answer', question: q.question, model_answer: q.model_answer, marks: q.marks, explanation: q.explanation });
             await base44.entities.Quiz.create({ title: quizTitle, subject, questions: cleaned, difficulty: 'intermediate', category: 'subject_content' });
-            toast({ title: '🎉 Quiz created!', description: 'Find it in your Quizzes page.' });
+            toast({ title: 'Quiz created!', description: 'Find it in your Quizzes page.' });
         } catch { toast({ title: 'Quiz generation failed', variant: 'destructive' }); }
         finally { setIsGeneratingQuiz(false); }
     };
@@ -281,7 +281,7 @@ Respond in markdown.`;
 
                         <TabsContent value="concept" className="mt-4 space-y-3">
                             <div className="bg-amber-50 border border-amber-200 rounded-xl p-3">
-                                <p className="text-xs text-amber-800 font-medium">💡 Type any concept — the AI creates an educational session and quizzes you through it</p>
+                                <p className="text-xs text-amber-800 font-medium">Type any concept — the AI creates an educational session and quizzes you through it</p>
                             </div>
                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                                 <div className="space-y-1.5">
@@ -297,7 +297,7 @@ Respond in markdown.`;
 
                         <TabsContent value="document" className="mt-4 space-y-3">
                             <div className="bg-orange-50 border border-orange-200 rounded-xl p-3">
-                                <p className="text-xs text-orange-800 font-medium">📄 Upload your notes — AI analyses them and quizzes you on the content</p>
+                                <p className="text-xs text-orange-800 font-medium">Upload your notes — AI analyses them and quizzes you on the content</p>
                             </div>
                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                                 <div className="space-y-1.5">

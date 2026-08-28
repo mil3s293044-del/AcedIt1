@@ -151,7 +151,7 @@ export default function GuideQuizPlayer({ guide, onComplete }) {
             >
                 <Card>
                     <CardHeader className="text-center">
-                        <CardTitle className="text-2xl text-green-600">Quiz Complete! 🎉</CardTitle>
+                        <CardTitle className="text-2xl text-green-600">Quiz Complete!</CardTitle>
                         <Badge className="bg-green-100 text-green-800 text-lg px-4 py-2 mt-4">
                             Score: {score}/{questions.length} ({percentage}%)
                         </Badge>

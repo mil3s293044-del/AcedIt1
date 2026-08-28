@@ -2,7 +2,7 @@ import React from 'react';
 import { motion } from 'framer-motion';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Clock, Star, BookOpen, GraduationCap, Brain, Target, Heart } from 'lucide-react';
+import { Clock, Star, BookOpen, GraduationCap, Brain, Target, Heart , Check} from 'lucide-react';
 
 const categoryIcons = {
     vce_system: GraduationCap,
@@ -100,7 +100,7 @@ export default function GuideCard({ guide, onSelect, isFeatured = false }) {
                         <div className="space-y-1 mb-3">
                             {guide.key_points.slice(0, 3).map((point, idx) => (
                                 <div key={idx} className="flex items-start gap-2 text-sm text-muted-foreground">
-                                    <span className="text-purple-500 mt-0.5">✓</span>
+                                    <Check className="w-3.5 h-3.5 text-primary mt-0.5 flex-shrink-0" />
                                     <span className="line-clamp-1">{point}</span>
                                 </div>
                             ))}

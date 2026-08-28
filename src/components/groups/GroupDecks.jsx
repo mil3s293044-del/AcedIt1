@@ -85,7 +85,7 @@ export default function GroupDecks({ group, user }) {
                 timestamp: new Date().toISOString()
             });
 
-            toast({ title: "Deck created! 🎉" });
+            toast({ title: "Deck created!" });
             setIsCreatingDeck(false);
             setNewDeck({ deck_name: "", subject_name: group.subject, topic: "" });
             await loadDecks();
@@ -160,7 +160,7 @@ export default function GroupDecks({ group, user }) {
             }
 
             toast({ 
-                title: "Imported to your decks! 📚", 
+                title: "Imported to your decks!", 
                 description: `${deck.cards.length} cards added to your personal flashcards` 
             });
         } catch (error) {

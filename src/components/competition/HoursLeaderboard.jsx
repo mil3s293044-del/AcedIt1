@@ -15,10 +15,12 @@ import { fmtDate } from "@/lib/safeDate";
 // Flat XP by finishing rank (1st / 2nd / 3rd / 4th+).
 const FLAT_XP = [150, 100, 60, 30];
 // On-brand rank styles: gold → xp, silver → secondary, bronze → streak.
+// The medal emoji said the same thing the colour and the number already say,
+// in a typeface nobody chose and at a size nothing else on the row uses.
 const RANK_STYLES = [
-    { bg: "bg-xp", text: "text-white", label: "🥇" },
-    { bg: "bg-secondary", text: "text-foreground", label: "🥈" },
-    { bg: "bg-streak", text: "text-white", label: "🥉" },
+    { bg: "bg-xp", text: "text-white", label: "1" },
+    { bg: "bg-secondary", text: "text-foreground", label: "2" },
+    { bg: "bg-streak", text: "text-white", label: "3" },
     { bg: "bg-secondary", text: "text-muted-foreground", label: "4" },
 ];
 
@@ -136,7 +138,7 @@ export default function HoursLeaderboard({ competition, currentUserEmail, onUpda
         setSyncing(true);
         try {
             await updateCompetitionProgress({ competition_id: competition.id });
-            toast({ title: "Score synced! 📊" });
+            toast({ title: "Score synced!" });
             onUpdate?.();
         } catch (e) {
             toast({ title: "Sync failed", description: e.message, variant: "destructive" });
@@ -150,7 +152,7 @@ export default function HoursLeaderboard({ competition, currentUserEmail, onUpda
         setSettling(true);
         try {
             await settleHoursCompetition({ competition_id: competition.id });
-            toast({ title: "Competition settled! 🏆 XP awarded." });
+            toast({ title: "Competition settled! XP awarded." });
             onUpdate?.();
         } catch (e) {
             toast({ title: "Error", description: e.message, variant: "destructive" });
@@ -269,14 +271,13 @@ export default function HoursLeaderboard({ competition, currentUserEmail, onUpda
             {!isCompleted && (
                 <div className="grid grid-cols-4 gap-2">
                     {[
-                        { pos: "1st", emoji: "🥇", xp: 150, color: "bg-xp/10 border-xp/20" },
-                        { pos: "2nd", emoji: "🥈", xp: 100, color: "bg-secondary border-border" },
-                        { pos: "3rd", emoji: "🥉", xp: 60, color: "bg-streak/10 border-streak/20" },
-                        { pos: "4th+", emoji: "📚", xp: 30, color: "bg-secondary border-border" },
+                        { pos: "1st", xp: 150, color: "bg-xp/10 border-xp/20", accent: "text-xp" },
+                        { pos: "2nd", xp: 100, color: "bg-secondary border-border", accent: "text-foreground" },
+                        { pos: "3rd", xp: 60, color: "bg-streak/10 border-streak/20", accent: "text-streak" },
+                        { pos: "4th+", xp: 30, color: "bg-secondary border-border", accent: "text-muted-foreground" },
                     ].map(tier => (
                         <div key={tier.pos} className={`${tier.color} border rounded-xl p-2.5 text-center`}>
-                            <p className="text-lg mb-0.5">{tier.emoji}</p>
-                            <p className="text-xs font-bold text-muted-foreground">{tier.pos}</p>
+                            <p className={`font-display font-black text-lg leading-none mb-1 ${tier.accent}`}>{tier.pos}</p>
                             <p className="text-xs font-black text-xp">{tier.xp} XP</p>
                         </div>
                     ))}
@@ -310,7 +311,7 @@ export default function HoursLeaderboard({ competition, currentUserEmail, onUpda
                 <Button onClick={handleSettle} disabled={settling}
                     className="w-full bg-xp hover:bg-xp/90 text-white font-display font-extrabold rounded-2xl py-6 text-base shadow-soft btn-3d">
                     {settling ? <Loader2 className="w-5 h-5 animate-spin mr-2" /> : <Trophy className="w-5 h-5 mr-2" />}
-                    {settling ? 'Settling…' : 'Settle Competition & Award XP 🏆'}
+                    {settling ? 'Settling…' : 'Settle Competition & Award XP'}
                 </Button>
             )}
 

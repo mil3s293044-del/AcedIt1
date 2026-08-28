@@ -18,7 +18,19 @@
 import React, { useState, useMemo, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Button } from "@/components/ui/button";
-import { Target, Loader2, Check, X, Flame, Coins, Clock, Sparkles, Sunrise } from "lucide-react";
+import {
+    Target, Loader2, Check, X, Flame, Coins, Clock, Sparkles, Sunrise,
+    FlaskConical, Timer, Shuffle, CalendarCheck, CheckCircle2, Wind, TrendingUp, Layers, Hourglass,
+} from "lucide-react";
+
+// Quests name their icon rather than carrying a glyph, so the whole set is
+// drawn from the one icon family the rest of the app uses and inherits the
+// current colour instead of whatever a platform decided an emoji looks like.
+const QUEST_ICONS = {
+    FlaskConical, Timer, Target, Shuffle, CalendarCheck, CheckCircle2,
+    Flame, Wind, TrendingUp, Layers, Hourglass,
+};
+const iconFor = (...names) => QUEST_ICONS[names.find((n) => QUEST_ICONS[n])] || Target;
 import { base44 } from "@/api/base44Client";
 import { useToast } from "@/components/ui/use-toast";
 import { METRICS, STUDY_BET_MULT, timeLeft } from "./arenaMeta";
@@ -63,7 +75,7 @@ function QuestCard({ bet }) {
     const quest = bet.quest_id ? QUEST_BY_ID[bet.quest_id] : null;
     const title = snap?.title || quest?.title
         || `${Number(bet.target).toLocaleString()} ${METRICS[bet.metric]?.unit || ""}`.trim();
-    const emoji = snap?.emoji || quest?.emoji || "🎯";
+    const QuestIcon = iconFor(snap?.icon, quest?.icon);
     const a = accentOf(quest);
 
     const target = bet.quest_target || bet.target || 1;
@@ -79,14 +91,13 @@ function QuestCard({ bet }) {
                 done ? "border-primary/50 bg-primary/5"
                 : bet.status === "lost" ? "border-border bg-secondary/20 opacity-70"
                 : t?.urgent ? "border-streak/50 bg-streak/5" : `${a.ring} ${a.glow}`}`}>
-            <span aria-hidden className="absolute -top-6 -right-4 text-7xl opacity-[0.07] select-none pointer-events-none">
-                {emoji}
-            </span>
+            <QuestIcon aria-hidden strokeWidth={1.5}
+                className="absolute -top-6 -right-4 w-28 h-28 opacity-[0.07] select-none pointer-events-none" />
 
             <div className="relative flex items-start justify-between gap-3">
                 <div className="min-w-0">
                     <p className="font-display font-extrabold text-foreground leading-snug">
-                        <span className="mr-1.5" aria-hidden>{emoji}</span>{title}
+                        <QuestIcon aria-hidden className="w-4 h-4 inline-block mr-1.5 -mt-0.5" />{title}
                     </p>
                     <p className="text-xs text-muted-foreground mt-1 tabular-nums">
                         {bet.progress_label || `${progress} / ${target}`}
@@ -167,7 +178,7 @@ export default function BackYourself({ bets, balance, onUpdate }) {
             if (data?.error) throw new Error(data.error);
             toast({
                 variant: "success",
-                title: `${quest.emoji} You're on the hook`,
+                title: "You're on the hook",
                 description: `${quest.title} — ${WINDOW_LABEL[windowHours]}. That's today's one; come back tomorrow for the next.`,
             });
             setQuest(null);
@@ -262,11 +273,12 @@ export default function BackYourself({ bets, balance, onUpdate }) {
                                     <button onClick={() => choose(q)} aria-pressed={picked}
                                         className={`group relative w-full text-left overflow-hidden rounded-3xl border-2 p-5 transition-all ${
                                             picked ? `${a.ring} ${a.glow}` : "border-border bg-surface hover:border-muted-foreground/40 hover:shadow-soft"}`}>
-                                        <span aria-hidden className="absolute -top-5 -right-3 text-6xl opacity-[0.06] group-hover:opacity-[0.12] transition-opacity select-none pointer-events-none">
-                                            {q.emoji}
-                                        </span>
+                                        {React.createElement(iconFor(q.icon), {
+                                            "aria-hidden": true, strokeWidth: 1.5,
+                                            className: "absolute -top-5 -right-3 w-24 h-24 opacity-[0.06] group-hover:opacity-[0.12] transition-opacity select-none pointer-events-none",
+                                        })}
                                         <div className="relative">
-                                            <span className="text-2xl leading-none" aria-hidden>{q.emoji}</span>
+                                            {React.createElement(iconFor(q.icon), { "aria-hidden": true, className: "w-6 h-6 text-foreground" })}
                                             <p className="font-display font-extrabold text-foreground leading-snug mt-2">{q.title}</p>
                                             <p className="text-xs text-muted-foreground leading-snug mt-1">{q.blurb}</p>
                                             <div className="flex flex-wrap items-center gap-1.5 mt-3">

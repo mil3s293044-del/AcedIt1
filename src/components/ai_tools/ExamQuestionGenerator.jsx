@@ -178,7 +178,7 @@ Return as a JSON object with a "questions" array.`,
             difficulty: difficulty.toLowerCase().replace(' ', '_'),
             category: 'subject_content'
         });
-        toast({ title: 'Saved as Quiz! 🎉', description: 'Find it in your Quizzes page.' });
+        toast({ title: 'Saved as Quiz!', description: 'Find it in your Quizzes page.' });
     };
 
     const totalMarks = questions.reduce((s, q) => s + (q.marks || 0), 0);

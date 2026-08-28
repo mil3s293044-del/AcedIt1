@@ -523,7 +523,7 @@ Base ALL questions on the provided material. If files are attached, read ALL con
             }
 
             toast({
-                title: "✅ Quiz created!",
+                title: "Quiz created!",
                 description: `${formattedQuestions.length} questions generated successfully`
             });
 
@@ -549,7 +549,7 @@ Base ALL questions on the provided material. If files are attached, read ALL con
             console.error("Quiz generation error:", error);
 
             toast({
-                title: "❌ Generation failed",
+                title: "Generation failed",
                 description: error.message || "Try a smaller file or fewer questions",
                 variant: "destructive"
             });
@@ -718,7 +718,7 @@ Return valid JSON only.`,
             });
 
             toast({
-                title: "✅ New quiz created!",
+                title: "New quiz created!",
                 description: `${formattedQuestions.length} new questions generated`
             });
 
@@ -726,7 +726,7 @@ Return valid JSON only.`,
         } catch (error) {
             console.error("Reshuffle error:", error);
             toast({
-                title: "❌ Reshuffle failed",
+                title: "Reshuffle failed",
                 description: error.message || "Could not generate new questions",
                 variant: "destructive"
             });

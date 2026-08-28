@@ -17,10 +17,10 @@ import { getExaminerPrompt } from "@/lib/subjectExaminerPrompts";
 import { invokeLLMStream } from "@/lib/streamingAI";
 
 const DEPTH_OPTIONS = [
-    { value: 'quick', label: '⚡ Quick Overview', desc: '~2 min read' },
-    { value: 'standard', label: '📘 Standard Explanation', desc: '~5 min read' },
-    { value: 'deep', label: '🔬 Deep Dive', desc: '~10 min read' },
-    { value: 'exam', label: '🎯 Exam-Focused', desc: 'Key points only' },
+    { value: 'quick', label: 'Quick Overview', desc: '~2 min read' },
+    { value: 'standard', label: 'Standard Explanation', desc: '~5 min read' },
+    { value: 'deep', label: 'Deep Dive', desc: '~10 min read' },
+    { value: 'exam', label: 'Exam-Focused', desc: 'Key points only' },
 ];
 
 const STYLE_OPTIONS = [
@@ -186,7 +186,7 @@ Make it genuinely educational and accurate for VCE Year 12 level.`;
             difficulty: 'intermediate',
             category: 'subject_content'
         });
-        toast({ title: '🎉 Quiz created!', description: 'Find it in your Quizzes page.' });
+        toast({ title: 'Quiz created!', description: 'Find it in your Quizzes page.' });
     };
 
     return (

@@ -10,7 +10,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { useToast } from '@/components/ui/use-toast';
 import { base44 } from '@/api/base44Client';
 import ReactMarkdown from 'react-markdown';
-import { Play, RotateCcw, Eye, EyeOff, CheckCircle2, Trophy, Target, Brain, ArrowRight, BookOpen, Save, Trash2, Coffee, HelpCircle, RotateCw } from 'lucide-react';
+import { Play, RotateCcw, Eye, EyeOff, CheckCircle2, Trophy, Target, Brain, ArrowRight, BookOpen, Save, Trash2, Coffee, HelpCircle, RotateCw , Scissors, RefreshCw} from 'lucide-react';
 
 const MODES = { SETUP: 'setup', LEARNING: 'learning', CHUNK_TEST: 'chunk_test', FINAL_TEST: 'final_test', COMPLETE: 'complete' };
 
@@ -103,7 +103,7 @@ export default function LineMemoriser() {
             if (newAttempts[currentKey] >= requiredAttempts) { setShowMorePracticeDialog(true); }
             else {
                 setShowSentence(false); setUserInput('');
-                toast({ title: `✓ Correct! ${requiredAttempts - newAttempts[currentKey]} more to master` });
+                toast({ title: `Correct! ${requiredAttempts - newAttempts[currentKey]} more to master` });
             }
         } else {
             setStreak(0); setAttempts({ ...attempts, [`${currentSentenceIndex}_${isChaining ? 'chain' : 'single'}`]: 0 });
@@ -146,7 +146,7 @@ export default function LineMemoriser() {
         const chunkText = sentences.slice(chunkStart, chunkEnd).join(' ');
         const result = await checkAnswerWithAI(chunkText, userInput);
         if (result.isCorrect) {
-            toast({ title: 'Chunk passed! 🎉' });
+            toast({ title: 'Chunk passed!' });
             if (chunkEnd === sentences.length) { setMode(MODES.FINAL_TEST); setShowSentence(false); }
             else { setCurrentSentenceIndex(chunkEnd); setIsChaining(false); setMode(MODES.LEARNING); setShowSentence(true); }
         } else {
@@ -168,7 +168,7 @@ export default function LineMemoriser() {
             setMode(MODES.COMPLETE);
             const newSessions = savedSessions.filter(s => s.id !== currentSessionId);
             setSavedSessions(newSessions); localStorage.setItem('lineMemoriserSessions', JSON.stringify(newSessions));
-            toast({ title: '🏆 Perfect!' });
+            toast({ title: 'Perfect!' });
         } else {
             toast({ title: 'Almost!', description: 'Review the passage and try again', variant: 'destructive' });
             setMode(MODES.LEARNING); setCurrentSentenceIndex(0); setIsChaining(false); setShowSentence(false);
@@ -285,9 +285,10 @@ export default function LineMemoriser() {
                             <Play className="w-4 h-4 mr-2" />Start Memorising
                         </Button>
                         <div className="grid grid-cols-3 gap-3 pt-2 border-t border-border">
-                            {[['📚', 'Break into sentences'], ['🔄', 'Spaced repetition'], ['🎯', 'Test full recall']].map(([icon, text]) => (
+                            {[[Scissors, 'Break into sentences'], [RefreshCw, 'Spaced repetition'], [Target, 'Test full recall']]
+                                .map(([Icon, text]) => (
                                 <div key={text} className="text-center p-3 bg-secondary/50 rounded-xl">
-                                    <div className="text-xl mb-1">{icon}</div>
+                                    <Icon className="w-5 h-5 mx-auto mb-1.5 text-primary" />
                                     <p className="text-xs text-muted-foreground">{text}</p>
                                 </div>
                             ))}

@@ -6,7 +6,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
     ChevronLeft, Copy, Check, Timer,
     TrendingUp, Users, Zap
-} from "lucide-react";
+, Trophy} from "lucide-react";
 import { useToast } from "@/components/ui/use-toast";
 import HoursLeaderboard from "./HoursLeaderboard";
 import ScorePredictionBetting from "./ScorePredictionBetting";
@@ -99,9 +99,13 @@ export default function GoalCompetitionDetail({ competition, currentUserEmail, o
                             initial={{ scale: 0, rotate: -25 }}
                             animate={{ scale: 1, rotate: 0 }}
                             transition={{ type: "spring", stiffness: 260, damping: 14, delay: 0.15 }}
-                            className="text-5xl mb-2"
+                            className="mb-2 flex justify-center"
                         >
-                            {isWinner ? '🏆' : '🎖️'}
+                            <span className={`w-16 h-16 rounded-2xl flex items-center justify-center ${
+                                isWinner ? "bg-xp/15" : "bg-secondary"}`}>
+                                <Trophy className={`w-8 h-8 ${isWinner ? "text-xp" : "text-muted-foreground"}`}
+                                    strokeWidth={2.2} />
+                            </span>
                         </motion.div>
                         <p className={`font-display font-black text-2xl ${isWinner ? 'text-xp' : 'text-foreground'}`}>
                             {isWinner ? 'Champion!' : `${competition.winner_name} took it`}

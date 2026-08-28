@@ -818,7 +818,7 @@ invent a theme from a single question.`,
             // Real XP through the server engine + celebration popup.
             await awardQuizXP({ score: finalScore, questionsCorrect, totalMarks: totalMarksAwarded, timeTaken });
 
-            toast({ title: "✅ Quiz marked!", description: `AI analysed all ${mappedFeedback.length} questions.` });
+            toast({ title: "Quiz marked!", description: `AI analysed all ${mappedFeedback.length} questions.` });
         } catch (error) {
             setAiFeedback([]);
             toast({ title: "AI Marking Failed", description: error.message || "Could not analyse answers.", variant: "destructive" });

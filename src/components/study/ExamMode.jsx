@@ -385,7 +385,7 @@ Return exactly ${openQs.length} results, in order.`,
       openQs.forEach((q, i) => {
         if (marked[i]) feedWeakSpot(q, marked[i].verdict === "correct");
       });
-      toast({ title: "✅ Marked by the examiner", description: `${marked.length} answer${marked.length === 1 ? "" : "s"} assessed to VCAA standards.` });
+      toast({ title: "Marked by the examiner", description: `${marked.length} answer${marked.length === 1 ? "" : "s"} assessed to VCAA standards.` });
     } catch (e) {
       toast({ title: "AI marking unavailable", description: e.message || "You can still self-mark below.", variant: "destructive" });
     } finally {

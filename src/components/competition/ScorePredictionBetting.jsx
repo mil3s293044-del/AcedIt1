@@ -9,7 +9,7 @@ import { base44 } from "@/api/base44Client";
 import {
     TrendingUp, TrendingDown, Zap, Target, Flag, Loader2,
     CheckCircle2, Edit3, Users, ArrowUpRight, ArrowDownRight, Lock
-} from "lucide-react";
+, CircleDot, CircleSlash} from "lucide-react";
 
 const XP_OPTS = [25, 50, 100, 200];
 const WIN_MULT = 1.8;
@@ -129,7 +129,7 @@ function SubmitResult({ competition, currentUserEmail, onUpdate }) {
             });
             const data = res?.data ?? res;
             toast({
-                title: "Result submitted! 🎯",
+                title: "Result submitted!",
                 description: data?.settled_count
                     ? `${data.settled_count} bet${data.settled_count === 1 ? '' : 's'} settled.`
                     : "Locked in.",
@@ -165,7 +165,13 @@ function SubmitResult({ competition, currentUserEmail, onUpdate }) {
             </div>
 
             <div className={`rounded-xl p-3 border-2 text-center ${accuracy === 'exact' ? 'bg-primary/10 border-primary/30' : accuracy === 'close' ? 'bg-chart-3/10 border-chart-3/30' : 'bg-streak/10 border-streak/20'}`}>
-                <p className="text-lg mb-0.5">{accuracy === 'exact' ? '🎯' : accuracy === 'close' ? '👍' : '😬'}</p>
+                {/* The panel is already coloured by accuracy; the icon names
+                    the same thing instead of miming it with a face. */}
+                {accuracy === 'exact'
+                    ? <Target className="w-5 h-5 mx-auto mb-1 text-primary" />
+                    : accuracy === 'close'
+                        ? <CircleDot className="w-5 h-5 mx-auto mb-1 text-chart-3" />
+                        : <CircleSlash className="w-5 h-5 mx-auto mb-1 text-streak" />}
                 <p className="text-xs font-bold text-foreground">
                     {accuracy === 'exact' ? 'Perfect prediction!' : accuracy === 'close' ? 'Close call' : `Off by ${diff}%`}
                 </p>
@@ -204,7 +210,7 @@ function BetPanel({ target, competition, currentUserEmail, onUpdate, balance }) 
                 direction,
                 wagered_xp: wageredXP,
             });
-            toast({ title: `${direction === 'over' ? '📈 OVER' : '📉 UNDER'} bet placed!`, description: `${wageredXP} XP wagered on ${target.name.split(' ')[0]}` });
+            toast({ title: `${direction === 'over' ? 'OVER' : 'UNDER'} bet placed!`, description: `${wageredXP} XP wagered on ${target.name.split(' ')[0]}` });
             setOpen(false);
             onUpdate?.();
         } catch (e) {
@@ -238,8 +244,8 @@ function BetPanel({ target, competition, currentUserEmail, onUpdate, balance }) 
                         {existingBet.status === 'open'
                             ? `${existingBet.direction.toUpperCase()} · ${existingBet.wagered_xp}XP`
                             : existingBet.status === 'won'
-                            ? `+${existingBet.xp_outcome}XP 🎉`
-                            : `${existingBet.xp_outcome}XP 💔`}
+                            ? `+${existingBet.xp_outcome}XP`
+                            : `${existingBet.xp_outcome}XP`}
                     </Badge>
                 ) : target.result_submitted ? (
                     <Badge className="ml-2 text-xs bg-secondary text-muted-foreground flex-shrink-0"><Lock className="w-3 h-3 mr-1" />Settled</Badge>
@@ -247,7 +253,7 @@ function BetPanel({ target, competition, currentUserEmail, onUpdate, balance }) 
                     <button className={`ml-2 text-xs font-bold px-3 py-1.5 rounded-xl border-2 transition-all flex-shrink-0 ${
                         open ? 'bg-chart-4 border-chart-4 text-white' : 'border-chart-4/30 text-chart-4 hover:bg-chart-4/5'
                     }`}>
-                        {open ? '✕ Cancel' : 'Bet →'}
+                        {open ? 'Cancel' : 'Bet →'}
                     </button>
                 )}
             </div>
@@ -309,7 +315,10 @@ function BetPanel({ target, competition, currentUserEmail, onUpdate, balance }) 
                         {/* Summary */}
                         <div className={`rounded-xl p-3.5 border-2 ${direction === 'over' ? 'bg-primary/10 border-primary/20' : 'bg-streak/10 border-streak/20'}`}>
                             <p className="text-sm font-black text-foreground mb-1">
-                                {direction === 'over' ? '📈' : '📉'} {target.name.split(' ')[0]} goes {direction.toUpperCase()} {target.self_line}%
+                                {direction === 'over'
+                                    ? <TrendingUp className="w-4 h-4 inline-block mr-1 -mt-0.5 text-primary" />
+                                    : <TrendingDown className="w-4 h-4 inline-block mr-1 -mt-0.5 text-streak" />}
+                                {target.name.split(' ')[0]} goes {direction.toUpperCase()} {target.self_line}%
                             </p>
                             <div className="flex justify-between text-xs font-semibold">
                                 <span className="text-primary">Win: +{Math.floor(wageredXP * WIN_MULT)} XP ({WIN_MULT}×)</span>
@@ -417,7 +426,7 @@ export default function ScorePredictionBetting({ competition, currentUserEmail, 
                                     {bet.target_name.split(' ')[0]} — <span className={bet.direction === 'over' ? 'text-primary' : 'text-streak'}>{bet.direction.toUpperCase()}</span> {bet.line}%
                                 </p>
                                 <p className="text-xs text-muted-foreground">
-                                    {bet.status === 'open' ? `Waiting for result` : bet.status === 'won' ? '🎉 Won' : '💔 Lost'}
+                                    {bet.status === 'open' ? `Waiting for result` : bet.status === 'won' ? 'Won' : 'Lost'}
                                 </p>
                             </div>
                             <div className="flex-shrink-0">

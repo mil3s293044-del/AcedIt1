@@ -104,7 +104,7 @@ Give ONE short, directed hint (2-3 sentences max) that steers them toward the ri
                                 </div>
                             )}
                         </div>
-                        <p className="text-xs text-muted-foreground mt-5">Great work pushing through the tough ones 💪</p>
+                        <p className="text-xs text-muted-foreground mt-5">Great work pushing through the tough ones</p>
                     </div>
                 </div>
                 <Button onClick={onComplete} className="w-full bg-chart-4 hover:bg-chart-4/90 text-white rounded-xl h-12 font-bold text-base">
@@ -228,7 +228,7 @@ Give ONE short, directed hint (2-3 sentences max) that steers them toward the ri
                                 {current.question.type === 'mcq' && (
                                     <div className={`rounded-2xl p-4 border-2 ${isCorrectMap[currentIdx] ? 'bg-primary/10 border-primary/30' : 'bg-streak/10 border-streak/30'}`}>
                                         <p className={`text-sm font-bold ${isCorrectMap[currentIdx] ? 'text-primary' : 'text-streak'}`}>
-                                            {isCorrectMap[currentIdx] ? '✓ Correct this time! You nailed it.' : '✗ Not quite — review the explanation below carefully.'}
+                                            {isCorrectMap[currentIdx] ? 'Correct this time. You nailed it.' : 'Not quite — review the explanation below carefully.'}
                                         </p>
                                     </div>
                                 )}
@@ -282,7 +282,7 @@ Give ONE short, directed hint (2-3 sentences max) that steers them toward the ri
                     </Button>
                 ) : (
                     <Button onClick={() => setFinished(true)} className="gap-2 rounded-xl bg-chart-4 hover:bg-chart-4/90 text-white font-bold px-6">
-                        Finish Review ✓
+                        Finish Review
                     </Button>
                 )}
             </div>
