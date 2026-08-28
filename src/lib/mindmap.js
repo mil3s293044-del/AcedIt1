@@ -511,3 +511,33 @@ export function diffMaps(before, after) {
         gained: gained.map(k => b.get(k).text),
     };
 }
+
+
+/**
+ * Minimum nodes before a rebuild is worth offering. Mirrors the guard inside
+ * MindMaps' own startRecall — a prompt that offers what the handler then
+ * refuses with a toast is worse than no prompt.
+ */
+export const REBUILD_MIN_NODES = 3;
+
+/**
+ * Should the "rebuild it from memory" prompt be showing?
+ *
+ * This exists because the answer used to be "only when there is nothing to
+ * rebuild". The closed-book advice was gated on `nodes <= 1`, so it appeared
+ * on an empty canvas and disappeared at exactly the moment rebuilding became
+ * the next move — and it carried no button either way. Six students in ten
+ * have built a mind map; none has ever rebuilt one, which is the step that
+ * makes mapping retrieval practice rather than drawing.
+ *
+ * `allMaps` is the saved rows, where a rebuild attempt is a child carrying
+ * parent_map_id. That row IS the record of having done it, so the prompt
+ * retires itself the first time a student takes it.
+ */
+export function shouldPromptRebuild({ map, allMaps = [], recallOf = null, dismissed = {} } = {}) {
+    if (!map?.id) return false;              // unsaved: nothing to rebuild against
+    if (recallOf) return false;              // already mid-rebuild
+    if ((map.nodes?.length || 0) < REBUILD_MIN_NODES) return false;
+    if (dismissed?.[map.id]) return false;
+    return !allMaps.some((m) => m?.parent_map_id === map.id);
+}
