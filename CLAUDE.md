@@ -50,7 +50,26 @@ prep started before an assessment, and declared study intents actually followed
 
 Every component reports the evidence behind it in `atar_components`, and Ranked
 renders it under each bar. If you add a component, add its counts too — a bare
-percentage tells a student nothing they can act on.
+percentage tells a student nothing they can act on. `planningEvidence` in
+`src/lib/atarBands.js` is the one wording, shared by Ranked and AtarPanel.
+
+Two traps this component has fallen into already, both fixed 2026-08-28:
+
+- **Read every table the behaviour lands in.** Pomodoro, active recall,
+  blurting and spaced repetition write to `study_techniques`; only quizzes and
+  the activity tracker write to `study_sessions`. Planning read just the latter,
+  so kept blocks, prep and kept intents all scored near zero for students who
+  used the Study page — the exact "planning is 22" the Ranked comment cites.
+- **Never score a student on a signal they can't reach.** Prep is only
+  applicable once an assessment is on the calendar and its lead-up has begun;
+  its weight is redistributed when there isn't one, rather than banked as a
+  zero. Same rule for grading an assessment that's still two weeks out.
+
+Breadth counts technique *variety*, so it reads every study event in the window,
+including the zero-XP rows a daily or velocity cap writes — a capped session is
+still a session the student did. And every window query pages (`fetchAllRows`):
+an unordered `.limit(n)` on `xp_events` handed heavy users an arbitrary prefix
+of their own log.
 
 Client mirror of the band thresholds is `src/lib/atarBands.js`. Server is the
 source of truth; keep them in sync.

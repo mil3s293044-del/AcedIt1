@@ -35,6 +35,7 @@ import {
     standing, titlesFor, nextBand, weakestComponent, BAND_TONE,
 } from "@/lib/ranked";
 import AceTip from "@/components/ace/AceTip";
+import { planningEvidence } from "@/lib/atarBands";
 
 const TONE_PILL = {
     muted: "bg-secondary text-muted-foreground", xp: "bg-xp/15 text-xp",
@@ -64,15 +65,9 @@ const COMPONENT_META = [
     { key: "effort", label: "Effort", hint: "Focused minutes", bar: "bg-xp",
       evidence: (c) => `${fmtMins(c.minutes)} of ~20h` },
     { key: "breadth", label: "Breadth", hint: "Technique variety", bar: "bg-chart-3",
-      evidence: (c) => `${c.technique_families ?? 0} of 5 techniques` },
-    { key: "planning", label: "Planning", hint: "Goals, blocks and intents kept", bar: "bg-primary",
-      evidence: (c) => {
-          const bits = [];
-          if (c.goals_set) bits.push(`${c.goals_met ?? 0}/${c.goals_set} goals`);
-          if (c.blocks_planned) bits.push(`${c.blocks_kept ?? 0}/${c.blocks_planned} blocks`);
-          if (c.intents_declared) bits.push(`${c.intents_kept ?? 0}/${c.intents_declared} intents kept`);
-          return bits.length ? bits.join(" · ") : "nothing planned yet";
-      } },
+      evidence: (c) => `${Math.min(c.technique_families ?? 0, c.technique_target ?? 5)} of ${c.technique_target ?? 5} techniques` },
+    { key: "planning", label: "Planning", hint: "Goals, blocks, prep and intents kept", bar: "bg-primary",
+      evidence: (c) => planningEvidence(c) },
 ];
 
 const BOARDS = [

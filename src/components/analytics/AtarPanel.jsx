@@ -14,7 +14,7 @@
 import React from "react";
 import { motion } from "framer-motion";
 import { GraduationCap, Info, TrendingUp, TrendingDown, Minus } from "lucide-react";
-import { atarBandOf } from "@/lib/atarBands";
+import { atarBandOf, planningEvidence } from "@/lib/atarBands";
 
 const fmtMins = (m) => {
     if (!m) return "0m";
@@ -35,16 +35,10 @@ const COMPONENTS = [
     },
     { key: "consistency", short: "c", label: "Consistency", bar: "bg-streak", evidence: (c) => `${c.study_days ?? 0} of 20 days` },
     { key: "effort", short: "e", label: "Effort", bar: "bg-xp", evidence: (c) => `${fmtMins(c.minutes)} of ~20h` },
-    { key: "breadth", short: "b", label: "Breadth", bar: "bg-chart-3", evidence: (c) => `${c.technique_families ?? 0} of 5 techniques` },
+    { key: "breadth", short: "b", label: "Breadth", bar: "bg-chart-3", evidence: (c) => `${Math.min(c.technique_families ?? 0, c.technique_target ?? 5)} of ${c.technique_target ?? 5} techniques` },
     {
         key: "planning", short: "p", label: "Planning", bar: "bg-primary",
-        evidence: (c) => {
-            const bits = [];
-            if (c.goals_set) bits.push(`${c.goals_met ?? 0}/${c.goals_set} goals`);
-            if (c.blocks_planned) bits.push(`${c.blocks_kept ?? 0}/${c.blocks_planned} blocks`);
-            if (c.intents_declared) bits.push(`${c.intents_kept ?? 0}/${c.intents_declared} intents`);
-            return bits.join(" · ") || "nothing planned yet";
-        },
+        evidence: (c) => planningEvidence(c),
     },
 ];
 
