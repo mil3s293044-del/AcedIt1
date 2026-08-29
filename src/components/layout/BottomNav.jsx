@@ -5,7 +5,7 @@ import {
     Home, Brain, Sparkles, Trophy, Menu, X,
     FileQuestion, BookOpen, Users, Map,
     Swords, BarChart3, Settings as SettingsIcon,
-    CreditCard, HelpCircle, Compass
+    CreditCard, HelpCircle, LifeBuoy
 } from "lucide-react";
 import { createPageUrl } from "@/utils";
 
@@ -17,14 +17,6 @@ const PRIMARY_TABS = [
 ];
 
 const MORE_GROUPS = [
-    // First, and on its own. It is the door to everything below it, and a door
-    // filed alphabetically among the rooms is not a door.
-    {
-        label: "Start here",
-        items: [
-            { label: "Explore — what can I do?", path: "Explore", icon: Compass },
-        ],
-    },
     {
         label: "Study",
         items: [
@@ -51,7 +43,8 @@ const MORE_GROUPS = [
             { label: "Subjects",     path: "Subjects",     icon: BookOpen },
             { label: "Subscription", path: "Subscription", icon: CreditCard },
             { label: "Settings",     path: "Settings",     icon: SettingsIcon },
-            { label: "Support",      path: "Support",      icon: HelpCircle },
+            { label: "Help — what can I do?", path: "Help", icon: HelpCircle },
+            { label: "Support",      path: "Support",      icon: LifeBuoy },
         ],
     },
 ];

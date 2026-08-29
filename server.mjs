@@ -1611,10 +1611,6 @@ const DAILY_CAPS = {
   duel_win:           2000,
   season_reward:      2000,
   loading_quiz:       50,
-  // The whole walkthrough is 440 XP, once, and every step is idempotent
-  // on its own event_key — so this cap never binds. It is here so the
-  // next reader of this table does not have to work that out.
-  guided_run:         500,
 };
 const HOURLY_VELOCITY_CAP = 600;
 
@@ -1661,74 +1657,6 @@ async function insertXPEvent(row, context = "awardXP") {
   return data;
 }
 
-// ── Guided walkthrough payouts ──────────────────────────────────────────────
-// What each step of the walkthrough is worth is decided HERE, never by the
-// caller. `flat_xp` arrives on the wire, so a source that trusted it would let
-// anyone claim any number. The client mirror is STEP_XP / FINISH_XP in
-// src/lib/guidedRun.js — this is the source of truth, keep them in sync.
-const GUIDED_RUN_XP = {
-  free_subjects: 40, free_quiz: 40, free_recall: 140,
-  premium_explain: 40, premium_exam: 40, premium_teach: 140,
-};
-const GUIDED_RUN_OF = {
-  free_subjects: "free", free_quiz: "free", free_recall: "free",
-  premium_explain: "premium", premium_exam: "premium", premium_teach: "premium",
-};
-
-/**
- * Was this step already finished before the walkthrough opened?
- *
- * Switching the walkthrough on hands every existing account a run, and most of
- * them already have subjects and have sat a quiz — paying on "the row exists"
- * alone would post 80 XP to a hundred-odd students for logging in. The run
- * snapshots what was already done when it starts; this is the server half of
- * that, so the payout cannot be claimed by calling the endpoint directly.
- */
-function guidedStepPreexisting(profile, stepId) {
-  const rec = profile?.extra?.guided_run?.[GUIDED_RUN_OF[stepId]];
-  return Array.isArray(rec?.preexisting) && rec.preexisting.includes(stepId);
-}
-
-// ...and a step pays on the same thing the client advances on: a row that
-// exists. The whole design rule of the walkthrough is that a step is finished
-// when the work is finished, so paying one out on a button press would be
-// paying for a click — and this is the half of that rule a student cannot
-// reach around.
-async function guidedStepDone(stepId, email) {
-  const exists = async (table, filters = {}) => {
-    let q = supabaseAdmin.from(table).select("id").eq("created_by", email).limit(1);
-    for (const [col, val] of Object.entries(filters)) q = q.eq(col, val);
-    const { data, error } = await q;
-    if (error) throw new Error(`${table}: ${error.message}`);
-    return (data || []).length > 0;
-  };
-  const usedTool = async (toolType) => {
-    const { data, error } = await supabaseAdmin
-      .from("ai_saved_results").select("id")
-      .eq("created_by", email).ilike("tool_type", toolType).limit(1);
-    if (error) throw new Error(`ai_saved_results: ${error.message}`);
-    return (data || []).length > 0;
-  };
-
-  switch (stepId) {
-    case "free_subjects":
-      return exists("user_subjects", { is_active: true });
-    case "free_quiz":
-      // A quiz that was generated and never opened is not the rep, so this
-      // reads attempts rather than quizzes.
-      return exists("quiz_attempts");
-    case "free_recall":
-      // Two tables, because Study writes both — the exact trap the ATAR's
-      // planning component fell into by reading only one of them.
-      return (await exists("study_techniques", { technique_name: "active_recall" }))
-          || (await exists("active_recall_sessions"));
-    case "premium_explain":     return usedTool("concept_explainer");
-    case "premium_exam":        return usedTool("exam_questions");
-    case "premium_teach":       return usedTool("teaching_assistant");
-    default:                    return false;
-  }
-}
-
 app.post("/local-ai/fn/awardXP", async (req, res) => {
   const user = await authenticateRequest(req);
   if (!user) return res.status(401).json({ error: "Unauthorized" });
@@ -1749,7 +1677,6 @@ app.post("/local-ai/fn/awardXP", async (req, res) => {
       wagered_xp, wager_accuracy,
       flat_xp,
       streak_multiplier,
-      step_id,
     } = body;
 
     if (!source) return res.status(400).json({ error: "source required" });
@@ -1863,32 +1790,13 @@ app.post("/local-ai/fn/awardXP", async (req, res) => {
       case "wager":
         rawXP = calcWagerXP(wagered_xp || 0, wager_accuracy || "wrong");
         break;
-      case "guided_run": {
-        const worth = GUIDED_RUN_XP[step_id];
-        if (!worth) return res.status(400).json({ error: `Unknown guided_run step: ${step_id}` });
-        if (guidedStepPreexisting(profile, step_id)) {
-          return res.json({ success: true, xp_awarded: 0, message: "Step was already done before the walkthrough", step_id });
-        }
-        let finished = false;
-        try {
-          finished = await guidedStepDone(step_id, userEmail);
-        } catch (e) {
-          console.warn("[guided_run] evidence check failed:", e?.message);
-          return res.status(503).json({ error: "Could not verify the step right now" });
-        }
-        // Not an error the student did anything wrong — the client polls, and
-        // a poll that lands a moment before the row does is normal.
-        if (!finished) return res.json({ success: true, xp_awarded: 0, pending: true, step_id });
-        rawXP = worth;
-        break;
-      }
       default:
         return res.status(400).json({ error: `Unknown source: ${source}` });
     }
 
     // ── Apply streak multiplier (1.0×–2.0×, clamped) ────────────────────
     const safeMultiplier = Math.max(1.0, Math.min(2.0, streak_multiplier || 1.0));
-    if (safeMultiplier > 1.0 && !["streak", "weekly_streak", "wager", "bet_win", "duel_win", "competition_bonus", "season_reward", "friend_win", "guided_run"].includes(source)) {
+    if (safeMultiplier > 1.0 && !["streak", "weekly_streak", "wager", "bet_win", "duel_win", "competition_bonus", "season_reward", "friend_win"].includes(source)) {
       rawXP = Math.round(rawXP * safeMultiplier);
     }
 

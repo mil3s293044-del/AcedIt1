@@ -1212,7 +1212,7 @@ Return valid JSON only.`,
                                 <Button onClick={() => setIsManualCreate(true)} variant="outline" size="sm" className="rounded-xl border-border gap-1.5 text-xs font-semibold">
                                     <PlusCircle className="w-3.5 h-3.5" /> Create
                                 </Button>
-                                <Button onClick={() => setShowAIDialog(true)} size="sm" data-run-target="quizzes" className="bg-chart-3 hover:bg-chart-3/90 text-white rounded-xl gap-1.5 text-xs font-semibold shadow-soft">
+                                <Button onClick={() => setShowAIDialog(true)} size="sm" className="bg-chart-3 hover:bg-chart-3/90 text-white rounded-xl gap-1.5 text-xs font-semibold shadow-soft">
                                     <Wand2 className="w-3.5 h-3.5" /> AI Generate
                                 </Button>
                             </div>

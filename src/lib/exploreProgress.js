@@ -1,7 +1,8 @@
 /**
  * exploreProgress — what the student has actually done, per feature.
  *
- * Explore listed all thirty-four features identically, which makes a catalogue
+ * Read by the Help page (which was called Explore when this was written, hence
+ * the filename). It listed all thirty-four features identically, a catalogue
  * rather than a map: nothing on the page knew the difference between the
  * technique someone runs every day and the one they have never opened. The
  * page was already loading the rows that answer that question and using them

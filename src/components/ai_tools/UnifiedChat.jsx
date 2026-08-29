@@ -461,7 +461,7 @@ export default function UnifiedChat() {
     ) : null;
 
     const composerBox = (
-        <div data-run-target="ai_tools" className="rounded-3xl border-2 border-border bg-background shadow-soft px-4 pt-3 pb-2 transition-colors focus-within:border-primary/50">
+        <div className="rounded-3xl border-2 border-border bg-background shadow-soft px-4 pt-3 pb-2 transition-colors focus-within:border-primary/50">
             <Textarea
                 value={input}
                 onChange={e => {

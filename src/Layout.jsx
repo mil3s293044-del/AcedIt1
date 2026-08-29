@@ -20,7 +20,6 @@ import AceIntro from "@/components/ace/AceIntro";
 import { recordVisit } from "@/lib/aceDeck";
 import AceBuddy from "@/components/ace/AceBuddy";
 import AceReacts from "@/components/ace/AceReacts";
-import GuidedRun from "@/components/onboarding/GuidedRun";
 
 const FloatingTimer = React.memo(({ currentTime, timerPosition, isDragging, handleMouseDown, timerRef, formatTime }) => (
     <motion.div
@@ -74,10 +73,6 @@ FloatingTimer.displayName = 'FloatingTimer';
 
 export default function Layout({ children }) {
     const location = useLocation();
-    // The walkthrough owns the corner and the mascot while it is running.
-    // Ace introducing a page over the top of Ace walking you through a step is
-    // the app arguing with itself, and it is the same corner besides.
-    const [runLive, setRunLive] = useState(false);
     const pageKey = location.pathname.replace(/^\//, "").split("/")[0] || "Dashboard";
 
     // The deck's weaker half. Opening a page isn't using a feature, which is
@@ -323,14 +318,9 @@ export default function Layout({ children }) {
                 ten pages that carry a help button — the route already tells us
                 where we are, and this way a page added later is covered the
                 moment it gets a knowledge-map entry. */}
-            <AceIntro page={pageKey} suppressed={runLive} />
+            <AceIntro page={pageKey} />
             {/* He asks what the plan is once a day and then travels with you. */}
-            <AceBuddy page={pageKey} userProfile={userProfile} suppressed={runLive} />
-
-            {/* Fires on first login and asks for three finished things rather
-                than walking them past thirty-four features. Renders nothing at
-                all for anyone who has finished it or waved it away. */}
-            <GuidedRun page={pageKey} userProfile={userProfile} onLiveChange={setRunLive} />
+            <AceBuddy page={pageKey} userProfile={userProfile} />
             {/* There is no second onboarding to suppress these for any more.
                 Signup runs the wizard at /Onboarding, which is its own route —
                 by the time Layout is on screen that conversation is over. The

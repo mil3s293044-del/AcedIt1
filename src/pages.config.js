@@ -70,13 +70,13 @@ import Subjects from './pages/Subjects';
 import Subscription from './pages/Subscription';
 import Support from './pages/Support';
 import Timer from './pages/Timer';
-import Explore from './pages/Explore';
+import Help from './pages/Help';
 import __Layout from './Layout.jsx';
 
 
 export const PAGES = {
     "AITools": AITools,
-    "Explore": Explore,
+    "Help": Help,
     "AIToolsHistory": AIToolsHistory,
     "Analytics": Analytics,
     "Checkout": Checkout,

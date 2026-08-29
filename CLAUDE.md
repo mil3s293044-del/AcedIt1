@@ -84,37 +84,6 @@ log, which cost them breadth, effort and mastery at once.
 Client mirror of the band thresholds is `src/lib/atarBands.js`. Server is the
 source of truth; keep them in sync.
 
-## The guided walkthrough
-
-Fires on first login and asks for three finished things rather than touring
-thirty-four features — the usage audit said students find the pages (SACs at
-80% reach) and then pick the passive option (active recall, blurting and
-rebuild-a-map all on zero). Free run: subjects, a quiz sat, one active recall
-pass, then it hands over to Explore. Premium re-runs the same engine with a
-different three steps over what just unlocked.
-
-`src/lib/guidedRun.js` owns the step lists and all the logic;
-`src/components/onboarding/GuidedRun.jsx` only navigates, points (via AceRoam)
-and pays. Layout mounts it once and stands AceIntro/AceBuddy down while it is
-live — they share the corner and the mascot.
-
-Three rules it exists to keep:
-
-- **A step is done when the ROW exists**, never when a button was clicked. It
-  pays XP, so a step advancing on "Next" would be paying for a click. The
-  server re-checks the same evidence (`guidedStepDone` in `server.mjs`) and
-  decides the amount itself — `flat_xp` off the wire is ignored for this
-  source.
-- **Work finished before the run opened is ticked, not paid.** The run
-  snapshots `preexisting` when it starts. Without it, switching this on posts
-  80 XP to every existing account for logging in.
-- **It never blocks.** A card in the corner, foldable to a pill, app fully
-  usable behind it. aceFirstRun's header has the long version of why.
-
-Steps point at real elements via `data-run-target` attributes in the pages.
-`guidedRun.test.mjs` asserts each one still exists in the file the step names —
-a renamed button otherwise fails silently as a mascot standing in a corner.
-
 ## Study intent
 
 The Dashboard modal asks what today is for (homework / cramming / free study)
@@ -175,6 +144,15 @@ npm run dev    # vite :5173 + server.mjs :3001 concurrently
   set of plain-node assertion files (`src/lib/*.test.mjs`, run through
   `_aliasLoader.mjs`) wired into `npm test`. Adding a real runner is still a
   decision, not a freebie.
+- **A feature gated behind an optional-looking step is a feature nobody has.**
+  Blurting's AI marking rendered only when source notes had been uploaded — an
+  upload sitting in a side panel on the setup screen, next to a "How Blurting
+  Works" list that promised "AI checks what you missed" unconditionally. The
+  marking worked; almost nobody ever saw it, which is the likeliest reason
+  blurting reads as zero in the usage audit. It marks either way now, against
+  the Study Design when there are no notes, and says which of the two it did.
+  Worth checking the same shape elsewhere before blaming a technique for being
+  unpopular.
 - Copy drifts away from the product. Retired features kept being advertised
   (weekly leagues on the paid tier, a Study Roadmap page that redirects, past
   papers in Revision Mode) and the AI tool count was hand-written as three
