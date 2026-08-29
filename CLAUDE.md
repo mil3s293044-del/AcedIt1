@@ -84,6 +84,37 @@ log, which cost them breadth, effort and mastery at once.
 Client mirror of the band thresholds is `src/lib/atarBands.js`. Server is the
 source of truth; keep them in sync.
 
+## Cards are the app's visual language
+
+`PlayingCard` + `cardIdentity` are used on eighteen surfaces — marketing, the
+signup wizard, Dashboard, Subjects, Review, the flashcard shelf, and inside the
+quiz player. **Rank is how strong the thing is, suit is the family it belongs
+to**, and that contract holds everywhere: deck mastery, quiz best score, a
+subject in the signup hand. An Ace is always earned, never given.
+
+`CardPack` is the shared pack — backs behind, one face on top, thickness = the
+count, fan on hover. `DeckStack` (flashcard decks) and `QuizDeck` (quizzes) are
+thin faces on it; before the extraction they were two near-identical
+two-hundred-line components, which is the copy that rots.
+
+If you are about to render a list of anything deck-shaped, it goes on
+`CardPack`. The quiz list was the last holdout — an icon in a rounded square, a
+title, two pills and three grey stat tiles reading Attempts / Best / Avg —
+and a grid of those is precisely what makes an app look generated. Tapping one
+also dropped you straight into a card table, so the seam was in the middle of
+the flow the page exists to start.
+
+Three things that took a rebuild to learn:
+
+- **One number on the face.** A card has room for one figure and it should be
+  the one that answers "what now" — due, or the score to beat. The rest goes on
+  the screen behind it.
+- **Actions go in the gutter under the card, not its top-right corner.** That
+  corner is where the title starts. They were `opacity-0` until hover, which
+  hid the collision and also made delete unreachable on a touch screen.
+- **One pack per row on a phone is correct.** Narrowing the card to fit two
+  does not fit two and clips the face trying. Two-up arrives at `sm`.
+
 ## The signup tour
 
 `AceTour` — six stops and a sign-off, fired once for accounts that are hours

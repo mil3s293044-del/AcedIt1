@@ -28,3 +28,6 @@ dist-ssr
 *.sw?
 
 .env
+# Python bytecode from the ui-ux-pro-max skill scripts
+__pycache__/
+*.pyc

@@ -43,7 +43,8 @@ import HelpButton from "@/components/shared/HelpButton";
 import TierUsagePill from "@/components/shared/TierUsagePill";
 import { FEATURES, canUseFeature } from "@/lib/tierAccess";
 
-import QuizCard from "../components/quizzes/QuizCard";
+import QuizDeck from "@/components/cards/QuizDeck";
+import { quizDeckStats } from "@/lib/quizDeck";
 import QuizPlayer from "../components/quizzes/QuizPlayer";
 import QuizInsightRail from "../components/quizzes/QuizInsightRail";
 import MarkdownMath from "@/components/shared/MarkdownMath";
@@ -1239,26 +1240,44 @@ Return valid JSON only.`,
                                                 <h3 className="font-bold text-foreground">{subjectName}</h3>
                                                 <span className="text-xs text-muted-foreground/60">{subjectQuizzes.length} quiz{subjectQuizzes.length !== 1 ? 'zes' : ''}</span>
                                             </div>
-                                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                                                {subjectQuizzes.map((quiz, index) => (
-                                                    <motion.div key={quiz.id} initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: index * 0.04 }} className="h-full">
-                                                        <QuizCard quiz={quiz} pastAttempts={quizAttempts} subjectColor={tone}
-                                                            onPlay={() => { setPendingQuiz(quiz); }}
-                                                            onRetryWrong={(wrongIdx) => {
-                                                                const subset = {
+                                            {/* A shelf, not a grid. Same row of
+                                                packs the flashcard decks are
+                                                dealt into, so the two lists in
+                                                this app that hold decks of
+                                                cards look like the same thing. */}
+                                            <div className="flex flex-wrap gap-x-3 gap-y-3">
+                                                {subjectQuizzes.map((quiz, index) => {
+                                                    const stats = quizDeckStats(quiz, quizAttempts);
+                                                    return (
+                                                        <QuizDeck
+                                                            key={quiz.id}
+                                                            index={index}
+                                                            title={quiz.title}
+                                                            subject={subjectName}
+                                                            difficulty={quiz.difficulty}
+                                                            tone={tone}
+                                                            questions={quiz.questions?.length || 0}
+                                                            bestScore={stats.bestScore}
+                                                            attempts={stats.attempts}
+                                                            toFix={stats.wrongIdx.length}
+                                                            canReshuffle={!!quiz.source_file_url}
+                                                            onSelect={() => setPendingQuiz(quiz)}
+                                                            onRetryWrong={() => {
+                                                                setQuizMode('standard');
+                                                                setQuizTimeLimitMs(null);
+                                                                setSelectedQuiz({
                                                                     ...quiz,
                                                                     _isRetry: true,
                                                                     title: `${quiz.title} — wrong only`,
-                                                                    questions: wrongIdx.map(i => quiz.questions[i]),
-                                                                };
-                                                                setQuizMode('standard');
-                                                                setQuizTimeLimitMs(null);
-                                                                setSelectedQuiz(subset);
+                                                                    questions: stats.wrongIdx.map(i => quiz.questions[i]),
+                                                                });
                                                                 setIsPlaying(true);
                                                             }}
-                                                            onReshuffle={handleReshuffleQuiz} onDelete={handleDeleteQuiz} />
-                                                    </motion.div>
-                                                ))}
+                                                            onReshuffle={() => handleReshuffleQuiz(quiz)}
+                                                            onDelete={() => handleDeleteQuiz(quiz.id)}
+                                                        />
+                                                    );
+                                                })}
                                             </div>
                                         </div>
                                     );
