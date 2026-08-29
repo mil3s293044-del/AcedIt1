@@ -1,10 +1,14 @@
 /**
- * Explore — the front door.
+ * Help — the manual, and the only guidance in here you can go and get.
  *
  * Every other piece of guidance in this app is PUSH: Ace introduces a page you
  * happen to be standing on, a tip explains a term you happen to be looking at,
  * the help button describes the page you already found. All of it good, none of
  * it reachable on purpose. A student who doesn't know what's here has no verb.
+ *
+ * It lives under Account rather than in the Study section, because that is
+ * where a student goes looking when they want the manual — next to Settings
+ * and Support, not next to the thing they are trying to do.
  *
  * It invents no content. `aceKnowledge` already describes every feature — what
  * it is, WHEN it's worth opening, what has to exist first — and already ranks
@@ -150,7 +154,7 @@ function FeatureCard({ feature, ready, premium, used, compact = false }) {
     );
 }
 
-export default function Explore() {
+export default function Help() {
     const [query, setQuery] = useState("");
     const [section, setSection] = useState("All");
     const [data, setData] = useState(null);
@@ -209,7 +213,7 @@ export default function Explore() {
         <div className="max-w-5xl mx-auto px-4 sm:px-6 py-6 sm:py-10">
             <div className="flex items-center gap-2 mb-1">
                 <Compass className="w-5 h-5 text-primary" />
-                <p className="stat-label text-muted-foreground">Explore</p>
+                <p className="stat-label text-muted-foreground">Help</p>
             </div>
             <h1 className="font-display font-black text-foreground text-3xl sm:text-4xl leading-tight">
                 What do you need?

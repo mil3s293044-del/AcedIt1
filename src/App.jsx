@@ -120,6 +120,8 @@ const AuthenticatedApp = () => {
       <Route path="/onboarding" element={<Onboarding existingUser />} />
       {/* Roadmap retired — old links land on the Planner */}
       <Route path="/StudyRoadmap" element={<Navigate to="/Goals" replace />} />
+      {/* Explore became Help and moved under Account */}
+      <Route path="/Explore" element={<Navigate to="/Help" replace />} />
       <Route path="/Paywall" element={<Paywall />} />
       <Route path="/Suspended" element={<Suspended />} />
       <Route path="/AdminIPPanel" element={<LayoutWrapper currentPageName="AdminIPPanel"><AdminIPPanel /></LayoutWrapper>} />

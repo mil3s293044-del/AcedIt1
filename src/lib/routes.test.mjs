@@ -59,7 +59,7 @@ check("every registered route is really imported", () => {
 check("nothing was written into the header comment by mistake", () => {
     // Anything the code needs must survive comment-stripping. If a name appears
     // only in the raw file, an edit landed in the example block.
-    for (const k of ["Explore", ...routeKeys.slice(0, 5)]) {
+    for (const k of ["Help", ...routeKeys.slice(0, 5)]) {
         const inRaw = (configRaw.match(new RegExp(`\\b${k}\\b`, "g")) || []).length;
         const inCode = (config.match(new RegExp(`\\b${k}\\b`, "g")) || []).length;
         assert.ok(inCode >= 2, `${k}: appears ${inCode}× in code (needs import + registration)`);

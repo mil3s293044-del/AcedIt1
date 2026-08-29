@@ -172,11 +172,31 @@ export default function BlurtingMethod({ onSessionComplete }) {
         setTimeout(() => textareaRef.current?.focus(), 100);
     };
 
+    /**
+     * Mark the blurt.
+     *
+     * This used to require uploaded notes — both here and in the review screen,
+     * which rendered the whole AI Marking panel only when `sourceFiles.length`
+     * was non-zero. The upload sits in a side panel on the setup screen and
+     * reads as optional, so most students never touched it and never saw any
+     * marking at all. Meanwhile "How Blurting Works" promised, unconditionally,
+     * that step 4 was "AI checks what you missed". The app was advertising a
+     * feature and then hiding it behind a step nobody knew was load-bearing.
+     *
+     * Notes are still better: they let it mark against what the student's own
+     * class actually covered. Without them it marks against the VCE Study
+     * Design via the subject's examiner prompt — less specific, still the point
+     * of the technique — and says which of the two it did, because a "you
+     * missed this" that the student's course never covered is worse than no
+     * feedback at all.
+     */
     const handleGenerateFeedback = async () => {
-        if (!sourceFiles.length || !blurtedText.trim()) {
-            toast({ title: "Missing info", description: "Upload notes and write your blurt first.", variant: "destructive" });
+        if (!blurtedText.trim()) {
+            toast({ title: "Nothing to mark yet", description: "Write your brain dump first.", variant: "destructive" });
             return;
         }
+        const hasNotes = sourceFiles.length > 0;
+        const topicLabel = topic?.trim() || "the topic they chose";
 
         const access = await checkLiveTier(FEATURES.BLURTING);
         if (!access.allowed) {
@@ -190,7 +210,7 @@ export default function BlurtingMethod({ onSessionComplete }) {
 
         setIsGeneratingFeedback(true);
         try {
-            const uploaded = await Promise.all(sourceFiles.map(f => base44.integrations.Core.UploadFile({ file: f }).then(r => ({ url: r.file_url, name: f.name, ext: f.name.split('.').pop().toLowerCase() }))));
+            const uploaded = hasNotes ? await Promise.all(sourceFiles.map(f => base44.integrations.Core.UploadFile({ file: f }).then(r => ({ url: r.file_url, name: f.name, ext: f.name.split('.').pop().toLowerCase() })))) : [];
             const docxPptx = uploaded.filter(f => f.ext === 'docx' || f.ext === 'pptx');
             const directFiles = uploaded.filter(f => f.ext !== 'docx' && f.ext !== 'pptx');
             let documentContext = '';
@@ -206,11 +226,19 @@ export default function BlurtingMethod({ onSessionComplete }) {
                     toast({ title: "File read failed", description: "Could not read " + f.name + ": " + e.message, variant: "destructive" });
                 }
             }
+            const task = hasNotes
+                ? `Evaluate this ${selectedSubject} "blurting" attempt against the source material (${sourceFiles.length} file(s)) using VCE Study Design criteria.`
+                : `Evaluate this ${selectedSubject} "blurting" attempt — everything the student could recall from memory about ${topicLabel}.
+
+There is NO source material for this session. Mark it against the VCE Study Design for ${selectedSubject}: what a VCE student is expected to know on this topic. Two rules follow from that, and breaking either makes the feedback worse than none:
+- Never say or imply you have seen their notes, their class, or their teacher's material. You have not.
+- Keep every "missed" point inside the Study Design for this subject and topic. A student told they missed something their course never covered will stop trusting the rest of it.`;
+
             const response = await base44.integrations.Core.InvokeLLM({
                 feature: "blurting",
                 prompt: `${getExaminerPrompt(selectedSubject)}
 
-Evaluate this ${selectedSubject} "blurting" attempt against the source material (${sourceFiles.length} file(s)) using VCE Study Design criteria.
+${task}
 
 Student's Blurted Text:
 ${blurtedText}
@@ -237,7 +265,7 @@ Reference Study Design requirements in your feedback.`,
                     required: ["completeness_percentage", "overall_assessment", "points_covered", "points_missed", "suggestions"]
                 }
             });
-            setAiFeedback(response);
+            setAiFeedback({ ...response, marked_against: hasNotes ? "notes" : "study_design" });
             // Real XP arrives via onSessionComplete → awardXP; no cosmetic
             // popups here (they'd show amounts the engine never granted).
             toast({ title: "Feedback ready!" });
@@ -465,8 +493,12 @@ Reference Study Design requirements in your feedback.`,
                     <div className="card-soft p-5 space-y-3">
                         <div className="flex items-center gap-2">
                             <Sparkles className="w-4 h-4 text-xp" />
-                            <h3 className="font-semibold text-foreground text-sm">Upload Notes for AI Marking</h3>
+                            <h3 className="font-semibold text-foreground text-sm">Your notes <span className="font-normal text-muted-foreground">(optional)</span></h3>
                         </div>
+                        <p className="text-xs text-muted-foreground leading-snug">
+                            Marking works without them. Add notes and it marks against what your
+                            class covered rather than the Study Design.
+                        </p>
                         <div className={`rounded-2xl border-2 border-dashed transition-all ${sourceFiles.length ? 'border-xp/50 bg-xp/5' : 'border-border bg-secondary/50'}`}>
                             <label className="flex items-center gap-3 p-3.5 cursor-pointer hover:bg-xp/5 transition-colors rounded-2xl">
                                 <div className={`w-8 h-8 rounded-xl flex items-center justify-center flex-shrink-0 ${sourceFiles.length ? 'bg-xp/10' : 'bg-surface'}`}>
@@ -665,140 +697,153 @@ Reference Study Design requirements in your feedback.`,
 
     const renderReview = () => (
         <motion.div key="review" initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} className="space-y-5">
-            {/* AI Feedback section */}
-            {sourceFiles.length > 0 ? (
-                <div className="card-soft p-6">
-                    {!aiFeedback ? (
-                        <div className="flex items-start gap-4">
-                            <div className="w-10 h-10 bg-chart-4/10 rounded-2xl flex items-center justify-center flex-shrink-0">
-                                <Sparkles className="w-5 h-5 text-chart-4" />
-                            </div>
+            {/* AI Feedback section.
+
+                This whole panel used to render only when notes had been
+                uploaded — the marking existed, it was just invisible to every
+                student who skipped an optional-looking upload on the setup
+                screen. Which is most of them, and is the likeliest reason
+                blurting sits at zero in the usage audit: the payoff was
+                unreachable. It marks either way now. */}
+            <div className="card-soft p-6">
+                {!aiFeedback ? (
+                    <div className="flex items-start gap-4">
+                        <div className="w-10 h-10 bg-chart-4/10 rounded-2xl flex items-center justify-center flex-shrink-0">
+                            <Sparkles className="w-5 h-5 text-chart-4" />
+                        </div>
+                        <div className="flex-1">
+                            <h3 className="font-semibold text-foreground mb-1">AI Marking</h3>
+                            <p className="text-sm text-muted-foreground mb-4">
+                                {sourceFiles.length > 0
+                                    ? "Compare your recall against your notes to see what you got right and what you missed."
+                                    : `See what you got right and what you left out, against the VCE Study Design for ${selectedSubject || "this subject"}.`}
+                            </p>
+                            <Button
+                                onClick={handleGenerateFeedback}
+                                disabled={isGeneratingFeedback || !blurtedText.trim()}
+                                className="h-11 bg-xp hover:bg-xp/90 text-white rounded-xl font-medium gap-2 shadow-soft"
+                            >
+                                {isGeneratingFeedback ? (
+                                    <><Loader2 className="w-4 h-4 animate-spin" /> Analysing your recall...</>
+                                ) : (
+                                    <><Wand2 className="w-4 h-4" /> Mark My Blurt</>
+                                )}
+                            </Button>
+                            {sourceFiles.length === 0 && (
+                                <p className="text-xs text-muted-foreground/80 mt-3 leading-snug">
+                                    Upload your notes on the setup screen next time and it marks against
+                                    what your class actually covered instead.
+                                </p>
+                            )}
+                        </div>
+                    </div>
+                ) : (
+                    <div className="space-y-5">
+                        {/* Score */}
+                        <div className="flex items-center gap-6 pb-5 border-b border-border">
+                            <ScoreRing percentage={aiFeedback.completeness_percentage} />
                             <div className="flex-1">
-                                <h3 className="font-semibold text-foreground mb-1">AI Marking</h3>
-                                <p className="text-sm text-muted-foreground mb-4">Compare your recall against your notes to see what you got right and what you missed.</p>
-                                <Button
-                                    onClick={handleGenerateFeedback}
-                                    disabled={isGeneratingFeedback || !blurtedText.trim()}
-                                    className="h-11 bg-xp hover:bg-xp/90 text-white rounded-xl font-medium gap-2 shadow-soft"
-                                >
-                                    {isGeneratingFeedback ? (
-                                        <><Loader2 className="w-4 h-4 animate-spin" /> Analysing your recall...</>
-                                    ) : (
-                                        <><Wand2 className="w-4 h-4" /> Mark My Blurt</>
-                                    )}
+                                <h3 className="font-bold text-foreground text-xl mb-1">AI Feedback</h3>
+                                <p className="text-sm text-muted-foreground leading-relaxed">{aiFeedback.overall_assessment}</p>
+                                <p className="text-xs text-muted-foreground/70 mt-2">
+                                    {aiFeedback.marked_against === "notes"
+                                        ? "Marked against the notes you uploaded."
+                                        : `Marked against the VCE Study Design for ${selectedSubject || "this subject"} — not against your class notes.`}
+                                </p>
+                            </div>
+                        </div>
+
+                        {/* Points covered */}
+                        {aiFeedback.points_covered?.length > 0 && (
+                            <div>
+                                <p className="text-xs font-semibold uppercase tracking-wide text-primary mb-2.5 flex items-center gap-1.5">
+                                    <CheckCircle className="w-3.5 h-3.5" /> What you remembered ({aiFeedback.points_covered.length})
+                                </p>
+                                <div className="space-y-1.5">
+                                    {aiFeedback.points_covered.map((point, idx) => (
+                                        <motion.div
+                                            key={idx}
+                                            initial={{ opacity: 0, x: -10 }}
+                                            animate={{ opacity: 1, x: 0 }}
+                                            transition={{ delay: idx * 0.05 }}
+                                            className="flex items-start gap-2.5 bg-primary/5 border border-primary/20 rounded-xl px-3.5 py-2.5"
+                                        >
+                                            <Check className="w-4 h-4 text-primary mt-0.5 flex-shrink-0" />
+                                            <span className="text-sm text-foreground">{point}</span>
+                                        </motion.div>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
+
+                        {/* Points missed */}
+                        {aiFeedback.points_missed?.length > 0 && (
+                            <div>
+                                <p className="text-xs font-semibold uppercase tracking-wide text-streak mb-2.5 flex items-center gap-1.5">
+                                    <AlertCircle className="w-3.5 h-3.5" /> What you missed ({aiFeedback.points_missed.length})
+                                </p>
+                                <div className="space-y-1.5">
+                                    {aiFeedback.points_missed.map((point, idx) => (
+                                        <motion.div
+                                            key={idx}
+                                            initial={{ opacity: 0, x: -10 }}
+                                            animate={{ opacity: 1, x: 0 }}
+                                            transition={{ delay: idx * 0.05 }}
+                                            className="flex items-start gap-2.5 bg-streak/5 border border-streak/20 rounded-xl px-3.5 py-2.5"
+                                        >
+                                            <X className="w-4 h-4 text-streak mt-0.5 flex-shrink-0" />
+                                            <span className="text-sm text-foreground">{point}</span>
+                                        </motion.div>
+                                    ))}
+                                </div>
+                                {/* The loop-closer. A list of things you
+                                    didn't know, with no mechanism that ever
+                                    shows them to you again, is most of the
+                                    value of the blurt thrown away. */}
+                                <Button onClick={makeCardsFromMisses} disabled={makingCards || cardsMade > 0}
+                                    className="mt-3 w-full gap-2 rounded-xl bg-streak hover:bg-streak/90 text-white">
+                                    {makingCards ? <Loader2 className="w-4 h-4 animate-spin" />
+                                        : cardsMade > 0 ? <Check className="w-4 h-4" /> : <Layers className="w-4 h-4" />}
+                                    {cardsMade > 0
+                                        ? `${cardsMade} card${cardsMade === 1 ? "" : "s"} made — due now`
+                                        : `Turn these ${aiFeedback.points_missed.length} into flashcards`}
                                 </Button>
                             </div>
-                        </div>
-                    ) : (
-                        <div className="space-y-5">
-                            {/* Score */}
-                            <div className="flex items-center gap-6 pb-5 border-b border-border">
-                                <ScoreRing percentage={aiFeedback.completeness_percentage} />
-                                <div className="flex-1">
-                                    <h3 className="font-bold text-foreground text-xl mb-1">AI Feedback</h3>
-                                    <p className="text-sm text-muted-foreground leading-relaxed">{aiFeedback.overall_assessment}</p>
+                        )}
+
+                        {/* Accuracy issues */}
+                        {aiFeedback.accuracy_issues && (
+                            <div className="bg-xp/5 border border-xp/20 rounded-2xl p-4">
+                                <p className="text-xs font-semibold uppercase tracking-wide text-xp mb-2">Accuracy Issues</p>
+                                <p className="text-sm text-foreground">{aiFeedback.accuracy_issues}</p>
+                            </div>
+                        )}
+
+                        {/* Suggestions */}
+                        {aiFeedback.suggestions?.length > 0 && (
+                            <div>
+                                <p className="text-xs font-semibold uppercase tracking-wide text-chart-4 mb-2.5 flex items-center gap-1.5">
+                                    <Sparkles className="w-3.5 h-3.5" /> Study Suggestions
+                                </p>
+                                <div className="space-y-1.5">
+                                    {aiFeedback.suggestions.map((s, idx) => (
+                                        <motion.div
+                                            key={idx}
+                                            initial={{ opacity: 0, x: -10 }}
+                                            animate={{ opacity: 1, x: 0 }}
+                                            transition={{ delay: idx * 0.05 }}
+                                            className="flex items-start gap-2.5 bg-chart-4/5 border border-chart-4/20 rounded-xl px-3.5 py-2.5"
+                                        >
+                                            <ChevronRight className="w-4 h-4 text-chart-4 mt-0.5 flex-shrink-0" />
+                                            <span className="text-sm text-foreground">{s}</span>
+                                        </motion.div>
+                                    ))}
                                 </div>
                             </div>
-
-                            {/* Points covered */}
-                            {aiFeedback.points_covered?.length > 0 && (
-                                <div>
-                                    <p className="text-xs font-semibold uppercase tracking-wide text-primary mb-2.5 flex items-center gap-1.5">
-                                        <CheckCircle className="w-3.5 h-3.5" /> What you remembered ({aiFeedback.points_covered.length})
-                                    </p>
-                                    <div className="space-y-1.5">
-                                        {aiFeedback.points_covered.map((point, idx) => (
-                                            <motion.div
-                                                key={idx}
-                                                initial={{ opacity: 0, x: -10 }}
-                                                animate={{ opacity: 1, x: 0 }}
-                                                transition={{ delay: idx * 0.05 }}
-                                                className="flex items-start gap-2.5 bg-primary/5 border border-primary/20 rounded-xl px-3.5 py-2.5"
-                                            >
-                                                <Check className="w-4 h-4 text-primary mt-0.5 flex-shrink-0" />
-                                                <span className="text-sm text-foreground">{point}</span>
-                                            </motion.div>
-                                        ))}
-                                    </div>
-                                </div>
-                            )}
-
-                            {/* Points missed */}
-                            {aiFeedback.points_missed?.length > 0 && (
-                                <div>
-                                    <p className="text-xs font-semibold uppercase tracking-wide text-streak mb-2.5 flex items-center gap-1.5">
-                                        <AlertCircle className="w-3.5 h-3.5" /> What you missed ({aiFeedback.points_missed.length})
-                                    </p>
-                                    <div className="space-y-1.5">
-                                        {aiFeedback.points_missed.map((point, idx) => (
-                                            <motion.div
-                                                key={idx}
-                                                initial={{ opacity: 0, x: -10 }}
-                                                animate={{ opacity: 1, x: 0 }}
-                                                transition={{ delay: idx * 0.05 }}
-                                                className="flex items-start gap-2.5 bg-streak/5 border border-streak/20 rounded-xl px-3.5 py-2.5"
-                                            >
-                                                <X className="w-4 h-4 text-streak mt-0.5 flex-shrink-0" />
-                                                <span className="text-sm text-foreground">{point}</span>
-                                            </motion.div>
-                                        ))}
-                                    </div>
-                                    {/* The loop-closer. A list of things you
-                                        didn't know, with no mechanism that ever
-                                        shows them to you again, is most of the
-                                        value of the blurt thrown away. */}
-                                    <Button onClick={makeCardsFromMisses} disabled={makingCards || cardsMade > 0}
-                                        className="mt-3 w-full gap-2 rounded-xl bg-streak hover:bg-streak/90 text-white">
-                                        {makingCards ? <Loader2 className="w-4 h-4 animate-spin" />
-                                            : cardsMade > 0 ? <Check className="w-4 h-4" /> : <Layers className="w-4 h-4" />}
-                                        {cardsMade > 0
-                                            ? `${cardsMade} card${cardsMade === 1 ? "" : "s"} made — due now`
-                                            : `Turn these ${aiFeedback.points_missed.length} into flashcards`}
-                                    </Button>
-                                </div>
-                            )}
-
-                            {/* Accuracy issues */}
-                            {aiFeedback.accuracy_issues && (
-                                <div className="bg-xp/5 border border-xp/20 rounded-2xl p-4">
-                                    <p className="text-xs font-semibold uppercase tracking-wide text-xp mb-2">Accuracy Issues</p>
-                                    <p className="text-sm text-foreground">{aiFeedback.accuracy_issues}</p>
-                                </div>
-                            )}
-
-                            {/* Suggestions */}
-                            {aiFeedback.suggestions?.length > 0 && (
-                                <div>
-                                    <p className="text-xs font-semibold uppercase tracking-wide text-chart-4 mb-2.5 flex items-center gap-1.5">
-                                        <Sparkles className="w-3.5 h-3.5" /> Study Suggestions
-                                    </p>
-                                    <div className="space-y-1.5">
-                                        {aiFeedback.suggestions.map((s, idx) => (
-                                            <motion.div
-                                                key={idx}
-                                                initial={{ opacity: 0, x: -10 }}
-                                                animate={{ opacity: 1, x: 0 }}
-                                                transition={{ delay: idx * 0.05 }}
-                                                className="flex items-start gap-2.5 bg-chart-4/5 border border-chart-4/20 rounded-xl px-3.5 py-2.5"
-                                            >
-                                                <ChevronRight className="w-4 h-4 text-chart-4 mt-0.5 flex-shrink-0" />
-                                                <span className="text-sm text-foreground">{s}</span>
-                                            </motion.div>
-                                        ))}
-                                    </div>
-                                </div>
-                            )}
-                        </div>
-                    )}
-                </div>
-            ) : (
-                <div className="card-soft bg-xp/5 border-xp/20 p-5 flex items-center gap-4">
-                    <Sparkles className="w-5 h-5 text-xp flex-shrink-0" />
-                    <p className="text-sm text-foreground">
-                        <span className="font-semibold">Next time:</span> Upload your PDF notes before the session to get AI feedback comparing your recall to your source material.
-                    </p>
-                </div>
-            )}
+                        )}
+                    </div>
+                )}
+            </div>
 
             {/* Your blurted text */}
             <div className="card-soft overflow-hidden">

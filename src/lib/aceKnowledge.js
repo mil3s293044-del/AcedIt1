@@ -377,7 +377,7 @@ export const BY_ID = Object.fromEntries(FEATURES.map(f => [f.id, f]));
  * is one place to be wrong in rather than fourteen.
  */
 export const PAGES = {
-    Explore:      { route: "/Explore",      title: "Explore",      intro: "Everything AcedIt can do, what each thing is for, and when it's worth opening." },
+    Help:         { route: "/Help",         title: "Help",         intro: "Everything AcedIt can do, what each thing is for, and when it's worth opening." },
     Dashboard:    { route: "/Dashboard",    title: "Home",         intro: "What's worth doing today, and how the last month has actually gone." },
     Study:        { route: "/Study",        title: "Study",        intro: "Six techniques doing six different jobs. Which tab you want depends on what's going wrong, not on which one you like." },
     Quizzes:      { route: "/Quizzes",      title: "Quizzes",      intro: "Exam-shaped questions, written by you or generated from your notes." },

@@ -5,7 +5,7 @@ import {
     GraduationCap,
     Brain, FileQuestion, Sparkles, Map, BarChart3, Trophy,
     Users, Swords,
-    BookOpen, CreditCard, Settings as SettingsIcon, HelpCircle, Compass,
+    BookOpen, CreditCard, Settings as SettingsIcon, HelpCircle, LifeBuoy,
 } from "lucide-react";
 import { createPageUrl } from "@/utils";
 
@@ -13,7 +13,6 @@ const NAV_SECTIONS = [
     {
         label: "Study",
         items: [
-            { label: "Explore",       path: "Explore",      icon: Compass },
             { label: "Study Session", path: "Study",        icon: Brain },
             { label: "Quizzes",       path: "Quizzes",      icon: FileQuestion },
             { label: "AI Tools",      path: "AITools",      icon: Sparkles },
@@ -40,7 +39,10 @@ const NAV_SECTIONS = [
             { label: "Subjects",     path: "Subjects",     icon: BookOpen },
             { label: "Subscription", path: "Subscription", icon: CreditCard },
             { label: "Settings",     path: "Settings",     icon: SettingsIcon },
-            { label: "Support",      path: "Support",      icon: HelpCircle },
+            // Two different things, so two different icons: Help is the manual
+            // for the app, Support is a human you can write to.
+            { label: "Help",         path: "Help",         icon: HelpCircle },
+            { label: "Support",      path: "Support",      icon: LifeBuoy },
         ],
     },
 ];

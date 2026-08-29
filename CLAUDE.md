@@ -84,6 +84,37 @@ log, which cost them breadth, effort and mastery at once.
 Client mirror of the band thresholds is `src/lib/atarBands.js`. Server is the
 source of truth; keep them in sync.
 
+## The signup tour
+
+`AceTour` — six stops and a sign-off, fired once for accounts that are hours
+old. Ace walks in on Dashboard, Subjects, Study, Quizzes, Planner and Help,
+says what each is for, and hands them back to the Dashboard. Copy and
+eligibility live in `src/lib/aceTour.js`; the component navigates, speaks and
+remembers the stop index so a refresh resumes rather than restarts.
+
+It is a tour, not an onboarding run. Nothing is gated on the student having
+done something, nothing pays XP, no step can be failed. The version that did
+all of that was a client library, a component, a server payout source and six
+anchor attributes scattered through the pages — reverted in `be14756`, and
+worth reading that commit before proposing it again.
+
+Two rules it exists to keep:
+
+- **It can only ever fire for genuinely new accounts.** Eligibility is derived
+  from `user_profiles.created_date`, not from a flag needing a backfill: older
+  than `TOUR_WINDOW_HOURS` and nothing starts, nothing is written. An unknown
+  age counts as old. Getting this wrong the generous way ambushes all ~130
+  existing accounts at once; getting it wrong the other way costs one student a
+  tour.
+- **He is drawn with `AceWalker` + `AceBubble`**, the pair AceBuddy uses, so he
+  arrives the way he arrives everywhere else. The first version pointed him at
+  each page's `<h1>` through AceRoam and he clipped under the nav — headings
+  are near the top, that is what headings are.
+
+Layout stands AceIntro and AceBuddy down while it runs; they share the corner
+and the mascot. It goes quiet on the payment flow, because the wizard sends
+premium-intent signups straight to /Subscription.
+
 ## Study intent
 
 The Dashboard modal asks what today is for (homework / cramming / free study)
@@ -140,8 +171,19 @@ npm run dev    # vite :5173 + server.mjs :3001 concurrently
   genuinely dead things have been removed. Worth reading a warning before deleting
   it — twice now an "unused" symbol turned out to mark a half-wired feature, not
   dead code (the shared-quiz handlers, Layout's unreachable UpgradeModal).
-- No test runner is configured. There is no `test` script, no vitest, no jest.
-  Adding one is a real decision, not a freebie.
+- No test runner is configured — there is no vitest or jest. What exists is a
+  set of plain-node assertion files (`src/lib/*.test.mjs`, run through
+  `_aliasLoader.mjs`) wired into `npm test`. Adding a real runner is still a
+  decision, not a freebie.
+- **A feature gated behind an optional-looking step is a feature nobody has.**
+  Blurting's AI marking rendered only when source notes had been uploaded — an
+  upload sitting in a side panel on the setup screen, next to a "How Blurting
+  Works" list that promised "AI checks what you missed" unconditionally. The
+  marking worked; almost nobody ever saw it, which is the likeliest reason
+  blurting reads as zero in the usage audit. It marks either way now, against
+  the Study Design when there are no notes, and says which of the two it did.
+  Worth checking the same shape elsewhere before blaming a technique for being
+  unpopular.
 - Copy drifts away from the product. Retired features kept being advertised
   (weekly leagues on the paid tier, a Study Roadmap page that redirects, past
   papers in Revision Mode) and the AI tool count was hand-written as three
