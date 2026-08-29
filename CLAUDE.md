@@ -84,6 +84,37 @@ log, which cost them breadth, effort and mastery at once.
 Client mirror of the band thresholds is `src/lib/atarBands.js`. Server is the
 source of truth; keep them in sync.
 
+## The signup tour
+
+`AceTour` — six stops and a sign-off, fired once for accounts that are hours
+old. Ace walks in on Dashboard, Subjects, Study, Quizzes, Planner and Help,
+says what each is for, and hands them back to the Dashboard. Copy and
+eligibility live in `src/lib/aceTour.js`; the component navigates, speaks and
+remembers the stop index so a refresh resumes rather than restarts.
+
+It is a tour, not an onboarding run. Nothing is gated on the student having
+done something, nothing pays XP, no step can be failed. The version that did
+all of that was a client library, a component, a server payout source and six
+anchor attributes scattered through the pages — reverted in `be14756`, and
+worth reading that commit before proposing it again.
+
+Two rules it exists to keep:
+
+- **It can only ever fire for genuinely new accounts.** Eligibility is derived
+  from `user_profiles.created_date`, not from a flag needing a backfill: older
+  than `TOUR_WINDOW_HOURS` and nothing starts, nothing is written. An unknown
+  age counts as old. Getting this wrong the generous way ambushes all ~130
+  existing accounts at once; getting it wrong the other way costs one student a
+  tour.
+- **He is drawn with `AceWalker` + `AceBubble`**, the pair AceBuddy uses, so he
+  arrives the way he arrives everywhere else. The first version pointed him at
+  each page's `<h1>` through AceRoam and he clipped under the nav — headings
+  are near the top, that is what headings are.
+
+Layout stands AceIntro and AceBuddy down while it runs; they share the corner
+and the mascot. It goes quiet on the payment flow, because the wizard sends
+premium-intent signups straight to /Subscription.
+
 ## Study intent
 
 The Dashboard modal asks what today is for (homework / cramming / free study)

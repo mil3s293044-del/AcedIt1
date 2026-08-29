@@ -20,6 +20,7 @@ import AceIntro from "@/components/ace/AceIntro";
 import { recordVisit } from "@/lib/aceDeck";
 import AceBuddy from "@/components/ace/AceBuddy";
 import AceReacts from "@/components/ace/AceReacts";
+import AceTour from "@/components/ace/AceTour";
 
 const FloatingTimer = React.memo(({ currentTime, timerPosition, isDragging, handleMouseDown, timerRef, formatTime }) => (
     <motion.div
@@ -73,6 +74,10 @@ FloatingTimer.displayName = 'FloatingTimer';
 
 export default function Layout({ children }) {
     const location = useLocation();
+    // The signup tour owns the corner and the mascot while it runs. Ace
+    // introducing a page over the top of Ace touring you through it is the app
+    // arguing with itself, and it is the same corner besides.
+    const [tourLive, setTourLive] = useState(false);
     const pageKey = location.pathname.replace(/^\//, "").split("/")[0] || "Dashboard";
 
     // The deck's weaker half. Opening a page isn't using a feature, which is
@@ -318,9 +323,15 @@ export default function Layout({ children }) {
                 ten pages that carry a help button — the route already tells us
                 where we are, and this way a page added later is covered the
                 moment it gets a knowledge-map entry. */}
-            <AceIntro page={pageKey} />
+            <AceIntro page={pageKey} suppressed={tourLive} />
             {/* He asks what the plan is once a day and then travels with you. */}
-            <AceBuddy page={pageKey} userProfile={userProfile} />
+            <AceBuddy page={pageKey} userProfile={userProfile} suppressed={tourLive} />
+
+            {/* Six stops and a sign-off, once, for accounts that are hours old.
+                Renders nothing at all for anyone else — see aceTour's header
+                for why eligibility is derived from the profile's age rather
+                than from a flag we would have had to backfill. */}
+            <AceTour page={pageKey} userProfile={userProfile} onLiveChange={setTourLive} />
             {/* There is no second onboarding to suppress these for any more.
                 Signup runs the wizard at /Onboarding, which is its own route —
                 by the time Layout is on screen that conversation is over. The
