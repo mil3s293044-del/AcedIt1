@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { Crown, Sparkles, Lock } from "lucide-react";
+import { Crown, Lock } from "lucide-react";
 import { base44 } from "@/api/base44Client";
 import { isPremium as checkIsPremium } from "@/lib/tierAccess";
 import { createPageUrl } from "@/utils";
@@ -68,8 +68,7 @@ export default function RequirePremium({ children, featureName = "this feature",
                     </Link>
                 </div>
                 <div className="mt-6 pt-6 border-t border-border text-left">
-                    <p className="text-xs font-extrabold uppercase tracking-wider text-muted-foreground mb-2 flex items-center gap-1.5">
-                        <Sparkles className="w-3 h-3" />
+                    <p className="text-xs font-extrabold uppercase tracking-wider text-muted-foreground mb-2">
                         What you get
                     </p>
                     <ul className="text-xs text-muted-foreground space-y-1.5">

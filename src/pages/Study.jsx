@@ -309,7 +309,6 @@ export default function Study() {
     };
 
     const currentTechnique = TECHNIQUES.find(t => t.id === activeTab) || TECHNIQUES[0];
-    const CurrentIcon = currentTechnique.icon;
     const currentTheme = ACCENT_THEME[currentTechnique.accent];
 
     // ─── Derived stats ─────────────────────────────────────────────────────────
@@ -634,25 +633,18 @@ export default function Study() {
                     {/* Technique panel */}
                     <div className="md:col-span-3">
                         <div className={`relative overflow-hidden rounded-3xl ${currentTheme.bg} border-2 ${currentTheme.border} p-6 lg:p-8 h-full transition-colors`}>
-                            <CurrentIcon className={`absolute -top-6 -right-6 w-32 h-32 ${currentTheme.iconText} opacity-10 pointer-events-none`} />
                             <div className="relative">
                                 <p className={`stat-label ${currentTheme.iconText}/80 mb-2`}>Selected technique</p>
-                                <div className="flex items-center gap-3 mb-3">
-                                    <div className={`w-12 h-12 rounded-2xl ${currentTheme.iconBg} flex items-center justify-center flex-shrink-0`}>
-                                        <CurrentIcon className={`w-6 h-6 ${currentTheme.iconText}`} />
-                                    </div>
-                                    <h2
-                                        className="font-display font-extrabold text-foreground leading-none"
-                                        style={{ fontSize: 'clamp(1.75rem, 4.5vw, 2.75rem)' }}
-                                    >
-                                        {currentTechnique.name}
-                                    </h2>
-                                </div>
+                                <h2
+                                    className="font-display font-extrabold text-foreground leading-none mb-3"
+                                    style={{ fontSize: 'clamp(1.75rem, 4.5vw, 2.75rem)' }}
+                                >
+                                    {currentTechnique.name}
+                                </h2>
                                 <p className="text-foreground text-sm lg:text-base font-medium leading-snug max-w-md mb-3">
                                     {currentTechnique.blurb}
                                 </p>
-                                <div className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-xl ${currentTheme.pillBg} ${currentTheme.pillText}`}>
-                                    <Sparkles className="w-3.5 h-3.5" />
+                                <div className={`inline-flex items-center px-3 py-1.5 rounded-xl ${currentTheme.pillBg} ${currentTheme.pillText}`}>
                                     <span className="text-xs font-bold">Good for: {currentTechnique.goodFor}</span>
                                 </div>
                             </div>
@@ -662,10 +654,7 @@ export default function Study() {
                     {/* Today stats panel — colour-matched to the selected technique */}
                     <div className="md:col-span-2">
                         <div className={`rounded-3xl ${currentTheme.bg} border-2 ${currentTheme.border} p-6 h-full flex flex-col transition-colors`}>
-                            <div className="flex items-center gap-2 mb-2">
-                                <Clock className={`w-4 h-4 ${currentTheme.iconText}`} />
-                                <p className={`stat-label ${currentTheme.iconText}/80`}>Today</p>
-                            </div>
+                            <p className={`stat-label ${currentTheme.iconText}/80 mb-2`}>Today</p>
                             <p className="font-display font-extrabold text-foreground leading-none" style={{ fontSize: 'clamp(2.25rem, 5.5vw, 3rem)' }}>
                                 {fmtTime(todayMins)}
                             </p>
@@ -704,10 +693,7 @@ export default function Study() {
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ delay: 0.1 }}
                 >
-                    <div className="flex items-center gap-2 mb-3">
-                        <Sparkles className="w-4 h-4 text-muted-foreground" />
-                        <p className="stat-label">Suggested today</p>
-                    </div>
+                    <p className="stat-label mb-3">Suggested today</p>
                     <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
                         {TECHNIQUES.map((t) => {
                             const th = ACCENT_THEME[t.accent];

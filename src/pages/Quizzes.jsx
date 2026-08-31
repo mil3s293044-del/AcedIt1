@@ -26,7 +26,6 @@ import {
     PlusCircle,
     Trophy,
     ArrowRight,
-    Clock,
     Zap,
     AlertTriangle,
     Bookmark,
@@ -1125,11 +1124,11 @@ Return valid JSON only.`,
                             </p>
                             <div className="space-y-2.5 mt-4 pt-4 border-t-2 border-xp/15">
                                 <div className="flex items-baseline justify-between">
-                                    <p className="text-xs font-bold text-muted-foreground inline-flex items-center gap-1"><Clock className="w-3 h-3" /> Time</p>
+                                    <p className="text-xs font-bold text-muted-foreground">Time</p>
                                     <p className="text-xs font-bold text-foreground">{fmtMins(quizStats.weekTimeSecs)}</p>
                                 </div>
                                 <div className="flex items-baseline justify-between">
-                                    <p className="text-xs font-bold text-muted-foreground inline-flex items-center gap-1"><Trophy className="w-3 h-3" /> Best</p>
+                                    <p className="text-xs font-bold text-muted-foreground">Best</p>
                                     <p className="text-xs font-bold text-foreground">{quizStats.weekBest != null ? `${Math.round(quizStats.weekBest)}%` : '—'}</p>
                                 </div>
                             </div>
@@ -1562,9 +1561,6 @@ Return valid JSON only.`,
                     <DialogContent className="max-w-2xl max-h-[90vh] overflow-hidden flex flex-col p-0">
                         <DialogHeader className="p-6 pb-4 border-b border-border bg-chart-4/5">
                             <DialogTitle className="flex items-center gap-3 text-2xl">
-                                <div className="w-10 h-10 rounded-xl bg-chart-4/10 flex items-center justify-center">
-                                    <Wand2 className="w-5 h-5 text-chart-4" />
-                                </div>
                                 <span className="flex-1">AI Quiz Generator</span>
                                 <TierUsagePill feature={FEATURES.QUIZ_AI_GEN} userProfile={userProfile} />
                             </DialogTitle>
