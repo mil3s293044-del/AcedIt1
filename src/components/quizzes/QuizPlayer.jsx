@@ -3,10 +3,9 @@ import { motion, AnimatePresence } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Label } from "@/components/ui/label";
 import {
     ArrowLeft, Clock, Wand2, Loader2,
-    X, Calculator, Check, ChevronLeft, ChevronRight, Flag, Layers, TrendingUp, Brain,
+    X, Check, ChevronLeft, ChevronRight, Flag, Layers, TrendingUp, Brain,
     Trophy, Star, BookOpen, Bookmark, BookmarkCheck
 } from "lucide-react";
 import AdaptiveReview from "./AdaptiveReview";
@@ -19,7 +18,10 @@ import { commandTermOf } from "@/lib/quizInsight";
 import { recordStudyAndGetStreak } from "@/components/shared/streakHelpers";
 import MathKeyboard from "../shared/MathKeyboard";
 import MathInput from "../shared/MathInput";
-import { Switch } from "@/components/ui/switch";
+import InkPad from "@/components/quizzes/InkPad";
+import MarkPanel from "@/components/quizzes/marking/MarkPanel";
+import { normaliseMark } from "@/lib/quizMarking";
+import { normaliseQuestion } from "@/lib/quizSchema";
 import MarkdownMath from "@/components/shared/MarkdownMath";
 import MathText from "@/components/shared/LatexRenderer";
 import { getLatexRules } from "@/lib/subjectExaminerPrompts";
@@ -303,7 +305,13 @@ export default function QuizPlayer({ quiz, onExit, mode = "standard", timeLimitM
     const [tally, setTally] = useState({ won: 0, missed: 0, run: 0 });
     const [isCorrect, setIsCorrect] = useState(null);
     const [pastAttempts, setPastAttempts] = useState([]);
+    // "text" | "math" | "ink", per question. A `true` left over from the old
+    // boolean switch still resolves to the maths editor where it is read.
     const [mathMode, setMathMode] = useState({});
+    // The recognised lines behind an ink answer, so the pad can be reopened and
+    // a line corrected. The ANSWER is the transcript these produce; the strokes
+    // live here for the length of the attempt.
+    const [inkLines, setInkLines] = useState({});
     const [, forceUpdate] = useState(0);
     const mathInputRefs = useState({})[0];
     const [currentFeedbackIndex, setCurrentFeedbackIndex] = useState(0);
@@ -729,8 +737,22 @@ Question: ${q.question}
 Student Answer: ${q.student_answer}${q.type === 'short' && q.previous_answer ? `\nPrevious Answer: ${q.previous_answer}` : ''}
 ${q.type === 'mcq' ? `Correct Answer: ${q.correct_answer}` : `Model Answer: ${q.model_answer}`}`).join('\n---\n')}
 
-For EACH question return: marks, what_wrong, improve${hasShortWithPrevious ? ', comparison' : ''}.
+For EACH question return: marks, criteria, edits, what_wrong, improve${hasShortWithPrevious ? ', comparison' : ''}.
 For a question that scored full marks, leave what_wrong and improve as empty strings — do not write praise.
+
+CRITERIA are the marks themselves, itemised — one entry per mark the assessor
+is looking for, so their "worth" values must add up to the question's total
+allocation. Each says what was wanted, whether this answer did it, and for a
+missed one, what specifically was absent. This is the most useful thing you
+produce: "you dropped the mark for naming the electron transfer" is something a
+student can act on, and "2/4" is not. Write the criterion as the assessor would
+phrase it, not as a comment on the student.
+
+EDITS are word or short-phrase swaps IN THE STUDENT'S OWN WORDS. "was" must be
+text they actually wrote, quoted exactly; "now" is what would have scored;
+"why" is one sentence on what the swap buys. Only include an edit where the
+wording genuinely costs a mark — never a stylistic preference, and never on an
+answer that scored full marks. Zero edits is a normal and common answer.
 Return exactly ${questionsForAnalysis.length} items.
 
 THEN look ACROSS every question that lost marks and find the THEMES.
@@ -756,7 +778,34 @@ invent a theme from a single question.`,
                                     marks: { type: "number" },
                                     what_wrong: { type: "string" },
                                     improve: { type: "string" },
-                                    comparison: { type: "string" }
+                                    comparison: { type: "string" },
+                                    criteria: {
+                                        type: "array",
+                                        items: {
+                                            type: "object",
+                                            properties: {
+                                                text: { type: "string" },
+                                                got: { type: "boolean" },
+                                                worth: { type: "number" },
+                                                note: { type: "string" }
+                                            },
+                                            required: ["text", "got", "worth"]
+                                        }
+                                    },
+                                    edits: {
+                                        type: "array",
+                                        items: {
+                                            type: "object",
+                                            properties: {
+                                                was: { type: "string" },
+                                                now: { type: "string" },
+                                                why: { type: "string" },
+                                                criterion: { type: "string" },
+                                                worth: { type: "number" }
+                                            },
+                                            required: ["was", "now", "why"]
+                                        }
+                                    }
                                 },
                                 required: ["marks", "what_wrong", "improve"]
                             }
@@ -780,7 +829,11 @@ invent a theme from a single question.`,
 
             if (!response?.feedback?.length) throw new Error("AI returned invalid format");
 
-            const mappedFeedback = response.feedback.map(item => ({
+            const mappedFeedback = response.feedback.map((item, i) => ({
+                // The itemised mark, reconciled against its own criteria. The
+                // denominator comes from the question, never from the model —
+                // see quizMarking's header.
+                mark: normaliseMark(item, normaliseQuestion(shuffledQuiz.questions[i], i).marks),
                 marks: item.marks || 0,
                 // Empty rather than "No errors noted": a question you got right
                 // has nothing to say here, and a placeholder in a panel is
@@ -1260,7 +1313,17 @@ invent a theme from a single question.`,
                                                 reading the ones that mattered. */}
                                             {currentFeedback ? (
                                                 <div className="space-y-3 pt-2 border-t border-border">
-                                                    {currentFeedback.student_error_analysis && (
+                                                    {/* Itemised marking, when the marker gave
+                                                        us criteria. It REPLACES the two prose
+                                                        panels rather than sitting above them —
+                                                        a criterion saying the transfer was not
+                                                        named, over a paragraph saying the
+                                                        transfer was not named, is the same
+                                                        finding twice. */}
+                                                    {currentFeedback.mark?.itemised && (
+                                                        <MarkPanel mark={currentFeedback.mark} />
+                                                    )}
+                                                    {!currentFeedback.mark?.itemised && currentFeedback.student_error_analysis && (
                                                         <div data-panel="wrong" className={`${FEEDBACK_PANEL.wrong} border rounded-2xl p-4`}>
                                                             <p className="text-xs font-bold uppercase tracking-wide mb-1.5">What went wrong</p>
                                                             <div className="text-sm text-foreground leading-relaxed">
@@ -1268,7 +1331,7 @@ invent a theme from a single question.`,
                                                             </div>
                                                         </div>
                                                     )}
-                                                    {currentFeedback.how_to_improve && (
+                                                    {!currentFeedback.mark?.itemised && currentFeedback.how_to_improve && (
                                                         <div data-panel="fix" className={`${FEEDBACK_PANEL.improve} border rounded-2xl p-4`}>
                                                             <p className="text-xs font-bold uppercase tracking-wide mb-1.5">What to do about it</p>
                                                             <div className="text-sm text-foreground leading-relaxed">
@@ -1287,7 +1350,8 @@ invent a theme from a single question.`,
                                                         written — but a right answer you guessed
                                                         is a real question, so it stays askable.
                                                         One short call, only when wanted. */}
-                                                    {!currentFeedback.student_error_analysis && !currentFeedback.how_to_improve && (
+                                                    {!currentFeedback.student_error_analysis && !currentFeedback.how_to_improve
+                                                        && !currentFeedback.mark?.itemised && (
                                                         whyRight[currentFeedbackIndex] ? (
                                                             <div data-panel="why" className={`${FEEDBACK_PANEL.explanation} border rounded-2xl p-4`}>
                                                                 <p className="text-xs font-bold uppercase tracking-wide mb-1.5">Why this is the answer</p>
@@ -1504,13 +1568,38 @@ invent a theme from a single question.`,
                                 <div className="space-y-3">
                                     <div className="flex items-center justify-between">
                                         <span className="text-xs text-muted-foreground/60 font-medium">Write a detailed answer below</span>
-                                        <div className="flex items-center gap-2">
-                                            <Calculator className="w-3.5 h-3.5 text-muted-foreground/60" />
-                                            <Switch checked={mathMode[currentQuestionIndex] || false} onCheckedChange={(v) => { setMathMode(p => ({ ...p, [currentQuestionIndex]: v })); }} />
-                                            <Label className="text-xs text-muted-foreground cursor-pointer">Math</Label>
+                                        {/* Three ways in, not a Math on/off. Typing is
+                                            wrong for a derivation — a student mid-working
+                                            should not be hunting for a fraction bar. */}
+                                        <div role="radiogroup" aria-label="How to answer"
+                                            className="inline-flex rounded-xl border-2 border-border overflow-hidden">
+                                            {[["text", "Type"], ["math", "Math"], ["ink", "Write"]].map(([mode, label]) => {
+                                                const on = (mathMode[currentQuestionIndex] || "text") === mode;
+                                                return (
+                                                    <button key={mode} type="button" role="radio" aria-checked={on}
+                                                        onClick={() => setMathMode(p => ({ ...p, [currentQuestionIndex]: mode }))}
+                                                        className={`px-2.5 py-1 text-xs font-bold cursor-pointer transition-colors
+                                                            ${on ? "bg-chart-3 text-white" : "text-muted-foreground hover:text-foreground"}`}>
+                                                        {label}
+                                                    </button>
+                                                );
+                                            })}
                                         </div>
                                     </div>
-                                    {mathMode[currentQuestionIndex] ? (
+                                    {mathMode[currentQuestionIndex] === "ink" ? (
+                                        <InkPad
+                                            subject={shuffledQuiz.subject}
+                                            lines={inkLines[currentQuestionIndex] || []}
+                                            onChange={(next) => {
+                                                setInkLines(p => ({ ...p, [currentQuestionIndex]: next }));
+                                                // The transcript IS the answer, and it is a
+                                                // plain string like every other answer — the
+                                                // 76 places that read user_answers never learn
+                                                // it was handwritten.
+                                                handleAnswerChange(next.map(l => `$$${l.latex}$$`).join("\n"));
+                                            }}
+                                        />
+                                    ) : (mathMode[currentQuestionIndex] === "math" || mathMode[currentQuestionIndex] === true) ? (
                                         <>
                                             <MathInput value={getCurrentAnswer() || ""} onChange={(value) => handleAnswerChange(value)}
                                                 textareaRef={(ref) => { if (ref) mathInputRefs[currentQuestionIndex] = ref; }}

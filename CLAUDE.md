@@ -84,6 +84,47 @@ log, which cost them breadth, effort and mastery at once.
 Client mirror of the band thresholds is `src/lib/atarBands.js`. Server is the
 source of truth; keep them in sync.
 
+## Quizzes: parts, ink, and itemised marking
+
+**`quizSchema.js` is an adapter, not a format.** VCAA questions come in parts —
+a stem, then (a), (b), (c) worth different marks. 76 places across thirteen
+files read `.questions` and QuizPlayer alone branches on `type === 'mcq'` 41
+times, so nothing branches on "is this the new shape": `normaliseQuestion`
+turns BOTH into a stem plus one or more parts, and a legacy question becomes a
+stem with a single unlabelled part.
+
+**Answer keys are load-bearing.** Every attempt ever saved keys answers by
+question index (`user_answers[3]`). A single-part question therefore keeps the
+bare index — "3", not "3a" — or every existing attempt reads back as
+unanswered. Only genuinely multi-part questions suffix.
+
+Marks are the currency: score is a percentage of marks available, not of
+questions answered, so a four-mark part b counts double a two-mark part a.
+
+**Marking is itemised, and the itemisation is the truth.** `quizMarking.js`
+returns criteria (what the assessor wanted, each got or missed, each worth n
+marks) and edits (word-level swaps in the student's own words). If the model
+states a total that contradicts its own criteria, THE CRITERIA WIN and the
+number is recomputed — a total that visibly disagrees with the list under it
+costs the marking all its credibility. The denominator always comes from the
+question, never from the model, or a marker can silently rescale a score.
+`MarkPanel` renders it with the landing page's own pen strokes (`PenMarks`,
+extracted from `MarkedWord` and put on design tokens). It REPLACES the prose
+panels rather than joining them — the same finding stated twice is worse.
+
+**The ink pad holds one line.** Write a step, it is recognised, it lifts off
+the pad into the typeset stack above, the pad clears. That is the whole
+anti-crowding design: nothing accumulates on the writing surface. Recognition
+is Claude vision over the upload path that already exists — no new dependency,
+nothing new on the server. A small in-browser digit model was the alternative
+and it handles isolated digits and nothing else: no fractions, roots, integrals
+or superscripts, which is to say it fails on exactly the maths this is for.
+
+Every recognised line stays editable before submission. A student marked down
+for the transcriber's mistake would be invisible to us and infuriating to them.
+The transcript is what gets marked; the strokes are session-only, because the
+saved answer is a plain string like every other answer.
+
 ## Cards are the app's visual language
 
 `PlayingCard` + `cardIdentity` are used on eighteen surfaces — marketing, the
