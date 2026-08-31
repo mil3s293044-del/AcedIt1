@@ -36,7 +36,7 @@
 import React, { useState, useEffect, useMemo, useCallback } from "react";
 import { Link } from "react-router-dom";
 import { motion } from "framer-motion";
-import { Search, X, ArrowRight, Lock, Compass, Check, Sparkles } from "lucide-react";
+import { Search, X, ArrowRight, Lock, Compass, Check } from "lucide-react";
 import { base44 } from "@/api/base44Client";
 import { isPremium } from "@/components/shared/subscriptionHelpers";
 import {
@@ -249,9 +249,7 @@ export default function Help() {
             {/* ── Worth trying next ──────────────────────────────────────── */}
             {suggestions.length > 0 && !query && (
                 <section className="mt-6">
-                    <h2 className="font-display font-extrabold text-foreground text-lg flex items-center gap-2">
-                        <Sparkles className="w-4 h-4 text-primary" /> Worth trying next
-                    </h2>
+                    <h2 className="font-display font-extrabold text-foreground text-lg">Worth trying next</h2>
                     <p className="text-sm text-muted-foreground mt-1 mb-3 leading-relaxed">
                         Picked from what you haven&rsquo;t done yet and can start right now.
                     </p>

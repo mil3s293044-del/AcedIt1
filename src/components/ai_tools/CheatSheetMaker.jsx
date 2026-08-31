@@ -285,9 +285,6 @@ ${sourceText ? `\nEXTRACTED CONTENT:${sourceText}` : ""}`;
             {!hasGenerated && (
                 <div className="card-soft p-5 space-y-4">
                     <div className="flex items-center gap-2 mb-1">
-                        <div className="w-8 h-8 rounded-lg bg-xp/15 flex items-center justify-center">
-                            <Wand2 className="w-4 h-4 text-xp" />
-                        </div>
                         <p className="font-display font-extrabold text-foreground text-sm">Cheat sheet setup</p>
                     </div>
 

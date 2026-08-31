@@ -2,7 +2,7 @@ import React, { useState, useEffect } from "react";
 import { base44 } from "@/api/base44Client";
 import { motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
-import { Crown, Check, Star, CreditCard, Loader2, Gift, Sparkles, X } from "lucide-react";
+import { Crown, Check, CreditCard, Loader2, Gift, Sparkles, X } from "lucide-react";
 import { useToast } from "@/components/ui/use-toast";
 import { useNavigate } from "react-router-dom";
 import { createPageUrl } from "@/utils";
@@ -244,9 +244,6 @@ export default function Subscription() {
                 {/* Social proof */}
                 {!isPremium && (
                     <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} className="card-soft p-6 lg:p-8 text-center">
-                        <div className="w-12 h-12 rounded-2xl bg-xp/15 flex items-center justify-center mx-auto mb-4">
-                            <Star className="w-6 h-6 text-xp" fill="currentColor" />
-                        </div>
                         <h3 className="font-display font-extrabold text-foreground text-xl mb-6">Why students go Premium</h3>
                         <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
                             {[
@@ -315,9 +312,6 @@ export default function Subscription() {
                 {!isPremium && (
                     <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }}
                         className="rounded-3xl bg-primary text-primary-foreground p-8 text-center">
-                        <div className="w-14 h-14 rounded-2xl bg-surface/20 flex items-center justify-center mx-auto mb-4">
-                            <Crown className="w-7 h-7 text-white" />
-                        </div>
                         <h3 className="font-display font-extrabold text-2xl mb-2">Ready to ace it?</h3>
                         <p className="text-primary-foreground/90 text-sm mb-6 max-w-xl mx-auto">
                             Upgrade today for unlimited access to every AI study tool, advanced techniques and analytics.

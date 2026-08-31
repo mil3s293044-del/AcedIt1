@@ -15,8 +15,7 @@
  */
 import React, { useState } from "react";
 import { motion } from "framer-motion";
-import {
-    Brain, ChevronDown, BookOpen, TrendingUp, AlertTriangle, Sparkles,
+import { ChevronDown, BookOpen, TrendingUp, AlertTriangle, Sparkles,
 } from "lucide-react";
 import BrainModel from "./BrainModel";
 import EvidenceChart from "./EvidenceChart";
@@ -52,9 +51,6 @@ export default function NeuroPanel({ techniqueId, techniqueName }) {
             {/* ── The brain ──────────────────────────────────────────────── */}
             <div className="rounded-3xl border-2 border-border bg-gradient-to-b from-secondary/40 to-transparent overflow-hidden">
                 <div className="flex items-center gap-2 px-4 pt-4">
-                    <div className="w-7 h-7 rounded-lg bg-map/15 flex items-center justify-center">
-                        <Brain className="w-4 h-4 text-map" />
-                    </div>
                     <p className="stat-label">Your brain on {techniqueName}</p>
                 </div>
 

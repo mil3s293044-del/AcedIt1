@@ -236,9 +236,7 @@ Rules:
                 </button>
 
                 <div>
-                    <p className="stat-label text-chart-4 mb-1.5 flex items-center gap-1.5">
-                        <Sparkles className="w-3.5 h-3.5" /> Strategise
-                    </p>
+                    <p className="stat-label text-chart-4 mb-1.5">Strategise</p>
                     <h1 className="font-display text-2xl sm:text-3xl lg:text-4xl font-extrabold tracking-tight text-foreground leading-[1.1]">
                         {stage === "pick" ? "Which assessment are we beating?"
                             : stage === "setup" ? "Where are you starting from?"

@@ -8,7 +8,7 @@ import {
     BarChart3, TrendingUp, Clock, Brain, Target, Calendar, Award,
     Zap, BookOpen, Activity, Flame,
     Layers, CheckCircle2, AlertTriangle,
-    Sparkles, Star, FileQuestion
+    Sparkles, FileQuestion
 } from "lucide-react";
 import { base44 } from "@/api/base44Client";
 import {
@@ -561,9 +561,6 @@ export default function Analytics() {
                             <BarChart3 className="absolute -top-4 -right-4 w-32 h-32 text-chart-3/10 pointer-events-none" />
                             <div className="relative">
                                 <div className="flex items-center gap-2 mb-3">
-                                    <div className="w-9 h-9 rounded-xl bg-chart-3/15 flex items-center justify-center">
-                                        <Sparkles className="w-5 h-5 text-chart-3" />
-                                    </div>
                                     <p className="stat-label text-chart-3/80">Biggest insight</p>
                                 </div>
                                 {bestSubjectName ? (
@@ -1235,7 +1232,7 @@ export default function Analytics() {
 
                         {/* Advice */}
                         <div className="card-soft p-6 bg-chart-4/5 border-chart-4/20 space-y-3">
-                            <h2 className="font-display font-extrabold text-foreground flex items-center gap-2"><Star className="w-4 h-4 text-chart-4" /> Flashcard Recommendations</h2>
+                            <h2 className="font-display font-extrabold text-foreground">Flashcard Recommendations</h2>
                             {fcHealth.due > 20 && <p className="text-sm text-foreground">• You have <strong>{fcHealth.due}</strong> cards due — schedule a review session today to stay on top of spaced repetition.</p>}
                             {fcHealth.weak > 0 && <p className="text-sm text-foreground">• Focus your next session on the <strong>{fcHealth.weak} weak-spot cards</strong> — these are the ones you keep getting wrong.</p>}
                             {fcHealth.unreviewed > 0 && <p className="text-sm text-foreground">• <strong>{fcHealth.unreviewed} cards</strong> have never been reviewed. Start activating them before they pile up.</p>}

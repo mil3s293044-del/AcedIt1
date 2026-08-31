@@ -215,6 +215,20 @@ npm run dev    # vite :5173 + server.mjs :3001 concurrently
   the Study Design when there are no notes, and says which of the two it did.
   Worth checking the same shape elsewhere before blaming a technique for being
   unpopular.
+- **An icon that restates the word next to it is decoration.** A clock in a
+  tile beside the heading "Pomodoro", a sparkle before "Good for:", a brain
+  before "Your brain on X" — and behind all of it a 128px ghosted clock at 10%
+  opacity. Three clocks in one panel. That stacking is most of what reads as
+  vibe-coded, and it is the same instinct as the emoji sweep: decoration added
+  because the space looked empty.
+  The rule is whether the glyph carries something the text does not. **Keep**
+  logo lockups, status (check, warning, spinner), empty-state anchors, icons
+  that differentiate items in a repeated set, and the wand/sparkle ON an AI
+  generate button — there it is the affordance. **Cut** ghosted watermarks,
+  icon tiles in front of a heading that names the same thing, and generic
+  Sparkles/Star/Crown/Zap on a standalone label.
+  Sets are kept whole: pulling one icon out of five sibling category headings
+  looks like a bug rather than a decision.
 - Copy drifts away from the product. Retired features kept being advertised
   (weekly leagues on the paid tier, a Study Roadmap page that redirects, past
   papers in Revision Mode) and the AI tool count was hand-written as three

@@ -208,10 +208,7 @@ export default function StreakMultiplier({ streakDays = 0, shields = 0, compact 
             </div>
 
             {/* Tip box */}
-            <div className="card-soft p-4 bg-streak/5 border-streak/30 flex items-start gap-3">
-                <div className="w-8 h-8 rounded-xl bg-streak/10 flex items-center justify-center flex-shrink-0">
-                    <Zap className="w-4 h-4 text-streak" />
-                </div>
+            <div className="card-soft p-4 bg-streak/5 border-streak/30">
                 <p className="text-xs text-foreground leading-relaxed">
                     <strong className="font-bold">Pro tip:</strong> A 30-day streak gives you 2.5× XP on everything — that's 150% more XP from quizzes, flashcards, focus sessions, and goals.
                 </p>
