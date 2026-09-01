@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect, useMemo, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -23,7 +23,7 @@ import MultipartQuestion from "@/components/quizzes/MultipartQuestion";
 import MarkPanel from "@/components/quizzes/marking/MarkPanel";
 import { normaliseMark } from "@/lib/quizMarking";
 import { normaliseQuestion } from "@/lib/quizSchema";
-import { cardFromAnnotation, bankKey } from "@/lib/mistakeBank";
+import { cardFromModule, bankKey } from "@/lib/mistakeBank";
 import MarkdownMath from "@/components/shared/MarkdownMath";
 import MathText from "@/components/shared/LatexRenderer";
 import { getLatexRules } from "@/lib/subjectExaminerPrompts";
@@ -314,9 +314,18 @@ export default function QuizPlayer({ quiz, onExit, mode = "standard", timeLimitM
     // a line corrected. The ANSWER is the transcript these produce; the strokes
     // live here for the length of the attempt.
     const [inkLines, setInkLines] = useState({});
-    // Phrases already banked this session, so the button can say so rather than
-    // quietly making a second identical card.
+    // Marks already banked this session, so the button can say so rather than
+    // quietly making a second identical card. Keyed per question, because two
+    // questions on one paper genuinely can drop the same criterion and both
+    // are worth rehearsing.
     const [banked, setBanked] = useState(new Set());
+    const [bankSaving, setBankSaving] = useState(new Set());
+    // The in-flight guard. `banked` is React state, so a second click landing
+    // in the same tick as the first reads the set BEFORE the first updated it
+    // and writes a duplicate card — which is what "keep hovering over it to
+    // save the mistake" produced. A ref is updated synchronously and closes
+    // that window; the state is what the button renders from.
+    const bankingRef = useRef(new Set());
     const [, forceUpdate] = useState(0);
     const mathInputRefs = useState({})[0];
     const [currentFeedbackIndex, setCurrentFeedbackIndex] = useState(0);
@@ -429,20 +438,24 @@ In two or three sentences, explain what makes that the right answer and what the
      * deck the spaced-repetition engine already reviews rather than into a
      * list of its own — see mistakeBank's header.
      */
-    const bankMistake = async (ann) => {
-        const key = bankKey(ann);
-        if (!key || banked.has(key)) return;
+    const bankMistake = async (mod) => {
+        const key = bankKey(mod, currentFeedbackIndex);
+        if (!key || bankingRef.current.has(key)) return;
         const q = shuffledQuiz.questions[currentFeedbackIndex];
-        const card = cardFromAnnotation(ann, {
+        const card = cardFromModule(mod, {
             subject: shuffledQuiz.subject,
             questionTitle: q?.question,
         });
         if (!card) return;
-        // Marked optimistically: the button is a promise about a card that will
-        // exist, and re-enabling it on a slow network invites a duplicate.
-        setBanked(prev => new Set(prev).add(key));
+        // Claimed synchronously so a double-click cannot get past it, then
+        // shown as saving. The old code marked it banked before the write and
+        // rolled back on failure, which told the student it was safe while it
+        // was still in flight.
+        bankingRef.current.add(key);
+        setBankSaving(prev => new Set(prev).add(key));
         try {
             await base44.entities.Flashcard.create(card);
+            setBanked(prev => new Set(prev).add(key));
             // Where it went, not just that it went. The bank is a real deck —
             // cards tagged "Mistake bank" group into one per subject on the
             // Spaced Repetition shelf — and a student who is not told that has
@@ -452,8 +465,11 @@ In two or three sentences, explain what makes that the right answer and what the
                 description: `It joins your ${shuffledQuiz.subject || "subject"} · Mistake bank deck and comes back on its own schedule.`,
             });
         } catch (e) {
-            setBanked(prev => { const next = new Set(prev); next.delete(key); return next; });
+            // Released so they can try again — the card does not exist.
+            bankingRef.current.delete(key);
             toast({ title: "Couldn't save that one", description: e?.message || "Try again in a moment.", variant: "destructive" });
+        } finally {
+            setBankSaving(prev => { const next = new Set(prev); next.delete(key); return next; });
         }
     };
 
@@ -825,8 +841,22 @@ produce: "you dropped the mark for naming the electron transfer" is something a
 student can act on, and "2/4" is not. Write the criterion as the assessor would
 phrase it, not as a comment on the student.
 
+  - "note" on a MISSED criterion is where the student reads what to do, and it
+    is shown whether or not you managed to quote anything, so it must stand on
+    its own. Say what a full-mark response would have contained for THIS mark.
+    A missed criterion with an empty note is a mark the student cannot act on.
+
 ANNOTATIONS point at the exact words that cost the mark, so they can be
-underlined in the student's own answer.
+underlined in the student's own answer. An annotation is EVIDENCE FOR A
+CRITERION, never a verdict of its own — the criteria decide what was lost, and
+an annotation only shows where it happened.
+
+  - "criterion_index" is the 0-based position of the criterion in the array
+    above that this annotation is evidence for. Always set it. An annotation
+    that names no criterion cannot be shown as having cost a mark, because
+    nothing connects it to one.
+  - Do not annotate a phrase to say it cost a mark when every criterion is met.
+    The criteria are the ledger; if they all say "got", nothing cost anything.
 
   - "quote" MUST be copied from their answer CHARACTER FOR CHARACTER — same
     case, same punctuation, same spacing. It is matched against their text
@@ -843,7 +873,8 @@ underlined in the student's own answer.
     student pick the one that sounds like them instead of copying yours. Never
     pad to two.
   - "severity" is "lost" when it cost a mark, "risk" when it survived but is
-    imprecise.
+    imprecise. This is checked against the criterion you linked it to and
+    corrected if it disagrees, so linking it correctly matters more.
   - Only annotate where the wording genuinely matters — never a stylistic
     preference, and never on an answer that scored full marks. Zero
     annotations is a normal and common answer.
@@ -895,7 +926,7 @@ invent a theme from a single question.`,
                                                 worth: { type: "number" },
                                                 note: { type: "string" }
                                             },
-                                            required: ["text", "got", "worth"]
+                                            required: ["text", "got", "worth", "note"]
                                         }
                                     },
                                     annotations: {
@@ -908,10 +939,11 @@ invent a theme from a single question.`,
                                                 wanted: { type: "string" },
                                                 fixes: { type: "array", items: { type: "string" } },
                                                 criterion: { type: "string" },
+                                                criterion_index: { type: "number" },
                                                 severity: { type: "string", enum: ["lost", "risk"] },
                                                 worth: { type: "number" }
                                             },
-                                            required: ["quote", "issue", "fixes"]
+                                            required: ["quote", "issue", "fixes", "criterion_index"]
                                         }
                                     }
                                 },
@@ -1457,6 +1489,8 @@ invent a theme from a single question.`,
                                                             answer={answerTextFor(currentFeedbackIndex)}
                                                             onBank={bankMistake}
                                                             banked={banked}
+                                                            saving={bankSaving}
+                                                            questionIndex={currentFeedbackIndex}
                                                         />
                                                     )}
                                                     {!currentFeedback.mark?.itemised && currentFeedback.student_error_analysis && (

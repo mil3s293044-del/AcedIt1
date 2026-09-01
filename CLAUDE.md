@@ -122,21 +122,37 @@ finds it by EXACT string match and underlines only those characters, in place,
 in their own paragraph. No fuzzy matching — underlining the wrong six words and
 saying they cost a mark sends a student to rewrite a sentence that was fine and
 costs the next annotation its credibility. Overlaps are dropped for the same
-reason. Hover, tap and keyboard focus all open the note, because hover-only is
-unusable on a phone.
+reason.
 
-The note is PORTALLED to the body and positioned `fixed` from a measured rect,
-then clamped: below the phrase, else above it, else pinned inside the viewport
-with its own scroll. All three cases are needed — a phrase near the right edge
-or low on a short viewport used to open a note that ran off the screen, which
-is the one place the marking says what to do. `position: fixed` resolves
-against a transformed ancestor, and framer-motion leaves an inline transform on
-every animated section here, so portalling is what makes `fixed` mean fixed.
-AceRoam's header records the same lesson.
+**An annotation POINTS. It does not hold the feedback.** It used to: what the
+assessor wanted, the rewrites, and the save button all lived in a note that
+opened on hover. Two failures came out of that and neither was tunable. The
+note is portalled to the body, so reaching toward the button left the phrase
+and closed it — you could see the save button and not get to it. And a mark
+with no quotable phrase had nowhere to put its explanation at all, which is
+backwards: "does not name the transfer" is unquotable precisely because the
+words are absent, so the marks that most needed explaining were the ones with
+a single line and no button.
 
-Each note carries what the assessor WANTED alongside what went wrong — the
-issue is the half a student can see for themselves, `wanted` is the half they
-cannot — and one or two suggested rewrites, never padded to two.
+All of it lives in `MarkModule` now, which is simply on the screen. The
+underline opens a small label — which mark this belongs to, what it cost — and
+tapping it scrolls to that module; pointing at a module's quote scrolls the
+other way. The label is `pointer-events-none` and holds no action, so there is
+nothing to catch. Content you need is never behind something that disappears
+when you reach for it.
+
+Still PORTALLED and positioned `fixed` from a measured rect, because
+`position: fixed` resolves against a transformed ancestor and framer-motion
+leaves an inline transform on every animated section here. AceRoam's header
+records the same lesson. The old note's three-case viewport clamping went with
+the note — a label two lines tall only needs below-else-above.
+
+`wanted` is what the assessor was looking for, and it is ONLY ever a real
+statement of what would have scored. It used to fall back to the criterion's
+note, which is the examiner's remark on what went wrong, so a block headed "the
+assessor wanted" printed a criticism — telling the student to write the
+diagnosis. The criterion text is itself the statement of what was wanted and it
+is already the heading.
 
 The marker writes like a VCAA examiner's report: it addresses the RESPONSE and
 not the student, names the command term when the answer misread it, gives no
@@ -151,6 +167,21 @@ banked mistake comes back through the SM-2 engine that already exists rather
 than sitting in a list nobody opens — same move blurting's `makeCardsFromMisses`
 already makes. The card asks for the FIX, never for the mistake; a card that
 rehearses the error is the opposite of the point.
+
+**Every mark a student can see, they can save.** One builder, `cardFromModule`,
+over a mark rather than over a quote. There were two — one for a quoted phrase,
+one for a missed criterion — and only the phrase one was ever wired up, so the
+unquotable mistakes had no button. A lost mark NEVER fails to make a card: with
+no fix and no `wanted`, the criterion text is a legitimate back, because it is
+already phrased as what the assessor was looking for. A surviving imprecision
+still needs a fix, or the card has no back at all.
+
+Banking is keyed `q{index}:{criterion}` and guarded by a ref, not by state. Two
+questions on one paper can genuinely drop the same criterion and both are worth
+rehearsing, which the old bare-quote key made look already-saved; and a second
+click landing in the same tick as the first read `banked` before React had
+updated it and wrote a duplicate. The button also says *saving* until the row
+exists — it used to claim saved before the write and roll back on failure.
 
 **Handwriting goes to `VISION_MODEL`**, not the prose default — Saver included.
 A downgraded model produces a wrong transcript and the transcript is what gets
@@ -168,6 +199,25 @@ question, never from the model, or a marker can silently rescale a score.
 `MarkPanel` renders it with the landing page's own pen strokes (`PenMarks`,
 extracted from `MarkedWord` and put on design tokens). It REPLACES the prose
 panels rather than joining them — the same finding stated twice is worse.
+
+**THE CRITERIA ARE THE LEDGER. Annotations are evidence for it, never a second
+verdict.** They used to be two independent judgements and they contradicted
+each other in front of the student: the criteria said which marks were dropped,
+and the annotations, chosen separately by the model, put "Cost a mark −1" on a
+phrase with nothing forcing agreement. A clean 3/3 could sit directly above a
+sentence underlined in red and told it cost a mark. So `linkAnnotations` binds
+every annotation to a criterion, and the link decides what it may claim —
+missed criterion → it cost exactly that criterion's marks; earned criterion →
+imprecise, cost nothing; linked to nothing → it may not bill a mark it is not
+attached to. Marks lost is the sum of the missed criteria and nothing else,
+which is `outOf - marks` by construction, and every "costing you" figure on the
+screen comes off that one subtraction (`markLedger`).
+
+`criterionIndexFor` REFUSES rather than guesses — index, then exact match on
+normalised text, then containment of at least 8 characters. Unlinked is safe
+and visible; mislinked blames the wrong mark, which is what the join exists to
+prevent. Watch `Number(null) === 0`: coercing the index attached every unlinked
+annotation to the first criterion on the page, silently and plausibly.
 
 **The ink pad holds one line.** Write a step, it is recognised, it lifts off
 the pad into the typeset stack above, the pad clears. That is the whole

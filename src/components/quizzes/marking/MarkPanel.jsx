@@ -8,9 +8,13 @@
  * meaning, on their answer rather than on a demo.
  *
  * ─── What goes where, and why ───────────────────────────────────────────────
- * MISSED CRITERIA FIRST. A list that opens with three ticks buries the one
- * line the student needed to read. `orderedCriteria` does the sorting; this
- * only renders it.
+ * ONE LEDGER, AND EVERY NUMBER COMES OFF IT. The fraction at the top, the
+ * "costing you N marks" line, and the −n on each module are all the same
+ * subtraction — see `markLedger`. They used to be two independent verdicts and
+ * they disagreed in front of the student.
+ *
+ * LOST MARKS FIRST. A list that opens with three ticks buries the one line the
+ * student needed to read. `markModules` does the sorting; this renders it.
  *
  * THE MARK IS A FRACTION, NOT A PERCENTAGE. "2/4" is what an assessor writes
  * and it keeps the itemisation underneath it checkable — three criteria worth
@@ -21,13 +25,20 @@
  * FULL MARKS SAYS NOTHING ELSE. No praise, no "great job". The existing marker
  * prompt already refuses to write praise for a clean mark; printing an empty
  * feedback card under it would undo that.
+ *
+ * THE ANSWER IS EVIDENCE, NOT A SECOND FEEDBACK LIST. It sits below the
+ * modules and is underlined where the marker could point; the underline opens
+ * a small label naming which mark that phrase belongs to, and clicking it
+ * scrolls to that module. Everything you can DO lives in the module, on the
+ * screen, not behind a hover.
  */
-import React from "react";
-import { motion, useReducedMotion } from "framer-motion";
-import { Check, X } from "lucide-react";
+import React, { useCallback, useMemo, useRef, useState } from "react";
+import { Bookmark } from "lucide-react";
 import AnnotatedAnswer from "@/components/quizzes/marking/AnnotatedAnswer";
+import MarkModule from "@/components/quizzes/marking/MarkModule";
 import MarkdownMath from "@/components/shared/MarkdownMath";
-import { orderedCriteria, isFullMarks } from "@/lib/quizMarking";
+import { markLedger, isFullMarks } from "@/lib/quizMarking";
+import { bankKey } from "@/lib/mistakeBank";
 
 /** Static lookups — Tailwind cannot see a class assembled at runtime. */
 const BAND = {
@@ -42,52 +53,52 @@ const bandFor = (m) => {
     return r >= 1 ? "full" : r >= 0.7 ? "most" : r >= 0.4 ? "some" : "none";
 };
 
-function Criterion({ c, index }) {
-    const reduce = useReducedMotion();
-    return (
-        <motion.li
-            initial={reduce ? false : { opacity: 0, x: -8 }}
-            animate={{ opacity: 1, x: 0 }}
-            transition={{ duration: 0.3, delay: Math.min(index * 0.06, 0.4) }}
-            className={`flex items-start gap-2.5 rounded-xl px-3 py-2.5 border
-                ${c.got ? "bg-primary/5 border-primary/20" : "bg-streak/5 border-streak/20"}`}
-        >
-            <span className={`mt-0.5 w-5 h-5 rounded-md flex items-center justify-center flex-shrink-0
-                ${c.got ? "bg-primary" : "bg-streak"}`}>
-                {c.got
-                    ? <Check className="w-3.5 h-3.5 text-white" strokeWidth={3} />
-                    : <X className="w-3.5 h-3.5 text-white" strokeWidth={3} />}
-            </span>
-            <div className="min-w-0 flex-1">
-                <div className="flex items-baseline justify-between gap-2">
-                    <MarkdownMath className="text-sm font-bold text-foreground leading-snug">
-                        {c.text}
-                    </MarkdownMath>
-                    <span className={`text-[11px] font-black tabular-nums flex-shrink-0
-                        ${c.got ? "text-primary" : "text-streak"}`}>
-                        {c.got ? "+" : "−"}{c.worth}
-                    </span>
-                </div>
-                {c.note && (
-                    <MarkdownMath className="text-xs text-muted-foreground leading-relaxed mt-1">
-                        {c.note}
-                    </MarkdownMath>
-                )}
-            </div>
-        </motion.li>
-    );
-}
+export default function MarkPanel({ mark, title, answer, onBank, banked = new Set(), saving = new Set(), questionIndex = 0 }) {
+    const ledger = useMemo(() => markLedger(mark), [mark]);
+    // Which module a phrase belongs to, so pointing at one finds the other in
+    // either direction.
+    const moduleForAnnotation = useMemo(() => {
+        const map = new Map();
+        for (const mod of ledger.modules) for (const a of mod.evidence) map.set(a.id, mod);
+        return map;
+    }, [ledger]);
 
-export default function MarkPanel({ mark, title, answer, onBank, banked }) {
+    const [flash, setFlash] = useState(null);
+    const flashTimer = useRef(null);
+    const rootRef = useRef(null);
+
+    /** Bring one element into view and mark it for a beat. */
+    const reveal = useCallback((selector, id) => {
+        const el = rootRef.current?.querySelector(selector);
+        el?.scrollIntoView({ behavior: "smooth", block: "center" });
+        clearTimeout(flashTimer.current);
+        setFlash(id);
+        flashTimer.current = setTimeout(() => setFlash(null), 1600);
+    }, []);
+
+    // Module → the phrase in their answer.
+    const pointAtAnswer = useCallback((ann) => {
+        reveal(`[data-annotation="${CSS.escape(ann.id)}"]`, `ann:${ann.id}`);
+    }, [reveal]);
+
+    // Phrase in their answer → the mark it belongs to.
+    const pointAtModule = useCallback((ann) => {
+        const mod = moduleForAnnotation.get(ann.id);
+        if (mod) reveal(`[data-mark-module="${CSS.escape(mod.id)}"]`, `mod:${mod.id}`);
+    }, [moduleForAnnotation, reveal]);
+
     if (!mark) return null;
-    const ordered = orderedCriteria(mark);
     const clean = isFullMarks(mark);
+    // Everything still worth saving. The header offers the lot in one gesture
+    // because a student with four dropped marks should not have to open four
+    // modules to keep them.
+    const unsaved = ledger.bankable.filter((m) => !banked.has(bankKey(m, questionIndex)));
 
     return (
-        <div data-mark-panel={title} className="space-y-3">
+        <div ref={rootRef} data-mark-panel={title} className="space-y-3">
             {/* The mark, as an assessor writes it. */}
             <div className="flex items-baseline justify-between gap-3">
-                <div className="flex items-baseline gap-2">
+                <div className="flex items-baseline gap-2 flex-wrap">
                     {title && <span className="stat-label text-muted-foreground">{title}</span>}
                     {clean && <span className="pill bg-primary/15 text-primary">Clean mark</span>}
                 </div>
@@ -97,11 +108,40 @@ export default function MarkPanel({ mark, title, answer, onBank, banked }) {
                 </p>
             </div>
 
-            {mark.criteria.length > 0 && (
+            {ledger.modules.length > 0 && (
                 <>
-                    <ul className="space-y-1.5">
-                        {ordered.map((c, i) => <Criterion key={`${c.text}-${i}`} c={c} index={i} />)}
+                    {/* The one sentence that says where the marks went, from the
+                        same subtraction as the fraction above it. */}
+                    {ledger.lost > 0 && (
+                        <div className="flex items-center justify-between gap-2 flex-wrap">
+                            <p className="text-xs text-muted-foreground">
+                                <span className="font-bold text-streak tabular-nums">
+                                    {ledger.lost} mark{ledger.lost === 1 ? "" : "s"}
+                                </span>{" "}
+                                went on {ledger.lostModules.length} thing{ledger.lostModules.length === 1 ? "" : "s"}.
+                            </p>
+                            {onBank && unsaved.length > 1 && (
+                                <button type="button"
+                                    onClick={() => unsaved.forEach((m) => onBank(m))}
+                                    className="inline-flex items-center gap-1.5 rounded-xl border-2 border-border px-2.5 py-1
+                                        text-xs font-bold text-foreground hover:border-primary/50 cursor-pointer transition-colors">
+                                    <Bookmark className="w-3.5 h-3.5" /> Save all {unsaved.length}
+                                </button>
+                            )}
+                        </div>
+                    )}
+
+                    <ul className="space-y-2">
+                        {ledger.modules.map((mod, i) => (
+                            <MarkModule key={mod.id} mod={mod} index={i}
+                                banked={banked.has(bankKey(mod, questionIndex))}
+                                saving={saving.has(bankKey(mod, questionIndex))}
+                                onBank={onBank}
+                                onPoint={pointAtAnswer}
+                                flash={flash === `mod:${mod.id}`} />
+                        ))}
                     </ul>
+
                     {/* Said out loud rather than hidden: the total printed at
                         the top was recalculated to match the list, because the
                         two disagreed. A student who can add up would have
@@ -123,10 +163,10 @@ export default function MarkPanel({ mark, title, answer, onBank, banked }) {
                     <p className="stat-label text-muted-foreground">Your answer, marked</p>
                     <div className="rounded-2xl bg-surface border border-border p-3.5">
                         <AnnotatedAnswer text={answer} annotations={mark.annotations}
-                            onBank={onBank} banked={banked} />
+                            onOpen={pointAtModule} flash={flash} />
                     </div>
                     <p className="text-xs text-muted-foreground">
-                        Underlined phrases have a note — point at one, or tap it.
+                        Underlined phrases point at the mark they belong to — tap one to jump to it.
                     </p>
                 </div>
             )}
@@ -136,10 +176,10 @@ export default function MarkPanel({ mark, title, answer, onBank, banked }) {
             {!mark.itemised && (mark.whatWrong || mark.improve) && (
                 <div className="space-y-2">
                     {mark.whatWrong && (
-                        <p className="text-sm text-foreground leading-relaxed">{mark.whatWrong}</p>
+                        <MarkdownMath className="text-sm text-foreground leading-relaxed">{mark.whatWrong}</MarkdownMath>
                     )}
                     {mark.improve && (
-                        <p className="text-sm text-muted-foreground leading-relaxed">{mark.improve}</p>
+                        <MarkdownMath className="text-sm text-muted-foreground leading-relaxed">{mark.improve}</MarkdownMath>
                     )}
                 </div>
             )}

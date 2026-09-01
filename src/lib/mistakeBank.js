@@ -18,68 +18,86 @@
  * The prompt is what the assessor wanted; the answer is the wording that
  * scores. A card that showed the error and asked "what was wrong with this?"
  * would be rehearsing the mistake, which is the opposite of the point.
+ *
+ * ─── One builder, because a mistake is a MARK, not a quote ──────────────────
+ * There were two builders, one for an annotated phrase and one for a missed
+ * criterion, and only the phrase one was ever wired up. That is why a student
+ * could save "you wrote 'goes up' where the command term was EXPLAIN" and
+ * could not save "did not name the electron transfer" — and the second is the
+ * bigger mistake, because it is the one whose words are missing from the page
+ * altogether. Both are now the same thing: a MODULE from quizMarking, which is
+ * one mark, with or without a phrase to point at.
  */
 
 /** The marker. Also the topic students see on the deck, so it has to read well. */
 export const BANK_TOPIC = "Mistake bank";
 
+const str = (v) => String(v ?? "").trim();
 const clip = (s, n) => {
-    const t = String(s || "").trim();
+    const t = str(s);
     return t.length > n ? `${t.slice(0, n - 1).trimEnd()}…` : t;
 };
 
 /**
- * A flashcard row from one annotation on a marked answer.
+ * A stable identity for "have I already saved this one".
  *
- * Returns null when there is nothing to rehearse — an annotation with no
- * suggested wording teaches nothing, and a card with a blank back is worse
- * than no card.
+ * Scoped to the question, because two questions on one paper genuinely can
+ * drop the same criterion and both are worth rehearsing — but a key of the
+ * bare quote made the second one look already-saved. Derived from the mark
+ * itself rather than from array position, so it survives the modules being
+ * reordered underneath it.
  */
-export function cardFromAnnotation(ann, { subject, questionTitle } = {}) {
-    const fix = String(ann?.fix || "").trim();
-    const quote = String(ann?.quote || "").trim();
-    if (!fix || !quote) return null;
-    const where = clip(questionTitle, 60);
-    return {
-        subject_name: subject || null,
-        topic: BANK_TOPIC,
-        unit: ann.criterion || null,
-        // Front: the situation and what they actually wrote.
-        question: `${where ? `${where} — ` : ""}you wrote “${clip(quote, 80)}”. What does the assessor want instead?`,
-        // Back: the wording that scores, and why. Never the mistake on its own.
-        answer: ann.issue ? `${fix}\n\n${ann.issue}` : fix,
-        is_active: true,
-    };
-}
+export const bankKey = (mod, questionIndex = 0) => {
+    const id = str(mod?.text) || str(mod?.quote) || str(mod?.id);
+    return id ? `q${questionIndex}:${id.toLowerCase()}` : "";
+};
 
 /**
- * A card from a criterion that was missed.
+ * A flashcard row from one mark on a marked answer.
  *
- * The criterion text IS the prompt — it is already phrased as what the
- * assessor was looking for — and the note is the explanation.
+ * Never returns null for a mark that was LOST. That is the whole repair: every
+ * mistake a student can see, they can save. The criterion text is itself a
+ * usable back — it is already phrased as what the assessor was looking for —
+ * so a card can always be built even when the marker offered no wording.
+ *
+ * A surviving imprecision (`risk`) still needs a fix to be worth a card; with
+ * no wording to rehearse there is nothing on the back but the observation.
  */
-export function cardFromCriterion(criterion, { subject, questionTitle } = {}) {
-    const text = String(criterion?.text || "").trim();
-    if (!text || criterion?.got) return null;
+export function cardFromModule(mod, { subject, questionTitle } = {}) {
+    if (!mod) return null;
+    const lost = mod.status === "lost";
+    const text = str(mod.text);
+    const fixes = (mod.fixes || []).map(str).filter(Boolean);
+    if (!text && !fixes.length) return null;
+    if (!lost && !fixes.length) return null;
+
     const where = clip(questionTitle, 60);
+    // What they actually wrote, when the marker could point at it. This is what
+    // makes the card feel like their own paper rather than a generic prompt.
+    const quote = str(mod.evidence?.[0]?.quote);
+
+    const front = quote
+        ? `${where ? `${where} — ` : ""}you wrote “${clip(quote, 80)}”. What did the assessor want instead?`
+        : `${where ? `${where} — ` : ""}${text}. What did the assessor need to see?`;
+
+    // Back: the wording that scores, then why. Never the mistake on its own.
+    const back = [
+        fixes.length ? fixes.join("\n\nor\n\n") : str(mod.wanted) || text,
+        fixes.length ? (str(mod.wanted) || str(mod.detail)) : str(mod.detail),
+    ].filter(Boolean).join("\n\n");
+
     return {
         subject_name: subject || null,
         topic: BANK_TOPIC,
-        unit: "Missed criterion",
-        question: `${where ? `${where} — ` : ""}${text}. What did the assessor need to see?`,
-        answer: String(criterion?.note || "").trim() || text,
+        unit: lost ? "Lost mark" : "Imprecise wording",
+        question: front,
+        answer: back || text,
         is_active: true,
+        // A dropped mark is a demonstrated weak spot, so it enters the schedule
+        // as one rather than waiting its turn behind cards they already know.
+        is_weak_spot: lost,
     };
 }
 
 /** Is this row one of the bank's? Used by the filtered view. */
 export const isBankCard = (card) => card?.topic === BANK_TOPIC;
-
-/**
- * A stable key for "have I already banked this one".
- *
- * The quote, because that is what the student sees underlined — banking the
- * same phrase twice from one marked answer should be impossible, and the
- * button says so rather than silently making a duplicate card.
- */
-export const bankKey = (ann) => String(ann?.quote || "").trim();
