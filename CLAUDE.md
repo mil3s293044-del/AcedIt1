@@ -100,6 +100,21 @@ unanswered. Only genuinely multi-part questions suffix.
 
 Marks are the currency: score is a percentage of marks available, not of
 questions answered, so a four-mark part b counts double a two-mark part a.
+Three places used to compute a question's allocation by hand as
+`q.type === 'mcq' ? 1 : (q.marks || 5)` and all three read 5 for a multipart
+question worth nine — they go through `normaliseQuestion(q, i).marks` now,
+which returns exactly the old value for a legacy question.
+
+**The player branches ONCE.** `MultipartQuestion` owns the whole part-shaped
+screen — stem in a quieter box, parts stacked below with the allocation
+right-aligned the way a paper prints it, textarea rows scaling with the marks.
+Everything else stays on the path it always took, which is why this cannot
+reach the quizzes that already exist. Marking stays ONE entry per question with
+the parts laid out inside the prompt, because the score, the feedback array and
+the attempt row are all indexed by question.
+
+Only the main generator (`handleGenerateQuiz`) emits parts. Reshuffle still
+produces flat questions.
 
 **Annotations point at characters, and an unquotable one is dropped.** The
 marker returns a verbatim `quote` from the student's answer; `annotate.js`

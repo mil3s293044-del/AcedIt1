@@ -354,6 +354,27 @@ export default function Quizzes() {
             } else if (aiSettings.question_types === "short_only") {
                 shortTarget = aiSettings.num_questions;
                 questionTypeInstruction = `You MUST generate EXACTLY ${shortTarget} short answer questions and 0 multiple choice questions. Every single question must be type "short_answer". Total questions: ${shortTarget}.`;
+            } else if (aiSettings.question_types === "multipart") {
+                shortTarget = aiSettings.num_questions;
+                questionTypeInstruction = `You MUST generate EXACTLY ${shortTarget} EXTENDED RESPONSE questions, VCAA style. Total questions: ${shortTarget}.
+
+Each one is a STEM followed by two to four PARTS:
+  - The stem sets up ONE situation — a scenario, a data set, an experiment, a
+    passage — and asks nothing by itself.
+  - Each part asks a separate thing ABOUT that stem, and every part must be
+    answerable from it. A part that could stand alone as its own question means
+    the stem is doing no work and you have written two questions instead of one.
+  - Parts get progressively harder, the way a real paper builds: recall or a
+    single calculation first, then application, then an evaluation or a
+    multi-step derivation.
+  - Mark allocations differ by part and match the work: 1-2 marks to state or
+    identify, 3-6 to explain, justify or derive.
+  - Set "type": "multipart", put the stem in "question", and put the parts in
+    the "parts" array — each with its own "prompt", "marks" and "model_answer".
+    A part may be an MCQ, in which case give it "options" and "correct_answer"
+    instead of a model answer.
+
+Do NOT write the parts into the stem as prose. They go in the array.`;
             } else {
                 mcqTarget = Math.ceil(aiSettings.num_questions * 0.6);
                 shortTarget = aiSettings.num_questions - mcqTarget;
@@ -448,7 +469,23 @@ Base ALL questions on the provided material. If files are attached, read ALL con
                                     correct_answer: { type: "number" },
                                     model_answer: { type: "string" },
                                     marks: { type: "number" },
-                                    explanation: { type: "string" }
+                                    explanation: { type: "string" },
+                                    parts: {
+                                        type: "array",
+                                        items: {
+                                            type: "object",
+                                            properties: {
+                                                label: { type: "string" },
+                                                type: { type: "string" },
+                                                prompt: { type: "string" },
+                                                marks: { type: "number" },
+                                                model_answer: { type: "string" },
+                                                options: { type: "array", items: { type: "string" } },
+                                                correct_answer: { type: "number" }
+                                            },
+                                            required: ["prompt", "marks"]
+                                        }
+                                    }
                                 },
                                 required: ["type", "question"]
                             }
@@ -465,6 +502,10 @@ Base ALL questions on the provided material. If files are attached, read ALL con
             // Format and validate questions — enforce type constraints
             const formattedQuestions = response.questions
                 .map(q => {
+                    // A question that came back with real parts is left alone.
+                    // Forcing it to "mcq" would strand the parts on a shape
+                    // that never renders them.
+                    if (Array.isArray(q.parts) && q.parts.length > 0) return { ...q, type: "multipart" };
                     // Force type based on user setting
                     let forcedType = q.type === "short_answer" ? "short_answer" : "mcq";
                     if (aiSettings.question_types === "mcq_only") forcedType = "mcq";
@@ -480,7 +521,22 @@ Base ALL questions on the provided material. If files are attached, read ALL con
                     }
                     return true;
                 })
-                .map(q => ({
+                .map(q => q.type === "multipart" ? {
+                    type: "multipart",
+                    question: q.question,
+                    parts: (q.parts || [])
+                        .filter(p => p && (p.prompt || p.question))
+                        .map((p, i) => ({
+                            label: p.label || String.fromCharCode(97 + i),
+                            type: p.type === "mcq" ? "mcq" : "short",
+                            prompt: p.prompt || p.question,
+                            marks: p.type === "mcq" ? 1 : Math.max(1, Number(p.marks) || marksValue),
+                            model_answer: p.type === "mcq" ? undefined : (p.model_answer || ""),
+                            options: p.type === "mcq" ? p.options?.slice(0, 4) : undefined,
+                            correct_answer: p.type === "mcq" ? (p.correct_answer ?? 0) : undefined,
+                        })),
+                    explanation: aiSettings.include_explanations ? (q.explanation || "") : "",
+                } : ({
                     type: q.type,
                     question: q.question,
                     options: q.type === "mcq" ? (q.options?.slice(0, 4).concat(Array(Math.max(0, 4 - (q.options?.length || 0))).fill("")).slice(0, 4)) : undefined,
@@ -489,6 +545,9 @@ Base ALL questions on the provided material. If files are attached, read ALL con
                     marks: q.type === "short_answer" ? (q.marks || marksValue) : undefined,
                     explanation: aiSettings.include_explanations ? (q.explanation || "") : ""
                 }))
+                // A multipart question that lost every part to the filter is
+                // an empty shell that would render as a stem and nothing else.
+                .filter(q => q.type !== "multipart" || q.parts.length > 0)
                 .slice(0, aiSettings.num_questions); // Hard cap to exact count requested
 
             if (formattedQuestions.length === 0) {
@@ -1722,6 +1781,7 @@ Return valid JSON only.`,
                                                     <SelectItem value="mixed">Mixed (MCQ + Short Answer)</SelectItem>
                                                     <SelectItem value="mcq_only">MCQ Only</SelectItem>
                                                     <SelectItem value="short_only">Short Answer Only</SelectItem>
+                                                    <SelectItem value="multipart">Extended response (a, b, c)</SelectItem>
                                                 </SelectContent>
                                             </Select>
                                         </div>

@@ -19,6 +19,7 @@ import { recordStudyAndGetStreak } from "@/components/shared/streakHelpers";
 import MathKeyboard from "../shared/MathKeyboard";
 import MathInput from "../shared/MathInput";
 import InkPad from "@/components/quizzes/InkPad";
+import MultipartQuestion from "@/components/quizzes/MultipartQuestion";
 import MarkPanel from "@/components/quizzes/marking/MarkPanel";
 import { normaliseMark } from "@/lib/quizMarking";
 import { normaliseQuestion } from "@/lib/quizSchema";
@@ -496,6 +497,11 @@ In two or three sentences, explain what makes that the right answer and what the
     };
 
     const currentQuestion = shuffledQuiz.questions[currentQuestionIndex];
+    // The same question through the adapter. `multipart` is the ONE branch the
+    // player takes for the part-shaped screen; everything else stays on the
+    // path it has always taken, which is why this change cannot reach the
+    // quizzes people already have.
+    const currentShape = normaliseQuestion(currentQuestion, currentQuestionIndex);
     const totalQ = shuffledQuiz.questions.length;
 
     const saveProgressToDatabase = async () => {
@@ -681,7 +687,10 @@ In two or three sentences, explain what makes that the right answer and what the
      * something real to read. Lives in `extra` so it needs no migration.
      */
     const buildQuestionResults = (marksFor) => shuffledQuiz.questions.map((q, i) => {
-        const max = q.type === 'mcq' ? 1 : (q.marks || 5);
+        // Through the adapter, not by hand: a multipart question is worth the
+        // sum of its parts, and `q.marks` on one of those is undefined. For a
+        // legacy question this returns exactly what the old expression did.
+        const max = normaliseQuestion(q, i).marks;
         const { marks, correct } = marksFor(q, i, max);
         return {
             q_index: i,
@@ -731,6 +740,30 @@ In two or three sentences, explain what makes that the right answer and what the
             const questionsForAnalysis = shuffledQuiz.questions.map((question, index) => {
                 const userAnswer = userAnswers[index];
                 const prevAnswer = previousAnswers[index];
+                const shape = normaliseQuestion(question, index);
+                if (shape.multipart) {
+                    // One entry per QUESTION even though it has several parts,
+                    // because the score, the feedback array and the attempt row
+                    // are all indexed by question. The parts go INSIDE it, each
+                    // with its own prompt, answer and allocation, so the marker
+                    // can still say which part lost the mark.
+                    return {
+                        q_num: index + 1,
+                        type: 'short',
+                        question: shape.stem,
+                        marks_allocation: shape.marks,
+                        parts: shape.parts.map((p) => ({
+                            label: p.label,
+                            prompt: p.prompt,
+                            marks: p.marks,
+                            student_answer: p.type === 'mcq'
+                                ? (userAnswers[p.key] !== undefined
+                                    ? p.options?.[parseInt(userAnswers[p.key], 10)] : "No answer provided")
+                                : (userAnswers[p.key] || "No answer provided"),
+                            model_answer: p.model_answer || "Not provided",
+                        })),
+                    };
+                }
                 if (question.type === 'mcq') {
                     const selectedOption = userAnswer !== undefined ? question.options[parseInt(userAnswer)] : "No answer provided";
                     const correctOption = question.options[question.correct_answer];
@@ -764,7 +797,12 @@ Mark this ${shuffledQuiz.subject} quiz. Provide feedback for ALL ${questionsForA
 
 MARKING: MCQ = 0 or 1 mark only. Short answer = 0 to allocation marks. Be lenient on phrasing.
 
-${questionsForAnalysis.map(q => `Q${q.q_num} [${q.type.toUpperCase()}]${q.type === 'short' ? ` - ${q.marks_allocation} marks` : ''}:
+${questionsForAnalysis.map(q => q.parts ? `Q${q.q_num} [MULTIPART] - ${q.marks_allocation} marks in total:
+Question: ${q.question}
+${q.parts.map(p => `  (${p.label}) [${p.marks} marks] ${p.prompt}
+  Student Answer: ${p.student_answer}
+  Model Answer: ${p.model_answer}`).join('\n')}
+Mark the parts separately and add them up. Name the part in each criterion — "(b) ..." — so the student can see which one lost the mark.` : `Q${q.q_num} [${q.type.toUpperCase()}]${q.type === 'short' ? ` - ${q.marks_allocation} marks` : ''}:
 Question: ${q.question}
 Student Answer: ${q.student_answer}${q.type === 'short' && q.previous_answer ? `\nPrevious Answer: ${q.previous_answer}` : ''}
 ${q.type === 'mcq' ? `Correct Answer: ${q.correct_answer}` : `Model Answer: ${q.model_answer}`}`).join('\n---\n')}
@@ -893,7 +931,8 @@ invent a theme from a single question.`,
             const finalScore = calcScoreFromFeedback(mappedFeedback);
             const questionsCorrect = mappedFeedback.filter((fb, idx) => {
                 const q = shuffledQuiz.questions[idx];
-                return q?.type === 'mcq' ? fb.marks === 1 : fb.marks >= (q?.marks || 5) * 0.8;
+                const outOf = normaliseQuestion(q, idx).marks;
+                return q?.type === 'mcq' ? fb.marks === 1 : fb.marks >= outOf * 0.8;
             }).length;
 
             const aiResults = buildQuestionResults((q, i, max) => {
@@ -941,14 +980,33 @@ invent a theme from a single question.`,
         shuffledQuiz.questions.forEach((q, i) => {
             const fb = feedback[i];
             if (!fb) return;
-            if (q.type === 'mcq') { total += fb.marks || 0; max += 1; }
-            else { total += fb.marks || 0; max += q.marks || 5; }
+            total += fb.marks || 0;
+            max += normaliseQuestion(q, i).marks;
         });
         return max > 0 ? Math.round((total / max) * 100) : 0;
     };
 
     const overallScore = calcScoreFromFeedback(aiFeedback);
     const getCurrentAnswer = () => userAnswers[currentQuestionIndex];
+
+    /**
+     * Everything the student wrote for one question, as one string.
+     *
+     * The annotation layer matches the marker's quotes against this, so a
+     * multipart question has to hand over all of its parts joined rather than
+     * an answer at the bare index, which it does not have.
+     */
+    const answerTextFor = (index) => {
+        const shape = normaliseQuestion(shuffledQuiz.questions[index], index);
+        if (!shape.multipart) {
+            const a = userAnswers[index];
+            return typeof a === "string" ? a : "";
+        }
+        return shape.parts
+            .filter((p) => p.type !== "mcq" && typeof userAnswers[p.key] === "string")
+            .map((p) => `(${p.label}) ${userAnswers[p.key]}`)
+            .join("\n\n");
+    };
 
     // ─── Adjusted score (auto + self-marked) ────────────────────────────────
     // Sums the user's self-marked marks on top of the AI-marked total.
@@ -1367,8 +1425,10 @@ invent a theme from a single question.`,
                                                     {currentFeedback.mark?.itemised && (
                                                         <MarkPanel
                                                             mark={currentFeedback.mark}
-                                                            answer={typeof userAnswers[currentFeedbackIndex] === "string"
-                                                                ? userAnswers[currentFeedbackIndex] : ""}
+                                                            /* A multipart question has no single answer — its
+                                                               parts are under "3a", "3b". Joined so the marker's
+                                                               quotes still find the text they came from. */
+                                                            answer={answerTextFor(currentFeedbackIndex)}
                                                             onBank={bankMistake}
                                                             banked={banked}
                                                         />
@@ -1580,16 +1640,38 @@ invent a theme from a single question.`,
                                 of saying the same thing is how a screen starts
                                 looking generated. */}
                             <span className={`pill mb-3 ${currentQuestion.type === 'mcq' ? 'bg-chart-4/15 text-chart-4' : 'bg-chart-3/15 text-chart-3'}`}>
-                                {currentQuestion.type === 'mcq' ? 'Multiple Choice' : `Short Answer · ${currentQuestion.marks || 5} marks`}
+                                {currentShape.multipart
+                                    ? `${currentShape.parts.length} parts · ${currentShape.marks} marks`
+                                    : currentQuestion.type === 'mcq'
+                                        ? 'Multiple Choice'
+                                        : `Short Answer · ${currentShape.marks} marks`}
                             </span>
-                            <div className="text-lg sm:text-xl font-semibold text-foreground leading-relaxed">
-                                <MarkdownMath>{currentQuestion.question || ""}</MarkdownMath>
-                            </div>
+                            {/* A multipart question prints its stem inside the
+                                parts view, above the parts it belongs to —
+                                printing it here as well would put the same
+                                paragraph on screen twice. */}
+                            {!currentShape.multipart && (
+                                <div className="text-lg sm:text-xl font-semibold text-foreground leading-relaxed">
+                                    <MarkdownMath>{currentQuestion.question || ""}</MarkdownMath>
+                                </div>
+                            )}
                         </>
                     )}
                 >
                     <div className="space-y-6">
-                            {currentQuestion.type === 'mcq' ? (
+                            {currentShape.multipart ? (
+                                <MultipartQuestion
+                                    question={currentShape}
+                                    subject={shuffledQuiz.subject}
+                                    disabled={showFeedback}
+                                    answers={userAnswers}
+                                    inkLines={inkLines}
+                                    onInk={(key, next) => setInkLines(p => ({ ...p, [key]: next }))}
+                                    onAnswer={(key, value) => {
+                                        if (!showFeedback) setUserAnswers(prev => ({ ...prev, [key]: value }));
+                                    }}
+                                />
+                            ) : currentQuestion.type === 'mcq' ? (
                                 <div className="space-y-2.5">
                                     {currentQuestion.options?.map((option, index) => {
                                         const isSelected = getCurrentAnswer()?.toString() === index.toString();
