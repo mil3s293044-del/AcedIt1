@@ -125,6 +125,23 @@ costs the next annotation its credibility. Overlaps are dropped for the same
 reason. Hover, tap and keyboard focus all open the note, because hover-only is
 unusable on a phone.
 
+The note is PORTALLED to the body and positioned `fixed` from a measured rect,
+then clamped: below the phrase, else above it, else pinned inside the viewport
+with its own scroll. All three cases are needed — a phrase near the right edge
+or low on a short viewport used to open a note that ran off the screen, which
+is the one place the marking says what to do. `position: fixed` resolves
+against a transformed ancestor, and framer-motion leaves an inline transform on
+every animated section here, so portalling is what makes `fixed` mean fixed.
+AceRoam's header records the same lesson.
+
+Each note carries what the assessor WANTED alongside what went wrong — the
+issue is the half a student can see for themselves, `wanted` is the half they
+cannot — and one or two suggested rewrites, never padded to two.
+
+The marker writes like a VCAA examiner's report: it addresses the RESPONSE and
+not the student, names the command term when the answer misread it, gives no
+praise, and says what a full-mark response would have contained.
+
 An annotation was a strikethrough over the whole phrase, off in its own card.
 Both were wrong: a strikethrough means DELETE THIS when the point is LOOK HERE,
 and lifting the phrase out of the paragraph loses the thing that makes it land.

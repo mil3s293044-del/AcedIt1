@@ -88,8 +88,30 @@ check("the older edit shape still reads", () => {
     // `was`/`why`/`now` was the first version of this field.
     const a = normaliseAnnotation({ was: "bad", now: "detrimental", why: "names the harm" });
     assert.equal(a.quote, "bad");
-    assert.equal(a.fix, "detrimental");
+    assert.deepEqual(a.fixes, ["detrimental"]);
     assert.equal(a.issue, "names the harm");
+});
+
+check("an annotation can offer several rewrites", () => {
+    // One suggested wording is the model's first idea; two let the student
+    // pick the one that sounds like them.
+    const a = normaliseAnnotation({ quote: "x", fixes: ["loses two electrons", "is oxidised to Mg2+"] });
+    assert.equal(a.fixes.length, 2);
+});
+
+check("duplicate and empty rewrites are dropped", () => {
+    const a = normaliseAnnotation({ quote: "x", fixes: ["same", "  same  ", "", null], fix: "same" });
+    assert.deepEqual(a.fixes, ["same"]);
+    assert.deepEqual(normaliseAnnotation({ quote: "x" }).fixes, []);
+});
+
+check("what the assessor wanted is its own field", () => {
+    // The issue says what is wrong; `wanted` says what was being looked for.
+    // A student needs both, and they are not the same sentence.
+    const a = normaliseAnnotation({ quote: "x", issue: "Describes rather than explains.",
+        wanted: "The half-equation, or the words 'loses two electrons'." });
+    assert.ok(a.wanted.startsWith("The half-equation"));
+    assert.equal(normaliseAnnotation({ quote: "x" }).wanted, "");
 });
 
 check("severity is one of two things, and defaults to the costly one", () => {

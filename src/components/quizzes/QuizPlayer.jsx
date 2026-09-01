@@ -443,7 +443,14 @@ In two or three sentences, explain what makes that the right answer and what the
         setBanked(prev => new Set(prev).add(key));
         try {
             await base44.entities.Flashcard.create(card);
-            toast({ title: "Added to your mistake bank", description: "It'll come back in your reviews." });
+            // Where it went, not just that it went. The bank is a real deck —
+            // cards tagged "Mistake bank" group into one per subject on the
+            // Spaced Repetition shelf — and a student who is not told that has
+            // saved something into a place they cannot find.
+            toast({
+                title: "Saved to your mistake bank",
+                description: `It joins your ${shuffledQuiz.subject || "subject"} · Mistake bank deck and comes back on its own schedule.`,
+            });
         } catch (e) {
             setBanked(prev => { const next = new Set(prev); next.delete(key); return next; });
             toast({ title: "Couldn't save that one", description: e?.message || "Try again in a moment.", variant: "destructive" });
@@ -827,13 +834,31 @@ underlined in the student's own answer.
     paraphrase is the same as sending nothing.
   - Quote the SHORTEST span that carries the problem. A whole sentence tells
     the student to rewrite a sentence; four words tells them what to change.
-  - "issue" is one sentence on what an assessor sees wrong with those words.
-  - "fix" is the wording that would have scored.
+  - "issue" — what an assessor sees wrong with those words. One sentence.
+  - "wanted" — what the assessor was looking for there, in the language of the
+    study design or the command term. This is the half a student cannot work
+    out for themselves, and it is what makes the note worth reading.
+  - "fixes" — one or two wordings that would have scored. Two is better than
+    one where two genuinely different phrasings work, because it lets the
+    student pick the one that sounds like them instead of copying yours. Never
+    pad to two.
   - "severity" is "lost" when it cost a mark, "risk" when it survived but is
     imprecise.
   - Only annotate where the wording genuinely matters — never a stylistic
     preference, and never on an answer that scored full marks. Zero
     annotations is a normal and common answer.
+
+WRITE LIKE A VCAA EXAMINER'S REPORT, because that is what this is. That means:
+  - Address what the RESPONSE did, not what the student is. "This response
+    describes the change without naming the transfer", never "you didn't
+    understand" and never "great effort".
+  - Use the command term. If the question said EVALUATE and the answer
+    described, say so — misreading the command term is the single most common
+    way marks are lost, and naming it teaches something that transfers.
+  - No praise, no encouragement, no exclamation marks. A clean mark gets an
+    empty comment; the mark itself is the feedback.
+  - Say what a full-mark response would have contained. Examiners publish the
+    high-scoring answer; that is the useful part of the report.
 Return exactly ${questionsForAnalysis.length} items.
 
 THEN look ACROSS every question that lost marks and find the THEMES.
@@ -880,12 +905,13 @@ invent a theme from a single question.`,
                                             properties: {
                                                 quote: { type: "string" },
                                                 issue: { type: "string" },
-                                                fix: { type: "string" },
+                                                wanted: { type: "string" },
+                                                fixes: { type: "array", items: { type: "string" } },
                                                 criterion: { type: "string" },
                                                 severity: { type: "string", enum: ["lost", "risk"] },
                                                 worth: { type: "number" }
                                             },
-                                            required: ["quote", "issue", "fix"]
+                                            required: ["quote", "issue", "fixes"]
                                         }
                                     }
                                 },
