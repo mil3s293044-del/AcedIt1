@@ -44,6 +44,7 @@ import { FEATURES, canUseFeature } from "@/lib/tierAccess";
 
 import QuizDeck from "@/components/cards/QuizDeck";
 import { quizDeckStats } from "@/lib/quizDeck";
+import { normaliseQuestions, formatGeneratedParts } from "@/lib/quizSchema";
 import QuizPlayer from "../components/quizzes/QuizPlayer";
 import QuizInsightRail from "../components/quizzes/QuizInsightRail";
 import MarkdownMath from "@/components/shared/MarkdownMath";
@@ -524,17 +525,7 @@ Base ALL questions on the provided material. If files are attached, read ALL con
                 .map(q => q.type === "multipart" ? {
                     type: "multipart",
                     question: q.question,
-                    parts: (q.parts || [])
-                        .filter(p => p && (p.prompt || p.question))
-                        .map((p, i) => ({
-                            label: p.label || String.fromCharCode(97 + i),
-                            type: p.type === "mcq" ? "mcq" : "short",
-                            prompt: p.prompt || p.question,
-                            marks: p.type === "mcq" ? 1 : Math.max(1, Number(p.marks) || marksValue),
-                            model_answer: p.type === "mcq" ? undefined : (p.model_answer || ""),
-                            options: p.type === "mcq" ? p.options?.slice(0, 4) : undefined,
-                            correct_answer: p.type === "mcq" ? (p.correct_answer ?? 0) : undefined,
-                        })),
+                    parts: formatGeneratedParts(q, marksValue),
                     explanation: aiSettings.include_explanations ? (q.explanation || "") : "",
                 } : ({
                     type: q.type,
@@ -665,20 +656,36 @@ Base ALL questions on the provided material. If files are attached, read ALL con
             const numQuestions = quiz.questions?.length || 10;
             const mcqCount = Math.ceil(numQuestions * 0.6);
             const shortCount = numQuestions - mcqCount;
+            // Reshuffle means "same quiz, new questions", so it has to keep the
+            // SHAPE it was handed. Reshuffling an extended-response paper into
+            // a pile of multiple choice is a different quiz.
+            const wasMultipart = normaliseQuestions(quiz).some(q => q.multipart);
+            const shapeInstruction = wasMultipart
+                ? `Generate UP TO ${numQuestions} EXTENDED RESPONSE questions, VCAA style — the same shape as the quiz being reshuffled.
+
+Each is a STEM followed by two to four PARTS:
+  - The stem sets up ONE situation and asks nothing by itself.
+  - Each part asks a separate thing about that stem and must be answerable
+    from it, getting progressively harder.
+  - Mark allocations differ by part and match the work: 1-2 marks to state or
+    identify, 3-6 to explain, justify or derive.
+  - Set "type": "multipart", put the stem in "question", and put the parts in
+    the "parts" array, each with its own "prompt", "marks" and "model_answer".
+    A part may be an MCQ, with "options" and "correct_answer" instead.`
+                : `Generate UP TO ${numQuestions} questions total (${mcqCount} MCQ first, then ${shortCount} short answer). If the document does not have enough unique content for all ${numQuestions} non-repetitive questions, generate fewer — quality over quantity.
+
+QUESTION ORDER: All MCQ questions MUST come before any short answer questions.`;
 
             const response = await base44.integrations.Core.InvokeLLM({
                 feature: "quiz_ai_gen",
-                model: "gemini_3_flash",
                 prompt: `You are a VCE quiz generator. Create a COMPLETELY NEW and DIFFERENT quiz for: ${quiz.subject}. Read ALL content in the document including text, images, diagrams, tables, and figures.
 
             IMPORTANT: Generate DIFFERENT questions from what might have been asked before. Focus on different aspects of the content. NEVER generate two questions that test the same concept or fact.
 
-            Generate UP TO ${numQuestions} questions total (${mcqCount} MCQ first, then ${shortCount} short answer). If the document does not have enough unique content for all ${numQuestions} non-repetitive questions, generate fewer — quality over quantity.
+            ${shapeInstruction}
 
             Difficulty: ${quiz.difficulty || 'Medium'}
             Base ALL questions on the uploaded document content, including any images, charts, or figures.
-
-QUESTION ORDER: All MCQ questions MUST come before any short answer questions.
 
 MATH FORMATTING RULES (CRITICAL):
 - ALWAYS use LaTeX for every mathematical expression — the app renders LaTeX as proper math via KaTeX.
@@ -720,7 +727,23 @@ Return valid JSON only.`,
                                     correct_answer: { type: "number" },
                                     model_answer: { type: "string" },
                                     marks: { type: "number" },
-                                    explanation: { type: "string" }
+                                    explanation: { type: "string" },
+                                    parts: {
+                                        type: "array",
+                                        items: {
+                                            type: "object",
+                                            properties: {
+                                                label: { type: "string" },
+                                                type: { type: "string" },
+                                                prompt: { type: "string" },
+                                                marks: { type: "number" },
+                                                model_answer: { type: "string" },
+                                                options: { type: "array", items: { type: "string" } },
+                                                correct_answer: { type: "number" }
+                                            },
+                                            required: ["prompt", "marks"]
+                                        }
+                                    }
                                 },
                                 required: ["type", "question"]
                             }
@@ -734,8 +757,10 @@ Return valid JSON only.`,
                 throw new Error("AI didn't generate questions. Try again.");
             }
 
-            // Sort questions: MCQ first, then short answer
-            const sortedQuestions = response.questions.sort((a, b) => {
+            // Sort questions: MCQ first, then short answer. Skipped for an
+            // extended-response paper, where there are no loose MCQs to hoist
+            // and the running order is the order the paper was written in.
+            const sortedQuestions = wasMultipart ? response.questions : response.questions.sort((a, b) => {
                 const aIsMcq = a.type === 'mcq' || a.type !== 'short_answer';
                 const bIsMcq = b.type === 'mcq' || b.type !== 'short_answer';
                 if (aIsMcq && !bIsMcq) return -1;
@@ -745,6 +770,10 @@ Return valid JSON only.`,
 
             const formattedQuestions = sortedQuestions
                 .filter(q => {
+                    // A question with parts is never an MCQ, whatever `type`
+                    // says — without this the options check below throws every
+                    // extended-response question away, because a stem has none.
+                    if (Array.isArray(q.parts) && q.parts.length > 0) return true;
                     if (q.type === 'mcq' || q.type !== 'short_answer') {
                         if (!q.options || q.options.length !== 4) {
                             console.warn("Skipping MCQ without 4 options:", q.question);
@@ -753,7 +782,12 @@ Return valid JSON only.`,
                     }
                     return true;
                 })
-                .map(q => ({
+                .map(q => (Array.isArray(q.parts) && q.parts.length > 0) ? {
+                    type: 'multipart',
+                    question: q.question,
+                    parts: formatGeneratedParts(q, 5),
+                    explanation: q.explanation || "",
+                } : ({
                     type: q.type === 'short_answer' ? 'short_answer' : 'mcq',
                     question: q.question,
                     options: q.type === 'mcq' || q.type !== 'short_answer' ? q.options : undefined,
@@ -761,7 +795,8 @@ Return valid JSON only.`,
                     model_answer: q.type === 'short_answer' ? (q.model_answer || "") : undefined,
                     marks: q.type === 'short_answer' ? (q.marks || 5) : undefined,
                     explanation: q.explanation || ""
-                }));
+                }))
+                .filter(q => q.type !== 'multipart' || q.parts.length > 0);
 
             if (formattedQuestions.length === 0) {
                 throw new Error("No valid questions generated. Please try again.");

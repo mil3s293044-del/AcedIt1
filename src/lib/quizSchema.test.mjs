@@ -10,7 +10,7 @@
 import assert from "node:assert/strict";
 import {
     normaliseQuestion, normaliseQuestions, allParts, quizMarks,
-    scoreFromMarks, mcqCorrect, partKey, autoLabel, partTitle,
+    scoreFromMarks, mcqCorrect, partKey, autoLabel, partTitle, formatGeneratedParts,
 } from "@/lib/quizSchema";
 
 let passed = 0;
@@ -149,6 +149,33 @@ check("titles read the way a paper reads", () => {
     assert.equal(partTitle(multi, multi.parts[1]), "3b");
     const flat = normaliseQuestion(LEGACY.questions[0], 4);
     assert.equal(partTitle(flat, flat.parts[0]), "5", "no phantom (a) on a one-part question");
+});
+
+check("a generated question is coerced into the stored part shape", () => {
+    const parts = formatGeneratedParts({ parts: [
+        { prompt: "Find the net force.", marks: 2 },
+        { label: "ii", type: "mcq", prompt: "Units?", options: ["N", "J"], correct_answer: 1 },
+        { question: "Explain.", marks: 0 },
+    ]}, 5);
+    assert.equal(parts.length, 3);
+    assert.deepEqual(parts.map((p) => p.label), ["a", "ii", "c"], "own label wins, others generated");
+    assert.equal(parts[1].marks, 1, "an MCQ part is one mark");
+    assert.equal(parts[1].correct_answer, 1);
+    assert.equal(parts[2].prompt, "Explain.", "`question` is read as `prompt`");
+    assert.equal(parts[2].marks, 5, "a zero allocation falls back to the setting");
+});
+
+check("a part that cannot be answered is dropped", () => {
+    assert.deepEqual(formatGeneratedParts({ parts: [null, {}, { marks: 3 }] }), []);
+    assert.deepEqual(formatGeneratedParts({}), []);
+    assert.deepEqual(formatGeneratedParts(null), []);
+});
+
+check("an mcq part with no real options degrades to a short answer", () => {
+    // Rendering a one-option multiple choice is worse than asking for prose.
+    const [p] = formatGeneratedParts({ parts: [{ type: "mcq", prompt: "Pick", options: ["only"] }] }, 4);
+    assert.equal(p.type, "short");
+    assert.equal(p.marks, 4);
 });
 
 console.log(`\n${passed} passed`);

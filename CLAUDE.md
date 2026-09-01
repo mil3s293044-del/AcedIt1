@@ -196,6 +196,22 @@ Three things that took a rebuild to learn:
 - **One pack per row on a phone is correct.** Narrowing the card to fit two
   does not fit two and clips the face trying. Two-up arrives at `sm`.
 
+## The dashboard answers one question
+
+**"What do I do right now."** Today's Play is the page; everything else is
+context around it. Progress belongs on Ranked and Analytics, which exist to
+show it properly — the distance-to-target block was removed for that reason,
+and it was the third progress readout on one screen.
+
+The table stays. `TableGround`, `Placed` and the fanned `HandRail` are the only
+place in the app with that vocabulary and they are what stop a page full of
+cards reading as a document. Concordance means the panels obey the same tokens
+and card shapes as the rest, not that the felt goes.
+
+Nothing is printed twice. The streak had its number in the header strip AND a
+panel below with the run of seven in it; the panel says it properly, so the
+strip stopped saying it at all.
+
 ## The signup tour
 
 `AceTour` — six stops and a sign-off, fired once for accounts that are hours
@@ -333,7 +349,11 @@ npm run dev    # vite :5173 + server.mjs :3001 concurrently
   discarded on close, the duration they picked was never read, the ATAR
   components were computed and never shown. If you add an input, wire it through
   the same session.
-- **No mascot yet** (maybe later). **No dark mode yet** (later).
+- **No mascot yet** (maybe later). **Dark mode EXISTS** — `index.css` has a
+  complete `.dark` token block and `src/lib/theme.js` offers four preferences
+  (system / light / dark / auto by the clock). This line used to say there was
+  no dark mode, which sent every session that read it to write light-only CSS.
+  Check both themes on any UI change.
 - VCAA examiner prompts live in `src/lib/subjectExaminerPrompts.js` (34 subjects).
 
 ## Working style

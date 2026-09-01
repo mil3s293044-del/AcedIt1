@@ -23,8 +23,21 @@ import { SuitPip } from "@/components/cards/PlayingCard";
 /** The suits cycle so the run reads as seven different cards, not seven copies. */
 const SUITS = ["spade", "heart", "club", "diamond", "spade", "heart", "club"];
 
-export default function RunOfSeven({ days = [], tone = "#FF4B4B" }) {
+/**
+ * The streak red, at an alpha.
+ *
+ * `tone` used to default to the literal #FF4B4B and the alphas were appended
+ * as hex pairs (`${tone}66`). That is the same colour as --streak written a
+ * second time, in a form the theme cannot reach: the day the streak red is
+ * retuned, or a theme wants a different one, this panel keeps the old value
+ * and nothing tells you. Callers can still pass a hex `tone` for a one-off,
+ * and the default now comes from the token.
+ */
+const streak = (alpha) => `hsl(var(--streak) / ${alpha})`;
+
+export default function RunOfSeven({ days = [], tone = null }) {
     const reduce = useReducedMotion();
+    const at = (alpha, hexPair) => (tone ? `${tone}${hexPair}` : streak(alpha));
 
     return (
         <div data-run-of-seven className="flex items-end gap-1.5 mt-4"
@@ -41,14 +54,14 @@ export default function RunOfSeven({ days = [], tone = "#FF4B4B" }) {
                                 transformStyle: "preserve-3d",
                                 background: state === "up" ? "hsl(var(--surface))" : "transparent",
                                 border: state === "open"
-                                    ? `1.5px dashed ${tone}66`
+                                    ? `1.5px dashed ${at(0.4, "66")}`
                                     : state === "up"
-                                        ? `1px solid ${tone}59`
-                                        : `1px solid ${tone}26`,
+                                        ? `1px solid ${at(0.35, "59")}`
+                                        : `1px solid ${at(0.15, "26")}`,
                                 // A face-down day is the deck's own hatch, at
                                 // the weight of a card lying in shadow.
                                 backgroundImage: state === "down"
-                                    ? `repeating-linear-gradient(45deg, ${tone}20 0 2px, transparent 2px 4px)`
+                                    ? `repeating-linear-gradient(45deg, ${at(0.125, "20")} 0 2px, transparent 2px 4px)`
                                     : undefined,
                             }}
                             initial={reduce ? false : { rotateY: state === "up" ? 180 : 0, opacity: 0 }}
