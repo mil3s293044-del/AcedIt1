@@ -190,16 +190,16 @@ Rules:
         setBusy(true);
         try {
             const stratId = (crypto.randomUUID?.() || String(Date.now())).slice(0, 8);
-            for (const s of plan.sessions) {
-                await base44.entities.StudyPlan.create({
-                    title: `${TECHNIQUES[s.technique].label}: ${s.topic}`,
-                    subject_name: sac.subject_name || null,
-                    date: s.date,
-                    start_time: null,
-                    is_completed: false,
-                    notes: `[str:${stratId}][dur:${s.duration}] ${s.why}`,
-                });
-            }
+            // One insert. A strategy through to a SAC three weeks out is
+            // twenty-odd sessions, and every one of them was its own request.
+            await base44.entities.StudyPlan.bulkCreate(plan.sessions.map(s => ({
+                title: `${TECHNIQUES[s.technique].label}: ${s.topic}`,
+                subject_name: sac.subject_name || null,
+                date: s.date,
+                start_time: null,
+                is_completed: false,
+                notes: `[str:${stratId}][dur:${s.duration}] ${s.why}`,
+            })));
             toast({
                 variant: "success",
                 title: "Strategy locked in",

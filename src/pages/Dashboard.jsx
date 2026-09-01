@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback, useMemo, useRef } from "react"
 import { base44 } from "@/api/base44Client";
 import { motion } from "framer-motion";
 import { Target, ArrowRight,
-    GraduationCap, Zap, Flame, Brain, FileQuestion,
+    GraduationCap, Zap, Brain, FileQuestion,
     Sparkles, Trophy, Play, Layers, Timer,
     Map, BarChart3, CheckCircle2, AlertTriangle, Shield, Sprout
 } from "lucide-react";
@@ -19,7 +19,6 @@ import YourHand from "@/components/dashboard/YourHand";
 import DueRadar from "@/components/dashboard/DueRadar";
 import ClearedPile from "@/components/dashboard/ClearedPile";
 import TableGround from "@/components/dashboard/TableGround";
-import DistanceToTarget from "@/components/dashboard/DistanceToTarget";
 import TodaysPlay from "@/components/dashboard/TodaysPlay";
 import HandRail from "@/components/dashboard/HandRail";
 import RunOfSeven from "@/components/dashboard/RunOfSeven";
@@ -803,7 +802,6 @@ export default function Dashboard() {
      */
     const subjectCards = useMemo(() => subjectHand(flashcards), [flashcards]);
 
-    const hasGoal = !!(userProfile?.goal_atar || userProfile?.goal_course_name);
 
     /**
      * What setup is genuinely outstanding, derived from the profile rather than
@@ -839,14 +837,11 @@ export default function Dashboard() {
                     <div className="flex items-center justify-between mb-3">
                         <div className="flex items-center gap-2 text-xs">
                             <span className="font-bold text-muted-foreground uppercase tracking-wider">{format(new Date(), 'EEE · MMM d')}</span>
-                            {streakDays > 0 && (
-                                <>
-                                    <span className="text-muted-foreground/40">·</span>
-                                    <span className="inline-flex items-center gap-1 font-extrabold text-streak">
-                                        <Flame className="w-3.5 h-3.5" /> {streakDays}d streak
-                                    </span>
-                                </>
-                            )}
+                            {/* The streak is NOT repeated here. It has a panel
+                                below with the run of seven and the multiplier
+                                in it, and printing the number twice on one
+                                screen makes the second one look like a
+                                different statistic. */}
                             {userProfile?.acedit_atar != null && (
                                 <>
                                     <span className="text-muted-foreground/40">·</span>
@@ -916,7 +911,6 @@ export default function Dashboard() {
                     <div>
                         {streakDays > 0 ? (
                             <div className="relative overflow-hidden rounded-2xl bg-surface border border-border shadow-soft p-6 lg:p-8 h-full">
-                                <Flame className="absolute -top-6 -right-6 w-32 h-32 text-streak/[0.08] pointer-events-none" />
                                 {/* Was sm:grid-cols-12. Breakpoints are viewport-wide, not
                                     container-wide, so at 1600px the `sm:` split stayed on
                                     inside a column half the width it was written for and
@@ -1029,9 +1023,6 @@ export default function Dashboard() {
                     <Placed index={4} className="rounded-2xl bg-primary/5 border border-primary/15 on-table p-5 lg:p-6">
                         <div className="flex flex-col sm:flex-row sm:items-center gap-4">
                             <div className="flex items-center gap-3 flex-1 min-w-0">
-                                <div className="w-11 h-11 rounded-xl bg-primary/10 flex items-center justify-center flex-shrink-0">
-                                    <Sparkles className="w-5 h-5 text-primary" />
-                                </div>
                                 <div>
                                     <h3 className="font-display font-extrabold text-foreground text-base">
                                         {setup.title}
@@ -1062,55 +1053,15 @@ export default function Dashboard() {
                     </Placed>
                 )}
 
-                {/* ── DISTANCE TO TARGET ──────────────────────────────── */}
-                {/* This was a poster showing the goal ATAR as a big number and
-                    nothing else. The target sat here, the AcedIt ATAR sat on
-                    Ranked, and the two never met — so the number was a wish
-                    with no distance attached. */}
-                <motion.section
-                    initial={{ opacity: 0, y: 12 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: 0.25 }}
-                >
-                    <div>
-                        {hasGoal ? (
-                            <DistanceToTarget
-                                atar={userProfile?.acedit_atar != null ? Number(userProfile.acedit_atar) : null}
-                                goalAtar={userProfile?.goal_atar}
-                                components={userProfile?.atar_components}
-                                courseName={userProfile?.goal_course_name}
-                                university={userProfile?.goal_university}
-                                /* Onboarding asks what success looks like this year and
-                                   says the more specific it is the more it will drive
-                                   them. It was then stored and never shown again. */
-                                qualitativeGoal={userProfile?.qualitative_goal}
-                            />
-                        ) : (
-                            /* A banner rather than a centred poster: this used to
-                               be a 2/5 column where stacking made sense, and at
-                               full width the same markup became a tall box of
-                               mostly nothing. */
-                            <div className="rounded-2xl bg-surface border border-dashed border-border p-5 lg:p-6 on-table
-                                flex flex-col sm:flex-row sm:items-center gap-4 text-center sm:text-left">
-                                <div className="w-12 h-12 rounded-2xl bg-chart-3/10 flex items-center justify-center flex-shrink-0 mx-auto sm:mx-0">
-                                    <Target className="w-6 h-6 text-chart-3" />
-                                </div>
-                                <div className="min-w-0 flex-1">
-                                    <h3 className="font-display font-extrabold text-foreground text-lg lg:text-xl">
-                                        What are you chasing?
-                                    </h3>
-                                    <p className="text-muted-foreground text-sm mt-0.5">
-                                        Set your ATAR target and dream course, and we'll help you get there.
-                                    </p>
-                                </div>
-                                <Link to={createPageUrl("Goals")} className="flex-shrink-0">
-                                    <Button className="w-full sm:w-auto">Set your goal</Button>
-                                </Link>
-                            </div>
-                        )}
-                    </div>
+                {/* DISTANCE TO TARGET lived here. It answered "how am I
+                    going", which is the question Ranked and Analytics both
+                    exist to answer properly, with room to show the working.
+                    On a page whose one job is "what do I do right now", a
+                    target ATAR is a number you can look at and not act on —
+                    and it was the third progress readout on the screen after
+                    the header strip and the streak. The goal itself is still
+                    set and tracked in the Planner. */}
 
-                </motion.section>
 
                     {/* ── WHAT YOU'LL LOSE THIS WEEK ──────────────────────── */}
                     {/* Moved out of the side rail to balance the columns. Folding

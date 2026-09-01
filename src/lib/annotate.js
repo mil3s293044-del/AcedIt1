@@ -38,11 +38,23 @@ export function normaliseAnnotation(raw, i = 0) {
     const quote = str(raw?.quote || raw?.was).trim();
     if (!quote) return null;
     const worth = Number(raw?.worth);
+    // An assessor rarely has exactly one way to fix a sentence, and offering
+    // two lets a student pick the one that sounds like them rather than copy
+    // the one the model happened to write first. `fix` was the single-string
+    // first version and still reads.
+    const fixes = [
+        ...(Array.isArray(raw?.fixes) ? raw.fixes : []),
+        raw?.fix, raw?.now,
+    ].map(str).map((f) => f.trim()).filter(Boolean);
     return {
         id: `a${i}`,
         quote,
         issue: str(raw?.issue || raw?.why).trim(),
-        fix: str(raw?.fix || raw?.now).trim(),
+        // What the study design or the criterion actually asked for. This is
+        // the examiner's half — the issue says what is wrong, this says what
+        // the assessor was looking for, and a student needs both.
+        wanted: str(raw?.wanted || raw?.criterion_detail).trim(),
+        fixes: [...new Set(fixes)],
         criterion: str(raw?.criterion).trim() || "Wording",
         // "lost" — this cost a mark. "risk" — imprecise but survived.
         severity: raw?.severity === "risk" ? "risk" : "lost",

@@ -500,7 +500,9 @@ export default function MindMaps({ user, subjects = [] }) {
         const ids = [layer.row.id, ...descendantMapIds(layer.row.id)];
         setBusy(true);
         try {
-            for (const id of ids) await base44.entities.MindMap.delete(id);
+            // Nested layers delete independently — nothing here reads a row
+            // another delete is about to remove.
+            await Promise.all(ids.map(id => base44.entities.MindMap.delete(id)));
             putRows(allMapsRef.current.filter(r => !ids.includes(r.id)));
             setConfirmLayer(null);
             toast({
@@ -792,14 +794,14 @@ export default function MindMaps({ user, subjects = [] }) {
         }
         setBusy(true);
         try {
-            for (const c of cards) {
-                await base44.entities.Flashcard.create({
-                    question: c.question, answer: c.answer,
-                    subject_name: map.subject || null, topic: c.topic,
-                    next_review_date: new Date().toISOString().slice(0, 10),
-                    is_active: true,
-                });
-            }
+            // A dense map makes forty-odd cards; that was forty round trips
+            // with the button spinning through all of them.
+            await base44.entities.Flashcard.bulkCreate(cards.map(c => ({
+                question: c.question, answer: c.answer,
+                subject_name: map.subject || null, topic: c.topic,
+                next_review_date: new Date().toISOString().slice(0, 10),
+                is_active: true,
+            })));
             toast({ variant: "success", title: `${cards.length} cards made`,
                 description: "They're in Spaced Repetition, due today." });
         } catch (e) {

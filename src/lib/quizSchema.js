@@ -146,6 +146,34 @@ export function scoreFromMarks(quiz, earned = {}) {
     return Math.round((got / total) * 100);
 }
 
+/**
+ * A generated question, coerced into the stored shape.
+ *
+ * Both quiz generators — the one that builds from notes and the one that
+ * reshuffles from the source file — have to do this, and doing it twice is how
+ * one of them ends up accepting a part shape the other rejects. `marksValue`
+ * is the fallback allocation the caller's settings chose.
+ */
+export function formatGeneratedParts(raw, marksValue = DEFAULT_SHORT_MARKS) {
+    const parts = (Array.isArray(raw?.parts) ? raw.parts : [])
+        .filter((p) => p && (p.prompt || p.question))
+        .map((p, i) => {
+            const mcq = p.type === "mcq" && Array.isArray(p.options) && p.options.length >= 2;
+            return {
+                label: p.label || autoLabel(i),
+                type: mcq ? "mcq" : "short",
+                prompt: p.prompt || p.question,
+                marks: mcq ? 1 : Math.max(1, Number(p.marks) || marksValue),
+                model_answer: mcq ? undefined : (p.model_answer || ""),
+                options: mcq ? p.options.slice(0, 4) : undefined,
+                correct_answer: mcq ? (p.correct_answer ?? 0) : undefined,
+            };
+        });
+    // A question whose parts all failed the filter is a stem with nothing under
+    // it — the caller drops it rather than rendering an empty shell.
+    return parts;
+}
+
 /** A human label for a part: "3" or "3b". Used in feedback and headings. */
 export const partTitle = (q, p) =>
     p.label ? `${q.index + 1}${p.label}` : String(q.index + 1);

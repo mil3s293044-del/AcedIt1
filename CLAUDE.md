@@ -125,6 +125,23 @@ costs the next annotation its credibility. Overlaps are dropped for the same
 reason. Hover, tap and keyboard focus all open the note, because hover-only is
 unusable on a phone.
 
+The note is PORTALLED to the body and positioned `fixed` from a measured rect,
+then clamped: below the phrase, else above it, else pinned inside the viewport
+with its own scroll. All three cases are needed — a phrase near the right edge
+or low on a short viewport used to open a note that ran off the screen, which
+is the one place the marking says what to do. `position: fixed` resolves
+against a transformed ancestor, and framer-motion leaves an inline transform on
+every animated section here, so portalling is what makes `fixed` mean fixed.
+AceRoam's header records the same lesson.
+
+Each note carries what the assessor WANTED alongside what went wrong — the
+issue is the half a student can see for themselves, `wanted` is the half they
+cannot — and one or two suggested rewrites, never padded to two.
+
+The marker writes like a VCAA examiner's report: it addresses the RESPONSE and
+not the student, names the command term when the answer misread it, gives no
+praise, and says what a full-mark response would have contained.
+
 An annotation was a strikethrough over the whole phrase, off in its own card.
 Both were wrong: a strikethrough means DELETE THIS when the point is LOOK HERE,
 and lifting the phrase out of the paragraph loses the thing that makes it land.
@@ -195,6 +212,22 @@ Three things that took a rebuild to learn:
   hid the collision and also made delete unreachable on a touch screen.
 - **One pack per row on a phone is correct.** Narrowing the card to fit two
   does not fit two and clips the face trying. Two-up arrives at `sm`.
+
+## The dashboard answers one question
+
+**"What do I do right now."** Today's Play is the page; everything else is
+context around it. Progress belongs on Ranked and Analytics, which exist to
+show it properly — the distance-to-target block was removed for that reason,
+and it was the third progress readout on one screen.
+
+The table stays. `TableGround`, `Placed` and the fanned `HandRail` are the only
+place in the app with that vocabulary and they are what stop a page full of
+cards reading as a document. Concordance means the panels obey the same tokens
+and card shapes as the rest, not that the felt goes.
+
+Nothing is printed twice. The streak had its number in the header strip AND a
+panel below with the run of seven in it; the panel says it properly, so the
+strip stopped saying it at all.
 
 ## The signup tour
 
@@ -276,6 +309,48 @@ npm run dev    # vite :5173 + server.mjs :3001 concurrently
 
 `.env.local` (gitignored) holds `ANTHROPIC_API_KEY`, `VITE_BASE44_APP_ID`, `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, `VITE_USE_SUPABASE`.
 
+## Reads are cached, and pages are split
+
+Two things every session should know before adding a query or a page.
+
+**Every entity read goes through one cache** (`src/api/readCache.js`, wired in
+`supabaseClient.js`). Its real job is DEDUPE, not memory: six components mount
+on first paint and five of them ask for the same `user_profiles` row, so they
+share one promise. The 8s TTL only absorbs remount storms. react-query is
+installed and configured and still nothing uses it — caching at the shim was
+one file against migrating 159 call sites, and that trade has not changed.
+
+Invalidation is eager and coarse on purpose: any write drops every cached read
+of that table, any non-read server function drops everything (`awardXP` alone
+touches xp_events, user_profiles and leaderboards), and any auth event drops
+the lot plus the memoised email and `auth.me()`. If you add a ported function
+that only reads, put it in `READ_ONLY_FUNCTIONS`; if you are not sure what it
+writes, leave it out. Getting that wrong shows a student a stale XP total the
+moment after they earned it.
+
+**Reads page.** PostgREST caps a response at 1000 rows and says nothing about
+it, so every unbounded `.filter({...})` was silently truncating for anyone past
+that many flashcards or xp_events. `fetchPaged` walks 1000 at a time with `id`
+as a tiebreak so a row cannot land on two pages, up to a 20000 ceiling that
+WARNS when it bites rather than handing back a prefix — the same failure the
+ATAR window queries hit.
+
+**Pages are lazy** (`pages.config.js`, `Suspense` in `App.jsx`). Statically
+imported, the 24 pages plus recharts, KaTeX and html2canvas built one 4MB
+bundle that every student parsed before the dashboard painted; it is 1.4MB now
+and the dashboard adds 61KB. Landing, Login and Layout stay in the first chunk
+because they are what an unauthenticated visitor and every route respectively
+need immediately. The Suspense boundary sits INSIDE the layout so a navigation
+reads as the page filling in, not the app blinking out. `routes.test.mjs`
+accepts either binding form — a route registered against an undeclared name is
+the 404 it exists to catch, and that looks the same either way.
+
+Write loops are gone from the paths that had them (Goals, Strategise,
+StrategyCheckIn, MindMaps, BlurtingMethod, Review): same-payload rows go
+through `bulkCreate`/`bulkUpdate`, and independent ones through `Promise.all`.
+A rebuilt fortnight was thirty sequential round trips with the button spinning
+through all of them.
+
 ## Known issues / paper-cuts
 
 - Console 400s on `/study_plans` and `/flashcards` — missing-column patches. Non-blocking.
@@ -333,7 +408,11 @@ npm run dev    # vite :5173 + server.mjs :3001 concurrently
   discarded on close, the duration they picked was never read, the ATAR
   components were computed and never shown. If you add an input, wire it through
   the same session.
-- **No mascot yet** (maybe later). **No dark mode yet** (later).
+- **No mascot yet** (maybe later). **Dark mode EXISTS** — `index.css` has a
+  complete `.dark` token block and `src/lib/theme.js` offers four preferences
+  (system / light / dark / auto by the clock). This line used to say there was
+  no dark mode, which sent every session that read it to write light-only CSS.
+  Check both themes on any UI change.
 - VCAA examiner prompts live in `src/lib/subjectExaminerPrompts.js` (34 subjects).
 
 ## Working style

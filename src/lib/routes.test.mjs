@@ -50,10 +50,24 @@ check("every registered route has a component file", () => {
     assert.deepEqual(missing, [], `routes with no page file: ${missing.join(", ")}`);
 });
 
-check("every registered route is really imported", () => {
-    const missing = routeKeys.filter((k) =>
-        !new RegExp(`^import\\s+${k}\\s+from`, "m").test(config));
+// Pages are lazy now, so the binding is `const X = lazy(() => import(...))`
+// rather than a static import. Both forms are accepted: what this is really
+// checking is that the name in PAGES resolves to something, not which syntax
+// brought it in. A route registered against an undeclared name is the 404 this
+// file exists to catch, and it looks identical either way.
+check("every registered route is really bound to a module", () => {
+    const bound = (k) =>
+        new RegExp(`^import\\s+${k}\\s+from`, "m").test(config) ||
+        new RegExp(`^const\\s+${k}\\s*=\\s*lazy\\(`, "m").test(config);
+    const missing = routeKeys.filter((k) => !bound(k));
     assert.deepEqual(missing, [], `registered but not imported: ${missing.join(", ")}`);
+});
+
+check("every lazy page points at its own file", () => {
+    const pairs = [...config.matchAll(/^const\s+(\w+)\s*=\s*lazy\(\(\) => import\('\.\/pages\/(\w+)'\)\)/gm)];
+    const wrong = pairs.filter(([, name, file]) => name !== file).map(([, n, f]) => `${n} -> ${f}`);
+    assert.deepEqual(wrong, [], `lazy binding points at the wrong page: ${wrong.join(", ")}`);
+    assert.ok(pairs.length > 10, `only ${pairs.length} lazy pages parsed`);
 });
 
 check("nothing was written into the header comment by mistake", () => {

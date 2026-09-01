@@ -408,16 +408,17 @@ export default function Planner() {
         if (!sessions?.length) { setWeekPlanOpen(false); return; }
         setWeekPlanSaving(true);
         try {
-            for (const s of sessions) {
-                await base44.entities.StudyPlan.create({
-                    title: s.title,
-                    subject_name: s.subject_name || null,
-                    date: s.date,
-                    start_time: s.start_time || null,
-                    is_completed: false,
-                    notes: `[dur:${Math.round(s.duration_minutes)}]`,
-                });
-            }
+            // One insert, not one per session. A generated week is a dozen
+            // rows and the loop made the student watch a dozen round trips
+            // finish before the dialog would close.
+            await base44.entities.StudyPlan.bulkCreate(sessions.map(s => ({
+                title: s.title,
+                subject_name: s.subject_name || null,
+                date: s.date,
+                start_time: s.start_time || null,
+                is_completed: false,
+                notes: `[dur:${Math.round(s.duration_minutes)}]`,
+            })));
             toast({
                 title: `${sessions.length} sessions on your week`,
                 description: "Move anything that clashes — it's your week, not the app's.",
@@ -595,16 +596,16 @@ export default function Planner() {
                 ? `${planType}: ${planTitle.trim()}`
                 : planTitle.trim();
             const notes = buildNotes(recId, planDuration, planNote, null);
-            for (let i = 0; i < weeks; i++) {
-                await base44.entities.StudyPlan.create({
+            // A weekly repeat over a term is one insert, not one per week.
+            await base44.entities.StudyPlan.bulkCreate(
+                Array.from({ length: weeks }, (_, i) => ({
                     title: finalTitle,
                     subject_name: planSubject || null,
                     date: format(addDays(parseISO(planDay), i * 7), "yyyy-MM-dd"),
                     start_time: planTime || null,
                     is_completed: false,
                     notes,
-                });
-            }
+                })));
             if (repeatWeekly) toast({ title: `Weekly for ${weeks} weeks`, description: "The series is on the board — delete any one to trim it." });
             setPlanTitle(""); setPlanType(""); setPlanNote(""); setRepeatWeekly(false);
             closePlanDialog();
@@ -731,7 +732,10 @@ export default function Planner() {
 
     const deletePlans = async (list) => {
         try {
-            for (const p of list) await base44.entities.StudyPlan.delete(p.id);
+            // "Delete future" on a weekly recurrence is a term's worth of rows;
+            // sequentially that is one round trip each with nothing between
+            // them to wait for.
+            await Promise.all(list.map(p => base44.entities.StudyPlan.delete(p.id)));
             setPlans(prev => prev.filter(x => !list.some(d => d.id === x.id)));
             setDeleteTarget(null);
         } catch { toast({ title: "Couldn't remove", variant: "destructive" }); }
@@ -802,9 +806,10 @@ export default function Planner() {
                 const m = moves.find(x => x.plan.id === p.id);
                 return m ? { ...p, date: m.date, start_time: m.time } : p;
             }));
-            for (const m of moves) {
-                await base44.entities.StudyPlan.update(m.plan.id, { date: m.date, start_time: m.time });
-            }
+            // Each row takes a different date, so this is not a bulkUpdate —
+            // but they don't depend on each other either, so they go together.
+            await Promise.all(moves.map(m =>
+                base44.entities.StudyPlan.update(m.plan.id, { date: m.date, start_time: m.time })));
 
             // Undo only what moved. `before` covers every missed session, and
             // writing a row back to the value it already holds is a wasted
@@ -815,9 +820,9 @@ export default function Planner() {
                     const b = movedBefore.find(x => x.id === p.id);
                     return b ? { ...p, date: b.date, start_time: b.start_time } : p;
                 }));
-                for (const b of movedBefore) {
-                    try { await base44.entities.StudyPlan.update(b.id, { date: b.date, start_time: b.start_time }); } catch { /* board is already back */ }
-                }
+                await Promise.all(movedBefore.map(b =>
+                    base44.entities.StudyPlan.update(b.id, { date: b.date, start_time: b.start_time })
+                        .catch(() => { /* board is already back */ })));
             };
             // Name the days rather than claiming "this week" — with enough
             // missed sessions the tail lands beyond the visible board, and a

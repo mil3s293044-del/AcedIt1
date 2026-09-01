@@ -143,17 +143,19 @@ Rules:
             // session already ticked off is a record of something that
             // happened; rewriting it would be rewriting history.
             const replaceable = strategy.future.filter(s => !s.is_completed);
-            for (const s of replaceable) await base44.entities.StudyPlan.delete(s.id);
-            for (const s of revised.sessions) {
-                await base44.entities.StudyPlan.create({
-                    title: `${TECHNIQUES[s.technique].label}: ${s.topic}`,
-                    subject_name: strategy.subject || null,
-                    date: s.date,
-                    start_time: null,
-                    is_completed: false,
-                    notes: `[str:${strategy.id}][dur:${s.duration}] ${s.why}`,
-                });
-            }
+            // The delete has to finish before the insert, or the two sets
+            // overlap on the board for a beat. Within each half nothing waits
+            // on anything, so each half goes at once — a rebuilt fortnight was
+            // thirty sequential round trips.
+            await Promise.all(replaceable.map(s => base44.entities.StudyPlan.delete(s.id)));
+            await base44.entities.StudyPlan.bulkCreate(revised.sessions.map(s => ({
+                title: `${TECHNIQUES[s.technique].label}: ${s.topic}`,
+                subject_name: strategy.subject || null,
+                date: s.date,
+                start_time: null,
+                is_completed: false,
+                notes: `[str:${strategy.id}][dur:${s.duration}] ${s.why}`,
+            })));
 
             toast({
                 variant: "success",

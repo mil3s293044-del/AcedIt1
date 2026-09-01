@@ -12,6 +12,7 @@
 
 import { createClient, processLock } from '@supabase/supabase-js';
 import { apiUrl } from '@/lib/apiBase';
+import { createReadCache } from './readCache.js';
 
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
@@ -119,18 +120,95 @@ function applyWhere(query, where) {
   return query;
 }
 
+// ─── Read cache ─────────────────────────────────────────────────────────────
+// Shared by every entity. See readCache.js for what it does and does not
+// promise. Exported so the dev tools and tests can inspect and clear it.
+export const readCache = createReadCache();
+
+// A read is identified by everything that changes its answer. Object key order
+// varies between call sites that pass the same filter, so the keys are sorted
+// before stringifying or two identical queries would miss each other.
+function cacheKey(op, where, sort, limit) {
+  const norm = (v) => {
+    if (Array.isArray(v)) return v.map(norm);
+    if (v && typeof v === 'object') {
+      return Object.keys(v).sort().reduce((o, k) => { o[k] = norm(v[k]); return o; }, {});
+    }
+    return v;
+  };
+  return JSON.stringify([op, norm(where ?? null), sort ?? null, limit ?? null]);
+}
+
+// PostgREST caps a response at 1000 rows and says nothing about it — the row
+// count just stops. Every unbounded `.filter({...})` in the app (110 of them)
+// has been silently truncating for any student past that many flashcards or
+// xp_events. So reads PAGE: 1000 at a time until the server runs out or we hit
+// the ceiling below.
+const PAGE_SIZE = 1000;
+
+// The ceiling is a guard against a runaway query, not a row budget, and it
+// warns when it bites instead of quietly handing back a prefix — the exact
+// failure the ATAR window queries hit, where an unordered `.limit(n)` on
+// xp_events cost heavy users breadth, effort and mastery at once.
+const ROW_CEILING = 20000;
+
+async function fetchPaged(table, { where, sort, limit, columns = '*' }) {
+  const cap = limit && limit > 0 ? limit : ROW_CEILING;
+  const out = [];
+  for (let from = 0; from < cap; from += PAGE_SIZE) {
+    const to = Math.min(from + PAGE_SIZE, cap) - 1;
+    let q = supabase.from(table).select(columns);
+    q = applyWhere(q, where);
+    q = applySort(q, sort);
+    // Ties in the sort column would let a row appear on two pages and another
+    // on none. id is unique, so it makes the order total.
+    if (sort) q = q.order('id', { ascending: true });
+    const { data, error } = await q.range(from, to);
+    if (error) throw error;
+    const batch = data ?? [];
+    out.push(...batch);
+    if (batch.length < to - from + 1) return out;   // server ran out
+  }
+  if (!limit && out.length >= ROW_CEILING) {
+    console.warn(
+      `[supabaseClient] '${table}' hit the ${ROW_CEILING}-row ceiling and was truncated. ` +
+      `This read needs a narrower filter or an explicit limit — what came back is a prefix, not the whole set.`,
+      { where, sort },
+    );
+  }
+  return out;
+}
+
+// ─── Memoised session email ─────────────────────────────────────────────────
+// Every create() and bulkCreate() stamped created_by, and each one paid an
+// auth round trip to learn an email that cannot change without a sign-in.
+// Held until the auth state actually changes.
+let _emailMemo = null;
+
 async function currentUserEmail() {
+  if (_emailMemo) return _emailMemo;
   // Prefer getSession() (fast, cached) over getUser() (network round-trip that
   // can fail during token-refresh races or when the tab has been backgrounded).
   const { data: { session } } = await supabase.auth.getSession();
-  if (session?.user?.email) return session.user.email;
+  if (session?.user?.email) { _emailMemo = session.user.email; return _emailMemo; }
   // Fallback: validate against the Auth server (handles edge cases where the
   // cached session is stale).
   try {
     const { data: { user } } = await supabase.auth.getUser();
-    return user?.email ?? null;
+    _emailMemo = user?.email ?? null;
+    return _emailMemo;
   } catch { return null; }
 }
+
+// Sign-in, sign-out and user-update all mean the memo and every cached read
+// belong to someone else now. TOKEN_REFRESHED is deliberately not in the list:
+// it fires on a timer and would flush the cache for nobody's benefit.
+supabase.auth.onAuthStateChange((event) => {
+  if (event === 'TOKEN_REFRESHED') return;
+  _emailMemo = null;
+  resetMeMemo();
+  readCache.clear();
+});
 
 function makeEntity(entityName) {
   const table = TABLES[entityName];
@@ -145,13 +223,16 @@ function makeEntity(entityName) {
 
   const ops = {
     async filter(where = {}, sort = '-created_date', limit) {
-      let q = supabase.from(table).select('*');
-      q = applyWhere(q, where);
-      q = applySort(q, sort);
-      if (limit) q = q.limit(limit);
-      const { data, error } = await q;
-      if (error) throw error;
-      return data ?? [];
+      // The cached value is shared between every caller of this key, and call
+      // sites sort and splice what they get back. They get their own array;
+      // the rows inside are shared, same as two components reading the same
+      // row from a store.
+      const rows = await readCache.read(
+        table,
+        cacheKey('filter', where, sort, limit),
+        () => fetchPaged(table, { where, sort, limit }),
+      );
+      return rows.slice();
     },
 
     async list(sort = '-created_date', limit) {
@@ -159,9 +240,11 @@ function makeEntity(entityName) {
     },
 
     async get(id) {
-      const { data, error } = await supabase.from(table).select('*').eq('id', id).single();
-      if (error) throw error;
-      return data;
+      return readCache.read(table, cacheKey('get', { id }), async () => {
+        const { data, error } = await supabase.from(table).select('*').eq('id', id).single();
+        if (error) throw error;
+        return data;
+      });
     },
 
     async create(payload) {
@@ -169,18 +252,21 @@ function makeEntity(entityName) {
       const row = email ? { created_by: email, ...payload } : { ...payload };
       const { data, error } = await supabase.from(table).insert(row).select().single();
       if (error) throw error;
+      readCache.invalidate(table);
       return data;
     },
 
     async update(id, payload) {
       const { data, error } = await supabase.from(table).update(payload).eq('id', id).select().single();
       if (error) throw error;
+      readCache.invalidate(table);
       return data;
     },
 
     async delete(id) {
       const { error } = await supabase.from(table).delete().eq('id', id);
       if (error) throw error;
+      readCache.invalidate(table);
       return { id };
     },
 
@@ -204,6 +290,7 @@ function makeEntity(entityName) {
         if (error) throw error;
         out.push(...(data ?? []));
       }
+      readCache.invalidate(table);
       return out;
     },
 
@@ -213,6 +300,7 @@ function makeEntity(entityName) {
       const stamped = email ? rows.map(r => ({ created_by: email, ...r })) : rows;
       const { data, error } = await supabase.from(table).insert(stamped).select();
       if (error) throw error;
+      readCache.invalidate(table);
       return data ?? [];
     },
 
@@ -230,8 +318,25 @@ function makeEntity(entityName) {
 }
 
 // ─── Auth surface — matches base44.auth.* shape used in the codebase ────────
+
+// 46 call sites ask who the user is, most of them from a mount effect, and
+// they all resolve to one row that cannot change without an auth event. The
+// promise itself is memoised, so a burst on first paint is one resolution
+// rather than 46 racing through the session lock. Cleared by the auth-state
+// listener above, alongside the email memo and the read cache.
+let _mePromise = null;
+
+function resetMeMemo() { _mePromise = null; }
+
 const authApi = {
   async me() {
+    if (!_mePromise) {
+      _mePromise = authApi._loadMe().catch((err) => { _mePromise = null; throw err; });
+    }
+    return _mePromise;
+  },
+
+  async _loadMe() {
     // Prefer getSession() (reads the session already restored from storage,
     // no network round trip) over getUser() alone — called this early, right
     // after a fresh page load, the client can still be mid-restore and
@@ -287,6 +392,7 @@ const authApi = {
   async updateMe(patch) {
     const { data, error } = await supabase.auth.updateUser({ data: patch });
     if (error) throw error;
+    resetMeMemo();
     return data.user;
   },
 };
@@ -353,8 +459,30 @@ const PORTED_FUNCTIONS = {
   // ...
 };
 
+// Functions that only read. Everything else writes rows we cannot see from
+// here — awardXP alone touches xp_events, user_profiles and leaderboards — so
+// anything not on this list flushes the whole read cache when it returns.
+// Getting a name wrong in the safe direction costs one refetch; getting it
+// wrong the other way shows a student a stale XP total right after they earned
+// it, so a function whose behaviour you are unsure of does NOT go here.
+const READ_ONLY_FUNCTIONS = new Set([
+  'getRankedBoards', 'getArenaState', 'getMyStakes', 'getCallouts',
+  'extractDocumentText', 'invokeAI', 'mindMapGaps',
+]);
+
 const functionsApi = {
   async invoke(name, payload) {
+    try {
+      return await functionsApi._invoke(name, payload);
+    } finally {
+      // After, not before: a read that fires while the function is running
+      // would otherwise cache the pre-write state and outlive the flush. In
+      // `finally` because a function that throws may still have written.
+      if (!READ_ONLY_FUNCTIONS.has(name)) readCache.clear();
+    }
+  },
+
+  async _invoke(name, payload) {
     const url = PORTED_FUNCTIONS[name];
     if (url) {
       // Attach the user's Supabase JWT so server.mjs can identify them.

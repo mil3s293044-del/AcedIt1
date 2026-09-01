@@ -134,7 +134,9 @@ export default function Review() {
                         if (!groups.has(key)) groups.set(key, { payload: p, ids: [] });
                         groups.get(key).ids.push(id);
                     }
-                    for (const g of groups.values()) await base44.entities.Flashcard.bulkUpdate(g.ids, g.payload);
+                    // Distinct payloads, so the groups are independent.
+                    await Promise.all([...groups.values()].map(g =>
+                        base44.entities.Flashcard.bulkUpdate(g.ids, g.payload)));
                 } else {
                     await base44.entities.Flashcard.bulkUpdate(idList, payload);
                 }

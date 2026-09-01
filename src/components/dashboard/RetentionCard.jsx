@@ -75,6 +75,13 @@ function RetentionBar({ slipping, falling, total, days }) {
 export default function RetentionCard({ flashcards = [], days = 7 }) {
     const o = useMemo(() => retentionOutlook(flashcards, { days }), [flashcards, days]);
 
+    // Nothing reviewed yet means there is no projection to make, and a panel
+    // whose whole content is "this fills in once you start a deck" plus a
+    // four-line disclaimer about the forgetting curve is 200px of the page
+    // spent telling a student they have no data. The dashboard's one job is
+    // what to do right now; this has nothing to contribute until it does.
+    if (!o.hasData) return null;
+
     return (
         <div className="card-soft on-table border-2 border-border p-5">
             <div className="flex items-center gap-2 mb-3">

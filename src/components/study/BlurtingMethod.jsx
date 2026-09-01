@@ -349,11 +349,10 @@ Reference Study Design requirements in your feedback.`,
         if (!missed.length) return;
         setMakingCards(true);
         try {
-            let made = 0;
-            for (const point of missed) {
-                const text = String(point || "").trim();
-                if (!text) continue;
-                await base44.entities.Flashcard.create({
+            const rows = missed
+                .map(point => String(point || "").trim())
+                .filter(Boolean)
+                .map(text => ({
                     subject_name: selectedSubject || null,
                     topic: topic || "Blurting gaps",
                     // The miss IS the answer; the prompt asks for it back.
@@ -364,9 +363,9 @@ Reference Study Design requirements in your feedback.`,
                     // demonstrably is one.
                     is_weak_spot: true,
                     next_review_date: format(new Date(), "yyyy-MM-dd"),
-                });
-                made++;
-            }
+                }));
+            await base44.entities.Flashcard.bulkCreate(rows);
+            const made = rows.length;
             setCardsMade(made);
             toast({
                 title: `${made} card${made === 1 ? "" : "s"} made`,
