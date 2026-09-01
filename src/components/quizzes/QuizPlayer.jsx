@@ -22,6 +22,7 @@ import InkPad from "@/components/quizzes/InkPad";
 import MarkPanel from "@/components/quizzes/marking/MarkPanel";
 import { normaliseMark } from "@/lib/quizMarking";
 import { normaliseQuestion } from "@/lib/quizSchema";
+import { cardFromAnnotation, bankKey } from "@/lib/mistakeBank";
 import MarkdownMath from "@/components/shared/MarkdownMath";
 import MathText from "@/components/shared/LatexRenderer";
 import { getLatexRules } from "@/lib/subjectExaminerPrompts";
@@ -312,6 +313,9 @@ export default function QuizPlayer({ quiz, onExit, mode = "standard", timeLimitM
     // a line corrected. The ANSWER is the transcript these produce; the strokes
     // live here for the length of the attempt.
     const [inkLines, setInkLines] = useState({});
+    // Phrases already banked this session, so the button can say so rather than
+    // quietly making a second identical card.
+    const [banked, setBanked] = useState(new Set());
     const [, forceUpdate] = useState(0);
     const mathInputRefs = useState({})[0];
     const [currentFeedbackIndex, setCurrentFeedbackIndex] = useState(0);
@@ -414,6 +418,34 @@ In two or three sentences, explain what makes that the right answer and what the
             toast({ title: "Couldn't explain that one", description: e?.message || "Try again in a moment.", variant: "destructive" });
         } finally {
             setAskingWhy(p => ({ ...p, [idx]: false }));
+        }
+    };
+
+    /**
+     * Bank one annotated phrase as a flashcard.
+     *
+     * A mistake is worth keeping only if it comes back, so it goes into the
+     * deck the spaced-repetition engine already reviews rather than into a
+     * list of its own — see mistakeBank's header.
+     */
+    const bankMistake = async (ann) => {
+        const key = bankKey(ann);
+        if (!key || banked.has(key)) return;
+        const q = shuffledQuiz.questions[currentFeedbackIndex];
+        const card = cardFromAnnotation(ann, {
+            subject: shuffledQuiz.subject,
+            questionTitle: q?.question,
+        });
+        if (!card) return;
+        // Marked optimistically: the button is a promise about a card that will
+        // exist, and re-enabling it on a slow network invites a duplicate.
+        setBanked(prev => new Set(prev).add(key));
+        try {
+            await base44.entities.Flashcard.create(card);
+            toast({ title: "Added to your mistake bank", description: "It'll come back in your reviews." });
+        } catch (e) {
+            setBanked(prev => { const next = new Set(prev); next.delete(key); return next; });
+            toast({ title: "Couldn't save that one", description: e?.message || "Try again in a moment.", variant: "destructive" });
         }
     };
 
@@ -737,7 +769,7 @@ Question: ${q.question}
 Student Answer: ${q.student_answer}${q.type === 'short' && q.previous_answer ? `\nPrevious Answer: ${q.previous_answer}` : ''}
 ${q.type === 'mcq' ? `Correct Answer: ${q.correct_answer}` : `Model Answer: ${q.model_answer}`}`).join('\n---\n')}
 
-For EACH question return: marks, criteria, edits, what_wrong, improve${hasShortWithPrevious ? ', comparison' : ''}.
+For EACH question return: marks, criteria, annotations, what_wrong, improve${hasShortWithPrevious ? ', comparison' : ''}.
 For a question that scored full marks, leave what_wrong and improve as empty strings — do not write praise.
 
 CRITERIA are the marks themselves, itemised — one entry per mark the assessor
@@ -748,11 +780,22 @@ produce: "you dropped the mark for naming the electron transfer" is something a
 student can act on, and "2/4" is not. Write the criterion as the assessor would
 phrase it, not as a comment on the student.
 
-EDITS are word or short-phrase swaps IN THE STUDENT'S OWN WORDS. "was" must be
-text they actually wrote, quoted exactly; "now" is what would have scored;
-"why" is one sentence on what the swap buys. Only include an edit where the
-wording genuinely costs a mark — never a stylistic preference, and never on an
-answer that scored full marks. Zero edits is a normal and common answer.
+ANNOTATIONS point at the exact words that cost the mark, so they can be
+underlined in the student's own answer.
+
+  - "quote" MUST be copied from their answer CHARACTER FOR CHARACTER — same
+    case, same punctuation, same spacing. It is matched against their text
+    exactly, and anything that does not match is silently discarded, so a
+    paraphrase is the same as sending nothing.
+  - Quote the SHORTEST span that carries the problem. A whole sentence tells
+    the student to rewrite a sentence; four words tells them what to change.
+  - "issue" is one sentence on what an assessor sees wrong with those words.
+  - "fix" is the wording that would have scored.
+  - "severity" is "lost" when it cost a mark, "risk" when it survived but is
+    imprecise.
+  - Only annotate where the wording genuinely matters — never a stylistic
+    preference, and never on an answer that scored full marks. Zero
+    annotations is a normal and common answer.
 Return exactly ${questionsForAnalysis.length} items.
 
 THEN look ACROSS every question that lost marks and find the THEMES.
@@ -792,18 +835,19 @@ invent a theme from a single question.`,
                                             required: ["text", "got", "worth"]
                                         }
                                     },
-                                    edits: {
+                                    annotations: {
                                         type: "array",
                                         items: {
                                             type: "object",
                                             properties: {
-                                                was: { type: "string" },
-                                                now: { type: "string" },
-                                                why: { type: "string" },
+                                                quote: { type: "string" },
+                                                issue: { type: "string" },
+                                                fix: { type: "string" },
                                                 criterion: { type: "string" },
+                                                severity: { type: "string", enum: ["lost", "risk"] },
                                                 worth: { type: "number" }
                                             },
-                                            required: ["was", "now", "why"]
+                                            required: ["quote", "issue", "fix"]
                                         }
                                     }
                                 },
@@ -1321,7 +1365,13 @@ invent a theme from a single question.`,
                                                         transfer was not named, is the same
                                                         finding twice. */}
                                                     {currentFeedback.mark?.itemised && (
-                                                        <MarkPanel mark={currentFeedback.mark} />
+                                                        <MarkPanel
+                                                            mark={currentFeedback.mark}
+                                                            answer={typeof userAnswers[currentFeedbackIndex] === "string"
+                                                                ? userAnswers[currentFeedbackIndex] : ""}
+                                                            onBank={bankMistake}
+                                                            banked={banked}
+                                                        />
                                                     )}
                                                     {!currentFeedback.mark?.itemised && currentFeedback.student_error_analysis && (
                                                         <div data-panel="wrong" className={`${FEEDBACK_PANEL.wrong} border rounded-2xl p-4`}>

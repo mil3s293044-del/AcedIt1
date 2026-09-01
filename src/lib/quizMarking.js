@@ -28,6 +28,8 @@
  * zero rather than poisoning the total.
  */
 
+import { normaliseAnnotation } from "@/lib/annotate";
+
 const str = (v) => (typeof v === "string" ? v.trim() : "");
 const clamp = (n, lo, hi) => Math.max(lo, Math.min(hi, n));
 
@@ -73,6 +75,13 @@ export function normaliseMark(raw, outOf = 1) {
     const edits = (Array.isArray(m.edits) ? m.edits : [])
         .map(normaliseEdit)
         .filter(Boolean);
+    // Spans of the student's own answer to underline in place. `edits` was the
+    // first shape of this and normaliseAnnotation still reads it, so a marker
+    // response written against the old prompt keeps working.
+    const annotations = [
+        ...(Array.isArray(m.annotations) ? m.annotations : []),
+        ...(Array.isArray(m.edits) ? m.edits : []),
+    ].map(normaliseAnnotation).filter(Boolean);
 
     const stated = Number(m.marks);
     let marks = Number.isFinite(stated) ? clamp(stated, 0, max) : 0;
@@ -92,11 +101,12 @@ export function normaliseMark(raw, outOf = 1) {
         outOf: max,
         criteria,
         edits,
+        annotations,
         // Kept so a response with no itemisation renders exactly as it used to.
         whatWrong: str(m.what_wrong || m.whatWrong),
         improve: str(m.improve),
         reconciled,
-        itemised: criteria.length > 0 || edits.length > 0,
+        itemised: criteria.length > 0 || annotations.length > 0,
     };
 }
 

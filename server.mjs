@@ -36,6 +36,18 @@ const MODEL = process.env.ANTHROPIC_MODEL || "claude-sonnet-4-6";
 // to the default model if not configured, so behaviour is unchanged until an
 // id is set in the Render dashboard.
 const FAST_MODEL = process.env.ANTHROPIC_FAST_MODEL || MODEL;
+/**
+ * Vision work — reading a student's handwriting off the ink pad — goes to a
+ * stronger model than the prose tools.
+ *
+ * The transcription was inheriting MODEL, and Sonnet 4.6 reads handwritten
+ * maths noticeably worse than a current Opus: the difference shows up on
+ * exactly the things that matter here, which are superscripts, fraction bars
+ * and the difference between a badly written 4 and a 9. It is also the
+ * cheapest call in the app — a few hundred output tokens over one small
+ * cropped image — so the tier costs almost nothing per use.
+ */
+const VISION_MODEL = process.env.ANTHROPIC_VISION_MODEL || "claude-opus-5";
 
 // A missing key used to be process.exit(1). On a laptop that reads as a helpful
 // nudge; on a host it means one absent secret takes the entire site down — no
@@ -2383,8 +2395,10 @@ app.post("/local-ai/invokeAIStream", async (req, res) => {
       // depending only on whether it happened to stream.
       model: modelFor(tierProfile?.ai_model_preference, feature, {
         fast: params.fast,
+        vision: params.vision === true,
         standardModel: MODEL,
         fastModel: FAST_MODEL,
+        visionModel: VISION_MODEL,
       }),
       max_tokens: maxTokens,
       messages: [{ role: "user", content: userContent }],
@@ -2748,8 +2762,10 @@ app.post("/local-ai/invokeAI", async (req, res) => {
       // model id is a client-supplied bill.
       model: modelFor(tierProfile?.ai_model_preference, feature, {
         fast: params.fast,
+        vision: params.vision === true,
         standardModel: MODEL,
         fastModel: FAST_MODEL,
+        visionModel: VISION_MODEL,
       }),
       max_tokens: 32000,
       messages: [{ role: "user", content: userContent }],
