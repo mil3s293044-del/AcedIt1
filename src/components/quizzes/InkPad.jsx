@@ -137,6 +137,9 @@ export default function InkPad({ lines = [], onChange, subject, disabled = false
             const { file_url } = await base44.integrations.Core.UploadFile({ file });
             const res = await base44.integrations.Core.InvokeLLM({
                 feature: "quiz_ai_mark",
+                // Routes to the vision model rather than the prose default —
+                // see VISION_MODEL in server.mjs for why that is not a detail.
+                vision: true,
                 prompt: `This image is ONE line of handwritten working from a VCE ${subject || "Mathematics"} student.
 
 Transcribe exactly what is written. Rules:

@@ -100,6 +100,46 @@ unanswered. Only genuinely multi-part questions suffix.
 
 Marks are the currency: score is a percentage of marks available, not of
 questions answered, so a four-mark part b counts double a two-mark part a.
+Three places used to compute a question's allocation by hand as
+`q.type === 'mcq' ? 1 : (q.marks || 5)` and all three read 5 for a multipart
+question worth nine — they go through `normaliseQuestion(q, i).marks` now,
+which returns exactly the old value for a legacy question.
+
+**The player branches ONCE.** `MultipartQuestion` owns the whole part-shaped
+screen — stem in a quieter box, parts stacked below with the allocation
+right-aligned the way a paper prints it, textarea rows scaling with the marks.
+Everything else stays on the path it always took, which is why this cannot
+reach the quizzes that already exist. Marking stays ONE entry per question with
+the parts laid out inside the prompt, because the score, the feedback array and
+the attempt row are all indexed by question.
+
+Only the main generator (`handleGenerateQuiz`) emits parts. Reshuffle still
+produces flat questions.
+
+**Annotations point at characters, and an unquotable one is dropped.** The
+marker returns a verbatim `quote` from the student's answer; `annotate.js`
+finds it by EXACT string match and underlines only those characters, in place,
+in their own paragraph. No fuzzy matching — underlining the wrong six words and
+saying they cost a mark sends a student to rewrite a sentence that was fine and
+costs the next annotation its credibility. Overlaps are dropped for the same
+reason. Hover, tap and keyboard focus all open the note, because hover-only is
+unusable on a phone.
+
+An annotation was a strikethrough over the whole phrase, off in its own card.
+Both were wrong: a strikethrough means DELETE THIS when the point is LOOK HERE,
+and lifting the phrase out of the paragraph loses the thing that makes it land.
+
+**The mistake bank is flashcards with a marker** (`topic: "Mistake bank"`), so a
+banked mistake comes back through the SM-2 engine that already exists rather
+than sitting in a list nobody opens — same move blurting's `makeCardsFromMisses`
+already makes. The card asks for the FIX, never for the mistake; a card that
+rehearses the error is the opposite of the point.
+
+**Handwriting goes to `VISION_MODEL`**, not the prose default — Saver included.
+A downgraded model produces a wrong transcript and the transcript is what gets
+MARKED, so the saving comes out of the student's marks. Mathpix's `v3/strokes`
+endpoint takes the exact shape `ink.js` already produces and is purpose-built
+for this; it is not wired up, and doing so needs an account and a key.
 
 **Marking is itemised, and the itemisation is the truth.** `quizMarking.js`
 returns criteria (what the assessor wanted, each got or missed, each worth n

@@ -19,9 +19,11 @@ import { recordStudyAndGetStreak } from "@/components/shared/streakHelpers";
 import MathKeyboard from "../shared/MathKeyboard";
 import MathInput from "../shared/MathInput";
 import InkPad from "@/components/quizzes/InkPad";
+import MultipartQuestion from "@/components/quizzes/MultipartQuestion";
 import MarkPanel from "@/components/quizzes/marking/MarkPanel";
 import { normaliseMark } from "@/lib/quizMarking";
 import { normaliseQuestion } from "@/lib/quizSchema";
+import { cardFromAnnotation, bankKey } from "@/lib/mistakeBank";
 import MarkdownMath from "@/components/shared/MarkdownMath";
 import MathText from "@/components/shared/LatexRenderer";
 import { getLatexRules } from "@/lib/subjectExaminerPrompts";
@@ -312,6 +314,9 @@ export default function QuizPlayer({ quiz, onExit, mode = "standard", timeLimitM
     // a line corrected. The ANSWER is the transcript these produce; the strokes
     // live here for the length of the attempt.
     const [inkLines, setInkLines] = useState({});
+    // Phrases already banked this session, so the button can say so rather than
+    // quietly making a second identical card.
+    const [banked, setBanked] = useState(new Set());
     const [, forceUpdate] = useState(0);
     const mathInputRefs = useState({})[0];
     const [currentFeedbackIndex, setCurrentFeedbackIndex] = useState(0);
@@ -417,6 +422,34 @@ In two or three sentences, explain what makes that the right answer and what the
         }
     };
 
+    /**
+     * Bank one annotated phrase as a flashcard.
+     *
+     * A mistake is worth keeping only if it comes back, so it goes into the
+     * deck the spaced-repetition engine already reviews rather than into a
+     * list of its own — see mistakeBank's header.
+     */
+    const bankMistake = async (ann) => {
+        const key = bankKey(ann);
+        if (!key || banked.has(key)) return;
+        const q = shuffledQuiz.questions[currentFeedbackIndex];
+        const card = cardFromAnnotation(ann, {
+            subject: shuffledQuiz.subject,
+            questionTitle: q?.question,
+        });
+        if (!card) return;
+        // Marked optimistically: the button is a promise about a card that will
+        // exist, and re-enabling it on a slow network invites a duplicate.
+        setBanked(prev => new Set(prev).add(key));
+        try {
+            await base44.entities.Flashcard.create(card);
+            toast({ title: "Added to your mistake bank", description: "It'll come back in your reviews." });
+        } catch (e) {
+            setBanked(prev => { const next = new Set(prev); next.delete(key); return next; });
+            toast({ title: "Couldn't save that one", description: e?.message || "Try again in a moment.", variant: "destructive" });
+        }
+    };
+
     /** Anything that points at a question also switches to the question view. */
     const openQuestion = (i) => { setCurrentFeedbackIndex(i); setResultsView("questions"); };
 
@@ -464,6 +497,11 @@ In two or three sentences, explain what makes that the right answer and what the
     };
 
     const currentQuestion = shuffledQuiz.questions[currentQuestionIndex];
+    // The same question through the adapter. `multipart` is the ONE branch the
+    // player takes for the part-shaped screen; everything else stays on the
+    // path it has always taken, which is why this change cannot reach the
+    // quizzes people already have.
+    const currentShape = normaliseQuestion(currentQuestion, currentQuestionIndex);
     const totalQ = shuffledQuiz.questions.length;
 
     const saveProgressToDatabase = async () => {
@@ -649,7 +687,10 @@ In two or three sentences, explain what makes that the right answer and what the
      * something real to read. Lives in `extra` so it needs no migration.
      */
     const buildQuestionResults = (marksFor) => shuffledQuiz.questions.map((q, i) => {
-        const max = q.type === 'mcq' ? 1 : (q.marks || 5);
+        // Through the adapter, not by hand: a multipart question is worth the
+        // sum of its parts, and `q.marks` on one of those is undefined. For a
+        // legacy question this returns exactly what the old expression did.
+        const max = normaliseQuestion(q, i).marks;
         const { marks, correct } = marksFor(q, i, max);
         return {
             q_index: i,
@@ -699,6 +740,30 @@ In two or three sentences, explain what makes that the right answer and what the
             const questionsForAnalysis = shuffledQuiz.questions.map((question, index) => {
                 const userAnswer = userAnswers[index];
                 const prevAnswer = previousAnswers[index];
+                const shape = normaliseQuestion(question, index);
+                if (shape.multipart) {
+                    // One entry per QUESTION even though it has several parts,
+                    // because the score, the feedback array and the attempt row
+                    // are all indexed by question. The parts go INSIDE it, each
+                    // with its own prompt, answer and allocation, so the marker
+                    // can still say which part lost the mark.
+                    return {
+                        q_num: index + 1,
+                        type: 'short',
+                        question: shape.stem,
+                        marks_allocation: shape.marks,
+                        parts: shape.parts.map((p) => ({
+                            label: p.label,
+                            prompt: p.prompt,
+                            marks: p.marks,
+                            student_answer: p.type === 'mcq'
+                                ? (userAnswers[p.key] !== undefined
+                                    ? p.options?.[parseInt(userAnswers[p.key], 10)] : "No answer provided")
+                                : (userAnswers[p.key] || "No answer provided"),
+                            model_answer: p.model_answer || "Not provided",
+                        })),
+                    };
+                }
                 if (question.type === 'mcq') {
                     const selectedOption = userAnswer !== undefined ? question.options[parseInt(userAnswer)] : "No answer provided";
                     const correctOption = question.options[question.correct_answer];
@@ -732,12 +797,17 @@ Mark this ${shuffledQuiz.subject} quiz. Provide feedback for ALL ${questionsForA
 
 MARKING: MCQ = 0 or 1 mark only. Short answer = 0 to allocation marks. Be lenient on phrasing.
 
-${questionsForAnalysis.map(q => `Q${q.q_num} [${q.type.toUpperCase()}]${q.type === 'short' ? ` - ${q.marks_allocation} marks` : ''}:
+${questionsForAnalysis.map(q => q.parts ? `Q${q.q_num} [MULTIPART] - ${q.marks_allocation} marks in total:
+Question: ${q.question}
+${q.parts.map(p => `  (${p.label}) [${p.marks} marks] ${p.prompt}
+  Student Answer: ${p.student_answer}
+  Model Answer: ${p.model_answer}`).join('\n')}
+Mark the parts separately and add them up. Name the part in each criterion — "(b) ..." — so the student can see which one lost the mark.` : `Q${q.q_num} [${q.type.toUpperCase()}]${q.type === 'short' ? ` - ${q.marks_allocation} marks` : ''}:
 Question: ${q.question}
 Student Answer: ${q.student_answer}${q.type === 'short' && q.previous_answer ? `\nPrevious Answer: ${q.previous_answer}` : ''}
 ${q.type === 'mcq' ? `Correct Answer: ${q.correct_answer}` : `Model Answer: ${q.model_answer}`}`).join('\n---\n')}
 
-For EACH question return: marks, criteria, edits, what_wrong, improve${hasShortWithPrevious ? ', comparison' : ''}.
+For EACH question return: marks, criteria, annotations, what_wrong, improve${hasShortWithPrevious ? ', comparison' : ''}.
 For a question that scored full marks, leave what_wrong and improve as empty strings — do not write praise.
 
 CRITERIA are the marks themselves, itemised — one entry per mark the assessor
@@ -748,11 +818,22 @@ produce: "you dropped the mark for naming the electron transfer" is something a
 student can act on, and "2/4" is not. Write the criterion as the assessor would
 phrase it, not as a comment on the student.
 
-EDITS are word or short-phrase swaps IN THE STUDENT'S OWN WORDS. "was" must be
-text they actually wrote, quoted exactly; "now" is what would have scored;
-"why" is one sentence on what the swap buys. Only include an edit where the
-wording genuinely costs a mark — never a stylistic preference, and never on an
-answer that scored full marks. Zero edits is a normal and common answer.
+ANNOTATIONS point at the exact words that cost the mark, so they can be
+underlined in the student's own answer.
+
+  - "quote" MUST be copied from their answer CHARACTER FOR CHARACTER — same
+    case, same punctuation, same spacing. It is matched against their text
+    exactly, and anything that does not match is silently discarded, so a
+    paraphrase is the same as sending nothing.
+  - Quote the SHORTEST span that carries the problem. A whole sentence tells
+    the student to rewrite a sentence; four words tells them what to change.
+  - "issue" is one sentence on what an assessor sees wrong with those words.
+  - "fix" is the wording that would have scored.
+  - "severity" is "lost" when it cost a mark, "risk" when it survived but is
+    imprecise.
+  - Only annotate where the wording genuinely matters — never a stylistic
+    preference, and never on an answer that scored full marks. Zero
+    annotations is a normal and common answer.
 Return exactly ${questionsForAnalysis.length} items.
 
 THEN look ACROSS every question that lost marks and find the THEMES.
@@ -792,18 +873,19 @@ invent a theme from a single question.`,
                                             required: ["text", "got", "worth"]
                                         }
                                     },
-                                    edits: {
+                                    annotations: {
                                         type: "array",
                                         items: {
                                             type: "object",
                                             properties: {
-                                                was: { type: "string" },
-                                                now: { type: "string" },
-                                                why: { type: "string" },
+                                                quote: { type: "string" },
+                                                issue: { type: "string" },
+                                                fix: { type: "string" },
                                                 criterion: { type: "string" },
+                                                severity: { type: "string", enum: ["lost", "risk"] },
                                                 worth: { type: "number" }
                                             },
-                                            required: ["was", "now", "why"]
+                                            required: ["quote", "issue", "fix"]
                                         }
                                     }
                                 },
@@ -849,7 +931,8 @@ invent a theme from a single question.`,
             const finalScore = calcScoreFromFeedback(mappedFeedback);
             const questionsCorrect = mappedFeedback.filter((fb, idx) => {
                 const q = shuffledQuiz.questions[idx];
-                return q?.type === 'mcq' ? fb.marks === 1 : fb.marks >= (q?.marks || 5) * 0.8;
+                const outOf = normaliseQuestion(q, idx).marks;
+                return q?.type === 'mcq' ? fb.marks === 1 : fb.marks >= outOf * 0.8;
             }).length;
 
             const aiResults = buildQuestionResults((q, i, max) => {
@@ -897,14 +980,33 @@ invent a theme from a single question.`,
         shuffledQuiz.questions.forEach((q, i) => {
             const fb = feedback[i];
             if (!fb) return;
-            if (q.type === 'mcq') { total += fb.marks || 0; max += 1; }
-            else { total += fb.marks || 0; max += q.marks || 5; }
+            total += fb.marks || 0;
+            max += normaliseQuestion(q, i).marks;
         });
         return max > 0 ? Math.round((total / max) * 100) : 0;
     };
 
     const overallScore = calcScoreFromFeedback(aiFeedback);
     const getCurrentAnswer = () => userAnswers[currentQuestionIndex];
+
+    /**
+     * Everything the student wrote for one question, as one string.
+     *
+     * The annotation layer matches the marker's quotes against this, so a
+     * multipart question has to hand over all of its parts joined rather than
+     * an answer at the bare index, which it does not have.
+     */
+    const answerTextFor = (index) => {
+        const shape = normaliseQuestion(shuffledQuiz.questions[index], index);
+        if (!shape.multipart) {
+            const a = userAnswers[index];
+            return typeof a === "string" ? a : "";
+        }
+        return shape.parts
+            .filter((p) => p.type !== "mcq" && typeof userAnswers[p.key] === "string")
+            .map((p) => `(${p.label}) ${userAnswers[p.key]}`)
+            .join("\n\n");
+    };
 
     // ─── Adjusted score (auto + self-marked) ────────────────────────────────
     // Sums the user's self-marked marks on top of the AI-marked total.
@@ -1321,7 +1423,15 @@ invent a theme from a single question.`,
                                                         transfer was not named, is the same
                                                         finding twice. */}
                                                     {currentFeedback.mark?.itemised && (
-                                                        <MarkPanel mark={currentFeedback.mark} />
+                                                        <MarkPanel
+                                                            mark={currentFeedback.mark}
+                                                            /* A multipart question has no single answer — its
+                                                               parts are under "3a", "3b". Joined so the marker's
+                                                               quotes still find the text they came from. */
+                                                            answer={answerTextFor(currentFeedbackIndex)}
+                                                            onBank={bankMistake}
+                                                            banked={banked}
+                                                        />
                                                     )}
                                                     {!currentFeedback.mark?.itemised && currentFeedback.student_error_analysis && (
                                                         <div data-panel="wrong" className={`${FEEDBACK_PANEL.wrong} border rounded-2xl p-4`}>
@@ -1530,16 +1640,38 @@ invent a theme from a single question.`,
                                 of saying the same thing is how a screen starts
                                 looking generated. */}
                             <span className={`pill mb-3 ${currentQuestion.type === 'mcq' ? 'bg-chart-4/15 text-chart-4' : 'bg-chart-3/15 text-chart-3'}`}>
-                                {currentQuestion.type === 'mcq' ? 'Multiple Choice' : `Short Answer · ${currentQuestion.marks || 5} marks`}
+                                {currentShape.multipart
+                                    ? `${currentShape.parts.length} parts · ${currentShape.marks} marks`
+                                    : currentQuestion.type === 'mcq'
+                                        ? 'Multiple Choice'
+                                        : `Short Answer · ${currentShape.marks} marks`}
                             </span>
-                            <div className="text-lg sm:text-xl font-semibold text-foreground leading-relaxed">
-                                <MarkdownMath>{currentQuestion.question || ""}</MarkdownMath>
-                            </div>
+                            {/* A multipart question prints its stem inside the
+                                parts view, above the parts it belongs to —
+                                printing it here as well would put the same
+                                paragraph on screen twice. */}
+                            {!currentShape.multipart && (
+                                <div className="text-lg sm:text-xl font-semibold text-foreground leading-relaxed">
+                                    <MarkdownMath>{currentQuestion.question || ""}</MarkdownMath>
+                                </div>
+                            )}
                         </>
                     )}
                 >
                     <div className="space-y-6">
-                            {currentQuestion.type === 'mcq' ? (
+                            {currentShape.multipart ? (
+                                <MultipartQuestion
+                                    question={currentShape}
+                                    subject={shuffledQuiz.subject}
+                                    disabled={showFeedback}
+                                    answers={userAnswers}
+                                    inkLines={inkLines}
+                                    onInk={(key, next) => setInkLines(p => ({ ...p, [key]: next }))}
+                                    onAnswer={(key, value) => {
+                                        if (!showFeedback) setUserAnswers(prev => ({ ...prev, [key]: value }));
+                                    }}
+                                />
+                            ) : currentQuestion.type === 'mcq' ? (
                                 <div className="space-y-2.5">
                                     {currentQuestion.options?.map((option, index) => {
                                         const isSelected = getCurrentAnswer()?.toString() === index.toString();

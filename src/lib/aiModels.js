@@ -70,9 +70,14 @@ export function tierOf(preference) {
  * the cheaper of the two, and letting a "fast" flag override it would move a
  * student's work back UP the price list while they are trying to economise.
  */
-export function modelFor(preference, feature, { fast = false, standardModel, fastModel } = {}) {
+export function modelFor(preference, feature, { fast = false, standardModel, fastModel, visionModel, vision = false } = {}) {
     const tier = tierOf(preference);
     const standard = standardModel || TIERS.standard.model;
+    // Vision outranks everything, Saver included. A downgraded model reading a
+    // student's handwriting produces a wrong transcript, and a wrong transcript
+    // gets MARKED — so saving a fraction of a cent here costs them marks. It is
+    // also the cheapest call in the app: one small cropped image.
+    if (vision && visionModel) return visionModel;
     if (tier === "saver" && !SAVER_EXCLUDES.includes(feature)) return TIERS.saver.model;
     return fast ? (fastModel || standard) : standard;
 }

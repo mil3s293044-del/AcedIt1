@@ -25,7 +25,7 @@
 import React from "react";
 import { motion, useReducedMotion } from "framer-motion";
 import { Check, X } from "lucide-react";
-import InlineEdit from "@/components/quizzes/marking/PenMarks";
+import AnnotatedAnswer from "@/components/quizzes/marking/AnnotatedAnswer";
 import MarkdownMath from "@/components/shared/MarkdownMath";
 import { orderedCriteria, isFullMarks } from "@/lib/quizMarking";
 
@@ -78,36 +78,7 @@ function Criterion({ c, index }) {
     );
 }
 
-/**
- * One suggested rewrite, as the landing page draws it: their phrase struck
- * through, the one that scores underlined beside it, and what the swap buys.
- */
-function Edit({ e, index }) {
-    const reduce = useReducedMotion();
-    return (
-        <motion.div
-            initial={reduce ? false : { opacity: 0, y: 8 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.35, delay: 0.2 + index * 0.1 }}
-            className="rounded-2xl bg-surface border border-border p-3.5"
-        >
-            <p className="text-base leading-relaxed">
-                <InlineEdit was={e.was} now={e.now} delay={0.3 + index * 0.1} />
-            </p>
-            <div className="flex items-baseline gap-2 flex-wrap mt-2.5">
-                <span className="stat-label">AcedIt · {e.criterion}</span>
-                <span className="pill bg-primary/15 text-primary">+{e.worth} mark{e.worth === 1 ? "" : "s"}</span>
-            </div>
-            {e.why && (
-                <MarkdownMath className="text-sm text-muted-foreground leading-relaxed mt-1.5">
-                    {e.why}
-                </MarkdownMath>
-            )}
-        </motion.div>
-    );
-}
-
-export default function MarkPanel({ mark, title }) {
+export default function MarkPanel({ mark, title, answer, onBank, banked }) {
     if (!mark) return null;
     const ordered = orderedCriteria(mark);
     const clean = isFullMarks(mark);
@@ -143,10 +114,20 @@ export default function MarkPanel({ mark, title }) {
                 </>
             )}
 
-            {mark.edits.length > 0 && (
+            {/* Their own answer, marked where it went wrong. Only rendered
+                when we HAVE the answer to mark — an annotation list with no
+                text to sit on has nowhere to go, and printing the quotes on
+                their own would be the out-of-context card this replaced. */}
+            {answer && mark.annotations.length > 0 && (
                 <div className="space-y-2 pt-1">
-                    <p className="stat-label text-muted-foreground">Worth rewording</p>
-                    {mark.edits.map((e, i) => <Edit key={`${e.was}-${i}`} e={e} index={i} />)}
+                    <p className="stat-label text-muted-foreground">Your answer, marked</p>
+                    <div className="rounded-2xl bg-surface border border-border p-3.5">
+                        <AnnotatedAnswer text={answer} annotations={mark.annotations}
+                            onBank={onBank} banked={banked} />
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                        Underlined phrases have a note — point at one, or tap it.
+                    </p>
                 </div>
             )}
 
