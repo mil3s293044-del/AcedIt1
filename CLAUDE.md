@@ -309,6 +309,48 @@ npm run dev    # vite :5173 + server.mjs :3001 concurrently
 
 `.env.local` (gitignored) holds `ANTHROPIC_API_KEY`, `VITE_BASE44_APP_ID`, `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, `VITE_USE_SUPABASE`.
 
+## Reads are cached, and pages are split
+
+Two things every session should know before adding a query or a page.
+
+**Every entity read goes through one cache** (`src/api/readCache.js`, wired in
+`supabaseClient.js`). Its real job is DEDUPE, not memory: six components mount
+on first paint and five of them ask for the same `user_profiles` row, so they
+share one promise. The 8s TTL only absorbs remount storms. react-query is
+installed and configured and still nothing uses it — caching at the shim was
+one file against migrating 159 call sites, and that trade has not changed.
+
+Invalidation is eager and coarse on purpose: any write drops every cached read
+of that table, any non-read server function drops everything (`awardXP` alone
+touches xp_events, user_profiles and leaderboards), and any auth event drops
+the lot plus the memoised email and `auth.me()`. If you add a ported function
+that only reads, put it in `READ_ONLY_FUNCTIONS`; if you are not sure what it
+writes, leave it out. Getting that wrong shows a student a stale XP total the
+moment after they earned it.
+
+**Reads page.** PostgREST caps a response at 1000 rows and says nothing about
+it, so every unbounded `.filter({...})` was silently truncating for anyone past
+that many flashcards or xp_events. `fetchPaged` walks 1000 at a time with `id`
+as a tiebreak so a row cannot land on two pages, up to a 20000 ceiling that
+WARNS when it bites rather than handing back a prefix — the same failure the
+ATAR window queries hit.
+
+**Pages are lazy** (`pages.config.js`, `Suspense` in `App.jsx`). Statically
+imported, the 24 pages plus recharts, KaTeX and html2canvas built one 4MB
+bundle that every student parsed before the dashboard painted; it is 1.4MB now
+and the dashboard adds 61KB. Landing, Login and Layout stay in the first chunk
+because they are what an unauthenticated visitor and every route respectively
+need immediately. The Suspense boundary sits INSIDE the layout so a navigation
+reads as the page filling in, not the app blinking out. `routes.test.mjs`
+accepts either binding form — a route registered against an undeclared name is
+the 404 it exists to catch, and that looks the same either way.
+
+Write loops are gone from the paths that had them (Goals, Strategise,
+StrategyCheckIn, MindMaps, BlurtingMethod, Review): same-payload rows go
+through `bulkCreate`/`bulkUpdate`, and independent ones through `Promise.all`.
+A rebuilt fortnight was thirty sequential round trips with the button spinning
+through all of them.
+
 ## Known issues / paper-cuts
 
 - Console 400s on `/study_plans` and `/flashcards` — missing-column patches. Non-blocking.

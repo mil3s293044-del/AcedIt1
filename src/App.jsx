@@ -5,17 +5,22 @@ import NavigationTracker from '@/lib/NavigationTracker'
 import { pagesConfig } from './pages.config'
 import { BrowserRouter as Router, Route, Routes, useLocation, Navigate } from 'react-router-dom';
 import { MotionConfig } from 'framer-motion';
+import { lazy, Suspense } from 'react';
 import PageNotFound from './lib/PageNotFound';
-import Paywall from './pages/Paywall';
-import Suspended from './pages/Suspended';
-import AdminIPPanel from './pages/AdminIPPanel';
+// Landing and Login are what an unauthenticated visitor lands on, so they stay
+// in the first chunk — splitting them would put a spinner in front of the
+// page that has to be instant. Everything below is reached by a deliberate
+// navigation and can afford to be fetched then.
 import Landing from './pages/Landing';
-import Onboarding from './pages/Onboarding';
 import Login from './pages/Login';
-import ForgotPassword from './pages/ForgotPassword';
-import ResetPassword from './pages/ResetPassword';
-import Privacy from './pages/Privacy';
-import Terms from './pages/Terms';
+const Paywall = lazy(() => import('./pages/Paywall'));
+const Suspended = lazy(() => import('./pages/Suspended'));
+const AdminIPPanel = lazy(() => import('./pages/AdminIPPanel'));
+const Onboarding = lazy(() => import('./pages/Onboarding'));
+const ForgotPassword = lazy(() => import('./pages/ForgotPassword'));
+const ResetPassword = lazy(() => import('./pages/ResetPassword'));
+const Privacy = lazy(() => import('./pages/Privacy'));
+const Terms = lazy(() => import('./pages/Terms'));
 import { AuthProvider, useAuth } from '@/lib/AuthContext';
 import { ThemeProvider } from '@/lib/useTheme';
 import UserNotRegisteredError from '@/components/UserNotRegisteredError';
@@ -25,9 +30,25 @@ const { Pages, Layout, mainPage } = pagesConfig;
 const mainPageKey = mainPage ?? Object.keys(Pages)[0];
 const MainPage = mainPageKey ? Pages[mainPageKey] : <></>;
 
-const LayoutWrapper = ({ children, currentPageName }) => Layout ?
-  <Layout currentPageName={currentPageName}>{children}</Layout>
-  : <>{children}</>;
+/**
+ * The page is loaded on demand, so something has to hold the frame while its
+ * chunk arrives. The boundary sits INSIDE the layout on purpose: the nav, the
+ * rail and the theme are already on screen and should stay there, so a
+ * navigation reads as the page filling in rather than the app blinking out.
+ *
+ * The spinner matches the auth one below it — same size, same tokens — so the
+ * two never look like different states of the same wait.
+ */
+const PageFallback = () => (
+  <div className="flex items-center justify-center py-24" role="status" aria-label="Loading">
+    <div className="w-8 h-8 border-4 border-border border-t-primary rounded-full animate-spin" />
+  </div>
+);
+
+const LayoutWrapper = ({ children, currentPageName }) => {
+  const page = <Suspense fallback={<PageFallback />}>{children}</Suspense>;
+  return Layout ? <Layout currentPageName={currentPageName}>{page}</Layout> : page;
+};
 
 const AuthenticatedApp = () => {
   const { isAuthenticated, isLoadingAuth, isLoadingPublicSettings, authError, navigateToLogin } = useAuth();
@@ -159,7 +180,18 @@ function App() {
                 boot layer in index.html covers everything before that. The
                 spinner still runs underneath for anyone who skips. */}
             <CardStorm />
-            <AuthenticatedApp />
+            {/* Outer boundary for the routes AuthenticatedApp returns
+                directly — /privacy, /terms, /onboarding and the recovery
+                flow all render outside LayoutWrapper, so they need one of
+                their own. Page navigations inside the app hit the inner
+                boundary first and keep their chrome. */}
+            <Suspense fallback={
+              <div className="fixed inset-0 flex items-center justify-center">
+                <div className="w-8 h-8 border-4 border-border border-t-primary rounded-full animate-spin" />
+              </div>
+            }>
+              <AuthenticatedApp />
+            </Suspense>
           </Router>
           <Toaster />
         </MotionConfig>

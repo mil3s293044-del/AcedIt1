@@ -47,30 +47,42 @@
  *
  * The mainPage value must match a key in the PAGES object exactly.
  */
-import AITools from './pages/AITools';
-import AIToolsHistory from './pages/AIToolsHistory';
-import Analytics from './pages/Analytics';
-import Checkout from './pages/Checkout';
-import Competitions from './pages/Competitions';
-import Dashboard from './pages/Dashboard';
-import Friends from './pages/Friends';
-import Goals from './pages/Goals';
-import Strategise from './pages/Strategise';
-import Guides from './pages/Guides';
-import PaymentCancel from './pages/PaymentCancel';
-import PaymentSuccess from './pages/PaymentSuccess';
-import Premium from './pages/Premium';
-import Quizzes from './pages/Quizzes';
-import Ranked from './pages/Ranked';
-import Review from './pages/Review';
-import Settings from './pages/Settings';
-import Study from './pages/Study';
-import StudyGroups from './pages/StudyGroups';
-import Subjects from './pages/Subjects';
-import Subscription from './pages/Subscription';
-import Support from './pages/Support';
-import Timer from './pages/Timer';
-import Help from './pages/Help';
+import { lazy } from 'react';
+
+// Every page is loaded on demand.
+//
+// Statically imported, the 24 pages here plus what they pull in — recharts,
+// KaTeX, html2canvas, the whole AI tool set — built ONE 4MB bundle that every
+// student downloaded and parsed before the dashboard could paint, on a school
+// wifi connection, most of it for pages they were not going to open. Each of
+// these is now its own chunk, fetched when the route is.
+//
+// Layout is NOT lazy: it is on every route, so splitting it would only add a
+// round trip before the chrome appears.
+const AITools = lazy(() => import('./pages/AITools'));
+const AIToolsHistory = lazy(() => import('./pages/AIToolsHistory'));
+const Analytics = lazy(() => import('./pages/Analytics'));
+const Checkout = lazy(() => import('./pages/Checkout'));
+const Competitions = lazy(() => import('./pages/Competitions'));
+const Dashboard = lazy(() => import('./pages/Dashboard'));
+const Friends = lazy(() => import('./pages/Friends'));
+const Goals = lazy(() => import('./pages/Goals'));
+const Strategise = lazy(() => import('./pages/Strategise'));
+const Guides = lazy(() => import('./pages/Guides'));
+const PaymentCancel = lazy(() => import('./pages/PaymentCancel'));
+const PaymentSuccess = lazy(() => import('./pages/PaymentSuccess'));
+const Premium = lazy(() => import('./pages/Premium'));
+const Quizzes = lazy(() => import('./pages/Quizzes'));
+const Ranked = lazy(() => import('./pages/Ranked'));
+const Review = lazy(() => import('./pages/Review'));
+const Settings = lazy(() => import('./pages/Settings'));
+const Study = lazy(() => import('./pages/Study'));
+const StudyGroups = lazy(() => import('./pages/StudyGroups'));
+const Subjects = lazy(() => import('./pages/Subjects'));
+const Subscription = lazy(() => import('./pages/Subscription'));
+const Support = lazy(() => import('./pages/Support'));
+const Timer = lazy(() => import('./pages/Timer'));
+const Help = lazy(() => import('./pages/Help'));
 import __Layout from './Layout.jsx';
 
 
