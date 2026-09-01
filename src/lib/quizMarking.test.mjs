@@ -10,6 +10,7 @@
 import assert from "node:assert/strict";
 import {
     normaliseMark, isFullMarks, orderedCriteria, marksLost,
+    markModules, markLedger, isBankable, criterionIndexFor,
 } from "@/lib/quizMarking";
 
 let passed = 0;
@@ -102,6 +103,152 @@ check("anything unreadable marks zero rather than throwing", () => {
         assert.deepEqual(m.edits, []);
     }
     assert.equal(normaliseMark({}, 0).outOf, 1, "never a zero denominator");
+});
+
+
+// ─── The ledger, and the incoherence it exists to end ───────────────────────
+//
+// Criteria and annotations used to be two independent verdicts. The criteria
+// said which marks were dropped; the annotations, chosen separately by the
+// model, put "Cost a mark −1" on a phrase with nothing forcing the two to
+// agree. A student could read "3/3, all criteria met" directly above their own
+// sentence underlined in red and told it cost them a mark.
+
+const ANN = (over) => ({ quote: "goes into solution", issue: "Inferred, not stated.", fixes: ["loses two electrons"], ...over });
+
+check("an annotation on a criterion they EARNED cannot claim a mark", () => {
+    const m = normaliseMark({
+        marks: 2,
+        criteria: [{ text: "Identifies the stronger reductant", got: true, worth: 2 }],
+        annotations: [ANN({ criterion: "Identifies the stronger reductant", severity: "lost", worth: 2 })],
+    }, 2);
+    assert.equal(m.marks, 2, "they got everything");
+    assert.equal(m.annotations[0].severity, "risk", "it survived — it did not cost a mark");
+    assert.equal(m.annotations[0].worth, 0);
+    assert.equal(markLedger(m).lost, 0, "and nothing on the screen may say otherwise");
+});
+
+check("an annotation on a MISSED criterion costs exactly that criterion", () => {
+    const m = normaliseMark({
+        marks: 0,
+        criteria: [{ text: "Names the electron transfer", got: false, worth: 2 }],
+        // The model lowballed the cost; the ledger is the authority.
+        annotations: [ANN({ criterion: "Names the electron transfer", worth: 1 })],
+    }, 2);
+    assert.equal(m.annotations[0].severity, "lost");
+    assert.equal(m.annotations[0].worth, 2, "the criterion's worth, not the model's guess");
+});
+
+check("an annotation attached to nothing may not bill a mark", () => {
+    const m = normaliseMark({
+        marks: 1,
+        criteria: [{ text: "Names the electron transfer", got: false, worth: 1 },
+                   { text: "States oxidation at the anode", got: true, worth: 1 }],
+        annotations: [ANN({ criterion: "Vibes", severity: "lost", worth: 1 })],
+    }, 2);
+    assert.equal(m.annotations[0].criterionIndex, null, "refuses rather than guessing");
+    assert.equal(m.annotations[0].severity, "risk");
+    // Otherwise the page would show 1 lost from the criteria and another 1
+    // from the annotation, for a question worth 2 that scored 1.
+    assert.equal(markLedger(m).lost, 1);
+});
+
+check("marks lost always equals outOf minus marks", () => {
+    for (const marks of [[true, true, true], [false, true, false], [false, false, false]]) {
+        const m = normaliseMark({
+            marks: 99,
+            criteria: marks.map((got, i) => ({ text: `Criterion ${i}`, got, worth: 1 })),
+        }, 3);
+        const l = markLedger(m);
+        assert.equal(l.lost, l.outOf - l.earned, `${marks} disagreed`);
+    }
+});
+
+check("the model can name the criterion by index", () => {
+    const criteria = [{ text: "A", got: true, worth: 1 }, { text: "B", got: false, worth: 1 }];
+    assert.equal(criterionIndexFor({ criterionIndex: 1 }, criteria), 1);
+    assert.equal(criterionIndexFor({ criterionIndex: 7 }, criteria), null, "out of range is refused");
+});
+
+check("a criterion named loosely still finds its mark", () => {
+    const criteria = [{ text: "Names the electron transfer", got: false, worth: 2 }];
+    // The model writes the part label in, or abbreviates.
+    assert.equal(criterionIndexFor({ criterion: "names the electron transfer" }, criteria), 0);
+    assert.equal(criterionIndexFor({ criterion: "the electron transfer" }, criteria), 0);
+    // Too short to be anything but a coincidence.
+    assert.equal(criterionIndexFor({ criterion: "the" }, criteria), null);
+});
+
+// ─── Modules: every mark is something you can act on ────────────────────────
+
+check("EVERY missed mark gets a module, quotable or not", () => {
+    // This is the repair. The mark with nothing to quote is the one whose words
+    // are absent from the answer, which is the one most needing explaining.
+    const m = normaliseMark({
+        marks: 1,
+        criteria: [
+            { text: "Identifies the stronger reductant", got: true, worth: 1 },
+            { text: "Names the electron transfer", got: false, worth: 1, note: "State it explicitly." },
+            { text: "States oxidation at the anode", got: false, worth: 1, note: "As a half-equation." },
+        ],
+        annotations: [ANN({ criterion: "Names the electron transfer" })],
+    }, 3);
+    const l = markLedger(m);
+    assert.equal(l.lostModules.length, 2);
+    assert.equal(l.bankable.length, 2, "both, including the one with no quote");
+    // The quoted one carries its evidence; the other stands on its note alone.
+    const quoted = l.modules.find((x) => x.text.startsWith("Names"));
+    assert.equal(quoted.evidence.length, 1);
+    assert.deepEqual(quoted.fixes, ["loses two electrons"]);
+    const bare = l.modules.find((x) => x.text.startsWith("States"));
+    assert.equal(bare.evidence.length, 0);
+    // The note is the examiner's remark, NOT a statement of what would have
+    // scored, so it is never promoted to `wanted` — a module headed "the
+    // assessor wanted" printing a criticism sends the student to copy it.
+    assert.equal(bare.wanted, "");
+    assert.equal(bare.detail, "As a half-equation.");
+    assert.equal(isBankable(bare), true);
+});
+
+check("lost marks come before the ones they earned", () => {
+    const m = normaliseMark({ marks: 2, criteria: CRITERIA }, 4);
+    assert.deepEqual(markModules(m).map((x) => x.status), ["lost", "earned", "earned"]);
+});
+
+check("a mark they earned is not bankable", () => {
+    const m = normaliseMark({ marks: 4, criteria: CRITERIA.map((c) => ({ ...c, got: true })) }, 4);
+    assert.deepEqual(markLedger(m).bankable, []);
+});
+
+check("with no criteria at all, annotations are the only verdict there is", () => {
+    // A degraded response. Overriding the model here would delete the only
+    // marking available rather than reconcile it.
+    const m = normaliseMark({ marks: 1, annotations: [ANN({ severity: "lost", worth: 1 })] }, 2);
+    const l = markLedger(m);
+    assert.equal(l.modules.length, 1);
+    assert.equal(l.modules[0].status, "lost");
+    assert.equal(l.modules[0].evidence.length, 1);
+});
+
+check("several notes about one thing read as one module", () => {
+    const m = normaliseMark({
+        marks: 0,
+        criteria: [{ text: "Names the electron transfer", got: false, worth: 1 }],
+        annotations: [
+            ANN({ quote: "goes into solution", criterion: "Names the electron transfer" }),
+            ANN({ quote: "the metal reacts", criterion: "Names the electron transfer", fixes: ["is oxidised"] }),
+        ],
+    }, 1);
+    const mods = markModules(m);
+    assert.equal(mods.length, 1, "one mark, one module");
+    assert.equal(mods[0].evidence.length, 2);
+    assert.deepEqual(mods[0].fixes, ["loses two electrons", "is oxidised"]);
+});
+
+check("modules survive a mark with nothing in it", () => {
+    assert.deepEqual(markModules(normaliseMark(null, 2)), []);
+    assert.deepEqual(markModules(null), []);
+    assert.equal(markLedger(normaliseMark(null, 2)).lost, 0);
 });
 
 console.log(`\n${passed} passed`);

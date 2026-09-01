@@ -47,7 +47,10 @@ export function normaliseAnnotation(raw, i = 0) {
         raw?.fix, raw?.now,
     ].map(str).map((f) => f.trim()).filter(Boolean);
     return {
-        id: `a${i}`,
+        // Kept when it is already there. `segment` re-normalises annotations
+        // that quizMarking has already linked, and a module points at its
+        // evidence by id — regenerating them here would break that pointer.
+        id: str(raw?.id).trim() || `a${i}`,
         quote,
         issue: str(raw?.issue || raw?.why).trim(),
         // What the study design or the criterion actually asked for. This is
@@ -56,6 +59,11 @@ export function normaliseAnnotation(raw, i = 0) {
         wanted: str(raw?.wanted || raw?.criterion_detail).trim(),
         fixes: [...new Set(fixes)],
         criterion: str(raw?.criterion).trim() || "Wording",
+        // Which criterion this is evidence for, when the marker says outright.
+        // quizMarking falls back to matching on the label when it doesn't, and
+        // refuses rather than guesses — see criterionIndexFor.
+        criterionIndex: Number.isInteger(raw?.criterion_index) ? raw.criterion_index
+            : Number.isInteger(raw?.criterionIndex) ? raw.criterionIndex : null,
         // "lost" — this cost a mark. "risk" — imprecise but survived.
         severity: raw?.severity === "risk" ? "risk" : "lost",
         worth: Number.isFinite(worth) && worth > 0 ? worth : 0,

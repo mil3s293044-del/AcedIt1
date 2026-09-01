@@ -32,6 +32,8 @@ import ReviewTable from "@/components/cards/ReviewTable";
 import DeckStack from "@/components/cards/DeckStack";
 import { rankFor, suitFor, subjectColor } from "@/components/cards/cardIdentity";
 import { cardMastery, isCardDue } from "@/lib/mastery";
+import { BANK_TOPIC, fixState } from "@/lib/mistakeBank";
+import { calculateNextReview as sm2Next, formatIntervalShort as sm2Interval, reviewPatch, RATINGS } from "@/lib/sm2";
 
 // Lucide alias — design system maps "alert" semantics to AlertTriangle.
 const AlertCircle = AlertTriangle;
@@ -90,115 +92,16 @@ const generationSummary = (cardCount, coverage) => {
 const computeMasteryScore = cardMastery;
 const isDue = isCardDue;
 
-const calculateNextReview = (quality, card) => {
-    let sessionSkipCount = 0;
-    const updatedCounts = {
-        review_count_again: card.review_count_again || 0,
-        review_count_hard: card.review_count_hard || 0,
-        review_count_good: card.review_count_good || 0,
-        review_count_easy: card.review_count_easy || 0,
-        consecutive_good: card.consecutive_good || 0,
-        consecutive_easy: card.consecutive_easy || 0
-    };
-
-    // SM-2 ease factor and interval
-    let ef = card.easiness_factor || 2.5;
-    let interval = card.interval_days || 1;
-    let repetitions = card.repetitions || 0;
-
-    if (quality === 1) {
-        updatedCounts.review_count_again++;
-        updatedCounts.consecutive_good = 0;
-        updatedCounts.consecutive_easy = 0;
-        sessionSkipCount = 0;
-        ef = Math.max(1.3, ef - 0.2);
-        interval = 1;
-        repetitions = 0;
-    } else if (quality === 2) {
-        updatedCounts.review_count_hard++;
-        updatedCounts.consecutive_good = 0;
-        updatedCounts.consecutive_easy = 0;
-        sessionSkipCount = 0;
-        ef = Math.max(1.3, ef - 0.15);
-        interval = Math.max(1, Math.floor(interval * 1.2));
-        // don't increment repetitions — needs another good rating
-    } else if (quality === 3) {
-        updatedCounts.review_count_good++;
-        updatedCounts.consecutive_good++;
-        updatedCounts.consecutive_easy = 0;
-        sessionSkipCount = 1;
-        ef = Math.max(1.3, ef - 0.05); // slight decay for "just good"
-        repetitions++;
-        if (repetitions === 1) interval = 1;
-        else if (repetitions === 2) interval = 3;
-        else interval = Math.round(interval * ef);
-    } else if (quality === 4) {
-        updatedCounts.review_count_easy++;
-        updatedCounts.consecutive_easy++;
-        updatedCounts.consecutive_good = 0;
-        sessionSkipCount = 1;
-        ef = Math.min(3.0, ef + 0.1);
-        repetitions++;
-        if (repetitions === 1) interval = 2;
-        else if (repetitions === 2) interval = 5;
-        else interval = Math.round(interval * ef);
-    }
-
-    // Cap interval at 180 days
-    interval = Math.min(interval, 180);
-
-    // Next review date
-    const nextReview = new Date();
-    nextReview.setDate(nextReview.getDate() + interval);
-    const nextReviewDate = nextReview.toISOString().split('T')[0];
-
-    // Weak spot logic
-    const totalDifficult = updatedCounts.review_count_again + updatedCounts.review_count_hard;
-    const totalReviews = totalDifficult + updatedCounts.review_count_good + updatedCounts.review_count_easy;
-    let isWeakSpot = totalReviews >= 3 && (totalDifficult / totalReviews) >= 0.5;
-    if (card.is_weak_spot) {
-        if (updatedCounts.consecutive_good >= 3 || updatedCounts.consecutive_easy >= 2) isWeakSpot = false;
-        else isWeakSpot = true;
-    }
-
-    // Compute mastery score for updated card state. Local-only — the
-    // flashcards schema has no mastery_score column, so we compute it on read
-    // rather than persist it.
-    const updatedCardForMastery = {
-        ...card, ...updatedCounts, easiness_factor: ef, interval_days: interval, last_reviewed_date: new Date().toISOString().split('T')[0],
-    };
-    const masteryScore = computeMasteryScore(updatedCardForMastery);
-
-    return {
-        ...updatedCounts,
-        session_skip_count:  sessionSkipCount,
-        is_weak_spot:        isWeakSpot,
-        easiness_factor:     ef,
-        interval_days:       interval,
-        repetitions,
-        next_review_date:    nextReviewDate,
-        // mastery_score kept here as a derived field for the caller; not
-        // sent to the DB (filtered out before .update()).
-        _mastery_score:      masteryScore,
-    };
-};
-
-// Human-readable interval for the rating-button previews ("1d", "2w", "3mo").
-const formatIntervalShort = (days) => {
-    if (days < 7) return `${days}d`;
-    if (days < 30) return `${Math.round(days / 7)}w`;
-    return `${Math.round(days / 30)}mo`;
-};
+// The scheduler and the rating scale now live in src/lib/sm2.js, so the
+// mistake bank can grade the same rows through the same arithmetic. The math
+// is unchanged; see that file for why it moved.
+const calculateNextReview = sm2Next;
+const formatIntervalShort = sm2Interval;
 
 // ─── Rating button config ────────────────────────────────────────────────────
 // Static class strings (Tailwind JIT-safe) — overdue/hard → streak,
 // hard/energy → xp, good (default recall) → chart-3 (blue), easy (mastered) → primary.
-const ratingConfig = [
-    { quality: 1, label: "Again", sublabel: "Didn't recall", color: "bg-streak/10 hover:bg-streak/20 text-streak border-streak/30 hover:border-streak/50" },
-    { quality: 2, label: "Hard", sublabel: "Almost", color: "bg-xp/10 hover:bg-xp/20 text-xp border-xp/30 hover:border-xp/50" },
-    { quality: 3, label: "Good", sublabel: "Recalled", color: "bg-chart-3/10 hover:bg-chart-3/20 text-chart-3 border-chart-3/30 hover:border-chart-3/50" },
-    { quality: 4, label: "Easy", sublabel: "Perfect", color: "bg-primary/10 hover:bg-primary/20 text-primary border-primary/30 hover:border-primary/50" },
-];
+const ratingConfig = RATINGS;
 
 /**
  * The same four colours as raw CSS, for the flash the discard pile gives when
@@ -775,13 +678,11 @@ The documents provided may be PowerPoint slides, Word documents, PDFs or text fi
         setReviewCards(prev => prev.map((c, i) => i === currentCardIndex ? { ...c, ...updates, total_reviews: newTotalReviews, last_quality: quality } : c));
 
         try {
-            // Strip the derived _mastery_score before persisting — it's not in schema.
-            const { _mastery_score, ...persistable } = updates;
+            // reviewPatch names the columns explicitly, so the derived
+            // _mastery_score cannot reach a table that has no column for it.
             await Flashcard.update(card.id, {
-                ...persistable,
-                last_reviewed_date: format(new Date(), 'yyyy-MM-dd'),
-                total_reviews:      newTotalReviews,
-                last_quality:       quality,
+                ...reviewPatch(updates, quality),
+                total_reviews: newTotalReviews,
             });
             // Real per-card XP through the incremental engine (idempotent per
             // card+review-count, 80/day cap). Every card is a recorded event,
@@ -837,6 +738,14 @@ The documents provided may be PowerPoint slides, Word documents, PDFs or text fi
         return (d.subject_name?.toLowerCase().includes(s) || d.topic?.toLowerCase().includes(s)) &&
             (filterSubject === 'all' || d.subject_name === filterSubject);
     });
+
+    // Mistakes banked from quiz marking. They review here like any other deck,
+    // but the bank screen is where you see whether you are actually fixing
+    // them — so this points at it rather than duplicating the answer.
+    const bankOutstanding = decks
+        .filter(d => d.topic === BANK_TOPIC)
+        .flatMap(d => d.cards)
+        .filter(c => fixState(c) !== "fixed").length;
 
     const decksBySubject = {};
     filteredDecks.forEach(deck => {
@@ -1145,6 +1054,22 @@ The documents provided may be PowerPoint slides, Word documents, PDFs or text fi
                         </Button>
                     </div>
                 </div>
+
+                {/* Only when there is something in it. A permanent banner for
+                    an empty bank is an advert; this is a status line. */}
+                {bankOutstanding > 0 && (
+                    <Link to={createPageUrl("MistakeBank")}
+                        className="flex items-center justify-between gap-3 rounded-2xl border-2 border-streak/30
+                            bg-streak/5 px-4 py-3 hover:border-streak/50 transition-colors group">
+                        <span className="text-sm text-foreground leading-snug">
+                            <span className="font-bold tabular-nums">{bankOutstanding}</span> mistake{bankOutstanding === 1 ? "" : "s"} from
+                            your marked quizzes {bankOutstanding === 1 ? "is" : "are"} still costing you marks.
+                        </span>
+                        <span className="text-xs font-bold text-streak flex-shrink-0 group-hover:translate-x-0.5 transition-transform">
+                            Mistake bank →
+                        </span>
+                    </Link>
+                )}
 
                 {Object.keys(decksBySubject).length === 0 ? (
                     <div className="text-center py-20 card-soft">
