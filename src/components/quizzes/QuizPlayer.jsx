@@ -11,6 +11,9 @@ import {
 import AdaptiveReview from "./AdaptiveReview";
 import DifficultyRating from "@/components/shared/DifficultyRating";
 import { useToast } from "@/components/ui/use-toast";
+import { ToastAction } from "@/components/ui/toast";
+import { useNavigate } from "react-router-dom";
+import { createPageUrl } from "@/utils";
 import { base44 } from "@/api/base44Client";
 import { saveResult } from "@/lib/saveResult";
 import { aceDone } from "@/components/ace/AceReacts";
@@ -335,6 +338,7 @@ export default function QuizPlayer({ quiz, onExit, mode = "standard", timeLimitM
     const [submittedQuestions, setSubmittedQuestions] = useState(new Set());
     const [savedQuestions, setSavedQuestions] = useState(new Set());
     const { toast } = useToast();
+    const navigate = useNavigate();
 
     // Bookmark a question + model/correct answer into the revise-later library
     // (stored as an AISavedResult — no new table needed).
@@ -460,9 +464,18 @@ In two or three sentences, explain what makes that the right answer and what the
             // cards tagged "Mistake bank" group into one per subject on the
             // Spaced Repetition shelf — and a student who is not told that has
             // saved something into a place they cannot find.
+            // The toast used to name a place with nothing to click. It said
+            // "it joins your Mistake bank deck" and left the student to go and
+            // find it, which is the shape of a feature nobody uses.
             toast({
                 title: "Saved to your mistake bank",
-                description: `It joins your ${shuffledQuiz.subject || "subject"} · Mistake bank deck and comes back on its own schedule.`,
+                description: `It comes back on its own schedule until you have it.`,
+                action: (
+                    <ToastAction altText="Open your mistake bank"
+                        onClick={() => navigate(createPageUrl("MistakeBank"))}>
+                        Open bank
+                    </ToastAction>
+                ),
             });
         } catch (e) {
             // Released so they can try again — the card does not exist.

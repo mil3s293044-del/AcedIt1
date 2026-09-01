@@ -83,12 +83,14 @@ const Subscription = lazy(() => import('./pages/Subscription'));
 const Support = lazy(() => import('./pages/Support'));
 const Timer = lazy(() => import('./pages/Timer'));
 const Help = lazy(() => import('./pages/Help'));
+const MistakeBank = lazy(() => import('./pages/MistakeBank'));
 import __Layout from './Layout.jsx';
 
 
 export const PAGES = {
     "AITools": AITools,
     "Help": Help,
+    "MistakeBank": MistakeBank,
     "AIToolsHistory": AIToolsHistory,
     "Analytics": Analytics,
     "Checkout": Checkout,

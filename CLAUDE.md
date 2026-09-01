@@ -183,6 +183,40 @@ click landing in the same tick as the first read `banked` before React had
 updated it and wrote a duplicate. The button also says *saving* until the row
 exists — it used to claim saved before the write and roll back on failure.
 
+**`/MistakeBank` answers "am I actually fixing these?"** — not "what did I get
+wrong", which is a guilt list and a screen nobody opens twice. The headline is
+a fraction of what is FIXED, the bar shows the pile shrinking, and repeats are
+called out because a student told they have dropped one criterion four times
+has one thing to fix instead of four.
+
+`fixState` reads the SM-2 counters already on the card — nothing new is stored
+to support it. Fixed is two clean recalls AND an interval of a week or more:
+one recall the day after banking is short-term memory, and telling a student
+they have fixed something they have not is the flattery the rank system exists
+to refuse. Slipping is their LAST answer, not their history, so a card with
+four early lapses since recalled twice reads as going the right way.
+
+READY IS NOT DUE. `due.js` counts a never-reviewed card as *new* on purpose —
+a fresh sixty-card deck must not report sixty overdue. But a mistake banked an
+hour ago is not unopened material; the student got it wrong this morning. The
+page passes "due or new", so a bank with five mistakes never opens on "nothing
+due today", which is the dead end the screen exists to avoid.
+
+The review runs ON the page. A review screen that sends you elsewhere to review
+is not one. It grades through `sm2.js` — `calculateNextReview`, the rating
+scale and `reviewPatch`, moved out of SpacedRepetition.jsx unchanged for
+exactly this, the same move `mastery.js` already made. Two schedulers for one
+card is how an app starts disagreeing with itself. `reviewPatch` names the
+columns so the derived `_mastery_score` cannot reach a table with no column for
+it — PostgREST rejects the whole row and the student loses the rating.
+
+Provenance rides in `extra.mistake` (criterion, quote, question, cost), because
+grouping by criterion cannot parse it back out of question prose that will be
+reworded. Cards banked before it exists still count, still review and still
+show their state; they just cannot be grouped. And `unit` is CONSTANT — the
+shelf keys decks on subject|topic|unit, so putting "Lost mark" there split one
+student's bank into two decks per subject.
+
 **Handwriting goes to `VISION_MODEL`**, not the prose default — Saver included.
 A downgraded model produces a wrong transcript and the transcript is what gets
 MARKED, so the saving comes out of the student's marks. Mathpix's `v3/strokes`
