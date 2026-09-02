@@ -2,7 +2,6 @@ import React, { useState, useEffect, useRef, useCallback } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useToast } from "@/components/ui/use-toast";
 import { createPageUrl } from "@/utils";
-import { Clock, Coffee, Move } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { motion, AnimatePresence } from "framer-motion";
@@ -21,7 +20,22 @@ import { recordVisit } from "@/lib/aceDeck";
 import AceBuddy from "@/components/ace/AceBuddy";
 import AceReacts from "@/components/ace/AceReacts";
 import AceTour from "@/components/ace/AceTour";
+import PomodoroOrb from "@/components/study/PomodoroOrb";
 
+/**
+ * The running block, wherever you are in the app.
+ *
+ * WHAT CHANGED AND WHY. It was a purple clock GLYPH beside a mono countdown —
+ * a picture of a clock next to the time, carrying nothing the digits did not
+ * already say, which is the decoration this codebase keeps taking out. It is a
+ * real clock now: the ring empties with the block, the hand ticks every
+ * second, and the colour says work or break before you read a word. See
+ * PomodoroOrb.
+ *
+ * THE DRAG HANDLE IS THE WHOLE CARD, and the move icon went with the glyph.
+ * `cursor: grab` on the card already says it can be moved, and an icon that
+ * only means "this is draggable" is a caption on an affordance.
+ */
 const FloatingTimer = React.memo(({ currentTime, timerPosition, isDragging, handleMouseDown, timerRef, formatTime }) => (
     <motion.div
         ref={timerRef}
@@ -38,33 +52,31 @@ const FloatingTimer = React.memo(({ currentTime, timerPosition, isDragging, hand
         onMouseDown={handleMouseDown}
         className="touch-none"
     >
-        <Card className={`bg-surface/95 backdrop-blur-sm border-2 ${isDragging ? 'border-purple-400 shadow-2xl' : 'border-purple-200 shadow-lg hover:shadow-xl'} transition-all select-none`}>
+        <Card className={`bg-surface/95 backdrop-blur-sm border-2 transition-all select-none
+            ${isDragging
+                ? 'border-primary/60 shadow-2xl'
+                : currentTime.isBreak
+                    ? 'border-xp/40 shadow-lg hover:shadow-xl hover:border-xp/60'
+                    : 'border-primary/40 shadow-lg hover:shadow-xl hover:border-primary/60'}`}>
             <CardContent className="p-3 timer-content">
-                <div className="flex items-center gap-3">
-                    <div className="flex items-center gap-2">
-                        <Move className="w-4 h-4 text-purple-400" />
-                        {currentTime.isBreak ? (
-                            <Coffee className="w-4 h-4 text-purple-500" />
-                        ) : (
-                            <Clock className="w-4 h-4 text-purple-500" />
+                <Link to={createPageUrl("Study")} onClick={(e) => e.stopPropagation()}
+                    className="flex items-center gap-3">
+                    <PomodoroOrb left={currentTime.timeLeft} total={currentTime.total}
+                        isBreak={currentTime.isBreak} />
+                    <div className="min-w-0">
+                        <div className="font-mono font-bold text-lg text-foreground tabular-nums leading-none">
+                            {formatTime(currentTime.timeLeft)}
+                        </div>
+                        <div className={`text-xs font-bold mt-1 ${currentTime.isBreak ? 'text-xp' : 'text-primary'}`}>
+                            {currentTime.isBreak ? 'Break' : `Session #${currentTime.session}`}
+                        </div>
+                        {currentTime.subject && !currentTime.isBreak && (
+                            <div className="text-xs text-muted-foreground truncate max-w-32">
+                                {currentTime.subject}
+                            </div>
                         )}
                     </div>
-                    <Link to={createPageUrl("Study")} className="flex-1" onClick={(e) => e.stopPropagation()}>
-                        <div>
-                            <div className="font-mono font-bold text-lg text-foreground">
-                                {formatTime(currentTime.timeLeft)}
-                            </div>
-                            <div className="text-xs text-muted-foreground">
-                                {currentTime.isBreak ? 'Break Time' : `Session #${currentTime.session}`}
-                            </div>
-                            {currentTime.subject && !currentTime.isBreak && (
-                                <div className="text-xs text-muted-foreground truncate max-w-32">
-                                    {currentTime.subject}
-                                </div>
-                            )}
-                        </div>
-                    </Link>
-                </div>
+                </Link>
             </CardContent>
         </Card>
     </motion.div>
@@ -209,7 +221,20 @@ export default function Layout({ children }) {
                 const timeSinceUpdate = Math.floor((now - (state.lastUpdated || now)) / 1000);
                 const actualTimeLeft = Math.max(0, state.timeLeft - timeSinceUpdate);
                 if (actualTimeLeft > 0) {
-                    setCurrentTime({ timeLeft: actualTimeLeft, isBreak: state.isBreak || false, session: state.session, subject: state.selectedSubject });
+                    // The block's full length, so the ring can be a proportion
+                    // rather than a guess. PomodoroTimer already saves its
+                    // settings into this state; an older saved state without
+                    // them yields undefined and the ring is simply not drawn.
+                    const mins = state.isBreak
+                        ? (state.settings?.shortBreak ?? state.settings?.longBreak)
+                        : state.settings?.workTime;
+                    setCurrentTime({
+                        timeLeft: actualTimeLeft,
+                        total: mins > 0 ? mins * 60 : 0,
+                        isBreak: state.isBreak || false,
+                        session: state.session,
+                        subject: state.selectedSubject,
+                    });
                 } else {
                     setCurrentTime(null); setGlobalTimer(null);
                     localStorage.removeItem('pomodoroTimerState');

@@ -390,6 +390,15 @@ a fast hover-out-hover-in cannot stutter. `perspective` goes on the PARENT; an
 element cannot supply its own vanishing point, and on the child a rotateY reads
 as a horizontal squash.
 
+**And hover detection NEVER goes on the element that rotates.** That was the
+real cause and the tween alone did not fix it. As the card turns through 90°
+its projected width collapses to nothing, so the stationary pointer falls
+outside its own hit box — `pointerleave` fires, it turns back, the box widens,
+`pointerenter` fires, forever. Holding the mouse still made it oscillate, which
+is why it looked like an animation bug and was not. `onPointerEnter`/`Leave`
+sit on the static wrapper now; only the inner element rotates. Anything that
+scales, rotates or flips on hover has this bug waiting in it.
+
 **Clearing the pile is an event, and the dashboard says so.** A student who
 worked through their cards — or cleared them on /Review by marking them known —
 came back to a hero that behaved as though nothing had happened. There is an
@@ -593,6 +602,21 @@ believing they do different things.
   discarded on close, the duration they picked was never read, the ATAR
   components were computed and never shown. If you add an input, wire it through
   the same session.
+- **The running timer is a clock, not a glyph beside a number.**
+  `PomodoroOrb` — a green (amber on break) face that glows, with an arc for how
+  much of the block is left and a hand that steps 6° every second. The arc is
+  an explicit SVG arc path with sweep-flag 1, NOT a `strokeDashoffset` on a
+  circle: the dash idiom is ambiguous about winding and the first version ran
+  anticlockwise, which on a clock face is the one thing it must not do. It
+  draws from `left` and `total` and nothing else, so the ring cannot disagree
+  with the digits next to it, and with no `total` (older saved state) the ring
+  is simply not drawn rather than drawn against a guess.
+- **A suggestion that says "I'll build it" has to build it.** Ace's WhatToTest
+  panel used to fill in two form fields and stop, leaving the student to scroll
+  down and find the start button. `startFromSuggestion` takes the pick all the
+  way into the session. It carries the choice in a ref, not state: the pick
+  arrives in the same tick that sets the subject, so reading state would build
+  the session for whatever subject was selected BEFORE they picked.
 - **No mascot yet** (maybe later). **Dark mode EXISTS** — `index.css` has a
   complete `.dark` token block and `src/lib/theme.js` offers four preferences
   (system / light / dark / auto by the clock). This line used to say there was

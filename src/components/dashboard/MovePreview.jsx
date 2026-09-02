@@ -83,7 +83,18 @@ export default function MovePreview({ move, card, theme, preview }) {
                 `perspective` lives here rather than on the rotating element,
                 because an element cannot supply its own vanishing point — put
                 it on the child and rotateY reads as a horizontal squash. */}
+            {/* HOVER IS DETECTED ON THIS WRAPPER, which never transforms.
+                Putting it on the card was the whole glitch: a rotating element
+                is projected NARROWER as it turns, so halfway through the flip
+                the pointer falls outside its own hit box, pointerleave fires,
+                it starts turning back, the box widens, pointerenter fires, and
+                it oscillates for as long as you hold still over it. No easing
+                curve can fix that, because the geometry is doing it.
+
+                An element you are hovering must not be the element that moves. */}
             <div className="absolute right-0 top-0 w-[152px]"
+                onPointerEnter={() => setOpen(true)}
+                onPointerLeave={() => setOpen(false)}
                 style={{ zIndex: 20, perspective: 900 }}>
                 <motion.div
                     initial={reduce ? { opacity: 0 } : {
@@ -100,8 +111,6 @@ export default function MovePreview({ move, card, theme, preview }) {
                         aria-label={preview ? `${move.label}: turn the card over` : move.label}
                         aria-pressed={open}
                         onClick={() => setOpen((v) => !v)}
-                        onPointerEnter={() => setOpen(true)}
-                        onPointerLeave={() => setOpen(false)}
                         onFocus={() => setOpen(true)}
                         onBlur={() => setOpen(false)}
                         className="block w-full cursor-pointer text-left
