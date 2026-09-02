@@ -20,6 +20,8 @@ import DueRadar from "@/components/dashboard/DueRadar";
 import ClearedPile from "@/components/dashboard/ClearedPile";
 import TableGround from "@/components/dashboard/TableGround";
 import TodaysPlay from "@/components/dashboard/TodaysPlay";
+import { brainActivity } from "@/lib/brainActivity";
+import { buildCase } from "@/lib/todaysCase";
 import HandRail from "@/components/dashboard/HandRail";
 import RunOfSeven from "@/components/dashboard/RunOfSeven";
 import Placed from "@/components/dashboard/Placed";
@@ -175,18 +177,21 @@ const INTENT_MOVES = {
         title: "You said homework today",
         sub: "List the tasks first, then run the clock on them one at a time.",
         cta: "Start the timer", link: "Study", accent: "chart-3", icon: Timer,
+        technique: "pomodoro", component: "effort",
     },
     cramming: {
         label: "Cram mode",
         title: "You said cramming today",
         sub: "Cover ground fast, and quiz yourself as you go so it actually sticks.",
         cta: "Start a session", link: "Study", accent: "xp", icon: Zap,
+        technique: "active_recall", component: "mastery",
     },
     free: {
         label: "Free study",
         title: "You said free study today",
         sub: "No deadline pressure, so it is a good day to shore up a weak spot.",
         cta: "Pick a technique", link: "Study", accent: "primary", icon: Sprout,
+        technique: "spaced_repetition", component: "breadth",
     },
 };
 
@@ -201,36 +206,42 @@ const CHALLENGE_MOVES = {
         title: "Retrieval beats re-reading, every time",
         sub: "You said it slips away after studying, and pulling it back out from memory is what makes it stay.",
         cta: "Start active recall", link: "Study", accent: "chart-4", icon: Brain,
+        technique: "active_recall", component: "mastery",
     },
     time: {
         label: "Your sticking point",
         title: "Map the week before it gets away",
         sub: "You said there's never enough runway before a SAC, and blocking it out now buys some back.",
         cta: "Open the planner", link: "Goals", accent: "xp", icon: Map,
+        component: "planning",
     },
     weak: {
         label: "Your sticking point",
         title: "Find out what you're actually shaky on",
         sub: "You said it's hard to tell, and your analytics already know which topics keep costing you marks.",
         cta: "See weak topics", link: "Analytics", accent: "chart-3", icon: BarChart3,
+        component: "mastery",
     },
     motivated: {
         label: "Your sticking point",
         title: "A short session still counts on the board",
         sub: "You said staying motivated is the hard part, and 25 minutes is enough to keep the streak and the score going.",
         cta: "Start a Pomodoro", link: "Study", accent: "primary", icon: Timer,
+        technique: "pomodoro", component: "consistency",
     },
     writing: {
         label: "Your sticking point",
         title: "Get a response marked properly",
         sub: "You said writing strong answers is the gap, and the English mentor marks to VCAA criteria and shows you the upgrade.",
         cta: "Open AI Tools", link: "AITools", accent: "chart-4", icon: Sparkles,
+        component: "mastery",
     },
     burnout: {
         label: "Your sticking point",
         title: "One focused block, then genuinely stop",
         sub: "You said the pressure is getting heavy, and a short bounded session beats an open-ended one.",
         cta: "Start 25 minutes", link: "Study", accent: "primary", icon: Timer,
+        technique: "pomodoro", component: "consistency",
     },
 };
 
@@ -243,6 +254,9 @@ function challengeMove(challenge) {
     if (!list.length) return null;
     return CHALLENGE_MOVES[list[new Date().getDate() % list.length]];
 }
+
+/** Minutes as a `why` row reads them — short, and never "0m". */
+const fmtWhy = (mins) => (mins >= 60 ? `${Math.floor(mins / 60)}h${mins % 60 ? ` ${mins % 60}m` : ""}` : `${mins}m`);
 
 function getTodaysMove({ todayMins, streakDays, dueFlashcards, urgentDays, urgentTitle, hour, intentMode, challenge }) {
     // What they told us this morning outranks anything we'd infer — until they
@@ -262,6 +276,10 @@ function getTodaysMove({ todayMins, streakDays, dueFlashcards, urgentDays, urgen
             // is not a streak — it is the one card nothing else beats.
             card: { rank: "A", suit: "spade", tone: "#0D1626" },
             icon: AlertTriangle,
+            component: "planning",
+            why: urgentDays === 0
+                ? { value: "Today", label: "is the deadline" }
+                : { value: urgentDays, label: `day${urgentDays === 1 ? "" : "s"} until it lands` },
         };
     }
     if (dueFlashcards >= 10) {
@@ -273,6 +291,9 @@ function getTodaysMove({ todayMins, streakDays, dueFlashcards, urgentDays, urgen
             link: "Study",
             accent: "chart-3",
             icon: Layers,
+            technique: "spaced_repetition",
+            component: "mastery",
+            why: { value: dueFlashcards, label: "cards at or past their review date" },
         };
     }
     if (streakDays > 0 && todayMins === 0 && hour >= 18) {
@@ -284,6 +305,9 @@ function getTodaysMove({ todayMins, streakDays, dueFlashcards, urgentDays, urgen
             link: "Study",
             accent: "streak",
             icon: Timer,
+            technique: "pomodoro",
+            component: "consistency",
+            why: { value: `${streakDays}d`, label: "streak on the line tonight" },
         };
     }
     if (todayMins === 0) {
@@ -297,6 +321,8 @@ function getTodaysMove({ todayMins, streakDays, dueFlashcards, urgentDays, urgen
             link: "Study",
             accent: "primary",
             icon: Timer,
+            technique: "pomodoro",
+            component: "consistency",
         };
     }
     if (todayMins < 60) {
@@ -308,6 +334,9 @@ function getTodaysMove({ todayMins, streakDays, dueFlashcards, urgentDays, urgen
             link: "Quizzes",
             accent: "xp",
             icon: Brain,
+            technique: "active_recall",
+            component: "mastery",
+            why: { value: fmtWhy(todayMins), label: "in so far — testing is what banks it" },
         };
     }
     return {
@@ -318,34 +347,20 @@ function getTodaysMove({ todayMins, streakDays, dueFlashcards, urgentDays, urgen
         link: "AITools",
         accent: "chart-4",
         icon: Sparkles,
+        technique: "exam",
+        component: "breadth",
+        why: { value: fmtWhy(todayMins), label: "logged today already" },
     };
 }
 
 // Direction A — softer tints, lighter borders, shadow for depth.
-/**
- * The move, as a card — and the RANK IS THE URGENCY, on the scale a card
- * player already knows. Someone who reads none of the label still gets the
- * ordering right, because a King outranks a Jack whether or not you were
- * paying attention.
- *
- *   A♠  a deadline. You cannot beat it and you cannot play around it.
- *   K♥  the streak is on the line tonight.
- *   Q♦  a pile of cards has come due.
- *   J♣  you have not started — the easiest opening.
- *   10♦ you are going; now test what stuck.
- *   9♠  you are well past the day's minimum, here is the bonus.
- *
- * Keyed on the accent each move already carries, so nothing has to be kept in
- * sync by hand; the deadline move overrides it to the Ace explicitly, because
- * it shares the streak accent and is not the same thing at all.
- */
-const MOVE_CARD = {
-    streak:    { rank: "K",  suit: "heart",   tone: "#FF4B4B" },
-    "chart-3": { rank: "Q",  suit: "diamond", tone: "#3B82F6" },
-    primary:   { rank: "J",  suit: "club",    tone: "#58CC02" },
-    xp:        { rank: "10", suit: "diamond", tone: "#F59E0B" },
-    "chart-4": { rank: "9",  suit: "spade",   tone: "#8B5CF6" },
-};
+/* THE MOVE USED TO BE DEALT AS A PLAYING CARD, and its RANK carried the
+ * urgency: an Ace for a deadline, a Jack for "you have not started". The rank
+ * was a good idea that could not pay for its own space — it told you the move
+ * was urgent, which the headline beside it already said, in the largest
+ * element on the most important panel. The brain took the space and spends it
+ * on something nothing else in the product says. See TodaysPlay's header; the
+ * card language is untouched everywhere else on this page. */
 
 const MOVE_THEME = {
     primary:   { bg: "bg-primary/5",   border: "border-primary/15",   iconBg: "bg-primary/10",   iconText: "text-primary",   bar: "bg-primary"   },
@@ -765,7 +780,15 @@ export default function Dashboard() {
         challenge: userProfile?.primary_challenge ?? null,
     });
     const moveTheme = MOVE_THEME[move.accent];
-    const moveCard = { ...(MOVE_CARD[move.accent] || MOVE_CARD.primary), ...(move.card || {}) };
+
+    // The argument for the move: what fired it, which systems it wakes that
+    // the last four weeks left dark, and what it is worth in ATAR points.
+    // Every row drops out when its number is not real — see todaysCase.js.
+    const brain = useMemo(() => brainActivity(studyTechniques), [studyTechniques]);
+    const todaysCase = useMemo(
+        () => buildCase({ move, activity: brain, components: userProfile?.atar_components || null }),
+        [move, brain, userProfile?.atar_components],
+    );
 
     // The modal asks "how long?" and saves the answer, but nothing ever read it
     // back — a student committed to an hour and the app never mentioned it
@@ -879,9 +902,9 @@ export default function Dashboard() {
                     )}
                 </Placed>
 
-                {/* ── YOUR PLAY — the card Ace deals you today ────────── */}
+                {/* ── YOUR PLAY — the move, and the case for it ───────── */}
                 <Placed index={1}>
-                    <TodaysPlay move={move} card={moveCard} theme={moveTheme}
+                    <TodaysPlay move={move} theme={moveTheme} todaysCase={todaysCase}
                         commitment={commitment} fmtTime={fmtTime}
                         todayMins={todaysStudyTime} weekMins={weeklyStudyTime}
                         weekGoalHours={goalHours} weekPct={weeklyPct}

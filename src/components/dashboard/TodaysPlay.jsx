@@ -1,27 +1,41 @@
 /**
- * TodaysPlay — the day's one instruction, as the card Ace deals you.
+ * TodaysPlay — the day's one instruction, and the case for it.
  *
- * What it replaces was a tinted banner: an icon in a rounded square, a label,
- * a headline, a line of copy and a button, on a pastel background that changed
- * colour with the accent. It worked, and it looked like every notification bar
- * ever shipped — which is a problem for the single most important element on
- * the page, because "the one thing to do today" was reading as "a message the
- * app would like you to dismiss".
+ * ─── What it is ─────────────────────────────────────────────────────────────
+ * Three columns, and each one is a different job:
  *
- * SO IT IS A CARD, OFF THE TOP OF A DECK. The rest of the product is built on
- * PlayingCard now — the review deck, the quiz table, the landing hero — and
- * the dashboard was the one screen that did not know the object existed. A
- * card is also the right SHAPE for this content: it is a single thing, it is
- * physical, and it arrives, which a banner never does.
+ *   THE BRAIN    which systems this move works, drawn over the systems the
+ *                student's last four weeks actually lit. A region dark in
+ *                their history and full in the move is the argument, drawn.
+ *   THE MOVE     what to do, one line on why, one button.
+ *   THE CASE     the trigger fact, the gap, and what it is worth in ATAR
+ *                points. See todaysCase.js — every row is dropped when its
+ *                number is not real.
  *
- * THE RANK IS NOT DECORATION. It is how urgent the move is, on the scale every
- * card player already knows: an Ace is the deadline you cannot beat, a Jack is
- * "you have not started yet", a 9 is "you are already going, here is a bonus".
- * Someone who never reads a word of the label still gets the ordering right.
+ * ─── Why the brain and not the playing card ─────────────────────────────────
+ * The card was right about one thing and wrong about another. Right that the
+ * hero should be an OBJECT rather than a notification bar — that is why the
+ * rest of the page is still cards. Wrong that a rank could carry the argument:
+ * an Ace tells you the move is urgent, which the headline already said, and
+ * then the largest element on the most important panel is spending its space
+ * restating one word.
  *
- * The deal is the same motion the review deck and the quiz table use, so this
- * is the third time a visitor sees it and the first time they see it on their
- * own data.
+ * The brain spends the same space on something nothing else in the product
+ * says. It is the student's own 28-day technique history (`brainActivity`),
+ * so a Pomodoro-only month reads as a bright front and a dark middle at a
+ * glance, and the move's own regions come up full on top of it. It is also
+ * already built, already cited, and already the thing the landing page and
+ * the signup wizard use to sell the app — this is the first time a student
+ * sees it aimed at their own work.
+ *
+ * The card language is untouched everywhere else on the page: YourHand, the
+ * subject deck, the quiz table, ClearedPile.
+ *
+ * ─── What is drawn is never the only copy of a fact ─────────────────────────
+ * The cloud is atmosphere; the regions are named in HTML beside it. If the
+ * canvas never paints — reduced motion, an old device, a screen reader —
+ * nothing factual is lost. BrainModel's own header makes the same promise and
+ * this panel keeps it.
  */
 import React from "react";
 import { motion, useReducedMotion } from "framer-motion";
@@ -29,18 +43,22 @@ import { ArrowRight } from "lucide-react";
 import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { createPageUrl } from "@/utils";
-import PlayingCard, { CardBack } from "@/components/cards/PlayingCard";
 import CommitmentRun from "@/components/dashboard/CommitmentRun";
+import BrainModel from "@/components/study/BrainModel";
 
-/** How many backs sit under the dealt card. Enough to read as a deck. */
-const DEPTH = 3;
-const STEP = 4;
+/** Static class lookups — Tailwind cannot see a class built at runtime. */
+const ROW_TONE = {
+    trigger: "text-foreground",
+    brain:   "text-chart-4",
+    payoff:  "text-primary",
+};
 
 export default function TodaysPlay({
-    move, card, theme, commitment, fmtTime,
+    move, theme, commitment, fmtTime, todaysCase,
     // The day's numbers. They used to live in a separate green panel beside
-    // this one — two boxes both headed "today", which is one box. The XP pair
-    // went with the ring: see the note where it used to be drawn.
+    // this one — two boxes both headed "today", which is one box. They now sit
+    // as a footer strip rather than a third column, because the case beside
+    // the move is what the panel is FOR and the numbers are context on it.
     todayMins, weekMins, weekGoalHours, weekPct, avgQuiz,
 }) {
     const reduce = useReducedMotion();
@@ -49,96 +67,72 @@ export default function TodaysPlay({
     // off the XP goal, which is no longer drawn anywhere, so "Hit" would have
     // appeared against nothing the student could see they had hit.
     const hit = !!commitment?.met;
+    const done = !!commitment?.met;
+    const rows = todaysCase?.rows || [];
+    const regions = todaysCase?.regions || [];
+    // No history and no technique means every region would read the same, and
+    // an identical picture for every student is the decoration this app keeps
+    // taking out. See todaysCase's `hasBrain`.
+    const showBrain = Boolean(todaysCase?.hasBrain) && regions.length > 0;
 
     return (
-        <div className="rounded-2xl bg-surface border border-border on-table p-5 lg:p-6">
-            {/* items-center, not items-stretch. The deck illustration is 208px
-                tall and the copy beside it is about 150, so stretching left the
-                text column top-aligned against a taller neighbour with a band
-                of nothing under the button — the panel's height was set by the
-                picture and the content did not fill it. Centring hangs
-                everything off the same axis and the surplus splits above and
-                below instead of pooling at the bottom. */}
-            <div className="flex flex-col lg:flex-row items-center gap-6 lg:gap-8">
+        <div className="rounded-2xl bg-surface border border-border on-table overflow-hidden">
+            <div className="flex flex-col lg:flex-row items-stretch gap-6 lg:gap-8 p-5 lg:p-6">
 
-                {/* ── The deck, and the card off the top of it ──────────── */}
-                {/* The deck leans LEFT out of its own box, so the box is padded
-                    to hold the overhang. Without that the panel's own rounding
-                    clipped the bottom corner off the lowest back and it read as
-                    a rendering bug rather than as a deck. */}
-                <div className="relative flex-shrink-0 mx-auto lg:mx-0"
-                    style={{ width: 156, height: 194 }}>
-                    {/* THE POSITIONING IS ON A WRAPPER, not on CardBack.
-                        CardBack's own class list opens with `relative`, and
-                        Tailwind emits position utilities in a fixed order where
-                        `relative` comes after `absolute` — so an `absolute`
-                        handed in through className loses, every back stays in
-                        normal flow, and the deck unstacks itself down the
-                        page. Same trap as the review pile and the hero hand. */}
-                    {Array.from({ length: DEPTH }, (_, k) => (
-                        <div key={k} className="absolute w-[118px]"
-                            style={{
-                                left: 8 - k * STEP, top: 22 - k * STEP,
-                                transform: `rotate(${-7 - k * 1.6}deg)`,
-                                zIndex: DEPTH - k,
-                                opacity: 1 - k * 0.14,
-                            }}>
-                            <CardBack tone={card.tone} flat={k > 0}
-                                className="w-full aspect-[2.5/3.5]" />
+                {/* ── The brain ─────────────────────────────────────────── */}
+                {showBrain && (
+                    <div className="lg:w-[300px] flex-shrink-0 flex flex-col justify-center">
+                        {/* `plate` gives the cloud a dark backing so the unlit
+                            points stay visible in light mode — without it the
+                            dark half of the picture, which is the half making
+                            the argument, disappears into the panel. */}
+                        <div className="relative rounded-2xl overflow-hidden">
+                            <BrainModel regions={regions} height={224} glow />
                         </div>
-                    ))}
-
-                    <motion.div
-                        data-todays-play
-                        className="absolute right-0 top-0 w-[134px]"
-                        style={{ zIndex: 20 }}
-                        /* Dealt FROM the deck: it starts where the backs are,
-                           turned over, and lands square on top of them. */
-                        initial={reduce ? { opacity: 0 } : {
-                            opacity: 0, x: -40, y: 18, rotate: -24, scale: 0.86,
-                        }}
-                        animate={{ opacity: 1, x: 0, y: 0, rotate: 3.5, scale: 1 }}
-                        transition={reduce ? { duration: 0.2 } : {
-                            type: "spring", stiffness: 170, damping: 18, mass: 0.9, delay: 0.18,
-                        }}
-                        whileHover={reduce ? undefined : { rotate: 0, y: -6, scale: 1.04 }}
-                    >
-                        {/* The only card left in the app still drawing the default
-                            ghost watermark. The move's icon and label sit dead
-                            centre, so the layout goes behind them at printing
-                            strength rather than in front. */}
-                        <PlayingCard rank={card.rank} suit={card.suit} tone={card.tone}
-                            smallIndices watermark={false} pips="faint"
-                            className="w-full aspect-[2.5/3.5]">
-                            <span className="absolute inset-0 flex flex-col items-center
-                                justify-center gap-2.5 px-3 text-center">
-                                <span className={`w-12 h-12 rounded-xl ${theme.iconBg}
-                                    flex items-center justify-center`}>
-                                    <Icon className={`w-6 h-6 ${theme.iconText}`} />
+                        {/* The regions in HTML, because the canvas is
+                            atmosphere and this is the fact. Only what the move
+                            works — the student's own history is in the
+                            brightness, not in this list. */}
+                        {todaysCase?.gaps?.length > 0 && (
+                            <p className="text-[11px] text-muted-foreground leading-snug mt-2 text-center lg:text-left">
+                                Wakes{" "}
+                                <span className="font-bold text-foreground">
+                                    {todaysCase.gaps.map((g) => g.name).join(", ")}
                                 </span>
-                                <span className="stat-label leading-tight">{move.label}</span>
-                            </span>
-                        </PlayingCard>
-                    </motion.div>
-                </div>
+                                {" "}— quiet in your last four weeks.
+                            </p>
+                        )}
+                    </div>
+                )}
 
                 {/* ── What it says, and the one button ──────────────────── */}
-                {/* Capped, and the surplus goes to the gap rather than to the
-                    end of this column. `flex-1` alone gave the copy the whole
-                    remaining track, so on a wide screen the sentence ended
-                    around 600px in and the next seven hundred were blank before
-                    the stats divider — one enormous hole in the middle of the
-                    first thing on the page. A measure this long is unreadable
-                    anyway; text stops being comfortable somewhere around 75
-                    characters and the cap is roughly that. */}
-                <div className="flex-1 min-w-0 max-w-2xl flex flex-col justify-center">
-                    <p className="stat-label mb-1.5">Do this next</p>
+                {/* The COLUMN fills; the TEXT is capped inside it. Capping the
+                    column instead left the surplus as one 500px hole between
+                    the button and the rail on a wide screen — the middle of
+                    the most important panel on the page, empty. Text stops
+                    being comfortable somewhere around 75 characters, so the
+                    headline and the line under it carry their own measure and
+                    the column is free to close the gap. */}
+                <div className="flex-1 min-w-0 flex flex-col justify-center">
+                    <div className="flex items-center gap-2 mb-1.5">
+                        <span className={`w-7 h-7 rounded-lg ${theme.iconBg}
+                            flex items-center justify-center flex-shrink-0`}>
+                            <Icon className={`w-4 h-4 ${theme.iconText}`} />
+                        </span>
+                        <p className="stat-label">{done ? "Today" : move.label}</p>
+                    </div>
+                    {/* It grows with the viewport rather than sitting at one
+                        size and leaving the extra width as a hole beside the
+                        rail. A short headline on a wide screen is the only
+                        thing here that can honestly take the space — padding
+                        the copy or the rail to fill it would be inventing
+                        content to fix a layout. */}
                     <h2 className="font-display font-extrabold text-foreground
-                        text-xl lg:text-2xl leading-snug tracking-tight">
-                        {commitment?.met ? "You did what you said you'd do." : move.title}
+                        text-xl lg:text-3xl xl:text-4xl leading-tight tracking-tight max-w-2xl">
+                        {done ? "You did what you said you'd do." : move.title}
                     </h2>
-                    <p className="text-muted-foreground text-sm mt-1.5 leading-relaxed max-w-lg">
-                        {commitment?.met
+                    <p className="text-muted-foreground text-sm lg:text-base mt-2 leading-relaxed max-w-lg">
+                        {done
                             ? `${fmtTime(commitment.done)} against the ${fmtTime(commitment.target)} you committed to.`
                             : move.sub}
                     </p>
@@ -150,61 +144,76 @@ export default function TodaysPlay({
                     <CommitmentRun commitment={commitment} fmtTime={fmtTime} />
 
                     <Link to={createPageUrl(move.link)} className="inline-block mt-5">
-                        <Button>{move.cta} <ArrowRight className="w-4 h-4" /></Button>
+                        <Button size="lg" className="text-base">
+                            {move.cta} <ArrowRight className="w-4 h-4" />
+                        </Button>
                     </Link>
                 </div>
 
-                {/* ── The day's numbers ─────────────────────────────────── */}
-                <div className="lg:w-[212px] flex-shrink-0 lg:ml-auto lg:border-l lg:border-border/70
-                    lg:pl-7 pt-5 lg:pt-0 border-t border-border/70 lg:border-t-0
-                    flex flex-col justify-center">
-                    {/* THE XP RING LIVED HERE. A hundred XP a day is a number
-                        the app invented, drawn as the biggest object in the
-                        panel, next to two other answers to the same question —
-                        "time today" underneath it and the commitment bar in the
-                        column to the left. Three readouts of how today is
-                        going, and the only one with a promise behind it was the
-                        smallest. The commitment took the job and this column
-                        went back to being what it says on the label: the
-                        numbers, in order of how much they matter. */}
-                    <div className="flex items-center justify-between mb-3">
-                        <p className="stat-label">Today</p>
-                        {hit && <span className="pill bg-primary/15 text-primary">Hit</span>}
+                {/* ── The case ──────────────────────────────────────────── */}
+                {/* Dropped entirely when nothing survived. A rail of dashes on
+                    a first-week account teaches a student that the numbers on
+                    this page are decoration. */}
+                {rows.length > 0 && (
+                    <div className="lg:w-[264px] flex-shrink-0 lg:border-l lg:border-border/70
+                        lg:pl-7 pt-5 lg:pt-0 border-t border-border/70 lg:border-t-0
+                        flex flex-col justify-center">
+                        <p className="stat-label mb-3">Why this</p>
+                        <ul className="space-y-3.5">
+                            {rows.map((r, i) => (
+                                <motion.li key={r.kind}
+                                    initial={reduce ? false : { opacity: 0, x: 6 }}
+                                    animate={{ opacity: 1, x: 0 }}
+                                    transition={{ duration: 0.3, delay: 0.25 + i * 0.08 }}
+                                    className="leading-tight">
+                                    <span className={`font-display font-extrabold text-xl tabular-nums
+                                        ${ROW_TONE[r.kind] || "text-foreground"}`}>
+                                        {r.value}
+                                    </span>
+                                    <span className="block text-[11px] text-muted-foreground leading-snug mt-0.5">
+                                        {r.label}
+                                    </span>
+                                </motion.li>
+                            ))}
+                        </ul>
                     </div>
+                )}
+            </div>
 
-                    <div className="space-y-3">
-                        <div className="flex items-baseline justify-between">
-                            <p className="text-xs font-bold text-muted-foreground">Time today</p>
-                            <p className="text-xs font-bold text-foreground">{fmtTime(todayMins)}</p>
-                        </div>
-                        <div>
-                            <div className="flex items-baseline justify-between mb-1">
-                                <p className="text-xs font-bold text-muted-foreground">This week</p>
-                                <p className="text-xs font-bold text-foreground">
-                                    {fmtTime(weekMins)}
-                                    <span className="text-muted-foreground/60"> / {weekGoalHours}h</span>
-                                </p>
-                            </div>
-                            <div className="h-1.5 bg-secondary rounded-full overflow-hidden">
-                                <motion.div
-                                    initial={{ width: 0 }}
-                                    animate={{ width: `${weekPct}%` }}
-                                    transition={{ duration: 0.9, delay: 0.35 }}
-                                    className={`h-full rounded-full ${weekPct >= 100 ? "bg-primary" : "bg-xp"}`}
-                                />
-                            </div>
-                        </div>
-                        <div className="flex items-baseline justify-between">
-                            <p className="text-xs font-bold text-muted-foreground">Avg quiz</p>
-                            <p className="text-xs font-bold text-foreground">
-                                {avgQuiz != null ? `${avgQuiz}%` : "-"}
-                            </p>
-                        </div>
-                    </div>
-
-                    {/* "Study now" sat here and went to the same place the
-                        panel's own primary button goes. One panel, one play. */}
-                </div>
+            {/* ── The day's numbers ─────────────────────────────────────── */}
+            {/* A strip, not a column. Three small readouts standing beside the
+                case would compete with it for the same corner, and the case is
+                the thing this panel exists to make. */}
+            <div className="flex flex-wrap items-center gap-x-6 gap-y-2 border-t border-border/70
+                bg-secondary/30 px-5 lg:px-6 py-3">
+                <span className="flex items-center gap-2">
+                    <span className="stat-label">Today</span>
+                    {hit && <span className="pill bg-primary/15 text-primary">Hit</span>}
+                </span>
+                <span className="flex items-baseline gap-1.5 text-xs">
+                    <span className="font-bold text-muted-foreground">Time</span>
+                    <span className="font-bold text-foreground tabular-nums">{fmtTime(todayMins)}</span>
+                </span>
+                <span className="flex items-baseline gap-1.5 text-xs min-w-[9rem] flex-1 max-w-[16rem]">
+                    <span className="font-bold text-muted-foreground">Week</span>
+                    <span className="font-bold text-foreground tabular-nums">
+                        {fmtTime(weekMins)}
+                        <span className="text-muted-foreground/60"> / {weekGoalHours}h</span>
+                    </span>
+                    <span className="flex-1 h-1.5 bg-secondary rounded-full overflow-hidden ml-1">
+                        <motion.span
+                            className={`block h-full rounded-full ${weekPct >= 100 ? "bg-primary" : "bg-xp"}`}
+                            initial={{ width: 0 }}
+                            animate={{ width: `${weekPct}%` }}
+                            transition={{ duration: 0.9, delay: 0.35 }} />
+                    </span>
+                </span>
+                <span className="flex items-baseline gap-1.5 text-xs">
+                    <span className="font-bold text-muted-foreground">Avg quiz</span>
+                    <span className="font-bold text-foreground tabular-nums">
+                        {avgQuiz != null ? `${avgQuiz}%` : "-"}
+                    </span>
+                </span>
             </div>
         </div>
     );

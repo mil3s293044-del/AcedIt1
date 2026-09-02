@@ -1,6 +1,9 @@
 import React, { useState, useEffect, useMemo } from "react";
-import { useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { base44 } from "@/api/base44Client";
+import { createPageUrl } from "@/utils";
+import { BANK_TOPIC, bankSummary } from "@/lib/mistakeBank";
+import { isDue, isNew } from "@/lib/due";
 import { deleteResult } from "@/lib/saveResult";
 import { motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
@@ -26,7 +29,6 @@ import {
     PlusCircle,
     Trophy,
     ArrowRight,
-    Zap,
     AlertTriangle,
     Bookmark,
     ChevronDown,
@@ -34,7 +36,7 @@ import {
     Trash2,
     Eye
 } from "lucide-react";
-import { format, isThisWeek, parseISO } from "date-fns";
+import { format } from "date-fns";
 import { useToast } from "@/components/ui/use-toast";
 import AISkeleton from "../components/shared/AISkeleton";
 import { isPremium } from "@/components/shared/subscriptionHelpers";
@@ -75,15 +77,6 @@ function getCoachLine({ name, hour, totalQuizzes, recentAttempts, avgScore, lowS
     return `${period}, ${name}. Let's get a quiz in.`;
 }
 
-function fmtMins(secs) {
-    if (!secs) return "0m";
-    const m = Math.round(secs / 60);
-    if (m < 60) return `${m}m`;
-    const h = Math.floor(m / 60);
-    const mm = m % 60;
-    return mm === 0 ? `${h}h` : `${h}h ${mm}m`;
-}
-
 const FOCUS_THEME = {
     primary:   { bg: "bg-primary/10",  border: "border-primary/25",  iconBg: "bg-primary/15",  iconText: "text-primary"  },
     xp:        { bg: "bg-xp/10",       border: "border-xp/25",       iconBg: "bg-xp/15",       iconText: "text-xp"       },
@@ -98,6 +91,7 @@ export default function Quizzes() {
     const [userProfile, setUserProfile] = useState(null);
     const [quizzes, setQuizzes] = useState([]);
     const [quizAttempts, setQuizAttempts] = useState([]);
+    const [bankCards, setBankCards] = useState([]);
     const [sharedQuizzes, setSharedQuizzes] = useState([]);
     const [userSubjects, setUserSubjects] = useState([]);
     const [selectedQuiz, setSelectedQuiz] = useState(null);
@@ -162,49 +156,27 @@ export default function Quizzes() {
             const profiles = await base44.entities.UserProfile.filter({ created_by: currentUser.email });
             setUserProfile(profiles[0] || null);
 
-            // Load data with individual error handling
-            let quizzesData = [];
-            let attemptsData = [];
-            let sharedQuizzesData = [];
-            let userSubjectsData = [];
-
-            try {
-                quizzesData = await base44.entities.Quiz.filter({ created_by: currentUser.email });
-            } catch (e) {
-                console.error("Error loading quizzes:", e);
-            }
-
-            try {
-                attemptsData = await base44.entities.QuizAttempt.filter({ created_by: currentUser.email });
-            } catch (e) {
-                console.error("Error loading quiz attempts:", e);
-            }
-
-            try {
-                sharedQuizzesData = await base44.entities.SharedQuiz.filter({
-                    shared_with_email: currentUser.email
-                });
-            } catch (e) {
-                console.error("Error loading shared quizzes:", e);
-            }
-
-            try {
-                userSubjectsData = await base44.entities.UserSubject.filter({
-                    created_by: currentUser.email,
-                    is_active: true
-                });
-            } catch (e) {
-                console.error("Error loading user subjects:", e);
-            }
-
-            try {
-                const saved = await base44.entities.AISavedResult.filter(
-                    { created_by: currentUser.email, tool_type: 'saved_answer' }, '-date_created'
-                );
-                setSavedAnswers(saved || []);
-            } catch (e) {
-                console.error("Error loading saved answers:", e);
-            }
+            // Six independent reads. They were sequential — six round trips
+            // one after another before the page could paint — and nothing here
+            // waits on anything else. Each keeps its own catch so one failing
+            // table still leaves the rest of the page usable.
+            const fail = (what) => (e) => { console.error(`Error loading ${what}:`, e); return []; };
+            const [quizzesData, attemptsData, sharedQuizzesData, userSubjectsData, saved, bankCards] =
+                await Promise.all([
+                    base44.entities.Quiz.filter({ created_by: currentUser.email }).catch(fail("quizzes")),
+                    base44.entities.QuizAttempt.filter({ created_by: currentUser.email }).catch(fail("quiz attempts")),
+                    base44.entities.SharedQuiz.filter({ shared_with_email: currentUser.email }).catch(fail("shared quizzes")),
+                    base44.entities.UserSubject.filter({ created_by: currentUser.email, is_active: true }).catch(fail("user subjects")),
+                    base44.entities.AISavedResult.filter(
+                        { created_by: currentUser.email, tool_type: 'saved_answer' }, '-date_created'
+                    ).catch(fail("saved answers")),
+                    // The mistake bank, for the panel beside the hero.
+                    base44.entities.Flashcard.filter({
+                        created_by: currentUser.email, topic: BANK_TOPIC, is_active: true,
+                    }).catch(fail("mistake bank")),
+                ]);
+            setSavedAnswers(saved || []);
+            setBankCards(bankCards || []);
 
             setQuizzes(quizzesData || []);
             setQuizAttempts(attemptsData || []);
@@ -887,6 +859,13 @@ Return valid JSON only.`,
     const pendingSharedQuizzes = sharedQuizzes.filter(sq => sq.status === "pending");
 
     // ─── Derived hero/coach stats ─────────────────────────────────────────────
+    // Ready is due OR never reviewed — a mistake banked an hour ago is not
+    // unopened material. Same rule the bank page uses; see bankSummary.
+    const bank = useMemo(
+        () => bankSummary(bankCards, (c) => isDue(c) || isNew(c)),
+        [bankCards],
+    );
+
     const quizStats = useMemo(() => {
         const totalQuizzes = quizzes.length;
         const sortedAttempts = [...quizAttempts].sort((a, b) => {
@@ -902,17 +881,10 @@ Return valid JSON only.`,
             ? Math.max(...quizAttempts.map(a => a.score || 0))
             : null;
 
-        // This week
-        const thisWeekAttempts = quizAttempts.filter(a => {
-            const d = a.date || a.created_date;
-            if (!d) return false;
-            try { return isThisWeek(parseISO(d), { weekStartsOn: 1 }); } catch { return false; }
-        });
-        const weekCount = thisWeekAttempts.length;
-        const weekTimeSecs = thisWeekAttempts.reduce((sum, a) => sum + (a.time_taken || 0), 0);
-        const weekBest = thisWeekAttempts.length
-            ? Math.max(...thisWeekAttempts.map(a => a.score || 0))
-            : null;
+        // The week's activity counts went with the panel that printed them.
+        // "3 quizzes taken this week" is a measure of turning up, not of
+        // getting better, and the space now shows the mistakes still costing
+        // marks — the one number on this page that goes down when you work.
 
         const lastAttempt = sortedAttempts[0] || null;
         const lowScore = avgScore != null && avgScore < 60;
@@ -922,9 +894,6 @@ Return valid JSON only.`,
             recentAttempts: sortedAttempts.length,
             avgScore,
             bestScore,
-            weekCount,
-            weekTimeSecs,
-            weekBest,
             lastAttempt,
             lowScore,
         };
@@ -1199,36 +1168,61 @@ Return valid JSON only.`,
                         </div>
                     </div>
 
-                    {/* RIGHT: This week */}
+                    {/* RIGHT: The mistake bank.
+                        This was "This week: 3 quizzes taken. Keep stacking." —
+                        a count of activity, which is the weakest thing this
+                        page knows. How many quizzes you sat is not a fact you
+                        can act on; which marks you are still dropping is, and
+                        it is the one number on this page that goes DOWN when
+                        the student does the work. AI Generate stays: it is the
+                        page's primary action and it is not the bank's business
+                        to inherit that space. */}
                     <div className="md:col-span-2">
-                        <div className="rounded-3xl bg-xp/10 border-2 border-xp/25 p-6 h-full flex flex-col">
+                        <div className="rounded-3xl bg-streak/10 border-2 border-streak/25 p-6 h-full flex flex-col">
                             <div className="flex items-center gap-2 mb-2">
-                                <Zap className="w-4 h-4 text-xp" />
-                                <p className="stat-label text-xp/80">This week</p>
+                                <Bookmark className="w-4 h-4 text-streak" />
+                                <p className="stat-label text-streak/80">Mistake bank</p>
                             </div>
                             <p className="font-display font-extrabold text-foreground leading-none" style={{ fontSize: 'clamp(2.25rem, 5.5vw, 3rem)' }}>
-                                {quizStats.weekCount}
+                                {bank.total === 0 ? '—' : bank.outstanding}
                             </p>
                             <p className="text-xs text-muted-foreground mt-2 leading-snug">
-                                {quizStats.weekCount === 0
-                                    ? "Nothing logged this week yet — let's change that."
-                                    : quizStats.weekCount === 1
-                                        ? "Nice — one quiz down this week."
-                                        : `${quizStats.weekCount} quizzes taken. Keep stacking.`}
+                                {bank.total === 0
+                                    ? "Mark a quiz and save the marks you drop — they come back until you have them."
+                                    : bank.outstanding === 0
+                                        ? `All ${bank.total} fixed. Nothing outstanding.`
+                                        : `${bank.outstanding} mistake${bank.outstanding === 1 ? '' : 's'} still costing you marks.`}
                             </p>
-                            <div className="space-y-2.5 mt-4 pt-4 border-t-2 border-xp/15">
-                                <div className="flex items-baseline justify-between">
-                                    <p className="text-xs font-bold text-muted-foreground">Time</p>
-                                    <p className="text-xs font-bold text-foreground">{fmtMins(quizStats.weekTimeSecs)}</p>
+
+                            {bank.total > 0 && (
+                                <div className="space-y-2.5 mt-4 pt-4 border-t-2 border-streak/15">
+                                    <div className="flex items-baseline justify-between">
+                                        <p className="text-xs font-bold text-muted-foreground">Fixed</p>
+                                        <p className="text-xs font-bold text-foreground tabular-nums">
+                                            {bank.fixed} / {bank.total}
+                                        </p>
+                                    </div>
+                                    <div className="flex items-baseline justify-between">
+                                        <p className="text-xs font-bold text-muted-foreground">Ready now</p>
+                                        <p className="text-xs font-bold text-foreground tabular-nums">{bank.ready}</p>
+                                    </div>
                                 </div>
-                                <div className="flex items-baseline justify-between">
-                                    <p className="text-xs font-bold text-muted-foreground">Best</p>
-                                    <p className="text-xs font-bold text-foreground">{quizStats.weekBest != null ? `${Math.round(quizStats.weekBest)}%` : '—'}</p>
-                                </div>
+                            )}
+
+                            <div className="mt-auto pt-4 space-y-2">
+                                {bank.total > 0 && (
+                                    <Link to={createPageUrl("MistakeBank")} className="block">
+                                        <Button size="sm" variant="outline"
+                                            className="w-full border-2 border-streak/30 text-foreground hover:bg-streak/10">
+                                            <Bookmark className="w-3.5 h-3.5" />
+                                            {bank.ready > 0 ? `Review ${bank.ready} now` : 'Open the bank'}
+                                        </Button>
+                                    </Link>
+                                )}
+                                <Button size="sm" onClick={() => setShowAIDialog(true)} className="w-full bg-chart-3 hover:bg-chart-3/90 text-white">
+                                    <Wand2 className="w-3.5 h-3.5" /> AI Generate
+                                </Button>
                             </div>
-                            <Button size="sm" onClick={() => setShowAIDialog(true)} className="w-full mt-4 bg-chart-3 hover:bg-chart-3/90 text-white">
-                                <Wand2 className="w-3.5 h-3.5" /> AI Generate
-                            </Button>
                         </div>
                     </div>
                 </motion.section>
