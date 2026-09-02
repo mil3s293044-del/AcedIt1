@@ -256,6 +256,8 @@ export default function ActiveRecall({ onSessionComplete, userSubjects: initialU
     const [isGeneratingMarking, setIsGeneratingMarking] = useState(false);
     const [isFocusMode, setIsFocusMode] = useState(false);
     const [showFocusPrompt, setShowFocusPrompt] = useState(false);
+    // See startFromSuggestion — carries a pick across the tick that sets state.
+    const pendingPick = useRef(null);
     const { toast } = useToast();
     const focusModeRef = useRef(null);
 
@@ -430,6 +432,24 @@ Questions should:
         }
     };
 
+    /**
+     * A suggestion from Ace's panel, taken all the way into a session.
+     *
+     * The panel says "Pick one and I'll build it" and then used to set two form
+     * fields and stop, leaving the student to scroll down and find the start
+     * button — a promise the screen made and did not keep, which is the same
+     * shape as an optional-looking step nobody completes. It builds it now.
+     */
+    const startFromSuggestion = (sug) => {
+        if (sug.subject) setSelectedSubject(sug.subject);
+        setTopic(sug.topic || "");
+        // Cleared so handleStartConfirmed rebuilds from THIS topic's material
+        // rather than reusing whatever the last generation left behind.
+        setQuestions([]);
+        pendingPick.current = { subject: sug.subject, topic: sug.topic || "" };
+        setShowFocusPrompt(true);
+    };
+
     const startSession = () => {
         if (!selectedSubject) {
             toast({ title: "Select a subject", description: "Choose a subject before starting.", variant: "destructive" });
@@ -439,11 +459,21 @@ Questions should:
     };
 
     const handleStartConfirmed = (inFocus) => {
+        // A pick from Ace's panel arrives in the same tick it sets the subject,
+        // so the state below has not updated yet. The ref carries the choice
+        // across that gap — without it the session would be built for whatever
+        // subject was selected BEFORE they picked, which is the one thing a
+        // one-click start must not do.
+        const pick = pendingPick.current;
+        const subject = pick?.subject || selectedSubject;
+        const forTopic = pick?.topic ?? topic;
+        pendingPick.current = null;
+
         // Their own cards and maps beat generic defaults, and need no upload.
         const own = questions.length > 0 ? [] : [
-            ...questionsFromCards(ownFlashcards, { subject: selectedSubject, topic, limit: questionCount }),
+            ...questionsFromCards(ownFlashcards, { subject, topic: forTopic, limit: questionCount }),
             ...(ownMaps.length ? questionsFromMap(
-                ownMaps.find(m => (m.topic || m.title) === topic) || ownMaps[0],
+                ownMaps.find(m => (m.topic || m.title) === forTopic) || ownMaps[0],
                 { limit: questionCount }) : []),
         ];
         const base = questions.length > 0
@@ -643,11 +673,7 @@ For each answer:
                 assessments={ownAssessments}
                 techniques={ownTechniques}
                 maps={ownMaps}
-                onPick={(sug) => {
-                    if (sug.subject) setSelectedSubject(sug.subject);
-                    setTopic(sug.topic || "");
-                    setQuestions([]);
-                }}
+                onPick={startFromSuggestion}
             />
 
             <div className="grid grid-cols-1 lg:grid-cols-5 gap-5">
