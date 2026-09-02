@@ -1050,7 +1050,7 @@ The documents provided may be PowerPoint slides, Word documents, PDFs or text fi
                             <Plus className="w-4 h-4" /> New Deck
                         </Button>
                         <Button onClick={() => setIsShowingGenerated(true)} className="btn-3d gap-2 bg-chart-4 hover:bg-chart-4 text-white rounded-xl h-11">
-                            <Sparkles className="w-4 h-4" /> AI Generate
+                            <Sparkles className="w-4 h-4" /> Make cards from notes
                         </Button>
                     </div>
                 </div>
@@ -1078,7 +1078,7 @@ The documents provided may be PowerPoint slides, Word documents, PDFs or text fi
                         <p className="text-sm text-muted-foreground mb-6">Create your first deck manually or let AI generate one from your notes.</p>
                         <div className="flex gap-3 justify-center">
                             <Button onClick={() => setIsCreatingDeck(true)} variant="outline" className="gap-2 rounded-xl border-2"><Plus className="w-4 h-4" /> Create Deck</Button>
-                            <Button onClick={() => setIsShowingGenerated(true)} className="btn-3d gap-2 bg-chart-4 hover:bg-chart-4 text-white rounded-xl"><Sparkles className="w-4 h-4" /> AI Generate</Button>
+                            <Button onClick={() => setIsShowingGenerated(true)} className="btn-3d gap-2 bg-chart-4 hover:bg-chart-4 text-white rounded-xl"><Sparkles className="w-4 h-4" /> Make cards from notes</Button>
                         </div>
                     </div>
                 ) : (
@@ -1234,7 +1234,7 @@ The documents provided may be PowerPoint slides, Word documents, PDFs or text fi
                 <DialogContent className="max-w-2xl rounded-3xl max-h-[90vh] flex flex-col overflow-hidden">
                     <DialogHeader>
                         <DialogTitle className="flex items-center gap-2">
-                            <Sparkles className="w-5 h-5 text-chart-4" /> AI Flashcard Generator
+                            <Sparkles className="w-5 h-5 text-chart-4" /> Make flashcards from your notes
                         </DialogTitle>
                     </DialogHeader>
 
@@ -1410,7 +1410,7 @@ The documents provided may be PowerPoint slides, Word documents, PDFs or text fi
                         <Button variant="outline" onClick={() => { clearDraft(); setIsShowingGenerated(false); setGeneratedFlashcards(null); setUploadedFiles([]); }} className="rounded-xl">Cancel</Button>
                         {!generatedFlashcards ? (
                             <Button onClick={handleGenerateFlashcardsFromFile} disabled={!uploadedFiles.length || isGenerating} className="btn-3d bg-chart-4 hover:bg-chart-4 text-white rounded-xl gap-2">
-                                {isGenerating ? <><Loader2 className="w-4 h-4 animate-spin" /> Generating...</> : <><Sparkles className="w-4 h-4" /> {aiSettings.cardCount === 'max' ? 'Generate All Cards' : `Generate ${aiSettings.cardCount} Cards`}</>}
+                                {isGenerating ? <><Loader2 className="w-4 h-4 animate-spin" /> Generating...</> : <><Sparkles className="w-4 h-4" /> {aiSettings.cardCount === 'max' ? 'Make every card it supports' : `Make ${aiSettings.cardCount} cards`}</>}
                             </Button>
                         ) : (
                             <Button onClick={() => handleSaveGeneratedFlashcards(newDeck)} disabled={!newDeck.subject_name || !newDeck.topic || isSavingDeck} className="btn-3d bg-chart-3 hover:bg-chart-3 text-white rounded-xl gap-2">

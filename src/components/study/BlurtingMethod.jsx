@@ -711,7 +711,7 @@ Reference Study Design requirements in your feedback.`,
                             <Sparkles className="w-5 h-5 text-chart-4" />
                         </div>
                         <div className="flex-1">
-                            <h3 className="font-semibold text-foreground mb-1">AI Marking</h3>
+                            <h3 className="font-semibold text-foreground mb-1">Check what you missed</h3>
                             <p className="text-sm text-muted-foreground mb-4">
                                 {sourceFiles.length > 0
                                     ? "Compare your recall against your notes to see what you got right and what you missed."
@@ -725,7 +725,7 @@ Reference Study Design requirements in your feedback.`,
                                 {isGeneratingFeedback ? (
                                     <><Loader2 className="w-4 h-4 animate-spin" /> Analysing your recall...</>
                                 ) : (
-                                    <><Wand2 className="w-4 h-4" /> Mark My Blurt</>
+                                    <><Wand2 className="w-4 h-4" /> Mark what I missed</>
                                 )}
                             </Button>
                             {sourceFiles.length === 0 && (

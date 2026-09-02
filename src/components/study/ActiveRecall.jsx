@@ -764,8 +764,8 @@ For each answer:
                             <Sparkles className="w-4 h-4 text-white" />
                         </div>
                         <div>
-                            <h3 className="font-semibold text-foreground text-sm">AI Question Generator</h3>
-                            <p className="text-xs text-muted-foreground">Upload notes → get smart questions</p>
+                            <h3 className="font-semibold text-foreground text-sm">Turn your notes into questions</h3>
+                            <p className="text-xs text-muted-foreground">Upload a PDF or slides and answer them here</p>
                         </div>
                     </div>
 
@@ -805,11 +805,23 @@ For each answer:
                         className="w-full h-11 bg-chart-4 hover:bg-chart-4/90 text-white rounded-xl font-medium gap-2"
                     >
                         {isGeneratingQuestions ? (
-                            <><Loader2 className="w-4 h-4 animate-spin" /> Generating...</>
+                            <><Loader2 className="w-4 h-4 animate-spin" /> Reading your notes…</>
                         ) : (
-                            <><Wand2 className="w-4 h-4" /> Generate Questions</>
+                            <><Wand2 className="w-4 h-4" /> Make questions from my notes</>
                         )}
                     </Button>
+                    {/* A disabled button that will not say why is the single
+                        most confusing control in an app. This one needs BOTH a
+                        subject and a file and used to sit greyed out with
+                        neither stated. */}
+                    {!isGeneratingQuestions && (!sourceFiles.length || !selectedSubject) && (
+                        <p className="text-xs text-center text-muted-foreground -mt-2">
+                            {!selectedSubject && !sourceFiles.length
+                                ? "Pick a subject and upload your notes first."
+                                : !selectedSubject ? "Pick a subject first."
+                                    : "Upload your notes first."}
+                        </p>
+                    )}
 
                     <div className="bg-surface rounded-xl p-3 border border-chart-4/20">
                         <p className="text-xs text-chart-4 leading-relaxed">
@@ -975,7 +987,7 @@ For each answer:
                             <Sparkles className="w-5 h-5 text-chart-4" />
                         </div>
                         <div className="flex-1">
-                            <h3 className="font-semibold text-foreground mb-1">Get AI Feedback</h3>
+                            <h3 className="font-semibold text-foreground mb-1">Mark my answers</h3>
                             <p className="text-sm text-muted-foreground mb-4">
                                 {sourceFiles.length ? "AI will mark each answer against your notes using VCAA criteria." : "Upload your notes to unlock AI marking."}
                             </p>

@@ -1237,7 +1237,7 @@ export default function Analytics() {
                             {fcHealth.weak > 0 && <p className="text-sm text-foreground">• Focus your next session on the <strong>{fcHealth.weak} weak-spot cards</strong> — these are the ones you keep getting wrong.</p>}
                             {fcHealth.unreviewed > 0 && <p className="text-sm text-foreground">• <strong>{fcHealth.unreviewed} cards</strong> have never been reviewed. Start activating them before they pile up.</p>}
                             {fcHealth.mastered > 0 && fcHealth.mastered === fcHealth.total && <p className="text-sm text-primary font-medium">• You've mastered all your flashcards! Consider adding more from your notes.</p>}
-                            {fcHealth.total === 0 && <p className="text-sm text-muted-foreground">No flashcards yet. Use AI Generate in the Study page to create a full deck from your notes.</p>}
+                            {fcHealth.total === 0 && <p className="text-sm text-muted-foreground">No flashcards yet. On the Study page, "Make cards from notes" builds a whole deck from a PDF or your slides.</p>}
                         </div>
                     </div>
                 )}

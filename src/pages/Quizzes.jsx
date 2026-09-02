@@ -933,7 +933,7 @@ Return valid JSON only.`,
                 label: "Stretch goal",
                 title: "Generate a harder AI quiz",
                 sub: "You're cruising — let's see how you handle exam-level difficulty.",
-                cta: "AI Generate",
+                cta: "Make a harder quiz",
                 accent: "xp",
                 icon: Sparkles,
                 action: () => setShowAIDialog(true),
@@ -984,7 +984,7 @@ Return valid JSON only.`,
             label: "Get started",
             title: "Generate your first AI quiz",
             sub: "Upload notes and we'll build a quiz tailored to your material.",
-            cta: "AI Generate",
+            cta: "Make a quiz from my notes",
             accent: "chart-4",
             icon: Wand2,
             action: () => setShowAIDialog(true),
@@ -1174,9 +1174,9 @@ Return valid JSON only.`,
                         page knows. How many quizzes you sat is not a fact you
                         can act on; which marks you are still dropping is, and
                         it is the one number on this page that goes DOWN when
-                        the student does the work. AI Generate stays: it is the
-                        page's primary action and it is not the bank's business
-                        to inherit that space. */}
+                        the student does the work. Making a quiz is not this
+                        panel's job — that button lives beside the quiz list,
+                        where somebody who wants one is already looking. */}
                     <div className="md:col-span-2">
                         <div className="rounded-3xl bg-streak/10 border-2 border-streak/25 p-6 h-full flex flex-col">
                             <div className="flex items-center gap-2 mb-2">
@@ -1209,20 +1209,25 @@ Return valid JSON only.`,
                                 </div>
                             )}
 
-                            <div className="mt-auto pt-4 space-y-2">
-                                {bank.total > 0 && (
+                            {/* One action, and it is the panel's own. Making a
+                                quiz already has a button beside the quiz list —
+                                where somebody who wants another quiz is
+                                actually looking — and a second copy here only
+                                existed because this panel used to be about
+                                quizzing. Three buttons on one page for one
+                                dialog is how a student stops trusting that any
+                                of them do different things. */}
+                            {bank.total > 0 && (
+                                <div className="mt-auto pt-4">
                                     <Link to={createPageUrl("MistakeBank")} className="block">
-                                        <Button size="sm" variant="outline"
-                                            className="w-full border-2 border-streak/30 text-foreground hover:bg-streak/10">
+                                        <Button size="sm"
+                                            className="w-full btn-3d bg-streak hover:bg-streak text-white">
                                             <Bookmark className="w-3.5 h-3.5" />
                                             {bank.ready > 0 ? `Review ${bank.ready} now` : 'Open the bank'}
                                         </Button>
                                     </Link>
-                                )}
-                                <Button size="sm" onClick={() => setShowAIDialog(true)} className="w-full bg-chart-3 hover:bg-chart-3/90 text-white">
-                                    <Wand2 className="w-3.5 h-3.5" /> AI Generate
-                                </Button>
-                            </div>
+                                </div>
+                            )}
                         </div>
                     </div>
                 </motion.section>
@@ -1300,8 +1305,12 @@ Return valid JSON only.`,
                                 <Button onClick={() => setIsManualCreate(true)} variant="outline" size="sm" className="rounded-xl border-border gap-1.5 text-xs font-semibold">
                                     <PlusCircle className="w-3.5 h-3.5" /> Create
                                 </Button>
+                                {/* "AI Generate" said which technology it used
+                                    and not what it did. A student who has never
+                                    used it cannot tell whether it makes a quiz,
+                                    marks one, or generates an answer. */}
                                 <Button onClick={() => setShowAIDialog(true)} size="sm" className="bg-chart-3 hover:bg-chart-3/90 text-white rounded-xl gap-1.5 text-xs font-semibold shadow-soft">
-                                    <Wand2 className="w-3.5 h-3.5" /> AI Generate
+                                    <Wand2 className="w-3.5 h-3.5" /> Make a quiz from notes
                                 </Button>
                             </div>
                         </div>
@@ -1383,7 +1392,7 @@ Return valid JSON only.`,
                                             <PlusCircle className="w-4 h-4" /> Create Quiz
                                         </Button>
                                         <Button onClick={() => setShowAIDialog(true)} className="bg-chart-3 hover:bg-chart-3/90 text-white rounded-xl gap-2 shadow-soft">
-                                            <Wand2 className="w-4 h-4" /> AI Generate
+                                            <Wand2 className="w-4 h-4" /> Make one from my notes
                                         </Button>
                                     </div>
                                     <div className="flex flex-wrap justify-center gap-2 mt-6">
@@ -1947,7 +1956,7 @@ Return valid JSON only.`,
                                         ) : (
                                             <>
                                                 <Wand2 className="w-4 h-4 mr-2" />
-                                                Generate Quiz
+                                                Make the quiz
                                             </>
                                         )}
                                     </Button>
