@@ -39,6 +39,9 @@ import AceBody from "@/components/ace/AceBody";
 import { isDue, isNew } from "@/lib/due";
 import { calculateNextReview, reviewPatch, formatIntervalShort, RATINGS } from "@/lib/sm2";
 import { BANK_TOPIC, bankSummary, fixState, mistakeMeta } from "@/lib/mistakeBank";
+import { drillFor, suggestRating } from "@/lib/drill";
+import ClozeDrill from "@/components/mistakes/ClozeDrill";
+import ProduceDrill from "@/components/mistakes/ProduceDrill";
 import {
     Play, RotateCcw, Check, X, Repeat, ArrowLeft, Inbox, ChevronDown, Sparkles,
 } from "lucide-react";
@@ -165,11 +168,33 @@ function MistakeRow({ card, index }) {
  * player, because it is the same act — a student should not have to learn a
  * second grading vocabulary for the same cards.
  */
+/**
+ * The rung's name, said out loud.
+ *
+ * A drill that silently gets harder feels like the app moving the goalposts.
+ * Naming the stage turns the same event into progress — you are on this one
+ * BECAUSE you got the last one right.
+ */
+const STAGE_BADGE = {
+    recognise: { label: "First look", cls: "bg-secondary text-muted-foreground",
+        blurb: "Read what scores, then rate how well you knew it." },
+    cloze:     { label: "Fill the gaps", cls: "bg-xp/15 text-xp",
+        blurb: "You have seen this one. Put the words back." },
+    produce:   { label: "From scratch", cls: "bg-primary/15 text-primary",
+        blurb: "No wording to lean on. Write what would earn the mark." },
+};
+
 function Runner({ queue, onGraded, onDone }) {
     const [i, setI] = useState(0);
     const [shown, setShown] = useState(false);
+    const [suggested, setSuggested] = useState(null);
     const [tally, setTally] = useState({ right: 0, wrong: 0 });
     const card = queue[i];
+
+    // Which rung this card is on, and everything that rung needs. Recomputed
+    // per card rather than per render so a cloze does not rebuild — and
+    // reshuffle its word bank — while the student is looking at it.
+    const drill = useMemo(() => (card ? drillFor(card) : null), [card]);
 
     // The card advances locally the moment it is graded; the write goes out
     // behind it. A student rating twenty cards should never be waiting on a
@@ -178,11 +203,14 @@ function Runner({ queue, onGraded, onDone }) {
         onGraded(card, quality);
         setTally((t) => ({ right: t.right + (quality >= 3 ? 1 : 0), wrong: t.wrong + (quality < 3 ? 1 : 0) }));
         if (i + 1 >= queue.length) onDone({ right: tally.right + (quality >= 3 ? 1 : 0), total: queue.length });
-        else { setI(i + 1); setShown(false); }
+        else { setI(i + 1); setShown(false); setSuggested(null); }
     };
 
     if (!card) return null;
     const meta = mistakeMeta(card);
+    const badge = STAGE_BADGE[drill.stage];
+    // Every rung reaches the rating buttons; they are just earned differently.
+    const rateable = drill.stage === "recognise" ? shown : suggested !== null;
 
     return (
         <div className="space-y-4">
@@ -200,47 +228,90 @@ function Runner({ queue, onGraded, onDone }) {
                     animate={{ width: `${(i / queue.length) * 100}%` }} transition={{ duration: 0.3 }} />
             </div>
 
-            <div className="card-soft border-2 border-border p-5 min-h-[16rem] flex flex-col">
-                <p className="stat-label text-muted-foreground">
-                    {card.subject_name || "Mistake"}{meta.questionTitle ? ` · ${meta.questionTitle}` : ""}
-                </p>
-                <MarkdownMath className="text-lg font-bold text-foreground leading-snug mt-2">
-                    {card.question}
-                </MarkdownMath>
+            <div className="card-soft border-2 border-border p-5 space-y-4">
+                {/* THE CRITERION IS THE HEADING, not the card's question text.
+                    The question already contains the assessment title and the
+                    quote, and the label above repeats the title — so the old
+                    screen printed the same title twice and buried the actual
+                    mark under a paragraph of prose. */}
+                <div>
+                    <div className="flex items-center gap-2 flex-wrap">
+                        <span className={`pill text-[10px] ${badge.cls}`}>{badge.label}</span>
+                        <p className="stat-label text-muted-foreground">
+                            {card.subject_name || "Mistake"}{meta.questionTitle ? ` · ${meta.questionTitle}` : ""}
+                        </p>
+                    </div>
+                    <p className="text-[11px] text-muted-foreground mt-1.5">{badge.blurb}</p>
+                </div>
 
-                <AnimatePresence mode="wait">
-                    {shown ? (
-                        <motion.div key="a" initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }}
-                            transition={{ duration: 0.2 }}
-                            className="mt-4 pt-4 border-t border-border flex-1">
-                            <p className="stat-label text-primary">What scores</p>
-                            <MarkdownMath className="text-base text-foreground leading-relaxed mt-1">
-                                {card.answer}
+                {drill.stage === "recognise" && (
+                    <>
+                        <div>
+                            <MarkdownMath className="text-lg font-bold text-foreground leading-snug">
+                                {meta.criterion || card.question}
                             </MarkdownMath>
-                        </motion.div>
-                    ) : (
-                        <div key="q" className="flex-1 flex items-end">
-                            <Button onClick={() => setShown(true)}
-                                className="btn-3d w-full bg-primary hover:bg-primary text-primary-foreground rounded-xl">
-                                Show what scores
-                            </Button>
+                            {meta.quote && (
+                                <p className="text-sm text-muted-foreground italic leading-snug mt-2">
+                                    You wrote “{meta.quote}”
+                                </p>
+                            )}
                         </div>
-                    )}
-                </AnimatePresence>
+
+                        <AnimatePresence mode="wait">
+                            {shown ? (
+                                <motion.div key="a" initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }}
+                                    transition={{ duration: 0.2 }}
+                                    className="pt-4 border-t border-border">
+                                    <p className="stat-label text-primary">What scores</p>
+                                    <MarkdownMath className="text-base text-foreground leading-relaxed mt-1">
+                                        {card.answer}
+                                    </MarkdownMath>
+                                </motion.div>
+                            ) : (
+                                <Button key="q" onClick={() => setShown(true)}
+                                    className="btn-3d w-full bg-primary hover:bg-primary text-primary-foreground rounded-xl">
+                                    Show what scores
+                                </Button>
+                            )}
+                        </AnimatePresence>
+                    </>
+                )}
+
+                {drill.stage === "cloze" && (
+                    <ClozeDrill key={card.id} cloze={drill.cloze}
+                        onGraded={(g) => setSuggested(suggestRating(g))} />
+                )}
+
+                {drill.stage === "produce" && (
+                    <ProduceDrill key={card.id} card={card} criterion={drill.criterion}
+                        onMarked={(rating) => setSuggested(rating ?? 3)} />
+                )}
             </div>
 
-            {shown && (
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                    {RATINGS.map((r) => (
-                        <button key={r.quality} type="button" onClick={() => grade(r.quality)}
-                            className={`rounded-xl border-2 px-2 py-2.5 text-center cursor-pointer transition-colors ${r.color}`}>
-                            <span className="block text-sm font-black">{r.label}</span>
-                            <span className="block text-[10px] opacity-80">{r.sublabel}</span>
-                            <span className="block text-[10px] font-bold tabular-nums mt-0.5">
-                                {formatIntervalShort(calculateNextReview(r.quality, card).interval_days)}
-                            </span>
-                        </button>
-                    ))}
+            {rateable && (
+                <div className="space-y-1.5">
+                    {/* The drill SUGGESTS; the student decides. Only they know
+                        whether they knew it or guessed it, and taking that
+                        judgement away is how a schedule stops matching a
+                        memory. */}
+                    {suggested != null && (
+                        <p className="text-xs text-muted-foreground text-center">
+                            Suggested from how you went — change it if you know better.
+                        </p>
+                    )}
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                        {RATINGS.map((r) => (
+                            <button key={r.quality} type="button" onClick={() => grade(r.quality)}
+                                className={`rounded-xl border-2 px-2 py-2.5 text-center cursor-pointer transition-all ${r.color}
+                                    ${suggested === r.quality ? "ring-2 ring-ring scale-[1.03]" : ""}`}>
+                                <span className="block text-sm font-black">{r.label}</span>
+                                <span className="block text-[10px] opacity-80">{r.sublabel}</span>
+                                <span className="block text-[10px] font-bold tabular-nums mt-0.5">
+                                    {formatIntervalShort(calculateNextReview(r.quality, card).interval_days)}
+                                </span>
+                            </button>
+                        ))}
+                    </div>
                 </div>
             )}
         </div>

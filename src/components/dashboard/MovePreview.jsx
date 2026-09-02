@@ -69,35 +69,54 @@ export default function MovePreview({ move, card, theme, preview }) {
                 </div>
             ))}
 
-            <motion.button
-                type="button"
-                data-todays-play
-                aria-label={preview ? `${move.label}: turn the card over` : move.label}
-                aria-pressed={open}
-                onClick={() => setOpen((v) => !v)}
-                onMouseEnter={() => setOpen(true)}
-                onMouseLeave={() => setOpen(false)}
-                onFocus={() => setOpen(true)}
-                onBlur={() => setOpen(false)}
-                className="absolute right-0 top-0 w-[152px] cursor-pointer
-                    focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4
-                    focus-visible:outline-ring rounded-xl"
-                style={{ zIndex: 20, transformStyle: "preserve-3d" }}
-                /* Dealt FROM the deck: it starts where the backs are, turned
-                   over, and lands square on top of them. */
-                initial={reduce ? { opacity: 0 } : {
-                    opacity: 0, x: -40, y: 18, rotate: -24, scale: 0.86,
-                }}
-                animate={{
-                    opacity: 1, x: 0, y: 0, scale: turned ? 1.04 : 1,
-                    rotate: turned ? 0 : 3.5,
-                    rotateY: reduce ? 0 : (turned ? 180 : 0),
-                }}
-                transition={reduce ? { duration: 0.2 } : {
-                    type: "spring", stiffness: 170, damping: 18, mass: 0.9,
-                    opacity: { delay: 0.18 }, rotateY: { duration: 0.4 },
-                }}
-            >
+            {/* TWO NESTED MOTION ELEMENTS, and that separation is the fix.
+                The deal-in and the flip used to share one `animate` object on
+                one spring: hovering re-entered the spring while it still had
+                velocity from `rotate` and `scale`, so the card wobbled on its
+                way over instead of turning. A spring is right for a card being
+                dealt and wrong for a card being turned — a turn has a fixed
+                arc and should take the same time every time.
+
+                Outer: the deal, once, on a spring. Inner: the flip, on a
+                tween, and nothing else animates with it.
+
+                `perspective` lives here rather than on the rotating element,
+                because an element cannot supply its own vanishing point — put
+                it on the child and rotateY reads as a horizontal squash. */}
+            <div className="absolute right-0 top-0 w-[152px]"
+                style={{ zIndex: 20, perspective: 900 }}>
+                <motion.div
+                    initial={reduce ? { opacity: 0 } : {
+                        opacity: 0, x: -40, y: 18, rotate: -24, scale: 0.86,
+                    }}
+                    animate={{ opacity: 1, x: 0, y: 0, rotate: 3.5, scale: 1 }}
+                    transition={reduce ? { duration: 0.2 } : {
+                        type: "spring", stiffness: 170, damping: 18, mass: 0.9, delay: 0.18,
+                    }}
+                >
+                    <motion.button
+                        type="button"
+                        data-todays-play
+                        aria-label={preview ? `${move.label}: turn the card over` : move.label}
+                        aria-pressed={open}
+                        onClick={() => setOpen((v) => !v)}
+                        onPointerEnter={() => setOpen(true)}
+                        onPointerLeave={() => setOpen(false)}
+                        onFocus={() => setOpen(true)}
+                        onBlur={() => setOpen(false)}
+                        className="block w-full cursor-pointer text-left
+                            focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4
+                            focus-visible:outline-ring rounded-xl"
+                        style={{ transformStyle: "preserve-3d" }}
+                        animate={{ rotateY: turned ? 180 : 0 }}
+                        transition={reduce
+                            ? { duration: 0 }
+                            /* A tween, not a spring. Same 0.42s every time, no
+                               overshoot, no dependence on where the previous
+                               animation left off — which is what made a fast
+                               hover-out-hover-in stutter. */
+                            : { duration: 0.42, ease: [0.4, 0, 0.2, 1] }}
+                    >
                 {/* Both faces are mounted and one is rotated behind the other,
                     so the flip is a real turn rather than a crossfade between
                     two elements that happen to swap. `backfaceVisibility`
@@ -139,7 +158,9 @@ export default function MovePreview({ move, card, theme, preview }) {
                         )}
                     </PlayingCard>
                 </span>
-            </motion.button>
+                    </motion.button>
+                </motion.div>
+            </div>
 
             {/* Said out loud, because a card that only turns on hover is a card
                 a touch user never learns turns at all. It goes when they have

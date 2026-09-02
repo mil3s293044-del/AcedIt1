@@ -12,7 +12,7 @@
     "lint": "eslint . --quiet",
     "lint:fix": "eslint . --fix",
     "typecheck": "tsc -p ./jsconfig.json",
-    "test": "npm run test:cost && npm run test:ace && npm run test:models && npm run test:zoom && npm run test:onboarding && npm run test:due && npm run test:theme && npm run test:chips && npm run test:mindmap && npm run test:explore && npm run test:portfolio && npm run test:sac && npm run test:routes && npm run test:tour && npm run test:quizdeck && npm run test:quizschema && npm run test:quizmarking && npm run test:ink && npm run test:annotate && npm run test:mistakes && npm run test:readcache && npm run test:sm2 && npm run test:case",
+    "test": "npm run test:cost && npm run test:ace && npm run test:models && npm run test:zoom && npm run test:onboarding && npm run test:due && npm run test:theme && npm run test:chips && npm run test:mindmap && npm run test:explore && npm run test:portfolio && npm run test:sac && npm run test:routes && npm run test:tour && npm run test:quizdeck && npm run test:quizschema && npm run test:quizmarking && npm run test:ink && npm run test:annotate && npm run test:mistakes && npm run test:readcache && npm run test:sm2 && npm run test:case && npm run test:drill",
     "test:cost": "node src/lib/aiCost.test.mjs",
     "test:ace": "node --import ./src/lib/_aliasLoader.mjs src/lib/aceGuide.test.mjs",
     "test:models": "node --import ./src/lib/_aliasLoader.mjs src/lib/aiModels.test.mjs",
@@ -34,6 +34,7 @@
     "test:readcache": "node --import ./src/lib/_aliasLoader.mjs src/api/readCache.test.mjs",
     "test:sm2": "node --import ./src/lib/_aliasLoader.mjs src/lib/sm2.test.mjs",
     "test:case": "node --import ./src/lib/_aliasLoader.mjs src/lib/todaysCase.test.mjs",
+    "test:drill": "node --import ./src/lib/_aliasLoader.mjs src/lib/drill.test.mjs",
     "test:quizdeck": "node --import ./src/lib/_aliasLoader.mjs src/lib/quizDeck.test.mjs",
     "test:tour": "node --import ./src/lib/_aliasLoader.mjs src/lib/aceTour.test.mjs",
     "preview": "vite preview"

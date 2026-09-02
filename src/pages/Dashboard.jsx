@@ -257,7 +257,7 @@ function challengeMove(challenge) {
 /** Minutes as a `why` row reads them — short, and never "0m". */
 const fmtWhy = (mins) => (mins >= 60 ? `${Math.floor(mins / 60)}h${mins % 60 ? ` ${mins % 60}m` : ""}` : `${mins}m`);
 
-function getTodaysMove({ todayMins, streakDays, dueFlashcards, urgentDays, urgentTitle, hour, intentMode, challenge }) {
+function getTodaysMove({ todayMins, streakDays, dueFlashcards, totalCards, urgentDays, urgentTitle, hour, intentMode, challenge }) {
     // What they told us this morning outranks anything we'd infer — until they
     // actually start, at which point the usual signals take over again.
     if (intentMode && todayMins === 0 && INTENT_MOVES[intentMode]) {
@@ -309,6 +309,47 @@ function getTodaysMove({ todayMins, streakDays, dueFlashcards, urgentDays, urgen
             why: { value: `${streakDays}d`, label: "streak on the line tonight" },
         };
     }
+    // A pile under ten still outranks a generic nudge. The branch above needs
+    // ten to beat a streak on the line tonight; this one only has to beat
+    // "here is a Pomodoro", and cards that are genuinely due are always the
+    // more concrete thing to do. Ignoring four due cards and suggesting a timer
+    // is the app failing to read its own screen.
+    if (dueFlashcards > 0) {
+        return {
+            label: "Cards waiting",
+            title: `${dueFlashcards} flashcard${dueFlashcards === 1 ? "" : "s"} ready for review`,
+            sub: "Short session, and the deck is clear again.",
+            cta: "Review now",
+            link: "Study",
+            accent: "chart-3",
+            icon: Layers,
+            technique: "spaced_repetition",
+            component: "mastery",
+            why: { value: dueFlashcards, label: `card${dueFlashcards === 1 ? "" : "s"} at or past their review date` },
+        };
+    }
+
+    // THE DECK IS CLEAR, and saying so is the point. A student who has just
+    // worked through the pile — or cleared it on /Review by marking cards known
+    // — came back to a dashboard that behaved as though nothing had happened.
+    // An app that never acknowledges finishing is one you stop finishing things
+    // in. Only claimed when they HAVE cards: "all caught up" to somebody with
+    // an empty deck is congratulating them on owning nothing.
+    if (totalCards > 0 && todayMins === 0) {
+        return {
+            label: "All caught up",
+            title: "Your deck is clear — nothing due today",
+            sub: "Nothing is asking for you. A short session now is pure ground gained.",
+            cta: "Start a Pomodoro",
+            link: "Study",
+            accent: "primary",
+            icon: Timer,
+            technique: "pomodoro",
+            component: "consistency",
+            why: { value: totalCards, label: "cards on schedule, none overdue" },
+        };
+    }
+
     if (todayMins === 0) {
         // Nothing declared, nothing due — this is where their stated struggle
         // is the most useful thing we know about them.
@@ -794,6 +835,10 @@ export default function Dashboard() {
         todayMins: todaysStudyTime,
         streakDays,
         dueFlashcards: dueFlashcardCount,
+        // So "all caught up" can only be claimed by somebody who has a deck to
+        // be caught up ON. Active cards only — a retired card is not a card
+        // they are keeping on schedule.
+        totalCards: flashcards.filter(c => c.is_active !== false && !c.retired_at).length,
         urgentDays: nextDeadline?.days ?? null,
         urgentTitle: nextDeadline?.title ?? null,
         hour,
