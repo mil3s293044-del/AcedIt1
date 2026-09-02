@@ -313,28 +313,41 @@ Nothing is printed twice. The streak had its number in the header strip AND a
 panel below with the run of seven in it; the panel says it properly, so the
 strip stopped saying it at all.
 
-**The hero MAKES A CASE, it does not assert one.** Three columns:
-`BrainModel` lit on the regions this move works, over the regions the last 28
-days actually lit (`brainActivity`); the move and one button; and the rail —
-what fired it, which systems it wakes that their work has left dark, and what
-it is worth in ATAR points (`todaysCase.js`).
+**The hero MAKES A CASE, it does not assert one.** Three columns: the card,
+the move and one button, and the rail — what fired it, what skipping it costs,
+and what it is worth in ATAR points (`todaysCase.js`).
 
 EVERY RAIL ROW IS DROPPED WHEN ITS NUMBER IS NOT REAL, and the rail disappears
-when none survive. A first-week account has no components, no brain history and
-no cards below recall; printing "+0.00 ATAR" at them teaches a student that the
-numbers on this page are decoration, after which the real ones do not land
-either. Same rule for the brain — with no history every region reads the same
-and it is an illustration, which is the decoration this app keeps removing.
+when none survive. A first-week account has no components and no cards below
+recall; printing "+0.00 ATAR" at them teaches a student that the numbers on
+this page are decoration, after which the real ones do not land either.
 
 The payoff is ATAR points and never XP. `liftFor` differences two runs of the
 same model Ranked uses, so it is checkable; XP is a number the app invented.
 
-The move used to be dealt as a PLAYING CARD whose rank carried the urgency — an
-Ace for a deadline, a Jack for "not started". Good idea, could not pay for its
-space: it said "this is urgent", which the headline beside it already said, in
-the largest element on the most important panel. The brain spends the same
-space on the one thing nothing else in the product says. The card language is
-untouched everywhere else on the page.
+**The card turns over to the actual work.** This column has been a dealt
+playing card, then a 3D brain, and is a card again — but not the same card.
+The first turned over to an icon and the move's LABEL, which is the headline
+beside it restated in the largest element on the page. The brain carried real
+information and none of it was about the work; interesting once, then never
+again on a screen opened every morning.
+
+It now turns over to the real question off their own deck, the real assessment
+title, or the clock counting the block. `previewFor` NEVER invents a face —
+every branch returns null rather than a placeholder, because the card turns on
+a promise ("here is the first one") and a face reading "your question will
+appear here" breaks it on the one interaction the panel asks for. With nothing
+real, it keeps the old icon-and-label face, which promises nothing.
+
+The rank still carries urgency (Ace = deadline, Jack = not started). It could
+never justify the space alone; the face is what pays for it.
+
+Two things the brain took with it when it went. The rail's "4 regions your
+recent work hasn't touched" row — evidence that only reads next to a graphic
+goes when the graphic does, or it is jargon a student cannot check. And
+`CommitmentRun`'s ghost pack, which existed to give the empty state an object:
+with a real card two inches away, a second row of card shapes reads as a
+loading skeleton. The sentence asking for a commitment stays either way.
 
 A move needs `technique` (which regions) and `component` (which ATAR slice) to
 have a case at all, and `why` for its trigger row. Add a move without them and
@@ -503,6 +516,21 @@ through all of them.
   `TOOL_COUNT` in `chatTools.js`. When you retire something, grep the copy.
 - Long subagent runs in this codebase have repeatedly hit 600s stream-idle timeouts. Avoid long-running subagents — do work in the main conversation or split into smaller agent tasks.
 - `package.json` `name` is still `base44-app` and `@base44/sdk` + `@base44/vite-plugin` are still listed (kept for dual-run; remove after cutover).
+
+**A button names the JOB, not the technology.** "AI Generate" told a student
+which technology was involved and nothing about what would happen — on the
+Study page it could plausibly have made cards, marked something, or written an
+answer. They say the work now: *Make cards from notes*, *Make a quiz from
+notes*, *Make questions from my notes*, *Mark my answers*, *Mark what I
+missed*. The wand stays; on a generate button the icon IS the affordance.
+
+And a disabled button says WHY. Active Recall's needed both a subject and a
+file and sat greyed out saying neither.
+
+One dialog, one button per surface. Making a quiz had three buttons on the
+Quizzes page; the one in the side panel only existed because that panel used to
+be about quizzing, and three buttons for one dialog is how a student stops
+believing they do different things.
 
 ## Voice / UX guardrails (from prior decisions)
 

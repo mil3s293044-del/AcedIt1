@@ -34,18 +34,27 @@ import { ArrowRight } from "lucide-react";
 import { SpadePip } from "@/components/ace/SpadeMark";
 import { runOf, MIN_CARDS } from "@/lib/commitmentRun";
 
-export default function CommitmentRun({ commitment, fmtTime }) {
+export default function CommitmentRun({ commitment, fmtTime, hasCard = false }) {
     const reduce = useReducedMotion();
 
     if (!commitment) {
         return (
             <div data-commitment-run="none" className="mt-4">
-                <div className="flex items-end gap-1.5 mb-2.5" aria-hidden="true">
-                    {Array.from({ length: MIN_CARDS }, (_, i) => (
-                        <span key={i} className="w-[26px] sm:w-[30px] aspect-[2.5/3.5]
-                            rounded-[5px] border border-dashed border-border bg-muted/40" />
-                    ))}
-                </div>
+                {/* The ghost pack is there to give the empty state an OBJECT —
+                    six card shapes waiting to be earned. When the panel is
+                    already leading with a real card two inches away, a second
+                    row of card shapes stops reading as "yours to fill" and
+                    starts reading as a loading skeleton next to the real
+                    thing. The sentence is the actual ask and it stays either
+                    way. */}
+                {!hasCard && (
+                    <div className="flex items-end gap-1.5 mb-2.5" aria-hidden="true">
+                        {Array.from({ length: MIN_CARDS }, (_, i) => (
+                            <span key={i} className="w-[26px] sm:w-[30px] aspect-[2.5/3.5]
+                                rounded-[5px] border border-dashed border-border bg-muted/40" />
+                        ))}
+                    </div>
+                )}
                 <p className="text-[13px] text-muted-foreground leading-relaxed">
                     Nothing committed for today.{" "}
                     <Link to={createPageUrl("Goals")}

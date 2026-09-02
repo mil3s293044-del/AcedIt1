@@ -20,8 +20,7 @@ import DueRadar from "@/components/dashboard/DueRadar";
 import ClearedPile from "@/components/dashboard/ClearedPile";
 import TableGround from "@/components/dashboard/TableGround";
 import TodaysPlay from "@/components/dashboard/TodaysPlay";
-import { brainActivity } from "@/lib/brainActivity";
-import { buildCase } from "@/lib/todaysCase";
+import { buildCase, previewFor } from "@/lib/todaysCase";
 import HandRail from "@/components/dashboard/HandRail";
 import RunOfSeven from "@/components/dashboard/RunOfSeven";
 import Placed from "@/components/dashboard/Placed";
@@ -354,13 +353,35 @@ function getTodaysMove({ todayMins, streakDays, dueFlashcards, urgentDays, urgen
 }
 
 // Direction A — softer tints, lighter borders, shadow for depth.
-/* THE MOVE USED TO BE DEALT AS A PLAYING CARD, and its RANK carried the
- * urgency: an Ace for a deadline, a Jack for "you have not started". The rank
- * was a good idea that could not pay for its own space — it told you the move
- * was urgent, which the headline beside it already said, in the largest
- * element on the most important panel. The brain took the space and spends it
- * on something nothing else in the product says. See TodaysPlay's header; the
- * card language is untouched everywhere else on this page. */
+/**
+ * The move, as a playing card.
+ *
+ * THE RANK IS NOT DECORATION. It is how urgent the move is, on the scale every
+ * card player already knows:
+ *
+ *   A♠  a deadline you cannot beat.
+ *   K♥  your streak is on the line tonight.
+ *   Q♦  the pile is asking for you.
+ *   J♣  you have not started — the easiest opening.
+ *   10♦ you are going; now test what stuck.
+ *   9♠  you are well past the day's minimum, here is the bonus.
+ *
+ * Keyed on the accent each move already carries, so nothing has to be kept in
+ * sync by hand; the deadline move overrides it to the Ace explicitly, because
+ * it shares the streak accent and is not the same thing at all.
+ *
+ * The rank on its own could never justify the space — it says "this is
+ * urgent", which the headline beside it already says. What pays for it is the
+ * FACE, which turns over to the first real question, assessment or block the
+ * student is about to meet. See MovePreview.
+ */
+const MOVE_CARD = {
+    streak:    { rank: "K",  suit: "heart",   tone: "#FF4B4B" },
+    "chart-3": { rank: "Q",  suit: "diamond", tone: "#3B82F6" },
+    primary:   { rank: "J",  suit: "club",    tone: "#58CC02" },
+    xp:        { rank: "10", suit: "diamond", tone: "#F59E0B" },
+    "chart-4": { rank: "9",  suit: "spade",   tone: "#8B5CF6" },
+};
 
 const MOVE_THEME = {
     primary:   { bg: "bg-primary/5",   border: "border-primary/15",   iconBg: "bg-primary/10",   iconText: "text-primary",   bar: "bg-primary"   },
@@ -781,13 +802,20 @@ export default function Dashboard() {
     });
     const moveTheme = MOVE_THEME[move.accent];
 
-    // The argument for the move: what fired it, which systems it wakes that
-    // the last four weeks left dark, and what it is worth in ATAR points.
-    // Every row drops out when its number is not real — see todaysCase.js.
-    const brain = useMemo(() => brainActivity(studyTechniques), [studyTechniques]);
+    const moveCard = { ...(MOVE_CARD[move.accent] || MOVE_CARD.primary), ...(move.card || {}) };
+
+    // The argument for the move: what fired it, what skipping it costs, and
+    // what it is worth in ATAR points. Every row drops out when its number is
+    // not real — see todaysCase.js.
     const todaysCase = useMemo(
-        () => buildCase({ move, activity: brain, components: userProfile?.atar_components || null }),
-        [move, brain, userProfile?.atar_components],
+        () => buildCase({ move, components: userProfile?.atar_components || null, flashcards }),
+        [move, userProfile?.atar_components, flashcards],
+    );
+    // The first real thing they would face, for the face of the card. Null
+    // when we have no genuine material — never a placeholder.
+    const movePreview = useMemo(
+        () => previewFor({ move, flashcards, deadline: nextDeadline }),
+        [move, flashcards, nextDeadline],
     );
 
     // The modal asks "how long?" and saves the answer, but nothing ever read it
@@ -904,7 +932,8 @@ export default function Dashboard() {
 
                 {/* ── YOUR PLAY — the move, and the case for it ───────── */}
                 <Placed index={1}>
-                    <TodaysPlay move={move} theme={moveTheme} todaysCase={todaysCase}
+                    <TodaysPlay move={move} card={moveCard} theme={moveTheme}
+                        todaysCase={todaysCase} preview={movePreview}
                         commitment={commitment} fmtTime={fmtTime}
                         todayMins={todaysStudyTime} weekMins={weeklyStudyTime}
                         weekGoalHours={goalHours} weekPct={weeklyPct}

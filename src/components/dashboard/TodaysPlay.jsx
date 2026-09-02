@@ -12,30 +12,23 @@
  *                points. See todaysCase.js — every row is dropped when its
  *                number is not real.
  *
- * ─── Why the brain and not the playing card ─────────────────────────────────
- * The card was right about one thing and wrong about another. Right that the
- * hero should be an OBJECT rather than a notification bar — that is why the
- * rest of the page is still cards. Wrong that a rank could carry the argument:
- * an Ace tells you the move is urgent, which the headline already said, and
- * then the largest element on the most important panel is spending its space
- * restating one word.
+ * ─── The card is back, and its face is the work ────────────────────────────
+ * This column has been a dealt playing card, then a brain, and now a card
+ * again — but not the same card. The first one turned over to an icon and the
+ * move's LABEL, which is the headline beside it restated in the largest
+ * element on the page. The brain carried real information and none of it was
+ * about the work.
  *
- * The brain spends the same space on something nothing else in the product
- * says. It is the student's own 28-day technique history (`brainActivity`),
- * so a Pomodoro-only month reads as a bright front and a dark middle at a
- * glance, and the move's own regions come up full on top of it. It is also
- * already built, already cited, and already the thing the landing page and
- * the signup wizard use to sell the app — this is the first time a student
- * sees it aimed at their own work.
+ * It now turns over to the ACTUAL FIRST THING they would face: the real
+ * question off their own deck, the real assessment title, the clock counting
+ * the block. Seeing the work beats any description of it, and it is the one
+ * thing here that cannot be wrong, because it is their own material. See
+ * MovePreview, and `previewFor` for the rule that it is never invented.
  *
- * The card language is untouched everywhere else on the page: YourHand, the
- * subject deck, the quiz table, ClearedPile.
- *
- * ─── What is drawn is never the only copy of a fact ─────────────────────────
- * The cloud is atmosphere; the regions are named in HTML beside it. If the
- * canvas never paints — reduced motion, an old device, a screen reader —
- * nothing factual is lost. BrainModel's own header makes the same promise and
- * this panel keeps it.
+ * ─── The rail is the evidence, and it is text ──────────────────────────────
+ * Nothing factual lives in the card. A student who never turns it over still
+ * has the headline, the case and the button — the flip adds appetite, never
+ * information.
  */
 import React from "react";
 import { motion, useReducedMotion } from "framer-motion";
@@ -44,17 +37,17 @@ import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { createPageUrl } from "@/utils";
 import CommitmentRun from "@/components/dashboard/CommitmentRun";
-import BrainModel from "@/components/study/BrainModel";
+import MovePreview from "@/components/dashboard/MovePreview";
 
 /** Static class lookups — Tailwind cannot see a class built at runtime. */
 const ROW_TONE = {
     trigger: "text-foreground",
-    brain:   "text-chart-4",
+    risk:    "text-streak",
     payoff:  "text-primary",
 };
 
 export default function TodaysPlay({
-    move, theme, commitment, fmtTime, todaysCase,
+    move, card, theme, commitment, fmtTime, todaysCase, preview,
     // The day's numbers. They used to live in a separate green panel beside
     // this one — two boxes both headed "today", which is one box. They now sit
     // as a footer strip rather than a third column, because the case beside
@@ -69,41 +62,15 @@ export default function TodaysPlay({
     const hit = !!commitment?.met;
     const done = !!commitment?.met;
     const rows = todaysCase?.rows || [];
-    const regions = todaysCase?.regions || [];
-    // No history and no technique means every region would read the same, and
-    // an identical picture for every student is the decoration this app keeps
-    // taking out. See todaysCase's `hasBrain`.
-    const showBrain = Boolean(todaysCase?.hasBrain) && regions.length > 0;
 
     return (
         <div className="rounded-2xl bg-surface border border-border on-table overflow-hidden">
             <div className="flex flex-col lg:flex-row items-stretch gap-6 lg:gap-8 p-5 lg:p-6">
 
-                {/* ── The brain ─────────────────────────────────────────── */}
-                {showBrain && (
-                    <div className="lg:w-[300px] flex-shrink-0 flex flex-col justify-center">
-                        {/* `plate` gives the cloud a dark backing so the unlit
-                            points stay visible in light mode — without it the
-                            dark half of the picture, which is the half making
-                            the argument, disappears into the panel. */}
-                        <div className="relative rounded-2xl overflow-hidden">
-                            <BrainModel regions={regions} height={224} glow />
-                        </div>
-                        {/* The regions in HTML, because the canvas is
-                            atmosphere and this is the fact. Only what the move
-                            works — the student's own history is in the
-                            brightness, not in this list. */}
-                        {todaysCase?.gaps?.length > 0 && (
-                            <p className="text-[11px] text-muted-foreground leading-snug mt-2 text-center lg:text-left">
-                                Wakes{" "}
-                                <span className="font-bold text-foreground">
-                                    {todaysCase.gaps.map((g) => g.name).join(", ")}
-                                </span>
-                                {" "}— quiet in your last four weeks.
-                            </p>
-                        )}
-                    </div>
-                )}
+                {/* ── The card, and the deck it came off ───────────────── */}
+                <div className="flex-shrink-0 flex flex-col justify-center lg:pr-2">
+                    <MovePreview move={move} card={card} theme={theme} preview={preview} />
+                </div>
 
                 {/* ── What it says, and the one button ──────────────────── */}
                 {/* The COLUMN fills; the TEXT is capped inside it. Capping the
@@ -141,7 +108,7 @@ export default function TodaysPlay({
                         copy while a ring three columns over drew a made-up XP
                         target at 112px across — the honest number small and the
                         invented one large. */}
-                    <CommitmentRun commitment={commitment} fmtTime={fmtTime} />
+                    <CommitmentRun commitment={commitment} fmtTime={fmtTime} hasCard={!!preview} />
 
                     <Link to={createPageUrl(move.link)} className="inline-block mt-5">
                         <Button size="lg" className="text-base">

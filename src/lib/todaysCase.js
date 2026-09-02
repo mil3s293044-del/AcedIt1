@@ -11,23 +11,30 @@
  *   TRIGGER   what fired this move. A fact about their data, today. "11 cards
  *             have fallen below reliable recall." The move carries it, because
  *             only the branch that chose the move knows why it chose it.
- *   BRAIN     which systems the move works, and which of those their last four
- *             weeks have left dark. This is the one thing on the page nothing
- *             else in the product says.
+ *   RISK      what it costs to skip today, where that is a real projection
+ *             rather than a scare. Only where the move has one — a review move
+ *             can say what falls out of reach; a Pomodoro cannot.
  *   PAYOFF    what it is worth in ATAR points, from atarLift — the same model
  *             Ranked uses. Never XP: XP is a number the app invented, and a
  *             payoff a student cannot check is an advert.
  *
  * ─── The rule ───────────────────────────────────────────────────────────────
  * EVERY ROW IS DROPPED WHEN ITS NUMBER IS NOT REAL. A student in their first
- * week has no ATAR components, no 28-day brain history and no cards below
- * recall, and the hero must not print "+0.0 ATAR" or "0 regions quiet" at
- * them — a case made of zeroes is worse than no case, because it teaches them
- * the numbers on this page are decoration. The panel renders whatever survives
- * and drops the rail entirely when nothing does.
+ * week has no ATAR components and no cards below recall, and the hero must not
+ * print "+0.0 ATAR" at them — a case made of zeroes is worse than no case,
+ * because it teaches them the numbers on this page are decoration. The panel
+ * renders whatever survives and drops the rail entirely when nothing does.
+ *
+ * ─── A row a picture explained cannot survive the picture ───────────────────
+ * There was a BRAIN row: "4 regions your recent work hasn't touched", beside a
+ * 3D model that showed exactly which ones and how dark. The model went, and
+ * the row could not stand on its own — without the picture, "4 regions" is
+ * jargon a student cannot act on and cannot check. Evidence that only reads
+ * next to a graphic goes when the graphic does.
  */
-import { TECHNIQUE_NEURO, REGIONS } from "@/lib/neuro";
 import { liftFor, ATAR_WEIGHTS } from "@/lib/atarLift";
+import { isDue } from "@/lib/due";
+import { retentionOutlook } from "@/lib/retention";
 
 /** How much of a component one solid session is worth assuming. */
 const STEP = 10;
@@ -39,49 +46,6 @@ const COMPONENT_LABEL = {
     breadth: "breadth",
     planning: "planning",
 };
-
-/**
- * The regions to light, and what they mean.
- *
- * TWO LAYERS IN ONE PICTURE, and the contrast is the argument:
- *   - everything the student's last 28 days actually lit, at its real
- *     activation, so a Pomodoro-only month reads as a bright front and a dark
- *     middle;
- *   - the regions today's move works, pushed to full.
- *
- * A region that is dark in the first layer and full in the second is precisely
- * "this is the gap and this move fills it", drawn rather than asserted.
- */
-export function caseRegions(technique, activity) {
-    const lit = new Map();
-    for (const r of activity?.regions || []) {
-        if (!REGIONS[r.id]) continue;
-        lit.set(r.id, { id: r.id, tone: r.tone, activation: Math.max(0.12, r.activation || 0) });
-    }
-    const target = TECHNIQUE_NEURO[technique]?.regions || [];
-    for (const r of target) {
-        if (!REGIONS[r.id]) continue;
-        lit.set(r.id, { id: r.id, tone: r.tone, activation: 1 });
-    }
-    return [...lit.values()];
-}
-
-/**
- * The regions this move brings online that the student's recent work has not.
- *
- * `activity.quiet` is every region NOTHING they did lit. Intersecting it with
- * the move's own regions is the honest version of "here is what you are
- * missing" — it names only gaps this move actually closes, rather than
- * listing everything dark and hoping one of them looks relevant.
- */
-export function quietGaps(technique, activity) {
-    const target = TECHNIQUE_NEURO[technique]?.regions || [];
-    if (!target.length || !activity?.hasData) return [];
-    const quiet = new Set((activity.quiet || []).map((q) => q.id));
-    return target
-        .filter((r) => quiet.has(r.id))
-        .map((r) => ({ id: r.id, name: REGIONS[r.id]?.short || REGIONS[r.id]?.name || r.id, role: r.role }));
-}
 
 /**
  * What a solid session on this move is worth on the AcedIt ATAR.
@@ -109,22 +73,26 @@ export function payoffFor(components, componentKey) {
  * as `{ value, label }`. A move with no honest number to show simply omits it
  * and the rail is one row shorter.
  */
-export function buildCase({ move, activity, components }) {
+export function buildCase({ move, components, flashcards = [] }) {
     const rows = [];
 
     if (move?.why?.value != null && move.why.label) {
         rows.push({ kind: "trigger", value: String(move.why.value), label: move.why.label });
     }
 
-    const gaps = quietGaps(move?.technique, activity);
-    if (gaps.length) {
-        rows.push({
-            kind: "brain",
-            value: gaps.length === 1 ? gaps[0].name : `${gaps.length} regions`,
-            label: gaps.length === 1
-                ? "quiet for four weeks — this wakes it"
-                : "your recent work hasn't touched",
-        });
+    // What skipping today costs, for the moves that genuinely have an answer.
+    // `retentionOutlook` projects their own cards down the forgetting curve;
+    // it is the same model RetentionCard draws, so the two cannot disagree.
+    // A Pomodoro has no equivalent and gets no row rather than a vague one.
+    if (move?.technique === "spaced_repetition" && flashcards.length) {
+        const o = retentionOutlook(flashcards, { days: 7 });
+        if (o.hasData && o.falling > 0) {
+            rows.push({
+                kind: "risk",
+                value: String(o.falling),
+                label: `more drop below reliable recall within ${o.days} days`,
+            });
+        }
     }
 
     const payoff = payoffFor(components, move?.component);
@@ -136,14 +104,54 @@ export function buildCase({ move, activity, components }) {
         });
     }
 
-    return {
-        rows,
-        regions: caseRegions(move?.technique, activity),
-        // The picture is worth drawing only when it is showing THIS student's
-        // work. With no history every region reads the same and it is an
-        // illustration, which is the decoration this app keeps removing.
-        hasBrain: Boolean(TECHNIQUE_NEURO[move?.technique]) || Boolean(activity?.hasData),
-        payoff,
-        gaps,
-    };
+    return { rows, payoff };
+}
+
+/**
+ * The actual first thing they would face, for the face of the card.
+ *
+ * ONLY REAL CONTENT. Every branch returns null rather than a placeholder,
+ * because the card turns over on a promise — "here is the first one" — and a
+ * face reading "your next question will appear here" breaks it on the one
+ * interaction the panel asks for. With nothing to show, MovePreview keeps the
+ * old icon-and-label face, which promises nothing.
+ */
+export function previewFor({ move, flashcards = [], deadline, today }) {
+    if (!move) return null;
+
+    // A review move shows a card off their own deck. The one the session would
+    // actually open with: due, and the longest overdue first, which is the
+    // order the review queue itself uses.
+    if (move.technique === "spaced_repetition") {
+        const due = flashcards
+            .filter((c) => c.question && isDue(c, today))
+            .sort((a, b) => String(a.next_review_date || "").localeCompare(String(b.next_review_date || "")));
+        const card = due[0];
+        if (!card) return null;
+        return {
+            label: card.subject_name || "First up",
+            body: card.question,
+            foot: due.length > 1 ? `and ${due.length - 1} more` : null,
+        };
+    }
+
+    // A deadline shows the deadline. The title is the whole point — "your SAC"
+    // is something they already know, "Unit 3 AOS 2 SAC" is the thing they
+    // have been avoiding.
+    if (move.component === "planning" && deadline?.title) {
+        const d = deadline.days;
+        return {
+            label: d === 0 ? "Due today" : `In ${d} day${d === 1 ? "" : "s"}`,
+            body: deadline.title,
+            foot: "Nothing planned for it yet",
+        };
+    }
+
+    // A timed block shows the block. It is the only move whose "first thing"
+    // is not a piece of content, and a clock IS the work.
+    if (move.technique === "pomodoro") {
+        return { label: "One block", body: "25:00", foot: "Then a real break" };
+    }
+
+    return null;
 }
