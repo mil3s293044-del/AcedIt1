@@ -313,6 +313,33 @@ Nothing is printed twice. The streak had its number in the header strip AND a
 panel below with the run of seven in it; the panel says it properly, so the
 strip stopped saying it at all.
 
+**The hero MAKES A CASE, it does not assert one.** Three columns:
+`BrainModel` lit on the regions this move works, over the regions the last 28
+days actually lit (`brainActivity`); the move and one button; and the rail —
+what fired it, which systems it wakes that their work has left dark, and what
+it is worth in ATAR points (`todaysCase.js`).
+
+EVERY RAIL ROW IS DROPPED WHEN ITS NUMBER IS NOT REAL, and the rail disappears
+when none survive. A first-week account has no components, no brain history and
+no cards below recall; printing "+0.00 ATAR" at them teaches a student that the
+numbers on this page are decoration, after which the real ones do not land
+either. Same rule for the brain — with no history every region reads the same
+and it is an illustration, which is the decoration this app keeps removing.
+
+The payoff is ATAR points and never XP. `liftFor` differences two runs of the
+same model Ranked uses, so it is checkable; XP is a number the app invented.
+
+The move used to be dealt as a PLAYING CARD whose rank carried the urgency — an
+Ace for a deadline, a Jack for "not started". Good idea, could not pay for its
+space: it said "this is urgent", which the headline beside it already said, in
+the largest element on the most important panel. The brain spends the same
+space on the one thing nothing else in the product says. The card language is
+untouched everywhere else on the page.
+
+A move needs `technique` (which regions) and `component` (which ATAR slice) to
+have a case at all, and `why` for its trigger row. Add a move without them and
+it silently renders bare.
+
 ## The signup tour
 
 `AceTour` — six stops and a sign-off, fired once for accounts that are hours
