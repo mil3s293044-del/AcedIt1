@@ -202,6 +202,35 @@ hour ago is not unopened material; the student got it wrong this morning. The
 page passes "due or new", so a bank with five mistakes never opens on "nothing
 due today", which is the dead end the screen exists to avoid.
 
+**The bank DRILLS, it does not show you the answer.** A two-sided card is
+RECOGNITION, and recognition feels like learning because the answer looks
+familiar when you see it — the exact illusion the landing page calls out by
+name. So a mistake gets harder as the student gets it right (`drill.js`):
+
+  RECOGNISE  first time. What they wrote, what would have scored. There is
+             nothing to retrieve yet; asking somebody to produce a wording
+             nobody has shown them is a test, not a drill.
+  CLOZE      the model wording with the load-bearing terms removed, and those
+             same terms as the word bank. No invented distractors — every word
+             belongs in a gap, so there is nothing to eliminate by feel.
+  PRODUCE    the criterion alone and a box, marked by the model against that
+             one criterion. This is the rung that transfers, because a SAC is
+             a box.
+
+The rung is read off `repetitions`, so nothing new is stored and a lapse drops
+the card back down the ladder WITH the scheduler rather than leaving it hard
+while its interval collapses. `keyTerms` blanks what the CRITERION turns on —
+words in both the criterion and the answer — never a stopword, never the
+opening word (a passage that starts with a hole has no context before it), and
+three gaps at most. **A rung that cannot be built falls back rather than
+degrading**: no blankable terms, no cloze; no criterion, no produce.
+
+The model SUGGESTS a rating and highlights that button; the student still
+presses one. An app that schedules a card off its own verdict has taken the one
+judgement only they can make — whether they knew it or guessed. A failed
+marking call is not a dead end either: the model wording appears and they rate
+themselves, which is the rung below.
+
 The review runs ON the page. A review screen that sends you elsewhere to review
 is not one. It grades through `sm2.js` — `calculateNextReview`, the rating
 scale and `reviewPatch`, moved out of SpacedRepetition.jsx unchanged for
@@ -352,6 +381,23 @@ loading skeleton. The sentence asking for a commitment stays either way.
 A move needs `technique` (which regions) and `component` (which ATAR slice) to
 have a case at all, and `why` for its trigger row. Add a move without them and
 it silently renders bare.
+
+**A flip is a tween; a deal is a spring.** MovePreview's card wobbled on its
+way over because both animations shared one `animate` on one spring — hovering
+re-entered it with velocity still on `rotate` and `scale`. They are nested now:
+outer does the deal once, inner does `rotateY` alone on a fixed 0.42s tween, so
+a fast hover-out-hover-in cannot stutter. `perspective` goes on the PARENT; an
+element cannot supply its own vanishing point, and on the child a rotateY reads
+as a horizontal squash.
+
+**Clearing the pile is an event, and the dashboard says so.** A student who
+worked through their cards — or cleared them on /Review by marking them known —
+came back to a hero that behaved as though nothing had happened. There is an
+"all caught up" move now, and it is only claimed by somebody who HAS a deck to
+be caught up on; congratulating an empty account on owning nothing is worse
+than silence. A pile under ten also no longer falls through the cracks: the
+high-priority branch needs ten to beat a streak on the line, the low-priority
+one only has to beat a generic Pomodoro.
 
 ## The signup tour
 
