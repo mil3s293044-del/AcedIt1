@@ -561,8 +561,48 @@ export const AuthProvider = ({ children }) => {
   // These power the /login, /onboarding (sign-in step, email path), /forgot-password
   // and /reset-password pages. They never touch the Base44 fallback path.
 
+  /**
+   * Sign up, with the verification email sent by US.
+   *
+   * ─── Why not just supabase.auth.signUp ──────────────────────────────────
+   * Because that asks Supabase to send the confirmation over its built-in
+   * SMTP, which is capped at three emails an hour for the whole project and
+   * drops mail. Students were hitting the cap on a normal Tuesday. The server
+   * creates the account and generates the same confirmation link WITHOUT
+   * sending anything, then delivers it through Resend — see
+   * /local-ai/fn/sendSignupEmail.
+   *
+   * ─── It falls back rather than failing ──────────────────────────────────
+   * If the server has no Resend key it creates nothing and says so, and we go
+   * back to the Supabase path. Slow mail beats no signup, and the one outcome
+   * neither path may produce is an account whose verification email was never
+   * sent — nobody can get into that, and nobody can re-register it either.
+   */
   const signUpWithPassword = async ({ email, password, fullName }) => {
     const redirectTo = `${window.location.origin}/`;
+
+    try {
+      const r = await fetch('/local-ai/fn/sendSignupEmail', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password, full_name: fullName, redirect_to: redirectTo }),
+      });
+      const j = await r.json().catch(() => ({}));
+      if (r.ok && j?.ok) return { ok: true, session: null, user: null, viaResend: true };
+      // A real, reportable answer — the email is taken, or they have tried too
+      // many times. Not something to paper over by trying the other path.
+      if (r.status === 409 || r.status === 429 || j?.created) {
+        return { ok: false, error: { message: j?.error || 'Sign-up failed.' } };
+      }
+      if (!j?.fallback) {
+        // A 400 from our own validation is still a real answer.
+        if (r.status === 400 && j?.error) return { ok: false, error: { message: j.error } };
+      }
+    } catch {
+      // Server unreachable — fall through to Supabase rather than stranding
+      // somebody on a dead form.
+    }
+
     const { data, error } = await supabase.auth.signUp({
       email,
       password,

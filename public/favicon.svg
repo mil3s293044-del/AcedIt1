@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  The tab mark: the ace of spades, on its card.
+
+  IDENTICAL IN BOTH THEMES, on purpose. The in-app mark flips to white on dark
+  (it is drawn with `fill-foreground`), but a favicon has no theme to follow —
+  it sits on the browser's tab strip, which is a colour neither the app nor the
+  user chose. A pip alone on a transparent ground is invisible on a dark tab
+  strip, and a mark that disappears half the time is worse than one that never
+  changes. So it is what an ace of spades actually is: black ink on a white
+  card, which reads on any strip a browser has ever shipped.
+
+  The path is a byte-for-byte copy of SPADE in src/components/ace/SpadeMark.jsx
+  — the tab and the app must be the same silhouette, and a favicon cannot
+  import.
+-->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <rect width="64" height="64" rx="13" fill="#FFFFFF"/>
+  <g transform="translate(32 32) scale(0.82) translate(-32 -32)">
+    <path fill="#0D1626"
+      d="M32 6 C32 6 5 26 5 37 C5 45 11 50.5 18 50.5 C23.5 50.5 28 47.5 30 43.5
+         C29.5 50 26 55.5 19.5 60 L44.5 60 C38 55.5 34.5 50 34 43.5
+         C36 47.5 40.5 50.5 46 50.5 C53 50.5 59 45 59 37 C59 26 32 6 32 6 Z"/>
+  </g>
+</svg>

@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { motion, useScroll, useReducedMotion } from "framer-motion";
 import { trackStartTrial } from "@/lib/analytics";
+import BrandMark from "@/components/shared/BrandMark";
 import EmailCapture from "@/components/marketing/EmailCapture";
 import DealtHand from "@/components/marketing/DealtHand";
 import StepCards from "@/components/marketing/StepCards";
@@ -20,7 +21,6 @@ import {
 import {
   ArrowRight,
   Check,
-  GraduationCap,
   Sparkles,
   Brain,
   Flame,
@@ -129,14 +129,11 @@ export default function Landing() {
             which is exactly what recolouring the hero would have shipped.
             One ink, both states; only the bar behind it changes. */}
         <div className="max-w-7xl mx-auto px-6 lg:px-10 h-16 flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <div className="w-9 h-9 rounded-xl bg-primary flex items-center justify-center shadow-[0_0_24px_rgba(88,204,2,0.45)]">
-              <GraduationCap className="w-5 h-5 text-white" />
-            </div>
-            <span className="font-display font-extrabold text-xl tracking-tight text-[#0D1626]">
-              AcedIt
-            </span>
-          </div>
+          {/* A FIXED ink, not `fill-foreground`. This page paints its own
+              palette — cream ground, #0D1626 type — and does not follow the
+              theme, so the themed mark would come out white on cream the
+              moment somebody's system is set to dark. */}
+          <BrandMark size="md" tone="fill-[#0D1626]" wordClassName="text-[#0D1626]" />
           <div className="hidden md:flex items-center gap-8">
             <button
               onClick={() => scrollToId("how")}
@@ -1069,10 +1066,7 @@ export default function Landing() {
       <footer className="border-t border-black/5 py-12 px-6">
         <div className="max-w-7xl mx-auto flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
           <div className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center">
-              <GraduationCap className="w-4 h-4 text-white" />
-            </div>
-            <span className="font-display font-extrabold text-lg">AcedIt</span>
+            <BrandMark size="sm" tone="fill-[#0D1626]" wordClassName="text-[#0D1626]" />
             <span className="text-xs text-[#0D1626]/50 ml-2">
               VCE study, done well.
             </span>

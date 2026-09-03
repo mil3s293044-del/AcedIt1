@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useRef } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
+import { BrandSpade } from "@/components/shared/BrandMark";
 import {
-    GraduationCap,
     Brain, FileQuestion, Sparkles, Map, BarChart3, Trophy,
     Users, Swords,
     BookOpen, CreditCard, Settings as SettingsIcon, HelpCircle, LifeBuoy,
@@ -85,9 +85,8 @@ export default function SideRail() {
                 to="/"
                 className="flex items-center gap-3 h-16 px-3 border-b border-border group flex-shrink-0"
             >
-                <div className="w-10 h-10 bg-primary rounded-xl flex items-center justify-center btn-3d transition-transform group-hover:scale-105 flex-shrink-0">
-                    <GraduationCap className="w-5 h-5 text-primary-foreground" />
-                </div>
+                <BrandSpade size="lg"
+                    className="transition-transform group-hover:scale-105" />
                 <AnimatePresence>
                     {expanded && (
                         <motion.span

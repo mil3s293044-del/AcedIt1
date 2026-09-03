@@ -1,5 +1,6 @@
 import React, { useEffect } from "react";
-import { GraduationCap, ArrowLeft } from "lucide-react";
+import { ArrowLeft } from "lucide-react";
+import BrandMark from "@/components/shared/BrandMark";
 
 /**
  * Shared shell for the public legal pages (Privacy, Terms). Plain, readable,
@@ -17,10 +18,7 @@ export default function LegalLayout({ title, lastUpdated, children }) {
       <header className="border-b border-black/5">
         <div className="max-w-3xl mx-auto px-6 py-5 flex items-center justify-between">
           <a href="/" className="flex items-center gap-2 cursor-pointer">
-            <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center">
-              <GraduationCap className="w-4 h-4 text-white" />
-            </div>
-            <span className="font-display font-extrabold text-lg">AcedIt</span>
+            <BrandMark size="sm" />
           </a>
           <a
             href="/"
