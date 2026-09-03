@@ -18,52 +18,32 @@
  *   which is the part that is about you. The whole climb is one tap away for
  *   anybody who wants to see it.
  *
- * ─── Two bars for two different quantities ──────────────────────────────────
- * Rank progress lives on the crest's ring now. The level bar stays a bar,
- * because rank and level are genuinely different things — level moves every
- * few sessions, rank a handful of times a year — and drawing them the same way
- * was most of why nobody could tell them apart.
+ * ─── Two quantities, drawn differently, in one block ────────────────────────
+ * Rank progress lives on the crest's ring; level is a bar. They are genuinely
+ * different things — level moves every few sessions, rank a handful of times a
+ * year — and drawing them identically was most of why nobody could tell them
+ * apart. But they answer the same question, "how far along am I", so they sit
+ * in the same card: the level bar used to be a strip of its own that was four
+ * fifths whitespace, a heading and a number at opposite ends of a wide screen.
+ *
+ * ─── The ladder went horizontal ─────────────────────────────────────────────
+ * See RankLadder. Ten tiers is the only thing here that is inherently long,
+ * and it was the one thing in a three-row window with the rest behind a
+ * toggle, while a third of the screen sat empty beside it.
  */
-import React, { useState } from "react";
-import { motion, AnimatePresence } from "framer-motion";
+import React from "react";
+import { motion } from "framer-motion";
 import { Progress } from "@/components/ui/progress";
-import { Zap, Trophy, Crown, Flame, Check, ChevronDown } from "lucide-react";
+import { Zap, Trophy, Crown, Flame } from "lucide-react";
 import {
     XP_RANKS, getRankFromXP, getRankProgress, xpToNextRank,
     levelFromXP, levelProgress, xpToNextLevel, xpForLevel,
 } from "@/components/shared/xpSystem";
 import AceTip from "@/components/ace/AceTip";
 import RankCrest from "./RankCrest";
-
-/** One rung. `state` is "done" | "current" | "locked". */
-function Rung({ r, state }) {
-    const current = state === "current";
-    return (
-        <div className={`flex items-center gap-3 rounded-xl px-3 py-2.5 border-2 transition-colors ${
-            current ? "bg-secondary/60 border-border" : "border-transparent"}`}>
-            <RankCrest rank={r} size={current ? 44 : 36} showRing={false}
-                className={state === "locked" ? "opacity-40" : ""} />
-            <div className="flex-1 min-w-0">
-                <p className={`text-sm truncate ${
-                    current ? "font-black text-foreground"
-                        : state === "done" ? "font-bold text-foreground" : "font-bold text-muted-foreground/70"}`}>
-                    {r.name}
-                </p>
-                <p className="text-[11px] text-muted-foreground tabular-nums">
-                    {r.minXP.toLocaleString()}{r.maxXP === Infinity ? "+" : `–${r.maxXP.toLocaleString()}`} XP
-                </p>
-            </div>
-            {current
-                ? <span className="pill bg-foreground text-background text-[10px]">You</span>
-                : state === "done"
-                    ? <Check className="w-4 h-4 text-primary flex-shrink-0" />
-                    : null}
-        </div>
-    );
-}
+import RankLadder from "./RankLadder";
 
 export default function XPLevelCard({ totalXP = 0, streakDays = 0, compact = false }) {
-    const [showAll, setShowAll] = useState(false);
     const rank = getRankFromXP(totalXP);
     const nextRank = XP_RANKS[rank.tier] || null;
     const rankPct = getRankProgress(totalXP);
@@ -95,13 +75,6 @@ export default function XPLevelCard({ totalXP = 0, streakDays = 0, compact = fal
         );
     }
 
-    // The rungs either side. `slice` keeps the numbers honest at both ends —
-    // tier 1 has nothing below it and tier 10 nothing above, and padding the
-    // list out with blanks to keep it three tall would be inventing rungs.
-    const i = rank.tier - 1;
-    const window = XP_RANKS.slice(Math.max(0, i - 1), i + 2);
-    const shown = showAll ? XP_RANKS : window;
-
     return (
         <div className="space-y-4">
             {/* ── RANK ───────────────────────────────────────────────────── */}
@@ -129,100 +102,102 @@ export default function XPLevelCard({ totalXP = 0, streakDays = 0, compact = fal
                     </div>
                 </div>
 
-                {/* What the next rung costs, in the one unit that buys it. */}
-                <p className="text-sm text-muted-foreground mt-4 pt-4 border-t border-border">
-                    {nextRank ? (
-                        <>
-                            <span className="font-bold text-foreground tabular-nums">
-                                {xpToNextRank(totalXP).toLocaleString()} XP
-                            </span>{" "}
-                            to <span className="font-bold text-foreground">{nextRank.name}</span>.
-                        </>
-                    ) : (
-                        <span className="inline-flex items-center gap-1.5 font-bold text-foreground">
-                            <Crown className="w-4 h-4 text-xp" /> Top of the ladder. There is nothing above this.
-                        </span>
-                    )}
-                </p>
+                <div className="mt-4 pt-4 border-t border-border grid gap-4 sm:grid-cols-2 items-center">
+                    {/* What the next rung costs, in the one unit that buys it. */}
+                    <p className="text-sm text-muted-foreground">
+                        {nextRank ? (
+                            <>
+                                <span className="font-bold text-foreground tabular-nums">
+                                    {xpToNextRank(totalXP).toLocaleString()} XP
+                                </span>{" "}
+                                to <span className="font-bold text-foreground">{nextRank.name}</span>.
+                            </>
+                        ) : (
+                            <span className="inline-flex items-center gap-1.5 font-bold text-foreground">
+                                <Crown className="w-4 h-4 text-xp" /> Top of the ladder. Nothing above this.
+                            </span>
+                        )}
+                    </p>
+
+                    {/* Level, in the same block rather than a card of its own.
+                        A heading and a number at opposite ends of a wide strip
+                        is not a card, it is a gap with a border around it. */}
+                    <div>
+                        <div className="flex items-baseline justify-between gap-3">
+                            <span className="stat-label">Level {level}</span>
+                            <span className="text-[11px] text-muted-foreground tabular-nums">
+                                {xpNeeded.toLocaleString()} XP to {level + 1}
+                            </span>
+                        </div>
+                        <div className="h-2 bg-secondary rounded-full overflow-hidden mt-1.5">
+                            <motion.div initial={{ width: 0 }} animate={{ width: `${lvlPct}%` }}
+                                transition={{ duration: 0.9, ease: "easeOut", delay: 0.2 }}
+                                className="h-full bg-xp rounded-full" />
+                        </div>
+                    </div>
+                </div>
             </motion.div>
 
-            {/* ── THE LADDER, around you ─────────────────────────────────── */}
+            {/* ── THE LADDER, end to end ─────────────────────────────────── */}
             <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.08 }}
-                className="card-soft p-4">
-                <div className="flex items-center justify-between gap-3 mb-2.5">
+                className="card-soft p-4 sm:p-5">
+                <div className="flex items-baseline justify-between gap-3 mb-3">
                     <p className="stat-label flex items-center gap-1.5">
                         <Trophy className="w-3.5 h-3.5" /> The ladder
                     </p>
-                    <button type="button" onClick={() => setShowAll(v => !v)}
-                        className="inline-flex items-center gap-1 text-xs font-bold text-muted-foreground hover:text-foreground transition-colors">
-                        {showAll ? "Just my rungs" : `All ${XP_RANKS.length}`}
-                        <ChevronDown className={`w-3.5 h-3.5 transition-transform ${showAll ? "rotate-180" : ""}`} />
-                    </button>
-                </div>
-
-                <AnimatePresence initial={false} mode="popLayout">
-                    <motion.div key={showAll ? "all" : "window"}
-                        initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-                        transition={{ duration: 0.15 }}
-                        className="space-y-1">
-                        {shown.map(r => (
-                            <Rung key={r.name} r={r}
-                                state={r.tier === rank.tier ? "current" : totalXP >= r.minXP ? "done" : "locked"} />
-                        ))}
-                    </motion.div>
-                </AnimatePresence>
-
-                <p className="text-[11px] text-muted-foreground mt-2.5">
-                    Ranks never reset. Levels move every few sessions; this moves a handful of times a year.
-                </p>
-            </motion.div>
-
-            {/* ── LEVEL ──────────────────────────────────────────────────── */}
-            <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.14 }}
-                className="card-soft p-5">
-                <div className="flex items-baseline justify-between gap-3 mb-2.5">
-                    <p className="stat-label">Level {level}</p>
-                    <p className="text-xs text-muted-foreground tabular-nums">
-                        {xpNeeded.toLocaleString()} XP to {level + 1}
+                    <p className="text-[11px] text-muted-foreground">
+                        Ranks never reset — this moves a handful of times a year.
                     </p>
                 </div>
-                <div className="h-3 bg-secondary rounded-full overflow-hidden">
-                    <motion.div initial={{ width: 0 }} animate={{ width: `${lvlPct}%` }}
-                        transition={{ duration: 0.9, ease: "easeOut", delay: 0.2 }}
-                        className="h-full bg-xp rounded-full" />
-                </div>
+                <RankLadder ranks={XP_RANKS} currentTier={rank.tier} totalXP={totalXP} pct={rankPct} />
             </motion.div>
 
-            {/* ── WHERE XP COMES FROM ────────────────────────────────────── */}
-            <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }}
-                className="card-soft p-5">
-                <p className="stat-label mb-3">Where XP comes from</p>
-                <div className="grid grid-cols-2 gap-2 text-sm">
-                    {/* No "AI Challenges" row. That feature was never wired into
-                        the live UI and ChallengeEngine.jsx is deleted — this
-                        table was advertising a way to earn XP that does not
-                        exist. Retire something, grep the copy. */}
-                    {[
-                        ["Focus sessions", "1.6–96 XP/hr"],
-                        ["Flashcards", "0.6–1.5 XP/card"],
-                        ["Quizzes", "8–50 XP"],
-                        ["Sub-goals", "40–195 XP"],
-                        ["Full goals", "240–540 XP"],
-                        ["Daily streak", "15–100 XP"],
-                        ["Score wagers", "up to 3.5× bet"],
-                        ["Competitions", "Bonus XP"],
-                    ].map(([label, xp]) => (
-                        <div key={label} className="flex justify-between items-center gap-2 bg-secondary/50 rounded-lg px-2.5 py-1.5">
-                            <span className="text-foreground text-xs truncate">{label}</span>
-                            <span className="font-bold text-chart-3 text-xs flex-shrink-0">{xp}</span>
-                        </div>
-                    ))}
-                </div>
-                <p className="text-[11px] text-muted-foreground mt-3">
-                    Your streak multiplier applies to all of it. Daily caps stop grinding — difficulty and
-                    accuracy are what move the number.
-                </p>
-            </motion.div>
         </div>
+    );
+}
+
+/**
+ * Where XP comes from — the rate card.
+ *
+ * Exported separately because the profile lays it beside the achievements grid
+ * rather than under it: both read better in a column than stretched across a
+ * wide screen, and this one is a two-column list to begin with.
+ *
+ * It is the ONLY rate card in the app. There was briefly a second on the same
+ * tab, and the two disagreed in two rows (flashcards at 0.5 against 0.6–1.5,
+ * quizzes at 2 XP/mark against 8–50) — two tables for one economy, on one
+ * screen, with different numbers, is worse than either alone.
+ */
+export function XPSources() {
+    return (
+        <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }}
+            className="card-soft p-5">
+            <p className="stat-label mb-3">Where XP comes from</p>
+            <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-1 gap-2 text-sm">
+                {/* No "AI Challenges" row. That feature was never wired into
+                    the live UI and ChallengeEngine.jsx is deleted — this table
+                    was advertising a way to earn XP that does not exist.
+                    Retire something, grep the copy. */}
+                {[
+                    ["Focus sessions", "1.6–96 XP/hr"],
+                    ["Flashcards", "0.6–1.5 XP/card"],
+                    ["Quizzes", "8–50 XP"],
+                    ["Sub-goals", "40–195 XP"],
+                    ["Full goals", "240–540 XP"],
+                    ["Daily streak", "15–100 XP"],
+                    ["Score wagers", "up to 3.5× bet"],
+                    ["Competitions", "Bonus XP"],
+                ].map(([label, xp]) => (
+                    <div key={label} className="flex justify-between items-center gap-2 bg-secondary/50 rounded-lg px-2.5 py-1.5">
+                        <span className="text-foreground text-xs truncate">{label}</span>
+                        <span className="font-bold text-chart-3 text-xs flex-shrink-0">{xp}</span>
+                    </div>
+                ))}
+            </div>
+            <p className="text-[11px] text-muted-foreground mt-3 leading-snug">
+                Your streak multiplier applies to all of it. Daily caps stop grinding — difficulty and
+                accuracy are what move the number.
+            </p>
+        </motion.div>
     );
 }
