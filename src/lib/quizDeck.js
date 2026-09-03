@@ -77,3 +77,61 @@ export function quizDeckStats(quiz, allAttempts = []) {
 
     return { attempts: all.length, bestScore, avgScore, wrongIdx, mostRecent };
 }
+
+/** How many recent sits the headline average is taken over. */
+export const RECENT_WINDOW = 5;
+
+/**
+ * The numbers the Quizzes hero prints: how many quizzes, how many attempts,
+ * the recent average and the best ever.
+ *
+ * IT LIVES HERE, beside `quizDeckStats`, because the hero sits directly above
+ * the shelf of deck faces and the two have to agree. They did not. The hero
+ * computed its own arithmetic inline and got three things differently:
+ *
+ *   THE ADJUSTED SCORE. The hero read the raw `score`; the faces read
+ *   `effectiveScore`. So a student who marked their own written work saw the
+ *   results screen say 78%, the deck face say 78%, and the panel above both
+ *   say 60% — the exact failure the note at the top of this file describes,
+ *   on the one surface that had not been fixed.
+ *
+ *   AN UNSCORED ATTEMPT IS NOT A ZERO. `sum + (a.score || 0)` counted an
+ *   attempt whose marking never came back as nought out of a hundred and
+ *   divided by it anyway, which drags the average down by a mark the student
+ *   never dropped.
+ *
+ *   "LAST 5" HAS TO MEAN THE LAST 5. Attempts were sorted on `date`, which is
+ *   written as a DAY (`toISOString().split("T")[0]`) — so every sit on the
+ *   same day tied, and the order among them was whatever order the rows came
+ *   back in. On a page where somebody sits four quizzes in an afternoon,
+ *   "last 5" and "you scored X% last time" were picking arbitrarily. Ordered
+ *   on `created_date`, which is a timestamp.
+ *
+ * Retries count as ATTEMPTS and never as a MEASUREMENT — the same split every
+ * other reader of this data makes.
+ */
+export function quizzingSummary(quizzes = [], allAttempts = []) {
+    const list = Array.isArray(allAttempts) ? allAttempts : [];
+    const at = (a) => new Date(a?.created_date || a?.date || 0).getTime() || 0;
+    const fullSits = list.filter((a) => !isRetryAttempt(a)).sort((a, b) => at(b) - at(a));
+
+    // In sit order, most recent first, with the unscored dropped rather than
+    // read as zero.
+    const scored = fullSits.map(effectiveScore).filter(isNum);
+    const recent = scored.slice(0, RECENT_WINDOW);
+
+    return {
+        totalQuizzes: Array.isArray(quizzes) ? quizzes.length : 0,
+        // Every attempt, retries included: this one is a count of turning up.
+        totalAttempts: list.length,
+        avgScore: recent.length
+            ? Math.round(recent.reduce((sum, s) => sum + s, 0) / recent.length)
+            : null,
+        // How many the average is actually over, so the label can say "last 3"
+        // when there are three rather than promising five and averaging fewer.
+        avgOver: recent.length,
+        bestScore: scored.length ? Math.max(...scored) : null,
+        lastAttempt: fullSits[0] || null,
+    };
+}
+
