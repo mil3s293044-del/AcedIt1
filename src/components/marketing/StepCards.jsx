@@ -18,6 +18,7 @@
 import React from "react";
 import { motion, useReducedMotion } from "framer-motion";
 import PlayingCard, { CardBack } from "@/components/cards/PlayingCard";
+import { rankAt } from "@/components/cards/cardIdentity";
 
 /** Cards laid on a table don't sit square. Fixed, not random — a layout that
  *  reshuffles on re-render reads as a glitch. */
@@ -59,7 +60,7 @@ export default function StepCards({ steps = [] }) {
                             style={reduce ? undefined : {
                                 backfaceVisibility: "hidden", WebkitBackfaceVisibility: "hidden",
                             }}>
-                            <PlayingCard rank={String(i + 1)} suit={step.suit} tone={step.tone}
+                            <PlayingCard rank={rankAt(i + 1)} suit={step.suit} tone={step.tone}
                                 className="w-full h-full"
                                 style={{ boxShadow: "0 24px 40px -18px rgba(0,0,0,0.6)" }}>
                                 <div className="absolute inset-0 flex flex-col justify-center px-6 pt-10 pb-8">

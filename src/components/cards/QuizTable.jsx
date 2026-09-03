@@ -35,6 +35,7 @@ import PlayingCard, { SuitPip } from "@/components/cards/PlayingCard";
 import { Pile, Count } from "@/components/cards/Pile";
 import AceBody from "@/components/ace/AceBody";
 import { suitForOption } from "@/components/cards/ChoiceCard";
+import { rankAt } from "@/components/cards/cardIdentity";
 
 /** The piles beside the question. Small — the question is the hero here. */
 const PILE_H = "clamp(3.2rem, 7vh, 4.4rem)";
@@ -187,7 +188,7 @@ export default function QuizTable({
                         : { type: "spring", stiffness: 320, damping: 28, mass: 0.8 }}>
                     {/* No watermark: on a landscape card the big pale pip lands
                         directly behind the question text. */}
-                    <PlayingCard rank={String(number)} suit={suit} tone={tone} smallIndices
+                    <PlayingCard rank={rankAt(number)} suit={suit} tone={tone} smallIndices
                         watermark={false} className="w-full">
                         <div data-question-card className="relative px-5 sm:px-7 py-8 min-h-[7rem]
                             flex items-center">

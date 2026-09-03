@@ -441,6 +441,43 @@ quiz player. **Rank is how strong the thing is, suit is the family it belongs
 to**, and that contract holds everywhere: deck mastery, quiz best score, a
 subject in the signup hand. An Ace is always earned, never given.
 
+**The deck is a REAL deck.** Anything printed on a card is checked against
+what a printer would actually put there, because the whole theme collapses the
+moment one card is obviously invented:
+
+- **Court cards carry a FIGURE** (`CourtFigure`), double-headed about the
+  panel's mirror line. They were a framed box with the suit pip in it twice,
+  which reads as a domino — a court card is the one card in the deck that is
+  not a pip layout, and the mirrored figure is the whole reason a jack is
+  recognisable across a table. Drawn as flat shapes rather than a woodcut: this
+  card is 55px wide far more often than it is large, and the crown, head, ruff
+  and robe are the part that survives being small. The HEADWEAR is the rank
+  cue — spikes for a king, domes for a queen, a plumed cap for the jack — with
+  the held object (sword, flower, staff) as the second.
+  Two things had to be right. The plate is drawn in a LANDSCAPE box, because
+  each half of the panel is about 64 × 39; a square viewBox letterboxed to the
+  height and the figure came out a chess pawn with margins either side. And the
+  robe fills the full width at the mirror line — tapered, the two halves meet
+  as a pointed lens and the figure reads as a flying saucer.
+- **There is no 1 in a deck**, and no 11, 12 or 17. Two surfaces numbered
+  things and printed that number straight onto a card — step 1 of three, and
+  the question number in the quiz player, which reaches 17 on a long quiz.
+  `rankAt` maps a 1-based position onto a real rank (1 = ace, 11 = jack).
+- **The pip field is a panel inset from all four corners**, indices outside it.
+  At the old metrics the top-left pip of a four printed straight over its own
+  rank, on every numbered card from four up.
+- **The ace's big centred pip is an early return, and has to stay one**:
+  PIP_LAYOUT has an entry for the ace as well, so losing that branch prints an
+  ace as a single ordinary pip.
+
+**The printed face is INKED PER MODE** (`PIP_INK`). A card being a card prints
+at full strength; `compact` (a name band along the bottom) and `faint` (a
+paragraph over the top) back off, because the app's own words have to win a
+contest against a pattern read peripherally. The court figure is inked lighter
+than its own frame on top of that — it is one large filled shape where a
+numbered card has six small marks, so matching their alpha makes a court card
+the heaviest thing in a hand, and rank means strength here, not weight.
+
 `CardPack` is the shared pack — backs behind, one face on top, thickness = the
 count, fan on hover. `DeckStack` (flashcard decks) and `QuizDeck` (quizzes) are
 thin faces on it; before the extraction they were two near-identical
@@ -813,11 +850,14 @@ shell and the suspended screen — which had already drifted to three corner
 radii, two icon colours and one hard-coded `#534AB7` that appears nowhere else
 in the app.
 
-In the app it is the brand green (`fill-primary`) and drawn larger than the
+In the app it is the brand green (`fill-primary`), lit with a two-stop
+`drop-shadow` glow, and drawn larger than the
 other call sites (`rail`, a 28px pip in its 40px box): the bare spade at 20px
 was visibly smaller than the 40px green tile it replaced, because the tile's
 colour was doing work the glyph now has to do alone. It cannot grow past the
-box — the collapsed rail is 64px wide with 12px of padding either side.
+box — the collapsed rail is 64px wide with 12px of padding either side. The
+glow is a drop-shadow on the GLYPH, never a box-shadow on its span: the span is
+a rectangle, and a halo around a rectangle behind a spade is a green square.
 
 It is the ace of spades now. The whole visual language is playing cards and the
 mascot is a spade already; a mortarboard belongs to every education app. Drawn

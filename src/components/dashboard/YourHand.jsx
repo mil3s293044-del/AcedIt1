@@ -132,7 +132,12 @@ function SubjectCard({ row, i, n, reduce, flipped, onFlip }) {
                                 the same arrangement as the hand in onboarding,
                                 so a student who built one two minutes ago
                                 recognises this one. */}
-                            <span className="absolute inset-x-0 bottom-0 px-1.5 pt-1 pb-1.5 text-center"
+                            {/* `pr-4` clears the bottom-right index. Centred
+                                edge to edge, "Test yourself" ran straight
+                                under the rank and suit and the corner came out
+                                looking like a printing fault — a real card
+                                never prints over its own index. */}
+                            <span className="absolute inset-x-0 bottom-0 pl-1.5 pr-4 pt-1 pb-1.5 text-center"
                                 style={{ background: `${tone}22` }}>
                                 <span className="block text-[10px] font-extrabold leading-[1.15]
                                     text-foreground/80 line-clamp-2 break-words">

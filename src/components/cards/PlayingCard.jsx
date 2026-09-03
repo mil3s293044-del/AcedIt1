@@ -33,34 +33,14 @@
  */
 import React, { useId } from "react";
 import { SpadePip } from "@/components/ace/SpadeMark";
+import SuitPip from "@/components/cards/SuitPip";
+import CourtFigure from "@/components/cards/CourtFigure";
 import { SUIT_IS_RED, rankTitle } from "@/components/cards/cardIdentity";
 
-/**
- * The other three suits, drawn on the same 0–64 box as the spade so all four
- * pips are interchangeable at any size.
- */
-const HEART = "M32 57 C32 57 6 39 6 22.5 C6 13.4 12.9 7 20.8 7 C26.2 7 30.1 10 32 13.6 "
-    + "C33.9 10 37.8 7 43.2 7 C51.1 7 58 13.4 58 22.5 C58 39 32 57 32 57 Z";
-const DIAMOND = "M32 4 L54 32 L32 60 L10 32 Z";
-const CLUB = "M32 5 C25.8 5 20.8 10 20.8 16.2 C20.8 18.1 21.3 19.9 22.1 21.4 "
-    + "C20.9 20.8 19.5 20.5 18 20.5 C11.8 20.5 6.8 25.5 6.8 31.7 C6.8 37.9 11.8 42.9 18 42.9 "
-    + "C22.5 42.9 26.4 40.2 28.1 36.4 C28.4 42.7 25.9 50.2 20.8 55 L43.2 55 "
-    + "C38.1 50.2 35.6 42.7 35.9 36.4 C37.6 40.2 41.5 42.9 46 42.9 C52.2 42.9 57.2 37.9 57.2 31.7 "
-    + "C57.2 25.5 52.2 20.5 46 20.5 C44.5 20.5 43.1 20.8 41.9 21.4 C42.7 19.9 43.2 18.1 43.2 16.2 "
-    + "C43.2 10 38.2 5 32 5 Z";
-
-const PATHS = { heart: HEART, diamond: DIAMOND, club: CLUB };
-
-/** One suit mark. Spades come from the mascot's own pip so the two agree. */
-export function SuitPip({ suit = "spade", className = "w-3 h-3" }) {
-    const tone = SUIT_IS_RED[suit] ? "fill-destructive" : "fill-foreground";
-    if (suit === "spade" || !PATHS[suit]) return <SpadePip className={className} tone={tone} />;
-    return (
-        <svg viewBox="0 0 64 64" className={className} aria-hidden="true">
-            <path d={PATHS[suit]} className={tone} />
-        </svg>
-    );
-}
+/** Re-exported: five call sites import the pip from here, and the suit mark
+ *  belonging to the card is the right mental model even now that it lives in
+ *  its own file (it had to, or CourtFigure and this would import each other). */
+export { default as SuitPip } from "@/components/cards/SuitPip";
 
 /**
  * `#3B82F6` → `rgba(59,130,246,a)`. Subject colours arrive as hex from the
@@ -150,11 +130,20 @@ function PipFace({ rank, suit, compact }) {
     // `compact` pulls the face up into the top two thirds, for a card that
     // also has to print a name along its bottom edge. Without it the row-6
     // pips land underneath the label and the card reads as a printing fault.
-    const top = compact ? 17 : 20;
-    const span = compact ? 44 : 60;
-    const size = compact ? 13 : 15;
+    //
+    // The top of the field CLEARS THE INDEX, which it did not: at 20% the
+    // top-left pip of a four printed straight over its own rank, on every
+    // numbered card from four up. On a real card the pip field is a panel
+    // inset from all four corners and the indices live outside it — the
+    // columns are pulled in to 27/50/73 for the same reason.
+    const top = compact ? 21 : 24;
+    const span = compact ? 40 : 55;
+    const size = compact ? 13 : 14;
 
-    // One big mark, centred, for an ace. It is the whole convention.
+    // One big mark, centred, for an ace. It is the whole convention, and it
+    // has to come BEFORE the layout below: PIP_LAYOUT has an entry for the
+    // ace too, so without this an ace prints as a single ordinary pip and
+    // reads as a card with one mark on it rather than as an ace.
     if (String(rank) === "A") {
         return (
             <span aria-hidden="true"
@@ -176,10 +165,15 @@ function PipFace({ rank, suit, compact }) {
                 <span
                     key={i}
                     className="absolute"
+                    // Square off the WIDTH. Sized as a percentage in both
+                    // axes the box came out 2.5:3.5 like the card, and an
+                    // svg letterboxes inside it — so the pip drew at its
+                    // width while occupying its height, and the vertical
+                    // rhythm of a ten was set by a number nothing printed.
                     style={{
                         width: `${size}%`,
-                        height: `${size}%`,
-                        left: `${22 + c * 28}%`,
+                        aspectRatio: "1",
+                        left: `${27 + c * 23}%`,
                         top: `${top + (r / 6) * span}%`,
                         transform: `translate(-50%,-50%)${r > 3 ? " rotate(180deg)" : ""}`,
                     }}
@@ -192,16 +186,21 @@ function PipFace({ rank, suit, compact }) {
 }
 
 /**
- * A court card's panel: a framed box with the suit twice, mirrored.
+ * A court card's face: the framed panel, with the double-headed figure in it.
  *
- * Deliberately not a drawn king. A real court card is an illustration, and a
- * bad illustration is far worse than none — the frame plus the mirrored pip is
- * the part of a court card that reads at a glance, and it is the part that
- * still reads at 62 pixels wide in a fan. The rank is already printed in both
- * corners, so nothing is lost by leaving it off the panel.
+ * The panel is the border a real jack, queen and king are printed inside; the
+ * mirror line across the middle is the fold the figure is reflected about.
+ * Both halves are the SAME component, the lower one rotated 180°, which is
+ * exactly how the plate is made — and it means the card reads the same way up
+ * whichever end of a fan you are holding.
  */
-function CourtFace({ suit, tone, compact }) {
-    const ink = alpha(tone, 0.5);
+function CourtFace({ rank, suit, tone, compact }) {
+    // The figure is inked LIGHTER than its own frame. It is a large filled
+    // shape where a numbered card has half a dozen small marks, so matching
+    // their alpha makes a court card visibly heavier than every other card in
+    // the same hand — and rank is supposed to mean strength here, not weight.
+    const ink = alpha(tone, 0.38) || "hsl(var(--muted-foreground))";
+    const rule = alpha(tone, 0.5) || "hsl(var(--border))";
     return (
         <span aria-hidden="true"
             className={`absolute rounded-[0.35rem] border-2 pointer-events-none
@@ -210,17 +209,34 @@ function CourtFace({ suit, tone, compact }) {
                 // edge lands under the name band otherwise, and a court card
                 // with its bottom sliced off looks broken rather than framed.
                 compact ? "left-[18%] right-[18%] top-[13%] bottom-[31%]" : "inset-[18%]"}`}
-            style={{ borderColor: ink || "hsl(var(--border))" }}>
-            <span className="flex-1 grid place-items-center border-b"
-                style={{ borderColor: ink || "hsl(var(--border))" }}>
-                <SuitPip suit={suit} className="w-[40%] h-[40%]" />
+            style={{ borderColor: rule, color: ink }}>
+            <span className="flex-1 min-h-0 flex border-b" style={{ borderColor: rule }}>
+                <CourtFigure rank={String(rank)} suit={suit} ink={ink} />
             </span>
-            <span className="flex-1 grid place-items-center rotate-180">
-                <SuitPip suit={suit} className="w-[40%] h-[40%]" />
+            <span className="flex-1 min-h-0 flex rotate-180">
+                <CourtFigure rank={String(rank)} suit={suit} ink={ink} />
             </span>
         </span>
     );
 }
+
+/**
+ * How strongly the printed face is inked, per mode.
+ *
+ * A real card has nothing on it but the face, so a card being a CARD prints at
+ * full strength. Every other mode here has the app's own words over the top —
+ * a subject name, a move, a question — and the face has to lose that contest
+ * without disappearing, because the thing underneath is a pattern you read
+ * with your peripheral vision and the words are the thing you read.
+ *
+ *   true      the card is the card. Full ink.
+ *   compact   a name band along the bottom edge. Backed off enough that the
+ *             band and the rank both win, which the full-strength panel did
+ *             not: at 92px the court frame was the loudest thing on a card
+ *             whose whole job was to say "English".
+ *   faint     a paragraph over the top. Printing-ghost strength.
+ */
+const PIP_INK = { true: 1, compact: 0.42, faint: 0.13 };
 
 export default function PlayingCard({
     rank = "A",
@@ -286,10 +302,11 @@ export default function PlayingCard({
             {pips
                 ? (
                     <span aria-hidden="true"
-                        className={`absolute inset-0 pointer-events-none ${
-                            pips === "faint" ? "opacity-[0.13]" : ""}`}>
+                        className="absolute inset-0 pointer-events-none"
+                        style={{ opacity: PIP_INK[String(pips)] ?? 1 }}>
                         {court
-                            ? <CourtFace suit={suit} tone={tone} compact={pips === "compact"} />
+                            ? <CourtFace rank={rank} suit={suit} tone={tone}
+                                compact={pips === "compact"} />
                             : <PipFace rank={rank} suit={suit} compact={pips === "compact"} />}
                     </span>
                 )
