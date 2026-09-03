@@ -813,6 +813,12 @@ shell and the suspended screen — which had already drifted to three corner
 radii, two icon colours and one hard-coded `#534AB7` that appears nowhere else
 in the app.
 
+In the app it is the brand green (`fill-primary`) and drawn larger than the
+other call sites (`rail`, a 28px pip in its 40px box): the bare spade at 20px
+was visibly smaller than the 40px green tile it replaced, because the tile's
+colour was doing work the glyph now has to do alone. It cannot grow past the
+box — the collapsed rail is 64px wide with 12px of padding either side.
+
 It is the ace of spades now. The whole visual language is playing cards and the
 mascot is a spade already; a mortarboard belongs to every education app. Drawn
 with `fill-foreground`, so one asset is near-black on light and near-white on
