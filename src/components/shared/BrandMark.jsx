@@ -52,10 +52,20 @@ const SIZE = {
  * BOTH themes — the landing hero's tinted bar — where `fill-foreground` would
  * come out black on black. Everywhere else leave it alone.
  */
-export function BrandSpade({ size = "md", tone = "fill-foreground", className = "" }) {
+export function BrandSpade({ size = "md", tone = "fill-foreground", glow = false, className = "" }) {
     const s = SIZE[size] || SIZE.md;
     return (
-        <span className={`grid place-items-center flex-shrink-0 ${s.box} ${className}`}>
+        <span className={`grid place-items-center flex-shrink-0 ${s.box} ${className}`}
+            // A drop-shadow on the GLYPH, not a box-shadow on the span: the
+            // span is a rectangle and a glow around a rectangle behind a spade
+            // is a green square. `drop-shadow` follows the alpha of what it is
+            // filtering, so the halo is spade-shaped. Two stops — a tight one
+            // for the edge and a wide one for the bloom — because a single
+            // large radius at a readable strength reads as a smudge.
+            style={glow ? {
+                filter: "drop-shadow(0 0 2px hsl(var(--primary) / 0.55))"
+                    + " drop-shadow(0 0 8px hsl(var(--primary) / 0.35))",
+            } : undefined}>
             <SpadePip className={s.pip} tone={tone} />
         </span>
     );
@@ -69,12 +79,13 @@ export function BrandSpade({ size = "md", tone = "fill-foreground", className = 
  * a fixed ink because the bar behind it does not follow the theme.
  */
 export default function BrandMark({
-    size = "md", tone, wordClassName = "text-foreground", showWord = true, className = "",
+    size = "md", tone, glow = false,
+    wordClassName = "text-foreground", showWord = true, className = "",
 }) {
     const s = SIZE[size] || SIZE.md;
     return (
         <span className={`inline-flex items-center gap-2 ${className}`}>
-            <BrandSpade size={size} tone={tone} />
+            <BrandSpade size={size} tone={tone} glow={glow} />
             {showWord && (
                 <span className={`font-display font-extrabold tracking-tight ${s.text} ${wordClassName}`}>
                     AcedIt

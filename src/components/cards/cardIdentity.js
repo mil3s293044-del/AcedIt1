@@ -48,6 +48,25 @@ export function rankFor(mastery) {
     return RANKS[Math.round((m / 100) * (RANKS.length - 1))];
 }
 
+/**
+ * A 1-based POSITION → a real rank. For the surfaces that number things —
+ * question 7 of a quiz, step 2 of three — and were printing that number
+ * straight onto a card.
+ *
+ * THERE IS NO 1 IN A DECK, and there is no 11, 12 or 17 either, so those cards
+ * were printing a rank no deck has ever had — the one inaccuracy on an object
+ * whose whole job is to be recognisably a playing card. Position 1 is the ace,
+ * 11 the jack, 14 the ace again; a fifteen-question quiz deals two aces the
+ * same way a second pack would.
+ */
+export function rankAt(n) {
+    const i = Math.max(1, Math.round(Number(n) || 1)) - 1;
+    // Ace first, then 2 upward: RANKS runs low-to-high for mastery, and here
+    // the order that matters is the order a deck is counted in.
+    const order = ["A", ...RANKS.slice(0, RANKS.length - 1)];
+    return order[i % order.length];
+}
+
 /** "Queen of Spades — 82% mastered". Used for the tooltip and the aria label. */
 export function rankTitle(rank, suit, mastery) {
     const face = SPOKEN[rank] || rank;

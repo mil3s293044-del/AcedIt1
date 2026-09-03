@@ -7,7 +7,7 @@
  * and a "retry what you got wrong" that hands back questions they got right.
  */
 import assert from "node:assert/strict";
-import { quizDeckStats, effectiveScore } from "@/lib/quizDeck";
+import { quizDeckStats, effectiveScore, quizzingSummary } from "@/lib/quizDeck";
 
 let passed = 0;
 const check = (name, fn) => {
@@ -141,6 +141,69 @@ check("a retry does not decide what is left to fix", () => {
     assert.deepEqual(s.wrongIdx, [1, 2], "still read from the last full sit");
     assert.equal(s.bestScore, 33, "a subset score is not the quiz's best");
     assert.equal(s.attempts, 2, "but a retry is still work the student did");
+});
+
+// ─── the hero panel agrees with the shelf beneath it ────────────────────────
+
+check("the headline best is the score the student was shown", () => {
+    // The results screen and the deck face both print `adjusted_score` where
+    // the student marked their own written work. The panel above them read the
+    // raw `score`, so it printed a lower number than the two things either
+    // side of it — and it is the panel a student would assume was right.
+    const attempts = [
+        { quiz_id: "q1", score: 60, adjusted_score: 78, created_date: "2026-02-01T09:00:00Z" },
+    ];
+    const hero = quizzingSummary([{ id: "q1" }], attempts);
+    const face = quizDeckStats({ id: "q1", questions: [] }, attempts);
+    assert.equal(hero.bestScore, 78);
+    assert.equal(hero.bestScore, face.bestScore, "panel and face must agree");
+});
+
+check("an attempt that was never scored is not a zero", () => {
+    const hero = quizzingSummary([{}], [
+        { score: 80, created_date: "2026-02-01T09:00:00Z" },
+        { score: null, created_date: "2026-02-02T09:00:00Z" },
+    ]);
+    assert.equal(hero.avgScore, 80, "an unmarked sit drags nothing down");
+    assert.equal(hero.avgOver, 1, "and the label says it averaged one");
+});
+
+check("last 5 means the last 5 even when they are all the same day", () => {
+    // `date` is written as a DAY, so sorting on it tied every sit made in one
+    // afternoon and the winner was whatever order the rows arrived in.
+    const day = "2026-02-01";
+    const attempts = [
+        { score: 10, date: day, created_date: "2026-02-01T09:00:00Z" },
+        { score: 20, date: day, created_date: "2026-02-01T10:00:00Z" },
+        { score: 30, date: day, created_date: "2026-02-01T11:00:00Z" },
+        { score: 40, date: day, created_date: "2026-02-01T12:00:00Z" },
+        { score: 50, date: day, created_date: "2026-02-01T13:00:00Z" },
+        { score: 99, date: day, created_date: "2026-02-01T14:00:00Z" },
+    ];
+    const hero = quizzingSummary([{}], attempts);
+    assert.equal(hero.lastAttempt.score, 99, "the latest sit, not an arbitrary one");
+    // The five most recent are 99, 50, 40, 30, 20 — the 10 falls out.
+    assert.equal(hero.avgScore, Math.round((99 + 50 + 40 + 30 + 20) / 5));
+});
+
+check("a retry counts as an attempt and never as a score", () => {
+    const hero = quizzingSummary([{}], [
+        { score: 70, created_date: "2026-02-01T09:00:00Z" },
+        { score: 0, created_date: "2026-02-02T09:00:00Z", extra: { is_retry: true } },
+    ]);
+    assert.equal(hero.totalAttempts, 2, "going back over your mistakes is work");
+    assert.equal(hero.avgScore, 70, "but it is not a mark on the whole paper");
+    assert.equal(hero.bestScore, 70);
+    assert.equal(hero.lastAttempt.score, 70, "and it is not your last sit");
+});
+
+check("nothing sat reports nothing rather than zero", () => {
+    const hero = quizzingSummary([{ id: "a" }, { id: "b" }], []);
+    assert.equal(hero.totalQuizzes, 2);
+    assert.equal(hero.totalAttempts, 0);
+    assert.equal(hero.avgScore, null, "a quiz nobody sat is not a nought");
+    assert.equal(hero.bestScore, null);
+    assert.equal(hero.lastAttempt, null);
 });
 
 console.log(`\n${passed} passed`);

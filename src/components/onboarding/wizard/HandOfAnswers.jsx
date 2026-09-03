@@ -33,8 +33,8 @@
  */
 import React from "react";
 import { motion, AnimatePresence, useReducedMotion } from "framer-motion";
-import PlayingCard, { SuitPip, alpha } from "@/components/cards/PlayingCard";
-import { suitFor, colorFor, SUIT_IS_RED } from "@/components/cards/cardIdentity";
+import PlayingCard, { alpha } from "@/components/cards/PlayingCard";
+import { suitFor, colorFor } from "@/components/cards/cardIdentity";
 
 /** Face cards for the years that count, so seniority reads off the rank. */
 const YEAR_RANK = {
@@ -62,21 +62,29 @@ const MAX_FANNED = 7;
  * So the label is laid out in the strip. It is left-anchored, `step` wide, and
  * the last card in the fan gets the full width because nothing covers it.
  *
- * AND ONLY ONE CORNER INDEX. PlayingCard prints both, rotated, the way a real
- * card is printed, which is right everywhere it is used at full size and wrong
- * here: the bottom-right index lands exactly on top of the label, and on the
- * one card that is not overlapped you could read both at once. A card held in
- * a fan shows its top-left corner. That is the entire reason the index is
- * printed twice on a real card, so honouring it means printing it once.
+ * BOTH CORNER INDICES, as a real card is printed. This used to print only the
+ * top-left, on the reasoning that a card held in a fan shows only that corner
+ * — true of the cards that ARE overlapped, and the last card in the fan is not
+ * overlapped by anything, so it sat there with one index and read as a card
+ * with a corner missing.
+ *
+ * What made the single index look necessary was the label, which ran under the
+ * bottom-right mark. So the LABEL gives way, not the index: on the last card
+ * its band reserves the corner. On every other card the band is only as wide
+ * as the visible strip and the index is out under the next card, where it
+ * costs nothing.
  */
 export function FanCard({ card, strip, labelSize }) {
-    const red = SUIT_IS_RED[card.suit];
     const tone = card.tone || (card.gold ? "#F0B429" : undefined);
+    // Only the card whose whole face is showing has to make room for its own
+    // bottom-right index; on an overlapped card that corner is behind the next
+    // card, and stealing width from a 34px strip clips the subject name.
+    const clearsIndex = strip >= CARD_W - 2;
     return (
         <PlayingCard
             rank={card.rank}
             suit={card.suit}
-            indices={false}
+            smallIndices
             // The real face: two marks for a two, a framed panel for a court
             // card, one big mark for the ace. Compact, so the layout sits in
             // the top two thirds and leaves the bottom edge for the name.
@@ -86,22 +94,16 @@ export function FanCard({ card, strip, labelSize }) {
             tone={tone}
             className="w-full h-full"
         >
-            <span aria-hidden="true"
-                className="absolute top-1 left-1.5 flex flex-col items-center leading-none z-10">
-                <span className={`font-display font-black tabular-nums text-[11px] ${
-                    red ? "text-destructive" : "text-foreground"}`}>
-                    {card.rank}
-                </span>
-                <SuitPip suit={card.suit} className="w-2 h-2 mt-0.5" />
-            </span>
-
             {/* The name sits on a band in the subject's own colour, opaque so
                 the pips above cannot show through it. That colour is not
                 decoration: it is what this subject looks like everywhere in
                 the app from the moment the account exists. */}
-            <span className="absolute bottom-0 left-0 pt-1 pb-1.5 px-1 text-center"
+            <span className="absolute bottom-0 left-0 pt-1 pb-1.5 pl-1 text-center"
                 style={{
                     width: strip,
+                    // The index is drawn at a fixed size, so the reserve is a fixed
+                    // number of pixels rather than a fraction of the card.
+                    paddingRight: clearsIndex ? 18 : 4,
                     background: tone ? alpha(tone, 0.16) : "hsl(var(--muted))",
                 }}>
                 <span className="block font-bold leading-[1.15] text-foreground/75

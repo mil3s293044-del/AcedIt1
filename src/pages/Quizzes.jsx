@@ -3,7 +3,6 @@ import { Link, useNavigate } from "react-router-dom";
 import { base44 } from "@/api/base44Client";
 import { createPageUrl } from "@/utils";
 import { BANK_TOPIC, bankSummary } from "@/lib/mistakeBank";
-import { isRetryAttempt } from "@/lib/quizInsight";
 import { isDue, isNew } from "@/lib/due";
 import { deleteResult } from "@/lib/saveResult";
 import { motion } from "framer-motion";
@@ -46,7 +45,7 @@ import TierUsagePill from "@/components/shared/TierUsagePill";
 import { FEATURES, canUseFeature } from "@/lib/tierAccess";
 
 import QuizDeck from "@/components/cards/QuizDeck";
-import { quizDeckStats } from "@/lib/quizDeck";
+import { quizDeckStats, quizzingSummary, effectiveScore, RECENT_WINDOW } from "@/lib/quizDeck";
 import { normaliseQuestions, formatGeneratedParts } from "@/lib/quizSchema";
 import QuizPlayer from "../components/quizzes/QuizPlayer";
 import QuizInsightRail from "../components/quizzes/QuizInsightRail";
@@ -73,7 +72,7 @@ function getCoachLine({ name, hour, totalQuizzes, recentAttempts, avgScore, lowS
         return `${period}, ${name}. ${avgScore}% average — let's run a few more and watch it climb.`;
     }
     if (avgScore != null) {
-        return `${period}, ${name}. Avg score ${avgScore}% across your last 5. Solid.`;
+        return `${period}, ${name}. Avg score ${avgScore}% across your recent sits. Solid.`;
     }
     return `${period}, ${name}. Let's get a quiz in.`;
 }
@@ -867,50 +866,12 @@ Return valid JSON only.`,
         [bankCards],
     );
 
+    // One source for the hero's figures, shared with the deck faces below it
+    // so the panel and the shelf cannot disagree — see `quizzingSummary` for
+    // the three ways they used to.
     const quizStats = useMemo(() => {
-        const totalQuizzes = quizzes.length;
-        const byDate = (a, b) => String(b.date || b.created_date || '')
-            .localeCompare(String(a.date || a.created_date || ''));
-        const sortedAttempts = [...quizAttempts].sort(byDate);
-
-        // SCORES COME FROM FULL SITS ONLY.
-        //
-        // A "wrong only" retry is a run at the questions you already missed,
-        // so its score is not on the same scale as a score on the whole paper
-        // — and it is the one you are most likely to do badly on, because it
-        // is made of your hardest questions by construction. Averaging it in
-        // punished the student for going back over their mistakes: the panel
-        // read "You scored 0% last time — your score will climb" directly
-        // above a card printing 60% BEST for the same quiz, and the greeting
-        // reported an average nothing on the page agreed with.
-        //
-        // The ACTIVITY count still includes them, because a retry is real work
-        // and the count is a measure of turning up rather than of accuracy.
-        const fullSits = sortedAttempts.filter(a => !isRetryAttempt(a));
-        const recent5 = fullSits.slice(0, 5);
-        const avgScore = recent5.length
-            ? Math.round(recent5.reduce((sum, a) => sum + (a.score || 0), 0) / recent5.length)
-            : null;
-        const bestScore = fullSits.length
-            ? Math.max(...fullSits.map(a => a.score || 0))
-            : null;
-
-        // The week's activity counts went with the panel that printed them.
-        // "3 quizzes taken this week" is a measure of turning up, not of
-        // getting better, and the space now shows the mistakes still costing
-        // marks — the one number on this page that goes down when you work.
-
-        const lastAttempt = fullSits[0] || null;
-        const lowScore = avgScore != null && avgScore < 60;
-
-        return {
-            totalQuizzes,
-            recentAttempts: sortedAttempts.length,
-            avgScore,
-            bestScore,
-            lastAttempt,
-            lowScore,
-        };
+        const s = quizzingSummary(quizzes, quizAttempts);
+        return { ...s, lowScore: s.avgScore != null && s.avgScore < 60 };
     }, [quizzes, quizAttempts]);
 
     const firstName = userProfile?.username || user?.full_name?.split(' ')[0] || 'friend';
@@ -919,7 +880,7 @@ Return valid JSON only.`,
         name: firstName,
         hour,
         totalQuizzes: quizStats.totalQuizzes,
-        recentAttempts: quizStats.recentAttempts,
+        recentAttempts: quizStats.totalAttempts,
         avgScore: quizStats.avgScore,
         lowScore: quizStats.lowScore,
     });
@@ -927,13 +888,16 @@ Return valid JSON only.`,
     // Featured "Next quiz" — state-aware suggestion
     const nextQuiz = useMemo(() => {
         // Low recent score on a known quiz — suggest replay
-        if (quizStats.lastAttempt && (quizStats.lastAttempt.score || 0) < 60) {
+        // The score they were SHOWN, which is the adjusted one wherever they
+        // marked their own written work.
+        const lastScore = quizStats.lastAttempt ? effectiveScore(quizStats.lastAttempt) : null;
+        if (typeof lastScore === "number" && lastScore < 60) {
             const target = quizzes.find(q => q.id === quizStats.lastAttempt.quiz_id);
             if (target) {
                 return {
                     label: "Run it back",
                     title: `Try "${target.title}" again`,
-                    sub: `You scored ${Math.round(quizStats.lastAttempt.score || 0)}% last time — your score will climb.`,
+                    sub: `You scored ${Math.round(lastScore)}% last time — your score will climb.`,
                     cta: "Retake quiz",
                     accent: "streak",
                     icon: AlertTriangle,
@@ -953,8 +917,10 @@ Return valid JSON only.`,
                 action: () => setShowAIDialog(true),
             };
         }
-        // Many quizzes available, no recent activity
-        if (quizzes.length >= 3 && quizStats.recentAttempts === 0) {
+        // Quizzes sitting there, never sat. The count is all-time, so this
+        // fires for somebody who has built a library and not opened it — not
+        // for somebody who simply has not been on this week.
+        if (quizzes.length >= 3 && quizStats.totalAttempts === 0) {
             const random = quizzes[Math.floor(Math.random() * quizzes.length)];
             return {
                 label: "Pick something",
@@ -1152,9 +1118,9 @@ Return valid JSON only.`,
                                     <p className="text-foreground text-sm lg:text-base mt-2 max-w-md font-medium leading-snug">
                                         {quizStats.totalQuizzes === 0
                                             ? "Build your first quiz and start locking knowledge in."
-                                            : quizStats.recentAttempts === 0
+                                            : quizStats.totalAttempts === 0
                                                 ? "Take one to see how it sticks."
-                                                : `${quizStats.recentAttempts} attempt${quizStats.recentAttempts === 1 ? '' : 's'} logged. Keep building.`}
+                                                : `${quizStats.totalAttempts} attempt${quizStats.totalAttempts === 1 ? '' : 's'} logged. Keep building.`}
                                     </p>
                                 </div>
                                 <div className="sm:col-span-2 grid grid-cols-2 sm:grid-cols-1 gap-3">
@@ -1168,7 +1134,13 @@ Return valid JSON only.`,
                                         }`}>
                                             {quizStats.avgScore != null ? `${quizStats.avgScore}%` : '—'}
                                         </p>
-                                        <p className="text-[11px] text-muted-foreground mt-0.5">last 5</p>
+                                        {/* Says what it actually averaged. "last 5"
+                                            over two sits is a small lie, and it
+                                            is the kind that makes a student stop
+                                            believing the bigger numbers. */}
+                                        <p className="text-[11px] text-muted-foreground mt-0.5">
+                                            {quizStats.avgOver ? `last ${quizStats.avgOver}` : `last ${RECENT_WINDOW}`}
+                                        </p>
                                     </div>
                                     <div className="bg-surface rounded-xl p-3 border-2 border-border">
                                         <p className="stat-label">Best score</p>

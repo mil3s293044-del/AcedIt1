@@ -85,7 +85,7 @@ export default function SideRail() {
                 to="/"
                 className="flex items-center gap-3 h-16 px-3 border-b border-border group flex-shrink-0"
             >
-                <BrandSpade size="rail" tone="fill-primary"
+                <BrandSpade size="rail" tone="fill-primary" glow
                     className="transition-transform group-hover:scale-105" />
                 <AnimatePresence>
                     {expanded && (
