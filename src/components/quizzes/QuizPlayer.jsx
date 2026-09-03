@@ -453,6 +453,10 @@ In two or three sentences, explain what makes that the right answer and what the
             // happened. `_sourceIndex` is the parent index on a "wrong only"
             // retry; on a normal sit the two are the same.
             source: { quizId: quiz.id, qIndex: q?._sourceIndex ?? currentFeedbackIndex },
+            // The grouping label for the bank's shelf. The quiz is the topic a
+            // student thinks in — "Remedies", "Polymers" — and its category is
+            // the subject, so the title is the right half.
+            topic: quiz.title,
         });
         if (!card) return;
         // Claimed synchronously so a double-click cannot get past it, then

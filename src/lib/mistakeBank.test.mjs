@@ -13,6 +13,7 @@ import {
     cardFromModule, isBankCard, bankKey, BANK_TOPIC,
     fixState, mistakeMeta, repeatOffenders, bankSummary,
     ladderDone, clearedBy, casesFor,
+    isRetired, groupBank, retireMistake, restoreMistake,
 } from "@/lib/mistakeBank";
 
 let passed = 0;
@@ -130,19 +131,34 @@ check("a banked mistake nobody has been asked about yet is NEW, not slipping", (
     assert.equal(fixState(card()), "new");
 });
 
-check("fixed needs two clean recalls AND a real gap", () => {
-    // One clean recall the day after banking it is short-term memory.
-    assert.equal(fixState(card({ review_count_good: 1, consecutive_good: 1, interval_days: 30, last_quality: 3 })), "working");
-    assert.equal(fixState(card({ review_count_good: 2, consecutive_good: 2, interval_days: 3, last_quality: 3 })), "working");
-    assert.equal(fixState(card({ review_count_good: 2, consecutive_good: 2, interval_days: 7, last_quality: 3 })), "fixed");
-    // Easy counts the same way, on its own counter.
-    assert.equal(fixState(card({ review_count_easy: 2, consecutive_easy: 2, interval_days: 10, last_quality: 4 })), "fixed");
+check("the rehearsal is done only when every rung has been passed", () => {
+    // Two clean recalls puts a card on the SECOND rung. Calling that rehearsed
+    // means a mistake can be "fixed" having never been asked to spot the error
+    // in its own sentence or rewrite it — which is the whole ladder.
+    assert.equal(fixState(card({ repetitions: 2, review_count_good: 2, interval_days: 30, last_quality: 3 })), "working");
+    // Every rung passed, but the scheduler has not pushed it out a week yet.
+    assert.equal(fixState(card({ repetitions: 5, review_count_good: 5, interval_days: 3, last_quality: 3 })), "working");
+    assert.equal(fixState(card({ repetitions: 5, review_count_good: 5, interval_days: 7, last_quality: 3 })), "fixed");
+});
+
+check("rating a card honestly never holds it back", () => {
+    // SM-2 keeps `consecutive_good` and `consecutive_easy` as SEPARATE streaks
+    // and each rating resets the other, so a student who rated Good and then
+    // Easy — two clean recalls, the second better than the first — sat on a
+    // maximum streak of one and could never finish. `repetitions` is the
+    // counter that actually means "clean recalls since the last lapse".
+    const mixed = card({
+        repetitions: 5, interval_days: 9, last_quality: 4,
+        review_count_good: 3, review_count_easy: 2,
+        consecutive_good: 0, consecutive_easy: 1,
+    });
+    assert.equal(fixState(mixed), "fixed");
 });
 
 check("slipping is their LAST answer, not their history", () => {
     // Four early lapses since recalled twice is going the right way; filing it
     // under slipping reports history as news.
-    assert.equal(fixState(card({ review_count_again: 4, review_count_good: 2, consecutive_good: 2, interval_days: 8, last_quality: 3 })), "fixed");
+    assert.equal(fixState(card({ repetitions: 5, review_count_again: 4, review_count_good: 5, interval_days: 8, last_quality: 3 })), "fixed");
     assert.equal(fixState(card({ review_count_again: 1, consecutive_good: 0, last_quality: 1 })), "slipping");
     assert.equal(fixState(card({ review_count_hard: 1, last_quality: 2 })), "slipping");
 });
@@ -180,7 +196,7 @@ check("the same criterion across subjects is one repeat", () => {
 
 check("a repeat is only fixed when EVERY instance is", () => {
     // One outstanding copy of a repeated mistake is still a mistake you make.
-    const done = { review_count_good: 2, consecutive_good: 2, interval_days: 9, last_quality: 3 };
+    const done = { repetitions: 5, review_count_good: 5, interval_days: 9, last_quality: 3 };
     const crit = (over) => card({ extra: { mistake: { criterion: "Same thing" } }, ...over });
     assert.equal(repeatOffenders([crit(done), crit(done)])[0].fixed, true);
     const partly = repeatOffenders([crit(done), crit({})])[0];
@@ -196,7 +212,7 @@ check("the summary counts only the bank, and adds up", () => {
         card(),                                                                       // new
         card({ last_quality: 1, review_count_again: 1 }),                             // slipping
         card({ last_quality: 3, review_count_good: 1, consecutive_good: 1 }),          // working
-        card({ last_quality: 3, review_count_good: 2, consecutive_good: 2, interval_days: 8 }), // fixed
+        card({ last_quality: 3, repetitions: 5, review_count_good: 5, interval_days: 8 }), // fixed
         { topic: "Blurting gaps", subject_name: "Chemistry" },                        // not ours
     ];
     const s = bankSummary(rows, (c) => c.last_quality === 1);
@@ -247,6 +263,7 @@ const ago = (d) => new Date(Date.now() - d * DAY).toISOString().slice(0, 10);
 const DRILLED = (over = {}) => ({
     id: "d1",
     topic: BANK_TOPIC,
+    repetitions: 6,
     consecutive_good: 3,
     interval_days: 12,
     last_quality: 4,
@@ -386,6 +403,102 @@ check("the summary counts what is waiting on a re-sit", () => {
     assert.equal(sum.awaitingRedo, 1);
     assert.equal(sum.fixed, 0);
     assert.equal(sum.outstanding, 1);
+});
+
+
+// ─── Clearing a mastered mistake ────────────────────────────────────────────
+//
+// The only other exit from a review queue is is_active: false, which destroys
+// the card — so a student who had genuinely fixed something had to choose
+// between being asked forever and losing it before revision week. These keep
+// clearing reversible, and keep the achievement after the pile is empty.
+
+check("retiring keeps the card and is one field to undo", () => {
+    const patch = retireMistake("2026-09-03T00:00:00.000Z");
+    assert.equal(patch.retired_at, "2026-09-03T00:00:00.000Z");
+    assert.equal(Object.keys(patch).length, 1, "nothing else is touched");
+    assert.equal(restoreMistake().retired_at, null);
+    assert.ok(isRetired({ retired_at: "2026-09-03T00:00:00.000Z" }));
+    assert.ok(!isRetired({}));
+});
+
+check("a cleared mistake leaves the working set but not the record", () => {
+    const done = DRILLED({ id: "gone", retired_at: new Date().toISOString() });
+    const sum = bankSummary([DRILLED(), done], () => false, []);
+    assert.equal(sum.total, 1, "the pile is what is left to do");
+    assert.equal(sum.cards.length, 1);
+    assert.equal(sum.clearedCount, 1);
+    assert.equal(sum.all.length, 2, "still there, still countable");
+    // The achievement survives an empty bank.
+    const emptied = bankSummary([done], () => false, []);
+    assert.equal(emptied.total, 0);
+    assert.equal(emptied.clearedCount, 1);
+});
+
+// ─── Grouping ───────────────────────────────────────────────────────────────
+
+const AT = (subject, topic, over = {}) => DRILLED({
+    id: `${subject}-${topic}-${over.id || Math.random()}`,
+    subject_name: subject,
+    ...over,
+    extra: { mistake: { ...DRILLED().extra.mistake, topic, ...(over.mistake || {}) } },
+});
+
+check("the bank groups subject, then topic", () => {
+    const groups = groupBank([
+        AT("Legal Studies", "Remedies", { id: "a" }),
+        AT("Legal Studies", "Remedies", { id: "b" }),
+        AT("Legal Studies", "Courts", { id: "c" }),
+        AT("Chemistry", "Polymers", { id: "d" }),
+    ], { attempts: [] });
+
+    assert.equal(groups.length, 2);
+    const legal = groups.find((g) => g.subject === "Legal Studies");
+    assert.equal(legal.total, 3);
+    assert.equal(legal.topics.length, 2);
+    assert.equal(legal.topics.find((t) => t.topic === "Remedies").total, 2);
+});
+
+check("every level counts what its own button would actually play", () => {
+    // "Review 6" that turns out to be one due card and five scheduled is the
+    // small lie that costs a screen its credibility.
+    const ready = new Set(["a"]);
+    const [g] = groupBank([
+        AT("Legal Studies", "Remedies", { id: "a" }),
+        AT("Legal Studies", "Remedies", { id: "b" }),
+    ], { isReady: (c) => ready.has(c.id), attempts: [] });
+    assert.equal(g.total, 2);
+    assert.equal(g.ready, 1);
+    assert.equal(g.topics[0].ready, 1);
+});
+
+check("a cleared mistake is in no group", () => {
+    const groups = groupBank([
+        AT("Legal Studies", "Remedies", { id: "a" }),
+        AT("Legal Studies", "Remedies", { id: "b", retired_at: new Date().toISOString() }),
+    ], { attempts: [] });
+    assert.equal(groups[0].total, 1);
+});
+
+check("the subject with the most left to do sorts first", () => {
+    const groups = groupBank([
+        AT("Chemistry", "Polymers", { id: "a" }),
+        AT("Legal Studies", "Remedies", { id: "b" }),
+        AT("Legal Studies", "Courts", { id: "c" }),
+    ], { attempts: [] });
+    assert.equal(groups[0].subject, "Legal Studies");
+});
+
+check("a mistake with no topic of its own still lands somewhere", () => {
+    // Every card banked before the topic existed. "No topic" is a group; a
+    // card that vanishes from the shelf is a card the student cannot reach.
+    const legacy = DRILLED({ id: "old", extra: { mistake: {
+        criterion: "Names the transfer", banked_at: new Date().toISOString(),
+    } } });
+    const groups = groupBank([legacy], { attempts: [] });
+    assert.equal(groups.length, 1);
+    assert.equal(groups[0].topics.length, 1);
+    assert.ok(groups[0].topics[0].topic);
 });
 
 console.log(`\n${passed} passed`);

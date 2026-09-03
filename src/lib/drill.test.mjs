@@ -10,7 +10,7 @@
 import assert from "node:assert/strict";
 import {
     drillStage, keyTerms, buildCloze, gradeCloze, suggestRating, drillFor, sameTerm,
-    buildSpot, gradeSpot,
+    buildSpot, gradeSpot, ladderFor, ladderProgress, LADDER,
 } from "@/lib/drill";
 
 let passed = 0;
@@ -266,6 +266,92 @@ check("only the most load-bearing differences are targets", () => {
     assert.ok(wrong.length <= 4, `flagged ${wrong.length}: ${wrong.join(", ")}`);
     assert.ok(wrong.includes("situation"), `got ${wrong.join(", ")}`);
     assert.ok(!wrong.includes("got"), "three-letter filler is not the mistake");
+});
+
+// ─── The tracker ────────────────────────────────────────────────────────────
+//
+// The ladder was completely invisible: a student saw one exercise, rated it,
+// and had no way to know whether that was the first of two or the third of
+// five. These exist to keep the tracker honest about the steps a given card
+// will actually see — a progress bar over rungs that can never be built is
+// worse than no progress bar.
+
+const FULL = (over = {}) => CARD({
+    extra: { mistake: {
+        criterion: "Explicit reference to fairness, equality and access to justice",
+        quote: "the court was nice to both people",
+        wanted: "the court applied the principle of equality to both parties",
+        source: { quiz_id: "q1", q_index: 0 },
+    } },
+    ...over,
+});
+
+check("a fresh mistake is on the first rung with everything ahead of it", () => {
+    const steps = ladderFor(FULL({ repetitions: 0 }));
+    assert.equal(steps.length, LADDER.length);
+    assert.equal(steps[0].state, "current");
+    assert.ok(steps.slice(1).every((s) => s.state === "todo"));
+    assert.equal(ladderProgress(steps).done, 0);
+});
+
+check("the counter moves the marker, and everything behind it is done", () => {
+    const steps = ladderFor(FULL({ repetitions: 2 }));
+    assert.equal(steps[0].state, "done");
+    assert.equal(steps[1].state, "done");
+    assert.equal(steps[2].state, "current");     // cloze
+    assert.equal(ladderProgress(steps).done, 2);
+});
+
+check("the redo step is only DONE when the gate says so", () => {
+    // The gate lives outside the card — rehearsal cannot mark itself proven.
+    const drilled = ladderFor(FULL({ repetitions: 6 }), { laddered: true });
+    assert.equal(drilled[4].state, "current");
+    assert.notEqual(ladderProgress(drilled).pct, 100);
+
+    const proven = ladderFor(FULL({ repetitions: 6 }), { laddered: true, cleared: true });
+    assert.equal(proven[4].state, "done");
+    assert.equal(ladderProgress(proven).pct, 100);
+});
+
+check("a finished rehearsal reads as finished, not parked on the last rung", () => {
+    // `repetitions` stops climbing at the top rehearsal rung, so without this
+    // a student who has done everything looks at four of five forever.
+    const parked = ladderFor(FULL({ repetitions: 9 }));
+    assert.equal(parked.find((s) => s.id === "repair").state, "current");
+    const finished = ladderFor(FULL({ repetitions: 9 }), { laddered: true });
+    assert.equal(finished.find((s) => s.id === "repair").state, "done");
+    assert.equal(finished.find((s) => s.id === "redo").state, "current");
+});
+
+check("a rung this card can never see is SKIPPED, not pending", () => {
+    // No quote means no spot, ever. Drawing it as a step the student is
+    // working towards is a progress bar that will jump.
+    const noQuote = ladderFor(CARD({
+        repetitions: 0,
+        extra: { mistake: { criterion: "Names the transfer", source: { quiz_id: "q", q_index: 0 } } },
+    }));
+    assert.equal(noQuote.find((s) => s.id === "spot").state, "skipped");
+    assert.equal(noQuote.find((s) => s.id === "recognise").state, "current");
+});
+
+check("skipped steps are out of the denominator", () => {
+    // Otherwise a card with two reachable rungs caps out at 40% and reads as
+    // permanently unfinished.
+    const steps = ladderFor(CARD({
+        repetitions: 9,
+        answer: "It is not the same",
+        extra: { mistake: { criterion: "Names it" } },
+    }), { cleared: false });
+    const p = ladderProgress(steps);
+    assert.ok(p.total < LADDER.length, `counted all ${p.total}`);
+    assert.ok(p.total >= 1);
+});
+
+check("a mistake with no source question shows no redo step", () => {
+    // There is nothing to sit again, and mistakeBank reports it fixed on the
+    // ladder alone rather than holding it one rung short forever.
+    const steps = ladderFor(CARD({ repetitions: 1, extra: { mistake: { criterion: "x" } } }));
+    assert.equal(steps.find((s) => s.id === "redo").state, "skipped");
 });
 
 console.log(`\n${passed} passed`);
