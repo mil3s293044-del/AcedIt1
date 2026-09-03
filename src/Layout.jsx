@@ -35,8 +35,35 @@ import PomodoroOrb from "@/components/study/PomodoroOrb";
  * THE DRAG HANDLE IS THE WHOLE CARD, and the move icon went with the glyph.
  * `cursor: grab` on the card already says it can be moved, and an icon that
  * only means "this is draggable" is a caption on an affordance.
+ *
+ * It only SAID that, though. The card's whole interior is the link to Study,
+ * and the drag handler bailed out on anything inside `.timer-content a` — so
+ * the grab cursor sat over roughly twelve pixels of padding that could
+ * actually be grabbed, and every student who tried to move the widget by the
+ * clock or the countdown was told it was draggable and then found it wasn't.
+ *
+ * So drag and click are separated by DISTANCE, not by target. A press
+ * anywhere on the card starts a drag; if the pointer never travels further
+ * than a few pixels it was a tap and the link fires, and if it did travel the
+ * click is swallowed on the way out. That is how a draggable thing that is
+ * also a link has to work — an element cannot decide which one you meant
+ * until you let go.
+ *
+ * POINTER events, not mouse: one code path covers touch, and a captured
+ * pointer keeps sending moves after it leaves the card, so a fast drag can't
+ * shake the widget loose the way the old document-level mousemove could when
+ * it crossed an iframe or left the window.
+ *
+ * The capture is taken LATE — at the moment the pointer passes the threshold,
+ * not when it goes down. A captured pointer retargets the click that follows
+ * it to the capturing element, so capturing on press meant the click never
+ * reached the anchor inside and a plain tap on the widget silently did
+ * nothing. Capture is a drag tool; a tap is not a drag.
  */
-const FloatingTimer = React.memo(({ currentTime, timerPosition, isDragging, handleMouseDown, timerRef, formatTime }) => (
+const FloatingTimer = React.memo(({
+    currentTime, timerPosition, isDragging, handlePointerDown, swallowClickAfterDrag,
+    timerRef, formatTime,
+}) => (
     <motion.div
         ref={timerRef}
         initial={{ opacity: 0, scale: 0.8 }}
@@ -49,7 +76,11 @@ const FloatingTimer = React.memo(({ currentTime, timerPosition, isDragging, hand
             cursor: isDragging ? 'grabbing' : 'grab',
             zIndex: 99
         }}
-        onMouseDown={handleMouseDown}
+        onPointerDown={handlePointerDown}
+        /* Capture phase, so a drag that ended over the link is stopped BEFORE
+           the anchor sees the click. On the bubble phase the navigation has
+           already been queued. */
+        onClickCapture={swallowClickAfterDrag}
         className="touch-none"
     >
         <Card className={`bg-surface/95 backdrop-blur-sm border-2 transition-all select-none
@@ -59,7 +90,7 @@ const FloatingTimer = React.memo(({ currentTime, timerPosition, isDragging, hand
                     ? 'border-xp/40 shadow-lg hover:shadow-xl hover:border-xp/60'
                     : 'border-primary/40 shadow-lg hover:shadow-xl hover:border-primary/60'}`}>
             <CardContent className="p-3 timer-content">
-                <Link to={createPageUrl("Study")} onClick={(e) => e.stopPropagation()}
+                <Link to={createPageUrl("Study")} draggable={false}
                     className="flex items-center gap-3">
                     <PomodoroOrb left={currentTime.timeLeft} total={currentTime.total}
                         isBreak={currentTime.isBreak} />
@@ -107,7 +138,11 @@ export default function Layout({ children }) {
         return saved ? JSON.parse(saved) : { x: window.innerWidth - 220, y: 70 };
     });
     const [isDragging, setIsDragging] = useState(false);
-    const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
+    // The live drag, in a ref rather than state. A pointermove fires far more
+    // often than a frame, and re-rendering the whole Layout on each one to
+    // read back an offset it already knows is how a drag starts feeling
+    // heavy. Only the POSITION is state, because only the position is drawn.
+    const dragRef = useRef(null);
     const timerRef = useRef(null);
     const [userProfile, setUserProfile] = useState(null);
     const [navigationGuard, setNavigationGuard] = useState({ show: false, targetUrl: null, onSave: null });
@@ -249,35 +284,134 @@ export default function Layout({ children }) {
         return () => clearInterval(interval);
     }, [globalTimer]);
 
-    const handleMouseDown = useCallback((e) => {
-        if (e.target.closest('.timer-content a')) return;
+    // Whether the widget is on screen at all. Declared up here because the
+    // drag effect keys on it — the listeners go on when the widget appears and
+    // come off when it goes, rather than being tied to a drag being in flight.
+    const showFloatingTimer = currentTime?.timeLeft > 0 && !location.pathname.includes(createPageUrl("Study"));
+
+    // Below this, a press was a TAP and the link should fire. Above it, the
+    // student was moving the widget and the click that follows is an accident
+    // of letting go. 4px is roughly the slop in a deliberate tap — a hand on a
+    // trackpad or a thumb on glass never lands perfectly still.
+    const DRAG_SLOP = 4;
+
+    /** Keep the widget on screen, whatever the viewport is now. */
+    const clampToViewport = useCallback((x, y) => {
+        const w = timerRef.current?.offsetWidth || 200;
+        const h = timerRef.current?.offsetHeight || 100;
+        return {
+            x: Math.max(16, Math.min(x, Math.max(16, window.innerWidth - w - 16))),
+            y: Math.max(16, Math.min(y, Math.max(16, window.innerHeight - h - 16))),
+        };
+    }, []);
+
+    const handlePointerDown = useCallback((e) => {
+        // Left button or touch only. A right-click is a context menu and a
+        // middle-click on the link is "open in a new tab"; neither is a drag.
+        if (e.button !== 0) return;
+        dragRef.current = {
+            id: e.pointerId,
+            offsetX: e.clientX - timerPosition.x,
+            offsetY: e.clientY - timerPosition.y,
+            startX: e.clientX,
+            startY: e.clientY,
+            moved: false,
+            captured: false,
+        };
         setIsDragging(true);
-        setDragStart({ x: e.clientX - timerPosition.x, y: e.clientY - timerPosition.y });
     }, [timerPosition.x, timerPosition.y]);
 
+    /**
+     * A click that ends a drag is swallowed.
+     *
+     * `moved` stays true until the NEXT press, on purpose: the click event
+     * arrives after pointerup, so clearing it on release would let the
+     * navigation through every time.
+     */
+    const swallowClickAfterDrag = useCallback((e) => {
+        if (!dragRef.current?.moved) return;
+        e.preventDefault();
+        e.stopPropagation();
+    }, []);
+
+    // Attached for as long as the widget is on screen, NOT while a drag is in
+    // flight. Keyed on `isDragging`, the listeners only went on after React
+    // had re-rendered for the state change — so every pointermove between the
+    // press and that commit was dropped on the floor, and a quick flick could
+    // finish before anything was listening. `dragRef` already says whether a
+    // drag is live; the handlers read it and no-op when it is not.
     useEffect(() => {
-        if (!isDragging) return;
-        const handleMouseMove = (e) => {
-            const newX = e.clientX - dragStart.x;
-            const newY = e.clientY - dragStart.y;
-            const timerWidth = timerRef.current?.offsetWidth || 200;
-            const timerHeight = timerRef.current?.offsetHeight || 100;
-            setTimerPosition({
-                x: Math.max(16, Math.min(newX, window.innerWidth - timerWidth - 16)),
-                y: Math.max(16, Math.min(newY, window.innerHeight - timerHeight - 16))
-            });
+        const node = timerRef.current;
+        if (!node) return;
+
+        const onMove = (e) => {
+            const d = dragRef.current;
+            if (!d || e.pointerId !== d.id) return;
+            if (!d.moved
+                && Math.abs(e.clientX - d.startX) < DRAG_SLOP
+                && Math.abs(e.clientY - d.startY) < DRAG_SLOP) return;
+            if (!d.captured) {
+                // Now it is a drag. From here the pointer reports to this
+                // element even when it outruns the card or leaves the window.
+                //
+                // Guarded: setPointerCapture THROWS if the pointer is no
+                // longer active, and an exception here would abort the rest of
+                // this handler — so a pointer that died mid-gesture would take
+                // the position update with it. Capture is an optimisation on
+                // top of a drag that already works without it.
+                d.captured = true;
+                try { node.setPointerCapture?.(e.pointerId); } catch { d.captured = false; }
+            }
+            d.moved = true;
+            setTimerPosition(clampToViewport(e.clientX - d.offsetX, e.clientY - d.offsetY));
         };
-        const handleMouseUp = () => {
+        const onUp = (e) => {
+            const d = dragRef.current;
+            if (!d) return;                       // no drag in flight
+            if (e.pointerId !== d.id) return;
+            dragRef.current = { ...d, id: null }; // keep `moved` for the click
+            if (d.captured) {
+                try { node.releasePointerCapture?.(e.pointerId); } catch { /* already gone */ }
+            }
             setIsDragging(false);
-            localStorage.setItem('timerPosition', JSON.stringify(timerPosition));
+            // Read the position off the node rather than the closure: this
+            // effect re-runs on isDragging alone, so `timerPosition` in scope
+            // is whatever it was when the drag STARTED. Persisting that put
+            // the widget back where it came from on the next page load.
+            if (d?.moved) {
+                localStorage.setItem('timerPosition', JSON.stringify({
+                    x: node.offsetLeft, y: node.offsetTop,
+                }));
+            }
         };
-        document.addEventListener('mousemove', handleMouseMove);
-        document.addEventListener('mouseup', handleMouseUp);
+
+        node.addEventListener('pointermove', onMove);
+        node.addEventListener('pointerup', onUp);
+        // A cancelled pointer (a system gesture, a phone call) must not leave
+        // the widget stuck to the cursor.
+        node.addEventListener('pointercancel', onUp);
+        // Until the threshold is passed there is no capture, so a press that
+        // is released off the card — or one the browser hands to something
+        // else — would otherwise leave `isDragging` stuck on forever.
+        window.addEventListener('pointerup', onUp);
+        window.addEventListener('pointercancel', onUp);
         return () => {
-            document.removeEventListener('mousemove', handleMouseMove);
-            document.removeEventListener('mouseup', handleMouseUp);
+            node.removeEventListener('pointermove', onMove);
+            node.removeEventListener('pointerup', onUp);
+            node.removeEventListener('pointercancel', onUp);
+            window.removeEventListener('pointerup', onUp);
+            window.removeEventListener('pointercancel', onUp);
         };
-    }, [isDragging, dragStart, timerPosition]);
+    }, [showFloatingTimer, clampToViewport]);
+
+    // A saved position is only valid for the viewport it was saved in. Resize
+    // to a narrow window and the widget was simply off the right-hand edge,
+    // with no way to reach it and no way to put it back.
+    useEffect(() => {
+        const onResize = () => setTimerPosition(p => clampToViewport(p.x, p.y));
+        window.addEventListener('resize', onResize);
+        return () => window.removeEventListener('resize', onResize);
+    }, [clampToViewport]);
 
     const formatTime = useCallback((seconds) => {
         const m = Math.floor(seconds / 60);
@@ -285,7 +419,6 @@ export default function Layout({ children }) {
         return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
     }, []);
 
-    const showFloatingTimer = currentTime?.timeLeft > 0 && !location.pathname.includes(createPageUrl("Study"));
 
     return (
         <div className="min-h-screen bg-background relative">
@@ -298,7 +431,8 @@ export default function Layout({ children }) {
                         currentTime={currentTime}
                         timerPosition={timerPosition}
                         isDragging={isDragging}
-                        handleMouseDown={handleMouseDown}
+                        handlePointerDown={handlePointerDown}
+                        swallowClickAfterDrag={swallowClickAfterDrag}
                         timerRef={timerRef}
                         formatTime={formatTime}
                     />

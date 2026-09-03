@@ -729,7 +729,11 @@ In two or three sentences, explain what makes that the right answer and what the
         const max = normaliseQuestion(q, i).marks;
         const { marks, correct } = marksFor(q, i, max);
         return {
-            q_index: i,
+            // The question's index in the QUIZ, which on a "wrong only" retry
+            // is not its index in the run. Everything that reads these rows
+            // back — weak spots, the drill builder, the auto-bank — looks the
+            // question up by this number in the parent quiz's array.
+            q_index: q._sourceIndex ?? i,
             type: q.type,
             question: q.question,
             command_term: commandTermOf(q.question),
@@ -751,7 +755,7 @@ In two or three sentences, explain what makes that the right answer and what the
                 correct: parseInt(userAnswers[i]) === q.correct_answer }
             : { marks: undefined, correct: null }));
         try {
-            const created = await base44.entities.QuizAttempt.create({ quiz_id: quiz.id, quiz_title: quiz.title, quiz_category: quiz.category, score: fallbackScore, questions_total: totalQ, questions_correct: mcqCorrect, time_taken: timeTaken, xp_earned: mcqCorrect * 2, user_answers: userAnswers, date: new Date().toISOString().split('T')[0], extra: { question_results: mcqOnlyResults } });
+            const created = await base44.entities.QuizAttempt.create({ quiz_id: quiz.id, quiz_title: quiz.title, quiz_category: quiz.category, score: fallbackScore, questions_total: totalQ, questions_correct: mcqCorrect, time_taken: timeTaken, xp_earned: mcqCorrect * 2, user_answers: userAnswers, date: new Date().toISOString().split('T')[0], extra: { question_results: mcqOnlyResults, is_retry: quiz._isRetry === true } });
             if (created?.id) setCreatedAttemptId(created.id);
         } catch {}
         await awardQuizXP({ score: fallbackScore, questionsCorrect: mcqCorrect, totalMarks: mcqCorrect, timeTaken });
@@ -1017,7 +1021,7 @@ invent a theme from a single question.`,
             const xpEarned = totalMarksAwarded * 2;
 
             try {
-                const created = await base44.entities.QuizAttempt.create({ quiz_id: quiz.id, quiz_title: quiz.title, quiz_category: quiz.category, score: finalScore, questions_total: totalQ, questions_correct: questionsCorrect, time_taken: timeTaken, xp_earned: xpEarned, user_answers: userAnswers, date: new Date().toISOString().split('T')[0], extra: { question_results: aiResults } });
+                const created = await base44.entities.QuizAttempt.create({ quiz_id: quiz.id, quiz_title: quiz.title, quiz_category: quiz.category, score: finalScore, questions_total: totalQ, questions_correct: questionsCorrect, time_taken: timeTaken, xp_earned: xpEarned, user_answers: userAnswers, date: new Date().toISOString().split('T')[0], extra: { question_results: aiResults, is_retry: quiz._isRetry === true } });
                 // Stash the new attempt's id so any later self-marks update the same row.
                 if (created?.id) setCreatedAttemptId(created.id);
             } catch {}

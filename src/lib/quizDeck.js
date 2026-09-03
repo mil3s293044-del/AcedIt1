@@ -16,7 +16,19 @@
  * from the most recent attempt's MCQs only. A short answer has no stored
  * correct index to compare against, so including them would quietly hand the
  * student back questions they had actually answered well.
+ *
+ * AND THE MOST RECENT ATTEMPT IS THE MOST RECENT FULL SIT. A "wrong only"
+ * retry stores its answers under the positions they held IN THE RETRY —
+ * question 5 of the quiz, sat as the only question in the run, is answer 0 —
+ * and this function reads those answers against the PARENT quiz's array. So
+ * once a student used the retry button, every number on that deck face was
+ * computed by comparing their answers to the wrong questions: the count of
+ * what was left to fix was arbitrary, and pressing the button again served
+ * them a set of questions chosen at random. Its score is not comparable
+ * either — a subset made of your hardest questions is not the quiz.
  */
+
+import { isRetryAttempt } from "@/lib/quizInsight";
 
 /** The score a student was actually shown for an attempt. */
 export const effectiveScore = (attempt) =>
@@ -30,9 +42,13 @@ const isNum = (v) => typeof v === "number" && Number.isFinite(v);
  * not expect — a quiz list that cannot count is still a quiz list.
  */
 export function quizDeckStats(quiz, allAttempts = []) {
-    const attempts = Array.isArray(allAttempts)
+    const all = Array.isArray(allAttempts)
         ? allAttempts.filter((a) => a?.quiz_id === quiz?.id)
         : [];
+    // Retries still count as attempts — they are real work, and the face's
+    // "3 tries" is a count of turning up. They are excluded from everything
+    // that is a MEASUREMENT of the quiz.
+    const attempts = all.filter((a) => !isRetryAttempt(a));
 
     const scored = attempts.map(effectiveScore).filter(isNum);
     // `null`, not 0. A quiz nobody has sat is a different thing from a quiz
@@ -59,5 +75,5 @@ export function quizDeckStats(quiz, allAttempts = []) {
         }, [])
         : [];
 
-    return { attempts: attempts.length, bestScore, avgScore, wrongIdx, mostRecent };
+    return { attempts: all.length, bestScore, avgScore, wrongIdx, mostRecent };
 }

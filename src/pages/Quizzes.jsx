@@ -1,8 +1,9 @@
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect, useMemo, useRef } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { base44 } from "@/api/base44Client";
 import { createPageUrl } from "@/utils";
 import { BANK_TOPIC, bankSummary } from "@/lib/mistakeBank";
+import { autoBankRows, weakSpots, isRetryAttempt } from "@/lib/quizInsight";
 import { isDue, isNew } from "@/lib/due";
 import { deleteResult } from "@/lib/saveResult";
 import { motion } from "framer-motion";
@@ -180,6 +181,8 @@ export default function Quizzes() {
 
             setQuizzes(quizzesData || []);
             setQuizAttempts(attemptsData || []);
+            // A question missed twice banks itself. See autoBank.
+            autoBank(quizzesData || [], attemptsData || [], bankCards || []);
             setSharedQuizzes(sharedQuizzesData || []);
             setUserSubjects(userSubjectsData || []);
 
@@ -190,6 +193,44 @@ export default function Quizzes() {
             }
         } finally {
             setIsLoading(false);
+        }
+    };
+
+    /**
+     * Bank the questions the student keeps getting wrong, without being asked.
+     *
+     * ─── Why here, and why once ─────────────────────────────────────────────
+     * Repeated misses are found by reading the whole attempt history, which is
+     * something only a page that has already loaded it can do — and this page
+     * loads it anyway, for the panel beside the list. So the reconciliation
+     * costs no query. It runs ONCE per mount, behind a ref, and writes nothing
+     * when there is nothing new: `autoBankRows` keys each card to its source
+     * question, so a mistake already banked is skipped whether the student
+     * banked it by hand or the last visit banked it for them.
+     *
+     * ─── It is deliberately quiet ───────────────────────────────────────────
+     * No toast. Banking a mistake is not an achievement to celebrate — the
+     * student got something wrong twice — and a popup congratulating them for
+     * it every time they open the page would be the app being pleased about
+     * bad news. The rail says the questions are in the bank, which is where a
+     * student who wants to know looks.
+     */
+    const autoBankedRef = useRef(false);
+    const autoBank = async (quizList, attemptList, existing) => {
+        if (autoBankedRef.current) return;
+        autoBankedRef.current = true;
+        try {
+            const rows = autoBankRows(
+                weakSpots(attemptList), quizList, existing,
+                { topic: BANK_TOPIC, unit: BANK_TOPIC });
+            if (!rows.length) return;
+            const made = await base44.entities.Flashcard.bulkCreate(rows);
+            // Fold them into the panel's count in the same tick, so the number
+            // beside "Mistake bank" is not a load behind the bank itself.
+            setBankCards(prev => [...prev, ...(Array.isArray(made) ? made : rows)]);
+        } catch (e) {
+            // A bank that fails to write is not a reason to break the page.
+            console.error("Auto-bank failed:", e);
         }
     };
 
@@ -868,17 +909,30 @@ Return valid JSON only.`,
 
     const quizStats = useMemo(() => {
         const totalQuizzes = quizzes.length;
-        const sortedAttempts = [...quizAttempts].sort((a, b) => {
-            const da = a.date || a.created_date || '';
-            const db = b.date || b.created_date || '';
-            return db.localeCompare(da);
-        });
-        const recent5 = sortedAttempts.slice(0, 5);
+        const byDate = (a, b) => String(b.date || b.created_date || '')
+            .localeCompare(String(a.date || a.created_date || ''));
+        const sortedAttempts = [...quizAttempts].sort(byDate);
+
+        // SCORES COME FROM FULL SITS ONLY.
+        //
+        // A "wrong only" retry is a run at the questions you already missed,
+        // so its score is not on the same scale as a score on the whole paper
+        // — and it is the one you are most likely to do badly on, because it
+        // is made of your hardest questions by construction. Averaging it in
+        // punished the student for going back over their mistakes: the panel
+        // read "You scored 0% last time — your score will climb" directly
+        // above a card printing 60% BEST for the same quiz, and the greeting
+        // reported an average nothing on the page agreed with.
+        //
+        // The ACTIVITY count still includes them, because a retry is real work
+        // and the count is a measure of turning up rather than of accuracy.
+        const fullSits = sortedAttempts.filter(a => !isRetryAttempt(a));
+        const recent5 = fullSits.slice(0, 5);
         const avgScore = recent5.length
             ? Math.round(recent5.reduce((sum, a) => sum + (a.score || 0), 0) / recent5.length)
             : null;
-        const bestScore = quizAttempts.length
-            ? Math.max(...quizAttempts.map(a => a.score || 0))
+        const bestScore = fullSits.length
+            ? Math.max(...fullSits.map(a => a.score || 0))
             : null;
 
         // The week's activity counts went with the panel that printed them.
@@ -886,7 +940,7 @@ Return valid JSON only.`,
         // getting better, and the space now shows the mistakes still costing
         // marks — the one number on this page that goes down when you work.
 
-        const lastAttempt = sortedAttempts[0] || null;
+        const lastAttempt = fullSits[0] || null;
         const lowScore = avgScore != null && avgScore < 60;
 
         return {
@@ -1365,7 +1419,14 @@ Return valid JSON only.`,
                                                                     ...quiz,
                                                                     _isRetry: true,
                                                                     title: `${quiz.title} — wrong only`,
-                                                                    questions: stats.wrongIdx.map(i => quiz.questions[i]),
+                                                                    // Each question remembers where it sits in the
+                                                                    // PARENT quiz. Without this the attempt records
+                                                                    // question 5 as index 0 — the position it held in
+                                                                    // the subset — and every later read attributes the
+                                                                    // miss to whichever question happens to be first.
+                                                                    questions: stats.wrongIdx.map(i => ({
+                                                                        ...quiz.questions[i], _sourceIndex: i,
+                                                                    })),
                                                                 });
                                                                 setIsPlaying(true);
                                                             }}

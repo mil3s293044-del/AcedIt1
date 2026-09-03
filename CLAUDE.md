@@ -162,6 +162,53 @@ An annotation was a strikethrough over the whole phrase, off in its own card.
 Both were wrong: a strikethrough means DELETE THIS when the point is LOOK HERE,
 and lifting the phrase out of the paragraph loses the thing that makes it land.
 
+**A "wrong only" retry is not a sit, and four readers treated it as one.**
+The retry button plays the questions you missed as a quiz of their own, so its
+score is on a different scale (it is made of your hardest questions by
+construction) and its answers are keyed by their positions IN THE RETRY. Every
+consumer that read it as a normal attempt got something visibly wrong:
+
+- `retrievalStrength` took it as the quiz's latest result, so the fading list
+  read "Mathematical Methods — wrong only · 0%" — a student who had just done
+  the right thing, told their retention had collapsed, under a renamed quiz.
+- `quizDeckStats` read `user_answers` against the PARENT question array, so one
+  press of retry made every number on that deck face arbitrary from then on,
+  and pressing it again served a set chosen at random.
+- The Quizzes greeting and the "run it back" strip averaged it in: "You scored
+  0% last time" printed directly above a card reading 60% BEST.
+- `weakSpots` attributed the miss to whatever question held that index in the
+  parent, and `buildDrillQuestions` then drilled it.
+
+New attempts carry `extra.is_retry` and record the PARENT index (`_sourceIndex`
+rides on the question). `isRetryAttempt` also matches the title suffix, which is
+the only trace older retries left; `isLegacyRetry` is the ones whose indices
+cannot be trusted and are skipped rather than half-believed. The split rule
+everywhere: a retry COUNTS as activity ("3 tries") and never as a MEASUREMENT
+(best, average, last score, what is left to fix).
+
+**One page, one next move.** Quizzes carried five: a mistake-bank panel, a
+"next quiz" strip, and a three-panel rail (losing marks / command terms /
+fading fastest). Each was defensible alone; together they were five headings
+answering the same question differently, and choosing between them is work the
+app was supposed to have done. The rail is ONE panel now (`workQueue`), and the
+command-term breakdown moved to /MistakeBank, which is the diagnosis screen.
+
+Order inside it is by KIND, deliberately: a question missed twice is EVIDENCE,
+a fading quiz is an ESTIMATE off a curve fitted to nobody's data. Blending them
+would mean inventing an exchange rate between the two and printing it as though
+it were measured, so evidence sorts first, each half sorts by its own measure,
+and a line between them says which is which.
+
+**A question missed twice banks itself.** `autoBankRows` writes it as an
+ordinary bank card — same topic, unit and `extra.mistake` shape — so it reviews
+through the same SM-2 ladder as a hand-banked mark. Pressing save is the right
+shape for choosing between five criteria on a marked answer; it is the wrong
+shape for a whole question you have now got wrong twice, where there is nothing
+to judge. Keyed on `quiz:<id>:<index>` so a reworded stem does not re-bank, and
+it NEVER invents a back: no model answer and no explanation means no card,
+because a card whose back reads "the correct answer" spends a real mistake on
+nothing.
+
 **The mistake bank is flashcards with a marker** (`topic: "Mistake bank"`), so a
 banked mistake comes back through the SM-2 engine that already exists rather
 than sitting in a list nobody opens — same move blurting's `makeCardsFromMisses`
@@ -408,6 +455,42 @@ than silence. A pile under ten also no longer falls through the cracks: the
 high-priority branch needs ten to beat a streak on the line, the low-priority
 one only has to beat a generic Pomodoro.
 
+## Ranked: the board is the page, the profile is a card
+
+My profile was `GamifiedMyRank` — an XP card, five stat tiles, twelve
+hand-written achievements, daily missions, a streak-multiplier explainer and a
+table of XP rates — with `AchievementsGallery` rendering a SECOND achievements
+grid from the server directly underneath. Two grids of badges on one screen,
+one authoritative and one a hard-coded guess at the same idea.
+
+`MyProfile` replaces both. Two things were wrong beyond the length:
+
+- **It wasn't competitive.** On a page called Ranked, nothing on the profile
+  compared you to anybody. The board array already carried every neighbour and
+  gap and none of it was read. The headline is the COMPARISON now — #3 of 132,
+  the person above and below with the gap to each, and which component closes
+  it, with a link to the page where you'd close it.
+- **It wasn't part of the app.** Five tiles with an icon in a rounded square is
+  the house style of every generated dashboard. A student's own profile is the
+  most obvious place for `PlayingCard` and it was the one surface not using it.
+  Rank comes from the ATAR through the same `rankFor` a deck uses, so an Ace
+  means here what it means everywhere; suit is the subject their logged time
+  actually goes to.
+
+It takes the board this page already fetched as a prop — the old pair re-read
+the profile, the sessions, the goals, the attempts and every flashcard for
+tiles that are gone. One query is left: which subject the time went to.
+
+There is no XP rate table on it. `XPLevelCard` already prints one under the
+rank ladder, and the standalone copy disagreed with it in two rows (flashcards
+0.5 vs 0.6–1.5, quizzes 2 XP/mark vs 8–50). Two rate cards for one economy on
+one screen is worse than either.
+
+`DailyMissions` came off the tab and is NOT deleted: it calls `awardXP`, so it
+is the only surface where mission XP can be claimed, and removing a payout is a
+product call. It is currently mounted nowhere — see the note at the top of the
+file before rehoming it.
+
 ## The signup tour
 
 `AceTour` — six stops and a sign-off, fired once for accounts that are hours
@@ -611,6 +694,20 @@ believing they do different things.
   draws from `left` and `total` and nothing else, so the ring cannot disagree
   with the digits next to it, and with no `total` (older saved state) the ring
   is simply not drawn rather than drawn against a guess.
+- **A draggable thing that is also a link separates the two by DISTANCE, not
+  by target.** The floating timer's whole interior is the link to Study, and
+  the drag handler bailed on anything inside it — so `cursor: grab` sat over
+  about twelve pixels of padding that could actually be grabbed. A press
+  anywhere starts a drag now; under 4px of travel it was a tap and the link
+  fires, over it the click is swallowed on the capture phase.
+  Three things that had to be right, in Layout's `handlePointerDown`:
+  **capture LATE** (a captured pointer retargets the click to the capturing
+  element, so capturing on press meant a tap silently did nothing);
+  **listeners attached for the widget's lifetime, not while dragging** (keyed
+  on `isDragging` they only went on after React re-rendered, and a quick flick
+  finished before anything was listening); and **`setPointerCapture` in a
+  try/catch**, because it throws on a pointer that is already gone and the
+  throw would abort the rest of the move handler.
 - **A suggestion that says "I'll build it" has to build it.** Ace's WhatToTest
   panel used to fill in two form fields and stop, leaving the student to scroll
   down and find the start button. `startFromSuggestion` takes the pick all the

@@ -74,7 +74,13 @@ export default function AchievementsGallery() {
         );
     }
 
-    const pct = data.total_count > 0 ? Math.round((data.unlocked_count / data.total_count) * 100) : 0;
+    // Read defensively. This grid is the bottom half of the profile tab, and a
+    // payload without `items` — an older server, a partial response — took the
+    // whole tab down with it rather than rendering one empty section.
+    const items = Array.isArray(data.items) ? data.items : [];
+    const total = data.total_count ?? items.length;
+    const unlocked = data.unlocked_count ?? items.filter((i) => i.unlocked).length;
+    const pct = total > 0 ? Math.round((unlocked / total) * 100) : 0;
 
     return (
         <div className="space-y-4">
@@ -84,7 +90,7 @@ export default function AchievementsGallery() {
                     <div>
                         <p className="stat-label text-muted-foreground">Achievements</p>
                         <p className="font-display font-extrabold text-foreground text-xl mt-0.5">
-                            {data.unlocked_count} <span className="text-muted-foreground/60 text-base">/ {data.total_count} unlocked</span>
+                            {unlocked} <span className="text-muted-foreground/60 text-base">/ {total} unlocked</span>
                         </p>
                     </div>
                     <span className="pill bg-primary/10 text-primary text-xs">{pct}%</span>
@@ -104,9 +110,9 @@ export default function AchievementsGallery() {
 
             {/* Hex-grid gallery */}
             <div className="grid grid-cols-3 sm:grid-cols-4 lg:grid-cols-6 gap-3">
-                {data.items.map((item) => (
+                {items.map((item) => (
                     <AchievementTile
-                        key={item.code}
+                        key={item.code || item.id}
                         item={item}
                         onClick={() => setSelected(item)}
                     />
