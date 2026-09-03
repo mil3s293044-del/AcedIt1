@@ -804,6 +804,61 @@ Quizzes page; the one in the side panel only existed because that panel used to
 be about quizzing, and three buttons for one dialog is how a student stops
 believing they do different things.
 
+## The logo, and the signup email
+
+**One mark, one component** (`BrandMark`). It was a green rounded square with a
+lucide `GraduationCap` in it, hand-rolled at EIGHT call sites — side rail,
+landing header and footer, login, forgot-password, reset-password, the legal
+shell and the suspended screen — which had already drifted to three corner
+radii, two icon colours and one hard-coded `#534AB7` that appears nowhere else
+in the app.
+
+It is the ace of spades now. The whole visual language is playing cards and the
+mascot is a spade already; a mortarboard belongs to every education app. Drawn
+with `fill-foreground`, so one asset is near-black on light and near-white on
+dark with no second file and no runtime swap — the same trick `SpadeFace` uses
+for the knocked-out eyes. The Landing page passes a FIXED ink instead, because
+it paints its own cream palette and does not follow the theme.
+
+**The favicon is ours and local.** It pointed at `https://base44.com/logo_v2.svg`
+— a third party's logo, fetched from their domain, on every page load. It is
+now `public/favicon.svg`: the same spade path, black on a white card, IDENTICAL
+in both themes on purpose. A favicon has no theme to follow; it sits on a tab
+strip whose colour neither the app nor the student chose, and a bare black pip
+disappears on a dark one. `index.html` also linked a `manifest.json` that has
+never existed in this repo; that line is gone.
+
+**The signup email is sent by US, through Resend** (`sendSignupEmail` in
+`server.mjs`). `supabase.auth.signUp()` asks Supabase to send it over the
+built-in SMTP relay — three emails an hour for the whole project, not meant for
+production, and it drops mail. The onboarding page already had a branch for the
+resulting error whose comment read "Once we wire Resend SMTP this should never
+fire in practice", so this was diagnosed long ago and never done; students were
+being shown "have Miles set up Resend SMTP".
+
+`admin.generateLink({ type: "signup" })` creates the account and returns the
+confirmation link WITHOUT sending anything, and Resend delivers it from the
+DNS-verified `acedit.au` sender that already carries support mail.
+
+Three rules it keeps:
+
+- **It creates nothing it cannot deliver.** With no `RESEND_API_KEY` it returns
+  `fallback: true` before touching Supabase and the client uses the old path.
+  An account whose verification email was never sent is one nobody can get into
+  and nobody can re-register.
+- **An internal failure is never shown to a student.** A bad service key
+  surfaced on the signup form as the literal string "fetch failed". Unknown
+  errors log the real message and answer `fallback: true` — the anon key may
+  well work when the service key does not.
+- **It is rate limited, because it has to be unauthenticated.** Five per email
+  and twenty per IP an hour, in memory. Enough for someone holding down the
+  button or mail-bombing one address, and honest about being per-process.
+
+`generateLink` regenerates the link for an account that exists but is
+unconfirmed, which is what makes "Send it again" on the check-your-inbox screen
+the identical call rather than a second code path. There was no way to ask for
+another email before this.
+
 ## Voice / UX guardrails (from prior decisions)
 
 - **Tone**: chill motivational coach. Never cocky.

@@ -50,6 +50,7 @@ import {
     ChevronLeft, ArrowRight, Check, X, Search, Plus,
     BookOpen, MapPin, Crown, Info,
     Mail,
+    Loader2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -892,6 +893,10 @@ function Step6Signin({ answers, update }) {
     const [fullName, setFullName] = useState("");
     const [emailError, setEmailError] = useState(null);
     const [emailSent, setEmailSent] = useState(false);
+    // The "send it again" affordance on the check-your-inbox screen.
+    const [resending, setResending] = useState(false);
+    const [resent, setResent] = useState(false);
+    const [resendError, setResendError] = useState("");
 
     const personalLine = [
         answers.yearLevel ? answers.yearLevel.replace(/ Units.*$/, "") : null,
@@ -960,21 +965,53 @@ function Step6Signin({ answers, update }) {
             // hides whether the SMTP / quota / email-format is actually broken.
             if (/already registered|exists/i.test(msg)) {
                 setEmailError("This email already has an account. Try signing in instead.");
-            } else if (/email rate limit|rate limit exceeded/i.test(msg)) {
-                // This is the Supabase free-tier 3-emails-per-hour cap. Once we
-                // wire Resend SMTP this should never fire in practice.
-                setEmailError("Hit Supabase's email rate limit (3/hour on built-in SMTP). Wait an hour, or have Miles set up Resend SMTP.");
+            } else if (/too many|rate limit/i.test(msg)) {
+                // NEVER NAME THE VENDOR OR THE DEVELOPER. This branch used to
+                // read "Hit Supabase's email rate limit (3/hour on built-in
+                // SMTP). Wait an hour, or have Miles set up Resend SMTP." — an
+                // internal to-do shown to a seventeen-year-old trying to sign
+                // up, naming a person they have never heard of and a cap they
+                // cannot do anything about. Signup now goes through our own
+                // Resend sender so this should be rare, and when it does fire
+                // it says the one thing they can act on.
+                setEmailError(msg);
             } else if (/for security purposes/i.test(msg)) {
-                // Supabase per-email-address cooldown: 60s between sends to same email
-                setEmailError("Too soon to resend to this email — wait about a minute and try again.");
+                setEmailError("Too soon to send another to this address — give it a minute.");
             } else if (/invalid.*email|unable to validate/i.test(msg)) {
-                setEmailError("Supabase rejected that email address. Try a different one.");
+                setEmailError("That email address was rejected. Try a different one.");
             } else {
                 setEmailError(msg);
             }
             return;
         }
         setEmailSent(true);
+    };
+
+    /**
+     * Send the verification email again.
+     *
+     * The SAME call as the first send. `generateLink` regenerates the
+     * confirmation link for an account that exists but is unconfirmed, so
+     * there is no second code path to keep in step — and the password is still
+     * in state because the student never left this screen.
+     */
+    const handleResend = async () => {
+        if (resending || resent) return;
+        setResending(true);
+        setResendError("");
+        const { ok, error } = await signUpWithPassword({
+            email: email.trim().toLowerCase(),
+            password,
+            fullName: fullName.trim() || undefined,
+        });
+        setResending(false);
+        if (ok) {
+            // Latched, so a student cannot sit there pressing it and trip the
+            // rate limit that exists to protect them from exactly that.
+            setResent(true);
+            return;
+        }
+        setResendError(error?.message || "Couldn't send it just now. Try again in a minute.");
     };
 
     // ─── Success state: verify-email instructions ──────────────────────────
@@ -1005,16 +1042,38 @@ function Step6Signin({ answers, update }) {
                             <Link to="/login" className="text-primary font-bold hover:underline">sign in with Google</Link> instead.
                         </p>
                     </div>
-                    <p className="text-xs text-muted-foreground text-center pt-2">
-                        Can't find the email? Check spam, or{" "}
-                        <button
+                    {/* A WAY FORWARD WHEN THE EMAIL DOESN'T ARRIVE.
+                        There wasn't one: a student whose mail was eaten could
+                        only start over with a different address, which is not
+                        a thing most people have. The same endpoint that sent
+                        the first one regenerates the link for an unconfirmed
+                        account, so this is the identical call. */}
+                    <div className="pt-1 space-y-2">
+                        <Button
                             type="button"
-                            onClick={() => setEmailSent(false)}
-                            className="font-bold text-primary hover:underline"
+                            variant="outline"
+                            disabled={resending || resent}
+                            onClick={handleResend}
+                            className="w-full border-2 border-border rounded-xl gap-2"
                         >
-                            try a different email
-                        </button>.
-                    </p>
+                            {resending ? <><Loader2 className="w-4 h-4 animate-spin" /> Sending…</>
+                                : resent ? <><Check className="w-4 h-4 text-primary" /> Sent — check again</>
+                                : <><Mail className="w-4 h-4" /> Send it again</>}
+                        </Button>
+                        {resendError && (
+                            <p className="text-xs text-streak text-center">{resendError}</p>
+                        )}
+                        <p className="text-xs text-muted-foreground text-center">
+                            Still nothing? Check spam, or{" "}
+                            <button
+                                type="button"
+                                onClick={() => { setEmailSent(false); setResent(false); setResendError(""); }}
+                                className="font-bold text-primary hover:underline"
+                            >
+                                try a different email
+                            </button>.
+                        </p>
+                    </div>
                 </div>
             </StepShell>
         );

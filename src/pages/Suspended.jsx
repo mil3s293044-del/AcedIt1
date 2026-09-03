@@ -1,5 +1,6 @@
 import React from "react";
-import { ShieldOff, GraduationCap } from "lucide-react";
+import { ShieldOff } from "lucide-react";
+import BrandMark from "@/components/shared/BrandMark";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/lib/AuthContext";
 
@@ -8,10 +9,9 @@ export default function Suspended() {
     return (
         <div className="min-h-screen bg-surface flex flex-col items-center justify-center px-6 py-12">
             <div className="flex items-center gap-3 mb-10">
-                <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{ backgroundColor: "#534AB7" }}>
-                    <GraduationCap className="w-6 h-6 text-white" />
-                </div>
-                <span className="text-xl font-bold" style={{ color: "#534AB7" }}>AcedIt</span>
+                {/* Was a hard-coded #534AB7 that appears nowhere else in the
+                    app — a screen nobody tests drifting off the palette. */}
+                <BrandMark size="lg" />
             </div>
 
             <div className="w-full max-w-md text-center">

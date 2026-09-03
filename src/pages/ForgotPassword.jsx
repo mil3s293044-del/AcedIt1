@@ -9,7 +9,8 @@
 import React, { useState } from "react";
 import { Link } from "react-router-dom";
 import { motion } from "framer-motion";
-import { GraduationCap, ArrowLeft, Mail } from "lucide-react";
+import { ArrowLeft, Mail } from "lucide-react";
+import BrandMark from "@/components/shared/BrandMark";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useAuth } from "@/lib/AuthContext";
@@ -52,10 +53,7 @@ export default function ForgotPassword() {
             <header className="border-b border-border/60 bg-background/95">
                 <div className="max-w-2xl mx-auto px-4 lg:px-6 h-14 flex items-center justify-between">
                     <Link to="/" className="flex items-center gap-2">
-                        <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center">
-                            <GraduationCap className="w-4 h-4 text-white" />
-                        </div>
-                        <span className="font-display font-extrabold text-base text-foreground">AcedIt</span>
+                        <BrandMark size="sm" />
                     </Link>
                     <Link to="/login" className="text-xs font-semibold text-muted-foreground hover:text-foreground transition-colors inline-flex items-center gap-1">
                         <ArrowLeft className="w-3 h-3" /> Back to sign in

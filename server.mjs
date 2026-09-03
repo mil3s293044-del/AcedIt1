@@ -6628,6 +6628,205 @@ app.post("/local-ai/fn/getRankedBoards", async (req, res) => {
 // Support cluster — Phase 3b ports (1 function)
 // ════════════════════════════════════════════════════════════════════════════
 
+
+// ════════════════════════════════════════════════════════════════════════════
+// Signup verification email — sent by US, through Resend
+// ════════════════════════════════════════════════════════════════════════════
+//
+// ─── The problem this replaces ──────────────────────────────────────────────
+// Signup went through `supabase.auth.signUp()`, which asks Supabase to send
+// the confirmation email over its BUILT-IN SMTP. That relay is capped at three
+// emails an hour for the whole project, is not intended for production, and
+// drops mail. The onboarding page already had a branch for the resulting error
+// — its comment reads "Once we wire Resend SMTP this should never fire in
+// practice" — so the cause was diagnosed and the fix was simply never done.
+// Students were being shown "have Miles set up Resend SMTP".
+//
+// ─── How this fixes it ──────────────────────────────────────────────────────
+// `admin.generateLink({ type: "signup" })` creates the account and returns the
+// confirmation link WITHOUT sending anything. We then deliver that link over
+// Resend — the same client already sending support mail from the DNS-verified
+// acedit.au domain. Supabase's relay is never involved, so there is no cap and
+// no queue, and the email is ours to write.
+//
+// ─── It refuses rather than half-working ────────────────────────────────────
+// With no Resend key configured this creates NOTHING and answers
+// `fallback: true`, so the client can go back to the Supabase path. The one
+// outcome that must never happen is an account created here whose verification
+// email was never sent — that is an account nobody can get into and nobody can
+// re-register.
+//
+// ─── Rate limited, because it is unauthenticated ────────────────────────────
+// It has to be: the caller does not have an account yet, which is the point.
+// So it is bounded per email and per IP, in memory. That is enough for the
+// abuse this actually faces (someone holding down a button, or pointing a
+// script at it to mail-bomb one address) and it is honest about being
+// per-process — a real limiter belongs in front of the app, not inside it.
+
+const SIGNUP_FROM = "AcedIt <hello@acedit.au>";
+const SIGNUP_WINDOW_MS = 60 * 60 * 1000;
+const SIGNUP_MAX_PER_EMAIL = 5;      // an hour's worth of "it didn't arrive"
+const SIGNUP_MAX_PER_IP = 20;        // a shared school NAT is one IP
+const signupHits = new Map();        // key → array of timestamps
+
+function signupRateHit(key, max) {
+  const now = Date.now();
+  const hits = (signupHits.get(key) || []).filter((t) => now - t < SIGNUP_WINDOW_MS);
+  if (hits.length >= max) {
+    signupHits.set(key, hits);
+    return { limited: true, retryAfterMs: SIGNUP_WINDOW_MS - (now - hits[0]) };
+  }
+  hits.push(now);
+  signupHits.set(key, hits);
+  // The map is only ever written by this endpoint and every key expires within
+  // the window, so a periodic sweep keeps it from growing without bound.
+  if (signupHits.size > 5000) {
+    for (const [k, v] of signupHits) {
+      if (!v.some((t) => now - t < SIGNUP_WINDOW_MS)) signupHits.delete(k);
+    }
+  }
+  return { limited: false };
+}
+
+/** The verification email. Plain enough to render anywhere, ours enough to trust. */
+function signupEmailHtml({ firstName, link }) {
+  const hi = firstName ? `Hi ${escapeHtml(firstName)},` : "Hi,";
+  return `<!doctype html>
+<html><body style="margin:0;padding:0;background:#FBF7F0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#FBF7F0;padding:32px 16px;">
+    <tr><td align="center">
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:480px;background:#FFFFFF;border-radius:20px;padding:32px;">
+        <tr><td style="padding-bottom:20px;">
+          <span style="font-size:22px;font-weight:800;color:#0D1626;letter-spacing:-0.02em;">&#9824;&nbsp;AcedIt</span>
+        </td></tr>
+        <tr><td style="font-size:20px;font-weight:800;color:#0D1626;padding-bottom:10px;">Confirm your email</td></tr>
+        <tr><td style="font-size:15px;line-height:1.6;color:#3C4657;padding-bottom:24px;">
+          ${hi} tap the button and you're in. Your subjects, goals and plan are already waiting.
+        </td></tr>
+        <tr><td style="padding-bottom:24px;">
+          <a href="${escapeHtml(link)}" style="display:inline-block;background:#58CC02;color:#FFFFFF;font-size:16px;font-weight:800;text-decoration:none;padding:14px 28px;border-radius:14px;">Verify my email</a>
+        </td></tr>
+        <tr><td style="font-size:12px;line-height:1.6;color:#7A8699;">
+          The link works once and expires in 24 hours. If the button doesn't work, paste this in:<br>
+          <span style="color:#3C4657;word-break:break-all;">${escapeHtml(link)}</span>
+        </td></tr>
+        <tr><td style="font-size:12px;line-height:1.6;color:#7A8699;padding-top:20px;border-top:1px solid #EDE7DD;margin-top:20px;">
+          Didn't sign up? Ignore this and nothing happens &mdash; the account isn't usable until it's confirmed.
+        </td></tr>
+      </table>
+    </td></tr>
+  </table>
+</body></html>`;
+}
+
+app.post("/local-ai/fn/sendSignupEmail", async (req, res) => {
+  try {
+    const email = String(req.body?.email || "").trim().toLowerCase();
+    const password = String(req.body?.password || "");
+    const fullName = String(req.body?.full_name || req.body?.fullName || "").trim();
+    const redirectTo = String(req.body?.redirect_to || req.body?.redirectTo || "").trim();
+
+    if (!email || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) {
+      return res.status(400).json({ error: "Enter a valid email address." });
+    }
+    if (password.length < 8) {
+      return res.status(400).json({ error: "Password must be at least 8 characters." });
+    }
+    // Nothing is created before this check. See the header — an account with no
+    // deliverable verification email is worse than a failed signup.
+    if (!resend || !supabaseAdmin) {
+      return res.json({
+        ok: false, fallback: true,
+        error: "Email delivery isn't configured on this server.",
+      });
+    }
+
+    const ip = String(req.headers["x-forwarded-for"] || "").split(",")[0].trim()
+      || req.socket?.remoteAddress || "unknown";
+    for (const [key, max] of [[`e:${email}`, SIGNUP_MAX_PER_EMAIL], [`i:${ip}`, SIGNUP_MAX_PER_IP]]) {
+      const hit = signupRateHit(key, max);
+      if (hit.limited) {
+        return res.status(429).json({
+          error: "That's a few too many tries. Give it a little while and check your spam folder in the meantime.",
+          retry_after_ms: hit.retryAfterMs,
+        });
+      }
+    }
+
+    // Creates the user and returns the confirmation link. Sends NOTHING.
+    const { data, error } = await supabaseAdmin.auth.admin.generateLink({
+      type: "signup",
+      email,
+      password,
+      options: {
+        data: fullName ? { full_name: fullName } : undefined,
+        redirectTo: redirectTo || undefined,
+      },
+    });
+
+    if (error) {
+      const msg = String(error.message || "");
+      if (/already been registered|already registered|already exists/i.test(msg)) {
+        // A CONFIRMED account. An unconfirmed one regenerates its link above,
+        // which is what makes "send it again" work through this same endpoint.
+        return res.status(409).json({
+          error: "That email already has an account. Try signing in instead.",
+          already_registered: true,
+        });
+      }
+      // Things the student can actually do something about, in their words.
+      if (/password/i.test(msg) && /short|least|weak/i.test(msg)) {
+        return res.status(400).json({ error: "Pick a longer password — at least 8 characters." });
+      }
+      if (/signup|sign up/i.test(msg) && /disabled|not allowed/i.test(msg)) {
+        return res.status(400).json({ error: "Sign-ups are closed at the moment." });
+      }
+      // ANYTHING ELSE IS OUR PROBLEM, NOT THEIRS. A bad service key or a
+      // Supabase blip surfaced here as the literal string "fetch failed" on a
+      // signup form. The real message goes to the log; the client is told to
+      // try the Supabase path, which uses a different key and may well work
+      // even when this one does not.
+      console.error("[sendSignupEmail] generateLink failed:", msg);
+      return res.json({
+        ok: false, fallback: true,
+        error: "Couldn't start your signup just now.",
+      });
+    }
+
+    const link = data?.properties?.action_link;
+    if (!link) {
+      console.error("[sendSignupEmail] no action_link in generateLink response");
+      return res.status(500).json({ error: "Could not build the verification link." });
+    }
+
+    const firstName = fullName.split(" ")[0] || "";
+    const sent = await resend.emails.send({
+      from: SIGNUP_FROM,
+      to: email,
+      subject: "Confirm your email — AcedIt",
+      html: signupEmailHtml({ firstName, link }),
+      text: `${firstName ? `Hi ${firstName},` : "Hi,"}\n\n`
+        + `Confirm your email to finish signing up:\n${link}\n\n`
+        + `The link works once and expires in 24 hours.\n\n`
+        + `Didn't sign up? Ignore this — the account isn't usable until it's confirmed.`,
+    });
+
+    if (sent?.error) {
+      console.error("[sendSignupEmail] resend failed:", sent.error);
+      return res.status(502).json({
+        error: "The account is ready but the email didn't send. Try 'send it again' in a moment.",
+        created: true,
+      });
+    }
+
+    console.log(`[sendSignupEmail] sent to ${email.replace(/(.).*(@.*)/, "$1***$2")}`);
+    return res.json({ ok: true, sent: true });
+  } catch (err) {
+    console.error("[sendSignupEmail] error:", err);
+    return res.status(500).json({ error: "Something went wrong starting your signup." });
+  }
+});
+
 // ─── sendSupportTicket ─────────────────────────────────────────────────────
 // Saves the ticket to support_tickets, then fires two Resend emails: admin
 // notification to ADMIN_EMAIL and confirmation back to the user. Email

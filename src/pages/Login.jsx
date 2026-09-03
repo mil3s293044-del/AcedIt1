@@ -8,7 +8,8 @@
 import React, { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
-import { GraduationCap, ArrowRight } from "lucide-react";
+import { ArrowRight } from "lucide-react";
+import BrandMark from "@/components/shared/BrandMark";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useAuth } from "@/lib/AuthContext";
@@ -66,10 +67,7 @@ export default function Login() {
             <header className="border-b border-border/60 bg-background/95">
                 <div className="max-w-2xl mx-auto px-4 lg:px-6 h-14 flex items-center justify-between">
                     <Link to="/" className="flex items-center gap-2">
-                        <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center">
-                            <GraduationCap className="w-4 h-4 text-white" />
-                        </div>
-                        <span className="font-display font-extrabold text-base text-foreground">AcedIt</span>
+                        <BrandMark size="sm" />
                     </Link>
                     <Link to="/onboarding" className="text-xs font-semibold text-muted-foreground hover:text-foreground transition-colors">
                         New here? <span className="text-primary">Start free</span>
