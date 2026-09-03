@@ -30,6 +30,7 @@ import HelpButton from "@/components/shared/HelpButton";
 import MyProfile from "@/components/ranked/MyProfile";
 import AtarDial from "@/components/ranked/AtarDial";
 import RankedBoard from "@/components/ranked/RankedBoard";
+import StandingRail from "@/components/ranked/StandingRail";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
     standing, titlesFor, nextBand, weakestComponent, BAND_TONE,
@@ -70,13 +71,18 @@ const COMPONENT_META = [
       evidence: (c) => planningEvidence(c) },
 ];
 
+// `gap` is the sentence form ("1.24 behind"); `gapShort` is what fits beside a
+// bar on a board row, where the direction is already drawn by an arrow.
 const BOARDS = [
     { id: "atar", label: "ATAR", icon: GraduationCap, value: (r) => r.acedit_atar,
-      fmt: (v) => (v == null ? "—" : v.toFixed(2)), gap: (g) => `${g.toFixed(2)} behind` },
+      fmt: (v) => (v == null ? "—" : v.toFixed(2)), gap: (g) => `${g.toFixed(2)} behind`,
+      gapShort: (g) => g.toFixed(2) },
     { id: "xp", label: "XP", icon: Zap, value: (r) => r.total_xp || 0,
-      fmt: (v) => (v || 0).toLocaleString(), gap: (g) => `${Math.round(g).toLocaleString()} XP behind` },
+      fmt: (v) => (v || 0).toLocaleString(), gap: (g) => `${Math.round(g).toLocaleString()} XP behind`,
+      gapShort: (g) => Math.round(g).toLocaleString() },
     { id: "time", label: "Study time", icon: Clock, value: (r) => r.total_study_time || 0,
-      fmt: (v) => fmtMins(v || 0), gap: (g) => `${fmtMins(g)} behind` },
+      fmt: (v) => fmtMins(v || 0), gap: (g) => `${fmtMins(g)} behind`,
+      gapShort: (g) => fmtMins(g) },
 ];
 
 const SCOPES = [
@@ -125,7 +131,6 @@ export default function Ranked() {
         return { ...s, row };
     }, [field, data, meta]);
 
-    const gapLabel = mine.above ? `${meta.gap(mine.above.gap)} ${displayName(mine.above.row, data?.me)}` : null;
     const next = nextBand(data?.my_atar);
     const weakest = weakestComponent(data?.my_components);
     const weakestMeta = COMPONENT_META.find(c => c.key === weakest?.key);
@@ -279,67 +284,22 @@ export default function Ranked() {
                                     </div>
                                 ) : (
                                     <RankedBoard rows={rows} me={data.me} boardMeta={meta} titles={titles}
-                                        nameOf={(r) => displayName(r, data.me)} myStanding={mine} gapLabel={gapLabel} />
+                                        nameOf={(r) => displayName(r, data.me)} myStanding={mine} />
                                 )}
                             </div>
 
                             {/* ── Standing rail ───────────────────────── */}
-                            <div className="xl:sticky xl:top-6 space-y-3">
-                                <div className="card-soft p-4 border-2 border-border space-y-3">
-                                    <p className="stat-label flex items-center gap-1.5">
-                                        <Target className="w-3.5 h-3.5" /> Your standing
-                                    </p>
-                                    {mine.rank ? (
-                                        <>
-                                            <p className="font-display font-black text-3xl text-foreground leading-none">
-                                                #{mine.rank}
-                                                <span className="text-sm font-bold text-muted-foreground"> of {mine.total}</span>
-                                            </p>
-                                            {mine.above ? (
-                                                <div className="rounded-xl bg-streak/5 border-2 border-streak/25 p-3">
-                                                    <p className="text-xs text-muted-foreground leading-snug">
-                                                        <span className="font-bold text-foreground">
-                                                            {meta.gap(mine.above.gap)} {displayName(mine.above.row, data.me)}
-                                                        </span>
-                                                        {" "}— that's the next spot.
-                                                    </p>
-                                                </div>
-                                            ) : (
-                                                <div className="rounded-xl bg-primary/5 border-2 border-primary/25 p-3">
-                                                    <p className="text-xs text-foreground font-bold">Top of the board. Someone's coming.</p>
-                                                </div>
-                                            )}
-                                            {mine.below && (
-                                                <p className="text-[11px] text-muted-foreground">
-                                                    {displayName(mine.below.row, data.me)} is {meta.gap(mine.below.gap).replace(" behind", "")} back.
-                                                </p>
-                                            )}
-                                        </>
-                                    ) : (
-                                        <p className="text-xs text-muted-foreground leading-snug">
-                                            You're not on this board yet. Three study days puts you on the ATAR ladder.
-                                        </p>
-                                    )}
-                                </div>
-
-                                {titles.get(data?.me) && (
-                                    <div className="card-soft p-4 border-2 border-border">
-                                        <p className="stat-label mb-1.5">Your title</p>
-                                        <span className={`pill ${TONE_PILL[titles.get(data.me).tone]}`}>
-                                            {titles.get(data.me).label}
-                                        </span>
-                                        <p className="text-[11px] text-muted-foreground mt-1.5">{titles.get(data.me).blurb}</p>
-                                    </div>
-                                )}
-
-                                <div className="card-soft p-4 border-2 border-border">
-                                    <p className="stat-label mb-2">How titles work</p>
-                                    <p className="text-[11px] text-muted-foreground leading-snug">
-                                        Three of them go to whoever actually leads this board on hours, XP and
-                                        streak. The rest are earned at a threshold. Most people don't have one —
-                                        that's the point.
-                                    </p>
-                                </div>
+                            {/* Was three cards: your standing, your title, and
+                                an explainer for the scarcity rules of a label
+                                most students do not have. StandingRail is the
+                                contest instead — who is above, who is behind,
+                                and what the gap costs in work. */}
+                            <div className="xl:sticky xl:top-6">
+                                <StandingRail
+                                    mine={mine} boardMeta={meta} board={board}
+                                    nameOf={(r) => displayName(r, data?.me)}
+                                    components={data?.my_components}
+                                    title={titles.get(data?.me)} />
                             </div>
                         </div>
                     </TabsContent>
