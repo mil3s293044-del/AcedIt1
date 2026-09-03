@@ -22,6 +22,15 @@
  * query or a swap at runtime. That is the same trick `SpadeFace` uses for the
  * mascot's knocked-out eyes, and the reason both can live on any background
  * the app has.
+ *
+ * The one exception is the side rail, which passes `fill-primary`: in the app
+ * the mark sits above a column of nav items already in the brand green, and it
+ * is the only place the logo has to read as the app's own rather than as a
+ * heading. `rail` is drawn at a 28px pip inside its 40px box — the bare spade at
+ * 20px was visibly smaller than the 40px green tile it replaced, because the
+ * tile's colour was doing the work the glyph now has to do alone. It cannot go
+ * past the box: the collapsed rail is 64px wide with 12px of padding either
+ * side.
  */
 import React from "react";
 import { SpadePip } from "@/components/ace/SpadeMark";
@@ -31,6 +40,8 @@ const SIZE = {
     sm: { box: "w-8 h-8",   pip: "w-4 h-4",   text: "text-base" },
     md: { box: "w-9 h-9",   pip: "w-[1.15rem] h-[1.15rem]", text: "text-xl" },
     lg: { box: "w-10 h-10", pip: "w-5 h-5",   text: "text-xl" },
+    // The side rail only. See the note above on why it is bigger.
+    rail: { box: "w-10 h-10", pip: "w-7 h-7", text: "text-xl" },
     xl: { box: "w-12 h-12", pip: "w-6 h-6",   text: "text-2xl" },
 };
 
