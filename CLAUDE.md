@@ -251,6 +251,16 @@ measure whether a student can recall what the assessor wanted, on a card, in
 isolation, after being reminded four times. That is worth measuring and it is
 not what a SAC asks — so clearing the ladder makes a card `drilled`, not fixed.
 
+`ladderDone` reads `repetitions`, and both halves of that matter. It asked for
+two consecutive good recalls, which did not mean what it said: SM-2 keeps
+`consecutive_good` and `consecutive_easy` as SEPARATE streaks and each rating
+resets the other, so a student who rated a card Good then Easy — two clean
+recalls, the second better — sat on a maximum streak of one and could never
+finish. And two recalls only puts a card on the SECOND rung, so a mistake could
+be called rehearsed having never been asked to spot the error in its own
+sentence or rewrite it. `LADDER_COMPLETE_AT` comes from drill.js, so "passed
+every module" and "which rung am I on" cannot disagree.
+
 A MISTAKE is fixed when it has cleared the ladder AND a later sit of its own
 question recorded its criterion as earned. A CASE — one question and every
 mistake on it — is closed only when all of them are fixed AND a later sit
@@ -269,6 +279,37 @@ alone rather than being held one rung short forever.
 
 Slipping is their LAST answer, not their history, so a card with four early
 lapses since recalled twice reads as going the right way.
+
+**A fixed mistake can be cleared out, and is asked about ONCE.** `start`
+snapshots which cards were already fixed, so the prompt at the end of a run
+names only what that run finished — a prompt on every visit is nagging, and a
+pile that never empties makes the headline fraction meaningless.
+
+Clearing writes `retired_at`, the field /Review already uses for "I know this",
+and its reasoning holds exactly: the only other exit from a review queue is
+`is_active: false`, which destroys the card, so a student who had genuinely
+fixed something had to choose between being asked forever and losing it before
+revision week. The card survives, leaves every queue in the app (due.js reports
+`known` before it checks anything else), and comes back with one tap — which is
+the only reason this is safe to offer on a routine screen. `clearedCount` is
+lifetime, so an emptied bank still says what it was.
+
+**The bank is a shelf: subject, then topic.** A flat list has one order, worst
+first, which is right for "what next" and wrong for the other thing a student
+does here — sit down before a SAC and work on ONE subject. Every level plays
+what its own count says, and that count is READY rather than total: "Review 6"
+that turns out to be one card due and five scheduled next week is the small lie
+that costs this screen its credibility. Topic comes from `extra.mistake.topic`,
+never the card's `topic` field, which is the constant "Mistake bank" and has to
+stay that way or the review shelf splits the bank into a deck per quiz.
+
+**The ladder is visible now** (`LadderTrack`). It was the most useful thing
+about the bank and completely hidden: a student saw one exercise, rated it, and
+had no way to know whether that was the first of two or the fourth of five. A
+rung this card can never build — no quote means no spot — is struck through
+rather than left pending, and struck-through steps come out of the denominator,
+or a card with two reachable rungs caps at 40% and reads as permanently
+unfinished.
 
 READY IS NOT DUE. `due.js` counts a never-reviewed card as *new* on purpose —
 a fresh sixty-card deck must not report sixty overdue. But a mistake banked an

@@ -32,6 +32,8 @@
 /** The marker. Also the topic students see on the deck, so it has to read well. */
 export const BANK_TOPIC = "Mistake bank";
 
+import { LADDER_COMPLETE_AT } from "@/lib/drill";
+
 const str = (v) => String(v ?? "").trim();
 const clip = (s, n) => {
     const t = str(s);
@@ -63,7 +65,7 @@ export const bankKey = (mod, questionIndex = 0) => {
  * A surviving imprecision (`risk`) still needs a fix to be worth a card; with
  * no wording to rehearse there is nothing on the back but the observation.
  */
-export function cardFromModule(mod, { subject, questionTitle, source } = {}) {
+export function cardFromModule(mod, { subject, questionTitle, source, topic } = {}) {
     if (!mod) return null;
     const lost = mod.status === "lost";
     const text = str(mod.text);
@@ -112,6 +114,12 @@ export function cardFromModule(mod, { subject, questionTitle, source } = {}) {
                 // student's own words in it can be drilled by spotting the
                 // error in them.
                 kind: mod.kind === "note" ? "note" : "criterion",
+                // The quiz this came from, as a grouping label. The CARD's
+                // `topic` is the constant "Mistake bank" — it has to be, or
+                // the review shelf splits one student's bank into a deck per
+                // quiz — so the real topic lives here, where a screen can
+                // group by it without touching the deck key.
+                topic: clip(topic, 80),
                 criterion: text,
                 quote,
                 // What would have scored, kept separately from the criterion.
@@ -164,15 +172,14 @@ export const isBankCard = (card) => card?.topic === BANK_TOPIC;
 // card, which is the whole reason `mastery.js` and `sm2.js` exist.
 
 /**
- * How many clean recalls, and how long a gap, before a mistake is FIXED.
+ * How long a gap, on top of the whole ladder, before the rehearsal counts.
  *
- * Two, not one. One clean recall the day after banking it is short-term
+ * A week. One clean recall the day after banking something is short-term
  * memory, and calling that fixed is the flattery the rank system exists to
- * refuse — a student who is told they have fixed something they have not is
- * being set up for the SAC. The interval is the same claim from the other
- * side: the scheduler only pushes a card a week out once it has earned it.
+ * refuse — a student told they have fixed something they have not is being set
+ * up for the SAC. The interval is that claim from the scheduler's side: it
+ * only pushes a card a week out once the card has earned it.
  */
-const FIXED_STREAK = 2;
 const FIXED_INTERVAL_DAYS = 7;
 
 /**
@@ -180,11 +187,31 @@ const FIXED_INTERVAL_DAYS = 7;
  * getting it wrong" are different things and lumping them together hides the
  * only one that needs action today.
  */
-/** Has the card cleared the drill ladder? Rehearsal only — not the same as fixed. */
+/**
+ * Has the card been through the whole drill ladder? Rehearsal only — not the
+ * same as fixed, which also needs the question earned back.
+ *
+ * ─── Why `repetitions` and not the consecutive counters ─────────────────────
+ * This used to ask for two consecutive good recalls, which was wrong twice.
+ *
+ * It did not mean what it said. SM-2 keeps `consecutive_good` and
+ * `consecutive_easy` as separate streaks and each rating RESETS the other, so
+ * a student who rated a card Good and then Easy — two clean recalls in a row,
+ * the second better than the first — was sitting on a maximum streak of one
+ * and could never finish. Rating a mistake honestly should never hold it back.
+ *
+ * And it could be satisfied without climbing the ladder. Two clean recalls
+ * puts a card on the SECOND rung; a mistake could be called rehearsed having
+ * never been asked to spot the error in its own sentence or rewrite it.
+ * "Pass all the modules" has to mean passing all the modules.
+ *
+ * `repetitions` is the counter the RUNGS are read off, so this now agrees with
+ * the ladder by construction — and SM-2 increments it on any clean recall and
+ * resets it on a lapse, which is exactly the quantity meant all along.
+ */
 export function ladderDone(card) {
-    const good = card?.consecutive_good || 0;
-    const easy = card?.consecutive_easy || 0;
-    return Math.max(good, easy) >= FIXED_STREAK && (card?.interval_days || 0) >= FIXED_INTERVAL_DAYS;
+    return (Number(card?.repetitions) || 0) >= LADDER_COMPLETE_AT
+        && (card?.interval_days || 0) >= FIXED_INTERVAL_DAYS;
 }
 
 /**
@@ -291,6 +318,9 @@ export function mistakeMeta(card) {
     const src = m?.source;
     return {
         kind: m?.kind === "note" ? "note" : "criterion",
+        // Older cards carry no topic of their own; the question they came from
+        // is the next best label and is never worse than "No topic".
+        topic: str(m?.topic) || str(m?.question_title),
         criterion: str(m?.criterion),
         quote: str(m?.quote),
         wanted: str(m?.wanted),
@@ -363,8 +393,32 @@ export function repeatOffenders(cards = [], { min = 2, attempts } = {}) {
  * no reason to make them wait. So the page passes "due or new", and a bank
  * with five mistakes in it never greets them with "nothing to do today".
  */
+/**
+ * Retired: mastered, and cleared out of the bank by the student.
+ *
+ * ─── Why this is not a delete ───────────────────────────────────────────────
+ * `retired_at` is the field /Review already uses for "I know this", and its
+ * reasoning holds exactly here: the only other exit from a review queue is
+ * `is_active: false`, which destroys the card — so a student who has genuinely
+ * fixed a mistake had to choose between being asked about it forever and
+ * losing it before revision week. Retiring keeps the card, takes it out of
+ * every queue in the app (due.js reports it as `known` before it checks
+ * anything else), and is one field to undo.
+ *
+ * It is also why clearing the bank is safe to offer casually. An action that
+ * cannot be taken back has to be defended with a confirmation dialog, and a
+ * confirmation dialog on a routine action is how students learn to click
+ * through them.
+ */
+export const isRetired = (card) => !!card?.retired_at;
+
 export function bankSummary(cards = [], isReady = () => false, attempts) {
-    const mine = cards.filter(isBankCard);
+    const all = cards.filter(isBankCard);
+    // The WORKING SET. A retired mistake is not outstanding and not a card in
+    // the pile; it is history, and counting it in either would mean the two
+    // numbers on the headline never move when a student clears one.
+    const mine = all.filter((c) => !isRetired(c));
+    const cleared = all.filter(isRetired);
     const counts = { slipping: 0, new: 0, working: 0, drilled: 0, fixed: 0 };
     const subjects = new Map();
 
@@ -381,6 +435,12 @@ export function bankSummary(cards = [], isReady = () => false, attempts) {
 
     return {
         cards: mine,
+        all,
+        cleared,
+        // Lifetime, so the achievement survives clearing the pile. A student
+        // who has fixed and cleared fourteen should not be shown a bank that
+        // says zero of zero.
+        clearedCount: cleared.length,
         total: mine.length,
         ...counts,
         // Everything that is not yet fixed is still costing marks.
@@ -479,3 +539,76 @@ function fullMarksSince(group, attempts = []) {
     }
     return null;
 }
+
+// ─── Grouping: subject, then topic ──────────────────────────────────────────
+
+/**
+ * The bank as a shelf: subject → topic → mistakes.
+ *
+ * ─── Why two levels and not one ─────────────────────────────────────────────
+ * A flat list of thirty mistakes is a list nobody reads to the end of, and its
+ * only order is "worst first" — which is right for deciding what to do next
+ * and wrong for the other thing a student does here, which is sit down to work
+ * on ONE subject before a SAC. Subject is the unit they think in; topic is the
+ * unit the assessment is set on.
+ *
+ * Every level counts what is READY, because that is what its button will play.
+ * A group offering "Review 6" that turns out to be one card due and five
+ * scheduled for next week is the kind of small lie that costs a screen its
+ * credibility.
+ *
+ * TOPIC IS NOT THE CARD'S `topic` FIELD. That is the constant "Mistake bank",
+ * which it must be — the review shelf keys decks on subject|topic|unit, so a
+ * real topic there would split one student's bank into a deck per quiz. The
+ * grouping label lives in `extra.mistake.topic`.
+ */
+export function groupBank(cards = [], { isReady = () => false, attempts } = {}) {
+    const bySubject = new Map();
+
+    for (const card of cards.filter(isBankCard)) {
+        if (isRetired(card)) continue;
+        const meta = mistakeMeta(card);
+        const subject = card.subject_name || "No subject";
+        const topic = meta.topic || "No topic";
+
+        if (!bySubject.has(subject)) {
+            bySubject.set(subject, { subject, cards: [], ready: 0, fixed: 0, topics: new Map() });
+        }
+        const s = bySubject.get(subject);
+        if (!s.topics.has(topic)) {
+            s.topics.set(topic, { topic, subject, cards: [], ready: 0, fixed: 0 });
+        }
+        const t = s.topics.get(topic);
+
+        const ready = isReady(card);
+        const fixed = fixState(card, attempts) === "fixed";
+        for (const bucket of [s, t]) {
+            bucket.cards.push(card);
+            if (ready) bucket.ready += 1;
+            if (fixed) bucket.fixed += 1;
+        }
+    }
+
+    return [...bySubject.values()]
+        .map((s) => ({
+            ...s,
+            total: s.cards.length,
+            // Most still to do first, at both levels: this list is a work
+            // queue, and a subject with nothing left in it does not get to sit
+            // at the top of one.
+            topics: [...s.topics.values()]
+                .map((t) => ({ ...t, total: t.cards.length, outstanding: t.cards.length - t.fixed }))
+                .sort((a, b) => (b.outstanding - a.outstanding) || a.topic.localeCompare(b.topic)),
+            outstanding: s.cards.length - s.fixed,
+        }))
+        .sort((a, b) => (b.outstanding - a.outstanding) || a.subject.localeCompare(b.subject));
+}
+
+/**
+ * The fields to write when a student clears a mastered mistake, and to undo it.
+ *
+ * Returned rather than written, the same shape `due.js` uses, so this file
+ * stays free of round trips and the caller owns the failure case.
+ */
+export const retireMistake = (now = new Date().toISOString()) => ({ retired_at: now });
+export const restoreMistake = () => ({ retired_at: null });

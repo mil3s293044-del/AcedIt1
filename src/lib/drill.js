@@ -54,6 +54,17 @@ const SPOT_AFTER = 1;
 const CLOZE_AFTER = 2;
 const REPAIR_AFTER = 4;
 
+/**
+ * The counter value at which every rung has been passed at least once.
+ *
+ * Exported because mistakeBank's "has the rehearsal finished" test has to
+ * agree with this file about where the ladder ends. It used to ask a different
+ * question entirely — two consecutive good recalls — which a student could
+ * satisfy on the SECOND rung and never see the top two at all. "Pass all the
+ * modules" has to mean passing all the modules.
+ */
+export const LADDER_COMPLETE_AT = REPAIR_AFTER + 1;
+
 // Blanking one of these teaches nothing and reads as a bug.
 const STOP = new Set(`a an the and or but of to in on at by for with from as is are was were
 be been being it its this that these those they them their there then than so such which who whom
@@ -344,4 +355,102 @@ export function drillFor(card) {
         if (spot) return { stage: "spot", spot };
     }
     return { stage: "recognise" };
+}
+
+// ─── The ladder, as something a student can see ─────────────────────────────
+
+/**
+ * The five steps, in order, with what each one asks for.
+ *
+ * The labels are the ASK, not the technique. "Cloze" means nothing to a
+ * seventeen-year-old and "Put the words back" means exactly what will happen.
+ */
+export const LADDER = [
+    { id: "recognise", label: "See it",   blurb: "Read what would have scored." },
+    { id: "spot",      label: "Spot it",  blurb: "Find the words that cost the mark." },
+    { id: "cloze",     label: "Fill it",  blurb: "Put the load-bearing words back." },
+    { id: "repair",    label: "Fix it",   blurb: "Rewrite it so it scores." },
+    { id: "redo",      label: "Prove it", blurb: "Sit the whole question again." },
+];
+
+/** Which rung a `repetitions` count sits on, without the buildability check. */
+const rawStageIndex = (card) => {
+    const reps = Number(card?.repetitions) || 0;
+    if (reps >= REPAIR_AFTER) return 3;
+    if (reps >= CLOZE_AFTER) return 2;
+    if (reps >= SPOT_AFTER) return 1;
+    return 0;
+};
+
+/**
+ * Every step of one mistake's journey, for the progress tracker.
+ *
+ * ─── Why show this at all ───────────────────────────────────────────────────
+ * The ladder is the most useful thing about the bank and it was completely
+ * invisible: a student saw one exercise, rated it, and had no idea whether
+ * that was the first of two or the third of five. A card said "coming back"
+ * and nothing else, so the only way to find out how close a mistake was to
+ * done was to keep doing it and see.
+ *
+ * ─── A skipped rung is shown as skipped ─────────────────────────────────────
+ * Not every rung can be built for every mistake — spotting needs the student's
+ * own words, filling needs a wording with something worth blanking. `drillFor`
+ * already falls back when a rung cannot be built; this says so on the tracker
+ * rather than drawing a step that will never happen. Pretending the ladder is
+ * five long for a card that will only ever see three is the same class of lie
+ * as a progress bar that jumps.
+ *
+ * ─── The two facts it cannot work out for itself ────────────────────────────
+ * `laddered` (the SM-2 counters say the rehearsal is complete) and `cleared`
+ * (a later sit of the question earned the criterion back) both live in
+ * mistakeBank, and both are passed in rather than guessed at — this file must
+ * not grow a second opinion about when a mistake is done.
+ *
+ * `laddered` matters for more than tidiness. The rung is read off
+ * `repetitions`, which stops climbing at the top rehearsal rung, so without it
+ * a card sits on "Fix it" as CURRENT forever and the tracker can never reach
+ * the end. A student who has finished would be looking at four of five.
+ */
+export function ladderFor(card, { cleared = false, laddered = false } = {}) {
+    const at = rawStageIndex(card);
+    const buildable = {
+        recognise: true,
+        spot: !!buildSpot(card),
+        cloze: !!buildCloze(card),
+        repair: !!String(card?.extra?.mistake?.criterion || "").trim(),
+        // The gate is always available in principle — a mistake with no source
+        // question is the one exception, and it reports as fixed on the ladder
+        // alone rather than showing a step it can never take.
+        redo: !!card?.extra?.mistake?.source,
+    };
+
+    return LADDER.map((step, i) => {
+        if (step.id === "redo") {
+            return {
+                ...step,
+                state: !buildable.redo ? "skipped"
+                    : cleared ? "done"
+                    // The gate is the live step the moment the rehearsal is
+                    // done, and only then — offering "sit it again" to
+                    // somebody two rungs off is asking for the exam before
+                    // the revision.
+                    : laddered || at >= LADDER.length - 2 ? "current" : "todo",
+            };
+        }
+        if (!buildable[step.id]) return { ...step, state: "skipped" };
+        // The rehearsal is finished as a whole, so every rung of it is behind
+        // them — including the one the counter is still parked on.
+        if (laddered) return { ...step, state: "done" };
+        // Everything below where the counter has reached is done, whether or
+        // not it was ever shown — the student got past it either way.
+        return { ...step, state: i < at ? "done" : i === at ? "current" : "todo" };
+    });
+}
+
+/** How far along, as a fraction, counting only the steps this card will see. */
+export function ladderProgress(steps = []) {
+    const live = steps.filter((s) => s.state !== "skipped");
+    if (!live.length) return { done: 0, total: 0, pct: 0 };
+    const done = live.filter((s) => s.state === "done").length;
+    return { done, total: live.length, pct: Math.round((done / live.length) * 100) };
 }

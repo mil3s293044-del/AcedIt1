@@ -34,14 +34,19 @@ import { base44 } from "@/api/base44Client";
 import { createPageUrl } from "@/utils";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/components/ui/use-toast";
+import { ToastAction } from "@/components/ui/toast";
 import MarkdownMath from "@/components/shared/MarkdownMath";
 import AceBody from "@/components/ace/AceBody";
 import { isDue, isNew } from "@/lib/due";
 import { calculateNextReview, reviewPatch, formatIntervalShort, RATINGS } from "@/lib/sm2";
-import { BANK_TOPIC, bankSummary, fixState, mistakeMeta, casesFor } from "@/lib/mistakeBank";
+import {
+    BANK_TOPIC, bankSummary, fixState, mistakeMeta, casesFor,
+    ladderDone, clearedBy, groupBank, retireMistake, restoreMistake,
+} from "@/lib/mistakeBank";
 import { redoQueue } from "@/lib/quizInsight";
 import QuizPlayer from "@/components/quizzes/QuizPlayer";
-import { drillFor, suggestRating } from "@/lib/drill";
+import { drillFor, suggestRating, ladderFor } from "@/lib/drill";
+import LadderTrack from "@/components/mistakes/LadderTrack";
 import ClozeDrill from "@/components/mistakes/ClozeDrill";
 import CommandTermPanel from "@/components/quizzes/CommandTermPanel";
 import RepairDrill from "@/components/mistakes/RepairDrill";
@@ -105,12 +110,18 @@ function FixBar({ summary }) {
 }
 
 /** One mistake, as a row. The criterion IS the headline — it is what was wanted. */
-function MistakeRow({ card, index, attempts }) {
+function MistakeRow({ card, index, attempts, onClear }) {
     const [open, setOpen] = useState(false);
     const reduce = useReducedMotion();
     const state = fixState(card, attempts);
     const meta = mistakeMeta(card);
     const s = STATE[state];
+    // The tracker takes both facts it cannot derive: whether the rehearsal is
+    // complete and whether the question has been earned back. Both live in
+    // mistakeBank, so the bar and the state chip can never disagree.
+    const steps = useMemo(
+        () => ladderFor(card, { laddered: ladderDone(card), cleared: !!clearedBy(card, attempts) }),
+        [card, attempts]);
 
     return (
         <motion.li
@@ -133,6 +144,9 @@ function MistakeRow({ card, index, attempts }) {
                             <span className="tabular-nums">· cost {meta.cost} mark{meta.cost === 1 ? "" : "s"}</span>
                         )}
                     </span>
+                </span>
+                <span className="hidden sm:block flex-shrink-0 w-28 mt-0.5">
+                    <LadderTrack steps={steps} compact />
                 </span>
                 <ChevronDown className={`w-4 h-4 text-muted-foreground flex-shrink-0 mt-0.5
                     transition-transform ${open ? "rotate-180" : ""}`} />
@@ -159,6 +173,25 @@ function MistakeRow({ card, index, attempts }) {
                                     {card.answer}
                                 </MarkdownMath>
                             </div>
+
+                            {/* Where it is up to, step by step. The chip on the
+                                row says WHAT state it is in; this says how far
+                                through, which is the question a student
+                                actually has. */}
+                            <div className="pt-1">
+                                <LadderTrack steps={steps} />
+                            </div>
+
+                            {/* Mastered, so it can go. Offered here as well as
+                                at the end of a run, because a student who
+                                cleared it weeks ago should not have to sit
+                                another review to be asked. */}
+                            {state === "fixed" && (
+                                <Button size="sm" variant="outline" onClick={() => onClear?.([card])}
+                                    className="w-full border-2 border-border rounded-xl gap-1.5 text-xs">
+                                    <Check className="w-3.5 h-3.5 text-primary" /> Clear it out of the bank
+                                </Button>
+                            )}
                         </div>
                     </motion.div>
                 )}
@@ -347,9 +380,26 @@ export default function MistakeBank() {
     const [queue, setQueue] = useState(null);
     const [redoing, setRedoing] = useState(null);
     const [result, setResult] = useState(null);
+    // Mistakes that became fixed during the run just finished, held so the
+    // student can be asked about them ONCE, at the moment it is true.
+    const [pendingClear, setPendingClear] = useState(null);
+    // Which subject/topic the list is scoped to, or null for the whole bank.
+    const [scope, setScope] = useState(null);
     // Grades already sent, so a card graded in one run is not re-sent if the
     // student starts another before the reload lands.
     const sentRef = useRef(new Set());
+    // Which cards were already fixed when a run started — see `start`.
+    const wasFixedRef = useRef(new Set());
+    // The rows, readable synchronously. See `finish`.
+    const cardsRef = useRef([]);
+    /** The only writer for the card list, so the ref cannot drift from state. */
+    const putCards = useCallback((next) => {
+        setCards((prev) => {
+            const value = typeof next === "function" ? next(prev) : next;
+            cardsRef.current = value;
+            return value;
+        });
+    }, []);
 
     const load = useCallback(async () => {
         try {
@@ -365,11 +415,11 @@ export default function MistakeBank() {
                 base44.entities.QuizAttempt.filter({ created_by: user.email }).catch(() => []),
                 base44.entities.Quiz.filter({ created_by: user.email }).catch(() => []),
             ]);
-            setCards(rows || []);
+            putCards(rows || []);
             setAttempts(attemptRows || []);
             setQuizzes(quizRows || []);
         } catch {
-            setCards([]);
+            putCards([]);
         } finally { setLoading(false); }
     }, []);
 
@@ -407,15 +457,28 @@ export default function MistakeBank() {
         return [...groups.values()].sort((a, b) => b.rows.length - a.rows.length);
     }, [redo]);
 
+    // Subject → topic, for the shelf and its per-group review buttons.
+    const groups = useMemo(
+        () => groupBank(cards, { isReady, attempts }), [cards, isReady, attempts]);
+
+    /** The cards a scope covers: the whole bank, one subject, or one topic. */
+    const inScope = useCallback((c) => {
+        if (!scope) return true;
+        if (c.subject_name !== scope.subject && (c.subject_name || "No subject") !== scope.subject) return false;
+        if (!scope.topic) return true;
+        return (mistakeMeta(c).topic || "No topic") === scope.topic;
+    }, [scope]);
+
     const shown = useMemo(() => {
+        const base = summary.cards.filter(inScope);
         const list = filter === "all"
-            ? summary.cards
-            : summary.cards.filter((c) => fixState(c, attempts) === filter);
+            ? base
+            : base.filter((c) => fixState(c, attempts) === filter);
         // Within a filter, the ones still going wrong first. Same rule as the
         // sections: the work before the wins.
         const rank = { slipping: 0, new: 1, working: 2, drilled: 3, fixed: 4 };
         return [...list].sort((a, b) => rank[fixState(a, attempts)] - rank[fixState(b, attempts)]);
-    }, [summary, filter, attempts]);
+    }, [summary, filter, attempts, inScope]);
 
     /**
      * Sit one quiz's flagged questions again.
@@ -445,7 +508,7 @@ export default function MistakeBank() {
         sentRef.current.add(key);
         const updates = calculateNextReview(quality, card);
         const totalReviews = (card.total_reviews || 0) + 1;
-        setCards((prev) => prev.map((c) => c.id === card.id
+        putCards((prev) => prev.map((c) => c.id === card.id
             ? { ...c, ...reviewPatch(updates, quality), total_reviews: totalReviews } : c));
         try {
             await base44.entities.Flashcard.update(card.id, {
@@ -469,15 +532,76 @@ export default function MistakeBank() {
         }
     }, [toast]);
 
+    /**
+     * Clear mastered mistakes out of the bank.
+     *
+     * `retired_at` rather than a delete — the field /Review already uses for
+     * "I know this". The card survives for revision week, leaves every queue
+     * in the app (due.js reports it as `known` before it checks anything
+     * else), and comes back with one tap. That is the only reason it is safe
+     * to offer this on a routine screen: an irreversible action has to be
+     * defended with a confirmation, and a confirmation on a routine action is
+     * how students learn to click through them.
+     */
+    const clearFixed = useCallback(async (list) => {
+        const rows = list.filter(Boolean);
+        if (!rows.length) return;
+        const patch = retireMistake();
+        putCards((prev) => prev.map((c) =>
+            rows.some((r) => r.id === c.id) ? { ...c, ...patch } : c));
+        setPendingClear(null);
+        try {
+            await Promise.all(rows.map((r) => base44.entities.Flashcard.update(r.id, patch)));
+            toast({
+                title: rows.length === 1 ? "Cleared" : `${rows.length} cleared`,
+                description: "Out of the bank and out of your review queue. Nothing is deleted.",
+                action: (
+                    <ToastAction altText="Undo" onClick={() => restore(rows)}>Undo</ToastAction>
+                ),
+            });
+        } catch {
+            putCards((prev) => prev.map((c) =>
+                rows.some((r) => r.id === c.id) ? { ...c, retired_at: null } : c));
+            toast({ title: "That didn't save", description: "They're still in the bank.", variant: "destructive" });
+        }
+    }, [toast, putCards]);
+
+    const restore = useCallback(async (rows) => {
+        const patch = restoreMistake();
+        putCards((prev) => prev.map((c) =>
+            rows.some((r) => r.id === c.id) ? { ...c, ...patch } : c));
+        try { await Promise.all(rows.map((r) => base44.entities.Flashcard.update(r.id, patch))); }
+        catch { /* the reload reconciles */ }
+    }, [putCards]);
+
     const start = (list) => {
         if (!list.length) return;
         setResult(null);
+        // Snapshot which of these were ALREADY fixed. Anything that is fixed
+        // when the run ends and was not fixed when it started is something the
+        // student has just finished, and that is the only moment worth asking
+        // them about it — a prompt on every visit is nagging.
+        wasFixedRef.current = new Set(
+            list.filter((c) => fixState(c, attempts) === "fixed").map((c) => c.id));
         setQueue(list);
     };
 
     const finish = (r) => {
+        const played = queue || [];
         setQueue(null);
         if (r) setResult(r);
+        // Read from `cardsRef`, NOT from `cards`.
+        //
+        // The last grade of a run calls onGraded and onDone in the same event
+        // handler, and the setCards inside onGraded has not flushed by then —
+        // so the `cards` this closure can see is one grade stale, which is
+        // precisely the grade that finishes the card. The ref is written
+        // synchronously beside every setCards for exactly this.
+        const byId = new Map(cardsRef.current.map((c) => [c.id, c]));
+        const newly = played
+            .map((c) => byId.get(c.id))
+            .filter((c) => c && !wasFixedRef.current.has(c.id) && fixState(c, attempts) === "fixed");
+        if (newly.length) setPendingClear(newly);
         load();
     };
 
@@ -531,8 +655,12 @@ export default function MistakeBank() {
         );
     }
 
-    const outstanding = summary.cards.filter((c) => fixState(c, attempts) !== "fixed");
-    const readyNow = summary.cards.filter(isReady);
+    // Scoped, so the buttons at the top of the page play what the list below
+    // them is showing. A "Review 12" that ignores the subject you just picked
+    // is the screen not listening.
+    const scoped = summary.cards.filter(inScope);
+    const outstanding = scoped.filter((c) => fixState(c, attempts) !== "fixed");
+    const readyNow = scoped.filter(isReady);
 
     return (
         <div className="p-4 sm:p-6 max-w-3xl mx-auto space-y-5">
@@ -549,6 +677,12 @@ export default function MistakeBank() {
                     {summary.outstanding === 0
                         ? "Nothing outstanding. Every mistake you have saved is holding."
                         : `${summary.outstanding} still to nail down.`}
+                    {/* The achievement survives an empty bank. A student who
+                        has fixed and cleared fourteen should not be shown a
+                        bank reading zero of zero. */}
+                    {summary.clearedCount > 0 && (
+                        <> <span className="text-primary font-bold">{summary.clearedCount} cleared out</span> for good.</>
+                    )}
                 </p>
             </div>
 
@@ -604,6 +738,49 @@ export default function MistakeBank() {
                     )}
                 </div>
             </div>
+
+            {/* ASKED ONCE, AT THE MOMENT IT IS TRUE.
+                A mistake that has just cleared both gates is finished, and
+                leaving it in the pile means the pile never shrinks and the
+                headline stops meaning anything. Asked here rather than on
+                every visit: `start` snapshots what was already fixed, so this
+                only ever names what the run just finished. */}
+            <AnimatePresence>
+                {pendingClear?.length > 0 && (
+                    <motion.div initial={{ opacity: 0, y: -6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
+                        className="rounded-2xl border-2 border-primary/30 bg-primary/5 p-4">
+                        <p className="text-sm font-black text-foreground flex items-center gap-2">
+                            <Check className="w-4 h-4 text-primary" />
+                            {pendingClear.length === 1
+                                ? "That one's fixed."
+                                : `${pendingClear.length} of those are fixed.`}
+                        </p>
+                        <p className="text-xs text-muted-foreground leading-snug mt-1">
+                            Rehearsed, and earned back on the question{pendingClear.length === 1 ? "" : "s"} you
+                            dropped {pendingClear.length === 1 ? "it" : "them"} in. Clear
+                            {pendingClear.length === 1 ? " it" : " them"} out of the bank? Nothing is deleted —
+                            one tap puts {pendingClear.length === 1 ? "it" : "them"} back.
+                        </p>
+                        <div className="flex flex-wrap gap-2 mt-3">
+                            <Button size="sm" onClick={() => clearFixed(pendingClear)}
+                                className="btn-3d bg-primary hover:bg-primary text-primary-foreground rounded-xl gap-1.5">
+                                <Check className="w-3.5 h-3.5" /> Clear {pendingClear.length}
+                            </Button>
+                            <Button size="sm" variant="outline" onClick={() => setPendingClear(null)}
+                                className="border-2 border-border rounded-xl">
+                                Keep {pendingClear.length === 1 ? "it" : "them"} for now
+                            </Button>
+                        </div>
+                    </motion.div>
+                )}
+            </AnimatePresence>
+
+            {/* THE SHELF. Subject is the unit a student thinks in — they sit
+                down to work on Legal Studies before a SAC, not on "everything
+                I have ever got wrong" — and topic is the unit the assessment
+                is set on. Every level plays exactly what its own count says. */}
+            <BankShelf groups={groups} scope={scope} onScope={setScope}
+                onReview={(list) => start(list.filter(isReady))} />
 
             {/* The mistakes you keep making. This is the most useful thing on
                 the screen and it only appears when it has something to say —
@@ -679,10 +856,46 @@ export default function MistakeBank() {
                 </div>
             ) : (
                 <ul className="space-y-2">
-                    {shown.map((c, i) => <MistakeRow key={c.id} card={c} index={i} attempts={attempts} />)}
+                    {shown.map((c, i) => (
+                        <MistakeRow key={c.id} card={c} index={i} attempts={attempts}
+                            onClear={clearFixed} />
+                    ))}
                 </ul>
             )}
             </>
+            )}
+
+            {/* CLEARED, AND STILL THERE. The undo is the whole reason clearing
+                is safe to offer casually — an action you cannot take back has
+                to be defended with a confirmation dialog, and a confirmation
+                dialog on a routine action is how students learn to click
+                through them. Collapsed by default: this is a record, not a
+                pile of work. */}
+            {tab === "fix" && summary.clearedCount > 0 && (
+                <details className="rounded-2xl border-2 border-border bg-surface overflow-hidden">
+                    <summary className="px-3 py-2.5 cursor-pointer text-sm font-bold text-foreground
+                        flex items-center gap-2">
+                        <Check className="w-4 h-4 text-primary" />
+                        {summary.clearedCount} cleared out
+                        <span className="text-[11px] font-normal text-muted-foreground">
+                            — kept, not deleted
+                        </span>
+                    </summary>
+                    <ul className="border-t border-border/60 divide-y divide-border/60">
+                        {summary.cleared.map((c) => (
+                            <li key={c.id} className="flex items-center gap-3 px-3 py-2">
+                                <MarkdownMath className="text-xs text-muted-foreground leading-snug flex-1 min-w-0 line-clamp-2">
+                                    {mistakeMeta(c).criterion || c.question}
+                                </MarkdownMath>
+                                <button type="button" onClick={() => restore([c])}
+                                    className="pill border-2 border-border text-[10px] text-muted-foreground
+                                        hover:text-foreground hover:border-foreground/40 flex-shrink-0">
+                                    Put it back
+                                </button>
+                            </li>
+                        ))}
+                    </ul>
+                </details>
             )}
 
             {tab === "fix" && (
@@ -693,6 +906,110 @@ export default function MistakeBank() {
                     you can recall it AND you earned it again on the question you dropped it in.
                 </p>
             )}
+        </div>
+    );
+}
+
+/**
+ * The shelf: subject, then topic, each able to start its own review.
+ *
+ * ─── Why the list needed a shape ────────────────────────────────────────────
+ * A flat list of thirty mistakes has exactly one order — worst first — which
+ * is right for "what do I do next" and wrong for the other thing a student
+ * does here, which is sit down before a SAC and work on ONE subject. That was
+ * previously impossible: the only button played the whole bank.
+ *
+ * ─── Every count is what its own button will play ───────────────────────────
+ * The number beside Review is the READY count, not the total. "Review 6" that
+ * turns out to be one card due and five scheduled for next week is the small
+ * lie that costs a screen its credibility, and this screen's whole job is
+ * being believed about what is fixed.
+ */
+function BankShelf({ groups, scope, onScope, onReview }) {
+    const [open, setOpen] = useState(() => new Set());
+    if (!groups.length) return null;
+
+    const toggle = (subject) => setOpen((prev) => {
+        const next = new Set(prev);
+        if (next.has(subject)) next.delete(subject); else next.add(subject);
+        return next;
+    });
+
+    const scopeLabel = scope
+        ? (scope.topic ? `${scope.subject} · ${scope.topic}` : scope.subject)
+        : null;
+
+    return (
+        <div className="space-y-2">
+            <div className="flex items-center justify-between gap-3">
+                <p className="stat-label text-muted-foreground">By subject</p>
+                {scopeLabel && (
+                    <button type="button" onClick={() => onScope(null)}
+                        className="inline-flex items-center gap-1 text-[11px] font-bold text-muted-foreground hover:text-foreground">
+                        <X className="w-3 h-3" /> {scopeLabel}
+                    </button>
+                )}
+            </div>
+
+            {groups.map((g) => {
+                const isOpen = open.has(g.subject);
+                const picked = scope?.subject === g.subject && !scope.topic;
+                return (
+                    <div key={g.subject}
+                        className={`rounded-2xl border-2 bg-surface overflow-hidden ${
+                            picked ? "border-foreground" : "border-border"}`}>
+                        <div className="flex items-center gap-2 px-3 py-2.5">
+                            <button type="button" onClick={() => toggle(g.subject)}
+                                aria-expanded={isOpen}
+                                className="flex items-center gap-2 min-w-0 flex-1 text-left cursor-pointer">
+                                <ChevronDown className={`w-4 h-4 text-muted-foreground flex-shrink-0
+                                    transition-transform ${isOpen ? "rotate-180" : ""}`} />
+                                <span className="min-w-0">
+                                    <span className="block text-sm font-black text-foreground truncate">{g.subject}</span>
+                                    <span className="block text-[11px] text-muted-foreground">
+                                        {g.fixed} of {g.total} fixed
+                                        {g.topics.length > 1 && ` · ${g.topics.length} topics`}
+                                    </span>
+                                </span>
+                            </button>
+                            <button type="button"
+                                onClick={() => { onScope({ subject: g.subject }); onReview(g.cards); }}
+                                disabled={!g.ready}
+                                className={`pill border-2 flex-shrink-0 transition-colors ${
+                                    g.ready ? "border-primary/40 text-primary hover:bg-primary/10"
+                                        : "border-border text-muted-foreground/50 cursor-default"}`}>
+                                {g.ready ? `Review ${g.ready}` : "None due"}
+                            </button>
+                        </div>
+
+                        {isOpen && (
+                            <ul className="border-t border-border/60 divide-y divide-border/60">
+                                {g.topics.map((t) => (
+                                    <li key={t.topic} className={`flex items-center gap-2 px-3 py-2 ${
+                                        scope?.topic === t.topic && scope?.subject === g.subject ? "bg-secondary/50" : ""}`}>
+                                        <button type="button"
+                                            onClick={() => onScope({ subject: g.subject, topic: t.topic })}
+                                            className="min-w-0 flex-1 text-left cursor-pointer">
+                                            <span className="block text-xs font-bold text-foreground truncate">{t.topic}</span>
+                                            <span className="block text-[11px] text-muted-foreground tabular-nums">
+                                                {t.fixed} of {t.total} fixed
+                                            </span>
+                                        </button>
+                                        <button type="button"
+                                            onClick={() => { onScope({ subject: g.subject, topic: t.topic }); onReview(t.cards); }}
+                                            disabled={!t.ready}
+                                            className={`pill border-2 flex-shrink-0 text-[10px] transition-colors ${
+                                                t.ready ? "border-primary/40 text-primary hover:bg-primary/10"
+                                                    : "border-border text-muted-foreground/50 cursor-default"}`}>
+                                            {t.ready ? `Review ${t.ready}` : "None due"}
+                                        </button>
+                                    </li>
+                                ))}
+                            </ul>
+                        )}
+                    </div>
+                );
+            })}
         </div>
     );
 }
