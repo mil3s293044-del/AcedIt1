@@ -455,41 +455,65 @@ than silence. A pile under ten also no longer falls through the cracks: the
 high-priority branch needs ten to beat a streak on the line, the low-priority
 one only has to beat a generic Pomodoro.
 
-## Ranked: the board is the page, the profile is a card
+## Ranked: the board is the race, the profile is the climb
 
-My profile was `GamifiedMyRank` — an XP card, five stat tiles, twelve
-hand-written achievements, daily missions, a streak-multiplier explainer and a
-table of XP rates — with `AchievementsGallery` rendering a SECOND achievements
-grid from the server directly underneath. Two grids of badges on one screen,
-one authoritative and one a hard-coded guess at the same idea.
+The page is two tabs and the split between them is the whole design. The BOARD
+tab is everyone else — where you sit, who is next, what it costs. The PROFILE
+tab is only you — how far up the ladder you have come and what you have
+unlocked. Anything that needs a rival on screen belongs on the board side.
 
-`MyProfile` replaces both. Two things were wrong beyond the length:
+Getting that wrong is easy and was done once: the profile briefly carried a
+player card and a three-row ladder of the students either side of you, which
+the board was already drawing larger, two feet to the left — and it put the
+competitive half of a page called Ranked behind a tab you have to go and
+choose.
 
-- **It wasn't competitive.** On a page called Ranked, nothing on the profile
-  compared you to anybody. The board array already carried every neighbour and
-  gap and none of it was read. The headline is the COMPARISON now — #3 of 132,
-  the person above and below with the gap to each, and which component closes
-  it, with a link to the page where you'd close it.
-- **It wasn't part of the app.** Five tiles with an icon in a rounded square is
-  the house style of every generated dashboard. A student's own profile is the
-  most obvious place for `PlayingCard` and it was the one surface not using it.
-  Rank comes from the ATAR through the same `rankFor` a deck uses, so an Ace
-  means here what it means everywhere; suit is the subject their logged time
-  actually goes to.
+**`StandingRail` is the contest.** Where you are, the person above with the gap
+to them, the person behind with what dropping it costs, and then WHAT CLOSES IT
+— `bestLever` naming the component with the most ATAR sitting on it and what a
+ten-point nudge is worth, checked against the gap so it only claims to overtake
+somebody when the arithmetic says it would. That figure comes from `atarLift`,
+the same differenced model Today's Play uses, so it is checkable. It is offered
+ONLY on the ATAR board: `atarLift` models the ATAR composite and nothing else,
+and "sit two quizzes to close it" under an XP gap would be a guess dressed as
+arithmetic.
 
-It takes the board this page already fetched as a prop — the old pair re-read
-the profile, the sessions, the goals, the attempts and every flashcard for
-tiles that are gone. One query is left: which subject the time went to.
+**Every row on the board shows its own gap, drawn to one scale.** That is what
+makes a position look takeable — before it, the only gap anybody could see was
+their own. The scale is the MEDIAN gap doubled, not the largest: one student
+sitting 27 points clear set the scale for the whole board and every gap people
+could actually close drew as two invisible pixels. Past twice the median the
+bar fills and the row is simply "far"; the number is printed beside it.
 
-There is no XP rate table on it. `XPLevelCard` already prints one under the
-rank ladder, and the standalone copy disagreed with it in two rows (flashcards
-0.5 vs 0.6–1.5, quizzes 2 XP/mark vs 8–50). Two rate cards for one economy on
-one screen is worse than either.
+Your row and the two either side carry a left rail, because those three rows
+are the race you are in. **Side-specific colour utilities, and the list
+separates with `border-t` rather than `divide-y`** — Tailwind's `divide-*`
+writes `border-color` through a combinator that outranks a plain `border-primary`
+on the child, so the first rail came out the same grey as the dividers.
 
-`DailyMissions` came off the tab and is NOT deleted: it calls `awardXP`, so it
-is the only surface where mission XP can be claimed, and removing a payout is a
-product call. It is currently mounted nowhere — see the note at the top of the
-file before rehoming it.
+**`MyProfile` is XP, the ladder, and achievements.** It was `GamifiedMyRank` —
+an XP card, five stat tiles, twelve hand-written achievements, daily missions, a
+streak explainer and a rate table — with `AchievementsGallery` rendering a
+SECOND achievements grid from the server underneath. The server catalogue
+stayed; it grants the XP. XP and streak come off the board row the page already
+fetched, so the tab makes no query of its own.
+
+**A rank is a badge, not a string.** `RankCrest` — a hexagon in the rank's own
+colour with its tier numeral, and the ring around it is progress to the next
+one. Ten tiers all drawn as the same amber trophy meant arriving at tier 9
+changed a string and nothing else. The ladder shows the rung below, yours and
+the next, with the full ten one tap away: seven padlocked rows is a list of
+things you have not done.
+
+No state or curriculum in a rank name. Two of them were "VCE Demigod" and
+"Legend of the HSC" — two different states' exam systems, in consecutive tiers,
+in a ladder every student on the app climbs. They are Syllabus Slayer and Final
+Boss.
+
+`DailyMissions` came off the profile and is NOT deleted: it calls `awardXP`, so
+it is the only surface where mission XP can be claimed, and removing a payout is
+a product call. It is mounted nowhere — read the note at the top of the file
+before rehoming it.
 
 ## The signup tour
 

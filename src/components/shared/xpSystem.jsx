@@ -42,6 +42,17 @@ export function levelProgress(totalXP) {
 
 // ─── All-Time XP Rank Tiers (HIGHER thresholds — long-term prestige) ─────────
 
+/**
+ * The ladder. Ten tiers, never reset, and the names carry the app's voice —
+ * a student should want to screenshot the one they are on.
+ *
+ * NO STATE OR CURRICULUM IN A RANK NAME. Two of these used to be "VCE Demigod"
+ * and "Legend of the HSC", which named a state's exam system in a ladder every
+ * student on the app climbs — and named two DIFFERENT states' systems in
+ * consecutive tiers, so the top of the ladder read as though it had been
+ * written by two people. A rank has to mean the same thing to everybody who
+ * reaches it.
+ */
 export const XP_RANKS = [
     { name: "Slackademic",            minXP: 0,       maxXP: 800,    tier: 1,  gradient: "from-slate-500 via-gray-500 to-slate-600",           color: "#64748b" },
     { name: "Barely Literate Bandit", minXP: 800,     maxXP: 3000,   tier: 2,  gradient: "from-stone-500 via-stone-600 to-slate-500",           color: "#78716c" },
@@ -51,8 +62,8 @@ export const XP_RANKS = [
     { name: "Grind Gremlin",          minXP: 35000,   maxXP: 65000,  tier: 6,  gradient: "from-emerald-500 via-teal-500 to-cyan-500",           color: "#10b981" },
     { name: "Pomodoro Prodigy",       minXP: 65000,   maxXP: 120000, tier: 7,  gradient: "from-cyan-500 via-blue-500 to-indigo-500",            color: "#06b6d4" },
     { name: "Academic Weapon",        minXP: 120000,  maxXP: 220000, tier: 8,  gradient: "from-violet-500 via-purple-500 to-fuchsia-500",       color: "#8b5cf6" },
-    { name: "VCE Demigod",            minXP: 220000,  maxXP: 400000, tier: 9,  gradient: "from-rose-500 via-pink-500 to-fuchsia-600",           color: "#f43f5e" },
-    { name: "Legend of the HSC",      minXP: 400000,  maxXP: Infinity, tier: 10, gradient: "from-yellow-400 via-amber-400 to-orange-500",      color: "#f59e0b" },
+    { name: "Syllabus Slayer",        minXP: 220000,  maxXP: 400000, tier: 9,  gradient: "from-rose-500 via-pink-500 to-fuchsia-600",           color: "#f43f5e" },
+    { name: "Final Boss",             minXP: 400000,  maxXP: Infinity, tier: 10, gradient: "from-yellow-400 via-amber-400 to-orange-500",      color: "#f59e0b" },
 ];
 
 export function getRankFromXP(totalXP) {
