@@ -199,15 +199,25 @@ would mean inventing an exchange rate between the two and printing it as though
 it were measured, so evidence sorts first, each half sorts by its own measure,
 and a line between them says which is which.
 
-**A question missed twice banks itself.** `autoBankRows` writes it as an
-ordinary bank card — same topic, unit and `extra.mistake` shape — so it reviews
-through the same SM-2 ladder as a hand-banked mark. Pressing save is the right
-shape for choosing between five criteria on a marked answer; it is the wrong
-shape for a whole question you have now got wrong twice, where there is nothing
-to judge. Keyed on `quiz:<id>:<index>` so a reworded stem does not re-bank, and
-it NEVER invents a back: no model answer and no explanation means no card,
-because a card whose back reads "the correct answer" spends a real mistake on
-nothing.
+**A MISTAKE AND A QUESTION ARE DIFFERENT SIZES, and they get different
+treatment.** The bank is for small specific errors — a criterion the assessor
+wanted, a phrase that cost a mark, a wording the marker flagged. Those you can
+drill in thirty seconds and rehearse on a schedule. A whole exam question is
+not that; it is a SIT.
+
+They were briefly the same thing. `autoBankRows` wrote a repeatedly-missed
+question into the bank as a card, which gave a phrase-sized ladder to an
+exam-sized thing, wrote rows on page load, and stored a clipped copy of the
+stem as the card's criterion — which the runner prints as its heading, so a
+long question arrived on screen cut off mid-word. It is deleted.
+
+`redoQueue` replaces it and stores NOTHING. Which questions need re-sitting is
+a fact about the attempt history, which is already loaded: questions missed
+more than once, and questions carrying banked mistakes that have never been sat
+clean. Derived, so it cannot go stale, double up, or disagree with the marks it
+came from. /MistakeBank is two tabs — Fix is the drilling, Sit again is the
+proving — and a re-sit plays through the existing retry path, so its results
+land with parent-relative indices like any other attempt.
 
 **The mistake bank is flashcards with a marker** (`topic: "Mistake bank"`), so a
 banked mistake comes back through the SM-2 engine that already exists rather
@@ -236,12 +246,29 @@ a fraction of what is FIXED, the bar shows the pile shrinking, and repeats are
 called out because a student told they have dropped one criterion four times
 has one thing to fix instead of four.
 
-`fixState` reads the SM-2 counters already on the card — nothing new is stored
-to support it. Fixed is two clean recalls AND an interval of a week or more:
-one recall the day after banking is short-term memory, and telling a student
-they have fixed something they have not is the flattery the rank system exists
-to refuse. Slipping is their LAST answer, not their history, so a card with
-four early lapses since recalled twice reads as going the right way.
+**REHEARSAL IS NOT PROOF, so "fixed" has two levels.** The SM-2 counters
+measure whether a student can recall what the assessor wanted, on a card, in
+isolation, after being reminded four times. That is worth measuring and it is
+not what a SAC asks — so clearing the ladder makes a card `drilled`, not fixed.
+
+A MISTAKE is fixed when it has cleared the ladder AND a later sit of its own
+question recorded its criterion as earned. A CASE — one question and every
+mistake on it — is closed only when all of them are fixed AND a later sit
+scored FULL MARKS, because a student can earn the criterion they drilled while
+dropping a different one in the same answer, and calling that finished is the
+trade the screen refuses.
+
+The evidence comes from `extra.question_results[].criteria`, which the player
+now records: the marking already produced the per-criterion verdicts and was
+throwing them away. `clearedBy` matches criterion text exactly, then by
+containment of at least twelve characters — the same refuse-rather-than-guess
+rule `criterionIndexFor` uses, because crediting a student with a fix they did
+not make is the one error this screen exists to prevent. A card with no source
+question (every card banked before the gate existed) reports on the ladder
+alone rather than being held one rung short forever.
+
+Slipping is their LAST answer, not their history, so a card with four early
+lapses since recalled twice reads as going the right way.
 
 READY IS NOT DUE. `due.js` counts a never-reviewed card as *new* on purpose —
 a fresh sixty-card deck must not report sixty overdue. But a mistake banked an
@@ -257,20 +284,43 @@ name. So a mistake gets harder as the student gets it right (`drill.js`):
   RECOGNISE  first time. What they wrote, what would have scored. There is
              nothing to retrieve yet; asking somebody to produce a wording
              nobody has shown them is a test, not a drill.
+  SPOT       their own sentence, with the words that cost the mark to be found
+             in it. The first rung asking for a JUDGEMENT rather than a memory,
+             and the only one that works on their words rather than a model
+             answer — which is what makes it transfer, because in a SAC nobody
+             has underlined anything.
   CLOZE      the model wording with the load-bearing terms removed, and those
              same terms as the word bank. No invented distractors — every word
              belongs in a gap, so there is nothing to eliminate by feel.
-  PRODUCE    the criterion alone and a box, marked by the model against that
-             one criterion. This is the rung that transfers, because a SAC is
-             a box.
+  REPAIR     their sentence, editable, rewritten so it would score, marked by
+             the model against that one criterion. Production anchored to what
+             they actually wrote: a smaller and fairer ask than a blank box,
+             and it teaches the edit rather than a replacement text.
+  REDO       the whole question again, marked. NOT a rung — it is the gate past
+             the ladder, and it lives in `clearedBy` because it is evidence
+             rather than rehearsal.
 
 The rung is read off `repetitions`, so nothing new is stored and a lapse drops
 the card back down the ladder WITH the scheduler rather than leaving it hard
 while its interval collapses. `keyTerms` blanks what the CRITERION turns on —
 words in both the criterion and the answer — never a stopword, never the
 opening word (a passage that starts with a hole has no context before it), and
-three gaps at most. **A rung that cannot be built falls back rather than
-degrading**: no blankable terms, no cloze; no criterion, no produce.
+three gaps at most.
+
+`buildSpot` is a word diff between the quote and what would have scored: the
+words in one and not the other are exactly what the mark turned on, so nothing
+is generated and nothing is guessed. Two limits, both learned from the render:
+the FOUR most load-bearing differences only (longest-first, the same proxy
+`keyTerms` uses), because a casual sentence against a tight model phrase
+differs almost everywhere and flagging six of eight words is not a drill; and
+never more than half the sentence, because "most of this" is a rewrite, which
+is the rung above. `gradeSpot` counts a wrong tap against a right one, or
+tapping everything wins.
+
+**A rung that cannot be built falls back rather than degrading, and the
+fallback CASCADES** — no quote means no spot, and if the wording also has
+nothing blankable it keeps falling to recognise. Checking one level down and
+stopping renders an empty exercise.
 
 The model SUGGESTS a rating and highlights that button; the student still
 presses one. An app that schedules a card off its own verdict has taken the one

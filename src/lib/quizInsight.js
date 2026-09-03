@@ -347,86 +347,94 @@ export function workQueue(quizzes = [], attempts = [], { limit = 6, now = Date.n
     };
 }
 
-// ─── 5. A repeated miss banks itself ────────────────────────────────────────
+// ─── 5. The redo queue ──────────────────────────────────────────────────────
 
 /**
- * Bank rows for questions the student keeps getting wrong.
+ * Whole questions to sit again — derived, never stored.
  *
- * ─── Why automatically ──────────────────────────────────────────────────────
- * Banking used to need a press: mark a quiz, read the criteria, press save on
- * each mark you want back. That is the right shape for a nuanced mark — the
- * student is choosing which of five criteria is worth rehearsing — but it is
- * the wrong shape for a whole question they have now missed TWICE. There is
- * nothing to judge there. The evidence is unambiguous, the app noticed it, and
- * leaving it in a list to be pressed meant the clearest mistakes a student
- * makes were the ones least likely to end up somewhere they came back.
+ * ─── Why this replaced auto-banking ─────────────────────────────────────────
+ * A question you keep getting wrong used to be written into the mistake bank
+ * as a card, automatically. That was wrong twice over.
  *
- * ─── It is the same card as a hand-banked one ───────────────────────────────
- * Same topic, same unit, same `extra.mistake` shape, so it reviews through the
- * same SM-2 ladder, counts in the same summary and groups by criterion with
- * everything else. A second kind of banked mistake would be a second scheduler
- * and a second review screen, which is the thing `mistakeBank.js` opens by
- * refusing to build.
+ *   IT WAS THE WRONG SIZE OF THING. The bank is for small specific errors —
+ *   a criterion the assessor wanted, a phrase that cost a mark, a wording the
+ *   marker flagged. Those are things you can drill in thirty seconds and
+ *   rehearse on a schedule. A whole exam question is not; it is a sit. Putting
+ *   both in one list gave them one ladder and one definition of "fixed", and
+ *   the ladder that suits a phrase suits neither.
  *
- * ─── Never invents a back ───────────────────────────────────────────────────
- * A card needs an answer that would actually score. An MCQ has one (the
- * correct option, plus any explanation); a short-answer question has one only
- * if the quiz carries a model answer or an explanation. Where there is
- * neither, no card is made — a card whose back reads "the correct answer" is
- * worse than the student never seeing it, because it takes a real mistake and
- * spends it on nothing.
+ *   IT WROTE ROWS ON PAGE LOAD, and it stored a clipped copy of the question
+ *   as the card's criterion — which the runner prints as its heading, so a
+ *   long stem arrived on screen cut off mid-word.
+ *
+ * There is nothing to store. Which questions need re-sitting is a fact about
+ * the attempt history, and the attempt history is already loaded: questions
+ * missed more than once, and questions that banked mistakes came from and have
+ * not been sat clean since. Deriving it means it can never go stale, never
+ * double up, and never disagree with the marks it was computed from.
  */
-export function autoBankRows(spots = [], quizzes = [], existing = [], { topic, unit } = {}) {
-    const byId = new Map(quizzes.map(q => [q.id, q]));
-    // Already banked, by the source key written below. Keyed on the QUESTION,
-    // not on its wording: a quiz edited to reword a stem must not re-bank a
-    // mistake the student has been working on for a fortnight.
-    const have = new Set(
-        existing.map(c => c?.extra?.mistake?.source).filter(Boolean));
+export function redoQueue(quizzes = [], attempts = [], bankCards = [], { limit = 20 } = {}) {
+    const byId = new Map(quizzes.map((q) => [q.id, q]));
+    const out = new Map();
 
-    const rows = [];
-    for (const s of spots) {
-        const source = `quiz:${s.quizId}:${s.qIndex}`;
-        if (!s.quizId || have.has(source)) continue;
-        const quiz = byId.get(s.quizId);
-        const q = quiz?.questions?.[s.qIndex];
-        if (!q) continue;
-
-        const back = q.type === "mcq"
-            ? [Array.isArray(q.options) ? q.options[q.correct_answer] : null, q.explanation]
-                .filter(Boolean).join("\n\n")
-            : [q.model_answer, q.explanation].filter(Boolean).join("\n\n");
-        if (!String(back || "").trim()) continue;
-
-        rows.push({
-            subject_name: quiz.subject || null,
-            topic, unit,
-            question: String(q.question || s.question || "").trim(),
-            answer: back,
-            is_active: true,
-            // Missed twice is a demonstrated weak spot by definition, so it
-            // enters the schedule as one rather than queueing behind material
-            // the student has never got wrong.
-            is_weak_spot: true,
-            extra: {
-                mistake: {
-                    // The criterion IS the question here. There is no marked
-                    // criterion to group on — the student got the whole thing
-                    // wrong — and grouping needs something stable, so the
-                    // question stands for itself.
-                    criterion: String(q.question || s.question || "").trim().slice(0, 200),
-                    quote: "",
-                    question_title: s.quizTitle || quiz.title || "",
-                    cost: 0,
-                    lost: true,
-                    source,
-                    auto: true,
-                    missed: s.missed,
-                    seen: s.seen,
-                    banked_at: new Date().toISOString(),
-                },
-            },
+    const add = (quizId, qIndex, reason) => {
+        const quiz = byId.get(quizId);
+        const question = quiz?.questions?.[qIndex];
+        if (!quiz || !question?.question) return;
+        const k = `${quizId}:${qIndex}`;
+        const existing = out.get(k);
+        if (existing) { existing.reasons.push(reason); return; }
+        out.set(k, {
+            key: k, quizId, qIndex, quiz, question,
+            title: quiz.title, subject: quiz.subject || null,
+            reasons: [reason],
         });
+    };
+
+    // Missed twice and still wrong.
+    for (const s of weakSpots(attempts, { limit: 50 })) {
+        if (s.quizId) add(s.quizId, s.qIndex, { kind: "missed", missed: s.missed, seen: s.seen });
     }
-    return rows;
+
+    // Carrying banked mistakes that have never been re-sat clean. This is the
+    // half that closes the loop: the drill ladder ends at "sit it again", and
+    // this is where the student goes to do that.
+    const bySource = new Map();
+    for (const card of bankCards) {
+        const src = card?.extra?.mistake?.source;
+        if (!src?.quiz_id || !Number.isInteger(src?.q_index)) continue;
+        const k = `${src.quiz_id}:${src.q_index}`;
+        bySource.set(k, (bySource.get(k) || 0) + 1);
+    }
+    for (const [k, count] of bySource) {
+        const [quizId, idx] = [k.slice(0, k.lastIndexOf(":")), Number(k.slice(k.lastIndexOf(":") + 1))];
+        if (fullMarksOn(attempts, quizId, idx)) continue;
+        add(quizId, idx, { kind: "banked", count });
+    }
+
+    return [...out.values()]
+        // A question you have missed repeatedly outranks one you merely have
+        // notes on: the first is a demonstrated failure, the second is
+        // unfinished business.
+        .sort((a, b) => score(b) - score(a))
+        .slice(0, limit);
+}
+
+const score = (row) => row.reasons.reduce(
+    (n, r) => n + (r.kind === "missed" ? 10 + (r.missed || 0) : 1 + (r.count || 0)), 0);
+
+/** Has this exact question ever been sat for everything available? */
+function fullMarksOn(attempts, quizId, qIndex) {
+    for (const a of attempts) {
+        if (a?.quiz_id !== quizId) continue;
+        const results = Array.isArray(a?.extra?.question_results) ? a.extra.question_results : [];
+        const r = results.find((x) => x?.q_index === qIndex);
+        if (r && r.marks != null && r.marks_max != null && r.marks >= r.marks_max) return true;
+    }
+    return false;
+}
+
+/** The playable questions for a redo run, in the order the queue put them. */
+export function redoQuestions(rows = []) {
+    return rows.map((r) => ({ ...r.question, _sourceIndex: r.qIndex })).filter((q) => q.question);
 }

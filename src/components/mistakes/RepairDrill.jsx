@@ -1,9 +1,18 @@
 /**
- * ProduceDrill — the criterion, a box, and an examiner.
+ * RepairDrill — your sentence, rewritten so it would score.
  *
- * The top rung. No wording to recognise and no words to slot in: the student
- * gets what the assessor was looking for and has to write something that would
- * earn it. This is the rung that transfers, because a SAC is a box.
+ * The top rung of the rehearsal ladder. No wording to recognise and no words
+ * to slot in: the student gets what the assessor was looking for and has to
+ * write something that earns it.
+ *
+ * ─── Anchored to what they wrote, when there is something to anchor to ──────
+ * A blank box asking for a model answer is a bigger and less fair ask than the
+ * mistake warrants — the student did not write nothing, they wrote something
+ * that fell short, and the useful skill is the EDIT. So their own phrasing is
+ * printed above the box and the ask is to repair it. Where the marker never
+ * quoted anything (the criterion's words were absent from the answer
+ * altogether, which is exactly why it was missed) there is nothing to repair
+ * and the prompt is the criterion alone — the same screen, one line lighter.
  *
  * ─── Marked, not self-rated, and then still self-rated ──────────────────────
  * The model marks the attempt against the criterion in the same examiner voice
@@ -33,7 +42,7 @@ const VERDICT = {
     missed:  { label: "Not yet",          cls: "text-streak",   icon: X, rating: 1 },
 };
 
-export default function ProduceDrill({ card, criterion, onMarked }) {
+export default function RepairDrill({ card, criterion, quote, onMarked }) {
     const [text, setText] = useState("");
     const [busy, setBusy] = useState(false);
     const [mark, setMark] = useState(null);
@@ -53,6 +62,7 @@ A student is re-drilling a mark they previously dropped. Mark THIS attempt
 against the one criterion below, and nothing else.
 
 THE CRITERION: ${criterion}
+${quote ? `WHAT THEY ORIGINALLY WROTE, which fell short: ${quote}` : ""}
 
 WHAT A FULL-MARK RESPONSE CONTAINED: ${card?.answer || "not recorded"}
 
@@ -104,18 +114,33 @@ Rules, and breaking any of them makes this worse than no feedback:
     return (
         <div className="space-y-4">
             <div>
-                <p className="stat-label text-muted-foreground">Write what would earn this</p>
+                <p className="stat-label text-muted-foreground">
+                    {quote ? "Rewrite it so it scores" : "Write what would earn this"}
+                </p>
                 <MarkdownMath className="text-base sm:text-lg font-bold text-foreground leading-snug mt-1">
                     {criterion}
                 </MarkdownMath>
             </div>
+
+            {/* What they wrote last time. Quieter than the criterion above it
+                and than the box below it — it is the thing being repaired, not
+                the thing being asked for, and printing it at the same weight
+                invites copying it back out. */}
+            {quote && (
+                <div className="rounded-xl bg-secondary/50 border border-border px-3 py-2.5">
+                    <p className="stat-label text-muted-foreground">You wrote</p>
+                    <p className="text-sm text-muted-foreground italic leading-snug mt-0.5">
+                        &ldquo;{quote}&rdquo;
+                    </p>
+                </div>
+            )}
 
             <Textarea
                 value={text}
                 onChange={(e) => setText(e.target.value)}
                 disabled={!!mark || failed}
                 rows={5}
-                placeholder="In your own words…"
+                placeholder={quote ? "Your version, fixed…" : "In your own words…"}
                 className="border-2 border-border rounded-xl text-base"
             />
 

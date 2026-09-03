@@ -449,6 +449,10 @@ In two or three sentences, explain what makes that the right answer and what the
         const card = cardFromModule(mod, {
             subject: shuffledQuiz.subject,
             questionTitle: q?.question,
+            // Where it came from, so the ladder can end where the mistake
+            // happened. `_sourceIndex` is the parent index on a "wrong only"
+            // retry; on a normal sit the two are the same.
+            source: { quizId: quiz.id, qIndex: q?._sourceIndex ?? currentFeedbackIndex },
         });
         if (!card) return;
         // Claimed synchronously so a double-click cannot get past it, then
@@ -722,12 +726,23 @@ In two or three sentences, explain what makes that the right answer and what the
      * command term off the stem — so weak spots and command-term analysis have
      * something real to read. Lives in `extra` so it needs no migration.
      */
-    const buildQuestionResults = (marksFor) => shuffledQuiz.questions.map((q, i) => {
+    const buildQuestionResults = (marksFor, criteriaFor) => shuffledQuiz.questions.map((q, i) => {
         // Through the adapter, not by hand: a multipart question is worth the
         // sum of its parts, and `q.marks` on one of those is undefined. For a
         // legacy question this returns exactly what the old expression did.
         const max = normaliseQuestion(q, i).marks;
         const { marks, correct } = marksFor(q, i, max);
+        // Which criteria this attempt actually earned.
+        //
+        // This is the evidence the mistake bank's redo gate runs on: a banked
+        // mistake is only fixed once a LATER sit of its own question records
+        // its criterion as got. Without it the bank can only ever measure
+        // rehearsal — whether a student can recall the wording on a card —
+        // which is not the thing a SAC asks. Costs nothing to write; the
+        // marking already produced it and it was being thrown away.
+        const criteria = (criteriaFor?.(i) || [])
+            .map((c) => ({ text: String(c?.text || "").slice(0, 300), got: !!c?.got }))
+            .filter((c) => c.text);
         return {
             // The question's index in the QUIZ, which on a "wrong only" retry
             // is not its index in the run. Everything that reads these rows
@@ -740,6 +755,7 @@ In two or three sentences, explain what makes that the right answer and what the
             marks_max: max,
             marks,
             is_correct: correct,
+            ...(criteria.length ? { criteria } : {}),
         };
     });
 
@@ -1015,7 +1031,7 @@ invent a theme from a single question.`,
                 if (!fb) return { marks: undefined, correct: null };
                 const marks = fb.marks || 0;
                 return { marks, correct: q.type === 'mcq' ? marks === 1 : marks >= max * 0.8 };
-            });
+            }, (i) => mappedFeedback[i]?.mark?.criteria);
 
             const totalMarksAwarded = mappedFeedback.reduce((sum, fb) => sum + (fb.marks || 0), 0);
             const xpEarned = totalMarksAwarded * 2;
