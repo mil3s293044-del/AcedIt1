@@ -592,9 +592,28 @@ fetched, so the tab makes no query of its own.
 **A rank is a badge, not a string.** `RankCrest` — a hexagon in the rank's own
 colour with its tier numeral, and the ring around it is progress to the next
 one. Ten tiers all drawn as the same amber trophy meant arriving at tier 9
-changed a string and nothing else. The ladder shows the rung below, yours and
-the next, with the full ten one tap away: seven padlocked rows is a list of
-things you have not done.
+changed a string and nothing else.
+
+**And the ladder runs ALONG the page** (`RankLadder`). Ten tiers is the only
+thing on this tab that is inherently long, and it was the one thing squeezed
+into a three-row window with the rest behind a toggle — while a third of a wide
+screen sat empty beside it. Horizontal, all ten visible, passed tiers ticked
+and the rest padlocked.
+
+The rail's fill runs to your crest PLUS how far through that tier you are, so
+it moves whenever XP lands rather than once every few months when a tier flips.
+The `+0.5` in `railEnd` is not decoration: crest *i* sits at `(i + 0.5)/n`
+across the track, so without it the bar stops a half-cell short and visibly
+fails to reach the crest the number above it says you are on. It SCROLLS on a
+phone rather than shrinking — the alternatives are unreadable numerals or
+dropping the names, which is what the ladder is for — and the current tier is
+scrolled into view on mount.
+
+Level folded into the rank hero at the same time. Rank and level are drawn
+differently on purpose (a ring against a bar, because one moves every few
+sessions and the other a few times a year) but they answer the same question,
+and the level card on its own was a heading and a number at opposite ends of a
+wide strip.
 
 No state or curriculum in a rank name. Two of them were "VCE Demigod" and
 "Legend of the HSC" — two different states' exam systems, in consecutive tiers,

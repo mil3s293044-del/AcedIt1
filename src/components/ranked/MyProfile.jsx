@@ -27,7 +27,7 @@
  * every flashcard to print tiles that are gone.
  */
 import React, { useMemo } from "react";
-import XPLevelCard from "./XPLevelCard";
+import XPLevelCard, { XPSources } from "./XPLevelCard";
 import AchievementsGallery from "./AchievementsGallery";
 
 export default function MyProfile({ data, loading }) {
@@ -37,7 +37,7 @@ export default function MyProfile({ data, loading }) {
 
     if (loading) {
         return (
-            <div className="space-y-4 max-w-4xl">
+            <div className="space-y-4">
                 <div className="card-soft animate-pulse h-40" />
                 <div className="card-soft animate-pulse h-52" />
             </div>
@@ -45,13 +45,22 @@ export default function MyProfile({ data, loading }) {
     }
 
     return (
-        // Capped and centred. The board tab is a wide grid with a rail; this
-        // tab is one column of cards, and stretched to 1400px a card holding
-        // "Level 12" on the left and "6,384 XP to 13" on the right is mostly
-        // the space between them.
-        <div className="space-y-5 max-w-4xl">
+        // FULL WIDTH, because the ladder now uses it. Capping this at 4xl left
+        // a third of a wide screen empty next to the one piece of content on
+        // the tab that is inherently long — ten tiers — squeezed into a
+        // three-row window with the rest behind a toggle.
+        <div className="space-y-5">
+            {/* Rank, level and the ten-tier track. */}
             <XPLevelCard totalXP={row?.total_xp || 0} streakDays={row?.streak_days || 0} />
-            <AchievementsGallery />
+
+            {/* Two columns, because both of these read better narrow than
+                wide: the XP table is a two-column list already, and the
+                achievements grid keeps its tiles at a size you can see rather
+                than stretching to eight across. */}
+            <div className="grid gap-5 xl:grid-cols-[minmax(0,22rem)_minmax(0,1fr)] items-start">
+                <XPSources />
+                <AchievementsGallery />
+            </div>
         </div>
     );
 }
