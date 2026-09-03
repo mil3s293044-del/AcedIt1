@@ -153,16 +153,19 @@ export default function QuizInsightRail({ quizzes = [], attempts = [], onDrill, 
                                     {drilling ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Zap className="w-3.5 h-3.5" />}
                                     Drill just these {queue.misses.length}
                                 </Button>
-                                {/* Said plainly, because it happened without being asked
-                                    for. An app that quietly writes rows on your behalf and
-                                    never mentions it is one you stop being able to predict. */}
+                                {/* A whole question is a SIT, not a card. It is not
+                                    banked and not drilled — the bank is for the small
+                                    specific errors inside an answer, which is a
+                                    different size of thing needing a different ladder.
+                                    The link says where those live. */}
                                 <p className="text-[10px] text-muted-foreground leading-snug">
-                                    These exact questions, no AI and no waiting. They&rsquo;re also{" "}
+                                    These exact questions, no AI and no waiting. The individual marks
+                                    you dropped are in{" "}
                                     <Link to={createPageUrl("MistakeBank")}
                                         className="font-bold text-streak inline-flex items-center gap-0.5 hover:underline">
-                                        <Bookmark className="w-2.5 h-2.5" />in your mistake bank
+                                        <Bookmark className="w-2.5 h-2.5" />your mistake bank
                                     </Link>
-                                    , so they come back on their own schedule.
+                                    , drilled one at a time.
                                 </p>
                             </>
                         )}

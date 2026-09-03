@@ -13,7 +13,7 @@
 import assert from "node:assert/strict";
 import {
     isRetryAttempt, isLegacyRetry, baseQuizTitle, weakSpots, retrievalStrength,
-    workQueue, autoBankRows, buildDrillQuestions,
+    workQueue, redoQueue, redoQuestions, buildDrillQuestions,
 } from "@/lib/quizInsight";
 
 let passed = 0;
@@ -165,46 +165,75 @@ check("a quiz that is not overdue is not in the queue", () => {
     assert.equal(workQueue([], [fresh]).stale.length, 0);
 });
 
-// ─── banking itself ─────────────────────────────────────────────────────────
+// ─── the redo queue ─────────────────────────────────────────────────────────
+//
+// Whole questions are a SIT, not a card. They used to be written into the
+// mistake bank automatically, which gave a phrase-sized ladder to an
+// exam-sized thing and stored a clipped copy of the stem as the card's
+// heading — so a long question arrived on screen cut off mid-word. The queue
+// is derived from the attempt history now and nothing is written at all.
 
-check("a repeated miss becomes a bank card with a real back", () => {
-    const spots = weakSpots([attempt({ date: ago(5) }), attempt({ date: ago(1) })]);
-    const rows = autoBankRows(spots, [QUIZ], [], { topic: "Mistake bank", unit: "Mistake bank" });
+check("a question missed twice is in the queue", () => {
+    const rows = redoQueue([QUIZ], [attempt({ date: ago(5) }), attempt({ date: ago(1) })]);
     assert.equal(rows.length, 1);
-    assert.equal(rows[0].topic, "Mistake bank");
-    assert.equal(rows[0].unit, "Mistake bank", "unit is constant or the shelf splits the bank");
-    assert.equal(rows[0].subject_name, "Chemistry");
-    assert.ok(rows[0].is_weak_spot, "missed twice IS a demonstrated weak spot");
-    assert.match(rows[0].answer, /Cross-links are covalent/);
-    assert.equal(rows[0].extra.mistake.source, "quiz:q1:0");
-    assert.ok(rows[0].extra.mistake.auto);
+    assert.equal(rows[0].qIndex, 0);
+    assert.equal(rows[0].reasons[0].kind, "missed");
 });
 
-check("an MCQ banks the correct OPTION, not its index", () => {
-    const twice = (i) => ({ quiz_id: "q1", quiz_title: "Polymers — Quick Quiz", date: ago(i),
-        extra: { question_results: [{ q_index: 1, question: QUIZ.questions[1].question, is_correct: false }] } });
-    const rows = autoBankRows(weakSpots([twice(5), twice(1)]), [QUIZ], []);
+check("a question you carry banked mistakes on is in the queue", () => {
+    const bank = [{ extra: { mistake: { source: { quiz_id: "q1", q_index: 2 } } } }];
+    const rows = redoQueue([QUIZ], [], bank);
     assert.equal(rows.length, 1);
-    assert.match(rows[0].answer, /Amine/);
-    assert.match(rows[0].answer, /N–H stretch/, "the explanation is worth having on the back");
+    assert.equal(rows[0].qIndex, 2);
+    assert.equal(rows[0].reasons[0].kind, "banked");
 });
 
-check("no model answer and no explanation means NO card", () => {
-    // A card whose back reads "the correct answer" spends a real mistake on
-    // nothing, and the student cannot get it back.
-    const twice = (i) => ({ quiz_id: "q1", quiz_title: "Polymers", date: ago(i),
-        extra: { question_results: [{ q_index: 2, question: QUIZ.questions[2].question, is_correct: false }] } });
-    assert.equal(autoBankRows(weakSpots([twice(5), twice(1)]), [QUIZ], []).length, 0);
+check("once you have sat it clean it leaves the queue", () => {
+    // The whole point of the gate: the queue empties when the work is done.
+    const bank = [{ extra: { mistake: { source: { quiz_id: "q1", q_index: 2 } } } }];
+    const clean = { quiz_id: "q1", date: ago(0), extra: { question_results: [
+        { q_index: 2, marks: 4, marks_max: 4 }] } };
+    assert.equal(redoQueue([QUIZ], [clean], bank).length, 0);
 });
 
-check("banking is idempotent — a reworded question does not re-bank", () => {
-    const spots = weakSpots([attempt({ date: ago(5) }), attempt({ date: ago(1) })]);
-    const first = autoBankRows(spots, [QUIZ], []);
-    const again = autoBankRows(spots, [QUIZ], first);
-    assert.equal(again.length, 0, "keyed on the question, not on its wording");
-    // Also true of a card the student banked by hand from the same source.
-    assert.equal(autoBankRows(spots, [QUIZ],
-        [{ extra: { mistake: { source: "quiz:q1:0" } } }]).length, 0);
+check("part marks on the re-sit does NOT clear it", () => {
+    const bank = [{ extra: { mistake: { source: { quiz_id: "q1", q_index: 0 } } } }];
+    const partial = { quiz_id: "q1", date: ago(0), extra: { question_results: [
+        { q_index: 0, marks: 2, marks_max: 4 }] } };
+    assert.equal(redoQueue([QUIZ], [partial], bank).length, 1);
+});
+
+check("one question with two reasons is ONE row", () => {
+    const bank = [{ extra: { mistake: { source: { quiz_id: "q1", q_index: 0 } } } }];
+    const rows = redoQueue([QUIZ], [attempt({ date: ago(5) }), attempt({ date: ago(1) })], bank);
+    assert.equal(rows.length, 1);
+    assert.equal(rows[0].reasons.length, 2);
+});
+
+check("a demonstrated miss outranks unfinished business", () => {
+    // Index 2 — never sat clean, so it stays in the queue. (Index 1 is
+    // answered correctly in the fixture, which is why it leaves.)
+    const bank = [{ extra: { mistake: { source: { quiz_id: "q1", q_index: 2 } } } }];
+    const rows = redoQueue([QUIZ], [attempt({ date: ago(5) }), attempt({ date: ago(1) })], bank);
+    assert.equal(rows[0].qIndex, 0, "missed twice comes first");
+    assert.equal(rows[1].qIndex, 2);
+});
+
+check("a question that no longer exists is not offered", () => {
+    // The quiz was deleted or edited down; there is nothing to sit.
+    const bank = [{ extra: { mistake: { source: { quiz_id: "q1", q_index: 99 } } } }];
+    assert.equal(redoQueue([QUIZ], [], bank).length, 0);
+    assert.equal(redoQueue([], [], bank).length, 0);
+});
+
+check("the questions handed to the player carry their parent index", () => {
+    // Without it the re-sit records its answers against the wrong questions,
+    // which is the bug the retry path already had once.
+    const rows = redoQueue([QUIZ], [attempt({ date: ago(5) }), attempt({ date: ago(1) })]);
+    const qs = redoQuestions(rows);
+    assert.equal(qs.length, 1);
+    assert.equal(qs[0]._sourceIndex, 0);
+    assert.equal(qs[0].question, QUIZ.questions[0].question);
 });
 
 console.log(`\n${passed} passed`);

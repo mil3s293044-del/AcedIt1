@@ -1,9 +1,9 @@
-import React, { useState, useEffect, useMemo, useRef } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { base44 } from "@/api/base44Client";
 import { createPageUrl } from "@/utils";
 import { BANK_TOPIC, bankSummary } from "@/lib/mistakeBank";
-import { autoBankRows, weakSpots, isRetryAttempt } from "@/lib/quizInsight";
+import { isRetryAttempt } from "@/lib/quizInsight";
 import { isDue, isNew } from "@/lib/due";
 import { deleteResult } from "@/lib/saveResult";
 import { motion } from "framer-motion";
@@ -181,8 +181,6 @@ export default function Quizzes() {
 
             setQuizzes(quizzesData || []);
             setQuizAttempts(attemptsData || []);
-            // A question missed twice banks itself. See autoBank.
-            autoBank(quizzesData || [], attemptsData || [], bankCards || []);
             setSharedQuizzes(sharedQuizzesData || []);
             setUserSubjects(userSubjectsData || []);
 
@@ -193,44 +191,6 @@ export default function Quizzes() {
             }
         } finally {
             setIsLoading(false);
-        }
-    };
-
-    /**
-     * Bank the questions the student keeps getting wrong, without being asked.
-     *
-     * ─── Why here, and why once ─────────────────────────────────────────────
-     * Repeated misses are found by reading the whole attempt history, which is
-     * something only a page that has already loaded it can do — and this page
-     * loads it anyway, for the panel beside the list. So the reconciliation
-     * costs no query. It runs ONCE per mount, behind a ref, and writes nothing
-     * when there is nothing new: `autoBankRows` keys each card to its source
-     * question, so a mistake already banked is skipped whether the student
-     * banked it by hand or the last visit banked it for them.
-     *
-     * ─── It is deliberately quiet ───────────────────────────────────────────
-     * No toast. Banking a mistake is not an achievement to celebrate — the
-     * student got something wrong twice — and a popup congratulating them for
-     * it every time they open the page would be the app being pleased about
-     * bad news. The rail says the questions are in the bank, which is where a
-     * student who wants to know looks.
-     */
-    const autoBankedRef = useRef(false);
-    const autoBank = async (quizList, attemptList, existing) => {
-        if (autoBankedRef.current) return;
-        autoBankedRef.current = true;
-        try {
-            const rows = autoBankRows(
-                weakSpots(attemptList), quizList, existing,
-                { topic: BANK_TOPIC, unit: BANK_TOPIC });
-            if (!rows.length) return;
-            const made = await base44.entities.Flashcard.bulkCreate(rows);
-            // Fold them into the panel's count in the same tick, so the number
-            // beside "Mistake bank" is not a load behind the bank itself.
-            setBankCards(prev => [...prev, ...(Array.isArray(made) ? made : rows)]);
-        } catch (e) {
-            // A bank that fails to write is not a reason to break the page.
-            console.error("Auto-bank failed:", e);
         }
     };
 

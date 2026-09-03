@@ -63,7 +63,7 @@ export const bankKey = (mod, questionIndex = 0) => {
  * A surviving imprecision (`risk`) still needs a fix to be worth a card; with
  * no wording to rehearse there is nothing on the back but the observation.
  */
-export function cardFromModule(mod, { subject, questionTitle } = {}) {
+export function cardFromModule(mod, { subject, questionTitle, source } = {}) {
     if (!mod) return null;
     const lost = mod.status === "lost";
     const text = str(mod.text);
@@ -105,15 +105,47 @@ export function cardFromModule(mod, { subject, questionTitle } = {}) {
         // question text, which is prose and will be reworded.
         extra: {
             mistake: {
+                // WHICH SORT of small error this is, because the drill rungs
+                // differ. A criterion is a thing the assessor wanted and did
+                // not get; a note is the marker's remark on wording that may
+                // or may not have cost a mark. Only a mistake with the
+                // student's own words in it can be drilled by spotting the
+                // error in them.
+                kind: mod.kind === "note" ? "note" : "criterion",
                 criterion: text,
                 quote,
+                // What would have scored, kept separately from the criterion.
+                // The criterion is what the assessor was LOOKING FOR; `wanted`
+                // is the wording that would have earned it, and the two rungs
+                // that ask a student to produce something need the second.
+                wanted: firstFix(fixes, mod.wanted),
                 question_title: where,
                 cost: Number(mod.cost) || 0,
                 lost,
+                // The question this came from, so the ladder can end where the
+                // mistake actually happened. Without it a banked mistake can
+                // be rehearsed forever and never re-faced in the place that
+                // will mark it — see `clearedBy`.
+                source: sourceRef(source),
                 banked_at: new Date().toISOString(),
             },
         },
     };
+}
+
+/** The wording that would have scored, if the marker gave one. */
+const firstFix = (fixes, wanted) => str(fixes?.[0]) || str(wanted) || "";
+
+/**
+ * A pointer back to the question, normalised so a missing one is absent rather
+ * than half-present. `{ quiz_id: undefined }` reads as a source in every
+ * truthiness check and is not one.
+ */
+function sourceRef(source) {
+    const quizId = str(source?.quizId || source?.quiz_id);
+    const idx = Number(source?.qIndex ?? source?.q_index);
+    if (!quizId || !Number.isInteger(idx) || idx < 0) return null;
+    return { quiz_id: quizId, q_index: idx };
 }
 
 /** Is this row one of the bank's? Used by the filtered view. */
@@ -148,15 +180,95 @@ const FIXED_INTERVAL_DAYS = 7;
  * getting it wrong" are different things and lumping them together hides the
  * only one that needs action today.
  */
-export function fixState(card) {
+/** Has the card cleared the drill ladder? Rehearsal only — not the same as fixed. */
+export function ladderDone(card) {
+    const good = card?.consecutive_good || 0;
+    const easy = card?.consecutive_easy || 0;
+    return Math.max(good, easy) >= FIXED_STREAK && (card?.interval_days || 0) >= FIXED_INTERVAL_DAYS;
+}
+
+/**
+ * Did the student go back and actually earn this criterion?
+ *
+ * ─── Why rehearsal is not enough ────────────────────────────────────────────
+ * Everything above this line measures whether a student can RECALL what the
+ * assessor wanted, on a card, in isolation, after being reminded of it four
+ * times. That is worth measuring and it is not what a SAC asks. The rehearsal
+ * ladder ends one step short of the only evidence that settles it: writing the
+ * thing again, in the question it went wrong in, and having it marked.
+ *
+ * So a mistake is cleared when a LATER attempt at its own question records
+ * this criterion as earned. Later than the banking, because an attempt from
+ * before the mistake existed cannot be evidence that it is gone.
+ *
+ * ─── The match refuses rather than guesses ──────────────────────────────────
+ * Criterion text is written by the model afresh on each marking, so the same
+ * criterion comes back reworded. Exact match, then containment of at least
+ * twelve characters — the same shape of rule `criterionIndexFor` uses in
+ * quizMarking, and for the same reason: crediting a student with fixing
+ * something they did not fix is the one error this whole screen exists to
+ * refuse. Unmatched simply means not yet cleared, which is safe and visible.
+ */
+export function clearedBy(card, attempts = []) {
+    const { criterion, source, bankedAt } = mistakeMeta(card);
+    if (!source || !criterion) return null;
+    const want = key(criterion);
+    if (!want) return null;
+    const since = Date.parse(bankedAt) || 0;
+
+    for (const a of attempts) {
+        if (a?.quiz_id !== source.quizId) continue;
+        const when = Date.parse(a.date || a.created_date || "") || 0;
+        // Same-day re-sits are allowed: `date` is a plain date on these rows,
+        // so requiring strictly later would discard the most common case —
+        // marking a quiz and immediately redoing the question.
+        if (when && since && when < since - DAY) continue;
+        const results = Array.isArray(a?.extra?.question_results) ? a.extra.question_results : [];
+        const r = results.find((x) => x?.q_index === source.qIndex);
+        if (!r) continue;
+        const got = (Array.isArray(r.criteria) ? r.criteria : [])
+            .filter((c) => c?.got).map((c) => key(c.text)).filter(Boolean);
+        if (got.some((g) => g === want || contains(g, want))) {
+            return { at: a.date || a.created_date || null, full: r.marks >= r.marks_max };
+        }
+    }
+    return null;
+}
+
+const DAY = 86400000;
+const key = (t) => String(t || "").toLowerCase().replace(/[^a-z0-9 ]/g, " ").replace(/\s+/g, " ").trim();
+/** One criterion says the other, in enough words to be sure of it. */
+const contains = (a, b) =>
+    (a.length >= 12 && b.includes(a)) || (b.length >= 12 && a.includes(b));
+
+/**
+ * Where a mistake is up to. FIVE states, because "rehearsed but never re-sat"
+ * is a real place to be and calling it fixed is the flattery this screen
+ * exists to refuse — while calling it "working" hides that there is exactly
+ * one thing left to do about it.
+ *
+ * `attempts` is optional. Without it the redo gate cannot be evaluated, so the
+ * function reports the ladder alone and a caller that has no attempt history
+ * behaves exactly as it did before the gate existed.
+ */
+export function fixState(card, attempts) {
     if (!card) return "new";
-    const good = card.consecutive_good || 0;
-    const easy = card.consecutive_easy || 0;
     const reviews = (card.review_count_again || 0) + (card.review_count_hard || 0)
         + (card.review_count_good || 0) + (card.review_count_easy || 0);
+    const done = ladderDone(card);
+
+    if (done) {
+        // No attempts to check against, or a card banked before the gate
+        // existed and carrying no source: the ladder is all the evidence there
+        // will ever be, so it stands. Holding those cards at "drilled" forever
+        // would be marking a student down for when they banked something.
+        if (!attempts) return "fixed";
+        const { source } = mistakeMeta(card);
+        if (!source) return "fixed";
+        return clearedBy(card, attempts) ? "fixed" : "drilled";
+    }
 
     if (reviews === 0) return "new";
-    if (Math.max(good, easy) >= FIXED_STREAK && (card.interval_days || 0) >= FIXED_INTERVAL_DAYS) return "fixed";
     // Their most recent answer is what "still" means. A card with four early
     // lapses that they have since recalled twice is going the right way, and
     // filing it under slipping would be reporting history as news.
@@ -164,7 +276,7 @@ export function fixState(card) {
     return "working";
 }
 
-export const FIX_STATES = ["slipping", "new", "working", "fixed"];
+export const FIX_STATES = ["slipping", "new", "working", "drilled", "fixed"];
 
 /**
  * Provenance, for the cards that carry it.
@@ -176,12 +288,21 @@ export const FIX_STATES = ["slipping", "new", "working", "fixed"];
  */
 export function mistakeMeta(card) {
     const m = card?.extra?.mistake;
+    const src = m?.source;
     return {
+        kind: m?.kind === "note" ? "note" : "criterion",
         criterion: str(m?.criterion),
         quote: str(m?.quote),
+        wanted: str(m?.wanted),
         questionTitle: str(m?.question_title),
         cost: Number(m?.cost) > 0 ? Number(m.cost) : 0,
         lost: m?.lost !== false,
+        // Absent on every card banked before the redo gate existed. Those
+        // cards still drill and still count; they simply cannot be closed by
+        // re-sitting anything, which `fixState` handles rather than leaving
+        // them stuck one rung from the end forever.
+        source: str(src?.quiz_id) && Number.isInteger(src?.q_index)
+            ? { quizId: str(src.quiz_id), qIndex: src.q_index } : null,
         bankedAt: str(m?.banked_at) || str(card?.created_date),
     };
 }
@@ -198,7 +319,7 @@ export function mistakeMeta(card) {
  * occurrence is an incident, not a pattern, and calling it one teaches a
  * student to distrust the label.
  */
-export function repeatOffenders(cards = [], { min = 2 } = {}) {
+export function repeatOffenders(cards = [], { min = 2, attempts } = {}) {
     const groups = new Map();
     for (const card of cards) {
         const { criterion } = mistakeMeta(card);
@@ -217,12 +338,12 @@ export function repeatOffenders(cards = [], { min = 2 } = {}) {
             subjects: [...g.subjects],
             // Fixed only when EVERY instance is. One outstanding copy of a
             // repeated mistake is still a mistake you are making.
-            fixed: g.cards.every((c) => fixState(c) === "fixed"),
+            fixed: g.cards.every((c) => fixState(c, attempts) === "fixed"),
             // How many are still open, so a partly-fixed repeat says so. "3×"
             // on a criterion the student has already nailed twice is history
             // reported as news, and it is the same error `fixState` refuses to
             // make about a single card.
-            open: g.cards.filter((c) => fixState(c) !== "fixed").length,
+            open: g.cards.filter((c) => fixState(c, attempts) !== "fixed").length,
         }))
         .sort((a, b) => b.count - a.count || a.criterion.localeCompare(b.criterion));
 }
@@ -242,13 +363,13 @@ export function repeatOffenders(cards = [], { min = 2 } = {}) {
  * no reason to make them wait. So the page passes "due or new", and a bank
  * with five mistakes in it never greets them with "nothing to do today".
  */
-export function bankSummary(cards = [], isReady = () => false) {
+export function bankSummary(cards = [], isReady = () => false, attempts) {
     const mine = cards.filter(isBankCard);
-    const counts = { slipping: 0, new: 0, working: 0, fixed: 0 };
+    const counts = { slipping: 0, new: 0, working: 0, drilled: 0, fixed: 0 };
     const subjects = new Map();
 
     for (const card of mine) {
-        const state = fixState(card);
+        const state = fixState(card, attempts);
         counts[state] += 1;
         const name = card.subject_name || "No subject";
         if (!subjects.has(name)) subjects.set(name, { subject: name, total: 0, fixed: 0, ready: 0 });
@@ -264,8 +385,97 @@ export function bankSummary(cards = [], isReady = () => false) {
         ...counts,
         // Everything that is not yet fixed is still costing marks.
         outstanding: mine.length - counts.fixed,
+        // Rehearsed to the end of the ladder and waiting on one thing: sitting
+        // the question again. Surfaced separately because it is the shortest
+        // path to a number going up that the student has.
+        awaitingRedo: counts.drilled,
         ready: mine.filter(isReady).length,
         subjects: [...subjects.values()].sort((a, b) => b.total - a.total),
-        repeats: repeatOffenders(mine),
+        repeats: repeatOffenders(mine, { min: 2, attempts }),
     };
+}
+
+// ─── Cases: the mistakes from one question, and when it is done with ────────
+
+/**
+ * A CASE is one question and everything you got wrong on it.
+ *
+ * ─── Why the question is the unit ───────────────────────────────────────────
+ * A dropped criterion is the right size to DRILL and the wrong size to
+ * finish on. Three criteria from one question are three cards that rehearse
+ * separately and then have to come back together, because the thing that
+ * proves you have them is the question, whole, marked — not three cards in a
+ * row on a Tuesday.
+ *
+ * So the two levels are honest about different things:
+ *
+ *   A MISTAKE is fixed when it has cleared the ladder AND its own criterion
+ *   was earned on a later sit. That is proof about that one criterion.
+ *
+ *   A CASE is closed when every mistake on it is fixed AND a later sit scored
+ *   FULL MARKS. Full marks is the only evidence that nothing was traded — a
+ *   student can earn the criterion they drilled while dropping a different one
+ *   in the same answer, and calling that finished would be the flattery this
+ *   screen refuses.
+ *
+ * Mistakes with no source question form no case. They are still drilled and
+ * still counted; there is simply nothing to re-sit them in.
+ */
+export function casesFor(cards = [], attempts = [], quizzes = []) {
+    const byQuiz = new Map(quizzes.map((q) => [q.id, q]));
+    const groups = new Map();
+
+    for (const card of cards.filter(isBankCard)) {
+        const meta = mistakeMeta(card);
+        if (!meta.source) continue;
+        const k = `${meta.source.quizId}:${meta.source.qIndex}`;
+        if (!groups.has(k)) {
+            const quiz = byQuiz.get(meta.source.quizId) || null;
+            groups.set(k, {
+                key: k,
+                quizId: meta.source.quizId,
+                qIndex: meta.source.qIndex,
+                quiz,
+                question: quiz?.questions?.[meta.source.qIndex] || null,
+                title: quiz?.title || meta.questionTitle,
+                subject: card.subject_name || quiz?.subject || null,
+                cards: [],
+            });
+        }
+        groups.get(k).cards.push(card);
+    }
+
+    return [...groups.values()].map((g) => {
+        const states = g.cards.map((c) => fixState(c, attempts));
+        const allFixed = states.every((st) => st === "fixed");
+        const full = fullMarksSince(g, attempts);
+        return {
+            ...g,
+            states,
+            total: g.cards.length,
+            fixed: states.filter((st) => st === "fixed").length,
+            // Everything rehearsed, nothing left but sitting it again.
+            readyToRedo: g.cards.length > 0 && states.every((st) => st === "fixed" || st === "drilled"),
+            fullMarks: !!full,
+            closed: allFixed && !!full,
+        };
+    }).sort((a, b) => (a.closed === b.closed ? b.total - a.total : a.closed ? 1 : -1));
+}
+
+/** A later sit of this exact question that scored everything available. */
+function fullMarksSince(group, attempts = []) {
+    const earliest = group.cards.reduce((min, c) => {
+        const t = Date.parse(mistakeMeta(c).bankedAt) || 0;
+        return min === 0 || (t && t < min) ? t : min;
+    }, 0);
+    for (const a of attempts) {
+        if (a?.quiz_id !== group.quizId) continue;
+        const when = Date.parse(a.date || a.created_date || "") || 0;
+        if (when && earliest && when < earliest - DAY) continue;
+        const results = Array.isArray(a?.extra?.question_results) ? a.extra.question_results : [];
+        const r = results.find((x) => x?.q_index === group.qIndex);
+        if (!r || r.marks == null || r.marks_max == null) continue;
+        if (r.marks >= r.marks_max) return { at: a.date || a.created_date || null };
+    }
+    return null;
 }

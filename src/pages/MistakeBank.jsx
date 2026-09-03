@@ -38,13 +38,16 @@ import MarkdownMath from "@/components/shared/MarkdownMath";
 import AceBody from "@/components/ace/AceBody";
 import { isDue, isNew } from "@/lib/due";
 import { calculateNextReview, reviewPatch, formatIntervalShort, RATINGS } from "@/lib/sm2";
-import { BANK_TOPIC, bankSummary, fixState, mistakeMeta } from "@/lib/mistakeBank";
+import { BANK_TOPIC, bankSummary, fixState, mistakeMeta, casesFor } from "@/lib/mistakeBank";
+import { redoQueue } from "@/lib/quizInsight";
+import QuizPlayer from "@/components/quizzes/QuizPlayer";
 import { drillFor, suggestRating } from "@/lib/drill";
 import ClozeDrill from "@/components/mistakes/ClozeDrill";
 import CommandTermPanel from "@/components/quizzes/CommandTermPanel";
-import ProduceDrill from "@/components/mistakes/ProduceDrill";
+import RepairDrill from "@/components/mistakes/RepairDrill";
+import SpotDrill from "@/components/mistakes/SpotDrill";
 import {
-    Play, RotateCcw, Check, X, Repeat, ArrowLeft, Inbox, ChevronDown, Sparkles,
+    Play, RotateCcw, Check, X, Repeat, ArrowLeft, Inbox, ChevronDown, Sparkles, Bookmark,
 } from "lucide-react";
 
 /**
@@ -61,10 +64,12 @@ const STATE = {
         blurb: "Banked, but you have not been asked about them yet." },
     working:  { label: "Coming back",            chip: "bg-xp", text: "text-xp", ring: "border-xp/30", bar: "bg-xp",
         blurb: "Recalled at least once. Not yet on a long enough schedule to call fixed." },
+    drilled:  { label: "Rehearsed — sit it again", chip: "bg-chart-3", text: "text-chart-3", ring: "border-chart-3/30", bar: "bg-chart-3",
+        blurb: "You can recall it on a card. The question it came from is the last step." },
     fixed:    { label: "Fixed",                  chip: "bg-primary", text: "text-primary", ring: "border-primary/30", bar: "bg-primary",
-        blurb: "Two clean recalls and a schedule a week out or longer." },
+        blurb: "Rehearsed, and earned again on the question it was dropped in." },
 };
-const ORDER = ["slipping", "new", "working", "fixed"];
+const ORDER = ["slipping", "new", "working", "drilled", "fixed"];
 
 /** The pile, shrinking. One bar, four segments, in the order above. */
 function FixBar({ summary }) {
@@ -100,10 +105,10 @@ function FixBar({ summary }) {
 }
 
 /** One mistake, as a row. The criterion IS the headline — it is what was wanted. */
-function MistakeRow({ card, index }) {
+function MistakeRow({ card, index, attempts }) {
     const [open, setOpen] = useState(false);
     const reduce = useReducedMotion();
-    const state = fixState(card);
+    const state = fixState(card, attempts);
     const meta = mistakeMeta(card);
     const s = STATE[state];
 
@@ -179,10 +184,12 @@ function MistakeRow({ card, index }) {
 const STAGE_BADGE = {
     recognise: { label: "First look", cls: "bg-secondary text-muted-foreground",
         blurb: "Read what scores, then rate how well you knew it." },
+    spot:      { label: "Spot it", cls: "bg-streak/15 text-streak",
+        blurb: "Your own sentence. Find the words that cost the mark." },
     cloze:     { label: "Fill the gaps", cls: "bg-xp/15 text-xp",
         blurb: "You have seen this one. Put the words back." },
-    produce:   { label: "From scratch", cls: "bg-primary/15 text-primary",
-        blurb: "No wording to lean on. Write what would earn the mark." },
+    repair:    { label: "Fix it", cls: "bg-primary/15 text-primary",
+        blurb: "Write the version that would have scored." },
 };
 
 function Runner({ queue, onGraded, onDone }) {
@@ -283,9 +290,14 @@ function Runner({ queue, onGraded, onDone }) {
                         onGraded={(g) => setSuggested(suggestRating(g))} />
                 )}
 
-                {drill.stage === "produce" && (
-                    <ProduceDrill key={card.id} card={card} criterion={drill.criterion}
-                        onMarked={(rating) => setSuggested(rating ?? 3)} />
+                {drill.stage === "spot" && (
+                    <SpotDrill key={card.id} spot={drill.spot} criterion={meta.criterion}
+                        onGraded={(g) => setSuggested(suggestRating(g))} />
+                )}
+
+                {drill.stage === "repair" && (
+                    <RepairDrill key={card.id} card={card} criterion={drill.criterion}
+                        quote={drill.quote} onMarked={(rating) => setSuggested(rating ?? 3)} />
                 )}
             </div>
 
@@ -326,9 +338,14 @@ export default function MistakeBank() {
     // quiz rail because it is a diagnosis, and this is the diagnosis screen —
     // see CommandTermPanel.
     const [attempts, setAttempts] = useState([]);
+    // The quizzes the mistakes came from, so a case can be re-sat where it
+    // happened rather than merely named.
+    const [quizzes, setQuizzes] = useState([]);
     const [loading, setLoading] = useState(true);
     const [filter, setFilter] = useState("all");
+    const [tab, setTab] = useState("fix");
     const [queue, setQueue] = useState(null);
+    const [redoing, setRedoing] = useState(null);
     const [result, setResult] = useState(null);
     // Grades already sent, so a card graded in one run is not re-sent if the
     // student starts another before the reload lands.
@@ -337,17 +354,20 @@ export default function MistakeBank() {
     const load = useCallback(async () => {
         try {
             const user = await base44.auth.me();
-            // Two independent reads, so the second does not wait on the first.
-            // The attempts are only for the verb panel: it fails on its own
-            // and the bank still loads.
-            const [rows, attemptRows] = await Promise.all([
+            // Three independent reads, none waiting on another. The bank is
+            // the only one that must succeed: attempts drive the verb panel
+            // and the redo gate, quizzes drive the redo tab, and each fails on
+            // its own without taking the page with it.
+            const [rows, attemptRows, quizRows] = await Promise.all([
                 base44.entities.Flashcard.filter({
                     created_by: user.email, topic: BANK_TOPIC, is_active: true,
                 }),
                 base44.entities.QuizAttempt.filter({ created_by: user.email }).catch(() => []),
+                base44.entities.Quiz.filter({ created_by: user.email }).catch(() => []),
             ]);
             setCards(rows || []);
             setAttempts(attemptRows || []);
+            setQuizzes(quizRows || []);
         } catch {
             setCards([]);
         } finally { setLoading(false); }
@@ -360,15 +380,58 @@ export default function MistakeBank() {
     // and making them wait a day is the dead end this screen exists to avoid.
     // See bankSummary's note on ready vs due.
     const isReady = useCallback((c) => isDue(c) || isNew(c), []);
-    const summary = useMemo(() => bankSummary(cards, isReady), [cards, isReady]);
+    // ATTEMPTS ARE PASSED EVERYWHERE A STATE IS READ. Without them fixState
+    // reports the ladder alone, which is what this whole change exists to stop
+    // being called "fixed" — and two screens disagreeing about one card is
+    // worse than either answer.
+    const summary = useMemo(
+        () => bankSummary(cards, isReady, attempts), [cards, isReady, attempts]);
+
+    const cases = useMemo(
+        () => casesFor(cards, attempts, quizzes), [cards, attempts, quizzes]);
+
+    // Whole questions to sit again. Derived, never stored — see redoQueue.
+    const redo = useMemo(
+        () => redoQueue(quizzes, attempts, cards), [quizzes, attempts, cards]);
+
+    // Grouped by quiz, because a re-sit is played through the quiz it belongs
+    // to: one attempt row, one set of question indices that mean what they say.
+    const redoByQuiz = useMemo(() => {
+        const groups = new Map();
+        for (const row of redo) {
+            if (!groups.has(row.quizId)) {
+                groups.set(row.quizId, { quiz: row.quiz, title: row.title, subject: row.subject, rows: [] });
+            }
+            groups.get(row.quizId).rows.push(row);
+        }
+        return [...groups.values()].sort((a, b) => b.rows.length - a.rows.length);
+    }, [redo]);
 
     const shown = useMemo(() => {
-        const list = filter === "all" ? summary.cards : summary.cards.filter((c) => fixState(c) === filter);
+        const list = filter === "all"
+            ? summary.cards
+            : summary.cards.filter((c) => fixState(c, attempts) === filter);
         // Within a filter, the ones still going wrong first. Same rule as the
         // sections: the work before the wins.
-        const rank = { slipping: 0, new: 1, working: 2, fixed: 3 };
-        return [...list].sort((a, b) => rank[fixState(a)] - rank[fixState(b)]);
-    }, [summary, filter]);
+        const rank = { slipping: 0, new: 1, working: 2, drilled: 3, fixed: 4 };
+        return [...list].sort((a, b) => rank[fixState(a, attempts)] - rank[fixState(b, attempts)]);
+    }, [summary, filter, attempts]);
+
+    /**
+     * Sit one quiz's flagged questions again.
+     *
+     * Through the retry path the player already has: `_isRetry` keeps it out
+     * of the score averages (a subset of your hardest questions is not the
+     * quiz) and `_sourceIndex` makes each result record against its position
+     * in the PARENT quiz — which is exactly what the redo gate reads back.
+     */
+    const startRedo = (group) => {
+        const questions = group.rows
+            .map((r) => ({ ...r.question, _sourceIndex: r.qIndex }))
+            .filter((q) => q.question);
+        if (!questions.length) return;
+        setRedoing({ ...group.quiz, _isRetry: true, title: `${group.title} — redo`, questions });
+    };
 
     /**
      * One graded card, written through the shared scheduler.
@@ -434,6 +497,16 @@ export default function MistakeBank() {
         );
     }
 
+    // A re-sit takes the whole screen. It is a quiz, not a panel, and the
+    // player is the same one the Quizzes page mounts — a second implementation
+    // of "answer a question and get it marked" is how two screens start
+    // disagreeing about what a mark is.
+    if (redoing) {
+        return (
+            <QuizPlayer quiz={redoing} onExit={() => { setRedoing(null); load(); }} />
+        );
+    }
+
     // Nothing banked yet. This is a real state and not a failure — it says
     // where mistakes come from rather than apologising for being empty.
     if (summary.total === 0) {
@@ -458,7 +531,7 @@ export default function MistakeBank() {
         );
     }
 
-    const outstanding = summary.cards.filter((c) => fixState(c) !== "fixed");
+    const outstanding = summary.cards.filter((c) => fixState(c, attempts) !== "fixed");
     const readyNow = summary.cards.filter(isReady);
 
     return (
@@ -479,6 +552,30 @@ export default function MistakeBank() {
                 </p>
             </div>
 
+            {/* TWO KINDS OF WORK, AND THEY ARE NOT THE SAME SIZE.
+                A dropped criterion is a phrase you can drill in thirty
+                seconds and rehearse on a schedule. A whole question is a SIT.
+                They used to share one list, which meant one ladder and one
+                definition of "fixed" for both, and the ladder that suits a
+                phrase suits neither. Fix is the drilling; Redo is the proving.
+                The tab reads the count so a student can see there is something
+                waiting behind it without opening it. */}
+            <div className="inline-flex rounded-2xl bg-surface border-2 border-border shadow-soft p-1.5 gap-1">
+                {[["fix", "Fix", Bookmark, summary.outstanding],
+                  ["redo", "Sit again", RotateCcw, redo.length]].map(([k, label, Icon, n]) => (
+                    <button key={k} type="button" onClick={() => setTab(k)}
+                        className={`flex items-center gap-1.5 py-2 px-3.5 rounded-xl text-sm font-bold transition-colors ${
+                            tab === k ? "bg-foreground text-background" : "text-muted-foreground hover:text-foreground"}`}>
+                        <Icon className="w-3.5 h-3.5" /> {label}
+                        {n > 0 && <span className="tabular-nums opacity-70">{n}</span>}
+                    </button>
+                ))}
+            </div>
+
+            {tab === "redo" ? (
+                <RedoTab groups={redoByQuiz} cases={cases} onSit={startRedo} />
+            ) : (
+            <>
             <div className="card-soft on-table border-2 border-border p-4 space-y-4">
                 <FixBar summary={summary} />
 
@@ -582,16 +679,113 @@ export default function MistakeBank() {
                 </div>
             ) : (
                 <ul className="space-y-2">
-                    {shown.map((c, i) => <MistakeRow key={c.id} card={c} index={i} />)}
+                    {shown.map((c, i) => <MistakeRow key={c.id} card={c} index={i} attempts={attempts} />)}
                 </ul>
             )}
+            </>
+            )}
 
-            <p className="text-[11px] text-muted-foreground leading-snug">
-                These are ordinary flashcards on the same schedule as the rest of your decks — they
-                also show up in <Link to={createPageUrl("Study?tab=spaced_repetition")}
-                    className="underline hover:text-foreground">Spaced Repetition</Link>. Fixed means two
-                clean recalls and a schedule a week out or longer.
+            {tab === "fix" && (
+                <p className="text-[11px] text-muted-foreground leading-snug">
+                    These are ordinary flashcards on the same schedule as the rest of your decks — they
+                    also show up in <Link to={createPageUrl("Study?tab=spaced_repetition")}
+                        className="underline hover:text-foreground">Spaced Repetition</Link>. Fixed means
+                    you can recall it AND you earned it again on the question you dropped it in.
+                </p>
+            )}
+        </div>
+    );
+}
+
+/**
+ * The re-sit list.
+ *
+ * ─── Why a question is not a card ───────────────────────────────────────────
+ * Everything on the Fix tab is small enough to rehearse: a criterion, a phrase,
+ * a wording. This tab is the other size of mistake, and it gets the other kind
+ * of treatment — you do not drill a whole exam question, you sit it. Nothing
+ * here is stored: which questions need re-sitting is a fact about the attempt
+ * history, so it cannot go stale and cannot disagree with the marks it came
+ * from.
+ *
+ * ─── Both halves of "why" are shown ─────────────────────────────────────────
+ * A question is here because you have missed it more than once, or because you
+ * are carrying banked mistakes on it that have never been earned back. The
+ * second is the one that closes the loop: the drill ladder ends at "sit it
+ * again", and this is where that happens.
+ */
+function RedoTab({ groups, cases, onSit }) {
+    const closed = cases.filter((c) => c.closed);
+
+    if (!groups.length) {
+        return (
+            <div className="card-soft border-2 border-border p-6 text-center">
+                <AceBody pose="think" className="w-20 h-20 mx-auto" />
+                <p className="text-sm font-bold text-foreground mt-2">Nothing to sit again.</p>
+                <p className="text-xs text-muted-foreground leading-snug mt-1 max-w-sm mx-auto">
+                    A question lands here when you have missed it more than once, or when you are
+                    carrying marks from it that you have not earned back yet.
+                </p>
+                {closed.length > 0 && (
+                    <p className="text-[11px] text-primary font-bold mt-3">
+                        {closed.length} question{closed.length === 1 ? "" : "s"} closed out for full marks.
+                    </p>
+                )}
+            </div>
+        );
+    }
+
+    return (
+        <div className="space-y-3">
+            <p className="text-sm text-muted-foreground leading-snug">
+                Sitting the question again is the last step. A mistake counts as fixed when you can
+                recall it <span className="font-bold text-foreground">and</span> you earn it back
+                here; the question is done with when the whole thing comes out at full marks.
             </p>
+
+            {groups.map((g) => (
+                <div key={g.quiz?.id || g.title} className="card-soft border-2 border-border p-4">
+                    <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                            <p className="text-sm font-black text-foreground truncate">{g.title}</p>
+                            <p className="text-[11px] text-muted-foreground">
+                                {g.subject ? `${g.subject} · ` : ""}
+                                {g.rows.length} question{g.rows.length === 1 ? "" : "s"} to sit again
+                            </p>
+                        </div>
+                        <Button size="sm" onClick={() => onSit(g)}
+                            className="btn-3d bg-primary hover:bg-primary text-primary-foreground rounded-xl gap-1.5 flex-shrink-0">
+                            <Play className="w-3.5 h-3.5" /> Sit {g.rows.length}
+                        </Button>
+                    </div>
+
+                    <ul className="space-y-2 mt-3">
+                        {g.rows.map((r) => (
+                            <li key={r.key} className="rounded-xl border border-border p-2.5">
+                                <MarkdownMath className="text-xs font-bold text-foreground leading-snug line-clamp-2">
+                                    {r.question.question}
+                                </MarkdownMath>
+                                <p className="flex flex-wrap items-center gap-x-2 text-[11px] text-muted-foreground mt-1">
+                                    {r.reasons.map((why, i) => (
+                                        <span key={i} className="inline-flex items-center gap-1">
+                                            {why.kind === "missed"
+                                                ? <><X className="w-3 h-3 text-streak" />missed {why.missed} of {why.seen}</>
+                                                : <><Bookmark className="w-3 h-3 text-chart-3" />{why.count} banked mark{why.count === 1 ? "" : "s"} to earn back</>}
+                                        </span>
+                                    ))}
+                                </p>
+                            </li>
+                        ))}
+                    </ul>
+                </div>
+            ))}
+
+            {closed.length > 0 && (
+                <p className="text-[11px] text-primary font-bold flex items-center gap-1.5">
+                    <Check className="w-3.5 h-3.5" />
+                    {closed.length} question{closed.length === 1 ? "" : "s"} already closed out for full marks.
+                </p>
+            )}
         </div>
     );
 }

@@ -12,6 +12,7 @@ import assert from "node:assert/strict";
 import {
     cardFromModule, isBankCard, bankKey, BANK_TOPIC,
     fixState, mistakeMeta, repeatOffenders, bankSummary,
+    ladderDone, clearedBy, casesFor,
 } from "@/lib/mistakeBank";
 
 let passed = 0;
@@ -228,6 +229,163 @@ check("a banked card carries its provenance and lands in ONE deck", () => {
     assert.equal(c.unit, BANK_TOPIC);
     assert.equal(cardFromModule(UNQUOTED, {}).unit, BANK_TOPIC);
     assert.equal(fixState(c), "new");
+});
+
+
+// ─── The redo gate ──────────────────────────────────────────────────────────
+//
+// Rehearsal measures whether a student can RECALL what the assessor wanted, on
+// a card, after being reminded four times. A SAC does not ask that. These
+// assertions exist to stop the ladder alone being reported as "fixed", which
+// is the flattery the whole screen is built to refuse — and, just as
+// importantly, to stop the opposite: a card banked before the gate existed
+// being held one rung short of done forever for a reason its owner cannot see.
+
+const DAY = 86400000;
+const ago = (d) => new Date(Date.now() - d * DAY).toISOString().slice(0, 10);
+
+const DRILLED = (over = {}) => ({
+    id: "d1",
+    topic: BANK_TOPIC,
+    consecutive_good: 3,
+    interval_days: 12,
+    last_quality: 4,
+    review_count_good: 3,
+    subject_name: "Legal Studies",
+    extra: { mistake: {
+        kind: "criterion",
+        criterion: "Explicit reference to access to justice",
+        quote: "people can use the courts",
+        wanted: "the principle of access to justice",
+        source: { quiz_id: "q1", q_index: 2 },
+        banked_at: new Date(Date.now() - 20 * DAY).toISOString(),
+        lost: true,
+    } },
+    ...over,
+});
+
+const SIT = (over = {}) => ({
+    quiz_id: "q1", date: ago(2),
+    extra: { question_results: [{
+        q_index: 2, marks: 4, marks_max: 6,
+        criteria: [{ text: "Explicit reference to access to justice", got: true }],
+    }] },
+    ...over,
+});
+
+check("the ladder alone is not fixed once a redo is possible", () => {
+    assert.ok(ladderDone(DRILLED()), "fixture must have cleared the ladder");
+    assert.equal(fixState(DRILLED(), []), "drilled");
+});
+
+check("earning the criterion again on the real question is what fixes it", () => {
+    assert.equal(fixState(DRILLED(), [SIT()]), "fixed");
+});
+
+check("an attempt from BEFORE the mistake was banked proves nothing", () => {
+    // It is the attempt the mistake came from, or one older still.
+    assert.equal(fixState(DRILLED(), [SIT({ date: ago(40) })]), "drilled");
+});
+
+check("dropping the criterion again on the re-sit is not a fix", () => {
+    const missed = SIT({ extra: { question_results: [{
+        q_index: 2, marks: 2, marks_max: 6,
+        criteria: [{ text: "Explicit reference to access to justice", got: false }],
+    }] } });
+    assert.equal(fixState(DRILLED(), [missed]), "drilled");
+});
+
+check("a different question on the same quiz is not evidence", () => {
+    const elsewhere = SIT({ extra: { question_results: [{
+        q_index: 5, marks: 6, marks_max: 6,
+        criteria: [{ text: "Explicit reference to access to justice", got: true }],
+    }] } });
+    assert.equal(fixState(DRILLED(), [elsewhere]), "drilled");
+});
+
+check("a reworded criterion still matches, if it says the same thing", () => {
+    // The model writes the criteria afresh every marking, so requiring an
+    // exact string would mean nothing ever cleared.
+    const reworded = SIT({ extra: { question_results: [{
+        q_index: 2, marks: 5, marks_max: 6,
+        criteria: [{ text: "Makes explicit reference to access to justice in the response", got: true }],
+    }] } });
+    assert.ok(clearedBy(DRILLED(), [reworded]));
+});
+
+check("a criterion that merely shares a few words does NOT match", () => {
+    // Crediting the wrong fix is the one error this screen exists to refuse.
+    const other = SIT({ extra: { question_results: [{
+        q_index: 2, marks: 5, marks_max: 6,
+        criteria: [{ text: "Reference to a case", got: true }],
+    }] } });
+    assert.equal(clearedBy(DRILLED(), [other]), null);
+});
+
+check("a card banked before the gate existed is not held hostage by it", () => {
+    // No source means no question to re-sit. Reporting it as "drilled" forever
+    // would mark a student down for WHEN they banked something.
+    const legacy = DRILLED({ extra: { mistake: {
+        criterion: "Names the transfer", banked_at: new Date().toISOString(),
+    } } });
+    assert.equal(fixState(legacy, []), "fixed");
+});
+
+check("with no attempt history at all, the ladder stands", () => {
+    // A caller that never loaded attempts must behave as it did before the
+    // gate existed rather than reporting everything as unfinished.
+    assert.equal(fixState(DRILLED()), "fixed");
+    assert.equal(fixState(DRILLED(), undefined), "fixed");
+});
+
+// ─── Cases ──────────────────────────────────────────────────────────────────
+
+const QUIZ = { id: "q1", title: "Legal — Remedies", subject: "Legal Studies",
+    questions: [{}, {}, { question: "Explain access to justice." }] };
+
+check("a case gathers the mistakes from one question", () => {
+    const other = DRILLED({ id: "d2", extra: { mistake: {
+        ...DRILLED().extra.mistake, criterion: "Names the principle of fairness",
+    } } });
+    const [c] = casesFor([DRILLED(), other], [SIT()], [QUIZ]);
+    assert.equal(c.total, 2);
+    assert.equal(c.quizId, "q1");
+    assert.equal(c.qIndex, 2);
+    assert.equal(c.title, "Legal — Remedies");
+});
+
+check("a case is CLOSED only on full marks, not on every mistake fixed", () => {
+    // A student can earn the criterion they drilled and drop a different one
+    // in the same answer. Calling that finished is the trade this refuses.
+    const [partial] = casesFor([DRILLED()], [SIT()], [QUIZ]);
+    assert.equal(partial.fixed, 1, "the mistake itself is fixed");
+    assert.equal(partial.fullMarks, false);
+    assert.equal(partial.closed, false);
+
+    const [full] = casesFor([DRILLED()], [SIT({ extra: { question_results: [{
+        q_index: 2, marks: 6, marks_max: 6,
+        criteria: [{ text: "Explicit reference to access to justice", got: true }],
+    }] } })], [QUIZ]);
+    assert.equal(full.closed, true);
+});
+
+check("a case with everything rehearsed says it is ready to re-sit", () => {
+    const [c] = casesFor([DRILLED()], [], [QUIZ]);
+    assert.ok(c.readyToRedo, "the one thing left is sitting the question");
+    assert.equal(c.closed, false);
+});
+
+check("mistakes with no source question form no case", () => {
+    const loose = DRILLED({ extra: { mistake: { criterion: "Something" } } });
+    assert.equal(casesFor([loose], [], [QUIZ]).length, 0);
+});
+
+check("the summary counts what is waiting on a re-sit", () => {
+    const sum = bankSummary([DRILLED()], () => false, []);
+    assert.equal(sum.drilled, 1);
+    assert.equal(sum.awaitingRedo, 1);
+    assert.equal(sum.fixed, 0);
+    assert.equal(sum.outstanding, 1);
 });
 
 console.log(`\n${passed} passed`);

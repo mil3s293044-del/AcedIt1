@@ -17,11 +17,23 @@
  *              is nothing to retrieve yet — they have not been told the answer
  *              once. Asking somebody to produce a wording nobody has shown
  *              them is a test, not a drill.
- *   CLOZE      once they have seen it. The model wording with the load-bearing
- *              terms removed, and those same terms as the word bank. Cheap,
- *              fast, and it targets precisely the words the criterion turns on.
- *   PRODUCE    once they can fill it in. The criterion alone, and a box. This
- *              is the one that transfers to a SAC, because a SAC is a box.
+ *   SPOT       their own sentence, with the words that cost the mark to be
+ *              found in it. The first rung that asks for a JUDGEMENT rather
+ *              than a memory, and it is the one that generalises: a student
+ *              who can see the weak phrase in their own writing catches the
+ *              next one before it is marked.
+ *   CLOZE      the model wording with the load-bearing terms removed, and
+ *              those same terms as the word bank. Cheap, fast, and it targets
+ *              precisely the words the criterion turns on.
+ *   REPAIR     their sentence, editable, rewritten so it would score — marked
+ *              against that one criterion. Production, but anchored to what
+ *              they actually wrote, which is a smaller and fairer ask than a
+ *              blank box and teaches the edit rather than a replacement text.
+ *   REDO       the whole question again, in the quiz, marked. Not a rung on
+ *              this ladder — it is the GATE past it, and it lives in
+ *              mistakeBank's `clearedBy` because it is evidence rather than
+ *              rehearsal. Nothing here can prove a mistake is gone; only
+ *              writing the answer again can.
  *
  * Expanding retrieval plus the generation effect, on the app's own schedule —
  * the stage is read off `repetitions`, which SM-2 already maintains, so
@@ -35,11 +47,12 @@
  * back a rung. Every function here returns null instead of degrading.
  */
 
-export const STAGES = ["recognise", "cloze", "produce"];
+export const STAGES = ["recognise", "spot", "cloze", "repair"];
 
 /** Correct recalls before the rung goes up. */
-const CLOZE_AFTER = 1;
-const PRODUCE_AFTER = 3;
+const SPOT_AFTER = 1;
+const CLOZE_AFTER = 2;
+const REPAIR_AFTER = 4;
 
 // Blanking one of these teaches nothing and reads as a bug.
 const STOP = new Set(`a an the and or but of to in on at by for with from as is are was were
@@ -60,8 +73,9 @@ const norm = (s) => String(s || "").toLowerCase().replace(/[^a-z0-9\s-]/g, " ");
  */
 export function drillStage(card) {
     const reps = Number(card?.repetitions) || 0;
-    if (reps >= PRODUCE_AFTER) return "produce";
+    if (reps >= REPAIR_AFTER) return "repair";
     if (reps >= CLOZE_AFTER) return "cloze";
+    if (reps >= SPOT_AFTER) return "spot";
     return "recognise";
 }
 
@@ -188,6 +202,102 @@ export function gradeCloze(cloze, filled = []) {
     return { each, right, total: cloze.answers.length, allRight: right === cloze.answers.length };
 }
 
+// ─── Spot the error ─────────────────────────────────────────────────────────
+
+/**
+ * Their own sentence, with the words that cost the mark marked as the target.
+ *
+ * ─── Where the target comes from ────────────────────────────────────────────
+ * A word-level DIFF between what they wrote and what would have scored. The
+ * marker already returns both — the quoted phrase and the replacement — and
+ * the words present in one and absent from the other are, precisely, the
+ * words the mark turned on. Nothing is generated and nothing is guessed: if
+ * the two wordings share everything or share nothing, there is no diff worth
+ * tapping and the rung is not built.
+ *
+ * ─── Why tapping rather than reading ────────────────────────────────────────
+ * Being shown the weak phrase is recognition; FINDING it is the judgement a
+ * student has to make while writing, when nobody has underlined anything yet.
+ * It is also the only rung that works on the student's own words rather than
+ * on a model answer, which is what makes it transfer.
+ *
+ * Returns tokens rather than a marked-up string so the renderer never parses:
+ * `{ words: [{ text, index, wrong }], targets, wanted }`.
+ */
+export function buildSpot(card, { minTargets = 1, maxTargets = 4 } = {}) {
+    const quote = String(card?.extra?.mistake?.quote || "").trim();
+    const wanted = String(card?.extra?.mistake?.wanted || "").trim();
+    if (!quote || !wanted) return null;
+
+    // Split on whitespace but KEEP the original tokens, punctuation and all —
+    // a student taps the word as they wrote it, not a normalised copy of it.
+    const raw = quote.split(/(\s+)/).filter((t) => t !== "");
+    const wantedSet = new Set(norm(wanted).split(/\s+/).filter(Boolean));
+
+    const words = [];
+    let i = 0;
+    for (const tok of raw) {
+        if (/^\s+$/.test(tok)) { words.push({ text: tok, space: true }); continue; }
+        const n = norm(tok).trim();
+        // A word is a candidate when it is theirs alone AND carries meaning. A
+        // stopword that happens to differ is a grammatical accident of two
+        // phrasings, and asking somebody to tap "the" teaches them that the
+        // exercise is noise.
+        const wrong = !!n && !wantedSet.has(n) && !STOP.has(n) && n.length >= 3;
+        words.push({ text: tok, index: i++, wrong, weight: n.length });
+    }
+
+    // THE FOUR MOST LOAD-BEARING, not everything that differs. A casual
+    // sentence compared against a tight model phrase differs almost
+    // everywhere — "the situation was unfair to Mary because she got less
+    // money" against "equality is undermined because like cases are not
+    // treated alike" flags six of eight words, which is not a drill, it is
+    // "your sentence is wrong". Longest-first is the same proxy for
+    // technical weight that `keyTerms` uses on the other rung: "situation"
+    // and "unfair" carry the mistake, "got" and "less" are how English works.
+    const ranked = words.filter((w) => w.wrong).sort((a, b) => b.weight - a.weight);
+    for (const w of ranked.slice(maxTargets)) w.wrong = false;
+
+    const targets = words.filter((w) => w.wrong).length;
+    const tokens = words.filter((w) => !w.space).length;
+    // No differing words: the two wordings say the same thing and there is
+    // nothing to find.
+    if (targets < minTargets) return null;
+    // Too many, PROPORTIONALLY. "Most of this sentence" is not a spot — it is
+    // a rewrite, which is the rung above, and asking a student to tap almost
+    // every word makes tapping every word the right answer. The threshold is a
+    // share of the sentence rather than a count, because three wrong words in
+    // four is the whole sentence and three in twenty is a phrase.
+    if (!tokens || targets / tokens > 0.5) return null;
+
+    return { words, targets, wanted };
+}
+
+/**
+ * Marked on BOTH kinds of miss.
+ *
+ * Tapping every word gets full marks on a scheme that only counts hits, so
+ * false positives count against you exactly as misses do. Otherwise the
+ * winning strategy is to tap everything, and a drill with a winning strategy
+ * that is not "know the answer" teaches the strategy.
+ */
+export function gradeSpot(spot, picked = []) {
+    if (!spot) return null;
+    const chosen = new Set(picked);
+    const targets = spot.words.filter((w) => w.wrong).map((w) => w.index);
+    const hits = targets.filter((i) => chosen.has(i));
+    const falsePositives = [...chosen].filter((i) => !targets.includes(i));
+    const right = Math.max(0, hits.length - falsePositives.length);
+    return {
+        targets,
+        hits,
+        falsePositives,
+        right,
+        total: targets.length,
+        allRight: hits.length === targets.length && falsePositives.length === 0,
+    };
+}
+
 /**
  * The rating a result suggests, on the app's 1–4 scale.
  *
@@ -213,15 +323,25 @@ export function suggestRating({ right, total }) {
  */
 export function drillFor(card) {
     const stage = drillStage(card);
-    if (stage === "cloze") {
-        const cloze = buildCloze(card);
-        return cloze ? { stage: "cloze", cloze } : { stage: "recognise" };
-    }
-    if (stage === "produce") {
-        // Produce needs something to mark against. Without a criterion the
-        // prompt would be "write the answer to the card you cannot see".
+
+    // Each rung falls back to the one below rather than degrading, and the
+    // fallbacks CASCADE: a card with no quote cannot be spotted, and if its
+    // model wording also has nothing worth blanking it cannot be clozed
+    // either, so it lands on recognise. Checking one level down and stopping
+    // would leave a card showing an empty cloze.
+    if (stage === "repair") {
         const criterion = String(card?.extra?.mistake?.criterion || "").trim();
-        return criterion ? { stage: "produce", criterion } : { stage: "recognise" };
+        // Repair needs something to mark against. Without a criterion the
+        // prompt would be "rewrite this to satisfy the thing you cannot see".
+        if (criterion) return { stage: "repair", criterion, quote: String(card?.extra?.mistake?.quote || "").trim() };
+    }
+    if (stage === "repair" || stage === "cloze") {
+        const cloze = buildCloze(card);
+        if (cloze) return { stage: "cloze", cloze };
+    }
+    if (stage !== "recognise") {
+        const spot = buildSpot(card);
+        if (spot) return { stage: "spot", spot };
     }
     return { stage: "recognise" };
 }
