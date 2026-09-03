@@ -41,6 +41,7 @@ import { calculateNextReview, reviewPatch, formatIntervalShort, RATINGS } from "
 import { BANK_TOPIC, bankSummary, fixState, mistakeMeta } from "@/lib/mistakeBank";
 import { drillFor, suggestRating } from "@/lib/drill";
 import ClozeDrill from "@/components/mistakes/ClozeDrill";
+import CommandTermPanel from "@/components/quizzes/CommandTermPanel";
 import ProduceDrill from "@/components/mistakes/ProduceDrill";
 import {
     Play, RotateCcw, Check, X, Repeat, ArrowLeft, Inbox, ChevronDown, Sparkles,
@@ -321,6 +322,10 @@ function Runner({ queue, onGraded, onDone }) {
 export default function MistakeBank() {
     const { toast } = useToast();
     const [cards, setCards] = useState([]);
+    // Quiz attempts, for the command-term breakdown. It moved here from the
+    // quiz rail because it is a diagnosis, and this is the diagnosis screen —
+    // see CommandTermPanel.
+    const [attempts, setAttempts] = useState([]);
     const [loading, setLoading] = useState(true);
     const [filter, setFilter] = useState("all");
     const [queue, setQueue] = useState(null);
@@ -332,10 +337,17 @@ export default function MistakeBank() {
     const load = useCallback(async () => {
         try {
             const user = await base44.auth.me();
-            const rows = await base44.entities.Flashcard.filter({
-                created_by: user.email, topic: BANK_TOPIC, is_active: true,
-            });
+            // Two independent reads, so the second does not wait on the first.
+            // The attempts are only for the verb panel: it fails on its own
+            // and the bank still loads.
+            const [rows, attemptRows] = await Promise.all([
+                base44.entities.Flashcard.filter({
+                    created_by: user.email, topic: BANK_TOPIC, is_active: true,
+                }),
+                base44.entities.QuizAttempt.filter({ created_by: user.email }).catch(() => []),
+            ]);
             setCards(rows || []);
+            setAttempts(attemptRows || []);
         } catch {
             setCards([]);
         } finally { setLoading(false); }
@@ -535,6 +547,13 @@ export default function MistakeBank() {
                     </ul>
                 </div>
             )}
+
+            {/* The verb, under the criteria. Both answer "what is the pattern",
+                one across the marks you dropped and one across the question
+                styles you drop them on, and neither is a next move — which is
+                exactly why they belong on this screen and not on the one you
+                open to sit a quiz. */}
+            <CommandTermPanel attempts={attempts} />
 
             {/* Filters. "All" first, then only the states that exist — a chip
                 reading "Fixed 0" is a filter that leads to an empty screen. */}

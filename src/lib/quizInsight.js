@@ -71,6 +71,39 @@ export const resultsOf = (attempt) => {
 
 export const hasQuestionData = (attempts = []) => attempts.some(a => resultsOf(a).length > 0);
 
+/**
+ * Was this attempt a "wrong only" retry rather than a run at the whole quiz?
+ *
+ * It matters because a retry is a run at the HARD SUBSET. Its score is not
+ * comparable to a score on the full paper, and treating it as the quiz's most
+ * recent result made a student who had just done the right thing — gone back
+ * over the questions they missed — look like their retention had collapsed.
+ * That is what put "Mathematical Methods — wrong only · 0%" at the top of the
+ * fading list: not a decayed quiz, a drill in progress.
+ *
+ * The flag is written on new attempts. Attempts saved before it existed are
+ * recognised by the title the retry path gives them, which is the only trace
+ * they left.
+ */
+export const isRetryAttempt = (a) =>
+    a?.extra?.is_retry === true || / — wrong only$/.test(String(a?.quiz_title || ""));
+
+/** The quiz's own title, with any retry suffix taken back off. */
+export const baseQuizTitle = (t) => String(t || "").replace(/ — wrong only$/, "");
+
+/**
+ * A retry saved BEFORE the player recorded which question of the parent quiz
+ * each result belonged to.
+ *
+ * Its `q_index` counts positions in the subset it was built from — question 5
+ * of the quiz, sat as the only question in a retry, recorded as index 0. Read
+ * back against the parent quiz that attributes the miss to a question the
+ * student may well have got right, and `buildDrillQuestions` then drills that
+ * wrong question. There is no way to recover the mapping after the fact, so
+ * these are skipped rather than half-trusted.
+ */
+export const isLegacyRetry = (a) => isRetryAttempt(a) && a?.extra?.is_retry !== true;
+
 // ─── 1. Where you're losing marks ───────────────────────────────────────────
 
 /**
@@ -87,11 +120,13 @@ export function weakSpots(attempts = [], { minMisses = 2, limit = 8 } = {}) {
         String(a.date || a.created_date || "").localeCompare(String(b.date || b.created_date || "")));
 
     for (const a of ordered) {
+        if (isLegacyRetry(a)) continue;
         for (const r of resultsOf(a)) {
             if (r.is_correct === null || r.is_correct === undefined) continue;   // unmarked
-            const key = `${a.quiz_id || a.quiz_title}::${r.q_index}`;
+            const key = `${a.quiz_id || baseQuizTitle(a.quiz_title)}::${r.q_index}`;
             const prev = byQuestion.get(key) || {
-                key, quizId: a.quiz_id, quizTitle: a.quiz_title, quizCategory: a.quiz_category,
+                key, quizId: a.quiz_id, quizTitle: baseQuizTitle(a.quiz_title),
+                quizCategory: a.quiz_category,
                 qIndex: r.q_index, question: r.question, type: r.type,
                 commandTerm: r.command_term || null, seen: 0, missed: 0, lastCorrect: null,
             };
@@ -193,7 +228,13 @@ const daysBetween = (a, b) => Math.max(0, (b - a) / DAY);
 export function retrievalStrength(quizzes = [], attempts = [], now = Date.now()) {
     const byQuiz = new Map();
     for (const a of attempts) {
-        const key = a.quiz_id || a.quiz_title;
+        // A retry covers only the questions you got wrong, so its score says
+        // nothing about the quiz as a whole and its date is not the last time
+        // you sat the quiz. Counting it did both: it renamed the row to
+        // "… — wrong only" and reported the subset score as the quiz's
+        // retention.
+        if (isRetryAttempt(a)) continue;
+        const key = a.quiz_id || baseQuizTitle(a.quiz_title);
         if (!key) continue;
         if (!byQuiz.has(key)) byQuiz.set(key, []);
         byQuiz.get(key).push(a);
@@ -227,7 +268,8 @@ export function retrievalStrength(quizzes = [], attempts = [], now = Date.now())
         out.push({
             key,
             quizId: latest.quiz_id,
-            title: latest.quiz_title || quizzes.find(q => q.id === latest.quiz_id)?.title || "Untitled quiz",
+            title: quizzes.find(q => q.id === latest.quiz_id)?.title
+                || baseQuizTitle(latest.quiz_title) || "Untitled quiz",
             category: latest.quiz_category,
             lastScore: Math.round(latest.score ?? 0),
             daysSince: Math.round(days),
@@ -238,4 +280,153 @@ export function retrievalStrength(quizzes = [], attempts = [], now = Date.now())
         });
     }
     return out.sort((a, b) => a.strength - b.strength);
+}
+
+// ─── 4. One queue, because a student has one next thing ─────────────────────
+
+/**
+ * What to work on, in order.
+ *
+ * ─── Why this replaced three panels ─────────────────────────────────────────
+ * The rail used to be "Where you're losing marks", "What the verb is costing
+ * you" and "Fading fastest", stacked. Add the mistake bank panel and the
+ * "Next quiz" strip on the same page and a student opening Quizzes was told
+ * four different things to do next, each with its own heading, its own bar
+ * chart and its own idea of what mattered. Four next moves is no next move;
+ * choosing between them is work the app is supposed to have already done.
+ *
+ * So the diagnosis panels moved to /MistakeBank — the screen whose entire job
+ * is "what am I getting wrong, and am I fixing it" — and what stays here is
+ * the one thing this page can act on: a single ordered list, with a button
+ * that plays it.
+ *
+ * ─── The order is by KIND first, and that is deliberate ─────────────────────
+ * A question you have now missed twice is EVIDENCE. A quiz that is fading is
+ * an ESTIMATE off a decay curve fitted to nobody's data, and the panel has
+ * always said so. Blending them into one number would have meant inventing an
+ * exchange rate between the two — how many days of estimated decay equal one
+ * demonstrated miss — and then presenting the result as though it were
+ * measured. Evidence first, estimate second, each sorted by its own measure,
+ * and every row says which it is and why it is there.
+ */
+export function workQueue(quizzes = [], attempts = [], { limit = 6, now = Date.now() } = {}) {
+    const spots = weakSpots(attempts, { limit: 20 });
+    const fading = retrievalStrength(quizzes, attempts, now).filter(f => f.overdue);
+
+    const misses = spots.map(s => ({
+        id: `miss:${s.key}`,
+        kind: "miss",
+        title: s.question,
+        where: s.quizTitle,
+        // The count IS the reason. "Missed 4 of 4" needs no interpreting and
+        // cannot be argued with, which is the whole advantage evidence has
+        // over an estimate.
+        detail: `missed ${s.missed} of ${s.seen}`,
+        term: s.commandTerm?.term || null,
+        quizId: s.quizId,
+        qIndex: s.qIndex,
+        spot: s,
+    }));
+
+    const stale = fading.map(f => ({
+        id: `fade:${f.key}`,
+        kind: "fade",
+        title: f.title,
+        where: null,
+        detail: `${f.lastScore}% · ${f.daysSince === 0 ? "today" : `${f.daysSince}d ago`}`,
+        quizId: f.quizId,
+        strength: f.strength,
+        fade: f,
+    }));
+
+    return {
+        rows: [...misses, ...stale].slice(0, limit),
+        misses,
+        stale,
+        total: misses.length + stale.length,
+    };
+}
+
+// ─── 5. A repeated miss banks itself ────────────────────────────────────────
+
+/**
+ * Bank rows for questions the student keeps getting wrong.
+ *
+ * ─── Why automatically ──────────────────────────────────────────────────────
+ * Banking used to need a press: mark a quiz, read the criteria, press save on
+ * each mark you want back. That is the right shape for a nuanced mark — the
+ * student is choosing which of five criteria is worth rehearsing — but it is
+ * the wrong shape for a whole question they have now missed TWICE. There is
+ * nothing to judge there. The evidence is unambiguous, the app noticed it, and
+ * leaving it in a list to be pressed meant the clearest mistakes a student
+ * makes were the ones least likely to end up somewhere they came back.
+ *
+ * ─── It is the same card as a hand-banked one ───────────────────────────────
+ * Same topic, same unit, same `extra.mistake` shape, so it reviews through the
+ * same SM-2 ladder, counts in the same summary and groups by criterion with
+ * everything else. A second kind of banked mistake would be a second scheduler
+ * and a second review screen, which is the thing `mistakeBank.js` opens by
+ * refusing to build.
+ *
+ * ─── Never invents a back ───────────────────────────────────────────────────
+ * A card needs an answer that would actually score. An MCQ has one (the
+ * correct option, plus any explanation); a short-answer question has one only
+ * if the quiz carries a model answer or an explanation. Where there is
+ * neither, no card is made — a card whose back reads "the correct answer" is
+ * worse than the student never seeing it, because it takes a real mistake and
+ * spends it on nothing.
+ */
+export function autoBankRows(spots = [], quizzes = [], existing = [], { topic, unit } = {}) {
+    const byId = new Map(quizzes.map(q => [q.id, q]));
+    // Already banked, by the source key written below. Keyed on the QUESTION,
+    // not on its wording: a quiz edited to reword a stem must not re-bank a
+    // mistake the student has been working on for a fortnight.
+    const have = new Set(
+        existing.map(c => c?.extra?.mistake?.source).filter(Boolean));
+
+    const rows = [];
+    for (const s of spots) {
+        const source = `quiz:${s.quizId}:${s.qIndex}`;
+        if (!s.quizId || have.has(source)) continue;
+        const quiz = byId.get(s.quizId);
+        const q = quiz?.questions?.[s.qIndex];
+        if (!q) continue;
+
+        const back = q.type === "mcq"
+            ? [Array.isArray(q.options) ? q.options[q.correct_answer] : null, q.explanation]
+                .filter(Boolean).join("\n\n")
+            : [q.model_answer, q.explanation].filter(Boolean).join("\n\n");
+        if (!String(back || "").trim()) continue;
+
+        rows.push({
+            subject_name: quiz.subject || null,
+            topic, unit,
+            question: String(q.question || s.question || "").trim(),
+            answer: back,
+            is_active: true,
+            // Missed twice is a demonstrated weak spot by definition, so it
+            // enters the schedule as one rather than queueing behind material
+            // the student has never got wrong.
+            is_weak_spot: true,
+            extra: {
+                mistake: {
+                    // The criterion IS the question here. There is no marked
+                    // criterion to group on — the student got the whole thing
+                    // wrong — and grouping needs something stable, so the
+                    // question stands for itself.
+                    criterion: String(q.question || s.question || "").trim().slice(0, 200),
+                    quote: "",
+                    question_title: s.quizTitle || quiz.title || "",
+                    cost: 0,
+                    lost: true,
+                    source,
+                    auto: true,
+                    missed: s.missed,
+                    seen: s.seen,
+                    banked_at: new Date().toISOString(),
+                },
+            },
+        });
+    }
+    return rows;
 }

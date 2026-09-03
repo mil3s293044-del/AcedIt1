@@ -1,3 +1,22 @@
+/**
+ * DailyMissions — three rotating daily objectives that pay real XP.
+ *
+ * ⚠ CURRENTLY NOT MOUNTED ANYWHERE. It was on Ranked's "My profile" tab and
+ * came off in the 2026-09 profile rebuild, which cut that tab back to the
+ * player card, the standing, XP/level and the achievements catalogue.
+ *
+ * It is kept rather than deleted because it is NOT dead display code: `claim`
+ * calls `awardXP` on the server, so this component is the only surface where
+ * mission XP can be claimed at all. Deleting it would quietly remove a payout
+ * from the economy, which is a product decision rather than a tidy-up.
+ *
+ * Two things worth knowing before rehoming it. The three missions are drawn at
+ * random and stored in `localStorage`, so they are per-browser and a student
+ * on two devices gets two different sets; and the Dashboard, the obvious new
+ * home, is deliberately kept to one question ("what do I do right now"), so
+ * dropping a second daily checklist on it needs a decision about which one
+ * leads rather than just an import.
+ */
 import React, { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Progress } from "@/components/ui/progress";

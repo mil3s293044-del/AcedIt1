@@ -120,4 +120,27 @@ check("an attempt with no usable score does not drag the average", () => {
     assert.equal(s.avgScore, 80, "and only one of them can be scored");
 });
 
+// ─── a retry is not a sit ───────────────────────────────────────────────────
+
+check("a retry does not decide what is left to fix", () => {
+    // The retry's answers are keyed by ITS positions, so reading them against
+    // the parent quiz compares each answer to the wrong question. Before this
+    // was fixed, one press of "retry the wrong ones" made every number on the
+    // deck face arbitrary from then on.
+    const quiz = { id: "q", questions: [
+        { type: "mcq", correct_answer: 0 },
+        { type: "mcq", correct_answer: 1 },
+        { type: "mcq", correct_answer: 2 },
+    ] };
+    const sit = { quiz_id: "q", score: 33, created_date: "2026-01-01",
+        user_answers: { 0: 0, 1: 0, 2: 0 } };            // got 1 and 2 wrong
+    const retry = { quiz_id: "q", score: 100, created_date: "2026-01-09",
+        quiz_title: "Q — wrong only", extra: { is_retry: true },
+        user_answers: { 0: 1, 1: 2 } };                  // both right, in retry order
+    const s = quizDeckStats(quiz, [sit, retry]);
+    assert.deepEqual(s.wrongIdx, [1, 2], "still read from the last full sit");
+    assert.equal(s.bestScore, 33, "a subset score is not the quiz's best");
+    assert.equal(s.attempts, 2, "but a retry is still work the student did");
+});
+
 console.log(`\n${passed} passed`);

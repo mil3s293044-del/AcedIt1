@@ -3,10 +3,11 @@
  *
  * The rework, and why:
  *
- *   • The page ran to four full-width stacked sections and ended with
- *     GamifiedMyRank rendering an achievements grid immediately above
- *     AchievementsGallery rendering another one. My profile now lives behind a
- *     tab, so the board is the page rather than the thing you scroll past.
+ *   • The page ran to four full-width stacked sections and ended with two
+ *     achievements grids, one hard-coded and one from the server, stacked
+ *     directly on top of each other. My profile lives behind a tab now, so the
+ *     board is the page rather than the thing you scroll past, and the tab
+ *     itself is one card and a ladder — see MyProfile.
  *   • max-w-6xl centred left ~380px of dead margin either side on a wide
  *     screen. Now 1600px with the board left and a standing rail filling it.
  *   • The score was a number and five bars. It's a dial with the bands marked
@@ -26,8 +27,7 @@ import {
 } from "lucide-react";
 import { base44 } from "@/api/base44Client";
 import HelpButton from "@/components/shared/HelpButton";
-import GamifiedMyRank from "@/components/ranked/GamifiedMyRank";
-import AchievementsGallery from "@/components/ranked/AchievementsGallery";
+import MyProfile from "@/components/ranked/MyProfile";
 import AtarDial from "@/components/ranked/AtarDial";
 import RankedBoard from "@/components/ranked/RankedBoard";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -344,9 +344,14 @@ export default function Ranked() {
                         </div>
                     </TabsContent>
 
-                    <TabsContent value="profile" className="mt-0 space-y-6">
-                        <GamifiedMyRank />
-                        <AchievementsGallery />
+                    {/* The profile is handed the board this page already
+                        fetched. It used to mount two components that between
+                        them re-read the profile, the sessions, the goals, the
+                        attempts and every flashcard — for tiles that are gone
+                        now — while the data they were comparing against was
+                        already in this scope. */}
+                    <TabsContent value="profile" className="mt-0">
+                        <MyProfile data={data} loading={loading} />
                     </TabsContent>
                 </Tabs>
             </div>
