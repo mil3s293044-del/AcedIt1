@@ -178,6 +178,15 @@ and disagreed with the deck faces three ways, all of them visible to a student:
   whatever order PostgREST returned. Ordered on `created_date` now, and the
   label says what it actually averaged rather than promising five.
 
+The second tile is TREND, not "best score all time". A personal record only
+changes when you beat it, so it sat unmoved for weeks, and it is set on your
+easiest quiz by construction — a trophy, not a measurement. `trend` differences
+the last five against the five before, needs `TREND_MIN` on BOTH sides (one sit
+either way is the difference between two papers, printed as a direction), and
+is null rather than 0 when there is not enough — 0 means "holding steady" and
+must not double as "I don't know yet". The tile says how many more sits unlock
+it rather than printing a dash forever.
+
 Attempts on a DELETED quiz still count: deleting a quiz does not delete its
 attempts, so "all time" spans quizzes no longer on the shelf. That is the
 intended reading — losing your best score because you tidied your library is
@@ -530,6 +539,39 @@ Three things that took a rebuild to learn:
   hid the collision and also made delete unreachable on a touch screen.
 - **One pack per row on a phone is correct.** Narrowing the card to fit two
   does not fit two and clips the face trying. Two-up arrives at `sm`.
+
+## Study is logged in TWO tables, and both of them count
+
+`study_techniques` takes everything the Study page runs — pomodoro, active
+recall, blurting, spaced repetition — with its minutes in `session_duration`.
+`study_sessions` takes quizzes and the activity tracker, with its minutes in
+`duration_minutes`. Neither is a superset.
+
+The dashboard's week panel read the second one alone, so a student who spent
+the week on the Study page was shown their QUIZZES and told that was the week.
+That is the identical trap the ATAR's planning component fell into, already
+written up above, repeated on the panel beside it. Anything asking "did they
+study" goes through `studyEvents` (`src/lib/studyLog.js`) or it will happen a
+third time.
+
+**`WeekPace` compares a student to THEMSELVES.** The app has no basis for
+saying anybody should do ninety minutes a day, so it does not: the bar is their
+own median week, cut at the SAME WEEKDAY (comparing Wednesday's running total
+against past full weeks tells everybody they are behind until Sunday). Median,
+not mean, or one cram week before a SAC sets the bar for the term — the same
+lesson the Ranked board learned about gap scales. A week with nothing in it is
+NO HISTORY rather than a zero-minute week, because reading a new account's
+empty weeks as zeroes puts their usual at nothing and congratulates any effort
+at all. Under `MIN_BASELINE_WEEKS` there is no comparison and the panel says so.
+
+**The subjects hand prints DAYS SINCE YOU TOUCHED IT** (`src/lib/neglect.js`),
+not the deck's size. The card already carries a measure — rank is mastery — so
+"310 cards" was a second, unrelated number on the same object, and it was
+inventory: it does not move when you work and it names nothing to do. The hand
+deals most-neglected-first, never-touched sorts ahead of the longest gap
+(`daysSince` returns null for it, which is not a big number and must not be
+sorted as one), and the count stays on the BACK of the card, where you turned
+it over to ask what is in the subject.
 
 ## The dashboard answers one question
 
