@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Safari's pinned-tab mark.
+
+  A MASK, not a picture: Safari throws away every colour in this file and fills
+  whatever is opaque with the accent from the `color` attribute on the link
+  tag. So there is no card and no white ground here — a rect behind the spade
+  would come back as a solid coloured square with a spade-shaped hole in it,
+  which is the classic way this asset goes wrong.
+
+  Same path as favicon.svg, drawn at full bleed on a 16-unit box, which is what
+  Apple's own guidance asks for.
+-->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <path d="M32 6 C32 6 5 26 5 37 C5 45 11 50.5 18 50.5 C23.5 50.5 28 47.5 30 43.5
+           C29.5 50 26 55.5 19.5 60 L44.5 60 C38 55.5 34.5 50 34 43.5
+           C36 47.5 40.5 50.5 46 50.5 C53 50.5 59 45 59 37 C59 26 32 6 32 6 Z"/>
+</svg>

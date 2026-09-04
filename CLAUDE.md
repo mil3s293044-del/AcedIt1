@@ -564,15 +564,27 @@ NO HISTORY rather than a zero-minute week, because reading a new account's
 empty weeks as zeroes puts their usual at nothing and congratulates any effort
 at all. Under `MIN_BASELINE_WEEKS` there is no comparison and the panel says so.
 
-**The subjects hand prints WHAT A NORMAL WEEK GIVES THAT SUBJECT**
-(`src/lib/usualWeek.js`), not the deck's size. That corner has carried three
-things now and the first two were both wrong: "310 cards" is inventory, which
-does not move when you work and names nothing to do; days-since-touched moved
-and was actionable, and was also a counter that only ever goes up, highest on
-the subject you are already avoiding, never saying anything good. Hours a week
-say where the time actually goes — the one fact about a subject a student
-cannot get elsewhere and cannot honestly guess — and it is the same "usual"
-WeekPace is built on, said twice from one calculation.
+**WeekPace ALSO owns the per-subject split, and the subjects hand is gone.**
+That hand was a fan of playing cards whose corner had held, in turn, the deck's
+card count, the days since it was last opened, and finally the usual weekly
+hours — at which point it was answering WeekPace's question, on a different
+object, two panels away, with the same number. Its corner had already been
+replaced twice looking for something worth putting there, so it was the one
+that went; the breakdown moved into the panel that prints the total it adds up
+to. `src/lib/usualWeek.js` survives it (`usualOrder`, `usualLabel`), and
+`studyMove.js` plus `subjectHand` went with the hand.
+
+The rows are BARS AGAINST THE BIGGEST SUBJECT, never against a target: the
+point is the shape of a week — which subject gets the hours and which is living
+on scraps — and the app has no business saying what that split ought to be. A
+subject with no history is DROPPED rather than listed at zero, because a row
+reading "0m/wk" against a subject added yesterday is an accusation the data
+does not support.
+
+The panel is STACKED at every width. It sits in half of a two-column row inside
+the page's own two-column grid, so at the viewport where a `lg:` split would
+fire the panel itself is about 500px and each column would be 250 — the same
+viewport-is-not-element trap the streak panel beside it already records.
 
 `usualWeeklyMinutes` is a median of past weeks, current week EXCLUDED (it is
 half-finished, and a Monday morning would drag every subject toward nothing).
@@ -966,10 +978,20 @@ way a browser does. It wants a real `/favicon.ico` at the root (the path that
 is checked without parsing the page), square and a multiple of 48px, which is
 the size a search result renders. And `apple-touch-icon` cannot be an SVG at
 all: iOS ignores it, so "add to home screen" fell back to a screenshot. So
-`favicon.ico` (16/32/48), `apple-touch-icon.png` (180) and `icon-192/512.png`
-all ship, ALL GENERATED FROM `favicon.svg` — regenerate them together or the
-tab, the home screen and the search result become three different marks. Google
-re-crawls on its own schedule; nothing in the page can force it.
+SAFARI wants two more on top of that. PNG favicons at 16 and 32, because its
+tab strip, bookmarks bar and Start Page do not all read the same asset and a
+PNG at the size being drawn is the one every version of it has taken; and
+`rel="mask-icon"` for a pinned tab, which is a MASK — Safari throws away its
+colours and fills whatever is opaque with the `color` on the link, so
+`mask-icon.svg` holds the bare spade and no white card. Ship the card there and
+a pinned tab comes back as a solid square with a spade-shaped hole in it.
+
+So `favicon.ico` (16/32/48), `icon-16/32.png`, `mask-icon.svg`,
+`apple-touch-icon.png` (180) and `icon-192/512.png` all ship, ALL GENERATED
+FROM `favicon.svg` — regenerate them together or the tab, the pinned tab, the
+home screen and the search result become four different marks. Neither Safari
+nor Google updates on deploy: Safari caches favicons in its own icon database,
+Google re-crawls on its own schedule. Nothing in the page can force either.
 
 **The signup email is sent by US, through Resend** (`sendSignupEmail` in
 `server.mjs`). `supabase.auth.signUp()` asks Supabase to send it over the

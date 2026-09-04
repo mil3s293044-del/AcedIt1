@@ -12,10 +12,8 @@ import { createPageUrl } from "@/utils";
 import { Link } from "react-router-dom";
 import HelpButton from "@/components/shared/HelpButton";
 import { reconcileUserXP } from "@/lib/reconcileXP";
-import { subjectHand } from "@/lib/mastery";
 import { getStreakMultiplier as getStreakMultiplierValue } from "@/components/shared/streakHelpers";
 import RetentionCard from "@/components/dashboard/RetentionCard";
-import YourHand from "@/components/dashboard/YourHand";
 import DueRadar from "@/components/dashboard/DueRadar";
 import WeekPace from "@/components/dashboard/WeekPace";
 import TableGround from "@/components/dashboard/TableGround";
@@ -29,7 +27,7 @@ import { atarBandOf } from "@/lib/atarBands";
 import { todaysIntent } from "@/lib/studyIntent";
 import { needsSetup, outstandingTasks, setupCopy } from "@/lib/onboardingTasks";
 import { isDue } from "@/lib/due";
-import { studyEvents, usualWeeklyMinutes } from "@/lib/studyLog";
+import { studyEvents } from "@/lib/studyLog";
 import AceTip from "@/components/ace/AceTip";
 import AceShuffle from "@/components/ace/AceShuffle";
 import AceBody from "@/components/ace/AceBody";
@@ -910,16 +908,14 @@ export default function Dashboard() {
         [studySessions, studyTechniques],
     );
 
-    const subjectCards = useMemo(() => {
-        // Undefined, not 0, when there is no history for a subject: the hand
-        // prints "—" and sorts it last rather than calling a subject starved
-        // on the strength of an account that is three days old.
-        const usual = usualWeeklyMinutes(logEvents);
-        return subjectHand(flashcards).map((r) => ({
-            ...r,
-            usualMinutes: usual.has(r.subject) ? usual.get(r.subject) : null,
-        }));
-    }, [flashcards, logEvents]);
+    // The subjects the student actually carries, for the week's breakdown.
+    // From the flashcards rather than from the log, so a subject they have set
+    // up and never studied is still a name this panel knows — WeekPace decides
+    // for itself which of them it has enough history to show.
+    const subjectNames = useMemo(
+        () => [...new Set(flashcards.map((c) => c?.subject_name).filter(Boolean))],
+        [flashcards],
+    );
 
 
     /**
@@ -1125,7 +1121,13 @@ export default function Dashboard() {
 
                 {/* The hand. Same row, same height. */}
                 <Placed index={3} className="min-w-0">
-                    <YourHand hand={subjectCards} className="h-full" />
+                    {/* The subjects hand was here — a fan of playing cards
+                        whose corner ended up printing the same usual weekly
+                        hours this panel is built on, two panels apart, on a
+                        different object. One of them had to go, and the fan
+                        was the one whose own number had already been replaced
+                        twice looking for something worth putting there. */}
+                    <WeekPace events={logEvents} subjects={subjectNames} className="h-full" />
                 </Placed>
                 </div>
 
@@ -1252,17 +1254,7 @@ export default function Dashboard() {
                         heading. */}
                     <DueRadar items={radar} />
 
-                    {/* This slot has now been a log twice: "Last sessions"
-                        (four rows with unlabelled stars on them) and then
-                        "Cleared this week" (a pile of cards over a count of
-                        them). Both answered "what happened", which is not a
-                        question anybody opens a dashboard to ask, and the pile
-                        also counted only the quizzes — see WeekPace.
 
-                        Pace answers "have I done enough lately" against the
-                        only benchmark the app can justify, which is the
-                        student's own usual week. */}
-                    <WeekPace events={logEvents} />
 
                 </motion.div>
                 </div>

@@ -28,6 +28,20 @@
  * than inventing one. A first-fortnight account gets its minutes and a line
  * about the comparison arriving, which is the honest version of this panel and
  * still more use than a pile.
+ *
+ * ─── And it absorbed the subjects hand ──────────────────────────────────────
+ * "Your subjects" was a fan of playing cards whose corner had, in turn, held
+ * the deck's card count, the days since you last opened it, and finally the
+ * usual weekly hours — at which point it was answering this panel's question
+ * on a different object, two panels apart, with the same number. So the hand
+ * went and the breakdown came here, where the total it adds up to is printed
+ * directly above it.
+ *
+ * The rows are BARS AGAINST THE BIGGEST SUBJECT, not against a target. The
+ * point is the SHAPE of a week — which subject gets the hours and which one is
+ * living on scraps — and the app has no business saying what the split ought
+ * to be. Least first, because the bottom of that list is the thing worth
+ * knowing.
  */
 import React from "react";
 import { motion, useReducedMotion } from "framer-motion";
@@ -35,7 +49,9 @@ import { Link } from "react-router-dom";
 import { createPageUrl } from "@/utils";
 import { ArrowRight, Brain } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { weekPace, MIN_BASELINE_WEEKS } from "@/lib/studyLog";
+import { weekPace, usualWeeklyMinutes, MIN_BASELINE_WEEKS } from "@/lib/studyLog";
+import { usualOrder, usualLabel, THIN_WEEK_MINUTES } from "@/lib/usualWeek";
+import { colorFor } from "@/components/cards/cardIdentity";
 
 const DAY_NAME = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
 
@@ -82,24 +98,37 @@ function PaceBar({ minutes, baseline }) {
     );
 }
 
-export default function WeekPace({ events = [], className = "" }) {
+export default function WeekPace({ events = [], subjects = [], className = "" }) {
     const pace = weekPace(events);
     const today = DAY_NAME[pace.dayIndex];
+
+    // The per-subject split, least first. Subjects with no history at all are
+    // dropped rather than listed at zero: a subject added yesterday has not
+    // been starved, and a row reading "0m/wk" against it is an accusation the
+    // data does not support.
+    const usual = usualWeeklyMinutes(events);
+    const rows = usualOrder(
+        subjects
+            .filter((name) => usual.has(name))
+            .map((name) => ({ subject: name, usualMinutes: usual.get(name) })),
+        (r) => r.usualMinutes,
+    );
+    const most = rows.reduce((m, r) => Math.max(m, r.usualMinutes), 0);
 
     if (pace.minutes === 0 && pace.baseline == null) {
         return (
             <div data-week-pace="0" className={`card-soft on-table p-5 ${className}`}>
-                <p className="stat-label mb-3">This week</p>
-                <div className="flex flex-col items-center text-center gap-3 py-2">
+                <p className="stat-label mb-3">Your study week</p>
+                <div className="flex flex-col items-center text-center gap-3 py-6">
                     <div className="w-10 h-10 rounded-xl bg-primary/5 flex items-center
                         justify-center border border-primary/10">
                         <Brain className="w-5 h-5 text-primary" />
                     </div>
                     <div>
                         <p className="font-bold text-foreground text-sm">Nothing logged yet</p>
-                        <p className="text-xs text-muted-foreground mt-0.5">
-                            Once there are a couple of weeks behind you, this compares
-                            the current one to your usual.
+                        <p className="text-xs text-muted-foreground mt-0.5 max-w-xs">
+                            Once there are a couple of weeks behind you, this shows the
+                            current one against your usual, and where the hours go.
                         </p>
                     </div>
                     <Link to={createPageUrl("Study")}>
@@ -115,9 +144,9 @@ export default function WeekPace({ events = [], className = "" }) {
     const ahead = pace.delta != null && pace.delta >= 0;
 
     return (
-        <div data-week-pace={pace.minutes} className={`card-soft on-table p-5 ${className}`}>
-            <div className="flex items-baseline justify-between gap-3">
-                <p className="stat-label">This week</p>
+        <div data-week-pace={pace.minutes} className={`card-soft on-table p-5 lg:p-6 ${className}`}>
+            <div className="flex items-baseline justify-between gap-3 mb-4">
+                <p className="stat-label">Your study week</p>
                 <Link to={createPageUrl("Analytics")}
                     className="text-[11px] font-bold text-muted-foreground hover:text-foreground
                         underline underline-offset-2">
@@ -125,46 +154,105 @@ export default function WeekPace({ events = [], className = "" }) {
                 </Link>
             </div>
 
-            <p className="font-display font-extrabold text-foreground leading-none mt-2"
-                style={{ fontSize: "clamp(2rem, 5vw, 2.75rem)" }}>
-                {fmt(pace.minutes)}
-            </p>
-
-            {pace.baseline != null ? (
-                <>
-                    <PaceBar minutes={pace.minutes} baseline={pace.baseline} />
-                    {/* The comparison in words as well as in the bar, because
-                        the bar cannot say WHICH weekday it stopped at, and
-                        "behind" without "by Wednesday" is a different claim. */}
-                    <p className="text-[13px] leading-relaxed mt-2.5">
-                        <span className={`font-bold ${ahead ? "text-primary" : "text-xp"}`}>
-                            {ahead ? "Ahead of" : "Behind"} your usual
-                        </span>
-                        <span className="text-muted-foreground">
-                            {" "}— you are normally at {fmt(pace.baseline)} by {today}.
-                        </span>
+            {/* STACKED AT EVERY WIDTH, deliberately. This panel sits in one
+                half of a two-column row inside the page's own two-column grid,
+                so at the viewport where a `lg:` split would fire the panel
+                itself is about 500px wide and each column would be 250 — the
+                headline and the bar do not fit in that. Tailwind breakpoints
+                are viewport-wide and not element-wide, which is the same trap
+                the streak panel beside this one records in its own comment. */}
+            <div className="space-y-5">
+                <div>
+                    <p className="font-display font-extrabold text-foreground leading-none"
+                        style={{ fontSize: "clamp(2.25rem, 6vw, 3.25rem)" }}>
+                        {fmt(pace.minutes)}
                     </p>
-                </>
-            ) : (
-                <p className="text-[13px] text-muted-foreground leading-relaxed mt-2">
-                    {pace.sessions} session{pace.sessions === 1 ? "" : "s"} across{" "}
-                    {pace.days} day{pace.days === 1 ? "" : "s"}. Your usual pace shows up
-                    here after {MIN_BASELINE_WEEKS} weeks.
-                </p>
-            )}
 
-            {pace.subjects.length > 0 && (
-                <p className="text-[11px] text-muted-foreground/70 mt-1.5 leading-relaxed">
-                    {pace.subjects.slice(0, 3).join(", ")}
-                    {pace.subjects.length > 3 ? ` +${pace.subjects.length - 3}` : ""}
-                </p>
-            )}
+                    {pace.baseline != null ? (
+                        <>
+                            <PaceBar minutes={pace.minutes} baseline={pace.baseline} />
+                            {/* The comparison in words as well as in the bar,
+                                because the bar cannot say WHICH weekday it
+                                stopped at, and "behind" without "by Wednesday"
+                                is a different claim. */}
+                            <p className="text-[13px] leading-relaxed mt-2.5">
+                                <span className={`font-bold ${ahead ? "text-primary" : "text-xp"}`}>
+                                    {ahead ? "Ahead of" : "Behind"} your usual
+                                </span>
+                                <span className="text-muted-foreground">
+                                    {" "}— you are normally at {fmt(pace.baseline)} by {today}.
+                                </span>
+                            </p>
+                        </>
+                    ) : (
+                        <p className="text-[13px] text-muted-foreground leading-relaxed mt-3">
+                            {pace.sessions} session{pace.sessions === 1 ? "" : "s"} across{" "}
+                            {pace.days} day{pace.days === 1 ? "" : "s"}. Your usual pace shows
+                            up here after {MIN_BASELINE_WEEKS} weeks.
+                        </p>
+                    )}
 
-            <Link to={createPageUrl("Study")}
-                className="inline-flex items-center gap-1 text-[11px] font-bold
-                    text-primary hover:underline mt-2.5">
-                {ahead ? "Keep it going" : "Put some time in"} <ArrowRight className="w-3 h-3" />
-            </Link>
+                    <Link to={createPageUrl("Study")}
+                        className="inline-flex items-center gap-1 text-[11px] font-bold
+                            text-primary hover:underline mt-3">
+                        {ahead ? "Keep it going" : "Put some time in"}
+                        <ArrowRight className="w-3 h-3" />
+                    </Link>
+                </div>
+
+                {/* WHERE THE HOURS GO. Nothing here is a target: the bars are
+                    relative to the subject that gets the most, so the row that
+                    matters is the short one at the bottom. */}
+                <div>
+                    {rows.length > 0 ? (
+                        <>
+                            <p className="text-[11px] font-bold uppercase tracking-wider
+                                text-muted-foreground/70 mb-2.5">
+                                A normal week
+                            </p>
+                            <ul className="space-y-2">
+                                {rows.slice(0, 6).map((r) => {
+                                    const tone = colorFor(r.subject);
+                                    const thin = r.usualMinutes <= THIN_WEEK_MINUTES;
+                                    const pct = most > 0
+                                        ? Math.max(2, (r.usualMinutes / most) * 100)
+                                        : 2;
+                                    return (
+                                        <li key={r.subject} data-usual-row={r.subject}>
+                                            <div className="flex items-baseline justify-between gap-3">
+                                                <span className="text-[12px] font-bold text-foreground
+                                                    truncate">{r.subject}</span>
+                                                <span className={`text-[11px] font-bold tabular-nums
+                                                    flex-shrink-0 ${
+                                                    thin ? "text-streak" : "text-muted-foreground"}`}>
+                                                    {usualLabel(r.usualMinutes)}
+                                                </span>
+                                            </div>
+                                            <span className="block h-1.5 rounded-full bg-secondary
+                                                overflow-hidden mt-1">
+                                                <span className="block h-full rounded-full"
+                                                    style={{ width: `${pct}%`, background: tone }} />
+                                            </span>
+                                        </li>
+                                    );
+                                })}
+                            </ul>
+                        </>
+                    ) : (
+                        <div className="h-full flex flex-col justify-center">
+                            <p className="text-[11px] font-bold uppercase tracking-wider
+                                text-muted-foreground/70 mb-1.5">
+                                A normal week
+                            </p>
+                            <p className="text-[13px] text-muted-foreground leading-relaxed">
+                                After {MIN_BASELINE_WEEKS} weeks this shows what each subject
+                                usually gets — the one living on scraps is the useful half of
+                                that.
+                            </p>
+                        </div>
+                    )}
+                </div>
+            </div>
         </div>
     );
 }
