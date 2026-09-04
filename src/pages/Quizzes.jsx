@@ -1142,12 +1142,36 @@ Return valid JSON only.`,
                                             {quizStats.avgOver ? `last ${quizStats.avgOver}` : `last ${RECENT_WINDOW}`}
                                         </p>
                                     </div>
+                                    {/* TREND, not "best score all time".
+                                        A personal record only changes when you
+                                        beat it, so it sat there unmoved for
+                                        weeks — and it is set on your easiest
+                                        quiz by construction, which makes it a
+                                        trophy rather than a measurement. This
+                                        moves every time you sit one, and it
+                                        answers the only question a score panel
+                                        should: is it going up. */}
                                     <div className="bg-surface rounded-xl p-3 border-2 border-border">
-                                        <p className="stat-label">Best score</p>
-                                        <p className="font-display font-extrabold text-foreground text-2xl mt-0.5 leading-none">
-                                            {quizStats.bestScore != null ? `${Math.round(quizStats.bestScore)}%` : '—'}
+                                        <p className="stat-label">Trend</p>
+                                        <p className={`font-display font-extrabold text-2xl mt-0.5 leading-none ${
+                                            quizStats.trend == null ? 'text-muted-foreground/60'
+                                                : quizStats.trend > 0 ? 'text-primary'
+                                                    : quizStats.trend < 0 ? 'text-streak'
+                                                        : 'text-foreground'
+                                        }`}>
+                                            {quizStats.trend == null
+                                                ? '—'
+                                                : quizStats.trend === 0
+                                                    ? 'Level'
+                                                    : `${quizStats.trend > 0 ? '+' : '−'}${Math.abs(quizStats.trend)}`}
                                         </p>
-                                        <p className="text-[11px] text-muted-foreground mt-0.5">all time</p>
+                                        {/* Says what unlocks it rather than
+                                            leaving a dash there forever. */}
+                                        <p className="text-[11px] text-muted-foreground mt-0.5">
+                                            {quizStats.trend == null
+                                                ? `after ${quizStats.trendNeeds} more sit${quizStats.trendNeeds === 1 ? '' : 's'}`
+                                                : `vs your ${quizStats.trendOver} before`}
+                                        </p>
                                     </div>
                                 </div>
                             </div>

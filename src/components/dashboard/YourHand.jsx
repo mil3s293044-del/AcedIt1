@@ -34,6 +34,7 @@ import { ArrowRight, Layers } from "lucide-react";
 import PlayingCard, { CardBack } from "@/components/cards/PlayingCard";
 import { rankFor, suitFor, colorFor, rankTitle } from "@/components/cards/cardIdentity";
 import { studyMove } from "@/lib/studyMove";
+import { neglectOrder, neglectLabel, neglectLine, STALE_DAYS } from "@/lib/neglect";
 
 /**
  * The card's move, as a link.
@@ -76,6 +77,7 @@ function SubjectCard({ row, i, n, reduce, flipped, onFlip }) {
     const suit = suitFor(row.subject);
     const tone = colorFor(row.subject);
     const move = moveFor(row);
+    const stale = row.lastTouched == null || (row.daysSince ?? 0) >= STALE_DAYS;
 
     // The fan leans out from the middle, the way a held hand does. Small
     // angles: this one has to stay readable, unlike a decorative fan.
@@ -150,13 +152,20 @@ function SubjectCard({ row, i, n, reduce, flipped, onFlip }) {
                                 </span>
                             </span>
 
-                            {/* The move, printed on the card. A count alone told
-                                you there was something to do and not what it
-                                was, so every card said the same thing in a
-                                different number. */}
+                            {/* HOW LONG SINCE YOU TOUCHED IT, not how many
+                                cards are in it.
+
+                                The card already carries a measure — the rank
+                                is mastery — so printing the deck's SIZE put a
+                                second, unrelated number on the same object and
+                                neither told you anything to do about it. "310"
+                                is inventory; a subject you have not opened in
+                                twelve days is a fact you can act on this
+                                afternoon, and it is the one thing about a
+                                subject that nothing else on this page says. */}
                             <span className={`absolute top-1.5 right-2 text-[9px] font-black
-                                tabular-nums ${move.urgent ? "text-streak" : "text-muted-foreground/50"}`}>
-                                {row.due > 0 ? row.due : row.cards}
+                                tabular-nums ${stale ? "text-streak" : "text-muted-foreground/50"}`}>
+                                {neglectLabel(row.daysSince)}
                             </span>
                         </PlayingCard>
                     </button>
@@ -185,6 +194,9 @@ function SubjectCard({ row, i, n, reduce, flipped, onFlip }) {
                             <span className="block h-1.5 flex-shrink-0"
                                 style={{ background: tone }} />
                             <span className="flex flex-col flex-1 p-2">
+                            {/* The card COUNT lives on the back, which is
+                                where inventory belongs: you turned the card
+                                over to ask what is in this subject. */}
                             <span className="block text-[9px] font-black uppercase tracking-wider
                                 text-muted-foreground/70">
                                 {row.cards} cards
@@ -248,13 +260,20 @@ export default function YourHand({ hand = [], className = "" }) {
             el.removeEventListener("pointerleave", onLeave);
         };
     }, [px, py, reduce]);
-    const shown = hand.slice(0, 8);
+    // MOST NEGLECTED FIRST. The hand used to be dealt strongest to weakest,
+    // which put the sentence's subject at both ends and made the reader scan
+    // for it. Dealt by neglect, the card you have been avoiding is the first
+    // one your eye lands on, and it is the one the line above names.
+    const ordered = neglectOrder(hand, (r) => r.daysSince);
+    const shown = ordered.slice(0, 8);
     const totalDue = hand.reduce((s, r) => s + r.due, 0);
+    const worst = neglectLine(shown, (r) => r.daysSince);
     // Do the ranks actually differ? Compared on RANK rather than on mastery,
     // because two subjects eight points apart can still both be sevens, and
     // the sentence is about the cards the reader is looking at.
+    const byMastery = [...shown].sort((a, b) => b.mastery - a.mastery);
     const spread = shown.length > 1
-        && rankFor(shown[0].mastery) !== rankFor(shown[shown.length - 1].mastery);
+        && rankFor(byMastery[0].mastery) !== rankFor(byMastery[byMastery.length - 1].mastery);
 
     /**
      * The card to play first.
@@ -285,13 +304,26 @@ export default function YourHand({ hand = [], className = "" }) {
                         actually differ. A brand new deck is all twos, and a
                         sentence naming a best and a worst over four identical
                         cards is the page telling you something it cannot see. */}
+                    {/* Rank is still mastery — that contract holds across
+                        eighteen surfaces and is not up for negotiation here.
+                        What the SENTENCE says is neglect, because that is what
+                        the corner number now reports and what the order of the
+                        hand means. Naming a strongest and a weakest over four
+                        identical twos was the page telling you something it
+                        could not see; the same rule applies to calling a
+                        subject neglected when nothing has been left. */}
                     <p className="text-sm text-muted-foreground leading-relaxed mb-4">
-                        {spread
-                            ? <>Rank is how well you know it. <span className="font-bold text-foreground">{shown[0].subject}</span> is
-                                your strongest card, <span className="font-bold text-foreground">{shown[shown.length - 1].subject}</span> your
-                                weakest.</>
-                            : <>Rank is how well you know it. Everything is still a two,
-                                because ranks are earned one review at a time.</>}
+                        <>Rank is how well you know it; the corner says how long since you
+                            opened it. </>
+                        {worst?.kind === "stale"
+                            ? <>You have not touched <span className="font-bold text-foreground">{worst.subject}</span> in {worst.days} days.</>
+                            : worst?.kind === "new"
+                                ? <><span className="font-bold text-foreground">{worst.subject}</span> has cards
+                                    and has never been opened.</>
+                                : spread
+                                    ? <><span className="font-bold text-foreground">{byMastery[0].subject}</span> is
+                                        your strongest card right now.</>
+                                    : <>Nothing has been left more than a few days.</>}
                     </p>
 
                     {/* Overflow rather than shrink: eight subjects at a readable

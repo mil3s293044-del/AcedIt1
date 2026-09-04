@@ -82,6 +82,15 @@ export function quizDeckStats(quiz, allAttempts = []) {
 export const RECENT_WINDOW = 5;
 
 /**
+ * Sits needed on EACH side before a trend is claimed.
+ *
+ * Two, not one. A trend off a single sit either side is the difference between
+ * two exam papers, which is noise printed as a direction — and a student told
+ * they are "down 14" because one quiz was harder learns to ignore the number.
+ */
+export const TREND_MIN = 2;
+
+/**
  * The numbers the Quizzes hero prints: how many quizzes, how many attempts,
  * the recent average and the best ever.
  *
@@ -120,6 +129,14 @@ export function quizzingSummary(quizzes = [], allAttempts = []) {
     const scored = fullSits.map(effectiveScore).filter(isNum);
     const recent = scored.slice(0, RECENT_WINDOW);
 
+    // The five before those, for the trend. Same window either side, so the
+    // comparison is like for like rather than "your last five against
+    // everything you have ever done", which flatters anybody improving and
+    // stops moving once they have sat enough.
+    const previous = scored.slice(RECENT_WINDOW, RECENT_WINDOW * 2);
+    const mean = (xs) => Math.round(xs.reduce((sum, s) => sum + s, 0) / xs.length);
+    const hasTrend = recent.length >= TREND_MIN && previous.length >= TREND_MIN;
+
     return {
         totalQuizzes: Array.isArray(quizzes) ? quizzes.length : 0,
         // Every attempt, retries included: this one is a count of turning up.
@@ -131,6 +148,19 @@ export function quizzingSummary(quizzes = [], allAttempts = []) {
         // when there are three rather than promising five and averaging fewer.
         avgOver: recent.length,
         bestScore: scored.length ? Math.max(...scored) : null,
+        // Points up or down against the window before this one. Null rather
+        // than 0 when there is not enough on both sides — "0" is a real answer
+        // (you are holding steady) and must not be how the page says "I don't
+        // know yet".
+        trend: hasTrend ? mean(recent) - mean(previous) : null,
+        trendOver: hasTrend ? previous.length : 0,
+        // How many more sits before the trend can be shown, so the tile can
+        // say what unlocks it rather than printing a dash.
+        trendNeeds: hasTrend ? 0 : Math.max(
+            TREND_MIN - recent.length,
+            (RECENT_WINDOW + TREND_MIN) - scored.length,
+            0,
+        ),
         lastAttempt: fullSits[0] || null,
     };
 }

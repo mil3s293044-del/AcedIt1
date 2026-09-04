@@ -17,7 +17,7 @@ import { getStreakMultiplier as getStreakMultiplierValue } from "@/components/sh
 import RetentionCard from "@/components/dashboard/RetentionCard";
 import YourHand from "@/components/dashboard/YourHand";
 import DueRadar from "@/components/dashboard/DueRadar";
-import ClearedPile from "@/components/dashboard/ClearedPile";
+import WeekPace from "@/components/dashboard/WeekPace";
 import TableGround from "@/components/dashboard/TableGround";
 import TodaysPlay from "@/components/dashboard/TodaysPlay";
 import { buildCase, previewFor } from "@/lib/todaysCase";
@@ -29,6 +29,7 @@ import { atarBandOf } from "@/lib/atarBands";
 import { todaysIntent } from "@/lib/studyIntent";
 import { needsSetup, outstandingTasks, setupCopy } from "@/lib/onboardingTasks";
 import { isDue } from "@/lib/due";
+import { studyEvents, lastTouchedBySubject, daysSince } from "@/lib/studyLog";
 import AceTip from "@/components/ace/AceTip";
 import AceShuffle from "@/components/ace/AceShuffle";
 import AceBody from "@/components/ace/AceBody";
@@ -459,7 +460,11 @@ export default function Dashboard() {
             const in14 = format(new Date(Date.now() + 14 * 24 * 60 * 60 * 1000), 'yyyy-MM-dd');
             const [profileData, sessionsData, techniquesData, quizData, assessmentData, flashcardData, plannerData, lbData] = await Promise.all([
                 base44.entities.UserProfile.filter({ created_by: userEmail }).catch(() => []),
-                base44.entities.StudySession.filter({ created_by: userEmail }, "-date", 30).catch(() => []),
+                // 400, not 30. WeekPace compares this week against the same weekday
+                // in up to eight prior weeks, and a thirty-row window is about
+                // a fortnight for anybody active — which silently gave the
+                // heaviest users the shortest history.
+                base44.entities.StudySession.filter({ created_by: userEmail }, "-date", 400).catch(() => []),
                 base44.entities.StudyTechnique.filter({ created_by: userEmail }, "-date").catch(() => []),
                 base44.entities.QuizAttempt.filter({ created_by: userEmail }, "-date", 10).catch(() => []),
                 base44.entities.SubjectAssessment.filter({ created_by: userEmail, is_completed: false }, "due_date", 10).catch(() => []),
@@ -896,7 +901,22 @@ export default function Dashboard() {
      * fetches, through the same mastery formula the review deck uses, so a
      * subject that shows as a Queen here opens as a Queen over there.
      */
-    const subjectCards = useMemo(() => subjectHand(flashcards), [flashcards]);
+    // BOTH study tables. Only quizzes and the activity tracker write to
+    // study_sessions; everything the Study page runs writes to
+    // study_techniques, so anything asking "when did they last work on this"
+    // has to read the pair. See studyLog.js.
+    const logEvents = useMemo(
+        () => studyEvents(studySessions, studyTechniques),
+        [studySessions, studyTechniques],
+    );
+
+    const subjectCards = useMemo(() => {
+        const touched = lastTouchedBySubject(logEvents, flashcards);
+        return subjectHand(flashcards).map((r) => {
+            const lastTouched = touched.get(r.subject) || null;
+            return { ...r, lastTouched, daysSince: daysSince(lastTouched) };
+        });
+    }, [flashcards, logEvents]);
 
 
     /**
@@ -1229,13 +1249,17 @@ export default function Dashboard() {
                         heading. */}
                     <DueRadar items={radar} />
 
-                    {/* "Last sessions" was here: four rows of subject, date
-                        and minutes, each with one to three orange stars and no
-                        legend anywhere saying the stars were a self-rated
-                        productivity score. A log, in the second most valuable
-                        column on the page, answering a question nobody opens a
-                        dashboard to ask. The pile answers the one they do. */}
-                    <ClearedPile sessions={studySessions} />
+                    {/* This slot has now been a log twice: "Last sessions"
+                        (four rows with unlabelled stars on them) and then
+                        "Cleared this week" (a pile of cards over a count of
+                        them). Both answered "what happened", which is not a
+                        question anybody opens a dashboard to ask, and the pile
+                        also counted only the quizzes — see WeekPace.
+
+                        Pace answers "have I done enough lately" against the
+                        only benchmark the app can justify, which is the
+                        student's own usual week. */}
+                    <WeekPace events={logEvents} />
 
                 </motion.div>
                 </div>
