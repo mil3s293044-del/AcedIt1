@@ -7,7 +7,7 @@ import { Target, ArrowRight,
     Map, BarChart3, CheckCircle2, AlertTriangle, Shield, Sprout
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { format, startOfWeek, differenceInDays, parseISO, isToday, isYesterday } from "date-fns";
+import { format, differenceInDays, parseISO, isToday, isYesterday } from "date-fns";
 import { createPageUrl } from "@/utils";
 import { Link } from "react-router-dom";
 import HelpButton from "@/components/shared/HelpButton";
@@ -587,20 +587,6 @@ export default function Dashboard() {
             || studyTechniques.some(s => s.date && isYesterday(new Date(s.date)));
     }, [studySessions, studyTechniques]);
 
-    const weeklyStudyTime = useMemo(() => {
-        const weekStart = startOfWeek(new Date());
-        const sum = (arr, key) => arr
-            .filter(s => s.date && new Date(s.date) >= weekStart)
-            .reduce((a, s) => a + (s[key] || 0), 0);
-        return sum(studySessions, 'duration_minutes') + sum(studyTechniques, 'session_duration');
-    }, [studySessions, studyTechniques]);
-
-    const avgQuizScore = useMemo(() => {
-        if (!quizAttempts.length) return null;
-        const recent = quizAttempts.slice(0, 5);
-        return Math.round(recent.reduce((a, q) => a + (q.score || 0), 0) / recent.length);
-    }, [quizAttempts]);
-
     const dueFlashcardCount = useMemo(
         () => flashcardReminders.reduce((a, d) => a + d.count, 0),
         [flashcardReminders]
@@ -650,8 +636,6 @@ export default function Dashboard() {
 
     const streakDays = userProfile?.streak_days || 0;
     const firstName = userProfile?.username || user?.full_name?.split(' ')[0] || 'friend';
-    const goalHours = userProfile?.weekly_study_goal_hours || 20;
-    const weeklyPct = Math.min(100, Math.round((weeklyStudyTime / (goalHours * 60)) * 100));
 
     // ── The radar, as one ranked list ────────────────────────────────────────
     // This used to render each source as its own run of tiles — up to eleven
@@ -912,15 +896,6 @@ export default function Dashboard() {
         [studySessions, studyTechniques],
     );
 
-    // The subjects the student actually carries, for the week's breakdown.
-    // From the flashcards rather than from the log, so a subject they have set
-    // up and never studied is still a name this panel knows — WeekPace decides
-    // for itself which of them it has enough history to show.
-    const subjectNames = useMemo(
-        () => [...new Set(flashcards.map((c) => c?.subject_name).filter(Boolean))],
-        [flashcards],
-    );
-
 
     /**
      * What setup is genuinely outstanding, derived from the profile rather than
@@ -1002,10 +977,7 @@ export default function Dashboard() {
                 <Placed index={1}>
                     <TodaysPlay move={move} card={moveCard} theme={moveTheme}
                         todaysCase={todaysCase} preview={movePreview}
-                        commitment={commitment} fmtTime={fmtTime}
-                        todayMins={todaysStudyTime} weekMins={weeklyStudyTime}
-                        weekGoalHours={goalHours} weekPct={weeklyPct}
-                        avgQuiz={avgQuizScore} />
+                        commitment={commitment} fmtTime={fmtTime} />
                 </Placed>
 
 
@@ -1131,7 +1103,7 @@ export default function Dashboard() {
                         different object. One of them had to go, and the fan
                         was the one whose own number had already been replaced
                         twice looking for something worth putting there. */}
-                    <WeekPace events={logEvents} subjects={subjectNames} className="h-full" />
+                    <WeekPace events={logEvents} className="h-full" />
                 </Placed>
                 </div>
 

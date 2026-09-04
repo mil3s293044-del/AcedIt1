@@ -48,18 +48,16 @@ const ROW_TONE = {
 
 export default function TodaysPlay({
     move, card, theme, commitment, fmtTime, todaysCase, preview,
-    // The day's numbers. They used to live in a separate green panel beside
-    // this one — two boxes both headed "today", which is one box. They now sit
-    // as a footer strip rather than a third column, because the case beside
-    // the move is what the panel is FOR and the numbers are context on it.
-    todayMins, weekMins, weekGoalHours, weekPct, avgQuiz,
+    // The day's numbers used to run along the bottom of this panel — today's
+    // minutes, the week against a 20h goal, the average quiz. Removed: the
+    // week's time is now a panel of its own that compares it to the student's
+    // own usual rather than to a number nobody chose, the quiz average is on
+    // Quizzes beside the trend that gives it meaning, and this panel is for
+    // making ONE case. A strip of context under it was the third thing on
+    // screen answering "how am I doing" and the weakest of the three.
 }) {
     const reduce = useReducedMotion();
     const Icon = move.icon;
-    // The badge follows the target the panel actually SHOWS. It used to fire
-    // off the XP goal, which is no longer drawn anywhere, so "Hit" would have
-    // appeared against nothing the student could see they had hit.
-    const hit = !!commitment?.met;
     const done = !!commitment?.met;
     const rows = todaysCase?.rows || [];
 
@@ -147,41 +145,6 @@ export default function TodaysPlay({
                 )}
             </div>
 
-            {/* ── The day's numbers ─────────────────────────────────────── */}
-            {/* A strip, not a column. Three small readouts standing beside the
-                case would compete with it for the same corner, and the case is
-                the thing this panel exists to make. */}
-            <div className="flex flex-wrap items-center gap-x-6 gap-y-2 border-t border-border/70
-                bg-secondary/30 px-5 lg:px-6 py-3">
-                <span className="flex items-center gap-2">
-                    <span className="stat-label">Today</span>
-                    {hit && <span className="pill bg-primary/15 text-primary">Hit</span>}
-                </span>
-                <span className="flex items-baseline gap-1.5 text-xs">
-                    <span className="font-bold text-muted-foreground">Time</span>
-                    <span className="font-bold text-foreground tabular-nums">{fmtTime(todayMins)}</span>
-                </span>
-                <span className="flex items-baseline gap-1.5 text-xs min-w-[9rem] flex-1 max-w-[16rem]">
-                    <span className="font-bold text-muted-foreground">Week</span>
-                    <span className="font-bold text-foreground tabular-nums">
-                        {fmtTime(weekMins)}
-                        <span className="text-muted-foreground/60"> / {weekGoalHours}h</span>
-                    </span>
-                    <span className="flex-1 h-1.5 bg-secondary rounded-full overflow-hidden ml-1">
-                        <motion.span
-                            className={`block h-full rounded-full ${weekPct >= 100 ? "bg-primary" : "bg-xp"}`}
-                            initial={{ width: 0 }}
-                            animate={{ width: `${weekPct}%` }}
-                            transition={{ duration: 0.9, delay: 0.35 }} />
-                    </span>
-                </span>
-                <span className="flex items-baseline gap-1.5 text-xs">
-                    <span className="font-bold text-muted-foreground">Avg quiz</span>
-                    <span className="font-bold text-foreground tabular-nums">
-                        {avgQuiz != null ? `${avgQuiz}%` : "-"}
-                    </span>
-                </span>
-            </div>
         </div>
     );
 }
