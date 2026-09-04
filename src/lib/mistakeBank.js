@@ -159,6 +159,31 @@ function sourceRef(source) {
 /** Is this row one of the bank's? Used by the filtered view. */
 export const isBankCard = (card) => card?.topic === BANK_TOPIC;
 
+/**
+ * Flashcards with the mistake bank taken out — what every DECK surface reads.
+ *
+ * ─── Why this has to exist ──────────────────────────────────────────────────
+ * A banked mistake is a `flashcards` row, because that is how it gets an SM-2
+ * schedule without a second scheduler. It is not a FLASHCARD in the sense the
+ * rest of the app means: it has no deck the student built, its topic is the
+ * constant "Mistake bank", its front asks for the fix to one dropped criterion,
+ * and it belongs to /MistakeBank, which is where the ladder, the case gate and
+ * the "am I actually fixing these" fraction live.
+ *
+ * Nothing filtered them out, so they leaked everywhere a flashcard is read: a
+ * "Mistake bank" deck sat on the flashcard shelf beside Chemistry, its cards
+ * counted toward due totals and retention, and the exam builder was willing to
+ * ask an exam question made of one marker's note about a phrase.
+ *
+ * Applied at the READ, per surface, rather than inside the shim: /MistakeBank
+ * and the Quizzes hero genuinely want these rows, and a global exclusion with
+ * an opt-out is the kind of magic that silently empties a screen later. An
+ * explicit call at each site is greppable, which this bug proves is worth more
+ * than the brevity.
+ */
+export const deckCards = (cards = []) =>
+    (Array.isArray(cards) ? cards.filter((c) => !isBankCard(c)) : []);
+
 // ─── Reading the bank back ──────────────────────────────────────────────────
 //
 // A bank that only accumulates is a guilt list, and a guilt list is a screen

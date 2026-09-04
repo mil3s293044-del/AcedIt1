@@ -32,7 +32,7 @@ import ReviewTable from "@/components/cards/ReviewTable";
 import DeckStack from "@/components/cards/DeckStack";
 import { rankFor, suitFor, subjectColor } from "@/components/cards/cardIdentity";
 import { cardMastery, isCardDue } from "@/lib/mastery";
-import { BANK_TOPIC, fixState } from "@/lib/mistakeBank";
+import { deckCards } from "@/lib/mistakeBank";
 import { calculateNextReview as sm2Next, formatIntervalShort as sm2Interval, reviewPatch, RATINGS } from "@/lib/sm2";
 
 // Lucide alias — design system maps "alert" semantics to AlertTriangle.
@@ -258,7 +258,11 @@ export default function SpacedRepetition() {
     const loadDecks = async (userEmail) => {
         setIsLoading(true);
         try {
-            const cards = await Flashcard.filter({ created_by: userEmail, is_active: true });
+            // The mistake bank is stored as flashcards but is not a deck the
+            // student built — it has its own screen, with its own ladder and
+            // its own idea of "fixed". See deckCards.
+            const cards = deckCards(
+                await Flashcard.filter({ created_by: userEmail, is_active: true }));
             const deckMap = {};
             cards.forEach(card => {
                 const deckKey = `${card.subject_name || 'Other'}_${card.topic || 'General'}`;
@@ -739,14 +743,6 @@ The documents provided may be PowerPoint slides, Word documents, PDFs or text fi
             (filterSubject === 'all' || d.subject_name === filterSubject);
     });
 
-    // Mistakes banked from quiz marking. They review here like any other deck,
-    // but the bank screen is where you see whether you are actually fixing
-    // them — so this points at it rather than duplicating the answer.
-    const bankOutstanding = decks
-        .filter(d => d.topic === BANK_TOPIC)
-        .flatMap(d => d.cards)
-        .filter(c => fixState(c) !== "fixed").length;
-
     const decksBySubject = {};
     filteredDecks.forEach(deck => {
         const sub = deck.subject_name || 'Other';
@@ -1054,22 +1050,6 @@ The documents provided may be PowerPoint slides, Word documents, PDFs or text fi
                         </Button>
                     </div>
                 </div>
-
-                {/* Only when there is something in it. A permanent banner for
-                    an empty bank is an advert; this is a status line. */}
-                {bankOutstanding > 0 && (
-                    <Link to={createPageUrl("MistakeBank")}
-                        className="flex items-center justify-between gap-3 rounded-2xl border-2 border-streak/30
-                            bg-streak/5 px-4 py-3 hover:border-streak/50 transition-colors group">
-                        <span className="text-sm text-foreground leading-snug">
-                            <span className="font-bold tabular-nums">{bankOutstanding}</span> mistake{bankOutstanding === 1 ? "" : "s"} from
-                            your marked quizzes {bankOutstanding === 1 ? "is" : "are"} still costing you marks.
-                        </span>
-                        <span className="text-xs font-bold text-streak flex-shrink-0 group-hover:translate-x-0.5 transition-transform">
-                            Mistake bank →
-                        </span>
-                    </Link>
-                )}
 
                 {Object.keys(decksBySubject).length === 0 ? (
                     <div className="text-center py-20 card-soft">

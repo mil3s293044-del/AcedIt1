@@ -22,6 +22,7 @@ import { useToast } from "@/components/ui/use-toast";
 import { format, addDays } from "date-fns";
 import { fmtDate } from "@/lib/safeDate";
 import AceShuffle from "@/components/ace/AceShuffle";
+import { deckCards } from "@/lib/mistakeBank";
 
 export default function GroupResources({ group, user }) {
     const [resources, setResources] = useState([]);
@@ -63,7 +64,7 @@ export default function GroupResources({ group, user }) {
     const loadUserContent = async () => {
         try {
             // Load user's flashcard decks
-            const flashcards = await Flashcard.filter({ created_by: user.email, is_active: true });
+            const flashcards = deckCards(await Flashcard.filter({ created_by: user.email, is_active: true }));
             const deckGroups = {};
             flashcards.forEach(card => {
                 const deckKey = card.deck_id || `${card.subject_name}_${card.topic}`;

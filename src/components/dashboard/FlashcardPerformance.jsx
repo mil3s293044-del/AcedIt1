@@ -10,6 +10,7 @@ import { Flashcard } from "@/entities/all";
 import { format, subDays } from "date-fns";
 import AceShuffle from "@/components/ace/AceShuffle";
 import { isDue } from "@/lib/due";
+import { deckCards } from "@/lib/mistakeBank";
 
 export default function FlashcardPerformance({ user }) {
     const [performance, setPerformance] = useState({
@@ -33,13 +34,13 @@ export default function FlashcardPerformance({ user }) {
         setIsLoading(true);
         try {
             // Add delay and catch rate limit errors gracefully
-            const allCards = await Flashcard.filter({ created_by: user.email, is_active: true }).catch(err => {
+            const allCards = deckCards(await Flashcard.filter({ created_by: user.email, is_active: true }).catch(err => {
                 if (err.message?.includes('Rate limit')) {
                     console.log('Rate limit hit - showing cached data');
                     return [];
                 }
                 throw err;
-            });
+            }));
             const today = format(new Date(), 'yyyy-MM-dd');
 
             // Calculate overall stats

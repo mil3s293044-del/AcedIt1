@@ -83,19 +83,40 @@ const FloatingTimer = React.memo(({
         onClickCapture={swallowClickAfterDrag}
         className="touch-none"
     >
-        <Card className={`bg-surface/95 backdrop-blur-sm border-2 transition-all select-none
-            ${isDragging
-                ? 'border-primary/60 shadow-2xl'
-                : currentTime.isBreak
-                    ? 'border-xp/40 shadow-lg hover:shadow-xl hover:border-xp/60'
-                    : 'border-primary/40 shadow-lg hover:shadow-xl hover:border-primary/60'}`}>
+        {/* ON THE APP'S OWN CARD, not a neon sticker.
+        
+            This was `bg-surface/95 backdrop-blur-sm` inside a 2px border in
+            the running tone, over `shadow-lg`. Three things went wrong in the
+            dark, and all three are the same mistake — styling it in isolation
+            rather than as one of this app's panels:
+        
+              A 2px border at /40 in the brand green reads at nearly full
+              strength on a dark ground, so the widget was ringed in neon while
+              every other panel in the app wears `border-border`. It was also
+              saying "running" for the third time, next to an orb and a label
+              that already do.
+        
+              `shadow-lg` is a black shadow. On a near-black page it does
+              nothing, so the one element on screen that is genuinely floating
+              above the app read as a flat sticker lying on it. `.on-table` is
+              the app's own elevation and its dark branch was written for
+              exactly this.
+        
+              And the translucent blur muddied the panel over dark content
+              without buying anything — every other card here is solid.
+        
+            The tone stays where it belongs: on the orb, and on the word. */}
+        <Card className={`card-soft on-table transition-colors select-none
+            ${isDragging ? 'border-primary/50' : 'hover:border-border/80'}`}>
             <CardContent className="p-3 timer-content">
                 <Link to={createPageUrl("Study")} draggable={false}
                     className="flex items-center gap-3">
                     <PomodoroOrb left={currentTime.timeLeft} total={currentTime.total}
                         isBreak={currentTime.isBreak} />
                     <div className="min-w-0">
-                        <div className="font-mono font-bold text-lg text-foreground tabular-nums leading-none">
+                        {/* font-display, like every other number in the app.
+                            A monospace clock belongs to a different product. */}
+                        <div className="font-display font-extrabold text-lg text-foreground tabular-nums leading-none">
                             {formatTime(currentTime.timeLeft)}
                         </div>
                         <div className={`text-xs font-bold mt-1 ${currentTime.isBreak ? 'text-xp' : 'text-primary'}`}>

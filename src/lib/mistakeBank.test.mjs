@@ -10,7 +10,7 @@
  */
 import assert from "node:assert/strict";
 import {
-    cardFromModule, isBankCard, bankKey, BANK_TOPIC,
+    cardFromModule, isBankCard, deckCards, bankKey, BANK_TOPIC,
     fixState, mistakeMeta, repeatOffenders, bankSummary,
     ladderDone, clearedBy, casesFor,
     isRetired, groupBank, retireMistake, restoreMistake,
@@ -101,6 +101,21 @@ check("bank cards are recognisable, and other cards are not", () => {
     assert.equal(isBankCard({ topic: BANK_TOPIC }), true);
     assert.equal(isBankCard({ topic: "Blurting gaps" }), false);
     assert.equal(isBankCard(null), false);
+});
+
+check("deck surfaces read flashcards with the bank taken out", () => {
+    // A banked mistake is a flashcards row so it can use one scheduler, and it
+    // is not a flashcard: nothing filtered it, so a "Mistake bank" deck sat on
+    // the shelf beside Chemistry and its cards counted toward due totals,
+    // retention, and the questions the exam builder was willing to ask.
+    const rows = [
+        { id: "a", topic: "Redox", subject_name: "Chemistry" },
+        { id: "b", topic: BANK_TOPIC, subject_name: "Chemistry" },
+        { id: "c", topic: "Text response", subject_name: "English" },
+    ];
+    assert.deepEqual(deckCards(rows).map((c) => c.id), ["a", "c"]);
+    assert.deepEqual(deckCards([]), []);
+    assert.deepEqual(deckCards(null), [], "a failed read is empty, not a throw");
 });
 
 check("the same mark banks once, but the same criterion on another question does not collide", () => {
