@@ -9,7 +9,7 @@
 import assert from "node:assert/strict";
 import {
     studyEvents, weekPace, weekStart, weekIndex, dayKey,
-    lastTouchedBySubject, daysSince, MIN_BASELINE_WEEKS,
+    usualWeeklyMinutes, MIN_BASELINE_WEEKS,
 } from "@/lib/studyLog";
 
 let passed = 0;
@@ -120,27 +120,44 @@ check("last week's work is not counted as this week's", () => {
     assert.equal(pace.minutes, 0, "the day before this Monday is a different week");
 });
 
-// ─── neglect ────────────────────────────────────────────────────────────────
+// ─── the usual week, per subject ────────────────────────────────────────────
 
-check("a subject is touched by studying it OR by reviewing its cards", () => {
-    const touched = lastTouchedBySubject(
-        [{ day: back(9), subject: "Chemistry", minutes: 30 }],
-        [{ subject_name: "Chemistry", last_reviewed_date: back(1) }],
-    );
-    assert.equal(touched.get("Chemistry"), back(1),
-        "otherwise it calls a subject neglected the morning after they revised it");
+check("a subject's usual is the median of past weeks, not this half-finished one", () => {
+    const evs = [
+        { id: "a", day: back(7), minutes: 120, subject: "Chemistry" },
+        { id: "b", day: back(14), minutes: 60, subject: "Chemistry" },
+        { id: "c", day: back(21), minutes: 600, subject: "Chemistry" },  // the SAC week
+        { id: "d", day: back(0), minutes: 5, subject: "Chemistry" },     // this week so far
+    ];
+    assert.equal(usualWeeklyMinutes(evs, WED).get("Chemistry"), 120,
+        "a mean would say 260, and this week's 5 must not drag it");
 });
 
-check("days since is whole days, and today is nought", () => {
-    assert.equal(daysSince(back(0), WED), 0);
-    assert.equal(daysSince(back(12), WED), 12);
+check("a week the subject was skipped counts as a zero for that subject", () => {
+    // The opposite of weekPace's rule, deliberately: a week with study in it
+    // and none of it on English is direct evidence about English. Skipping
+    // those would report a subject touched once a month as its one good week.
+    const evs = [
+        { id: "a", day: back(7), minutes: 120, subject: "English" },
+        { id: "b", day: back(14), minutes: 120, subject: "Chemistry" },
+        { id: "c", day: back(21), minutes: 120, subject: "Chemistry" },
+    ];
+    assert.equal(usualWeeklyMinutes(evs, WED).get("English"), 0,
+        "one good week out of three is not a usual week");
 });
 
-check("never touched is null, which is not the same as a big number", () => {
-    assert.equal(daysSince(null, WED), null);
-    assert.equal(daysSince("", WED), null);
-    const touched = lastTouchedBySubject([], [{ subject_name: "New thing" }]);
-    assert.equal(touched.get("New thing"), undefined);
+check("with too little history there is no usual for anybody", () => {
+    const evs = [{ id: "a", day: back(7), minutes: 120, subject: "Chemistry" }];
+    assert.equal(usualWeeklyMinutes(evs, WED).size, 0,
+        "one week is not a habit, and the card prints a dash");
+});
+
+check("weeks the student did nothing at all are not read as zero weeks", () => {
+    // Three active weeks out of eight. The five silent ones are absence of
+    // evidence — counted, they would halve every subject's usual.
+    const evs = [];
+    for (const w of [1, 2, 3]) evs.push({ id: `w${w}`, day: back(w * 7), minutes: 60, subject: "X" });
+    assert.equal(usualWeeklyMinutes(evs, WED).get("X"), 60);
 });
 
 console.log(`\n${passed} passed`);

@@ -564,14 +564,28 @@ NO HISTORY rather than a zero-minute week, because reading a new account's
 empty weeks as zeroes puts their usual at nothing and congratulates any effort
 at all. Under `MIN_BASELINE_WEEKS` there is no comparison and the panel says so.
 
-**The subjects hand prints DAYS SINCE YOU TOUCHED IT** (`src/lib/neglect.js`),
-not the deck's size. The card already carries a measure — rank is mastery — so
-"310 cards" was a second, unrelated number on the same object, and it was
-inventory: it does not move when you work and it names nothing to do. The hand
-deals most-neglected-first, never-touched sorts ahead of the longest gap
-(`daysSince` returns null for it, which is not a big number and must not be
-sorted as one), and the count stays on the BACK of the card, where you turned
-it over to ask what is in the subject.
+**The subjects hand prints WHAT A NORMAL WEEK GIVES THAT SUBJECT**
+(`src/lib/usualWeek.js`), not the deck's size. That corner has carried three
+things now and the first two were both wrong: "310 cards" is inventory, which
+does not move when you work and names nothing to do; days-since-touched moved
+and was actionable, and was also a counter that only ever goes up, highest on
+the subject you are already avoiding, never saying anything good. Hours a week
+say where the time actually goes — the one fact about a subject a student
+cannot get elsewhere and cannot honestly guess — and it is the same "usual"
+WeekPace is built on, said twice from one calculation.
+
+`usualWeeklyMinutes` is a median of past weeks, current week EXCLUDED (it is
+half-finished, and a Monday morning would drag every subject toward nothing).
+A week the subject was skipped counts as a ZERO for that subject — the opposite
+of WeekPace's rule, deliberately: a week with study in it and none of it on
+Chemistry is direct evidence about Chemistry, and skipping those reports a
+subject touched once a month as its one good week. Rounded to the half hour on
+the card, because a median across weeks does not know its own tenths.
+
+Least time deals FIRST and unknown sorts LAST — a subject with no history has
+not been starved, it has not been measured, and heading the list with it claims
+something the page cannot see. The card count stays on the BACK, where you
+turned it over to ask what is in the subject.
 
 ## The dashboard answers one question
 
@@ -945,6 +959,17 @@ in both themes on purpose. A favicon has no theme to follow; it sits on a tab
 strip whose colour neither the app nor the student chose, and a bare black pip
 disappears on a dark one. `index.html` also linked a `manifest.json` that has
 never existed in this repo; that line is gone.
+
+**Swapping that tag fixed the tab and did NOT fix Google**, which went on
+printing Base44's orange mark beside acedit.au — a crawler does not look the
+way a browser does. It wants a real `/favicon.ico` at the root (the path that
+is checked without parsing the page), square and a multiple of 48px, which is
+the size a search result renders. And `apple-touch-icon` cannot be an SVG at
+all: iOS ignores it, so "add to home screen" fell back to a screenshot. So
+`favicon.ico` (16/32/48), `apple-touch-icon.png` (180) and `icon-192/512.png`
+all ship, ALL GENERATED FROM `favicon.svg` — regenerate them together or the
+tab, the home screen and the search result become three different marks. Google
+re-crawls on its own schedule; nothing in the page can force it.
 
 **The signup email is sent by US, through Resend** (`sendSignupEmail` in
 `server.mjs`). `supabase.auth.signUp()` asks Supabase to send it over the
