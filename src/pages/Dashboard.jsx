@@ -29,7 +29,7 @@ import { atarBandOf } from "@/lib/atarBands";
 import { todaysIntent } from "@/lib/studyIntent";
 import { needsSetup, outstandingTasks, setupCopy } from "@/lib/onboardingTasks";
 import { isDue } from "@/lib/due";
-import { studyEvents, lastTouchedBySubject, daysSince } from "@/lib/studyLog";
+import { studyEvents, usualWeeklyMinutes } from "@/lib/studyLog";
 import AceTip from "@/components/ace/AceTip";
 import AceShuffle from "@/components/ace/AceShuffle";
 import AceBody from "@/components/ace/AceBody";
@@ -911,11 +911,14 @@ export default function Dashboard() {
     );
 
     const subjectCards = useMemo(() => {
-        const touched = lastTouchedBySubject(logEvents, flashcards);
-        return subjectHand(flashcards).map((r) => {
-            const lastTouched = touched.get(r.subject) || null;
-            return { ...r, lastTouched, daysSince: daysSince(lastTouched) };
-        });
+        // Undefined, not 0, when there is no history for a subject: the hand
+        // prints "—" and sorts it last rather than calling a subject starved
+        // on the strength of an account that is three days old.
+        const usual = usualWeeklyMinutes(logEvents);
+        return subjectHand(flashcards).map((r) => ({
+            ...r,
+            usualMinutes: usual.has(r.subject) ? usual.get(r.subject) : null,
+        }));
     }, [flashcards, logEvents]);
 
 

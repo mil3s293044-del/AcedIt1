@@ -2,13 +2,35 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <!-- Ours, and local. This pointed at https://base44.com/logo_v2.svg — a
-         third party's logo, fetched from a third party's domain, on every page
-         load of an app that has been migrating off them for months. -->
-    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <!--
+      THE TAB MARK, and the one a search engine shows beside the result.
+
+      This pointed at https://base44.com/logo_v2.svg — a third party's logo,
+      fetched from a third party's domain, on every page load of an app that
+      has been migrating off them for months. Swapping the tag fixed the tab
+      and did NOT fix Google, which was still printing Base44's orange mark
+      next to acedit.au, because a crawler does not look the same way a
+      browser does:
+
+        • It wants a real /favicon.ico as well. An SVG icon is supported, but
+          the .ico at the root is the path every crawler has always tried and
+          the one that is checked without parsing the page.
+        • It wants the icon SQUARE and a multiple of 48px. 48 is the size
+          Google actually renders in a result, so the .ico carries 16/32/48
+          and the browser picks.
+        • And apple-touch-icon cannot be an SVG at all — iOS ignores it, so
+          "add to home screen" fell back to a screenshot of the page.
+
+      Every file here is generated from favicon.svg, so the tab, the home
+      screen and the search result cannot drift into three different marks.
+      Re-crawling is Google's call and takes days to weeks; nothing in the
+      page can force it.
+    -->
+    <link rel="icon" href="/favicon.ico" sizes="48x48" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" sizes="any" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <meta name="theme-color" content="#58CC02" />
-    <link rel="apple-touch-icon" href="/favicon.svg" />
+    <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link

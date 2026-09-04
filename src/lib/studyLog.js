@@ -177,43 +177,52 @@ export function weekPace(events = [], now = new Date()) {
     };
 }
 
-// ─── Neglect ────────────────────────────────────────────────────────────────
-
 /**
- * Subject → the last day it was touched, as "YYYY-MM-DD".
+ * Subject → the minutes a normal week holds for it.
  *
- * Counts a study log entry OR a flashcard review, because both are the student
- * working on that subject and only counting one of them would name a subject
- * neglected on the morning after they revised it.
+ * ─── Why a MEDIAN of past weeks, and why past weeks only ────────────────────
+ * The same reasoning as `weekPace`, for the same reason: one five-hour cram
+ * before a SAC is not what a student "usually" does, and a mean lets it say
+ * so. The CURRENT week is excluded because it is half-finished — counting a
+ * Monday morning would drag every subject's usual toward nothing, and the
+ * number is supposed to be the thing this week is measured against.
+ *
+ * A week the subject was not touched at all IS counted, as a zero, and that is
+ * the opposite of the rule `weekPace` uses — deliberately. There, an empty
+ * week means the student was not using the app and there is no evidence about
+ * their pace; here, a week with study in it and none of it on Chemistry is
+ * direct evidence about Chemistry. Skipping those would report a subject
+ * touched once a month as its one good week.
  */
-export function lastTouchedBySubject(events = [], flashcards = []) {
+export function usualWeeklyMinutes(events = [], now = new Date()) {
+    const list = Array.isArray(events) ? events : [];
+    const thisMonday = weekStart(now);
+
+    // Which past weeks the student was active at all. A student who joined
+    // three weeks ago has no week before that, and reading those as zeroes
+    // would say every subject is usually never studied.
+    const weeks = [];
+    for (let w = 1; w <= BASELINE_WEEKS; w += 1) {
+        const start = new Date(thisMonday.getTime() - w * 7 * MS_DAY);
+        const from = dayKey(start);
+        const to = dayKey(new Date(start.getTime() + 6 * MS_DAY));
+        const rows = list.filter((e) => e.day >= from && e.day <= to);
+        if (rows.length) weeks.push(rows);
+    }
+    if (weeks.length < MIN_BASELINE_WEEKS) return new Map();
+
+    const subjects = new Set(list.map((e) => e.subject).filter(Boolean));
     const out = new Map();
-    const put = (subject, day) => {
-        if (!subject || !day) return;
-        const prev = out.get(subject);
-        if (!prev || day > prev) out.set(subject, day);
-    };
-
-    (Array.isArray(events) ? events : []).forEach((e) => put(e.subject, e.day));
-    (Array.isArray(flashcards) ? flashcards : []).forEach((c) => {
-        put(c?.subject_name, String(c?.last_reviewed_date || "").slice(0, 10));
+    subjects.forEach((subject) => {
+        const perWeek = weeks.map((rows) => rows
+            .filter((e) => e.subject === subject)
+            .reduce((sum, e) => sum + e.minutes, 0));
+        const sorted = perWeek.sort((a, b) => a - b);
+        const mid = Math.floor(sorted.length / 2);
+        const median = sorted.length % 2
+            ? sorted[mid]
+            : Math.round((sorted[mid - 1] + sorted[mid]) / 2);
+        out.set(subject, median);
     });
-
     return out;
-}
-
-/**
- * Whole days since `day`, or null when it has never been touched.
- *
- * NULL IS NOT INFINITY and the caller has to say which it means. A subject
- * with cards that has never been opened is the most neglected thing on the
- * page; a brand new subject added an hour ago is not neglected at all, it is
- * new. Returning a number for both would let one be printed as the other.
- */
-export function daysSince(day, now = new Date()) {
-    if (!day) return null;
-    const then = new Date(`${String(day).slice(0, 10)}T00:00:00`);
-    if (Number.isNaN(then.getTime())) return null;
-    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-    return Math.max(0, Math.round((today - then) / MS_DAY));
 }
