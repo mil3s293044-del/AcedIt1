@@ -33,6 +33,7 @@ import HelpButton from "@/components/shared/HelpButton";
 import NeuroPanel from "../components/study/NeuroPanel";
 import { todaysIntent } from "@/lib/studyIntent";
 import { isDue } from "@/lib/due";
+import { deckCards } from "@/lib/mistakeBank";
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 const fmtTime = (m) => {
@@ -127,7 +128,7 @@ export default function Study() {
                 StudyTechnique.filter({ created_by: userEmail }, "-created_date", 50),
                 UserSubject.filter({ created_by: userEmail, is_active: true }),
                 base44.entities.StudySession.filter({ created_by: userEmail }, "-date", 50).catch(() => []),
-                base44.entities.Flashcard.filter({ created_by: userEmail, is_active: true }, "next_review_date").catch(() => []),
+                base44.entities.Flashcard.filter({ created_by: userEmail, is_active: true }, "next_review_date").then(deckCards).catch(() => []),
                 base44.entities.SubjectAssessment.filter({ created_by: userEmail, is_completed: false }, "due_date", 10).catch(() => []),
             ]);
             setUserProfile(profileData);

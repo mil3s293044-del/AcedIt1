@@ -9,6 +9,7 @@ import { format, differenceInDays, parseISO } from "date-fns";
 import { useNavigate } from "react-router-dom";
 import { createPageUrl } from "@/utils";
 import { isDue } from "@/lib/due";
+import { deckCards } from "@/lib/mistakeBank";
 
 export default function UpcomingAssessments({ user }) {
     const [assessments, setAssessments] = useState([]);
@@ -32,7 +33,7 @@ export default function UpcomingAssessments({ user }) {
                 base44.entities.Flashcard.filter({
                     created_by: user.email,
                     is_active: true
-                }, "next_review_date")
+                }, "next_review_date").then(deckCards)
             ]);
             
             const upcoming = allAssessments.filter(assessment => {

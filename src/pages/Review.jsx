@@ -40,6 +40,7 @@ import { base44 } from "@/api/base44Client";
 import { createPageUrl } from "@/utils";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/components/ui/use-toast";
+import { deckCards } from "@/lib/mistakeBank";
 import { ToastAction } from "@/components/ui/toast";
 import { Layers, Play, Sparkles, Inbox, ChevronDown } from "lucide-react";
 import AuditPile from "@/components/study/AuditPile";
@@ -81,10 +82,11 @@ export default function Review() {
     const load = useCallback(async () => {
         try {
             const user = await base44.auth.me();
-            const rows = await base44.entities.Flashcard.filter({
+            // Minus the mistake bank, which reviews on its own screen.
+            const rows = deckCards(await base44.entities.Flashcard.filter({
                 created_by: user.email, is_active: true,
-            });
-            setCards(rows || []);
+            }));
+            setCards(rows);
         } catch (err) {
             console.error("Review load error:", err);
             toast({ title: "Couldn't load your cards", description: "Refresh and try again.", variant: "destructive" });

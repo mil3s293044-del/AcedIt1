@@ -26,6 +26,7 @@ import { ToastAction } from "@/components/ui/toast";
 import { format, differenceInDays, parseISO, addDays, startOfWeek, addWeeks } from "date-fns";
 import HelpButton from "@/components/shared/HelpButton";
 import { createPageUrl } from "@/utils";
+import { deckCards } from "@/lib/mistakeBank";
 import { recIdOf, stratIdOf, durationOf, noteTextOf, buildNotes } from "@/lib/planTags";
 import { strategiesNeedingCheckIn } from "@/lib/strategyState";
 import StrategyCheckIn from "@/components/planner/StrategyCheckIn";
@@ -376,7 +377,7 @@ export default function Planner() {
                 // The week planner works out which cards fall out of reach in
                 // the next seven days, so it needs the SM-2 state. Not windowed
                 // — memory state is cumulative.
-                base44.entities.Flashcard.filter({ created_by: email, is_active: true }).catch(() => []),
+                base44.entities.Flashcard.filter({ created_by: email, is_active: true }).then(deckCards).catch(() => []),
             ]);
             const p = profileData[0] || null;
             setProfile(p);

@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo } from "react";
 import { Link } from "react-router-dom";
 import { createPageUrl } from "@/utils";
+import { deckCards } from "@/lib/mistakeBank";
 import { motion } from "framer-motion";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
@@ -254,7 +255,7 @@ export default function Analytics() {
                 UserProfile.filter({ created_by: email }).then(d => d[0] || null),
                 StudyTechnique.filter({ created_by: email, date: { $gte: dr.start, $lte: dr.end } }),
                 QuizAttempt.filter({ created_by: email, date: { $gte: dr.start, $lte: dr.end } }),
-                Flashcard.filter({ created_by: email }),
+                Flashcard.filter({ created_by: email }).then(deckCards),
                 ActiveRecallSession.filter({ created_by: email, date: { $gte: dr.start, $lte: dr.end } }),
                 BlurtingSession.filter({ created_by: email, date: { $gte: dr.start, $lte: dr.end } }),
                 UserSubject.filter({ created_by: email, is_active: true }),

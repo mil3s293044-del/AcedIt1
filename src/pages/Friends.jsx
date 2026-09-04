@@ -17,6 +17,7 @@ import { useToast } from "@/components/ui/use-toast";
 import HelpButton from "@/components/shared/HelpButton";
 import FriendsLeaderboard from "@/components/friends/FriendsLeaderboard";
 import AceBody from "@/components/ace/AceBody";
+import { deckCards } from "@/lib/mistakeBank";
 
 // ── Coach voice (chill + motivational, social) ────────────────────────────
 function getCoachLine({ name, hour, friendCount, pendingCount, sharedCount }) {
@@ -124,7 +125,7 @@ export default function Friends() {
                 base44.entities.SharedQuiz.filter({ shared_with_email: currentUser.email, status: 'pending' }).catch(() => []),
                 base44.entities.SharedFlashcard.filter({ shared_with_email: currentUser.email, status: 'pending' }).catch(() => []),
                 base44.entities.Quiz.filter({ created_by: currentUser.email }).catch(() => []),
-                base44.entities.Flashcard.filter({ created_by: currentUser.email, is_active: true }).catch(() => []),
+                base44.entities.Flashcard.filter({ created_by: currentUser.email, is_active: true }).then(deckCards).catch(() => []),
             ]);
 
             setUserProfile(profileData[0] || {});

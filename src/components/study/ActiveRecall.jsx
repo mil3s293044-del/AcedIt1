@@ -20,6 +20,7 @@ import { CONFIDENCE } from "@/lib/calibration";
 import CalibrationReport from "./CalibrationReport";
 import WhatToTest from "./WhatToTest";
 import { questionsFromCards, questionsFromMap } from "@/lib/recallSuggest";
+import { deckCards } from "@/lib/mistakeBank";
 
 // Static class lookups so Tailwind JIT can see every utility.
 const verdictConfig = {
@@ -310,7 +311,7 @@ export default function ActiveRecall({ onSessionComplete, userSubjects: initialU
                 // it was read here, which is why the only fast path was
                 // "default questions".
                 const [cards, maps, asmts, techs] = await Promise.all([
-                    base44.entities.Flashcard.filter({ created_by: currentUser.email, is_active: true }).catch(() => []),
+                    base44.entities.Flashcard.filter({ created_by: currentUser.email, is_active: true }).then(deckCards).catch(() => []),
                     base44.entities.MindMap.filter({ created_by: currentUser.email }, "-updated_date", 50).catch(() => []),
                     base44.entities.SubjectAssessment.filter({ created_by: currentUser.email, is_completed: false }, "due_date", 20).catch(() => []),
                     base44.entities.StudyTechnique.filter({ created_by: currentUser.email }, "-date", 40).catch(() => []),

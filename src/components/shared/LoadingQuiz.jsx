@@ -4,6 +4,7 @@ import { Check, X, Clock, Sparkles, Loader2 } from "lucide-react";
 import { base44 } from "@/api/base44Client";
 import MathText from "@/components/shared/LatexRenderer";
 import { fireXPFeedback } from "@/components/ranked/XPFeedback";
+import { deckCards } from "@/lib/mistakeBank";
 
 // ─── Loading mini-quiz ───────────────────────────────────────────────────────
 // Shown while a slow AI generation runs. Pulls quick MCQs from the student's
@@ -66,7 +67,7 @@ export default function LoadingQuiz() {
                 const user = await base44.auth.me();
                 const [quizzes, cards] = await Promise.all([
                     base44.entities.Quiz.filter({ created_by: user.email }).catch(() => []),
-                    base44.entities.Flashcard.filter({ created_by: user.email }).catch(() => []),
+                    base44.entities.Flashcard.filter({ created_by: user.email }).then(deckCards).catch(() => []),
                 ]);
 
                 // From saved quizzes — MCQs already have options + correct index.

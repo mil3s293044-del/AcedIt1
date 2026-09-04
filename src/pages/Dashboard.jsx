@@ -28,6 +28,7 @@ import { todaysIntent } from "@/lib/studyIntent";
 import { needsSetup, outstandingTasks, setupCopy } from "@/lib/onboardingTasks";
 import { isDue } from "@/lib/due";
 import { studyEvents } from "@/lib/studyLog";
+import { deckCards } from "@/lib/mistakeBank";
 import AceTip from "@/components/ace/AceTip";
 import AceShuffle from "@/components/ace/AceShuffle";
 import AceBody from "@/components/ace/AceBody";
@@ -518,7 +519,10 @@ export default function Dashboard() {
             // The raw cards, for the retention projection. Only a due-deck
             // summary was being kept, which threw away every SM-2 field the
             // forgetting curve is built from.
-            setFlashcards(flashcardData || []);
+            // Minus the mistake bank: it is stored as flashcards and is not
+            // one, so it must not reach due counts, retention, Today's Play or
+            // the week's subject split. See deckCards.
+            setFlashcards(deckCards(flashcardData));
 
             // GENUINELY due, not "has a date that has passed". A card is
             // created with next_review_date set to today, so this line used to

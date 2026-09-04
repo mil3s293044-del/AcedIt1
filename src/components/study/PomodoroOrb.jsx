@@ -61,7 +61,19 @@ const TONE = {
 
 export default function PomodoroOrb({ left = 0, total = 0, isBreak = false, size = SIZE }) {
     const tone = isBreak ? TONE.break : TONE.work;
-    const glow = `hsl(var(${tone.varName}))`;
+
+    /**
+     * TWO STOPS, BOTH BELOW FULL STRENGTH — a defined edge and a modest bloom.
+     *
+     * This was one `drop-shadow(0 0 5px)` at the token's full alpha, which is
+     * fine on cream and wrong on a dark page: with nothing to absorb it the
+     * bloom spread across the whole orb and came out as a fuzzy green smear,
+     * the loudest thing on a widget that floats over every screen in the app.
+     * Nothing else in the dark theme glows like that. Same idiom BrandMark
+     * uses on the side rail: tight for the edge, wide and faint for the halo.
+     */
+    const glow = `drop-shadow(0 0 2px hsl(var(${tone.varName}) / 0.55))`
+        + ` drop-shadow(0 0 7px hsl(var(${tone.varName}) / 0.28))`;
 
     // Remaining, not elapsed: the ring empties as the block runs down, so a
     // nearly-gone ring means a nearly-gone block without any inversion to do
@@ -78,7 +90,7 @@ export default function PomodoroOrb({ left = 0, total = 0, isBreak = false, size
     return (
         <svg width={size} height={size} viewBox={`0 0 ${SIZE} ${SIZE}`}
             className={tone.text} aria-hidden="true"
-            style={{ filter: `drop-shadow(0 0 5px ${glow})` }}>
+            style={{ filter: glow }}>
             {/* The face. Kept very quiet — it is a bezel, not content. */}
             <circle cx={MID} cy={MID} r={R + 3}
                 className="fill-surface stroke-current" strokeOpacity={0.18} strokeWidth={1} />

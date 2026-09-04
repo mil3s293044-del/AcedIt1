@@ -249,6 +249,21 @@ came from. /MistakeBank is two tabs — Fix is the drilling, Sit again is the
 proving — and a re-sit plays through the existing retry path, so its results
 land with parent-relative indices like any other attempt.
 
+**A BANKED MISTAKE IS A FLASHCARDS ROW AND IS NOT A FLASHCARD**, and nothing
+enforced that until it had leaked everywhere. `deckCards` (mistakeBank.js) is
+the filter every DECK surface reads through — the shelf, /Review, Study, the
+dashboard's due counts and retention, the exam/blurting/recall builders,
+Analytics, sharing. Without it a "Mistake bank" deck sat on the flashcard shelf
+beside Chemistry, its cards counted toward due totals and the forgetting curve,
+and the exam builder was willing to ask a question made of one marker's note
+about a phrase.
+
+Applied at the READ, per surface, rather than inside the shim: /MistakeBank and
+the Quizzes hero genuinely want those rows, and a global exclusion with an
+opt-out is the kind of magic that silently empties a screen a year later. Two
+reads are deliberately NOT filtered — the data export and account deletion,
+which are about everything the student owns rather than about decks.
+
 **The mistake bank is flashcards with a marker** (`topic: "Mistake bank"`), so a
 banked mistake comes back through the SM-2 engine that already exists rather
 than sitting in a list nobody opens — same move blurting's `makeCardsFromMisses`
@@ -1039,6 +1054,17 @@ another email before this.
   discarded on close, the duration they picked was never read, the ATAR
   components were computed and never shown. If you add an input, wire it through
   the same session.
+- **A widget that floats over the app is still one of the app's panels.** The
+  pomodoro timer was styled in isolation and it showed in the dark: a 2px
+  border at /40 in the brand green, which on a dark ground reads near
+  full-strength and rings the thing in neon (while saying "running" for the
+  third time, beside an orb and a label that already do); `shadow-lg`, a BLACK
+  shadow, so the one genuinely floating element on screen had no elevation at
+  all on a near-black page; a translucent blur that muddied it over dark
+  content and bought nothing; and `font-mono` digits, where every other number
+  in the app is `font-display` + `tabular-nums`. It wears `card-soft on-table`
+  now — the app's own panel and its own dark elevation — and the tone lives on
+  the orb and the word, which is where it was already.
 - **The running timer is a clock, not a glyph beside a number.**
   `PomodoroOrb` — a green (amber on break) face that glows, with an arc for how
   much of the block is left and a hand that steps 6° every second. The arc is
@@ -1047,7 +1073,10 @@ another email before this.
   anticlockwise, which on a clock face is the one thing it must not do. It
   draws from `left` and `total` and nothing else, so the ring cannot disagree
   with the digits next to it, and with no `total` (older saved state) the ring
-  is simply not drawn rather than drawn against a guess.
+  is simply not drawn rather than drawn against a guess. Its glow is TWO STOPS
+  BELOW FULL STRENGTH — a tight edge and a faint bloom, the same idiom
+  BrandMark uses. One `drop-shadow` at the token's full alpha is fine on cream
+  and comes out as a fuzzy smear on dark, where there is nothing to absorb it.
 - **A draggable thing that is also a link separates the two by DISTANCE, not
   by target.** The floating timer's whole interior is the link to Study, and
   the drag handler bailed on anything inside it — so `cursor: grab` sat over

@@ -10,6 +10,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { motion, AnimatePresence } from "framer-motion";
 import AceShuffle from "@/components/ace/AceShuffle";
+import { deckCards } from "@/lib/mistakeBank";
 import {
   GraduationCap, Clock, AlertCircle, BarChart3, Check, X,
   ChevronLeft, ChevronRight, Play, Trophy, Loader2, RefreshCw,
@@ -157,7 +158,7 @@ export default function ExamMode({ userSubjects }) {
     setIsLoadingData(true);
     try {
       const [flashcards, quizzes, arSessions] = await Promise.all([
-      base44.entities.Flashcard.filter({ created_by: user.email, is_active: true }),
+      base44.entities.Flashcard.filter({ created_by: user.email, is_active: true }).then(deckCards),
       base44.entities.Quiz.filter({ created_by: user.email }), // FIX: only user's own quizzes
       base44.entities.ActiveRecallSession.filter({ created_by: user.email }, "-created_date", 30)]
       );

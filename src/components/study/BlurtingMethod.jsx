@@ -15,6 +15,7 @@ import WhatToTest from "./WhatToTest";
 import { FEATURES, checkLiveTier } from "@/lib/tierAccess";
 import { getExaminerPrompt } from "@/lib/subjectExaminerPrompts";
 import { fmtDate } from "@/lib/safeDate";
+import { deckCards } from "@/lib/mistakeBank";
 
 // Static class lookup for AI score pill — Tailwind JIT cannot see interpolated tokens.
 const SCORE_PILL = {
@@ -121,7 +122,7 @@ export default function BlurtingMethod({ onSessionComplete }) {
                 setUserSubjects(uniqueSubjects || []);
 
                 const [cards, maps, asmts, techs] = await Promise.all([
-                    base44.entities.Flashcard.filter({ created_by: currentUser.email, is_active: true }).catch(() => []),
+                    base44.entities.Flashcard.filter({ created_by: currentUser.email, is_active: true }).then(deckCards).catch(() => []),
                     base44.entities.MindMap.filter({ created_by: currentUser.email }, "-updated_date", 50).catch(() => []),
                     base44.entities.SubjectAssessment.filter({ created_by: currentUser.email, is_completed: false }, "due_date", 20).catch(() => []),
                     base44.entities.StudyTechnique.filter({ created_by: currentUser.email }, "-date", 40).catch(() => []),
