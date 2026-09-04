@@ -891,17 +891,20 @@ Reference Study Design requirements in your feedback.`,
         </AnimatePresence>
     );
 
+    // Fixed dark in both themes. `bg-foreground` over `text-surface` is an
+    // inversion that only holds in light mode and turned this into a white
+    // page in the dark; see the longer note in PomodoroTimer.
     if (isFocusMode) {
         return (
-            <div ref={focusModeRef} className="fixed inset-0 z-[10000] bg-foreground">
+            <div ref={focusModeRef} className="fixed inset-0 z-[10000] bg-[#0A121F]">
                 <div className="absolute inset-0 bg-xp/10" />
                 <div className="relative z-10 flex flex-col h-full">
                     <div className="flex items-center justify-between px-6 py-4">
-                        <div className="flex items-center gap-2 text-background/60 text-sm">
+                        <div className="flex items-center gap-2 text-white/60 text-sm">
                             <PenTool className="w-4 h-4" />
                             Blurting — Focus Mode
                         </div>
-                        <Button onClick={() => { exitFullscreen(); setIsFocusMode(false); }} variant="ghost" className="text-background/60 hover:text-background hover:bg-background/10 gap-2">
+                        <Button onClick={() => { exitFullscreen(); setIsFocusMode(false); }} variant="ghost" className="text-white/60 hover:text-white hover:bg-white/10 gap-2">
                             <X className="w-4 h-4" /> Exit Focus
                         </Button>
                     </div>
