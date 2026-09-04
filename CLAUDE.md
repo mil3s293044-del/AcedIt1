@@ -579,27 +579,21 @@ NO HISTORY rather than a zero-minute week, because reading a new account's
 empty weeks as zeroes puts their usual at nothing and congratulates any effort
 at all. Under `MIN_BASELINE_WEEKS` there is no comparison and the panel says so.
 
-**WeekPace ALSO owns the per-subject split, and the subjects hand is gone.**
-That hand was a fan of playing cards whose corner had held, in turn, the deck's
-card count, the days since it was last opened, and finally the usual weekly
-hours — at which point it was answering WeekPace's question, on a different
-object, two panels away, with the same number. Its corner had already been
-replaced twice looking for something worth putting there, so it was the one
-that went; the breakdown moved into the panel that prints the total it adds up
-to. `src/lib/usualWeek.js` survives it (`usualOrder`, `usualLabel`), and
-`studyMove.js` plus `subjectHand` went with the hand.
+**The subjects hand is gone, and so is the per-subject split that briefly
+replaced it.** The hand was a fan of playing cards whose corner had held, in
+turn, the deck's card count, the days since it was last opened, and finally the
+usual weekly hours — at which point it was answering WeekPace's question, on a
+different object, two panels away, with the same number. The breakdown moved
+into WeekPace and then came out again: a panel that answers "have I done enough
+lately" with a headline, a bar and a sentence does not also need four rows
+taking the same total apart, and that list read as an accusation. Where the
+hours go belongs on Analytics. `usualWeek.js`, `usualWeeklyMinutes`,
+`studyMove.js` and `subjectHand` all went with them.
 
-The rows are BARS AGAINST THE BIGGEST SUBJECT, never against a target: the
-point is the shape of a week — which subject gets the hours and which is living
-on scraps — and the app has no business saying what that split ought to be. A
-subject with no history is DROPPED rather than listed at zero, because a row
-reading "0m/wk" against a subject added yesterday is an accusation the data
-does not support.
-
-The panel is STACKED at every width. It sits in half of a two-column row inside
-the page's own two-column grid, so at the viewport where a `lg:` split would
-fire the panel itself is about 500px and each column would be 250 — the same
-viewport-is-not-element trap the streak panel beside it already records.
+The panel is STACKED and single-column. It sits in half of a two-column row
+inside the page's own two-column grid, so at the viewport where a `lg:` split
+would fire the panel itself is about 500px and each column would be 250 — the
+same viewport-is-not-element trap the streak panel beside it already records.
 
 `usualWeeklyMinutes` is a median of past weeks, current week EXCLUDED (it is
 half-finished, and a Monday morning would drag every subject toward nothing).
@@ -628,7 +622,13 @@ and card shapes as the rest, not that the felt goes.
 
 Nothing is printed twice. The streak had its number in the header strip AND a
 panel below with the run of seven in it; the panel says it properly, so the
-strip stopped saying it at all.
+strip stopped saying it at all. Today's Play carried a footer strip too —
+today's minutes, the week against a 20h goal, the average quiz — and all three
+went the same way: the week's time is a panel of its own that compares it to
+the student's own usual rather than to a number nobody chose, and the quiz
+average is on Quizzes beside the trend that gives it meaning. A hero that makes
+ONE case does not close with a row of context that is the third thing on screen
+answering "how am I doing".
 
 **The hero MAKES A CASE, it does not assert one.** Three columns: the card,
 the move and one button, and the rail — what fired it, what skipping it costs,
