@@ -1054,6 +1054,16 @@ another email before this.
   discarded on close, the duration they picked was never read, the ATAR
   components were computed and never shown. If you add an input, wire it through
   the same session.
+- **FOCUS MODE IS A BLACKOUT AND IS NOT THEMED.** Both focus screens (the
+  pomodoro's and blurting's) painted themselves `bg-foreground` with
+  `text-surface` on top — a hand-rolled inversion that reads as "the ink
+  becomes the page". It only holds in light mode: in the dark `--foreground`
+  is near-white and `--surface` is a dark navy, so the one screen in the app
+  that must never be bright came out as a WHITE page with dark text. The
+  ground is a literal `#0A121F` now and the ink is literal white, in both
+  themes — a token that flips underneath a deliberate inversion is the bug,
+  not the fix. Watch for `text-background` in the same blocks: on a dark
+  ground it is black on black.
 - **A widget that floats over the app is still one of the app's panels.** The
   pomodoro timer was styled in isolation and it showed in the dark: a 2px
   border at /40 in the brand green, which on a dark ground reads near

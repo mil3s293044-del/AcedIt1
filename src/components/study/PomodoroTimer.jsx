@@ -520,9 +520,20 @@ export default function PomodoroTimer({ onSessionComplete, userSubjects: initial
 
     const colorScheme = getColorScheme();
 
+    // A FIXED DARK GROUND, in both themes.
+    //
+    // Focus mode was `bg-foreground` with `text-surface` on top of it — a
+    // hand-rolled inversion that reads as "the ink becomes the page". It only
+    // holds in light mode: in the dark `--foreground` is near-white and
+    // `--surface` is a dark navy, so this came out as a WHITE page with dark
+    // text, which is the one screen in the app that must never be bright.
+    //
+    // Focus mode is a blackout by design, so its ground is a literal dark
+    // rather than a token that flips underneath it, and the ink on top is
+    // literal white. Same navy the boot curtain uses.
     if (isFocusMode) {
         return (
-            <div ref={focusModeRef} className="fixed inset-0 z-[10000] bg-foreground">
+            <div ref={focusModeRef} className="fixed inset-0 z-[10000] bg-[#0A121F]">
                 <div className={`absolute inset-0 ${colorScheme.focusBg}`}></div>
                 <div className="relative z-20 p-6 flex items-center justify-end">
                     <Button
@@ -531,14 +542,14 @@ export default function PomodoroTimer({ onSessionComplete, userSubjects: initial
                             setIsFocusMode(false);
                         }}
                         variant="ghost"
-                        className="bg-surface/10 border-surface/20 text-surface hover:bg-surface/20"
+                        className="bg-white/10 border-white/20 text-white hover:bg-white/20"
                     >
                         <X className="w-4 h-4 mr-2" />
                         Exit Focus Mode
                     </Button>
                 </div>
                 <div className="relative z-10 p-8 h-[calc(100vh-100px)] overflow-auto flex items-center justify-center">
-                    <div className="bg-surface/5 backdrop-blur-sm rounded-3xl border border-surface/10 p-12 shadow-soft">
+                    <div className="bg-white/5 backdrop-blur-sm rounded-3xl border border-white/10 p-12 shadow-soft">
                         <div className="flex flex-col items-center space-y-8">
                             {/* Ace owns the break here too. He does NOT appear
                                 during focus — a mascot beside a running timer
@@ -548,7 +559,7 @@ export default function PomodoroTimer({ onSessionComplete, userSubjects: initial
                                     <AceBody className="w-24 sm:w-32" pose="sleep" title="Ace"
                                         tone="fill-white" card="fill-slate-900"
                                         cardStroke="stroke-slate-900" />
-                                    <p className="text-surface/90 text-lg sm:text-xl text-center max-w-md mt-3"
+                                    <p className="text-white/90 text-lg sm:text-xl text-center max-w-md mt-3"
                                         data-ace-break-line>
                                         {breakLine}
                                     </p>
@@ -557,7 +568,7 @@ export default function PomodoroTimer({ onSessionComplete, userSubjects: initial
                             <div className="relative w-80 h-80 flex items-center justify-center">
                                 <svg className="absolute w-full h-full transform -rotate-90" viewBox="0 0 100 100">
                                     <circle
-                                        className="stroke-current text-surface/10"
+                                        className="stroke-current text-white/10"
                                         strokeWidth="3"
                                         cx="50"
                                         cy="50"
@@ -580,8 +591,8 @@ export default function PomodoroTimer({ onSessionComplete, userSubjects: initial
                                     />
                                 </svg>
                                 <div className="text-center">
-                                    <h2 className="text-7xl font-bold tracking-tighter text-surface mb-2">{formatTime(timeLeft)}</h2>
-                                    <p className="text-surface/70 text-lg mb-2">Time Remaining</p>
+                                    <h2 className="font-display text-7xl font-extrabold tracking-tighter tabular-nums text-white mb-2">{formatTime(timeLeft)}</h2>
+                                    <p className="text-white/70 text-lg mb-2">Time Remaining</p>
                                     <p className="font-semibold text-xl" style={{ color: colorScheme.accentVar }}>
                                         {isBreak ? (isLongBreak(session - 1) ? 'Long Break' : 'Short Break') : 'Work Time'}
                                     </p>
@@ -593,11 +604,11 @@ export default function PomodoroTimer({ onSessionComplete, userSubjects: initial
                                     {isRunning ? <Pause className="w-6 h-6 mr-2" /> : <Play className="w-6 h-6 mr-2" />}
                                     {getButtonText()}
                                 </Button>
-                                <Button onClick={resetTimer} aria-label="Reset timer" variant="outline" size="lg" className="bg-surface/10 border-surface/20 hover:bg-surface/20 text-surface">
+                                <Button onClick={resetTimer} aria-label="Reset timer" variant="outline" size="lg" className="bg-white/10 border-white/20 hover:bg-white/20 text-white">
                                     <RotateCcw className="w-6 h-6" />
                                 </Button>
                                 {isBreak && (
-                                    <Button onClick={skipBreak} variant="outline" size="lg" className="bg-surface/10 border-surface/20 hover:bg-surface/20 text-surface">
+                                    <Button onClick={skipBreak} variant="outline" size="lg" className="bg-white/10 border-white/20 hover:bg-white/20 text-white">
                                         Skip Break
                                     </Button>
                                 )}
