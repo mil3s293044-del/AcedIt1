@@ -14,8 +14,14 @@ import { moderationPresets } from "@/components/shared/contentModeration";
 import HelpButton from "@/components/shared/HelpButton";
 import SubjectDetail from "../components/vce/SubjectDetail";
 import { VCE_SUBJECTS } from "@/data/vceSubjects";
-import { colorFor, subjectColor, SUBJECT_PALETTE } from "@/components/cards/cardIdentity";
-import { alpha } from "@/components/cards/PlayingCard";
+import { colorFor, subjectColor, SUBJECT_PALETTE, rankFor, suitFor } from "@/components/cards/cardIdentity";
+import PlayingCard, { alpha } from "@/components/cards/PlayingCard";
+import { deckCards, BANK_TOPIC } from "@/lib/mistakeBank";
+import { studyEvents } from "@/lib/studyLog";
+import { subjectStats, subjectLead } from "@/lib/subjectHub";
+import { base44 } from "@/api/base44Client";
+import { Link } from "react-router-dom";
+import { createPageUrl } from "@/utils";
 
 /**
  * Subject colour comes from cardIdentity, and only from there.
@@ -99,66 +105,104 @@ function BrowseSubjectCard({ subject, isSelected, onAdd, onRemove, onViewDetails
 
 // ─── My Subject Card (larger, more info) ──────────────────────────────────────
 
-function MySubjectCard({ userSubject, fullSubject, onRemove, onViewDetails }) {
+/**
+ * A subject you are carrying, as the card the rest of the app draws.
+ *
+ * ─── What it replaces ───────────────────────────────────────────────────────
+ * An icon in a rounded square, a title, two pills, an overview blurb, two more
+ * pills and a "Details" link. That is precisely the generated-app tile this
+ * codebase keeps removing, on the one object that most deserves to be a
+ * playing card — `PlayingCard` is the app's language on eighteen surfaces and
+ * a subject was not one of them.
+ *
+ * It also said NOTHING about the student's work. Code, year level, scaling and
+ * an overview are facts about the curriculum; a page you open to look at your
+ * subjects should be able to tell you where you are up to in them. The face
+ * carries the one number that answers "what now" and the line under it is the
+ * same lead the hub opens with, so the shelf and the page agree.
+ *
+ * Rank is mastery and suit is the family, the same contract as everywhere.
+ */
+function MySubjectCard({ userSubject, fullSubject, stats, lead, onRemove }) {
     // subjectColor handles all three things this column has ever held: hex,
     // a palette key, and one of the old design-token names.
     const hex = subjectColor(userSubject);
-    const palette = swatch(hex);
+    const name = userSubject.subject_name;
+    const rank = rankFor(stats?.mastery || 0);
+    const urgent = lead && (lead.kind === "assessment" || lead.kind === "mistakes");
+
     return (
-        <div className="group relative card-soft overflow-hidden hover:shadow-soft transition-all duration-300">
-            <div className="p-5 relative" style={palette.tile}>
-                <div className="flex items-start gap-3">
-                    <div className="w-12 h-12 rounded-2xl flex items-center justify-center shadow-soft"
-                        style={palette.solid}>
-                        <BookOpen className="w-6 h-6 text-white" />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                        <h3 className="font-bold text-foreground text-base truncate">{userSubject.subject_name}</h3>
-                        <div className="flex items-center gap-2 mt-1">
-                            <span className="pill text-[10px] py-0.5 font-mono"
-                                style={{ ...palette.tile, ...palette.text }}>
-                                {userSubject.subject_code}
-                            </span>
-                            <span className="pill bg-xp/10 text-xp text-[10px] py-0.5">
+        <div className="group relative">
+            <Link to={`${createPageUrl("SubjectHub")}?subject=${encodeURIComponent(name)}`}
+                className="block rounded-2xl focus-visible:outline focus-visible:outline-2
+                    focus-visible:outline-offset-2 focus-visible:outline-ring">
+                <div className="card-soft on-table overflow-hidden transition-transform duration-200
+                    group-hover:-translate-y-0.5">
+                    <div className="flex items-stretch gap-4 p-4">
+                        {/* No name band on this one. The heading is six
+                            pixels to the right saying the same thing, and a
+                            long subject wrapped to two lines and overflowed
+                            the card it was printed on. With nothing over it
+                            the face can be a real face.
+
+                            92px IS A FLOOR, not a preference. `Index` is sized
+                            in fixed pixels while the pip field is a percentage
+                            of the card, so the two converge as the card
+                            shrinks: at 72px the index's own suit mark landed
+                            against the top-left pip and the card read as a
+                            nine with ten marks on it. The index clears the
+                            field from about 88px up, and 92 is what HandRail
+                            already uses. Anything smaller needs `pips="faint"`
+                            or no pips at all. */}
+                        <PlayingCard rank={rank} suit={suitFor(name)} tone={hex} smallIndices
+                            watermark={false} pips
+                            className="w-[92px] flex-shrink-0 aspect-[2.5/3.5]" />
+
+                        <div className="min-w-0 flex-1 flex flex-col">
+                            <h3 className="font-display font-extrabold text-foreground text-base
+                                leading-tight truncate">{name}</h3>
+                            <p className="text-[11px] text-muted-foreground mt-0.5 truncate">
                                 {userSubject.year_level || "Year 12"}
-                            </span>
+                                {fullSubject?.scaling_info?.scaling_factor
+                                    ? ` · scales ${fullSubject.scaling_info.scaling_factor}` : ""}
+                            </p>
+
+                            {/* ONE line, and it is the same one the hub leads
+                                with. Two surfaces answering "what next" with
+                                different sentences is how a student stops
+                                believing either. */}
+                            <p className={`text-[12px] leading-snug mt-2 line-clamp-2 font-bold ${
+                                urgent ? "text-streak" : lead ? "text-foreground" : "text-muted-foreground"}`}>
+                                {lead ? lead.title : "Nothing outstanding"}
+                            </p>
+
+                            <div className="flex items-center gap-3 mt-auto pt-2 text-[11px]
+                                text-muted-foreground tabular-nums">
+                                <span>{stats?.cards || 0} cards</span>
+                                {stats?.due > 0 && (
+                                    <span className="font-bold text-primary">{stats.due} ready</span>
+                                )}
+                                {stats?.bestScore != null && (
+                                    <span>{Math.round(stats.bestScore)}% best</span>
+                                )}
+                            </div>
                         </div>
                     </div>
-                    <button
-                        onClick={(e) => { e.stopPropagation(); onRemove(); }}
-                        className="opacity-0 group-hover:opacity-100 w-7 h-7 rounded-lg bg-streak/10 text-streak hover:bg-streak/20 flex items-center justify-center transition-all flex-shrink-0"
-                        title="Remove subject"
-                    >
-                        <X className="w-3.5 h-3.5" />
-                    </button>
                 </div>
-            </div>
-            {fullSubject?.overview && (
-                <div className="px-5 pb-2">
-                    <p className="text-xs text-muted-foreground line-clamp-2 leading-relaxed">{fullSubject.overview}</p>
-                </div>
-            )}
-            <div className="px-5 pb-4 pt-2 flex items-center justify-between">
-                <div className="flex gap-1.5">
-                    {fullSubject?.difficulty_level && (
-                        <span className="pill bg-secondary text-muted-foreground text-[10px] py-0.5 capitalize">{fullSubject.difficulty_level}</span>
-                    )}
-                    {fullSubject?.scaling_info?.scaling_factor && (
-                        <span className="pill bg-primary/10 text-primary text-[10px] py-0.5">
-                            <TrendingUp className="w-2.5 h-2.5 mr-0.5" />{fullSubject.scaling_info.scaling_factor}
-                        </span>
-                    )}
-                    {fullSubject?.is_private && (
-                        <span className="pill bg-chart-4/10 text-chart-4 text-[10px] py-0.5">Custom</span>
-                    )}
-                </div>
-                {fullSubject && (
-                    <button onClick={onViewDetails}
-                        className="text-xs text-chart-4 hover:text-chart-4/80 font-semibold flex items-center gap-0.5 transition-colors">
-                        Details <ChevronRight className="w-3 h-3" />
-                    </button>
-                )}
-            </div>
+            </Link>
+
+            {/* In the gutter, outside the link. A button inside a link is
+                invalid and the inner one stops firing. */}
+            <button
+                onClick={(e) => { e.preventDefault(); e.stopPropagation(); onRemove(); }}
+                className="absolute top-2 right-2 w-7 h-7 rounded-lg bg-surface/90 border border-border
+                    text-muted-foreground hover:text-streak hover:bg-streak/10 flex items-center
+                    justify-center transition-colors opacity-70 group-hover:opacity-100
+                    focus-visible:opacity-100"
+                title={`Remove ${name}`}
+            >
+                <X className="w-3.5 h-3.5" />
+            </button>
         </div>
     );
 }
@@ -179,6 +223,12 @@ export default function Subjects() {
     const [selectedSubjectColor, setSelectedSubjectColor] = useState("");
     const [showCreateDialog, setShowCreateDialog] = useState(false);
     const [newSubjectForm, setNewSubjectForm] = useState({ name: "", code: "", year_level: "Year 12 Units 3&4", color: SUBJECT_PALETTE[0].hex });
+    // The student's own work, for the faces on the shelf. Loaded once and
+    // sliced per subject rather than queried per card — six subjects would
+    // otherwise be thirty-six round trips before the page painted.
+    const [work, setWork] = useState({
+        flashcards: [], quizzes: [], attempts: [], bank: [], events: [], assessments: [],
+    });
     const { toast } = useToast();
 
     const isAdmin = user?.role === "admin";
@@ -198,10 +248,31 @@ export default function Subjects() {
     }, [searchTerm]);
 
     const loadData = useCallback(async (email) => {
-        const [all, mine] = await Promise.all([
-            VCESubject.list("-created_date").catch(() => []),
-            UserSubject.filter({ created_by: email }).catch(() => []),
-        ]);
+        const fail = () => [];
+        const [all, mine, cards, quizzes, attempts, bank, sessions, techniques, assessments] =
+            await Promise.all([
+                VCESubject.list("-created_date").catch(fail),
+                UserSubject.filter({ created_by: email }).catch(fail),
+                base44.entities.Flashcard.filter({ created_by: email, is_active: true }).catch(fail),
+                base44.entities.Quiz.filter({ created_by: email }).catch(fail),
+                base44.entities.QuizAttempt.filter({ created_by: email }).catch(fail),
+                base44.entities.Flashcard.filter({
+                    created_by: email, topic: BANK_TOPIC, is_active: true,
+                }).catch(fail),
+                base44.entities.StudySession.filter({ created_by: email }, "-date", 400).catch(fail),
+                base44.entities.StudyTechnique.filter({ created_by: email }, "-date").catch(fail),
+                base44.entities.SubjectAssessment.filter({ created_by: email }).catch(fail),
+            ]);
+        setWork({
+            // Deck cards only: the bank is counted separately as mistakes, and
+            // counting it twice would inflate both numbers on the face.
+            flashcards: deckCards(cards),
+            quizzes: quizzes || [],
+            attempts: attempts || [],
+            bank: bank || [],
+            events: studyEvents(sessions, techniques),
+            assessments: assessments || [],
+        });
         // Static catalog is canonical for official VCE subjects. Backend entity
         // is only consulted for the user's own private custom subjects — this
         // prevents stale/glitched legacy entries (VET Hebrew, random duplicates,
@@ -217,9 +288,21 @@ export default function Subjects() {
         s.name.toLowerCase().includes(debouncedSearch.toLowerCase()) || s.code.toLowerCase().includes(debouncedSearch.toLowerCase())
     ), [subjects, debouncedSearch]);
 
-    const mySelectedSubjects = useMemo(() => mySubjects.map(us => ({
-        ...us, fullSubject: subjects.find(s => s.id === us.vce_subject_id)
-    })), [mySubjects, subjects]);
+    const mySelectedSubjects = useMemo(() => mySubjects.map(us => {
+        const stats = subjectStats(us.subject_name, {
+            flashcards: work.flashcards, quizzes: work.quizzes, attempts: work.attempts,
+            bankCards: work.bank, events: work.events, assessments: work.assessments,
+        });
+        return {
+            ...us,
+            fullSubject: subjects.find(s => s.id === us.vce_subject_id),
+            stats,
+            // Coverage and the mark split are the hub's job — the shelf only
+            // needs the lead, and passing nulls keeps it from claiming a gap
+            // it has not measured.
+            lead: subjectLead(stats, null, null),
+        };
+    }), [mySubjects, subjects, work]);
 
     // ─── Handlers ──────────────────────────────────────────────────────────────
 
@@ -415,15 +498,16 @@ export default function Subjects() {
                                 </div>
                             </div>
                         ) : (
-                            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                                 <AnimatePresence mode="popLayout">
                                     {mySelectedSubjects.map(us => (
                                         <motion.div key={us.id} layout initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, scale: 0.9 }}>
                                             <MySubjectCard
                                                 userSubject={us}
                                                 fullSubject={us.fullSubject}
+                                                stats={us.stats}
+                                                lead={us.lead}
                                                 onRemove={() => handleRemoveSubject(us.id)}
-                                                onViewDetails={() => us.fullSubject && setSelectedSubject(us.fullSubject)}
                                             />
                                         </motion.div>
                                     ))}
