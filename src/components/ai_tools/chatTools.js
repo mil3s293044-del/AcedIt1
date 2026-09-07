@@ -67,6 +67,42 @@ const MATH_STRANDS = {
 // then makes ONE non-streaming call with a JSON schema (CLAUDE.md: JSON tools
 // don't stream) and hands the result to the artifact component.
 //
+// UNLIKE THE PROSE PATH, an artifact call used to see only the newest
+// message — never the turns before it. "Give me probability questions" then
+// "make those harder" landed on a model with no idea what "those" were, so it
+// wrote a fresh, often off-topic set. buildArtifactHistory rebuilds a
+// transcript for these prompts the same way buildPrompt does for streaming
+// tools, with one difference that matters here: an artifact turn's own
+// message.content is just its title (see persist() in UnifiedChat — the full
+// generated set was never stored as text), so a plain transcript would still
+// only give the model a title to work from. This pulls the REAL content back
+// out of message.artifact.data instead, so "make those harder" has the
+// actual questions to harden.
+const ARTIFACT_HISTORY_TURNS = 6;
+
+function summariseArtifactTurn(m) {
+    const a = m.artifact;
+    if (!a) return m.content;
+    if (a.kind === "exam_questions") {
+        const qs = (a.data || []).map((q, i) => `${i + 1}. ${q.question}`).join("\n");
+        return `[Generated question set — "${a.title || ""}"]\n${qs}`;
+    }
+    if (a.kind === "cheat_sheet") {
+        const items = (a.data || []).map((it) => `- ${it.content}`).join("\n");
+        return `[Generated cheat sheet — "${a.title || ""}"]\n${items}`;
+    }
+    if (a.kind === "line_memoriser") {
+        return `[Split passage — "${a.title || ""}"]\n${(a.data || []).join(" / ")}`;
+    }
+    return m.content;
+}
+
+export function buildArtifactHistory(messages) {
+    const turns = (messages || []).filter((m) => !m.streaming).slice(-ARTIFACT_HISTORY_TURNS);
+    if (turns.length === 0) return "";
+    return turns.map((m) => `${m.role === "user" ? "Student" : "You"}: ${summariseArtifactTurn(m)}`).join("\n\n");
+}
+
 // The sheet fits ~22 items per A4 page; ask for a modest buffer beyond that so
 // there are alternates to swap in. A bigger pool is what made the old
 // standalone tool crawl, so keep it tight.
@@ -97,13 +133,13 @@ const CHEAT_SHEET_ARTIFACT = (subjectName) => ({
         },
         required: ["items"],
     },
-    prompt: (userText, fileNames) => {
+    prompt: (userText, fileNames, historyText) => {
         const poolCount = CHEAT_SHEET_PAGES * CHEAT_SHEET_ITEMS_PER_PAGE + 12;
         return `${subjectBlock(subjectName)}
 
 You are building a high-density EXAM CHEAT SHEET for VCE${subjectName ? ` ${subjectName}` : ""}, sized to fit ${CHEAT_SHEET_PAGES} A4 page of tight two-column notes.
 
-${fileNames?.length ? `The student has attached ${fileNames.map((n) => `"${n}"`).join(", ")} — the full content is provided alongside this message. Build the sheet from that material.\n\n` : ""}What the student asked for: ${userText}
+${historyText ? `CONVERSATION SO FAR (the new request below may be asking you to continue, extend, or revise this rather than start over):\n${historyText}\n\n` : ""}${fileNames?.length ? `The student has attached ${fileNames.map((n) => `"${n}"`).join(", ")} — the full content is provided alongside this message. Build the sheet from that material.\n\n` : ""}What the student asked for: ${userText}
 
 RULES
 - Return EXACTLY ${poolCount} items, no more — ranked best-first so the top ones fill the sheet and the rest are alternates.
@@ -144,11 +180,11 @@ const EXAM_QUESTIONS_ARTIFACT = (subjectName, o = {}) => ({
         },
         required: ["questions"],
     },
-    prompt: (userText, fileNames) => `${subjectBlock(subjectName)}
+    prompt: (userText, fileNames, historyText) => `${subjectBlock(subjectName)}
 
 You are writing VCE${subjectName ? ` ${subjectName}` : ""} exam questions at ${o.difficulty === "exam" ? "authentic VCE exam standard" : `${o.difficulty || "exam"} standard`}.
 
-${fileNames?.length ? `The student has attached ${fileNames.map((n) => `"${n}"`).join(", ")} — the full content is provided alongside this message. Draw the questions from that material.\n\n` : ""}What the student asked for: ${userText}
+${historyText ? `CONVERSATION SO FAR (the new request below may be asking you to revise, extend, or build on this rather than switch topic — e.g. "make those harder" means harder versions of THESE questions, same topic):\n${historyText}\n\n` : ""}${fileNames?.length ? `The student has attached ${fileNames.map((n) => `"${n}"`).join(", ")} — the full content is provided alongside this message. Draw the questions from that material.\n\n` : ""}What the student asked for: ${userText}
 
 RULES
 - Write EXACTLY ${o.count || 5} questions unless the student clearly asked for a different number.
@@ -174,11 +210,11 @@ const LINE_MEMORISER_ARTIFACT = (subjectName, o = {}) => ({
         },
         required: ["lines"],
     },
-    prompt: (userText, fileNames) => `${subjectBlock(subjectName)}
+    prompt: (userText, fileNames, historyText) => `${subjectBlock(subjectName)}
 
 Split the passage below into the units a student should memorise ONE AT A TIME, in order.
 
-${fileNames?.length ? `The student has attached ${fileNames.map((n) => `"${n}"`).join(", ")} — the full content is provided alongside this message. Use that as the passage.\n\n` : ""}PASSAGE (from the student): ${userText}
+${historyText ? `CONVERSATION SO FAR (the new message below may be a correction or a continuation of this rather than a new passage):\n${historyText}\n\n` : ""}${fileNames?.length ? `The student has attached ${fileNames.map((n) => `"${n}"`).join(", ")} — the full content is provided alongside this message. Use that as the passage.\n\n` : ""}PASSAGE (from the student): ${userText}
 
 RULES
 - Return the text VERBATIM, split into "lines". Never reword, correct, summarise or add to it — they are memorising these exact words.

@@ -22,7 +22,7 @@ import { invokeLLMStream } from "@/lib/streamingAI";
 import { useToast } from "@/components/ui/use-toast";
 import { recordStudyAndGetStreak } from "@/components/shared/streakHelpers";
 import MarkdownMath from "@/components/shared/MarkdownMath";
-import { CHAT_TOOLS, toolById, defaultOptions, resolveChoices } from "./chatTools";
+import { CHAT_TOOLS, toolById, defaultOptions, resolveChoices, buildArtifactHistory } from "./chatTools";
 import CheatSheetArtifact from "./CheatSheetArtifact";
 import ExamQuestionsArtifact from "./ExamQuestionsArtifact";
 import LineMemoriserArtifact from "./LineMemoriserArtifact";
@@ -276,7 +276,7 @@ export default function UnifiedChat() {
                 const res = await base44.integrations.Core.InvokeLLM({
                     feature: usedTool.feature,
                     fast: true,
-                    prompt: artifactSpec.prompt(promptText, files.map(f => f.name)),
+                    prompt: artifactSpec.prompt(promptText, files.map(f => f.name), buildArtifactHistory(history)),
                     file_urls: files.length ? files.map(f => f.url) : undefined,
                     response_json_schema: artifactSpec.schema,
                 });
