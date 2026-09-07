@@ -511,6 +511,31 @@ moment one card is obviously invented:
 - **The pip field is a panel inset from all four corners**, indices outside it.
   At the old metrics the top-left pip of a four printed straight over its own
   rank, on every numbered card from four up.
+- **THE INDEX IS A FRACTION OF THE CARD, not a number of pixels.** Everything
+  else on the face already was one — the pip field is inset to 27/50/73 across
+  the width, the frame is a percentage, the aspect is fixed — and the index
+  alone sat at a flat 8px from the edge at 11px tall. So the two converged as
+  the card shrank: a hairline in the corner of a 176px pack, and a third of the
+  width on the 62px cards in the onboarding fan, where the index's own suit
+  mark had already landed against the top-left pip and a nine read as a card
+  with ten marks on it.
+  `.card-face` in index.css puts `container-type: inline-size` on the card and
+  publishes the metrics as `--idx-*`; `.card-face-lg` is the fuller ramp, which
+  is all `smallIndices` now selects between. Containment is INLINE ONLY, so the
+  cards whose height comes from their content (the quiz question, the marked
+  answer) are untouched — check that before widening it.
+  **The `min()` caps are load-bearing.** Past about 160px a real index stops
+  growing, and the name bands and body copy these cards print are still in
+  pixels, so the caps are what make a large card render exactly as it did — no
+  existing clearance had to be re-tuned. There is a px fallback ahead of the
+  `@supports` block, so a browser without container queries gets the old
+  rendering rather than no index.
+- **A face reserves the corner with `--card-index-w` / `--card-index-h`**, never
+  by counting pixels. Three places counted: CardPack's `pt-7 pr-5`, the
+  onboarding fan's flat 18px (29% of a 62px card), and the subject hub's name
+  band. A reserve tuned by hand at one width is wrong at every other one, and
+  it is the reason the fan's own comment used to read "the index is drawn at a
+  fixed size, so the reserve is a fixed number of pixels".
 - **The ace's big centred pip is an early return, and has to stay one**:
   PIP_LAYOUT has an entry for the ace as well, so losing that branch prints an
   ace as a single ordinary pip.
@@ -660,12 +685,10 @@ rounded square, a title, two pills, a blurb and two more pills — the generated
 app tile this codebase keeps removing, on the one object that most deserved to
 be a card.
 
-**92px IS A FLOOR for a card with pips on it.** `Index` is sized in fixed
-pixels while the pip field is a percentage of the card, so the two converge as
-the card shrinks. At 72px the index's own suit mark landed against the
-top-left pip and a nine read as a card with ten marks on it. The index clears
-the field from about 88px up; 92 is what HandRail already uses. Below that,
-`pips="faint"` or no pips — do not just make the card smaller.
+The shelf card sits at **92px** as a legibility call rather than a constraint:
+the index scales with the card now (see the cards section above), so it clears
+the pip field at any width, and 92 is simply where nine marks still read as
+nine across a two-column row.
 
 ## The dashboard answers one question
 

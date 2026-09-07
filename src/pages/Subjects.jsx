@@ -145,15 +145,11 @@ function MySubjectCard({ userSubject, fullSubject, stats, lead, onRemove }) {
                             the card it was printed on. With nothing over it
                             the face can be a real face.
 
-                            92px IS A FLOOR, not a preference. `Index` is sized
-                            in fixed pixels while the pip field is a percentage
-                            of the card, so the two converge as the card
-                            shrinks: at 72px the index's own suit mark landed
-                            against the top-left pip and the card read as a
-                            nine with ten marks on it. The index clears the
-                            field from about 88px up, and 92 is what HandRail
-                            already uses. Anything smaller needs `pips="faint"`
-                            or no pips at all. */}
+                            92px is a legibility call, not a constraint. The
+                            index scales with the card now, so it clears the
+                            pip field at any size — this is simply the width at
+                            which nine marks still read as nine across a
+                            two-column row. */}
                         <PlayingCard rank={rank} suit={suitFor(name)} tone={hex} smallIndices
                             watermark={false} pips
                             className="w-[92px] flex-shrink-0 aspect-[2.5/3.5]" />

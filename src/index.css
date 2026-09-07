@@ -257,6 +257,83 @@
       inset 0 1px 0 rgba(255, 255, 255, 0.05);
   }
 
+  /**
+   * THE CARD FACE — a playing card's corner index, sized as a fraction of the
+   * card rather than in pixels.
+   *
+   * A real card prints its index at a proportion of the card, and everything
+   * else on ours already is one: the pip field is inset to 27/50/73 across the
+   * width, the frame is a percentage, the aspect is fixed. The index alone sat
+   * at a flat 8px from the edge at 11px tall, so the two converged as the card
+   * shrank. On a 176px pack that is a hairline in the corner; on a 62px card
+   * in the onboarding fan it is a third of the width, and the index's own suit
+   * mark ended up against the top-left pip — a nine reading as a card with ten
+   * marks on it.
+   *
+   * `cqw` is a percentage of the CARD, which is what makes one component serve
+   * a 55px fan and a 32rem table card. `container-type: inline-size` contains
+   * the INLINE axis only, so the cards whose height comes from their content
+   * (the quiz question, the marked answer) are untouched.
+   *
+   * THE `min()` CAPS ARE LOAD-BEARING. Past about 160px a real index stops
+   * growing with the card, and more to the point the name bands and body copy
+   * these cards print are still measured in pixels — the caps are what keep a
+   * large card rendering exactly as it does today, so no existing clearance
+   * has to be re-tuned.
+   *
+   * `--card-index-w` and `--card-index-h` are the room an index actually takes
+   * from its corner, published so a face can reserve it instead of guessing.
+   * The width allows for a two-digit rank ("10" is the widest thing printed
+   * here) rather than the pip, which is narrower.
+   */
+  .card-face {
+    /* The fallback is what ships to a browser with no container queries: the
+       exact pixel values this component used before, so it degrades to the old
+       rendering rather than to no index at all. */
+    --idx-x: 8px;
+    --idx-y: 6px;
+    --idx-rank: 11px;
+    --idx-pip: 8px;
+    --idx-gap: 2px;
+    --card-index-w: 21px;
+    --card-index-h: 27px;
+  }
+  /* Full-size indices, for a card big enough to print them at reading size. */
+  .card-face-lg {
+    --idx-x: 12px;
+    --idx-y: 10px;
+    --idx-rank: 16px;
+    --idx-pip: 12px;
+    --idx-gap: -2px;
+    --card-index-w: 31px;
+    --card-index-h: 36px;
+  }
+
+  @supports (font-size: 1cqw) {
+    .card-face {
+      container-type: inline-size;
+      --idx-x: min(5cqw, 8px);
+      --idx-y: min(3.8cqw, 6px);
+      --idx-rank: min(7cqw, 12px);
+      --idx-pip: min(5cqw, 8px);
+      --idx-gap: min(0.9cqw, 2px);
+      --card-index-w: calc(var(--idx-x) + min(8.4cqw, 14.4px));
+      --card-index-h: calc(var(--idx-y) + var(--idx-rank) + var(--idx-gap) + var(--idx-pip));
+    }
+    .card-face-lg {
+      --idx-x: min(5cqw, 14px);
+      --idx-y: min(3.6cqw, 11px);
+      --idx-rank: min(6.2cqw, 18px);
+      --idx-pip: min(4.4cqw, 13px);
+      /* Negative: the full-size mark tucks its pip up under the rank, which is
+         how it is printed. `min()` on a negative pair takes the more negative,
+         so the cap is the first term and the ramp the second. */
+      --idx-gap: max(-2px, -0.5cqw);
+      --card-index-w: calc(var(--idx-x) + min(7.4cqw, 21px));
+      --card-index-h: calc(var(--idx-y) + var(--idx-rank) + var(--idx-gap) + var(--idx-pip));
+    }
+  }
+
   .card-soft-hover {
     transition: transform 200ms ease-out, box-shadow 200ms ease-out;
   }
