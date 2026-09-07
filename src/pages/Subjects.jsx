@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo, useCallback, useRef } from "react"
 import { motion, AnimatePresence } from "framer-motion";
 import {
     Search, Plus, X, BookOpen, Shield, ChevronRight,
-    GraduationCap, Layers, Star, TrendingUp, Palette, Check
+    GraduationCap, Layers, Star, Palette, Check
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -18,6 +18,12 @@ import { colorFor, subjectColor, SUBJECT_PALETTE } from "@/components/cards/card
 import { alpha } from "@/components/cards/PlayingCard";
 import ScoreCurve from "@/components/subjects/ScoreCurve";
 import { hueOf, scaledScore, clampScore } from "@/lib/studyScore";
+import ScalingMark from "@/components/subjects/ScalingMark";
+import LoadStrip from "@/components/subjects/LoadStrip";
+import {
+    LEARNING_AREAS, SORTS, areaOf, sortSubjects, groupByArea, loadSummary,
+    prerequisiteOf,
+} from "@/lib/subjectBrowse";
 import { deckCards, BANK_TOPIC } from "@/lib/mistakeBank";
 import { studyEvents } from "@/lib/studyLog";
 import { subjectStats, subjectLead } from "@/lib/subjectHub";
@@ -50,61 +56,107 @@ const swatch = (hex) => ({
 
 // ─── Mini Subject Card for Browse ─────────────────────────────────────────────
 
+/**
+ * One subject in the catalogue.
+ *
+ * ─── What it replaces ───────────────────────────────────────────────────────
+ * A book icon in a rounded square, the name, the code, a two-line truncated
+ * overview, a difficulty pill, a scaling pill and a "Details" link. Thirty-
+ * three of them. The icon was the same on every card — the "icon that restates
+ * the word next to it" this codebase keeps deleting, thirty-three times over —
+ * and the overview was cut mid-sentence on every single one, so the longest
+ * element on the card was the one nobody could finish reading.
+ *
+ * ─── It leads with the number students come here for ────────────────────────
+ * Scaling, at size, with its direction drawn correctly (see ScalingMark for
+ * the bug that fixes). Then where the subject LEADS — career pathways, which
+ * the catalogue has carried for every subject and which lived behind a
+ * "Details" link nobody clicks. Those are the two things that cannot be worked
+ * out from the name.
+ *
+ * The prerequisite is called out because it is the one fact that can rule a
+ * subject out entirely, and it was buried in the modal with everything else.
+ */
 function BrowseSubjectCard({ subject, isSelected, onAdd, onRemove, onViewDetails }) {
     const hex = colorFor(subject?.name);
-    const palette = swatch(hex);
+    const pathways = Array.isArray(subject?.career_pathways) ? subject.career_pathways : [];
+    const prereq = prerequisiteOf((subject?.prerequisites || [])[0]);
+
     return (
-        <div className="group relative card-soft overflow-hidden hover:shadow-soft transition-all duration-300">
-            <div className="h-2 w-full" style={palette.solid} />
-            <div className="p-4">
-                <div className="flex items-start justify-between gap-2 mb-2">
-                    <div className="flex items-center gap-2.5 min-w-0">
-                        <div className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0"
-                            style={palette.tile}>
-                            <BookOpen className="w-5 h-5" style={palette.text} />
-                        </div>
-                        <div className="min-w-0">
-                            <h3 className="font-bold text-foreground text-sm truncate">{subject.name}</h3>
-                            <p className="text-xs text-muted-foreground/60 font-mono">{subject.code}</p>
-                        </div>
+        <div className="group relative card-soft on-table overflow-hidden flex flex-col
+            transition-transform duration-200 hover:-translate-y-0.5">
+            {/* The colour spine, matching the shelf on the other tab — the same
+                subject is the same colour wherever it appears. */}
+            <span aria-hidden="true" className="absolute inset-y-0 left-0 w-1"
+                style={{ background: hex }} />
+
+            <div className="flex-1 pl-4 pr-3 py-3.5">
+                <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0 flex-1">
+                        <h3 className="font-display font-extrabold text-foreground text-sm
+                            leading-tight">{subject.name}</h3>
+                        <p className="text-[10px] text-muted-foreground/70 font-mono mt-0.5">
+                            {subject.code}
+                        </p>
                     </div>
-                    <button
-                        onClick={(e) => { e.stopPropagation(); isSelected ? onRemove() : onAdd(); }}
-                        className={`flex-shrink-0 w-8 h-8 rounded-lg flex items-center justify-center transition-all text-xs font-bold ${isSelected
-                            ? "bg-primary/15 text-primary hover:bg-streak/15 hover:text-streak"
-                            : "bg-secondary text-muted-foreground hover:bg-chart-4/15 hover:text-chart-4"
-                            }`}
-                        title={isSelected ? "Remove from my subjects" : "Add to my subjects"}
-                    >
-                        {isSelected ? <Check className="w-3.5 h-3.5" /> : <Plus className="w-3.5 h-3.5" />}
-                    </button>
+                    <ScalingMark subject={subject} size="lg" />
                 </div>
-                {subject.overview && (
-                    <p className="text-xs text-muted-foreground line-clamp-2 mb-3 leading-relaxed">{subject.overview}</p>
+
+                {/* Where it leads. The catalogue has had this for every subject
+                    since it was written and browse never showed it. */}
+                {pathways.length > 0 && (
+                    <p className="text-[11px] text-muted-foreground leading-relaxed mt-2.5">
+                        {pathways.slice(0, 3).join(" · ")}
+                    </p>
                 )}
-                <div className="flex items-center justify-between">
-                    <div className="flex gap-1.5">
-                        {subject.difficulty_level && (
-                            <span className="pill bg-secondary text-muted-foreground text-[10px] py-0.5 capitalize">
-                                {subject.difficulty_level}
-                            </span>
-                        )}
-                        {subject.scaling_info?.scaling_factor && (
-                            <span className="pill bg-primary/10 text-primary text-[10px] py-0.5">
-                                <TrendingUp className="w-2.5 h-2.5 mr-0.5" />{subject.scaling_info.scaling_factor}
-                            </span>
-                        )}
-                    </div>
+
+                {/* The one fact that can rule a subject out — and a
+                    recommendation is NOT that, so it is labelled as advice
+                    and inked as advice. See `prerequisiteOf`. */}
+                {prereq && (
+                    <p className={`text-[10px] font-bold leading-snug mt-2 ${
+                        prereq.kind === "required" ? "text-xp/90" : "text-muted-foreground"}`}>
+                        {prereq.kind === "required" ? "Needs " : "Suits "}{prereq.text}
+                    </p>
+                )}
+            </div>
+
+            <div className="flex items-center justify-between gap-2 pl-4 pr-3 pb-3">
+                <div className="flex items-center gap-1.5">
+                    {subject.difficulty_level && (
+                        <span className="pill bg-secondary text-muted-foreground text-[10px] py-0.5 capitalize">
+                            {subject.difficulty_level}
+                        </span>
+                    )}
+                    {subject.is_private && (
+                        <span className="pill bg-chart-4/10 text-chart-4 text-[10px] py-0.5">Custom</span>
+                    )}
                     <button onClick={onViewDetails}
-                        className="text-xs text-chart-4 hover:text-chart-4/80 font-semibold flex items-center gap-0.5 transition-colors">
+                        className="text-[11px] text-chart-4 hover:text-chart-4/80 font-bold
+                            flex items-center gap-0.5 transition-colors">
                         Details <ChevronRight className="w-3 h-3" />
                     </button>
                 </div>
+
+                {/* The add/remove control says which state it is in AND what a
+                    press would do — a bare tick reads as a badge, not a
+                    button, which is why removing was undiscoverable. */}
+                <button
+                    onClick={(e) => { e.stopPropagation(); isSelected ? onRemove() : onAdd(); }}
+                    className={`flex-shrink-0 h-7 px-2.5 rounded-lg flex items-center gap-1
+                        transition-colors text-[11px] font-bold ${isSelected
+                            ? "bg-primary/15 text-primary hover:bg-streak/15 hover:text-streak"
+                            : "bg-secondary text-muted-foreground hover:bg-chart-4/15 hover:text-chart-4"}`}
+                    title={isSelected ? "Remove from my subjects" : "Add to my subjects"}
+                >
+                    {isSelected
+                        ? <><Check className="w-3.5 h-3.5" /> Added</>
+                        : <><Plus className="w-3.5 h-3.5" /> Add</>}
+                </button>
             </div>
         </div>
     );
 }
-
 // ─── One subject, as a row ───────────────────────────────────────────────────
 
 /**
@@ -225,6 +277,9 @@ export default function Subjects() {
     const [debouncedSearch, setDebouncedSearch] = useState("");
     const [user, setUser] = useState(null);
     const [activeTab, setActiveTab] = useState("my");
+    // Browse filters. `area` null means every area.
+    const [area, setArea] = useState(null);
+    const [sortKey, setSortKey] = useState("area");
     const [showYearLevelDialog, setShowYearLevelDialog] = useState(false);
     const [selectedSubjectForYear, setSelectedSubjectForYear] = useState(null);
     const [selectedYearLevel, setSelectedYearLevel] = useState("Year 12 Units 3&4");
@@ -302,9 +357,44 @@ export default function Subjects() {
 
     const isSubjectInMyList = useCallback((id) => mySubjects.some(us => us.vce_subject_id === id), [mySubjects]);
 
-    const filteredSubjects = useMemo(() => subjects.filter(s =>
-        s.name.toLowerCase().includes(debouncedSearch.toLowerCase()) || s.code.toLowerCase().includes(debouncedSearch.toLowerCase())
-    ), [subjects, debouncedSearch]);
+    /**
+     * Browse, narrowed and ordered.
+     *
+     * Search, then the area chip, then the sort. Grouping happens downstream of
+     * all three, so filtering to one area and sorting by scaling gives one
+     * section sorted by scaling rather than an argument between the two.
+     */
+    const filteredSubjects = useMemo(() => {
+        const q = debouncedSearch.toLowerCase();
+        const hit = subjects.filter((s) =>
+            (!q || s.name.toLowerCase().includes(q) || s.code.toLowerCase().includes(q))
+            && (!area || areaOf(s.name) === area));
+        return sortSubjects(hit, sortKey);
+    }, [subjects, debouncedSearch, area, sortKey]);
+
+    /**
+     * Sections, but ONLY when sorting by area — any other sort is a single
+     * ranking across the whole catalogue, and chopping it into headed sections
+     * would break the very order the student asked for.
+     */
+    const browseGroups = useMemo(
+        () => (sortKey === "area" ? groupByArea(filteredSubjects) : null),
+        [filteredSubjects, sortKey]);
+
+    /**
+     * Which areas have anything in them at all, so a chip can never lead to an
+     * empty page. Computed off the SEARCH results, not the area filter, or
+     * picking a chip would hide every other chip.
+     */
+    const availableAreas = useMemo(() => {
+        const q = debouncedSearch.toLowerCase();
+        const present = new Set(subjects
+            .filter((s) => !q || s.name.toLowerCase().includes(q) || s.code.toLowerCase().includes(q))
+            .map((s) => areaOf(s.name)));
+        return LEARNING_AREAS.filter((a) => present.has(a.key));
+    }, [subjects, debouncedSearch]);
+
+    const load = useMemo(() => loadSummary(mySubjects, subjects), [mySubjects, subjects]);
 
     /**
      * The shelf, in colour-wheel order.
@@ -539,12 +629,50 @@ export default function Subjects() {
                     ))}
                 </div>
 
-                {/* Search (for browse tab) */}
+                {/* Browse controls. Thirty-three subjects and, until now, one
+                    text box to narrow them with. */}
                 {activeTab === "all" && (
-                    <div className="relative max-w-md">
-                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground/60" />
-                        <Input value={searchTerm} onChange={e => setSearchTerm(e.target.value)}
-                            placeholder="Search subjects..." className="pl-10 bg-surface border-border rounded-xl h-10" />
+                    <div className="space-y-3">
+                        <div className="flex flex-wrap items-center gap-3">
+                            <div className="relative flex-1 min-w-[220px] max-w-md">
+                                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground/60" />
+                                <Input value={searchTerm} onChange={e => setSearchTerm(e.target.value)}
+                                    placeholder="Search subjects..." className="pl-10 bg-surface border-border rounded-xl h-10" />
+                            </div>
+                            <Select value={sortKey} onValueChange={setSortKey}>
+                                <SelectTrigger className="rounded-xl h-10 w-[170px] bg-surface">
+                                    <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    {SORTS.map((o) => (
+                                        <SelectItem key={o.key} value={o.key}>{o.label}</SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
+                        </div>
+
+                        {/* Only areas that actually have subjects in them — a
+                            chip that leads to an empty page reads as a broken
+                            filter. */}
+                        <div className="flex flex-wrap gap-1.5">
+                            <button onClick={() => setArea(null)}
+                                className={`px-3 py-1.5 rounded-full text-[12px] font-bold transition-colors ${
+                                    area === null
+                                        ? "bg-foreground text-background"
+                                        : "bg-secondary text-muted-foreground hover:text-foreground"}`}>
+                                All
+                            </button>
+                            {availableAreas.map((a) => (
+                                <button key={a.key}
+                                    onClick={() => setArea(area === a.key ? null : a.key)}
+                                    className={`px-3 py-1.5 rounded-full text-[12px] font-bold transition-colors ${
+                                        area === a.key
+                                            ? "bg-foreground text-background"
+                                            : "bg-secondary text-muted-foreground hover:text-foreground"}`}>
+                                    {a.label}
+                                </button>
+                            ))}
+                        </div>
                     </div>
                 )}
 
@@ -601,26 +729,56 @@ export default function Subjects() {
                 {/* BROWSE TAB */}
                 {activeTab === "all" && (
                     <div>
+                        <LoadStrip summary={load} />
+
                         {filteredSubjects.length === 0 ? (
                             <div className="text-center py-16">
-                                <BookOpen className="w-12 h-12 mx-auto text-muted-foreground/60 mb-3" />
-                                <p className="text-muted-foreground text-sm">No subjects found</p>
+                                <p className="text-muted-foreground text-sm">
+                                    Nothing matches that. Try a different area or clear the search.
+                                </p>
+                            </div>
+                        ) : browseGroups ? (
+                            /* Sorted by area, so the areas are the sections.
+                               Every other sort is one ranking across the whole
+                               catalogue and must not be chopped up. */
+                            <div className="space-y-7">
+                                {browseGroups.map((g) => (
+                                    <section key={g.key}>
+                                        <div className="flex items-baseline gap-2 mb-3">
+                                            <h2 className="font-display font-extrabold text-foreground text-base">
+                                                {g.label}
+                                            </h2>
+                                            <span className="text-[11px] text-muted-foreground tabular-nums">
+                                                {g.subjects.length}
+                                            </span>
+                                        </div>
+                                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
+                                            {g.subjects.map((subject) => (
+                                                <BrowseSubjectCard
+                                                    key={subject.id}
+                                                    subject={subject}
+                                                    isSelected={isSubjectInMyList(subject.id)}
+                                                    onAdd={() => handleAddSubject(subject)}
+                                                    onRemove={() => handleRemoveByVCEId(subject.id)}
+                                                    onViewDetails={() => setSelectedSubject(subject)}
+                                                />
+                                            ))}
+                                        </div>
+                                    </section>
+                                ))}
                             </div>
                         ) : (
-                            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-                                <AnimatePresence mode="popLayout">
-                                    {filteredSubjects.map((subject, i) => (
-                                        <motion.div key={subject.id} layout initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.02 }}>
-                                            <BrowseSubjectCard
-                                                subject={subject}
-                                                isSelected={isSubjectInMyList(subject.id)}
-                                                onAdd={() => handleAddSubject(subject)}
-                                                onRemove={() => handleRemoveByVCEId(subject.id)}
-                                                onViewDetails={() => setSelectedSubject(subject)}
-                                            />
-                                        </motion.div>
-                                    ))}
-                                </AnimatePresence>
+                            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
+                                {filteredSubjects.map((subject) => (
+                                    <BrowseSubjectCard
+                                        key={subject.id}
+                                        subject={subject}
+                                        isSelected={isSubjectInMyList(subject.id)}
+                                        onAdd={() => handleAddSubject(subject)}
+                                        onRemove={() => handleRemoveByVCEId(subject.id)}
+                                        onViewDetails={() => setSelectedSubject(subject)}
+                                    />
+                                ))}
                             </div>
                         )}
                     </div>

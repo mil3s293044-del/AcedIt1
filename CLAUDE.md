@@ -713,6 +713,64 @@ through the spectrum at a position nobody chose. Saturation under 0.15 is "no
 colour"; the check is HSL saturation, so a dark green is still green. Name
 breaks ties or two subjects on one palette entry swap places between renders.
 
+## Browse is where subjects get CHOSEN
+
+**It was a catalogue of thirty-three identical cards.** The same book icon on
+every one (the "icon that restates the word next to it" rule, thirty-three
+times over), a two-line truncated overview cut mid-sentence so the longest
+element on the card was the one nobody could finish, and a single text box to
+narrow the lot. A student on this page is making one of the larger decisions of
+their schooling.
+
+**The scaling factor had the wrong arrow on it.** Every subject printed its
+factor in one pill — a `TrendingUp` glyph in `text-primary` green — so Further
+Maths at −4 and Specialist at +13 both got a green arrow pointing up, on the
+single number VCE students most want off this page. `ScalingMark` drives the
+glyph and the colour off the same comparison, so they cannot disagree, and the
+catalogue's `+N` placeholder renders as a dash rather than a zero.
+
+**Three fields the catalogue has always carried and browse never showed.**
+`career_pathways` (where it leads) is the headline under the name;
+`prerequisites` is the one fact that can rule a subject out; both were behind a
+"Details" link nobody clicks.
+
+**A PREREQUISITE IS WRITTEN THREE WAYS and only one is a requirement.** Printed
+raw with "Needs " in front, two of the three come out as nonsense:
+`"None"` → "Needs None", `"Recommended: Year 10 Drama"` → "Needs Recommended:
+Year 10 Drama". The third is the dangerous one — `"Year 10 maths recommended"`
+→ "Needs Yr 10 maths recommended" reads as a hard gate on a subject the student
+could take. `prerequisiteOf` returns `null`, `recommended` or `required`, the
+card says *Needs* or *Suits* accordingly, and a requirement carrying advice
+after a semicolon keeps only the requirement ("Year 10 Chemistry; concurrent
+Methods recommended" → Needs Yr 10 Chemistry). A test parses every prerequisite
+in the real catalogue, so a fourth phrasing added later fails the suite instead
+of reaching a student.
+
+**Learning areas are HAND-MAPPED, not derived.** Thirty-three is small enough
+to be exact, and every heuristic that could produce them ("does the name
+contain Mathematics") gets Data Analytics wrong. A test asserts every catalogue
+subject has a mapped area — without it a subject added later falls into "Your
+own", the heading meant for the student's own custom subjects.
+
+**Sections appear ONLY when sorting by area.** Any other sort is a single
+ranking across the whole catalogue, and chopping it into headed sections breaks
+the very order the student asked for. Empty areas are dropped: a heading over
+nothing is a broken filter, not a section. The area chips are computed off the
+SEARCH results rather than the area filter, or picking one chip would hide
+every other chip.
+
+**`LoadStrip` checks RULES and reports the rest.** An ATAR needs a completed
+Unit 3–4 English sequence and study scores in at least four studies — things a
+student can fail to satisfy without knowing, so they get a tick or a warning.
+The scaling average is reported and NOT judged: scaling reflects the strength
+of the cohort that sat a subject, not a discount available to whoever picks it,
+so a strip grading a load as "scaling badly" would push a student to drop
+subjects on a misreading of the number. Subjects whose scaling the catalogue
+does not know are excluded from that average rather than counted as zero, and
+the strip says what it averaged over. An account with nothing picked is not
+failing two requirements — it is a student who has not started, and gets one
+neutral line instead of two warnings.
+
 ## The study-score curve
 
 **`goal_study_score` has been on `user_subjects` since migration 0002, and
@@ -1293,6 +1351,8 @@ another email before this.
 - `src/lib/subjectHub.js`, `src/pages/SubjectHub.jsx` — one subject, gathered
 - `src/lib/studyScore.js`, `src/components/subjects/ScoreCurve.jsx` — the state
   distribution, and the drag that finally sets `goal_study_score`
+- `src/lib/subjectBrowse.js`, `src/components/subjects/ScalingMark.jsx`,
+  `LoadStrip.jsx` — learning areas, sorting, prerequisites, and the load checks
 - `src/components/shared/MarkdownMath.jsx`, `LatexRenderer.jsx` — KaTeX
 - `supabase/migrations/0001…0006_*.sql` — applied schema
 - `base44/entities/*.jsonc`, `base44/functions/*/` — Base44 reference, kept until cutover
