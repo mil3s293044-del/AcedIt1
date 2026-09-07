@@ -499,11 +499,28 @@ moment one card is obviously invented:
   and robe are the part that survives being small. The HEADWEAR is the rank
   cue — spikes for a king, domes for a queen, a plumed cap for the jack — with
   the held object (sword, flower, staff) as the second.
-  Two things had to be right. The plate is drawn in a LANDSCAPE box, because
-  each half of the panel is about 64 × 39; a square viewBox letterboxed to the
-  height and the figure came out a chess pawn with margins either side. And the
-  robe fills the full width at the mirror line — tapered, the two halves meet
-  as a pointed lens and the figure reads as a flying saucer.
+  The plate is drawn in a LANDSCAPE box, because each half of the panel is
+  about 64 × 39; a square viewBox letterboxed to the height and the figure came
+  out a chess pawn with margins either side.
+  **WHAT MEETS AT THE FOLD DECIDES WHETHER THIS IS A FIGURE.** Mirror any
+  silhouette whose top edge peaks in the middle and you get a lens — so the
+  robe's last stretch into the mirror line is VERTICAL, and it stops short of
+  the sides. Vertical sides mirror into a rectangle, which is a band of cloth
+  at the waist; full width and a curve mirror into a flying saucer with the
+  halves' dividing rule running through it like an equator. This note used to
+  say the saucer was fixed by squaring the robe's bottom CORNERS. It was not,
+  and it never could have been — the corners were never what made the lens.
+  Two more rules the redraw is holding:
+  **Nothing is drawn outside the viewBox.** Crowns were plotted up to y=-3 in a
+  box starting at 0, so every king's and queen's headwear was quietly clipped
+  flat by `overflow-hidden`.
+  **Head, ruff, robe and the held object INTERLOCK.** With daylight between
+  them they read as scattered marks small and as an exploded diagram large. The
+  ruff's top curve tucks behind the skull, the robe overlaps the ruff, and the
+  object's shaft runs down under the robe — free, because BODY paints last and
+  covers it, and the difference between held and laid alongside.
+  If the figure looks wrong at one size it is wrong at ALL of them: the SVG
+  uses `meet`, so it is scale-invariant. Large is just where you can see it.
 - **There is no 1 in a deck**, and no 11, 12 or 17. Two surfaces numbered
   things and printed that number straight onto a card — step 1 of three, and
   the question number in the quiz player, which reaches 17 on a long quiz.
