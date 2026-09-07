@@ -84,6 +84,7 @@ const Support = lazy(() => import('./pages/Support'));
 const Timer = lazy(() => import('./pages/Timer'));
 const Help = lazy(() => import('./pages/Help'));
 const MistakeBank = lazy(() => import('./pages/MistakeBank'));
+const SubjectHub = lazy(() => import('./pages/SubjectHub'));
 import __Layout from './Layout.jsx';
 
 
@@ -110,6 +111,7 @@ export const PAGES = {
     "Study": Study,
     "StudyGroups": StudyGroups,
     "Subjects": Subjects,
+    "SubjectHub": SubjectHub,
     "Subscription": Subscription,
     "Support": Support,
     "Timer": Timer,

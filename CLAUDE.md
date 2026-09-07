@@ -595,18 +595,77 @@ inside the page's own two-column grid, so at the viewport where a `lg:` split
 would fire the panel itself is about 500px and each column would be 250 — the
 same viewport-is-not-element trap the streak panel beside it already records.
 
-`usualWeeklyMinutes` is a median of past weeks, current week EXCLUDED (it is
-half-finished, and a Monday morning would drag every subject toward nothing).
-A week the subject was skipped counts as a ZERO for that subject — the opposite
-of WeekPace's rule, deliberately: a week with study in it and none of it on
-Chemistry is direct evidence about Chemistry, and skipping those reports a
-subject touched once a month as its one good week. Rounded to the half hour on
-the card, because a median across weeks does not know its own tenths.
+## Subjects is a shelf, and each subject has a hub
 
-Least time deals FIRST and unknown sorts LAST — a subject with no history has
-not been starved, it has not been measured, and heading the list with it claims
-something the page cannot see. The card count stays on the BACK, where you
-turned it over to ask what is in the subject.
+**Subjects was a catalogue you opened once at signup.** A VCAA overview, a
+scaling pill, a difficulty pill and a "Details" link — facts about the
+curriculum, nothing about the student. So the question anybody actually opens
+that page to ask ("where am I up to in Chemistry, and what do I do about it")
+had nowhere to be answered, while the answer sat scattered across six screens:
+the decks on Review, the quizzes on Quizzes, the dropped criteria on
+/MistakeBank, the hours in two log tables, the SAC on the planner.
+
+`subjectHub.js` gathers it and `/SubjectHub?subject=` is where it lands. The
+subject rides in the QUERY STRING because `createPageUrl` builds `/PageName`
+and every cross-page link in the app is built with it; a second URL scheme for
+one page is how routes start disagreeing with the router.
+
+**Everything is DERIVED from rows the app already loads.** Nothing new is
+stored, so nothing here can go stale, double up, or disagree with the screen it
+came from — the rule `redoQueue` already follows. Subjects loads the student's
+work ONCE and slices it per subject: six subjects querying for themselves would
+be thirty-six round trips before the shelf painted.
+
+**Two fields the app has shipped for months and had never once read.**
+`assessment_structure` and `key_skills` in `vceSubjects.js` were referenced
+nowhere in the codebase, and they are exactly the two things a student cannot
+work out from their own data:
+
+- **Where the marks are.** Exam 2 is 44% of Methods, the Unit 4 SAC is 14%. A
+  student revising the 14% the week before the 44% is making a bad trade and
+  has no way to see it, because the weights live in a study design nobody
+  opens. `markSplit` sorts heaviest first, which is the whole point.
+  The percentages are VCAA's and are **not renormalised**: a study design whose
+  components do not add to 100 is a fact about the data, and scaling them to
+  fit would invent numbers. `total` is reported so the panel can say so.
+- **What you have never touched.** `coverage` matches the topics a student has
+  already written — deck topics, quiz titles — against `key_skills`, on
+  normalised containment either way. No tagging, no new field, no backfill.
+
+**Coverage REFUSES rather than guesses, and says what it could not place.** A
+topic matching no area comes back as `unmatched` — printed on the panel — not
+dropped and not forced onto the nearest skill. Crediting an area the student
+has not covered is the one error this cannot make: it would send them into a
+SAC believing they had done the work. And "you have never studied Vectors" is
+only worth printing by a page that also admits it did not recognise four of
+your decks.
+
+**`subjectLead` is the one line, ordered by what it COSTS** — a SAC inside a
+fortnight, then marks you are actively dropping, then the review pile, then a
+gap in the course, then what the marks are worth. Each branch returns null
+rather than a placeholder when its number is not real, the same rule Today's
+Play keeps about its rail. The shelf card and the hub print the SAME lead:
+two surfaces answering "what next" with different sentences is how a student
+stops believing either.
+
+`usualMinutes` is a median of past weeks with the current one EXCLUDED — it is
+half-finished, and a Monday morning would drag every subject toward nothing.
+Week buckets go through `studyLog`'s own `weekStart` and `dayKey`; rolling the
+Monday maths again here would be a second copy of the week, and `dayKey` exists
+precisely because `toISOString` is UTC.
+
+**A subject card is a `PlayingCard` now**, rank = mastery, suit = the subject,
+the same contract as the other eighteen surfaces. It replaced an icon in a
+rounded square, a title, two pills, a blurb and two more pills — the generated-
+app tile this codebase keeps removing, on the one object that most deserved to
+be a card.
+
+**92px IS A FLOOR for a card with pips on it.** `Index` is sized in fixed
+pixels while the pip field is a percentage of the card, so the two converge as
+the card shrinks. At 72px the index's own suit mark landed against the
+top-left pip and a nine read as a card with ten marks on it. The index clears
+the field from about 88px up; 92 is what HandRail already uses. Below that,
+`pips="faint"` or no pips — do not just make the card smaller.
 
 ## The dashboard answers one question
 
@@ -1127,7 +1186,9 @@ another email before this.
 - `src/api/supabaseClient.js`, `runtimeConfig.js`, `entitiesShim.js`, `functionsShim.js`, `_dualRunDevTools.js`
 - `src/lib/AuthContext.jsx` — still on Base44, swap pending
 - `src/lib/streamingAI.js`, `src/lib/reconcileXP.js`, `src/lib/subjectExaminerPrompts.js`
-- `src/data/vceSubjects.js` — VCE subject catalog
+- `src/data/vceSubjects.js` — VCE subject catalog (`assessment_structure` and
+  `key_skills` are read by `subjectHub.js`)
+- `src/lib/subjectHub.js`, `src/pages/SubjectHub.jsx` — one subject, gathered
 - `src/components/shared/MarkdownMath.jsx`, `LatexRenderer.jsx` — KaTeX
 - `supabase/migrations/0001…0006_*.sql` — applied schema
 - `base44/entities/*.jsonc`, `base44/functions/*/` — Base44 reference, kept until cutover
