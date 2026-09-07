@@ -5,7 +5,9 @@ import NavigationTracker from '@/lib/NavigationTracker'
 import { pagesConfig } from './pages.config'
 import { BrowserRouter as Router, Route, Routes, useLocation, Navigate } from 'react-router-dom';
 import { MotionConfig } from 'framer-motion';
-import { lazy, Suspense } from 'react';
+import { Suspense } from 'react';
+import { lazyPage } from '@/lib/lazyPage';
+import PageErrorBoundary from '@/components/shared/PageErrorBoundary';
 import PageNotFound from './lib/PageNotFound';
 // Landing and Login are what an unauthenticated visitor lands on, so they stay
 // in the first chunk — splitting them would put a spinner in front of the
@@ -13,14 +15,14 @@ import PageNotFound from './lib/PageNotFound';
 // navigation and can afford to be fetched then.
 import Landing from './pages/Landing';
 import Login from './pages/Login';
-const Paywall = lazy(() => import('./pages/Paywall'));
-const Suspended = lazy(() => import('./pages/Suspended'));
-const AdminIPPanel = lazy(() => import('./pages/AdminIPPanel'));
-const Onboarding = lazy(() => import('./pages/Onboarding'));
-const ForgotPassword = lazy(() => import('./pages/ForgotPassword'));
-const ResetPassword = lazy(() => import('./pages/ResetPassword'));
-const Privacy = lazy(() => import('./pages/Privacy'));
-const Terms = lazy(() => import('./pages/Terms'));
+const Paywall = lazyPage('Paywall', () => import('./pages/Paywall'));
+const Suspended = lazyPage('Suspended', () => import('./pages/Suspended'));
+const AdminIPPanel = lazyPage('AdminIPPanel', () => import('./pages/AdminIPPanel'));
+const Onboarding = lazyPage('Onboarding', () => import('./pages/Onboarding'));
+const ForgotPassword = lazyPage('ForgotPassword', () => import('./pages/ForgotPassword'));
+const ResetPassword = lazyPage('ResetPassword', () => import('./pages/ResetPassword'));
+const Privacy = lazyPage('Privacy', () => import('./pages/Privacy'));
+const Terms = lazyPage('Terms', () => import('./pages/Terms'));
 import { AuthProvider, useAuth } from '@/lib/AuthContext';
 import { ThemeProvider } from '@/lib/useTheme';
 import UserNotRegisteredError from '@/components/UserNotRegisteredError';
@@ -46,7 +48,19 @@ const PageFallback = () => (
 );
 
 const LayoutWrapper = ({ children, currentPageName }) => {
-  const page = <Suspense fallback={<PageFallback />}>{children}</Suspense>;
+  // The boundary sits OUTSIDE Suspense and INSIDE the layout, which is the
+  // only arrangement that does the right thing on both failures: outside, so
+  // it catches a chunk whose promise rejected (the reject surfaces where the
+  // lazy component would have rendered); inside, so the nav and rail survive
+  // and the student can navigate away rather than staring at white.
+  //
+  // `currentPageName` as the reset key: one bad page must not leave every
+  // other page showing the fallback until a refresh.
+  const page = (
+    <PageErrorBoundary resetKey={currentPageName}>
+      <Suspense fallback={<PageFallback />}>{children}</Suspense>
+    </PageErrorBoundary>
+  );
   return Layout ? <Layout currentPageName={currentPageName}>{page}</Layout> : page;
 };
 

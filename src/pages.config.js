@@ -47,7 +47,7 @@
  *
  * The mainPage value must match a key in the PAGES object exactly.
  */
-import { lazy } from 'react';
+import { lazyPage } from '@/lib/lazyPage';
 
 // Every page is loaded on demand.
 //
@@ -59,32 +59,32 @@ import { lazy } from 'react';
 //
 // Layout is NOT lazy: it is on every route, so splitting it would only add a
 // round trip before the chrome appears.
-const AITools = lazy(() => import('./pages/AITools'));
-const AIToolsHistory = lazy(() => import('./pages/AIToolsHistory'));
-const Analytics = lazy(() => import('./pages/Analytics'));
-const Checkout = lazy(() => import('./pages/Checkout'));
-const Competitions = lazy(() => import('./pages/Competitions'));
-const Dashboard = lazy(() => import('./pages/Dashboard'));
-const Friends = lazy(() => import('./pages/Friends'));
-const Goals = lazy(() => import('./pages/Goals'));
-const Strategise = lazy(() => import('./pages/Strategise'));
-const Guides = lazy(() => import('./pages/Guides'));
-const PaymentCancel = lazy(() => import('./pages/PaymentCancel'));
-const PaymentSuccess = lazy(() => import('./pages/PaymentSuccess'));
-const Premium = lazy(() => import('./pages/Premium'));
-const Quizzes = lazy(() => import('./pages/Quizzes'));
-const Ranked = lazy(() => import('./pages/Ranked'));
-const Review = lazy(() => import('./pages/Review'));
-const Settings = lazy(() => import('./pages/Settings'));
-const Study = lazy(() => import('./pages/Study'));
-const StudyGroups = lazy(() => import('./pages/StudyGroups'));
-const Subjects = lazy(() => import('./pages/Subjects'));
-const Subscription = lazy(() => import('./pages/Subscription'));
-const Support = lazy(() => import('./pages/Support'));
-const Timer = lazy(() => import('./pages/Timer'));
-const Help = lazy(() => import('./pages/Help'));
-const MistakeBank = lazy(() => import('./pages/MistakeBank'));
-const SubjectHub = lazy(() => import('./pages/SubjectHub'));
+const AITools = lazyPage('AITools', () => import('./pages/AITools'));
+const AIToolsHistory = lazyPage('AIToolsHistory', () => import('./pages/AIToolsHistory'));
+const Analytics = lazyPage('Analytics', () => import('./pages/Analytics'));
+const Checkout = lazyPage('Checkout', () => import('./pages/Checkout'));
+const Competitions = lazyPage('Competitions', () => import('./pages/Competitions'));
+const Dashboard = lazyPage('Dashboard', () => import('./pages/Dashboard'));
+const Friends = lazyPage('Friends', () => import('./pages/Friends'));
+const Goals = lazyPage('Goals', () => import('./pages/Goals'));
+const Strategise = lazyPage('Strategise', () => import('./pages/Strategise'));
+const Guides = lazyPage('Guides', () => import('./pages/Guides'));
+const PaymentCancel = lazyPage('PaymentCancel', () => import('./pages/PaymentCancel'));
+const PaymentSuccess = lazyPage('PaymentSuccess', () => import('./pages/PaymentSuccess'));
+const Premium = lazyPage('Premium', () => import('./pages/Premium'));
+const Quizzes = lazyPage('Quizzes', () => import('./pages/Quizzes'));
+const Ranked = lazyPage('Ranked', () => import('./pages/Ranked'));
+const Review = lazyPage('Review', () => import('./pages/Review'));
+const Settings = lazyPage('Settings', () => import('./pages/Settings'));
+const Study = lazyPage('Study', () => import('./pages/Study'));
+const StudyGroups = lazyPage('StudyGroups', () => import('./pages/StudyGroups'));
+const Subjects = lazyPage('Subjects', () => import('./pages/Subjects'));
+const Subscription = lazyPage('Subscription', () => import('./pages/Subscription'));
+const Support = lazyPage('Support', () => import('./pages/Support'));
+const Timer = lazyPage('Timer', () => import('./pages/Timer'));
+const Help = lazyPage('Help', () => import('./pages/Help'));
+const MistakeBank = lazyPage('MistakeBank', () => import('./pages/MistakeBank'));
+const SubjectHub = lazyPage('SubjectHub', () => import('./pages/SubjectHub'));
 import __Layout from './Layout.jsx';
 
 

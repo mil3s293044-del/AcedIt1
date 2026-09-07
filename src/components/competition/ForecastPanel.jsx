@@ -26,12 +26,20 @@ import { Button } from "@/components/ui/button";
 import { useToast } from "@/components/ui/use-toast";
 import { base44 } from "@/api/base44Client";
 import { Loader2, TrendingUp, Check, X, Clock } from "lucide-react";
+import OddsDots, { oddsPhrase } from "@/components/competition/OddsDots";
+import Odometer from "@/components/competition/Odometer";
 import {
     KINDS, PAYING_KINDS, baseRateFor, forecastBoard, payoutFor, clampP,
     CALIBRATION_MIN,
 } from "@/lib/forecast";
 
 const STAKES = [25, 50, 100, 200];
+
+/** Inside a day of settling. Used only to draw attention, never to decide. */
+const closingSoon = (r) => {
+    const t = new Date(r?.forecast?.deadline || 0).getTime();
+    return Number.isFinite(t) && t - Date.now() < 24 * 3600 * 1000;
+};
 const pct = (p) => `${Math.round(clampP(p) * 100)}%`;
 
 /** Deadline options per kind, in days. Kept short: a call you cannot remember
@@ -215,6 +223,16 @@ function Composer({ ctx, onPlaced }) {
 
             <ProbDial value={p} base={base.p} onChange={setP} />
 
+            {/* The dots are the point of this screen. A percentage is abstract;
+                "7 times in 10" is a count, and the ringed dots are exactly the
+                disagreement with the house that is being scored. */}
+            <div className="flex items-center gap-3 mt-3">
+                <OddsDots value={p} base={base.p} />
+                <span className="text-[12px] text-muted-foreground">
+                    you're saying <span className="font-bold text-foreground">{oddsPhrase(p)}</span>
+                </span>
+            </div>
+
             <div className="flex items-center gap-2 mt-4">
                 <span className="text-[11px] text-muted-foreground">Stake</span>
                 {STAKES.map((s) => (
@@ -232,10 +250,12 @@ function Composer({ ctx, onPlaced }) {
                 left printed a loss of 5 XP in the colour of a win. */}
             <div className="flex items-baseline gap-4 mt-3 text-[12px] tabular-nums">
                 <span className={`font-bold ${ifRight >= 0 ? "text-primary" : "text-streak"}`}>
-                    {ifRight > 0 ? "+" : ""}{ifRight} if it happens
+                    <Odometer value={ifRight} format={(n) => `${n > 0 ? "+" : ""}${n}`} />
+                    {" "}if it happens
                 </span>
                 <span className={`font-bold ${ifWrong >= 0 ? "text-primary" : "text-streak"}`}>
-                    {ifWrong > 0 ? "+" : ""}{ifWrong} if it doesn't
+                    <Odometer value={ifWrong} format={(n) => `${n > 0 ? "+" : ""}${n}`} />
+                    {" "}if it doesn't
                 </span>
             </div>
 
@@ -351,14 +371,31 @@ export default function ForecastPanel({ forecasts = [], ctx = {}, onChanged }) {
                     <ul className="space-y-2.5">
                         {board.open.map((r) => (
                             <li key={r.forecast.id} className="flex items-center gap-3">
-                                <Clock className="w-4 h-4 text-muted-foreground flex-shrink-0" />
+                                {/* A call inside a day of its deadline pulses.
+                                    It is the one thing on the page about to be
+                                    decided, and it is otherwise indistinguishable
+                                    from a call with a fortnight left. */}
+                                <span className="relative flex-shrink-0">
+                                    {closingSoon(r) && (
+                                        <motion.span
+                                            className="absolute inset-0 rounded-full bg-xp/40"
+                                            animate={{ scale: [1, 1.9], opacity: [0.6, 0] }}
+                                            transition={{ duration: 1.6, repeat: Infinity, ease: "easeOut" }} />
+                                    )}
+                                    <Clock className={`relative w-4 h-4 ${
+                                        closingSoon(r) ? "text-xp" : "text-muted-foreground"}`} />
+                                </span>
                                 <div className="min-w-0 flex-1">
                                     <p className="text-[13px] font-bold text-foreground leading-snug">
                                         {r.question}
                                     </p>
-                                    <p className="text-[11px] text-muted-foreground tabular-nums">
-                                        You said {pct(r.p)} · we said {pct(r.base.p)} · {r.forecast.stake || r.forecast.wagered_xp || 0} XP in
-                                    </p>
+                                    <div className="flex items-center gap-2 mt-1">
+                                        <OddsDots value={r.p} base={r.base.p} size="sm" animate={false} />
+                                        <span className="text-[11px] text-muted-foreground tabular-nums">
+                                            {pct(r.p)} vs {pct(r.base.p)} · {r.forecast.stake || r.forecast.wagered_xp || 0} XP in
+                                            {closingSoon(r) ? " · closing" : ""}
+                                        </span>
+                                    </div>
                                 </div>
                                 <Button size="sm" variant="outline" className="flex-shrink-0"
                                     disabled={settling === r.forecast.id}
@@ -391,22 +428,39 @@ export default function ForecastPanel({ forecasts = [], ctx = {}, onChanged }) {
 
                 {board.settled.length > 0 && (
                     <ul className="mt-4 pt-4 border-t border-border/70 space-y-2">
-                        {board.settled.slice(0, 6).map((r) => (
-                            <li key={r.forecast.id} className="flex items-center gap-2.5 text-[12px]">
-                                {r.outcome
-                                    ? <Check className="w-3.5 h-3.5 text-primary flex-shrink-0" />
-                                    : <X className="w-3.5 h-3.5 text-streak flex-shrink-0" />}
+                        {board.settled.slice(0, 6).map((r, i) => (
+                            /* The settlement reveal. A call resolving is the
+                               payoff of the whole loop and it used to just
+                               appear — the verdict stamps in with a spring,
+                               the XP counts up from zero, and the rows land in
+                               sequence so a batch reads as results coming in
+                               rather than a list rendering. */
+                            <motion.li key={r.forecast.id}
+                                className="flex items-center gap-2.5 text-[12px]"
+                                initial={{ opacity: 0, x: -6 }}
+                                animate={{ opacity: 1, x: 0 }}
+                                transition={{ delay: 0.05 + i * 0.06, duration: 0.3 }}>
+                                <motion.span className="flex-shrink-0"
+                                    initial={{ scale: 0.4, rotate: -20 }}
+                                    animate={{ scale: 1, rotate: 0 }}
+                                    transition={{ delay: 0.12 + i * 0.06,
+                                        type: "spring", stiffness: 500, damping: 18 }}>
+                                    {r.outcome
+                                        ? <Check className="w-3.5 h-3.5 text-primary" />
+                                        : <X className="w-3.5 h-3.5 text-streak" />}
+                                </motion.span>
                                 <span className="min-w-0 flex-1 truncate text-foreground">{r.question}</span>
                                 <span className="text-muted-foreground tabular-nums flex-shrink-0">
                                     said {pct(r.p)}
                                 </span>
                                 {r.kind.pays && (
-                                    <span className={`tabular-nums font-bold flex-shrink-0 ${
+                                    <span className={`font-bold flex-shrink-0 ${
                                         r.xp >= 0 ? "text-primary" : "text-streak"}`}>
-                                        {r.xp >= 0 ? "+" : ""}{r.xp}
+                                        <Odometer value={r.xp}
+                                            format={(n) => `${n >= 0 ? "+" : ""}${n}`} />
                                     </span>
                                 )}
-                            </li>
+                            </motion.li>
                         ))}
                     </ul>
                 )}

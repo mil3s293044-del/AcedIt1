@@ -4281,15 +4281,43 @@ app.post("/local-ai/fn/submitPredictionResult", async (req, res) => {
         : p,
     );
 
+    // ─── BETS SETTLE ON THE SYNCED PROGRESS, NOT ON THE TYPED NUMBER ────────
+    //
+    // `actual_result` arrives in the request body from the person the bets are
+    // ON, and every open bet here has `target_email === userEmail`. So the
+    // subject of the bets decided them — set a line, let friends take sides,
+    // then type whatever number makes them lose. Two accounts is a collusion
+    // loop: one bets "over", the other reports a result that pays it at 1.8x.
+    // It moved OTHER PEOPLE's XP, which makes it worse than the equivalent
+    // hole in resolveScoreWager.
+    //
+    // The server already syncs each participant's real progress into this row
+    // — it is what score_history and every projection in battleOdds are built
+    // from — so it can settle on its own number. `actual_result` is still
+    // recorded, because a student's own account of how the assessment went is
+    // worth keeping; it just no longer decides anybody's XP.
+    const syncedProgress = Number(me.compete_score ?? me.progress_percent);
+    const settlesOn = Number.isFinite(syncedProgress) ? syncedProgress : null;
+
     const bets = comp.progress_bets || [];
     const settled = [];
     const updatedBets = bets.map((bet) => {
       if (bet.status !== "open" || bet.target_email !== userEmail) return bet;
-      const won = bet.direction === "over" ? actual_result > bet.line : actual_result < bet.line;
+      // With nothing synced there is no verifiable number, so the bet stays
+      // open rather than being decided by the only figure available — which is
+      // the one that cannot be trusted. Refunds are a settlement question, not
+      // a reporting one.
+      if (settlesOn === null) return bet;
+      const won = bet.direction === "over" ? settlesOn > bet.line : settlesOn < bet.line;
       const xp_outcome = won
         ? Math.floor(bet.wagered_xp * PROGRESS_BET_WIN_MULT)
         : -bet.wagered_xp;
-      const resolved = { ...bet, status: won ? "won" : "lost", xp_outcome, resolved_at: new Date().toISOString() };
+      const resolved = {
+        ...bet, status: won ? "won" : "lost", xp_outcome,
+        resolved_at: new Date().toISOString(),
+        // What actually decided it, on the row, so a dispute has an answer.
+        settled_on: settlesOn, settled_by: "synced_progress",
+      };
       settled.push(resolved);
       return resolved;
     });
@@ -4323,6 +4351,9 @@ app.post("/local-ai/fn/submitPredictionResult", async (req, res) => {
     return res.json({
       success: true,
       actual_result,
+      // Null means nothing was synced yet, so no bet moved. The client should
+      // say so rather than implying the bets were settled.
+      settled_on: settlesOn,
       settled_count: settled.length,
       won: settled.filter((b) => b.status === "won").length,
       lost: settled.filter((b) => b.status === "lost").length,
