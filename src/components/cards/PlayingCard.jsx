@@ -62,23 +62,38 @@ export const CARD_H = "clamp(19rem, 56vh, 32rem)";
 /**
  * A corner index: rank over pip, the way it's printed.
  *
- * Two sizes, because the index has to stay in proportion to the card. The
- * full-size mark on a 176px deck stack lands on top of the deck's own name —
- * a real card prints its index at a fixed fraction of the card, not a fixed
- * number of millimetres.
+ * ─── SIZED AS A FRACTION OF THE CARD, which is what a real one is ───────────
+ * Every metric now comes off the `--idx-*` properties `.card-face` publishes,
+ * so the mark holds its proportion from a 62px card in the onboarding fan to a
+ * 32rem card on the table. See the note beside `.card-face` in index.css for
+ * why two fixed pixel sizes could not: a fixed index on a card whose every
+ * other feature is a percentage converges on the pip field as the card
+ * shrinks, and at 62px it had already collided.
+ *
+ * `small` is no longer a different number of pixels — it is a tighter ramp,
+ * for a card that also has to print a name band or a paragraph and needs the
+ * index to give way to it.
+ *
+ * The pip is sized by a WRAPPER rather than by passing a style into SuitPip:
+ * SuitPip forwards to SpadePip for spades and takes className only, so a style
+ * prop would silently apply to three suits and not the fourth.
  */
-function Index({ rank, suit, flip, small }) {
+function Index({ rank, suit, flip }) {
     return (
         <span aria-hidden="true"
             className={`absolute flex flex-col items-center leading-none z-10 ${
-                small
-                    ? (flip ? "bottom-1.5 right-2 rotate-180" : "top-1.5 left-2")
-                    : (flip ? "bottom-2.5 right-3 rotate-180" : "top-2.5 left-3")}`}>
+                flip ? "rotate-180" : ""}`}
+            style={flip
+                ? { bottom: "var(--idx-y)", right: "var(--idx-x)" }
+                : { top: "var(--idx-y)", left: "var(--idx-x)" }}>
             <span className={`font-display font-black tabular-nums ${
-                small ? "text-[11px]" : "text-sm sm:text-base"} ${
-                SUIT_IS_RED[suit] ? "text-destructive" : "text-foreground"}`}>{rank}</span>
-            <SuitPip suit={suit}
-                className={small ? "w-2 h-2 mt-0.5" : "w-2.5 h-2.5 sm:w-3 sm:h-3 -mt-0.5"} />
+                SUIT_IS_RED[suit] ? "text-destructive" : "text-foreground"}`}
+                style={{ fontSize: "var(--idx-rank)" }}>{rank}</span>
+            <span className="block flex-shrink-0"
+                style={{ width: "var(--idx-pip)", height: "var(--idx-pip)",
+                    marginTop: "var(--idx-gap)" }}>
+                <SuitPip suit={suit} className="w-full h-full" />
+            </span>
         </span>
     );
 }
@@ -245,7 +260,12 @@ export default function PlayingCard({
     tone,
     /** Skip the corner marks — for a card too small to print them legibly. */
     indices = true,
-    /** Smaller corner marks, for a card rendered at deck-tile size. */
+    /**
+     * The tighter index ramp, for a card that also prints a name band or a
+     * paragraph and needs the corner to give way to it. Not a fixed smaller
+     * size any more — both ramps scale with the card, this one just backs off
+     * sooner. See `.card-face` in index.css.
+     */
     smallIndices = false,
     /** Explains the two corner marks on hover, and to a screen reader. */
     mastery,
@@ -283,7 +303,12 @@ export default function PlayingCard({
     const court = COURT[String(rank)];
     return (
         <div
+            // `card-face` is what makes the corner indices a fraction of THIS
+            // card rather than a fixed number of pixels; `card-face-lg` is the
+            // fuller ramp for a card printing them at reading size. Both are
+            // just custom properties plus a container — see index.css.
             className={`relative rounded-[0.9rem] bg-surface border border-border overflow-hidden
+                card-face ${smallIndices ? "" : "card-face-lg"}
                 shadow-[0_1px_2px_rgba(13,22,38,0.10),0_18px_34px_-18px_rgba(13,22,38,0.42)]
                 ${className}`}
             style={style}
@@ -319,8 +344,8 @@ export default function PlayingCard({
 
             {indices && (
                 <span title={rankTitle(rank, suit, mastery)}>
-                    <Index rank={rank} suit={suit} small={smallIndices} />
-                    <Index rank={rank} suit={suit} small={smallIndices} flip />
+                    <Index rank={rank} suit={suit} />
+                    <Index rank={rank} suit={suit} flip />
                 </span>
             )}
 

@@ -499,11 +499,28 @@ moment one card is obviously invented:
   and robe are the part that survives being small. The HEADWEAR is the rank
   cue — spikes for a king, domes for a queen, a plumed cap for the jack — with
   the held object (sword, flower, staff) as the second.
-  Two things had to be right. The plate is drawn in a LANDSCAPE box, because
-  each half of the panel is about 64 × 39; a square viewBox letterboxed to the
-  height and the figure came out a chess pawn with margins either side. And the
-  robe fills the full width at the mirror line — tapered, the two halves meet
-  as a pointed lens and the figure reads as a flying saucer.
+  The plate is drawn in a LANDSCAPE box, because each half of the panel is
+  about 64 × 39; a square viewBox letterboxed to the height and the figure came
+  out a chess pawn with margins either side.
+  **WHAT MEETS AT THE FOLD DECIDES WHETHER THIS IS A FIGURE.** Mirror any
+  silhouette whose top edge peaks in the middle and you get a lens — so the
+  robe's last stretch into the mirror line is VERTICAL, and it stops short of
+  the sides. Vertical sides mirror into a rectangle, which is a band of cloth
+  at the waist; full width and a curve mirror into a flying saucer with the
+  halves' dividing rule running through it like an equator. This note used to
+  say the saucer was fixed by squaring the robe's bottom CORNERS. It was not,
+  and it never could have been — the corners were never what made the lens.
+  Two more rules the redraw is holding:
+  **Nothing is drawn outside the viewBox.** Crowns were plotted up to y=-3 in a
+  box starting at 0, so every king's and queen's headwear was quietly clipped
+  flat by `overflow-hidden`.
+  **Head, ruff, robe and the held object INTERLOCK.** With daylight between
+  them they read as scattered marks small and as an exploded diagram large. The
+  ruff's top curve tucks behind the skull, the robe overlaps the ruff, and the
+  object's shaft runs down under the robe — free, because BODY paints last and
+  covers it, and the difference between held and laid alongside.
+  If the figure looks wrong at one size it is wrong at ALL of them: the SVG
+  uses `meet`, so it is scale-invariant. Large is just where you can see it.
 - **There is no 1 in a deck**, and no 11, 12 or 17. Two surfaces numbered
   things and printed that number straight onto a card — step 1 of three, and
   the question number in the quiz player, which reaches 17 on a long quiz.
@@ -511,6 +528,31 @@ moment one card is obviously invented:
 - **The pip field is a panel inset from all four corners**, indices outside it.
   At the old metrics the top-left pip of a four printed straight over its own
   rank, on every numbered card from four up.
+- **THE INDEX IS A FRACTION OF THE CARD, not a number of pixels.** Everything
+  else on the face already was one — the pip field is inset to 27/50/73 across
+  the width, the frame is a percentage, the aspect is fixed — and the index
+  alone sat at a flat 8px from the edge at 11px tall. So the two converged as
+  the card shrank: a hairline in the corner of a 176px pack, and a third of the
+  width on the 62px cards in the onboarding fan, where the index's own suit
+  mark had already landed against the top-left pip and a nine read as a card
+  with ten marks on it.
+  `.card-face` in index.css puts `container-type: inline-size` on the card and
+  publishes the metrics as `--idx-*`; `.card-face-lg` is the fuller ramp, which
+  is all `smallIndices` now selects between. Containment is INLINE ONLY, so the
+  cards whose height comes from their content (the quiz question, the marked
+  answer) are untouched — check that before widening it.
+  **The `min()` caps are load-bearing.** Past about 160px a real index stops
+  growing, and the name bands and body copy these cards print are still in
+  pixels, so the caps are what make a large card render exactly as it did — no
+  existing clearance had to be re-tuned. There is a px fallback ahead of the
+  `@supports` block, so a browser without container queries gets the old
+  rendering rather than no index.
+- **A face reserves the corner with `--card-index-w` / `--card-index-h`**, never
+  by counting pixels. Three places counted: CardPack's `pt-7 pr-5`, the
+  onboarding fan's flat 18px (29% of a 62px card), and the subject hub's name
+  band. A reserve tuned by hand at one width is wrong at every other one, and
+  it is the reason the fan's own comment used to read "the index is drawn at a
+  fixed size, so the reserve is a fixed number of pixels".
 - **The ace's big centred pip is an early return, and has to stay one**:
   PIP_LAYOUT has an entry for the ace as well, so losing that branch prints an
   ace as a single ordinary pip.
@@ -660,12 +702,10 @@ rounded square, a title, two pills, a blurb and two more pills — the generated
 app tile this codebase keeps removing, on the one object that most deserved to
 be a card.
 
-**92px IS A FLOOR for a card with pips on it.** `Index` is sized in fixed
-pixels while the pip field is a percentage of the card, so the two converge as
-the card shrinks. At 72px the index's own suit mark landed against the
-top-left pip and a nine read as a card with ten marks on it. The index clears
-the field from about 88px up; 92 is what HandRail already uses. Below that,
-`pips="faint"` or no pips — do not just make the card smaller.
+The shelf card sits at **92px** as a legibility call rather than a constraint:
+the index scales with the card now (see the cards section above), so it clears
+the pip field at any width, and 92 is simply where nine marks still read as
+nine across a two-column row.
 
 ## The dashboard answers one question
 

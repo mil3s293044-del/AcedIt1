@@ -134,8 +134,15 @@ export default function CardPack({
                     {/* Right padding clears the bottom-right index; the top
                         clears the top-left one. Both indices are printed INSIDE
                         the card, so the face has to make room for them rather
-                        than run underneath. */}
-                    <span className="absolute inset-0 flex flex-col pl-3 pr-5 pt-7 pb-5">
+                        than run underneath.
+
+                        Taken from the card's own published metrics rather than
+                        counted in pixels: the index scales with the card now,
+                        and a reserve tuned by hand at 158px was wrong at every
+                        other width. */}
+                    <span className="absolute inset-0 flex flex-col pl-3 pb-5"
+                        style={{ paddingRight: "var(--card-index-w)",
+                            paddingTop: "var(--card-index-h)" }}>
                         {children}
                     </span>
                 </PlayingCard>

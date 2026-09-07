@@ -231,12 +231,15 @@ export default function SubjectHub() {
                         <PlayingCard rank={rank} suit={suit} tone={hex} smallIndices
                             watermark={false} pips="compact"
                             className="w-[104px] aspect-[2.5/3.5]">
-                            {/* `pr-4` clears the bottom-right index. A real
-                                card never prints over its own index, and
+                            {/* The reserve clears the bottom-right index. A
+                                real card never prints over its own index, and
                                 centred edge to edge a long subject name runs
-                                straight under it. */}
-                            <span className="absolute inset-x-0 bottom-0 pl-1.5 pr-4 pt-1 pb-1.5 text-center"
-                                style={{ background: alpha(hex, 0.13) }}>
+                                straight under it. The card publishes the room
+                                its mark takes, so this follows it at any
+                                size. */}
+                            <span className="absolute inset-x-0 bottom-0 pl-1.5 pt-1 pb-1.5 text-center"
+                                style={{ background: alpha(hex, 0.13),
+                                    paddingRight: "var(--card-index-w)" }}>
                                 <span className="block text-[10px] font-extrabold leading-[1.15]
                                     text-foreground/80 line-clamp-2 break-words">{name}</span>
                             </span>

@@ -101,9 +101,12 @@ export function FanCard({ card, strip, labelSize }) {
             <span className="absolute bottom-0 left-0 pt-1 pb-1.5 pl-1 text-center"
                 style={{
                     width: strip,
-                    // The index is drawn at a fixed size, so the reserve is a fixed
-                    // number of pixels rather than a fraction of the card.
-                    paddingRight: clearsIndex ? 18 : 4,
+                    // The card publishes how much room its index actually
+                    // takes, so the reserve follows the mark instead of
+                    // guessing at it. It used to be a flat 18px — 29% of a
+                    // 62px card, reserved for a mark that is nothing like
+                    // that wide once it scales with the card it is on.
+                    paddingRight: clearsIndex ? "var(--card-index-w)" : 4,
                     background: tone ? alpha(tone, 0.16) : "hsl(var(--muted))",
                 }}>
                 <span className="block font-bold leading-[1.15] text-foreground/75
