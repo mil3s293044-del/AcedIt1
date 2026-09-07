@@ -31,7 +31,7 @@
  * studied Vectors" is only worth printing by a page that also admits what it
  * could not place.
  */
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { motion } from "framer-motion";
 import { Link, useNavigate } from "react-router-dom";
 import { createPageUrl } from "@/utils";
@@ -41,9 +41,11 @@ import {
     Target, TrendingUp,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import PlayingCard from "@/components/cards/PlayingCard";
-import { rankFor, suitFor, subjectColor, colorFor } from "@/components/cards/cardIdentity";
+import { subjectColor, colorFor } from "@/components/cards/cardIdentity";
 import { alpha } from "@/components/cards/PlayingCard";
+import ScoreCurve from "@/components/subjects/ScoreCurve";
+import ScalingMark from "@/components/subjects/ScalingMark";
+import { scaledScore, clampScore } from "@/lib/studyScore";
 import { deckCards, BANK_TOPIC } from "@/lib/mistakeBank";
 import { studyEvents } from "@/lib/studyLog";
 import { VCE_SUBJECTS } from "@/data/vceSubjects";
@@ -96,6 +98,12 @@ export default function SubjectHub() {
         flashcards: [], quizzes: [], attempts: [], bank: [],
         events: [], assessments: [], userSubject: null,
     });
+    // The target while a drag is in flight. Same shape as the shelf: local
+    // during the drag, one write on release, and the ref exists because the
+    // commit fires in the same tick as the last move.
+    const [target, setTarget] = useState(undefined);
+    const targetRef = useRef(undefined);
+    useEffect(() => { targetRef.current = target; }, [target]);
 
     // The subject is in the query string rather than the path: createPageUrl
     // builds `/PageName`, and every other cross-page link in the app is built
@@ -180,8 +188,36 @@ export default function SubjectHub() {
     const lead = useMemo(() => subjectLead(stats, cov, split), [stats, cov, split]);
 
     const hex = data.userSubject ? subjectColor(data.userSubject) : colorFor(name);
-    const rank = rankFor(stats.mastery);
-    const suit = suitFor(name);
+
+    /**
+     * The target: the local drag value if there is one, otherwise the saved
+     * column. `undefined` means "nothing dragged yet" and is deliberately
+     * distinct from `null`, which is a student who genuinely has no target —
+     * `??` on a single value could not tell those apart.
+     */
+    const shownTarget = target !== undefined
+        ? target
+        : (data.userSubject?.goal_study_score ?? null);
+
+    /**
+     * One write, on release. Rolls back on failure for the reason the shelf
+     * does: a handle resting where the student left it while the database says
+     * otherwise is the screen lying about their target.
+     */
+    const commitTarget = async () => {
+        const id = data.userSubject?.id;
+        const score = targetRef.current;
+        if (!id || score == null) return;
+        try {
+            await base44.entities.UserSubject.update(id, { goal_study_score: score });
+            setData((d) => (d.userSubject
+                ? { ...d, userSubject: { ...d.userSubject, goal_study_score: score } }
+                : d));
+        } catch (err) {
+            console.error("Could not save target study score:", err);
+            setTarget(undefined);
+        }
+    };
 
     if (!name) {
         return (
@@ -212,40 +248,35 @@ export default function SubjectHub() {
                         text-foreground truncate">{name}</h1>
                     <p className="text-sm text-muted-foreground mt-1">
                         {data.userSubject?.year_level || full?.code || "Your subject"}
-                        {full?.scaling_info?.scaling_factor
-                            ? ` · scales ${full.scaling_info.scaling_factor}` : ""}
                     </p>
                 </div>
-                <HelpButton page="Subjects" />
+                <div className="flex items-start gap-4 flex-shrink-0">
+                    {/* Drawn by the same component browse uses, so a subject
+                        that scales DOWN cannot get a green up-arrow here after
+                        that bug was fixed one page over. */}
+                    {full && <ScalingMark subject={full} size="lg" />}
+                    <HelpButton page="Subjects" />
+                </div>
             </div>
 
             {/* ── The move ───────────────────────────────────────────── */}
-            {/* The card is the app's own object, and the rank on it is the
-                mastery score every other surface uses — one contract, not a
-                second scale invented for this page. */}
+            {/* A colour spine, NOT a playing card. The shelf on /Subjects made
+                the same call and for the same reason: a card's rank is a
+                one-glyph summary, and this page's job is the opposite — the
+                target drawn against the state, with the distance to it
+                visible. The card face would also take the width the curve
+                needs. Two surfaces describing one subject have to agree about
+                what a subject looks like. */}
             <motion.section
                 initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}
-                className="rounded-2xl bg-surface border border-border on-table overflow-hidden">
-                <div className="flex flex-col sm:flex-row items-stretch gap-5 sm:gap-7 p-5 lg:p-6">
-                    <div className="flex-shrink-0 self-center sm:self-start">
-                        <PlayingCard rank={rank} suit={suit} tone={hex} smallIndices
-                            watermark={false} pips="compact"
-                            className="w-[104px] aspect-[2.5/3.5]">
-                            {/* The reserve clears the bottom-right index. A
-                                real card never prints over its own index, and
-                                centred edge to edge a long subject name runs
-                                straight under it. The card publishes the room
-                                its mark takes, so this follows it at any
-                                size. */}
-                            <span className="absolute inset-x-0 bottom-0 pl-1.5 pt-1 pb-1.5 text-center"
-                                style={{ background: alpha(hex, 0.13),
-                                    paddingRight: "var(--card-index-w)" }}>
-                                <span className="block text-[10px] font-extrabold leading-[1.15]
-                                    text-foreground/80 line-clamp-2 break-words">{name}</span>
-                            </span>
-                        </PlayingCard>
-                    </div>
+                className="relative rounded-2xl bg-surface border border-border on-table overflow-hidden">
+                <span aria-hidden="true" className="absolute inset-y-0 left-0 w-1.5"
+                    style={{ background: hex }} />
+                <span aria-hidden="true" className="absolute inset-0 pointer-events-none"
+                    style={{ background: `linear-gradient(90deg, ${alpha(hex, 0.09)}, transparent 45%)` }} />
 
+                <div className="relative flex flex-col lg:flex-row items-stretch gap-6 lg:gap-8
+                    pl-6 pr-5 py-5 lg:py-6">
                     <div className="min-w-0 flex-1 flex flex-col justify-center">
                         {lead ? (
                             <>
@@ -277,11 +308,30 @@ export default function SubjectHub() {
                             </>
                         )}
                     </div>
+
+                    {/* The same curve the shelf carries, and the same write.
+                        A student who set a target on one screen must not find
+                        it missing on the other. */}
+                    <div className="lg:w-[320px] flex-shrink-0">
+                        <p className="stat-label mb-0.5">Target study score</p>
+                        <ScoreCurve target={shownTarget} tone={hex}
+                            scaled={shownTarget == null ? null : scaledScore(shownTarget, full)}
+                            label={`Target study score for ${name}`}
+                            onChange={(n) => setTarget(clampScore(n))}
+                            onCommit={commitTarget} />
+                    </div>
                 </div>
 
                 {/* Your own numbers, as a strip under the case. */}
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 border-t border-border/70
-                    bg-secondary/30 px-5 lg:px-6 py-4">
+                {/* Mastery is here because the card's RANK used to carry it and
+                    nothing else on the page did — dropping the card must not
+                    quietly drop the number it encoded. It is the same
+                    `cardMastery` average every other surface reads. */}
+                <div className="relative grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4
+                    border-t border-border/70 bg-secondary/30 px-6 lg:px-6 py-4">
+                    <Stat label="Mastery"
+                        value={stats.cards ? `${stats.mastery}%` : "—"}
+                        sub={stats.cards ? "across your cards" : "no cards yet"} />
                     <Stat label="Ready" value={stats.due}
                         tone={stats.due > 0 ? "text-primary" : "text-muted-foreground/60"}
                         sub={`${stats.cards} card${stats.cards === 1 ? "" : "s"} in ${stats.decks} deck${stats.decks === 1 ? "" : "s"}`} />

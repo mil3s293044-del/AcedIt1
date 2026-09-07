@@ -478,6 +478,72 @@ for the transcriber's mistake would be invisible to us and infuriating to them.
 The transcript is what gets marked; the strokes are session-only, because the
 saved answer is a plain string like every other answer.
 
+## Compete: forecasting, not betting
+
+**The wagering layer could not lose.** `resolveScoreWager` settled on "user
+enters their actual assessment score" — a number from the request body — and
+the only UI that called it pre-filled that field with the student's own
+prediction (`useState(me?.actual_result ?? me?.self_line ?? 75)`). So the
+default interaction was: set a line, open the form, press submit, collect 3×,
+against the `bet_win` cap of 2000 XP a day. It was the largest faucet in the
+app and the only one that required no study.
+
+Two more things were wrong with it as a GAME. **No odds** — a flat 1.8× on the
+client and 3×/1.5× on the server, so backing a certainty paid what backing a
+longshot paid, and a constant carries no information. **No counterparty** — you
+set your own line and settled your own outcome, so nothing anybody did was a
+claim against anyone.
+
+**A forecast is a PROBABILITY on a question the app can settle itself**
+(`forecast.js`). Scored against a base rate with a proper scoring rule:
+`xp = stake × ((base − outcome)² − (p − outcome)²)`. Restating the base rate
+back at the app pays EXACTLY ZERO, which is the property that makes it
+unfarmable — and a test proves the rule is proper, that stating what you
+actually believe maximises expected return at every price.
+
+**K IS 1 AND THERE IS NO CLAMP.** This was K=2 with the loss floored at the
+stake, and the clamp made the rule improper in the tails: against a house at
+50% with a true probability of 10%, saying 0% beat saying 10%, because past the
+point where the clamp bites extra confidence is free. `skill` is already in
+[−1, 1], so at K=1 the payout is bounded by the stake without one. The test
+that catches this is the properness sweep — keep it.
+
+**The stake is ESCROWED, and that is load-bearing.** `awardXP` only adds and is
+cap-bounded, so a losing forecast could not be charged through it — and with no
+charge, saying 100% on everything would be optimal, which is the same
+cannot-lose shape arrived at from the other side. `placeForecast` debits the
+stake; `settleForecast` credits `stake + payout`, which lands in [0, 2×stake]
+so the award path stays add-only.
+
+**THE SERVER RECOMPUTES THE OUTCOME AND NEVER ACCEPTS ONE.** The client may
+only say WHICH forecast to settle; what happened is read back out of
+`study_sessions`, `study_techniques` and `quiz_attempts` under the service
+role. The scoring is mirrored in `server.mjs` deliberately — the client's copy
+DRAWS the number, the server's AWARDS it, and only the server's is trusted.
+Change one, change both. `resolveScoreWager` now returns 410: no client called
+it any more, but an authenticated POST is an authenticated POST.
+
+**A base rate off too little history is a PRIOR and says so.** Under `MIN_OBS`
+observations the panel prints "we haven't seen enough of your history yet"
+rather than "100% — from your last 1". Every kind measures from the student's
+own record, through `studyEvents` so BOTH study tables count.
+
+**A self-reported SAC call resolves and pays NOTHING** (`pays: false`, and
+`settleForecast` rejects the kind outright). Real marks are what students care
+most about and the one thing the app cannot see, so keeping them is right —
+paying XP for a number they type is the exact hole this closed.
+
+**Settlement takes the FIRST sit after the call, never the best.** Waiting for
+a good result and calling that the outcome is the old exploit in a new costume.
+A quiz never sat is open until the deadline and false after it, or a forecast
+could be left open forever and never be wrong.
+
+Two rendering notes from the reliability chart, both of which rendered it
+blank. Framer cannot tween a unitless `0` to a percentage, so bars need
+`initial={{ height: "0%" }}`. And the track was `items-end`, which on a row
+sizes columns to their content in the cross axis — every percentage height
+resolved against zero. It is `items-stretch`.
+
 ## Cards are the app's visual language
 
 `PlayingCard` + `cardIdentity` are used on eighteen surfaces — marketing, the
@@ -652,6 +718,18 @@ subject rides in the QUERY STRING because `createPageUrl` builds `/PageName`
 and every cross-page link in the app is built with it; a second URL scheme for
 one page is how routes start disagreeing with the router.
 
+**The hub and the shelf draw a subject the SAME WAY**, and keeping that true is
+the point rather than a tidy-up. The hub led with a `PlayingCard` for exactly
+as long as the shelf did; when the shelf became a colour-spine row the hub was
+briefly the only screen still calling a subject a card, which is two surfaces
+disagreeing about what the object is. It carries the spine, the same
+`ScoreCurve` writing the same `goal_study_score`, and `ScalingMark` in its
+header — so the wrong-arrow bug fixed on browse cannot come back here.
+
+Dropping the card cost one number: the rank ENCODED mastery and nothing else on
+the page printed it. It is a stat in the strip now. Removing a display is fine;
+removing the only place a measurement appears, silently, is not.
+
 **Everything is DERIVED from rows the app already loads.** Nothing new is
 stored, so nothing here can go stale, double up, or disagree with the screen it
 came from — the rule `redoQueue` already follows. Subjects loads the student's
@@ -712,6 +790,64 @@ near-neutral mix, so sorting it by that would scatter every uncoloured subject
 through the spectrum at a position nobody chose. Saturation under 0.15 is "no
 colour"; the check is HSL saturation, so a dark green is still green. Name
 breaks ties or two subjects on one palette entry swap places between renders.
+
+## Browse is where subjects get CHOSEN
+
+**It was a catalogue of thirty-three identical cards.** The same book icon on
+every one (the "icon that restates the word next to it" rule, thirty-three
+times over), a two-line truncated overview cut mid-sentence so the longest
+element on the card was the one nobody could finish, and a single text box to
+narrow the lot. A student on this page is making one of the larger decisions of
+their schooling.
+
+**The scaling factor had the wrong arrow on it.** Every subject printed its
+factor in one pill — a `TrendingUp` glyph in `text-primary` green — so Further
+Maths at −4 and Specialist at +13 both got a green arrow pointing up, on the
+single number VCE students most want off this page. `ScalingMark` drives the
+glyph and the colour off the same comparison, so they cannot disagree, and the
+catalogue's `+N` placeholder renders as a dash rather than a zero.
+
+**Three fields the catalogue has always carried and browse never showed.**
+`career_pathways` (where it leads) is the headline under the name;
+`prerequisites` is the one fact that can rule a subject out; both were behind a
+"Details" link nobody clicks.
+
+**A PREREQUISITE IS WRITTEN THREE WAYS and only one is a requirement.** Printed
+raw with "Needs " in front, two of the three come out as nonsense:
+`"None"` → "Needs None", `"Recommended: Year 10 Drama"` → "Needs Recommended:
+Year 10 Drama". The third is the dangerous one — `"Year 10 maths recommended"`
+→ "Needs Yr 10 maths recommended" reads as a hard gate on a subject the student
+could take. `prerequisiteOf` returns `null`, `recommended` or `required`, the
+card says *Needs* or *Suits* accordingly, and a requirement carrying advice
+after a semicolon keeps only the requirement ("Year 10 Chemistry; concurrent
+Methods recommended" → Needs Yr 10 Chemistry). A test parses every prerequisite
+in the real catalogue, so a fourth phrasing added later fails the suite instead
+of reaching a student.
+
+**Learning areas are HAND-MAPPED, not derived.** Thirty-three is small enough
+to be exact, and every heuristic that could produce them ("does the name
+contain Mathematics") gets Data Analytics wrong. A test asserts every catalogue
+subject has a mapped area — without it a subject added later falls into "Your
+own", the heading meant for the student's own custom subjects.
+
+**Sections appear ONLY when sorting by area.** Any other sort is a single
+ranking across the whole catalogue, and chopping it into headed sections breaks
+the very order the student asked for. Empty areas are dropped: a heading over
+nothing is a broken filter, not a section. The area chips are computed off the
+SEARCH results rather than the area filter, or picking one chip would hide
+every other chip.
+
+**`LoadStrip` checks RULES and reports the rest.** An ATAR needs a completed
+Unit 3–4 English sequence and study scores in at least four studies — things a
+student can fail to satisfy without knowing, so they get a tick or a warning.
+The scaling average is reported and NOT judged: scaling reflects the strength
+of the cohort that sat a subject, not a discount available to whoever picks it,
+so a strip grading a load as "scaling badly" would push a student to drop
+subjects on a misreading of the number. Subjects whose scaling the catalogue
+does not know are excluded from that average rather than counted as zero, and
+the strip says what it averaged over. An account with nothing picked is not
+failing two requirements — it is a student who has not started, and gets one
+neutral line instead of two warnings.
 
 ## The study-score curve
 
@@ -1293,6 +1429,11 @@ another email before this.
 - `src/lib/subjectHub.js`, `src/pages/SubjectHub.jsx` — one subject, gathered
 - `src/lib/studyScore.js`, `src/components/subjects/ScoreCurve.jsx` — the state
   distribution, and the drag that finally sets `goal_study_score`
+- `src/lib/subjectBrowse.js`, `src/components/subjects/ScalingMark.jsx`,
+  `LoadStrip.jsx` — learning areas, sorting, prerequisites, and the load checks
+- `src/lib/forecast.js`, `src/components/competition/ForecastPanel.jsx` — the
+  proper scoring rule, base rates and calibration; settled by `settleForecast`
+  in `server.mjs`, which recomputes rather than trusts
 - `src/components/shared/MarkdownMath.jsx`, `LatexRenderer.jsx` — KaTeX
 - `supabase/migrations/0001…0006_*.sql` — applied schema
 - `base44/entities/*.jsonc`, `base44/functions/*/` — Base44 reference, kept until cutover
