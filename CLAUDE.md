@@ -696,11 +696,73 @@ Week buckets go through `studyLog`'s own `weekStart` and `dayKey`; rolling the
 Monday maths again here would be a second copy of the week, and `dayKey` exists
 precisely because `toISOString` is UTC.
 
-**A subject card is a `PlayingCard` now**, rank = mastery, suit = the subject,
-the same contract as the other eighteen surfaces. It replaced an icon in a
-rounded square, a title, two pills, a blurb and two more pills — the generated-
-app tile this codebase keeps removing, on the one object that most deserved to
-be a card.
+**A subject is a ROW with a colour spine, and deliberately NOT a card.**
+`PlayingCard` is the app's language on eighteen surfaces and this was briefly
+the nineteenth. It is not, because a card's rank is a SUMMARY — one glyph for
+how strong a thing is — and the row's job is the opposite: the target you are
+chasing, drawn against the state, with the distance to it visible. A rank in
+the corner would be a second, coarser answer to the question the curve answers
+properly, and the face would take the width the curve needs. What identifies a
+subject here is its COLOUR, as a spine down the full height of the row rather
+than a dot, because that is the thing the page is sorted by.
+
+**The shelf is in colour-wheel order** (`hueOf`). Greys sort LAST and together:
+an unset subject carries the default `#6B7280`, whose hue is an artefact of a
+near-neutral mix, so sorting it by that would scatter every uncoloured subject
+through the spectrum at a position nobody chose. Saturation under 0.15 is "no
+colour"; the check is HSL saturation, so a dark green is still green. Name
+breaks ties or two subjects on one palette entry swap places between renders.
+
+## The study-score curve
+
+**`goal_study_score` has been on `user_subjects` since migration 0002, and
+until now nothing in the app ever set it.** Analytics reads it and the AI
+performance analyser reads it — two consumers, no input, null for every
+student on the site. It is the "collect nothing you don't use" rule inverted
+and it is worse: a screen was drawing conclusions from a column nobody could
+fill in.
+
+**The curve IS the input.** Drag the handle; there is no separate control,
+because a slider under a picture of a slider is two things doing one job. The
+write happens once on pointer-up, never per move — and the pending value lives
+in a ref, because the commit fires in the same tick as the last move and a
+closure read would save the second-to-last value (the trap `startFromSuggestion`
+already records). A failed write ROLLS BACK, since a handle resting where the
+student left it while the database says otherwise is the screen lying.
+
+**What is drawn is a construction, not an estimate.** VCAA builds every study's
+RAW score to mean 30, SD 7 on a 0–50 scale — the same curve for every subject
+in the state, which is exactly why it can be drawn without inventing anything.
+
+**`mean_study_score` in the catalogue is NOT that mean, and must never be
+plotted on this curve.** It ranges 26.4–41.5 across the 33 subjects carrying
+it, because it is the SCALED mean — what VTAC turns the raw score into. The
+catalogue says so in its own words two fields away: "A raw 30 scales to 35."
+Plotting Methods' 34.4 on a raw curve would put its average student at the 73rd
+percentile of their own cohort. So the per-subject fact is reported beside the
+curve as scaling, which is what it is.
+
+**Scaling is tapered, and labelled `≈`.** The catalogue gives ONE point on the
+scaling curve, and real scaling compresses toward the top because 50 is the
+ceiling on both sides. Applied flat, a raw 48 in Methods would print as 53. The
+offset is exact at 30, where the catalogue's number actually applies, and
+closes to nothing at 50.
+
+**The shaded regions are the whole reason to draw a curve.** Area under a
+distribution is a COUNT of people: left of the marker is everyone you would
+finish ahead of, right is everyone still ahead of you. The right tail is inked
+harder despite being smaller, because it is what the number refers to — a
+student dragging 30 → 45 watches that sliver close, which is what "top 2%" is
+trying to say and cannot. NOTHING is shaded until a target exists: with no
+target there is no "you", and shading around the ghost handle would claim they
+are aiming at 30 — the question the strip is asking.
+
+Two rendering notes. The regions are ONE static area path behind two animated
+clip rectangles, never a tweened `d`: an interpolator can only walk between
+paths with equal point counts, and a region 0–12 has a different sample count
+from 0–44, so it would snap. And the ticks are centred on their own score, so
+the drawing is inset horizontally — without it a "50" at `x = W` has half of
+itself outside the viewBox and renders as a lone "5".
 
 The shelf card sits at **92px** as a legibility call rather than a constraint:
 the index scales with the card now (see the cards section above), so it clears
@@ -1229,6 +1291,8 @@ another email before this.
 - `src/data/vceSubjects.js` — VCE subject catalog (`assessment_structure` and
   `key_skills` are read by `subjectHub.js`)
 - `src/lib/subjectHub.js`, `src/pages/SubjectHub.jsx` — one subject, gathered
+- `src/lib/studyScore.js`, `src/components/subjects/ScoreCurve.jsx` — the state
+  distribution, and the drag that finally sets `goal_study_score`
 - `src/components/shared/MarkdownMath.jsx`, `LatexRenderer.jsx` — KaTeX
 - `supabase/migrations/0001…0006_*.sql` — applied schema
 - `base44/entities/*.jsonc`, `base44/functions/*/` — Base44 reference, kept until cutover
