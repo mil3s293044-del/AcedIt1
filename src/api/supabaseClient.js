@@ -426,6 +426,11 @@ const PORTED_FUNCTIONS = {
   updateCompetitionProgress:'/local-ai/fn/updateCompetitionProgress',
   settleHoursCompetition:   '/local-ai/fn/settleHoursCompetition',
   resolveScoreWager:        '/local-ai/fn/resolveScoreWager',
+  // Forecasting — the server escrows the stake and RECOMPUTES the outcome from
+  // study_sessions / study_techniques / quiz_attempts. It never accepts one
+  // from the client, which is the hole resolveScoreWager left open.
+  placeForecast:            '/local-ai/fn/placeForecast',
+  settleForecast:           '/local-ai/fn/settleForecast',
   // PvP over/under bets — escrow + settlement live server-side:
   placeProgressBet:         '/local-ai/fn/placeProgressBet',
   submitPredictionResult:   '/local-ai/fn/submitPredictionResult',

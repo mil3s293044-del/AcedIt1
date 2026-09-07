@@ -478,6 +478,72 @@ for the transcriber's mistake would be invisible to us and infuriating to them.
 The transcript is what gets marked; the strokes are session-only, because the
 saved answer is a plain string like every other answer.
 
+## Compete: forecasting, not betting
+
+**The wagering layer could not lose.** `resolveScoreWager` settled on "user
+enters their actual assessment score" — a number from the request body — and
+the only UI that called it pre-filled that field with the student's own
+prediction (`useState(me?.actual_result ?? me?.self_line ?? 75)`). So the
+default interaction was: set a line, open the form, press submit, collect 3×,
+against the `bet_win` cap of 2000 XP a day. It was the largest faucet in the
+app and the only one that required no study.
+
+Two more things were wrong with it as a GAME. **No odds** — a flat 1.8× on the
+client and 3×/1.5× on the server, so backing a certainty paid what backing a
+longshot paid, and a constant carries no information. **No counterparty** — you
+set your own line and settled your own outcome, so nothing anybody did was a
+claim against anyone.
+
+**A forecast is a PROBABILITY on a question the app can settle itself**
+(`forecast.js`). Scored against a base rate with a proper scoring rule:
+`xp = stake × ((base − outcome)² − (p − outcome)²)`. Restating the base rate
+back at the app pays EXACTLY ZERO, which is the property that makes it
+unfarmable — and a test proves the rule is proper, that stating what you
+actually believe maximises expected return at every price.
+
+**K IS 1 AND THERE IS NO CLAMP.** This was K=2 with the loss floored at the
+stake, and the clamp made the rule improper in the tails: against a house at
+50% with a true probability of 10%, saying 0% beat saying 10%, because past the
+point where the clamp bites extra confidence is free. `skill` is already in
+[−1, 1], so at K=1 the payout is bounded by the stake without one. The test
+that catches this is the properness sweep — keep it.
+
+**The stake is ESCROWED, and that is load-bearing.** `awardXP` only adds and is
+cap-bounded, so a losing forecast could not be charged through it — and with no
+charge, saying 100% on everything would be optimal, which is the same
+cannot-lose shape arrived at from the other side. `placeForecast` debits the
+stake; `settleForecast` credits `stake + payout`, which lands in [0, 2×stake]
+so the award path stays add-only.
+
+**THE SERVER RECOMPUTES THE OUTCOME AND NEVER ACCEPTS ONE.** The client may
+only say WHICH forecast to settle; what happened is read back out of
+`study_sessions`, `study_techniques` and `quiz_attempts` under the service
+role. The scoring is mirrored in `server.mjs` deliberately — the client's copy
+DRAWS the number, the server's AWARDS it, and only the server's is trusted.
+Change one, change both. `resolveScoreWager` now returns 410: no client called
+it any more, but an authenticated POST is an authenticated POST.
+
+**A base rate off too little history is a PRIOR and says so.** Under `MIN_OBS`
+observations the panel prints "we haven't seen enough of your history yet"
+rather than "100% — from your last 1". Every kind measures from the student's
+own record, through `studyEvents` so BOTH study tables count.
+
+**A self-reported SAC call resolves and pays NOTHING** (`pays: false`, and
+`settleForecast` rejects the kind outright). Real marks are what students care
+most about and the one thing the app cannot see, so keeping them is right —
+paying XP for a number they type is the exact hole this closed.
+
+**Settlement takes the FIRST sit after the call, never the best.** Waiting for
+a good result and calling that the outcome is the old exploit in a new costume.
+A quiz never sat is open until the deadline and false after it, or a forecast
+could be left open forever and never be wrong.
+
+Two rendering notes from the reliability chart, both of which rendered it
+blank. Framer cannot tween a unitless `0` to a percentage, so bars need
+`initial={{ height: "0%" }}`. And the track was `items-end`, which on a row
+sizes columns to their content in the cross axis — every percentage height
+resolved against zero. It is `items-stretch`.
+
 ## Cards are the app's visual language
 
 `PlayingCard` + `cardIdentity` are used on eighteen surfaces — marketing, the
@@ -1365,6 +1431,9 @@ another email before this.
   distribution, and the drag that finally sets `goal_study_score`
 - `src/lib/subjectBrowse.js`, `src/components/subjects/ScalingMark.jsx`,
   `LoadStrip.jsx` — learning areas, sorting, prerequisites, and the load checks
+- `src/lib/forecast.js`, `src/components/competition/ForecastPanel.jsx` — the
+  proper scoring rule, base rates and calibration; settled by `settleForecast`
+  in `server.mjs`, which recomputes rather than trusts
 - `src/components/shared/MarkdownMath.jsx`, `LatexRenderer.jsx` — KaTeX
 - `supabase/migrations/0001…0006_*.sql` — applied schema
 - `base44/entities/*.jsonc`, `base44/functions/*/` — Base44 reference, kept until cutover

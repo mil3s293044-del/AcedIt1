@@ -9,7 +9,6 @@ import {
 , Trophy} from "lucide-react";
 import { useToast } from "@/components/ui/use-toast";
 import HoursLeaderboard from "./HoursLeaderboard";
-import ScorePredictionBetting from "./ScorePredictionBetting";
 import { Countdown, Confetti, useCountUp } from "./arenaHelpers";
 
 /**
@@ -165,11 +164,12 @@ export default function GoalCompetitionDetail({ competition, currentUserEmail, o
                 </TabsContent>
 
                 <TabsContent value="bets" className="pt-4">
-                    <ScorePredictionBetting
-                        competition={competition}
-                        currentUserEmail={currentUserEmail}
-                        onUpdate={onUpdate}
-                    />
+                    {/* ScorePredictionBetting was here. It settled on a score the
+                        student typed into a form pre-filled with their own
+                        prediction, at a flat 1.8x — a bet that could not lose,
+                        wired to the largest XP faucet in the app. Forecasting
+                        replaces it on the Compete page, where the outcome is
+                        recomputed server-side from study rows. */}
                 </TabsContent>
             </Tabs>
         </div>

@@ -5,12 +5,14 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
     Trophy, Swords, Crown, Activity, ClipboardList, Settings as SettingsIcon,
-    LogIn, Loader2, ArrowRight, RotateCcw, Target, Users, ShieldAlert, Flame,
+    LogIn, Loader2, ArrowRight, RotateCcw, Target, Users, ShieldAlert, Flame, LineChart,
 } from "lucide-react";
 import { base44 } from "@/api/base44Client";
 import { useToast } from "@/components/ui/use-toast";
 import GoalCompetitionDetail from "@/components/competition/GoalCompetitionDetail";
 import Arena from "@/components/arena/Arena";
+import ForecastPanel from "@/components/competition/ForecastPanel";
+import { studyEvents } from "@/lib/studyLog";
 import CreateDuelDialog from "@/components/arena/CreateDuelDialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { joinGoalCompetition, createGoalCompetition } from "@/api/functionsShim";
@@ -53,6 +55,11 @@ export default function Competitions() {
     const [selectedComp, setSelectedComp] = useState(null);
     const [inviteCode, setInviteCode] = useState("");
     const [competeTab, setCompeteTab] = useState("duels");
+    // Forecasting: the calls themselves, plus the rows they settle against.
+    // Loaded here rather than in the panel so the tab does not refetch every
+    // time it is opened, and through `studyEvents` so BOTH study tables count.
+    const [forecasts, setForecasts] = useState([]);
+    const [forecastRows, setForecastRows] = useState({ events: [], attempts: [] });
     // Duels for the unified list. The arena owns creating/answering them;
     // this is a read so both kinds of competition can sit in one place.
     const [duels, setDuels] = useState([]);
@@ -103,6 +110,40 @@ export default function Competitions() {
     const [rematchingEmail, setRematchingEmail] = useState(null);
     const { toast } = useToast();
 
+    /**
+     * The student's calls, and the study rows that decide them.
+     *
+     * `score_wagers` is reused rather than given a new table: the columns line
+     * up (bettor = the forecaster, wagered_xp = the stake, predicted_score =
+     * the probability as 0-100) and the shape of a forecast rides in `extra`.
+     * A migration against a live database for a field that fits is the kind of
+     * cost this does not need to pay.
+     */
+    const loadForecasts = useCallback(async (email) => {
+        if (!email) return;
+        const fail = () => [];
+        const [rows, sessions, techniques, attempts] = await Promise.all([
+            base44.entities.ScoreWager.filter({ bettor_email: email }).catch(fail),
+            base44.entities.StudySession.filter({ created_by: email }, "-date", 400).catch(fail),
+            base44.entities.StudyTechnique.filter({ created_by: email }, "-date").catch(fail),
+            base44.entities.QuizAttempt.filter({ created_by: email }).catch(fail),
+        ]);
+        setForecasts((rows || [])
+            .filter((r) => r?.extra?.forecast)
+            .map((r) => ({
+                id: r.id,
+                ...r.extra.forecast,
+                stake: r.wagered_xp,
+                created_at: r.created_date,
+                // A row the server has already settled carries its verdict, and
+                // that verdict WINS: the client recomputes for display, the
+                // server decides. Two answers to one question is how a screen
+                // starts disagreeing with the XP it paid.
+                settled: r.status !== "pending",
+            })));
+        setForecastRows({ events: studyEvents(sessions, techniques), attempts: attempts || [] });
+    }, []);
+
     useEffect(() => { loadData(); }, []);
 
     const loadData = async () => {
@@ -110,6 +151,9 @@ export default function Competitions() {
         try {
             const u = await base44.auth.me();
             setUser(u);
+            // Fire and forget: the calls tab is not the landing tab, so making
+            // the whole page wait on it would slow the one everybody opens.
+            loadForecasts(u.email);
             const [allComps, profiles, subjects] = await Promise.all([
                 base44.entities.GoalCompetition.list('-created_date', 50),
                 base44.entities.UserProfile.filter({ created_by: u.email }),
@@ -235,6 +279,13 @@ export default function Competitions() {
             liveCount: allBattles_.filter((b) => b.status === "live").length,
         };
     }, [allBattles_]);
+
+    const forecastCtx = useMemo(
+        () => ({ events: forecastRows.events, attempts: forecastRows.attempts }),
+        [forecastRows]);
+
+    const openCalls = useMemo(
+        () => forecasts.filter((f) => !f.settled).length, [forecasts]);
 
     const bigMovers = useMemo(() => movers(allBattles_, { hours: 24 }), [allBattles_]);
     const rivals = useMemo(
@@ -552,10 +603,12 @@ export default function Competitions() {
 
                 {/* ── ONE PAGE, THREE CLEAR MODES ──────────────────────── */}
                 <Tabs value={competeTab} onValueChange={setCompeteTab} className="space-y-5">
-                    <TabsList className="grid w-full grid-cols-2 h-auto p-1.5 rounded-2xl bg-surface border-2 border-border shadow-soft">
+                    <TabsList className="grid w-full grid-cols-3 h-auto p-1.5 rounded-2xl bg-surface border-2 border-border shadow-soft">
                         {[
                             { value: "duels", label: "Battles", icon: Swords, count: liveBattleCount },
                             { value: "bets", label: "Back yourself", icon: Target },
+                            { value: "calls", label: "Your calls", icon: LineChart,
+                              count: openCalls },
                         ].map(tab => (
                             <TabsTrigger key={tab.value} value={tab.value}
                                 className="flex items-center justify-center gap-1 sm:gap-1.5 py-2.5 px-1.5 sm:px-2 rounded-xl text-xs lg:text-sm font-bold text-muted-foreground data-[state=active]:bg-foreground data-[state=active]:text-background data-[state=active]:shadow-soft transition-all min-w-0">
@@ -570,6 +623,15 @@ export default function Competitions() {
                             </TabsTrigger>
                         ))}
                     </TabsList>
+
+                    {/* Your calls — forecasting. Replaces the score-prediction
+                        betting that used to sit inside a competition detail
+                        view, which is both where nobody found it and where it
+                        could not lose. */}
+                    <TabsContent value="calls" className="mt-4">
+                        <ForecastPanel forecasts={forecasts} ctx={forecastCtx}
+                            onChanged={() => loadForecasts(user?.email)} />
+                    </TabsContent>
 
                     {/* Back yourself — solo commitment bets */}
                     <TabsContent value="bets" className="mt-4">

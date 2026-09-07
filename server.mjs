@@ -3963,6 +3963,21 @@ app.post("/local-ai/fn/resolveScoreWager", async (req, res) => {
   if (!user) return res.status(401).json({ error: "Unauthorized" });
   if (!supabaseAdmin) return res.status(500).json({ error: "Supabase admin not configured" });
 
+  // ─── CLOSED. This endpoint paid out on a client-supplied outcome. ────────
+  //
+  // It settled on `actual_score` straight from the request body, and the only
+  // UI that called it pre-filled that field with the student's own prediction,
+  // so the default interaction was worth 3x the stake for pressing submit. No
+  // client calls it any more, but an authenticated POST is an authenticated
+  // POST: leaving it reachable leaves the exploit reachable.
+  //
+  // `settleForecast` is the replacement and it reads the outcome out of
+  // study_sessions, study_techniques and quiz_attempts itself.
+  return res.status(410).json({
+    error: "resolveScoreWager is retired — outcomes are no longer accepted from the client. Use settleForecast.",
+  });
+  // eslint-disable-next-line no-unreachable
+
   try {
     const { wager_id, actual_score } = req.body || {};
     if (!wager_id || actual_score === undefined || actual_score === null) {
@@ -7298,6 +7313,244 @@ app.post("/local-ai/fn/sendSupportTicket", async (req, res) => {
 // (refreshing attribution on re-submit) and send the lead-magnet email via
 // Resend. Deliberately unauthenticated — callers are cold visitors, not users.
 const LEAD_MAGNET_FROM = "AcedIt <hello@acedit.au>";
+
+// ─── settleForecast ────────────────────────────────────────────────────────
+//
+// THE SERVER RECOMPUTES THE OUTCOME. It never accepts one.
+//
+// This exists because `resolveScoreWager` did the opposite: it settled on an
+// `actual_score` taken straight from the request body, and the form that sent
+// it was pre-filled with the student's own prediction. Set a line, submit the
+// form unchanged, collect 3x, up to the 2000 XP/day `bet_win` cap. A client
+// that can name its own outcome is a client that cannot lose.
+//
+// So the only thing the client may send is WHICH forecast to settle. What
+// happened is read back out of study_sessions, study_techniques and
+// quiz_attempts under the service role.
+//
+// The scoring is the Brier skill rule mirrored from src/lib/forecast.js:
+//   xp = stake * ((base - outcome)^2 - (p - outcome)^2)
+// Stating the base rate back pays exactly zero, so there is nothing to farm.
+// K is 1 and there is NO clamp, deliberately: skill is already in [-1, 1], and
+// a clamp makes the rule improper in the tails — past the point where it bites,
+// extra confidence costs nothing, so overstating pays. The stake escrow is what
+// bounds the loss instead.
+// The duplication with the client library is deliberate and bounded — the
+// client's copy DRAWS the number, this one AWARDS it, and only this one is
+// trusted. Change one, change both.
+const FORECAST_PAYOUT_K = 1;
+const FORECAST_MAX_STAKE = 500;
+
+const dayKeyUTCLocal = (d) => {
+  const p = (n) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
+};
+
+function forecastPayout(stake, p, base, outcome) {
+  const s = Math.max(0, Math.min(FORECAST_MAX_STAKE, Math.round(Number(stake) || 0)));
+  if (!s) return 0;
+  const o = outcome ? 1 : 0;
+  const cl = (x) => Math.min(1, Math.max(0, Number(x) || 0));
+  const skill = (cl(base) - o) ** 2 - (cl(p) - o) ** 2;
+  return Math.round(s * FORECAST_PAYOUT_K * skill);
+}
+
+// ─── placeForecast ─────────────────────────────────────────────────────────
+//
+// THE STAKE IS ESCROWED, and that is what makes the scoring rule bite.
+//
+// awardXP only ever adds and is bounded by DAILY_CAPS, so a losing forecast
+// could not be charged through it. Without a charge, saying 100% on everything
+// would be optimal — you would keep the wins and pay nothing for the misses —
+// which is the same "cannot lose" shape as the system this replaces, arrived
+// at from the other direction.
+//
+// So the stake is taken here, at placement, and settlement credits
+// `stake + payout`. Since payout is floored at -stake, that credit is never
+// negative: awardXP stays add-only and the incentive still holds exactly.
+app.post("/local-ai/fn/placeForecast", async (req, res) => {
+  const user = await authenticateRequest(req);
+  if (!user) return res.status(401).json({ error: "Unauthorized" });
+  if (!supabaseAdmin) return res.status(500).json({ error: "Supabase admin not configured" });
+
+  try {
+    const { kind, p, base, stake, deadline, threshold, quiz_id, subject } = req.body || {};
+    if (!kind || p === undefined || base === undefined) {
+      return res.status(400).json({ error: "kind, p and base required" });
+    }
+    const prob = Math.min(1, Math.max(0, Number(p)));
+    const baseRate = Math.min(1, Math.max(0, Number(base)));
+
+    // A self-reported call is free and pays nothing: no stake, no escrow, no
+    // route to the XP economy at all.
+    const pays = kind !== "sac";
+    const amount = pays
+      ? Math.max(0, Math.min(FORECAST_MAX_STAKE, Math.round(Number(stake) || 0)))
+      : 0;
+
+    if (pays && amount > 0) {
+      const { data: profile } = await supabaseAdmin
+        .from("user_profiles").select("id, total_xp").eq("email", user.email).single();
+      const held = profile?.total_xp ?? 0;
+      // You cannot stake XP you do not have. Without this the balance goes
+      // negative and every level and rank derived from it goes with it.
+      if (held < amount) {
+        return res.status(400).json({ error: "Not enough XP to stake", held });
+      }
+      await supabaseAdmin.from("user_profiles")
+        .update({ total_xp: held - amount }).eq("id", profile.id);
+      await supabaseAdmin.from("xp_events").insert({
+        user_email: user.email, source: "wager", xp_awarded: -amount, xp_amount: -amount,
+        description: `Staked on a forecast (${kind})`,
+        event_key: `forecast-stake-${user.email}-${Date.now()}`,
+      });
+    }
+
+    const { data: row, error } = await supabaseAdmin.from("score_wagers").insert({
+      created_by: user.email,
+      bettor_email: user.email,
+      target_email: user.email,
+      target_quiz_id: quiz_id || null,
+      predicted_score: Math.round(prob * 100),
+      wagered_xp: amount,
+      status: "pending",
+      extra: {
+        forecast: {
+          kind, p: prob, base: baseRate, threshold: threshold ?? null,
+          quiz_id: quiz_id || null, subject: subject || null,
+          deadline: deadline || null, pays,
+        },
+      },
+    }).select().single();
+    if (error) throw error;
+
+    return res.json({ forecast: row, staked: amount });
+  } catch (err) {
+    console.error("placeForecast error:", err);
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+app.post("/local-ai/fn/settleForecast", async (req, res) => {
+  const user = await authenticateRequest(req);
+  if (!user) return res.status(401).json({ error: "Unauthorized" });
+  if (!supabaseAdmin) return res.status(500).json({ error: "Supabase admin not configured" });
+
+  try {
+    const { forecast_id } = req.body || {};
+    if (!forecast_id) return res.status(400).json({ error: "forecast_id required" });
+
+    const { data: row, error } = await supabaseAdmin
+      .from("score_wagers").select("*").eq("id", forecast_id).single();
+    if (error || !row) return res.status(404).json({ error: "Forecast not found" });
+    // Only the person who made the call may settle it, and only once.
+    if (row.bettor_email !== user.email) return res.status(403).json({ error: "Not yours" });
+    if (row.status !== "pending") {
+      return res.json({ already: true, status: row.status, xp_outcome: row.xp_outcome || 0 });
+    }
+
+    const f = row.extra?.forecast || {};
+    const kind = String(f.kind || "");
+    const createdAt = new Date(row.created_date);
+    const deadline = new Date(f.deadline || 0);
+    const now = new Date();
+
+    // A self-reported kind resolves for bragging rights and PAYS NOTHING. It is
+    // rejected here rather than paid zero so it can never reach awardXP at all.
+    if (kind === "sac") {
+      return res.status(400).json({ error: "Self-reported forecasts do not pay XP" });
+    }
+
+    let outcome = null;
+
+    if (kind === "streak" || kind === "minutes") {
+      const from = dayKeyUTCLocal(createdAt);
+      const to = dayKeyUTCLocal(deadline);
+      if (now < deadline) return res.json({ open: true });
+
+      // BOTH study tables. Reading one is the trap the ATAR's planning
+      // component and the dashboard's week panel each fell into separately.
+      const [sessions, techniques] = await Promise.all([
+        supabaseAdmin.from("study_sessions")
+          .select("date, duration_minutes").eq("created_by", user.email)
+          .gte("date", from).lte("date", to),
+        supabaseAdmin.from("study_techniques")
+          .select("date, session_duration").eq("created_by", user.email)
+          .gte("date", from).lte("date", to),
+      ]);
+      const events = [
+        ...(sessions.data || []).map((r) => ({ day: String(r.date).slice(0, 10),
+          minutes: Number(r.duration_minutes) || 0 })),
+        ...(techniques.data || []).map((r) => ({ day: String(r.date).slice(0, 10),
+          minutes: Number(r.session_duration) || 0 })),
+      ];
+
+      if (kind === "minutes") {
+        const total = events.reduce((sum, e) => sum + e.minutes, 0);
+        outcome = total >= Number(f.threshold || 0);
+      } else {
+        const studied = new Set(events.filter((e) => e.minutes > 0).map((e) => e.day));
+        const days = [];
+        const d = new Date(createdAt); d.setHours(0, 0, 0, 0);
+        const end = new Date(deadline); end.setHours(0, 0, 0, 0);
+        while (d <= end) { days.push(dayKeyUTCLocal(d)); d.setDate(d.getDate() + 1); }
+        outcome = days.every((k) => studied.has(k));
+      }
+    } else if (kind === "quiz") {
+      // The FIRST sit after the call, never the best — waiting for a good one
+      // and calling that the result is the old exploit in a new costume.
+      const { data: sits } = await supabaseAdmin
+        .from("quiz_attempts")
+        .select("score, adjusted_score, extra, created_date")
+        .eq("created_by", user.email).eq("quiz_id", f.quiz_id)
+        .gt("created_date", row.created_date)
+        .order("created_date", { ascending: true }).limit(20);
+      const real = (sits || []).filter((a) => !a?.extra?.is_retry);
+      if (!real.length) {
+        if (now < deadline) return res.json({ open: true });
+        outcome = false;
+      } else {
+        const first = real[0];
+        const score = first.adjusted_score ?? first.score;
+        if (typeof score !== "number") return res.json({ open: true });
+        outcome = score > Number(f.threshold || 0);
+      }
+    } else {
+      return res.status(400).json({ error: "Unknown forecast kind" });
+    }
+
+    if (outcome === null) return res.json({ open: true });
+
+    // The base rate is the one the app PUBLISHED when the call was made, not a
+    // fresh one: repricing at settlement would change the deal after the fact.
+    const xp = forecastPayout(row.wager_xp, Number(f.p), Number(f.base), outcome);
+
+    await supabaseAdmin.from("score_wagers").update({
+      status: outcome ? "won" : "lost",
+      resolved_at: new Date().toISOString(),
+      accuracy: outcome ? "exact" : null,
+      xp_outcome: xp,
+      extra: { ...(row.extra || {}), forecast: { ...f, outcome, settled_by: "server" } },
+    }).eq("id", forecast_id);
+
+    // The stake was taken at placement, so what comes back is stake + payout.
+    // payout is floored at -stake, so this is never negative and awardXP stays
+    // add-only. A maximally wrong call returns nothing; agreeing with the base
+    // rate returns exactly the stake.
+    const refund = Math.max(0, Math.round((Number(row.wagered_xp) || 0) + xp));
+    if (refund > 0) {
+      await callLocalFn("awardXP", {
+        source: "bet_win", flat_xp: refund,
+        description: `Forecast settled: ${kind}`,
+      }, req.headers.authorization || "");
+    }
+
+    return res.json({ settled: true, outcome, xp, returned: refund });
+  } catch (err) {
+    console.error("settleForecast error:", err);
+    return res.status(500).json({ error: err.message });
+  }
+});
 
 app.post("/local-ai/fn/captureLead", async (req, res) => {
   if (!supabaseAdmin) return res.status(500).json({ error: "Supabase admin not configured" });
