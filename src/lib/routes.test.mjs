@@ -50,24 +50,41 @@ check("every registered route has a component file", () => {
     assert.deepEqual(missing, [], `routes with no page file: ${missing.join(", ")}`);
 });
 
-// Pages are lazy now, so the binding is `const X = lazy(() => import(...))`
-// rather than a static import. Both forms are accepted: what this is really
-// checking is that the name in PAGES resolves to something, not which syntax
-// brought it in. A route registered against an undeclared name is the 404 this
-// file exists to catch, and it looks identical either way.
+// Pages are lazy, so the binding is a `const X = …(() => import(...))` rather
+// than a static import, and it now goes through `lazyPage` so a failed chunk
+// retries instead of blanking the app. ALL THREE forms are accepted: what this
+// is really checking is that the name in PAGES resolves to something, not which
+// syntax brought it in. A route registered against an undeclared name is the
+// 404 this file exists to catch, and it looks identical either way.
 check("every registered route is really bound to a module", () => {
     const bound = (k) =>
         new RegExp(`^import\\s+${k}\\s+from`, "m").test(config) ||
-        new RegExp(`^const\\s+${k}\\s*=\\s*lazy\\(`, "m").test(config);
+        new RegExp(`^const\\s+${k}\\s*=\\s*(lazy|lazyPage)\\(`, "m").test(config);
     const missing = routeKeys.filter((k) => !bound(k));
     assert.deepEqual(missing, [], `registered but not imported: ${missing.join(", ")}`);
 });
 
 check("every lazy page points at its own file", () => {
-    const pairs = [...config.matchAll(/^const\s+(\w+)\s*=\s*lazy\(\(\) => import\('\.\/pages\/(\w+)'\)\)/gm)];
-    const wrong = pairs.filter(([, name, file]) => name !== file).map(([, n, f]) => `${n} -> ${f}`);
+    // `lazyPage('Name', () => import('./pages/Name'))` — the NAME argument is
+    // checked as well as the binding, because it is what the retry logs and
+    // what the session guard keys on. A wrong one there is silent: the page
+    // still loads, and only the failure path lies about which page failed.
+    const pairs = [...config.matchAll(
+        /^const\s+(\w+)\s*=\s*lazyPage\('(\w+)',\s*\(\) => import\('\.\/pages\/(\w+)'\)\)/gm)];
+    const wrong = pairs
+        .filter(([, name, label, file]) => !(name === file && label === file))
+        .map(([, n, l, f]) => `${n} / '${l}' -> ${f}`);
     assert.deepEqual(wrong, [], `lazy binding points at the wrong page: ${wrong.join(", ")}`);
     assert.ok(pairs.length > 10, `only ${pairs.length} lazy pages parsed`);
+});
+
+check("the import inside lazyPage stays a literal, or code-splitting dies", () => {
+    // Rollup only splits on a static `import('./pages/X')` it can see. Passing
+    // a variable, or building the path, silently collapses all 24 pages back
+    // into the main bundle — the build still succeeds and the app still works,
+    // which is exactly why nothing would catch it.
+    assert.ok(!/lazyPage\([^)]*import\(\s*[`$]/.test(config),
+        "a template or variable path in lazyPage would defeat the bundler");
 });
 
 check("nothing was written into the header comment by mistake", () => {

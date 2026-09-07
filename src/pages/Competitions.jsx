@@ -13,6 +13,8 @@ import GoalCompetitionDetail from "@/components/competition/GoalCompetitionDetai
 import Arena from "@/components/arena/Arena";
 import ForecastPanel from "@/components/competition/ForecastPanel";
 import { studyEvents } from "@/lib/studyLog";
+import { competeLead } from "@/lib/competeLead";
+import { forecastBoard } from "@/lib/forecast";
 import CreateDuelDialog from "@/components/arena/CreateDuelDialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { joinGoalCompetition, createGoalCompetition } from "@/api/functionsShim";
@@ -284,8 +286,21 @@ export default function Competitions() {
         () => ({ events: forecastRows.events, attempts: forecastRows.attempts }),
         [forecastRows]);
 
-    const openCalls = useMemo(
-        () => forecasts.filter((f) => !f.settled).length, [forecasts]);
+    const forecastBoardNow = useMemo(
+        () => forecastBoard(forecasts, forecastCtx), [forecasts, forecastCtx]);
+
+    const openCalls = forecastBoardNow.open.length;
+
+    /**
+     * The one thing happening now, ordered by what is about to be decided.
+     * Null when nothing real is — a hero that invents urgency on an empty
+     * account teaches a student to stop reading it.
+     */
+    const lead = useMemo(() => competeLead({
+        openCalls: forecastBoardNow.open,
+        battles: allBattles_,
+        hasDeck: forecasts.length > 0 || allBattles_.length > 0,
+    }), [forecastBoardNow, allBattles_, forecasts]);
 
     const bigMovers = useMemo(() => movers(allBattles_, { hours: 24 }), [allBattles_]);
     const rivals = useMemo(
@@ -549,6 +564,42 @@ export default function Competitions() {
             <div className="max-w-6xl mx-auto px-4 lg:px-8 py-6 lg:py-10 space-y-6 lg:space-y-8">
 
                 {calloutBanner}
+
+                {/* ── WHAT'S LIVE ─────────────────────────────────────────
+                    One answer to "is anything happening", above the tabs. The
+                    page used to open by asking the student to choose between
+                    three tabs, which is a navigation question standing where an
+                    answer should be. Same move Today's Play makes. */}
+                {lead && (
+                    <motion.button
+                        type="button"
+                        onClick={() => setCompeteTab(lead.tab)}
+                        initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}
+                        transition={{ duration: 0.35 }}
+                        className="w-full text-left relative card-soft on-table overflow-hidden
+                            group focus-visible:outline focus-visible:outline-2
+                            focus-visible:outline-offset-2 focus-visible:outline-ring">
+                        <span aria-hidden="true"
+                            className={`absolute inset-y-0 left-0 w-1.5 ${
+                                lead.kind === "call_closing" ? "bg-xp"
+                                    : lead.kind === "battle_close" ? "bg-streak" : "bg-primary"}`} />
+                        <div className="relative flex items-center gap-4 pl-6 pr-5 py-4">
+                            <div className="min-w-0 flex-1">
+                                <span className="stat-label">Live now</span>
+                                <p className="font-display font-extrabold text-foreground
+                                    text-lg lg:text-xl leading-tight mt-0.5">{lead.title}</p>
+                                <p className="text-[13px] text-muted-foreground mt-1 leading-snug
+                                    line-clamp-2">{lead.detail}</p>
+                            </div>
+                            <span className="flex-shrink-0 inline-flex items-center gap-1.5 text-sm
+                                font-bold text-foreground">
+                                {lead.action}
+                                <ArrowRight className="w-4 h-4 transition-transform
+                                    group-hover:translate-x-0.5" />
+                            </span>
+                        </div>
+                    </motion.button>
+                )}
 
                 {/* ── COACH STRIP ─────────────────────────────────────── */}
                 <motion.section initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.35 }}>

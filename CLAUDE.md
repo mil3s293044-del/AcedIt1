@@ -478,6 +478,63 @@ for the transcriber's mistake would be invisible to us and infuriating to them.
 The transcript is what gets marked; the strokes are session-only, because the
 saved answer is a plain string like every other answer.
 
+## A blank page is a missing error boundary
+
+**"I click a page and it's just a blank screen; refreshing loads it."** That is
+a dynamic import that REJECTED. The 24 pages are code-split, so a navigation
+fetches a chunk; when the fetch fails the lazy promise rejects, and with NO
+ERROR BOUNDARY ANYWHERE IN THE APP React unmounted the whole tree — nav, rail,
+theme — leaving white. The refresh works because it re-fetches `index.html` and
+gets the current chunk names.
+
+Which is usually the cause: a DEPLOY. A student holding an open tab has an
+`index.html` naming `Dashboard-a1b2c3.js`; a deploy replaces it and deletes the
+old file; their next navigation asks for a file that no longer exists. On a
+site that ships often, every open tab is one navigation from a white screen.
+
+`lazyPage` (`src/lib/lazyPage.js`) retries once after 400ms — which alone fixes
+the transient case invisibly — then reloads, ONCE, guarded by `sessionStorage`.
+The guard is not optional: an unguarded `location.reload()` on a chunk that is
+missing for any reason a reload cannot cure spins forever, and the app goes
+from broken to unusable and unreportable.
+
+`PageErrorBoundary` catches everything else. `resetKey` is the current page
+name, and that matters more than it looks: without it a boundary that has
+caught once keeps rendering its fallback, so one bad page makes every OTHER
+page look broken until a refresh — turning one failure into a broken app.
+
+**Keep the `import()` a literal.** Rollup only splits on a static
+`import('./pages/X')` it can see; a variable or template path silently
+collapses all 24 pages into the main bundle, the build still succeeds, and
+nothing notices. `routes.test.mjs` asserts it, along with the `lazyPage` name
+argument matching its file — a wrong name there is invisible until the failure
+path lies about which page failed.
+
+## Compete: the page opens on an answer
+
+**Three tabs is a navigation question standing where an answer should be.**
+`competeLead` picks the one thing happening, ordered by what is about to be
+DECIDED — a call settling tonight, then a battle close enough to turn, then any
+battle, then an invitation to make a call. Every branch returns null rather than
+a placeholder, so an empty account gets no hero rather than "0 XP at stake".
+
+**A probability is the most abstract thing on the page, so it is drawn as a
+COUNT.** `OddsDots` — ten dots, N filled, "7 times in 10". The dots the base
+rate would have filled are ringed, which makes the disagreement itself
+countable: those rings are exactly what the scoring rule pays on. Rounded to
+the nearest dot deliberately; 0.68 is not more knowable than "about seven in
+ten" off a dozen observations.
+
+`Odometer` rolls the payout numbers rather than swapping them, because on this
+dial the numbers ARE the feedback — rolled, the trade-off is visible as motion
+instead of reconstructed from two remembered states. It springs a motion value
+and formats per frame; animating the string cannot work, there is nothing to
+interpolate between "-5" and "+14".
+
+Open calls inside 24 hours of settling pulse. Settled calls stamp their verdict
+in with a spring and count their XP up, staggered, so a batch reads as results
+arriving rather than a list rendering.
+
 ## Compete: forecasting, not betting
 
 **The wagering layer could not lose.** `resolveScoreWager` settled on "user
@@ -527,6 +584,17 @@ it any more, but an authenticated POST is an authenticated POST.
 observations the panel prints "we haven't seen enough of your history yet"
 rather than "100% — from your last 1". Every kind measures from the student's
 own record, through `studyEvents` so BOTH study tables count.
+
+**THE ARENA HAD THE SAME HOLE AND IT WAS WORSE.** `submitPredictionResult`
+took `actual_result` from the request body and settled every bet where
+`target_email === userEmail` — so the subject of the bets decided them, moving
+OTHER PEOPLE's XP at a flat 1.8×. Two accounts is a collusion loop: one bets
+over, the other reports a number that pays it. It settles on the participant's
+SYNCED progress now (the same figure `score_history` and every `battleOdds`
+projection are built from); with nothing synced the bet stays open rather than
+being decided by the one number that cannot be trusted. `actual_result` is
+still recorded — a student's own account of how it went is worth keeping — it
+just no longer decides anybody's XP.
 
 **A self-reported SAC call resolves and pays NOTHING** (`pays: false`, and
 `settleForecast` rejects the kind outright). Real marks are what students care
