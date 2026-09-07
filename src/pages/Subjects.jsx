@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useCallback } from "react";
+import React, { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
     Search, Plus, X, BookOpen, Shield, ChevronRight,
@@ -14,8 +14,10 @@ import { moderationPresets } from "@/components/shared/contentModeration";
 import HelpButton from "@/components/shared/HelpButton";
 import SubjectDetail from "../components/vce/SubjectDetail";
 import { VCE_SUBJECTS } from "@/data/vceSubjects";
-import { colorFor, subjectColor, SUBJECT_PALETTE, rankFor, suitFor } from "@/components/cards/cardIdentity";
-import PlayingCard, { alpha } from "@/components/cards/PlayingCard";
+import { colorFor, subjectColor, SUBJECT_PALETTE } from "@/components/cards/cardIdentity";
+import { alpha } from "@/components/cards/PlayingCard";
+import ScoreCurve from "@/components/subjects/ScoreCurve";
+import { hueOf, scaledScore, clampScore } from "@/lib/studyScore";
 import { deckCards, BANK_TOPIC } from "@/lib/mistakeBank";
 import { studyEvents } from "@/lib/studyLog";
 import { subjectStats, subjectLead } from "@/lib/subjectHub";
@@ -103,98 +105,108 @@ function BrowseSubjectCard({ subject, isSelected, onAdd, onRemove, onViewDetails
     );
 }
 
-// ─── My Subject Card (larger, more info) ──────────────────────────────────────
+// ─── One subject, as a row ───────────────────────────────────────────────────
 
 /**
- * A subject you are carrying, as the card the rest of the app draws.
+ * A subject you are carrying.
+ *
+ * ─── No playing card here, and that is a considered exception ───────────────
+ * `PlayingCard` is the app's language on eighteen surfaces and this row is the
+ * nineteenth thing that could have used it. It does not, because a card's rank
+ * is a SUMMARY — one glyph standing in for how strong something is — and this
+ * row's whole job is the opposite: the target you are chasing, drawn against
+ * the state, with the distance to it visible. A rank in the corner would be a
+ * second, coarser answer to the question the curve already answers properly,
+ * and the card face would take the width the curve needs.
+ *
+ * What identifies a subject here is its COLOUR, carried as a spine down the
+ * left edge rather than as a dot or a pill — the same colour the deck, the
+ * quiz and the hub already use, at the size where you can sort by it.
  *
  * ─── What it replaces ───────────────────────────────────────────────────────
  * An icon in a rounded square, a title, two pills, an overview blurb, two more
- * pills and a "Details" link. That is precisely the generated-app tile this
- * codebase keeps removing, on the one object that most deserves to be a
- * playing card — `PlayingCard` is the app's language on eighteen surfaces and
- * a subject was not one of them.
- *
- * It also said NOTHING about the student's work. Code, year level, scaling and
- * an overview are facts about the curriculum; a page you open to look at your
- * subjects should be able to tell you where you are up to in them. The face
- * carries the one number that answers "what now" and the line under it is the
- * same lead the hub opens with, so the shelf and the page agree.
- *
- * Rank is mastery and suit is the family, the same contract as everywhere.
+ * pills and a "Details" link: the generated-app tile this codebase keeps
+ * removing, saying nothing whatever about the student's own work.
  */
-function MySubjectCard({ userSubject, fullSubject, stats, lead, onRemove }) {
+function SubjectRow({ userSubject, fullSubject, stats, lead, target, onTarget, onCommit, onRemove }) {
     // subjectColor handles all three things this column has ever held: hex,
     // a palette key, and one of the old design-token names.
     const hex = subjectColor(userSubject);
     const name = userSubject.subject_name;
-    const rank = rankFor(stats?.mastery || 0);
     const urgent = lead && (lead.kind === "assessment" || lead.kind === "mistakes");
+    const scaled = target == null ? null : scaledScore(target, fullSubject);
+    const hub = `${createPageUrl("SubjectHub")}?subject=${encodeURIComponent(name)}`;
 
     return (
-        <div className="group relative">
-            <Link to={`${createPageUrl("SubjectHub")}?subject=${encodeURIComponent(name)}`}
-                className="block rounded-2xl focus-visible:outline focus-visible:outline-2
-                    focus-visible:outline-offset-2 focus-visible:outline-ring">
-                <div className="card-soft on-table overflow-hidden transition-transform duration-200
-                    group-hover:-translate-y-0.5">
-                    <div className="flex items-stretch gap-4 p-4">
-                        {/* No name band on this one. The heading is six
-                            pixels to the right saying the same thing, and a
-                            long subject wrapped to two lines and overflowed
-                            the card it was printed on. With nothing over it
-                            the face can be a real face.
+        <div className="group relative card-soft on-table overflow-hidden">
+            {/* The spine. This is the subject's identity and the thing the page
+                is sorted by, so it runs the full height of the row rather than
+                sitting in a corner as a dot. */}
+            <span aria-hidden="true" className="absolute inset-y-0 left-0 w-1.5"
+                style={{ background: hex }} />
+            {/* A breath of the same colour across the row, so a spectrum of
+                rows reads as one at a glance without any of them shouting. */}
+            <span aria-hidden="true" className="absolute inset-0 pointer-events-none"
+                style={{ background: `linear-gradient(90deg, ${alpha(hex, 0.09)}, transparent 45%)` }} />
 
-                            92px is a legibility call, not a constraint. The
-                            index scales with the card now, so it clears the
-                            pip field at any size — this is simply the width at
-                            which nine marks still read as nine across a
-                            two-column row. */}
-                        <PlayingCard rank={rank} suit={suitFor(name)} tone={hex} smallIndices
-                            watermark={false} pips
-                            className="w-[92px] flex-shrink-0 aspect-[2.5/3.5]" />
+            <div className="relative flex flex-col sm:flex-row sm:items-center gap-4 sm:gap-6
+                pl-5 pr-4 py-4">
+                <div className="min-w-0 flex-1">
+                    <Link to={hub} className="group/name inline-flex items-baseline gap-1.5
+                        rounded focus-visible:outline focus-visible:outline-2
+                        focus-visible:outline-offset-2 focus-visible:outline-ring">
+                        <h3 className="font-display font-extrabold text-foreground text-lg
+                            leading-tight truncate group-hover/name:underline
+                            decoration-2 underline-offset-2">{name}</h3>
+                        <ChevronRight className="w-4 h-4 text-muted-foreground flex-shrink-0
+                            transition-transform group-hover/name:translate-x-0.5" />
+                    </Link>
+                    <p className="text-[11px] text-muted-foreground mt-0.5 truncate">
+                        {userSubject.year_level || "Year 12"}
+                        {fullSubject?.scaling_info?.scaling_factor
+                            ? ` · scales ${fullSubject.scaling_info.scaling_factor}` : ""}
+                    </p>
 
-                        <div className="min-w-0 flex-1 flex flex-col">
-                            <h3 className="font-display font-extrabold text-foreground text-base
-                                leading-tight truncate">{name}</h3>
-                            <p className="text-[11px] text-muted-foreground mt-0.5 truncate">
-                                {userSubject.year_level || "Year 12"}
-                                {fullSubject?.scaling_info?.scaling_factor
-                                    ? ` · scales ${fullSubject.scaling_info.scaling_factor}` : ""}
-                            </p>
+                    {/* ONE line, and it is the same one the hub leads with. Two
+                        surfaces answering "what next" with different sentences
+                        is how a student stops believing either. */}
+                    <p className={`text-[13px] leading-snug mt-2 font-bold ${
+                        urgent ? "text-streak" : lead ? "text-foreground" : "text-muted-foreground"}`}>
+                        {lead ? lead.title : "Nothing outstanding"}
+                    </p>
 
-                            {/* ONE line, and it is the same one the hub leads
-                                with. Two surfaces answering "what next" with
-                                different sentences is how a student stops
-                                believing either. */}
-                            <p className={`text-[12px] leading-snug mt-2 line-clamp-2 font-bold ${
-                                urgent ? "text-streak" : lead ? "text-foreground" : "text-muted-foreground"}`}>
-                                {lead ? lead.title : "Nothing outstanding"}
-                            </p>
-
-                            <div className="flex items-center gap-3 mt-auto pt-2 text-[11px]
-                                text-muted-foreground tabular-nums">
-                                <span>{stats?.cards || 0} cards</span>
-                                {stats?.due > 0 && (
-                                    <span className="font-bold text-primary">{stats.due} ready</span>
-                                )}
-                                {stats?.bestScore != null && (
-                                    <span>{Math.round(stats.bestScore)}% best</span>
-                                )}
-                            </div>
-                        </div>
+                    <div className="flex items-center gap-3 mt-2 text-[11px]
+                        text-muted-foreground tabular-nums">
+                        <span>{stats?.cards || 0} cards</span>
+                        {stats?.due > 0 && (
+                            <span className="font-bold text-primary">{stats.due} ready</span>
+                        )}
+                        {stats?.bestScore != null && (
+                            <span>{Math.round(stats.bestScore)}% best</span>
+                        )}
                     </div>
                 </div>
-            </Link>
+
+                {/* The target, on the state's own curve. */}
+                {/* The scaled figure lives UNDER the curve, not beside the
+                    heading: that corner belongs to the remove button, and the
+                    two were printing on top of each other. */}
+                <div className="sm:w-[300px] flex-shrink-0">
+                    <p className="stat-label mb-0.5">Target study score</p>
+                    <ScoreCurve target={target} tone={hex} scaled={scaled}
+                        label={`Target study score for ${name}`}
+                        onChange={onTarget} onCommit={onCommit} />
+                </div>
+            </div>
 
             {/* In the gutter, outside the link. A button inside a link is
                 invalid and the inner one stops firing. */}
             <button
-                onClick={(e) => { e.preventDefault(); e.stopPropagation(); onRemove(); }}
+                onClick={onRemove}
                 className="absolute top-2 right-2 w-7 h-7 rounded-lg bg-surface/90 border border-border
                     text-muted-foreground hover:text-streak hover:bg-streak/10 flex items-center
-                    justify-center transition-colors opacity-70 group-hover:opacity-100
-                    focus-visible:opacity-100"
+                    justify-center transition-colors opacity-0 group-hover:opacity-100
+                    focus-visible:opacity-100 sm:opacity-70"
                 title={`Remove ${name}`}
             >
                 <X className="w-3.5 h-3.5" />
@@ -225,6 +237,16 @@ export default function Subjects() {
     const [work, setWork] = useState({
         flashcards: [], quizzes: [], attempts: [], bank: [], events: [], assessments: [],
     });
+    // Targets are held here while a drag is in flight, keyed by subject id.
+    // The row reads this first and the row's own column second, so the handle
+    // tracks the pointer at once instead of waiting for a round trip — and a
+    // failed write rolls the entry back rather than leaving the screen lying.
+    const [targets, setTargets] = useState({});
+    // The commit handler fires from a pointerup that lands in the same tick as
+    // the last move, so reading `targets` from the closure would write the
+    // second-to-last value. Same reason WhatToTest carries its pick in a ref.
+    const targetsRef = useRef(targets);
+    useEffect(() => { targetsRef.current = targets; }, [targets]);
     const { toast } = useToast();
 
     const isAdmin = user?.role === "admin";
@@ -284,21 +306,40 @@ export default function Subjects() {
         s.name.toLowerCase().includes(debouncedSearch.toLowerCase()) || s.code.toLowerCase().includes(debouncedSearch.toLowerCase())
     ), [subjects, debouncedSearch]);
 
+    /**
+     * The shelf, in colour-wheel order.
+     *
+     * Sorting by hue is the point rather than a flourish: the colour IS how a
+     * subject is identified everywhere else in the app, so ordering by it
+     * makes the page's own spine legible and the position of a subject stable
+     * between visits. Greys sort last together — see `hueOf` for why an
+     * uncoloured subject must not be scattered into the blues.
+     *
+     * Name breaks the tie so two subjects sharing a palette entry cannot swap
+     * places between renders.
+     */
     const mySelectedSubjects = useMemo(() => mySubjects.map(us => {
         const stats = subjectStats(us.subject_name, {
             flashcards: work.flashcards, quizzes: work.quizzes, attempts: work.attempts,
             bankCards: work.bank, events: work.events, assessments: work.assessments,
         });
+        const hex = subjectColor(us);
         return {
             ...us,
-            fullSubject: subjects.find(s => s.id === us.vce_subject_id),
+            hex,
+            hue: hueOf(hex),
+            fullSubject: subjects.find(s => s.id === us.vce_subject_id)
+                || VCE_SUBJECTS.find(s => s.name === us.subject_name),
             stats,
             // Coverage and the mark split are the hub's job — the shelf only
             // needs the lead, and passing nulls keeps it from claiming a gap
             // it has not measured.
             lead: subjectLead(stats, null, null),
+            target: us.id in targets ? targets[us.id] : (us.goal_study_score ?? null),
         };
-    }), [mySubjects, subjects, work]);
+    }).sort((a, b) => a.hue - b.hue
+        || String(a.subject_name).localeCompare(String(b.subject_name))),
+    [mySubjects, subjects, work, targets]);
 
     // ─── Handlers ──────────────────────────────────────────────────────────────
 
@@ -333,6 +374,41 @@ export default function Subjects() {
         toast({ title: "Removed", description: "Subject removed from your list." });
         if (user?.email) await loadData(user.email);
     };
+
+    /**
+     * Dragging the curve. Local only — one state write per pointer move, no
+     * network at all, or a drag across the scale is fifty round trips.
+     */
+    const handleTarget = useCallback((id, score) => {
+        setTargets((t) => ({ ...t, [id]: clampScore(score) }));
+    }, []);
+
+    /**
+     * Letting go. ONE write, and the local value is kept afterwards rather
+     * than dropped: `loadData` is not re-run here, so clearing it would snap
+     * the handle back to the stale row until something else refetched.
+     *
+     * A failed write rolls the entry back to what the row actually holds,
+     * because a handle sitting where the student left it while the database
+     * says otherwise is the screen quietly lying about their target.
+     */
+    const handleCommitTarget = useCallback(async (id) => {
+        const score = targetsRef.current[id];
+        if (score == null) return;
+        try {
+            await UserSubject.update(id, { goal_study_score: score });
+            setMySubjects((rows) => rows.map((r) =>
+                (r.id === id ? { ...r, goal_study_score: score } : r)));
+        } catch (err) {
+            console.error("Could not save target study score:", err);
+            setTargets(({ [id]: _dropped, ...rest }) => rest);
+            toast({
+                variant: "destructive",
+                title: "Target not saved",
+                description: "That did not save — check your connection and try again.",
+            });
+        }
+    }, [toast]);
 
     const handleRemoveByVCEId = async (vceId) => {
         const us = mySubjects.find(x => x.vce_subject_id === vceId);
@@ -494,15 +570,24 @@ export default function Subjects() {
                                 </div>
                             </div>
                         ) : (
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                            /* One column. These are ROWS — the curve wants
+                               300px and the lead line wants prose width, and
+                               two of them side by side gives neither. */
+                            <div className="space-y-3">
                                 <AnimatePresence mode="popLayout">
                                     {mySelectedSubjects.map(us => (
-                                        <motion.div key={us.id} layout initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, scale: 0.9 }}>
-                                            <MySubjectCard
+                                        <motion.div key={us.id} layout
+                                            initial={{ opacity: 0, y: 12 }}
+                                            animate={{ opacity: 1, y: 0 }}
+                                            exit={{ opacity: 0, scale: 0.97 }}>
+                                            <SubjectRow
                                                 userSubject={us}
                                                 fullSubject={us.fullSubject}
                                                 stats={us.stats}
                                                 lead={us.lead}
+                                                target={us.target}
+                                                onTarget={(n) => handleTarget(us.id, n)}
+                                                onCommit={() => handleCommitTarget(us.id)}
                                                 onRemove={() => handleRemoveSubject(us.id)}
                                             />
                                         </motion.div>
