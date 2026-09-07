@@ -652,6 +652,18 @@ subject rides in the QUERY STRING because `createPageUrl` builds `/PageName`
 and every cross-page link in the app is built with it; a second URL scheme for
 one page is how routes start disagreeing with the router.
 
+**The hub and the shelf draw a subject the SAME WAY**, and keeping that true is
+the point rather than a tidy-up. The hub led with a `PlayingCard` for exactly
+as long as the shelf did; when the shelf became a colour-spine row the hub was
+briefly the only screen still calling a subject a card, which is two surfaces
+disagreeing about what the object is. It carries the spine, the same
+`ScoreCurve` writing the same `goal_study_score`, and `ScalingMark` in its
+header — so the wrong-arrow bug fixed on browse cannot come back here.
+
+Dropping the card cost one number: the rank ENCODED mastery and nothing else on
+the page printed it. It is a stat in the strip now. Removing a display is fine;
+removing the only place a measurement appears, silently, is not.
+
 **Everything is DERIVED from rows the app already loads.** Nothing new is
 stored, so nothing here can go stale, double up, or disagree with the screen it
 came from — the rule `redoQueue` already follows. Subjects loads the student's
