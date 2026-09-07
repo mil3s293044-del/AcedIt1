@@ -9,33 +9,11 @@
 import React from "react";
 import { motion } from "framer-motion";
 import { Swords, Trophy, Coins, Clock, Users, ChevronRight, TrendingUp, TrendingDown } from "lucide-react";
-
-/**
- * The row's price history, drawn small.
- *
- * A percentage on its own is a standing; the shape is what tells a student
- * whether the number is coming for them. `market` is already computed for
- * every battle (oddsSeries in battleOdds) and, until now, only the detail view
- * rendered it — so the list, the screen people actually live on, was the one
- * place the race looked static.
- */
-function Spark({ series, tone }) {
-    if (!series || series.length < 3) return null;
-    const ps = series.map((d) => d.p);
-    const lo = Math.min(...ps, 0), hi = Math.max(...ps, 100);
-    const span = Math.max(1, hi - lo);
-    const pts = series.map((d, i) => {
-        const x = (i / (series.length - 1)) * 100;
-        const y = 20 - ((d.p - lo) / span) * 20;
-        return `${x.toFixed(1)},${y.toFixed(1)}`;
-    }).join(" ");
-    return (
-        <svg viewBox="0 0 100 20" preserveAspectRatio="none" className="w-full h-5" aria-hidden="true">
-            <polyline points={pts} fill="none" stroke="currentColor" strokeWidth="1.5"
-                strokeLinejoin="round" strokeLinecap="round" className={tone} vectorEffect="non-scaling-stroke" />
-        </svg>
-    );
-}
+// The row's price history, drawn small. A percentage on its own is a standing;
+// the SHAPE is what says whether the number is coming for you. This used to be
+// a local `Spark` pinned to a 0-100 scale, which flattened every real swing —
+// see MomentumSpark for what that cost and why it is scaled to the data now.
+import MomentumSpark from "@/components/competition/MomentumSpark";
 
 function timeLeftLabel(endsAt) {
     if (!endsAt) return null;
@@ -154,7 +132,7 @@ export default function BattleRow({ battle, onClick }) {
                             <span className={`font-display font-black text-base tabular-nums ${oddsTone}`}>{odds}%</span>
                         </span>
                     </div>
-                    <Spark series={market} tone={oddsTone} />
+                    <MomentumSpark series={market} />
                     <div className="h-1.5 bg-secondary rounded-full overflow-hidden">
                         <motion.div initial={{ width: 0 }} animate={{ width: `${odds}%` }}
                             transition={{ duration: 0.8 }} className={`h-full rounded-full ${oddsBar}`} />

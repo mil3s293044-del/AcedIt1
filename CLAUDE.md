@@ -531,6 +531,26 @@ instead of reconstructed from two remembered states. It springs a motion value
 and formats per frame; animating the string cannot work, there is nothing to
 interpolate between "-5" and "+14".
 
+**The battle sparkline was already there and was scaled wrong.** BattleRow has
+drawn `oddsSeries` — win probability replayed across the trail — since the
+market dashboard landed, and it plotted every battle on a fixed 0–100:
+`Math.min(...ps, 0)` and `Math.max(...ps, 100)` are constants, so the seeds
+pinned the range open. A race swinging 48 → 55, which is the entire story of a
+close battle, moved the line 1.4px in a 20px box and read as flat.
+
+`MomentumSpark` scales to the DATA with a floor. The floor matters as much as
+the scaling: without it a steady battle gets stretched to fill the box and
+reads as violent swings, which is the same lie the other way up. Fifty per cent
+is drawn, because a win-probability line without the coin-flip on it is a
+wiggle — crossing it is the event, and the fill is the distance from even.
+
+Two things it must keep. The reveal is a CLIP RECTANGLE, never framer's
+`pathLength`: that is implemented as a stroke dash, and a dash pattern inside a
+`preserveAspectRatio="none"` viewBox is stretched horizontally by however much
+wider the box is than it is tall, so the line rendered with gaps torn through
+it. And the end dot is an HTML span positioned by percentage, not an SVG
+circle — the same non-uniform stretch turns a circle into a flattened oval.
+
 Open calls inside 24 hours of settling pulse. Settled calls stamp their verdict
 in with a spring and count their XP up, staggered, so a batch reads as results
 arriving rather than a list rendering.
