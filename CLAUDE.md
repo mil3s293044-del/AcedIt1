@@ -632,6 +632,31 @@ blank. Framer cannot tween a unitless `0` to a percentage, so bars need
 sizes columns to their content in the cross axis — every percentage height
 resolved against zero. It is `items-stretch`.
 
+## A dependency array is read DURING render
+
+This shipped and took the Compete page down as a white screen:
+
+```js
+useEffect(() => { loadCallouts(); }, [tick, loadCallouts]);   // line 175
+...
+const loadCallouts = useCallback(...);                        // line 224
+```
+
+A function called INSIDE an effect body is read when the effect runs, which is
+after render — so `useEffect(() => loadData(), [])` sitting above its own
+`const loadData` is completely fine, and this codebase does exactly that in
+several places. **A dependency array is different: it is evaluated during
+render**, at the point the hook is called. Naming a `const` that has not been
+reached yet is a temporal-dead-zone `ReferenceError`, the component throws on
+its first render, and `PageErrorBoundary` shows "This page didn't load".
+
+The two shapes look almost identical in a diff and one of them is a crash,
+which is why `hookDeps.test.mjs` scans every page and component for a
+dependency naming something declared later in the same file. It was verified
+by putting the broken order back and watching it fail with the real file and
+line numbers — a static check nobody has seen fail is a static check that has
+quietly stopped working.
+
 ## The app is live, and it waits its turn
 
 `src/lib/liveRefresh.js` (the rules, pure and tested) + `src/lib/LiveContext.jsx`

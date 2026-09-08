@@ -168,19 +168,6 @@ export default function Competitions() {
 
     useEffect(() => { loadData(); }, []);
 
-    // ── The live refetch ────────────────────────────────────────────────────
-    // Skips the very first tick, which fires on mount alongside loadData above
-    // and would double every initial load. From then on, every tick is the
-    // provider saying the student is not mid-anything and it is safe to pull.
-    const firstTick = useRef(true);
-    useEffect(() => {
-        if (firstTick.current) { firstTick.current = false; return; }
-        loadData();
-        loadCallouts();
-        loadReactions();
-        // loadData is redefined each render; depending on it would refetch on
-        // every keystroke elsewhere in the page. The tick is the trigger.
-    }, [liveTick, loadCallouts, loadReactions]);
 
     const loadData = async () => {
         setIsLoading(true);
@@ -244,6 +231,29 @@ export default function Competitions() {
         }
     }, []);
     useEffect(() => { if (user?.email) loadReactions(); }, [user?.email, loadReactions]);
+
+    // ── The live refetch ────────────────────────────────────────────────────
+    // Every tick is the provider saying the student is not mid-anything and it
+    // is safe to pull. The first one fires on mount alongside the initial
+    // load, so it is skipped rather than doubling it.
+    //
+    // THIS HAS TO SIT BELOW THE LOADERS. It was written above them, next to
+    // the mount effect, and took the page down with a TDZ ReferenceError: a
+    // function named in a DEPENDENCY ARRAY is read during render, while the
+    // same function called inside the effect body is not — which is exactly
+    // why `useEffect(() => loadData(), [])` a few lines up is fine where it is
+    // and this is not.
+    const firstTick = useRef(true);
+    useEffect(() => {
+        if (firstTick.current) { firstTick.current = false; return; }
+        loadData();
+        loadCallouts();
+        loadReactions();
+        // loadData is a plain function redefined every render; depending on it
+        // would refetch on every keystroke elsewhere on the page. The tick is
+        // the trigger, and it is the only one.
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [liveTick, loadCallouts, loadReactions]);
 
     // Only what needs answering: aimed at me, still open. A settled one is a
     // record, not a demand.
