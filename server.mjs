@@ -5297,6 +5297,189 @@ app.post("/local-ai/fn/verifyMe", async (req, res) => {
   }
 });
 
+/**
+ * Who is entitled to see a call-out: everyone racing in the contest it belongs
+ * to, and nobody else.
+ *
+ * A call-out used to be a private transaction — `getCallouts` returned only
+ * rows where you were the caller or the target, so the most dramatic thing in
+ * the app happened where nobody could see it. Making it visible to the battle
+ * is what turns it into an event; making it visible to the SITE would turn it
+ * into a stocks. The contest is the room.
+ */
+async function calloutAudience(c) {
+  if (!c) return { emails: [], title: null, kind: null };
+  if (c.duel_id) {
+    const { data: duel } = await supabaseAdmin
+      .from("study_duels").select("challenger_email, opponent_email, title").eq("id", c.duel_id).maybeSingle();
+    if (!duel) return { emails: [], title: null, kind: "duel" };
+    return {
+      emails: [duel.challenger_email, duel.opponent_email].filter(Boolean),
+      title: duel.title || "your duel",
+      kind: "duel",
+    };
+  }
+  const { data: comp } = await supabaseAdmin
+    .from("goal_competitions").select("participants, title").eq("id", c.competition_id).maybeSingle();
+  if (!comp) return { emails: [], title: null, kind: "competition" };
+  return {
+    emails: (comp.participants || []).map((p) => p.email).filter(Boolean),
+    title: comp.title || "the battle",
+    kind: "competition",
+  };
+}
+
+/**
+ * Duel ids this student is in.
+ *
+ * Two queries rather than an interpolated `.or()` filter, for the reason
+ * `getCallouts` already states two functions down: the email comes from a
+ * verified JWT, but building PostgREST filter syntax out of a string is a
+ * habit worth not having.
+ */
+async function myDuelIds(email) {
+  const [a, b] = await Promise.all([
+    supabaseAdmin.from("study_duels").select("id").eq("challenger_email", email).limit(40),
+    supabaseAdmin.from("study_duels").select("id").eq("opponent_email", email).limit(40),
+  ]);
+  return [...new Set([...(a.data || []), ...(b.data || [])].map((d) => d.id))];
+}
+
+/**
+ * The shape a SPECTATOR may see. Narrower than `publicCallout`: somebody who
+ * is neither the caller nor the target has no business with the questions, the
+ * answers, or the internal settle note, and gets the event rather than the row.
+ */
+const spectatorCallout = (row) => {
+  if (!row) return null;
+  return {
+    id: row.id,
+    duel_id: row.duel_id, competition_id: row.competition_id,
+    caller_email: row.caller_email, caller_name: row.caller_name,
+    target_email: row.target_email, target_name: row.target_name,
+    status: row.status,
+    created_date: row.created_date, respond_by: row.respond_by,
+    started_at: row.started_at, submitted_at: row.submitted_at,
+    score: row.score, xp_moved: row.xp_moved,
+    question_count: (row.questions || []).length,
+    seconds_allowed: row.seconds_allowed, pass_mark: row.pass_mark,
+    spectator: true,
+  };
+};
+
+// ─── reactToEvent / getReactions ───────────────────────────────────────────
+//
+// One tap on a feed event. A feed nobody can answer is a broadcast, and the
+// smallest possible answer is the difference between a timeline and a log.
+//
+// NO FREE TEXT. The glyph is validated against a fixed set — these are
+// sixteen-year-olds losing in front of their group sometimes, and a text box on
+// that is a moderation problem this app cannot staff. The fixed set gives all
+// of the "somebody saw this" and none of the risk.
+const REACTIONS = ["👀", "🔥", "😮", "👏", "🧊"];
+const REACTION_MISSING = ["42P01", "PGRST205", "PGRST204"];
+
+app.post("/local-ai/fn/reactToEvent", async (req, res) => {
+  const user = await authenticateRequest(req);
+  if (!user) return res.status(401).json({ error: "Unauthorized" });
+  if (!supabaseAdmin) return res.status(500).json({ error: "Supabase admin not configured" });
+
+  try {
+    const { event_key, emoji, duel_id, competition_id } = req.body || {};
+    if (!event_key) return res.status(400).json({ error: "event_key required" });
+    if (emoji && !REACTIONS.includes(emoji)) {
+      return res.status(400).json({ error: "Not a reaction we know." });
+    }
+    if (!duel_id && !competition_id) {
+      return res.status(400).json({ error: "A reaction belongs to a contest." });
+    }
+
+    // You may only react inside a battle you are in. Scoped from the CONTEST,
+    // never from the event key, which is a client-supplied string.
+    const audience = await calloutAudience({ duel_id, competition_id });
+    if (!audience.emails.includes(user.email)) {
+      return res.status(403).json({ error: "You're not in that one." });
+    }
+
+    // Tapping the same glyph again takes it back; a different one replaces it.
+    // Upsert-then-delete rather than two round trips from the client, so a
+    // double tap cannot leave two rows.
+    const { data: existing } = await supabaseAdmin
+      .from("compete_reactions").select("id, emoji")
+      .eq("created_by", user.email).eq("event_key", event_key).maybeSingle();
+
+    if (existing && (!emoji || existing.emoji === emoji)) {
+      await supabaseAdmin.from("compete_reactions").delete().eq("id", existing.id);
+      return res.json({ success: true, mine: null });
+    }
+    if (existing) {
+      await supabaseAdmin.from("compete_reactions").update({ emoji }).eq("id", existing.id);
+      return res.json({ success: true, mine: emoji });
+    }
+    const { error: insErr } = await supabaseAdmin.from("compete_reactions").insert({
+      created_by: user.email, event_key, emoji,
+      duel_id: duel_id || null, competition_id: competition_id || null,
+    });
+    if (insErr) {
+      if (REACTION_MISSING.includes(insErr.code)) {
+        return res.json({ success: true, available: false, mine: null });
+      }
+      throw insErr;
+    }
+    return res.json({ success: true, mine: emoji });
+  } catch (err) {
+    console.error("[reactToEvent] error:", err);
+    return res.status(500).json({ error: err?.message || String(err) });
+  }
+});
+
+// Every reaction on every event in every battle I'm in, counted.
+app.post("/local-ai/fn/getReactions", async (req, res) => {
+  const user = await authenticateRequest(req);
+  if (!user) return res.status(401).json({ error: "Unauthorized" });
+  if (!supabaseAdmin) return res.status(500).json({ error: "Supabase admin not configured" });
+
+  try {
+    const [{ data: myComps }, { data: myDuels }] = await Promise.all([
+      supabaseAdmin.from("goal_competitions").select("id")
+        .contains("participants", JSON.stringify([{ email: user.email }])).limit(40),
+      myDuelIds(user.email),
+    ]);
+    const compIds = (myComps || []).map((c) => c.id);
+    const duelIds = myDuels;
+    if (!compIds.length && !duelIds.length) return res.json({ success: true, available: true, events: {} });
+
+    const [a, b] = await Promise.all([
+      compIds.length
+        ? supabaseAdmin.from("compete_reactions").select("event_key, emoji, created_by")
+            .in("competition_id", compIds).limit(2000)
+        : Promise.resolve({ data: [], error: null }),
+      duelIds.length
+        ? supabaseAdmin.from("compete_reactions").select("event_key, emoji, created_by")
+            .in("duel_id", duelIds).limit(2000)
+        : Promise.resolve({ data: [], error: null }),
+    ]);
+    // Migration 0034 may not have run yet. Say so plainly rather than
+    // reporting an empty set — the client hides the buttons on this flag, so
+    // they never appear before the table behind them exists.
+    if (a.error && REACTION_MISSING.includes(a.error.code)) {
+      console.warn("[getReactions] compete_reactions missing — run migration 0034.");
+      return res.json({ success: true, available: false, events: {} });
+    }
+
+    const events = {};
+    for (const r of [...(a.data || []), ...(b.data || [])]) {
+      const e = events[r.event_key] || (events[r.event_key] = { counts: {}, mine: null });
+      e.counts[r.emoji] = (e.counts[r.emoji] || 0) + 1;
+      if (r.created_by === user.email) e.mine = r.emoji;
+    }
+    return res.json({ success: true, available: true, events, options: REACTIONS });
+  } catch (err) {
+    console.error("[getReactions] error:", err);
+    return res.status(500).json({ error: err?.message || String(err) });
+  }
+});
+
 // ─── getCallouts ───────────────────────────────────────────────────────────
 // Everything involving me, with answers stripped and expiry applied lazily.
 app.post("/local-ai/fn/getCallouts", async (req, res) => {
@@ -5327,13 +5510,59 @@ app.post("/local-ai/fn/getCallouts", async (req, res) => {
 
     const byId = new Map();
     for (const r of [...(asCaller || []), ...(asTarget || [])]) byId.set(r.id, r);
+
+    // ─── AND EVERY CALL-OUT IN A BATTLE I AM RACING IN ───────────────────────
+    //
+    // The two queries above are "call-outs involving me", which is what this
+    // returned for its whole life — so a challenge between two other people in
+    // your own battle was invisible to you, and the most dramatic thing the app
+    // can do happened where nobody could witness it. The contest is the room:
+    // if you are in it, you see what happens in it.
+    //
+    // Scoped by the contests I am a participant of, never by a client-supplied
+    // id, so this cannot be used to read a battle I am not in.
+    const [{ data: myComps }, { data: myDuels }] = await Promise.all([
+      supabaseAdmin.from("goal_competitions").select("id")
+        .contains("participants", JSON.stringify([{ email: user.email }])).limit(40),
+      myDuelIds(user.email),
+    ]);
+    const compIds = (myComps || []).map((c) => c.id);
+    const duelIds = myDuels;
+
+    const [{ data: inComps }, { data: inDuels }] = await Promise.all([
+      compIds.length
+        ? supabaseAdmin.from("callouts").select("*").in("competition_id", compIds)
+            .order("created_date", { ascending: false }).limit(60)
+        : Promise.resolve({ data: [] }),
+      duelIds.length
+        ? supabaseAdmin.from("callouts").select("*").in("duel_id", duelIds)
+            .order("created_date", { ascending: false }).limit(60)
+        : Promise.resolve({ data: [] }),
+    ]);
+    const spectated = new Map();
+    for (const r of [...(inComps || []), ...(inDuels || [])]) {
+      if (!byId.has(r.id)) spectated.set(r.id, r);
+    }
+
     const data = [...byId.values()].sort((a, b) => new Date(b.created_date) - new Date(a.created_date));
 
     const rows = [];
     for (const row of data || []) {
       rows.push(await settleExpiredCallout(row));
     }
-    return res.json({ success: true, available: true, callouts: rows.map(publicCallout) });
+    // A spectator gets the EVENT, not the row: no questions, no answers, no
+    // settle note. `publicCallout` is already answer-free, but somebody who is
+    // neither party has no business with the rest of it either.
+    const watched = [];
+    for (const row of spectated.values()) {
+      watched.push(spectatorCallout(await settleExpiredCallout(row)));
+    }
+
+    return res.json({
+      success: true, available: true,
+      callouts: rows.map(publicCallout),
+      watching: watched,
+    });
   } catch (err) {
     console.error("[getCallouts] error:", err);
     return res.status(500).json({ error: err?.message || String(err) });
@@ -7629,12 +7858,62 @@ app.post("/local-ai/fn/placeForecast", async (req, res) => {
   if (!supabaseAdmin) return res.status(500).json({ error: "Supabase admin not configured" });
 
   try {
-    const { kind, p, base, stake, deadline, threshold, quiz_id, subject } = req.body || {};
+    const { kind, p, base, stake, deadline, threshold, quiz_id, subject, callout_id } = req.body || {};
     if (!kind || p === undefined || base === undefined) {
       return res.status(400).json({ error: "kind, p and base required" });
     }
     const prob = Math.min(1, Math.max(0, Number(p)));
     const baseRate = Math.min(1, Math.max(0, Number(base)));
+
+    // ─── Backing somebody else's call-out ────────────────────────────────────
+    //
+    // THE CALLER AND THE TARGET MAY NOT TAKE A POSITION. They decide the
+    // outcome — the target by how hard they try, the caller by whom they
+    // picked — so letting either one bet on it is the same cannot-lose shape
+    // the whole wagering layer was torn out for. Refused here, on the server,
+    // where it cannot be edited out of a bundle.
+    //
+    // And you may only back a call-out in a contest you are actually in. A
+    // spectator market open to the whole site would let two accounts stage a
+    // call-out and have a third collect on it.
+    let calloutMeta = null;
+    if (kind === "callout") {
+      if (!callout_id) return res.status(400).json({ error: "callout_id required" });
+      const { data: c } = await supabaseAdmin
+        .from("callouts").select("*").eq("id", callout_id).maybeSingle();
+      if (!c) return res.status(404).json({ error: "That call-out no longer exists." });
+      if (c.caller_email === user.email || c.target_email === user.email) {
+        return res.status(403).json({
+          error: "You're in this one — you can't back it. That's the whole point of it being a call-out.",
+        });
+      }
+      if (!["pending", "active"].includes(c.status)) {
+        return res.status(400).json({ error: "That call-out has already been decided." });
+      }
+      const ctx = await calloutAudience(c);
+      if (!ctx.emails.includes(user.email)) {
+        return res.status(403).json({ error: "You can only back a call-out in a battle you're in." });
+      }
+      // ONE POSITION PER PERSON PER CALL-OUT. Without this a spectator could
+      // place a call at 5% and another at 95% and be paid for whichever landed,
+      // which is a way of buying a guaranteed return out of a proper rule.
+      const { data: existing } = await supabaseAdmin
+        .from("score_wagers").select("id")
+        .eq("bettor_email", user.email).eq("status", "pending")
+        .contains("extra", JSON.stringify({ forecast: { callout_id } }))
+        .limit(1);
+      if (existing?.length) {
+        return res.status(409).json({ error: "You've already backed this one." });
+      }
+      calloutMeta = {
+        callout_id,
+        target_name: c.target_name || null,
+        caller_name: c.caller_name || null,
+        // The call-out's own clock is the deadline. A client-supplied one
+        // would let somebody hold a position open past the verdict.
+        deadline: c.respond_by,
+      };
+    }
 
     // A self-reported call is free and pays nothing: no stake, no escrow, no
     // route to the XP economy at all.
@@ -7673,7 +7952,8 @@ app.post("/local-ai/fn/placeForecast", async (req, res) => {
         forecast: {
           kind, p: prob, base: baseRate, threshold: threshold ?? null,
           quiz_id: quiz_id || null, subject: subject || null,
-          deadline: deadline || null, pays,
+          deadline: calloutMeta?.deadline || deadline || null, pays,
+          ...(calloutMeta || {}),
         },
       },
     }).select().single();
@@ -7769,6 +8049,37 @@ app.post("/local-ai/fn/settleForecast", async (req, res) => {
         const score = first.adjusted_score ?? first.score;
         if (typeof score !== "number") return res.json({ open: true });
         outcome = score > Number(f.threshold || 0);
+      }
+    } else if (kind === "callout") {
+      // Settled off the `callouts` row's OWN status, which only the server
+      // writes. Nothing here comes from the client except which forecast to
+      // settle, which is the rule this whole handler exists to keep.
+      const { data: c } = await supabaseAdmin
+        .from("callouts").select("status, respond_by").eq("id", f.callout_id).maybeSingle();
+      if (!c) return res.status(404).json({ error: "That call-out no longer exists." });
+      if (c.status === "passed") outcome = true;
+      else if (c.status === "failed" || c.status === "expired") outcome = false;
+      else if (c.status === "voided") {
+        // Nothing was tested, so nobody was right. The stake goes back whole
+        // and the position is cancelled rather than scored — paying out on a
+        // question that was never asked is worse than not paying at all.
+        await supabaseAdmin.from("score_wagers").update({
+          status: "cancelled", resolved_at: new Date().toISOString(), xp_outcome: 0,
+          extra: { ...(row.extra || {}), forecast: { ...f, outcome: null, settled_by: "server" } },
+        }).eq("id", forecast_id);
+        const back = Math.max(0, Math.round(Number(row.wagered_xp) || 0));
+        if (back > 0) {
+          await callLocalFn("awardXP", {
+            source: "bet_win", flat_xp: back,
+            description: "Call-out voided — stake returned",
+          }, req.headers.authorization || "");
+        }
+        return res.json({ voided: true, returned: back });
+      } else if (now < new Date(c.respond_by || deadline)) {
+        return res.json({ open: true });
+      } else {
+        // Past its clock with no verdict: the forfeit sweep has not run yet.
+        return res.json({ open: true });
       }
     } else {
       return res.status(400).json({ error: "Unknown forecast kind" });

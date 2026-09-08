@@ -267,6 +267,56 @@ export const KINDS = {
     },
 
     /**
+     * "They'll pass the call-out." — A FORECAST ABOUT SOMEBODY ELSE.
+     *
+     * Every other kind is a student predicting their own behaviour, which
+     * means every other kind is partly under their control. This one is not,
+     * and that is what makes it the best-shaped question on the page: the
+     * spectator has no lever, only a judgement, so the score is pure
+     * calibration.
+     *
+     * THE CALLER AND THE TARGET MAY NOT BACK IT. They decide the outcome —
+     * the target by how hard they try, the caller by whom they picked — so
+     * letting either take a position is the same cannot-lose shape the
+     * wagering layer was torn out for. `placeForecast` refuses both on the
+     * server, where it cannot be edited out.
+     *
+     * Settled off the `callouts` row's own status, which the server writes
+     * and no client can touch: passed → true, failed/expired → false, and
+     * anything still running is not yet decidable.
+     */
+    callout: {
+        key: "callout",
+        label: "Back a call-out",
+        question: (f) => `${f.target_name || "They"} pass the call-out`,
+        pays: true,
+        /**
+         * How often this person has passed a call-out before. Prior is 0.6:
+         * a call-out is answerable by anyone who actually did the study, and
+         * a coin-flip would say the average student is bluffing half the time.
+         *
+         * `callouts` here is the target's own history, passed in by the panel
+         * — not the spectator's, which would answer a different question.
+         */
+        baseRate: ({ targetHistory = [] }) => {
+            const done = targetHistory.filter((c) =>
+                ["passed", "failed", "expired"].includes(c?.status));
+            return rate(done.filter((c) => c.status === "passed").length, done.length, 0.6);
+        },
+        settle: ({ calloutStatus, forecast, now }) => {
+            if (calloutStatus === "passed") return true;
+            if (["failed", "expired", "voided"].includes(calloutStatus)) {
+                // Voided is not a fail — nothing was tested — so it settles
+                // nothing and the stake goes back. Handled by the server.
+                return calloutStatus === "voided" ? null : false;
+            }
+            // Still pending or being sat. Past its own deadline with no
+            // verdict the server will have expired it; until then, open.
+            return new Date(now) >= new Date(forecast.deadline) ? false : null;
+        },
+    },
+
+    /**
      * "I'll get X on my SAC." — HONOUR SYSTEM, AND IT PAYS NOTHING.
      *
      * Real assessment marks are the thing students care most about and the one

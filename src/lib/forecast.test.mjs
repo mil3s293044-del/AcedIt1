@@ -324,6 +324,53 @@ check("the board splits open from settled and totals only what resolved", () => 
     assert.equal(board.calibration.n, 1);
 });
 
+// ─── backing a call-out ─────────────────────────────────────────────────────
+
+check("a call-out settles on the row's own status, never on a claim", () => {
+    const f = { kind: "callout", p: 0.7, stake: 50, created_at: day(3), deadline: day(-1) };
+    assert.equal(settleForecast(f, { calloutStatus: "passed", now: NOW }), true);
+    assert.equal(settleForecast(f, { calloutStatus: "failed", now: NOW }), false);
+    assert.equal(settleForecast(f, { calloutStatus: "expired", now: NOW }), false,
+        "ignoring a call-out is a forfeit, and the people who backed a pass were wrong");
+});
+
+check("a VOIDED call-out settles nothing — there was no test", () => {
+    const f = { kind: "callout", p: 0.7, stake: 50, created_at: day(3), deadline: day(-1) };
+    assert.equal(settleForecast(f, { calloutStatus: "voided", now: NOW }), null);
+});
+
+check("a call-out still being sat is open, and one past its clock is a fail", () => {
+    const open = { kind: "callout", p: 0.7, stake: 50, created_at: day(3), deadline: day(-5) };
+    assert.equal(settleForecast(open, { calloutStatus: "active", now: NOW }), null);
+    const done = { kind: "callout", p: 0.7, stake: 50, created_at: day(3), deadline: day(1) };
+    assert.equal(settleForecast(done, { calloutStatus: "pending", now: NOW }), false);
+});
+
+check("the base rate is THE TARGET'S record, not the spectator's", () => {
+    const hist = [
+        { status: "passed" }, { status: "passed" }, { status: "failed" },
+        { status: "passed" }, { status: "pending" },
+    ];
+    const b = baseRateFor({ kind: "callout" }, { targetHistory: hist });
+    assert.equal(b.n, 4, "the one still pending is not evidence of anything");
+    assert.ok(Math.abs(b.p - 0.75) < 1e-9);
+});
+
+check("with no history the call-out base rate is a labelled PRIOR", () => {
+    const b = baseRateFor({ kind: "callout" }, { targetHistory: [] });
+    assert.equal(b.source, "prior");
+    assert.equal(b.n, 0);
+    assert.ok(b.p > 0.5, "somebody who did the study can answer for it; a coin-flip says half are bluffing");
+});
+
+check("backing a call-out pays on skill, so restating the base rate pays zero", () => {
+    // The property that makes every kind unfarmable applies here too.
+    const b = baseRateFor({ kind: "callout" }, { targetHistory: [] }).p;
+    for (const outcome of [true, false]) {
+        assert.equal(payoutFor(100, b, b, outcome), 0);
+    }
+});
+
 check("an unknown kind is dropped rather than guessed at", () => {
     assert.equal(resolveOne({ kind: "roulette", p: 1, stake: 999 }, {}), null);
     assert.equal(forecastBoard([{ kind: "roulette" }], {}).open.length, 0);

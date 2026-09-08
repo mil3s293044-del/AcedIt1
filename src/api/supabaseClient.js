@@ -441,6 +441,8 @@ const PORTED_FUNCTIONS = {
   getCallouts:              '/local-ai/fn/getCallouts',
   startCallout:             '/local-ai/fn/startCallout',
   submitCallout:            '/local-ai/fn/submitCallout',
+  reactToEvent:             '/local-ai/fn/reactToEvent',
+  getReactions:             '/local-ai/fn/getReactions',
   verifyMe:                 '/local-ai/fn/verifyMe',
   respondDuel:              '/local-ai/fn/respondDuel',
   placeDuelSideBet:         '/local-ai/fn/placeDuelSideBet',
@@ -471,7 +473,7 @@ const PORTED_FUNCTIONS = {
 // wrong the other way shows a student a stale XP total right after they earned
 // it, so a function whose behaviour you are unsure of does NOT go here.
 const READ_ONLY_FUNCTIONS = new Set([
-  'getRankedBoards', 'getArenaState', 'getMyStakes', 'getCallouts',
+  'getRankedBoards', 'getArenaState', 'getMyStakes', 'getCallouts', 'getReactions',
   'extractDocumentText', 'invokeAI', 'mindMapGaps',
 ]);
 

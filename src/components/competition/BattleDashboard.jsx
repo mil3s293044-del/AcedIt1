@@ -374,7 +374,10 @@ export default function BattleDashboard({ battle, onBack, footer, activity = [],
                     battle={battle}
                     me={me}
                     rivals={ranked.filter(p => p.email && p.email !== me?.email)}
-                    callouts={callouts.list}
+                    // Every call-out in this battle, not only the ones I am a
+                    // party to. Who called who is the record this panel exists
+                    // to keep, and it used to show a third of it.
+                    callouts={[...(callouts.list || []), ...(callouts.watching || [])]}
                     onChanged={callouts.refresh}
                     onSelfCheck={callouts.onSelfCheck}
                     record={record}
