@@ -70,12 +70,16 @@ export default function PomodoroTimer({ onSessionComplete, userSubjects: initial
     const [session, setSession] = useState(1);
     const [timeLeft, setTimeLeft] = useState(25 * 60);
     const [isRunning, setIsRunning] = useState(false);
-    // The blackout's entire purpose is that nothing on it moves — and a
-    // running clock is work in progress whether or not the blackout is up.
-    useBusy(isFocusMode || isRunning, BUSY.FOCUS);
     const [selectedSubject, setSelectedSubject] = useState("");
     const [topic, setTopic] = useState("");
     const [isFocusMode, setIsFocusMode] = useState(false);
+    // The blackout's entire purpose is that nothing on it moves — and a
+    // running clock is work in progress whether or not the blackout is up.
+    // BELOW both states it reads: a hook ARGUMENT is evaluated during render
+    // exactly like a dependency array is, so naming `isFocusMode` above its
+    // own declaration was the same temporal-dead-zone crash that took Compete
+    // down, in a shape the deps-array scanner could not see.
+    useBusy(isFocusMode || isRunning, BUSY.FOCUS);
     // Seeded by which break this is, so it holds still for the whole five
     // minutes instead of changing on every tick of the timer.
     const breakLine = useMemo(() => pick(BREAK, `break-${session}`), [session]);

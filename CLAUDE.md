@@ -650,12 +650,44 @@ render**, at the point the hook is called. Naming a `const` that has not been
 reached yet is a temporal-dead-zone `ReferenceError`, the component throws on
 its first render, and `PageErrorBoundary` shows "This page didn't load".
 
-The two shapes look almost identical in a diff and one of them is a crash,
-which is why `hookDeps.test.mjs` scans every page and component for a
-dependency naming something declared later in the same file. It was verified
-by putting the broken order back and watching it fail with the real file and
-line numbers — a static check nobody has seen fail is a static check that has
-quietly stopped working.
+The two shapes look almost identical in a diff and one of them is a crash.
+
+**AND A DEPENDENCY ARRAY IS NOT THE ONLY THING READ DURING RENDER.** The same
+crash came back a day later on Study, in a shape the first guard did not cover:
+
+```js
+useBusy(isFocusMode || isRunning, BUSY.FOCUS);            // line 75
+const [isFocusMode, setIsFocusMode] = useState(false);    // line 78
+```
+
+A hook ARGUMENT is evaluated at the call site exactly like a deps array. So the
+rule is not "dependency arrays", it is anything read during render.
+
+`hookDeps.test.mjs` covers both: dependency arrays, and the arguments of any
+hook call carrying no arrow function (a `useEffect(() => …)` always has one, so
+only its array is examined — which is what keeps the safe body-call shape from
+being flagged). Both checks were verified by putting each broken order back and
+watching them fail with the real file and line numbers; a static check nobody
+has seen fail is one that has quietly stopped working.
+
+Three false-positive classes had to go before it was worth having, all found on
+its first run against the real codebase: object-literal keys
+(`useState({ strengths: [] })` names no binding), string contents
+(`useState("duels")`), and calls in a nested helper referring to a module-level
+const, which is legal — indentation stands in for scope.
+
+eslint's own `no-use-before-define` is the general form of this and was measured
+rather than assumed: 74 hits across the app, nearly all of them the SAFE shape.
+Turning it on would mean reshuffling 74 pieces of working code to catch two real
+bugs, so the narrow check earns its place.
+
+**Nothing in lint, the build, or the test suite RENDERS A PAGE**, which is why
+both of these shipped. `scripts/checkPagesMount.mjs` does: it mounts all 36
+pages one at a time against a dev server and reports the ones that throw. It
+needs a browser so it is not in `npm test`, but it is the check that actually
+answers the question, and it named both bugs exactly ("Study: Cannot access
+'isFocusMode' before initialization"). Run it before shipping anything that
+touches a page's hooks.
 
 ## The app is live, and it waits its turn
 
