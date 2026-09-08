@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
     Clock, Zap, RefreshCw, Loader2, Trophy,
-    CheckCircle2, Swords, Coins, TrendingUp, Crown, Flame, ShieldAlert
+    CheckCircle2, Swords, Coins, TrendingUp, Crown, Flame, ShieldAlert, ShieldCheck
 } from "lucide-react";
 import { updateCompetitionProgress, settleHoursCompetition } from "@/api/functionsShim";
 import { useToast } from "@/components/ui/use-toast";
@@ -29,6 +29,46 @@ function formatTime(minutes) {
     const h = Math.floor(minutes / 60);
     const m = minutes % 60;
     return m > 0 ? `${h}h ${m}m` : `${h}h`;
+}
+
+/**
+ * Hours, split into what has been PROVEN and what has only been claimed.
+ *
+ * ─── Nobody is accused, and that is the whole design ────────────────────────
+ * Unverified hours are not hidden, not flagged, not ranked lower and not
+ * described as suspect. They are drawn in a lighter ink. Passing a call-out on
+ * what you said you studied stamps that block solid — so verifying is a FLEX,
+ * something a student wants to do, rather than a defence against an accusation
+ * the app made about them.
+ *
+ * A student nobody has ever challenged is not at 0% proven; they have never
+ * been asked. With nothing verified the row simply prints the time as it
+ * always did, and this component renders nothing at all.
+ */
+function StudyTime({ participant }) {
+    const total = Math.max(0, Math.round(participant.study_minutes || 0));
+    const verified = Math.max(0, Math.min(total, Math.round(participant.verified_minutes || 0)));
+    const ghosted = total - verified;
+
+    if (!verified) {
+        return (
+            <p className="text-xs text-muted-foreground flex items-center gap-1 justify-end mt-0.5">
+                <Clock className="w-3 h-3" />{formatTime(total)}
+            </p>
+        );
+    }
+    return (
+        <p className="text-xs flex items-center gap-1 justify-end mt-0.5"
+            title={ghosted > 0
+                ? `${formatTime(verified)} proven by a call-out · ${formatTime(ghosted)} not yet`
+                : `${formatTime(verified)}, all of it proven by a call-out`}>
+            <ShieldCheck className="w-3 h-3 text-primary flex-shrink-0" />
+            <span className="font-bold text-foreground tabular-nums">{formatTime(verified)}</span>
+            {ghosted > 0 && (
+                <span className="text-muted-foreground/50 tabular-nums">+{formatTime(ghosted)}</span>
+            )}
+        </p>
+    );
 }
 
 function ParticipantRow({ participant, rank, currentUserEmail, isCompleted, maxScore, scoreAbove, scoreBelow }) {
@@ -97,9 +137,7 @@ function ParticipantRow({ participant, rank, currentUserEmail, isCompleted, maxS
                 <div className="text-right flex-shrink-0">
                     <p className="font-black text-foreground text-sm tabular-nums">{score}<span className="text-xs text-muted-foreground font-bold"> pts</span></p>
                     {!isCompleted ? (
-                        <p className="text-xs text-muted-foreground flex items-center gap-1 justify-end mt-0.5">
-                            <Clock className="w-3 h-3" />{formatTime(participant.study_minutes || 0)}
-                        </p>
+                        <StudyTime participant={participant} />
                     ) : participant.bonus_xp_awarded > 0 ? (
                         <p className="text-xs text-xp font-semibold flex items-center gap-0.5 justify-end mt-0.5">
                             <Zap className="w-3 h-3" />+{participant.bonus_xp_awarded} XP
@@ -168,7 +206,10 @@ export default function HoursLeaderboard({ competition, currentUserEmail, onUpda
     };
 
     const myScore = me?.compete_score || 0;
-    const myHours = ((me?.study_minutes || 0) / 60).toFixed(1);
+    const myCountedMinutes = Math.max(0, Math.round(me?.study_minutes || 0));
+    const myHours = (myCountedMinutes / 60).toFixed(1);
+    const myVerified = Math.max(0, Math.min(myCountedMinutes, Math.round(me?.verified_minutes || 0)));
+    const myClaimed = Math.max(myCountedMinutes, Math.round(me?.claimed_minutes || 0));
 
     // Stakes + live momentum.
     const pot = computePot(competition);
@@ -231,8 +272,25 @@ export default function HoursLeaderboard({ competition, currentUserEmail, onUpda
                         <div className="text-center">
                             <p className="stat-label mb-1">Hours</p>
                             <p className="font-display font-black text-2xl text-foreground">{myHours}h</p>
+                            {myVerified > 0 && (
+                                <p className="text-[10px] font-bold text-primary flex items-center justify-center gap-0.5 mt-0.5">
+                                    <ShieldCheck className="w-2.5 h-2.5" />{formatTime(myVerified)} proven
+                                </p>
+                            )}
                         </div>
                     </div>
+                    {/* The caps only bite on a day that could not have happened —
+                        over four hours in one sitting, over twelve in a day, or
+                        more minutes than have passed since midnight. An honest
+                        student never sees this line, and quietly deleting time
+                        without saying so would be worse than the cheating it
+                        prevents. It states a limit; it does not accuse anybody. */}
+                    {myClaimed > myCountedMinutes && (
+                        <p className="text-[11px] text-muted-foreground mt-2 text-center">
+                            Counting {formatTime(myCountedMinutes)} of the {formatTime(myClaimed)} logged —
+                            a session counts up to 4h and a day up to 12h.
+                        </p>
+                    )}
                     {!isCompleted && competition.goal_target_date && (
                         <div className="mt-3 pt-3 border-t border-chart-4/15">
                             <Countdown targetDate={competition.goal_target_date} variant="banner" />

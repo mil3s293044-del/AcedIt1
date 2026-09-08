@@ -340,6 +340,20 @@ export default function BattleDashboard({ battle, onBack, footer, activity = [],
                                             .join(" · ")}
                                     </p>
                                 )}
+                                {/* Mastery counts the first sit of each quiz
+                                    substantial enough to be worth sitting, so a
+                                    student who only ever does short warm-ups
+                                    scores nothing on a 400-point slice. Zero
+                                    with no explanation is the silent penalty
+                                    this line exists to prevent — and it is
+                                    shown only to the person it is about, never
+                                    as a note on somebody else's row. */}
+                                {p.isMe && p.participant?.score_breakdown?.mastery === 0
+                                    && !p.participant?.board_sits && (
+                                    <p className="text-[11px] font-bold text-chart-3 mt-1">
+                                        Mastery opens on your first sit of a quiz with 8+ questions.
+                                    </p>
+                                )}
                             </div>
                         );
                     })}

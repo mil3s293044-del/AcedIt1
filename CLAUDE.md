@@ -632,6 +632,105 @@ blank. Framer cannot tween a unitless `0` to a percentage, so bars need
 sizes columns to their content in the cross axis — every percentage height
 resolved against zero. It is `items-stretch`.
 
+## Compete: a claim has to survive something
+
+`src/lib/integrity.js`. **Every rule here DISCOUNTS a claim; none of them
+accuses a person.** A student who studied honestly never notices any of it, and
+a student inflating their hours simply finds the inflation is not worth
+anything — which is the only version of this that can be wrong occasionally
+without doing harm. An app that calls a sixteen-year-old a cheat on the basis
+of a heuristic is a worse outcome than the cheating.
+
+**FABRICATED TIME.** `duration_minutes` and `session_duration` arrive from the
+client, and **four** ranking paths summed them raw — `syncCompetitionSlice`
+(which writes the `study_minutes` the hours board ranks on), the goal engine's
+`study_hours`, the Arena's `study_minutes` metric, and `competitionCompeteScore`.
+A single POST of 600 minutes went to the top of a board. The ATAR's effort
+component has capped its own days since it was written; the boards had no
+equivalent. They all go through `countableStudyMinutes` now:
+
+- one row is at most one sitting (`SESSION_MAX_MINUTES`),
+- one day is at most `DAILY_MINUTE_CAP`,
+- and **you cannot have studied more minutes today than have passed today** —
+  today's ceiling is the minutes since local midnight, which catches the actual
+  attack (ten POSTs of four hours inside one second) exactly and is trivially
+  explainable to anyone who asks. Past days get the flat cap, because once the
+  day is over the app cannot know when a row was earned.
+
+The client mirror is `countableByDay`. Server is the source of truth.
+
+**IDLE FARMING, which was collected and thrown away.** `awardXP` has accepted
+`idle_ratio`, `tab_away_count` and `session_complete` since it was ported;
+`calcFocusTimerXP` destructured only `duration_minutes`, and **no client had
+ever sent one of them**. So the anti-farming inputs existed on the server, no
+producer existed on the client, and a timer left running in a background tab
+paid exactly what an hour of work paid — "collect nothing you don't use",
+inverted, in the one place built to stop this. PomodoroTimer counts them off
+the `visibilitychange` handler that was already mounted, Study.jsx forwards
+them, and `calcFocusTimerXP` finally reads them. Away time is measured **only
+while the clock is running**: a paused timer is a student on a break, which is
+the thing the technique is built around and must never be charged for. A
+tab-away costs a flat minute, not a proportion, or a long honest session pays
+more for one glance at a message than a short one does.
+
+**TRIVIAL, REPEATED AND RETRY QUIZZES.** `competitionCompeteScore` averaged
+every attempt in the window into a 400-point mastery slice, which was farmable
+three ways at once: write an eight-second quiz on your easiest topic and score
+100; sit the same easy quiz twenty times; or run "wrong only" retries, whose
+scores are on a different scale by construction. It reads the FIRST sit of each
+quiz clearing `BOARD_MIN_QUESTIONS`/`BOARD_MIN_MARKS` now — first rather than
+best, because taking the best rewards grinding a paper until a good roll comes
+up, the same "wait for a result you like" shape the forecast settlement
+refuses.
+
+**Practice is untouched by ANY of this.** A three-question warm-up still
+scores, still feeds the deck, still pays XP. It just does not decide a contest.
+
+**And the gate SAYS WHAT UNLOCKS IT.** A student who only ever sits short
+quizzes would otherwise take a silent zero on a 400-point slice — the "never
+score a student on a signal they can't reach" rule applies just as hard to one
+they CAN reach and were never told about. `board_sits` rides on the participant
+and BattleDashboard names the floor, on that student's own row only. It is
+deliberately NOT inside `score_breakdown`, which the dashboard renders by
+iterating every numeric key, so "sits 0" would read as a fourth component worth
+nothing.
+
+**Call-outs: verified hours are drawn differently, never ranked differently.**
+The call-out system (migrations 0025/0026, `createCallout`/`submitCallout`)
+already existed — one competitor challenges another to a short timed quiz built
+from the material that competitor themselves studied. What was missing was any
+consequence on the board. `verifiedStudyMinutes` splits a participant's hours
+into proven and claimed, and the row draws the proven part in solid ink with
+the rest ghosted beside it. Nothing is hidden, flagged, ranked lower or called
+suspect — **verifying is a FLEX, not a defence against an accusation the app
+made.** A student nobody has ever challenged is not at 0% proven; they have
+never been asked, and their row prints the time exactly as it always did.
+
+**A pass proves the window it was BUILT from**, `window_start` → `submitted_at`,
+which is a real column and not a heuristic. `VERIFY_COVERS_HOURS` is only the
+fallback for a verification that arrived without one.
+
+Two bugs this has already had:
+
+- **A `callouts` row carries `status`, not a boolean.** A check for
+  `passed !== false` waved every row through including the failures, because
+  their `passed` field is simply absent — a verification system that is a
+  rubber stamp at exactly the moment it matters. Status is checked first and an
+  unrecognised one verifies nothing.
+- **Verified minutes are capped too.** Passing a quiz must not license an
+  impossible day, or verification becomes the exploit.
+
+**And when a cap bites, the screen says so.** Silently deleting time would be
+worse than the cheating it prevents, so the strip prints what it counted of
+what was logged and states the limit. It states a limit; it does not accuse
+anybody. An honest student never sees the line.
+
+`Countdown variant="banner"` used to fall back to `text-white` on a 15%-alpha
+ground — legible on the dark battle header it was written for, invisible on
+every light surface it was later reused on, including this one. A hard-coded
+ink was the bug; the token follows the theme. Same lesson as the focus-mode
+blackout, arrived at from the other direction.
+
 ## Cards are the app's visual language
 
 `PlayingCard` + `cardIdentity` are used on eighteen surfaces — marketing, the
@@ -1522,6 +1621,9 @@ another email before this.
 - `src/lib/forecast.js`, `src/components/competition/ForecastPanel.jsx` — the
   proper scoring rule, base rates and calibration; settled by `settleForecast`
   in `server.mjs`, which recomputes rather than trusts
+- `src/lib/integrity.js` — the caps, the idle discount, the quiz floors and the
+  verified/claimed split. Mirrored server-side by `countableStudyMinutes`,
+  `verifiedStudyMinutes` and `boardQuizScores`; change one, change both
 - `src/components/shared/MarkdownMath.jsx`, `LatexRenderer.jsx` — KaTeX
 - `supabase/migrations/0001…0006_*.sql` — applied schema
 - `base44/entities/*.jsonc`, `base44/functions/*/` — Base44 reference, kept until cutover

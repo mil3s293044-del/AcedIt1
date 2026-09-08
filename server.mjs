@@ -1530,9 +1530,119 @@ const PRIORITY_MULT = { low: 0.8, medium: 1.0, high: 1.3 };
 const GOAL_DIFF_MULT = { easy: 0.8, medium: 1.0, hard: 1.4, very_hard: 1.8 };
 const CHALLENGE_BASE = { practice_questions: 40, flashcard_sprint: 30, focus_session: 50, mini_test: 60, revision_schedule: 35 };
 
-function calcFocusTimerXP({ duration_minutes = 0 }) {
-  if (duration_minutes < 2) return 0;
-  return Math.round(Math.min(duration_minutes, 120) * 1.25);
+// Mirrors focusQuality() in src/lib/integrity.js. The client's copy DRAWS the
+// discount on the session summary; this one AWARDS it, and only this one is
+// trusted. Change one, change both.
+const TAB_AWAY_MINUTES = 1;
+
+function countedFocusMinutes({ duration_minutes = 0, idle_ratio = 0, tab_away_count = 0 }) {
+  const claimed = Math.max(0, Number(duration_minutes) || 0);
+  const idle = Math.min(1, Math.max(0, Number(idle_ratio) || 0));
+  const aways = Math.max(0, Math.round(Number(tab_away_count) || 0));
+  return Math.max(0, claimed * (1 - idle) - aways * TAB_AWAY_MINUTES);
+}
+
+// ─── COUNTABLE MINUTES, NOT CLAIMED ONES ───────────────────────────────────
+//
+// `duration_minutes` and `session_duration` arrive from the client, and every
+// board that ranks on hours summed them raw. A single POST of 600 minutes went
+// straight to the top. The ATAR's effort component has capped its own days for
+// exactly this reason since it was written; the leaderboards had no equivalent.
+//
+// Mirrors countableByDay() in src/lib/integrity.js — the client's copy DRAWS
+// the number, this one RANKS on it, and only this one is trusted. Change one,
+// change both.
+const SESSION_MAX_MINUTES = 240;
+const DAILY_MINUTE_CAP = 720;
+
+const dayKeyOf = (d) => {
+  const x = d instanceof Date ? d : new Date(d);
+  if (Number.isNaN(x.getTime())) return null;
+  const p = (n) => String(n).padStart(2, "0");
+  return `${x.getFullYear()}-${p(x.getMonth() + 1)}-${p(x.getDate())}`;
+};
+
+/** The shape countableStudyMinutes wants, out of either study table. */
+const studyRowFor = (r, col) => ({
+  day: String(r?.date || r?.created_date || "").slice(0, 10),
+  at: r?.created_date || r?.date || null,
+  minutes: Math.max(0, Number(r?.[col]) || 0),
+  idle_ratio: r?.idle_ratio ?? r?.extra?.idle_ratio ?? 0,
+  tab_away_count: r?.tab_away_count ?? r?.extra?.tab_away_count ?? 0,
+});
+
+/**
+ * Two limits and a clock. One row is at most one sitting; one day is at most
+ * DAILY_MINUTE_CAP; and TODAY is further capped by the minutes that have
+ * actually passed since midnight — which is what makes ten instant POSTs of
+ * four hours each worth twelve hours instead of forty. Past days get the flat
+ * cap, because once the day is over the app cannot know when a row was earned
+ * and a cap is the honest limit of what it can assert.
+ */
+function countableStudyMinutes(rows = [], now = new Date()) {
+  const perDay = new Map();
+  for (const r of rows) {
+    if (!r?.day) continue;                 // an undated row lands in any window
+    const counted = Math.min(SESSION_MAX_MINUTES, countedFocusMinutes({
+      duration_minutes: r.minutes,
+      idle_ratio: r.idle_ratio,
+      tab_away_count: r.tab_away_count,
+    }));
+    perDay.set(r.day, (perDay.get(r.day) || 0) + counted);
+  }
+  const today = dayKeyOf(now);
+  const midnight = new Date(now); midnight.setHours(0, 0, 0, 0);
+  const elapsedToday = Math.max(0, (new Date(now).getTime() - midnight.getTime()) / 60000);
+
+  let total = 0;
+  perDay.forEach((mins, d) => {
+    const ceiling = d === today ? Math.min(DAILY_MINUTE_CAP, elapsedToday) : DAILY_MINUTE_CAP;
+    total += Math.min(mins, ceiling);
+  });
+  return Math.round(total);
+}
+
+/**
+ * The minutes a passed call-out actually vouches for.
+ *
+ * No heuristic window is needed: a call-out is BUILT from the material the
+ * target studied between `window_start` and the moment it was issued, so
+ * passing it proves exactly that span. Nothing outside it is claimed.
+ *
+ * Nobody is accused by this. Unverified minutes still count, still rank, and
+ * still pay — the board simply draws what has been proven differently, so
+ * verifying is a flex rather than a defence.
+ */
+function verifiedStudyMinutes(rows = [], callouts = [], now = new Date()) {
+  const spans = (callouts || [])
+    .filter((c) => c?.status === "passed")
+    .map((c) => {
+      const a = new Date(c.window_start || c.created_date).getTime();
+      const b = new Date(c.submitted_at || c.created_date).getTime();
+      if (!Number.isFinite(a) || !Number.isFinite(b)) return null;
+      return { from: Math.min(a, b), to: Math.max(a, b) };
+    })
+    .filter(Boolean);
+  if (!spans.length) return 0;
+
+  const covered = rows.filter((r) => {
+    const t = new Date(r?.at || 0).getTime();
+    return Number.isFinite(t) && spans.some((s) => t >= s.from && t <= s.to);
+  });
+  // Capped like everything else. Proof is not a bypass, or verification
+  // becomes the exploit.
+  return countableStudyMinutes(covered, now);
+}
+
+// The idle signals were ACCEPTED AND IGNORED: this function destructured only
+// `duration_minutes` while the call site dutifully passed idle_ratio,
+// tab_away_count and session_complete. So leaving a timer running in a
+// background tab paid exactly what an hour of work paid. They count now —
+// as a discount on the time, never as an accusation about the student.
+function calcFocusTimerXP({ duration_minutes = 0, idle_ratio = 0, tab_away_count = 0 }) {
+  const counted = countedFocusMinutes({ duration_minutes, idle_ratio, tab_away_count });
+  if (counted < 2) return 0;
+  return Math.round(Math.min(counted, 120) * 1.25);
 }
 function calcPracticeQuestionsXP({ questions_attempted = 0, questions_correct = 0, difficulty = "proficient", consecutive_streak = 0 }) {
   if (questions_attempted === 0) return 0;
@@ -2972,15 +3082,18 @@ app.post("/local-ai/fn/updateGoalProgress", async (req, res) => {
               supabaseAdmin.from("study_techniques").select("*").eq("created_by", userEmail),
               supabaseAdmin.from("study_sessions").select("*").eq("created_by", userEmail),
             ]);
-            const techMin = (techs || [])
+            // Countable, not claimed — see countableStudyMinutes(). This used
+            // to sum `session_duration` and `duration_minutes` straight off
+            // the rows, and both arrive from the client.
+            const pick = (rows, col) => (rows || [])
               .filter(afterBaseline)
-              .filter((s) => matchesSubject(s, subjectFilter))
-              .reduce((sum, s) => sum + (s.session_duration || 0), 0);
-            const sessMin = (sess || [])
-              .filter(afterBaseline)
-              .filter((s) => matchesSubject(s, subjectFilter))
-              .reduce((sum, s) => sum + (s.duration_minutes || 0), 0);
-            return Math.min((techMin + sessMin) / 60, subGoal.target);
+              .filter((r) => matchesSubject(r, subjectFilter))
+              .map((r) => studyRowFor(r, col));
+            const totalMin = countableStudyMinutes([
+              ...pick(techs, "session_duration"),
+              ...pick(sess, "duration_minutes"),
+            ]);
+            return Math.min(totalMin / 60, subGoal.target);
           }
           case "quiz_score": {
             const { data: attempts } = await supabaseAdmin
@@ -3728,13 +3841,34 @@ async function syncCompetitionSlice(userEmail, competitionId) {
     supabaseAdmin.from("study_sessions").select("*").eq("created_by", userEmail),
   ]);
 
-  const techMinutes = (techs || [])
+  // THIS is the number the hours board ranks on, and it summed the client's
+  // own minutes with no ceiling of any kind — the single largest hole in
+  // Compete. It goes through countableStudyMinutes() now: one row is one
+  // sitting, one day is one day, and today cannot exceed the minutes that have
+  // actually passed since midnight.
+  const pick = (rows, col) => (rows || [])
     .filter(afterStart).filter(matchesSubject)
-    .reduce((sum, s) => sum + (s.session_duration || 0), 0);
-  const sessMinutes = (sess || [])
-    .filter(afterStart).filter(matchesSubject)
-    .reduce((sum, s) => sum + (s.duration_minutes || 0), 0);
-  const totalMinutes = techMinutes + sessMinutes;
+    .map((r) => studyRowFor(r, col));
+  const studyRows = [
+    ...pick(techs, "session_duration"),
+    ...pick(sess, "duration_minutes"),
+  ];
+  const totalMinutes = countableStudyMinutes(studyRows);
+  const claimedMinutes = Math.round(studyRows.reduce((sum, r) => sum + r.minutes, 0));
+
+  // What a passed call-out in THIS contest actually vouches for. Missing table
+  // (migrations 0025/0026 not run) is not an error here — it simply means
+  // nothing has been verified yet, which is the honest answer.
+  let verifiedMinutes = 0;
+  try {
+    const { data: passes } = await supabaseAdmin
+      .from("callouts")
+      .select("status, window_start, submitted_at, created_date")
+      .eq("competition_id", competitionId)
+      .eq("target_email", userEmail)
+      .eq("status", "passed");
+    verifiedMinutes = verifiedStudyMinutes(studyRows, passes || []);
+  } catch { /* table absent — nothing verified */ }
 
   // Compete Score over the battle window — the ranking basis.
   const cs = await competitionCompeteScore(userEmail, startDate.toISOString());
@@ -3761,8 +3895,18 @@ async function syncCompetitionSlice(userEmail, competitionId) {
     return {
       ...p,
       study_minutes: totalMinutes,
+      // Both halves are recorded so the board can draw proven hours in solid
+      // ink and the rest ghosted, WITHOUT ranking them differently or hiding
+      // anything. `claimed_minutes` is what the client sent; the gap between
+      // it and study_minutes is what the caps took off.
+      verified_minutes: verifiedMinutes,
+      claimed_minutes: claimedMinutes,
       compete_score: cs.total,
       score_breakdown: { effort: cs.effort, mastery: cs.mastery, consistency: cs.consistency },
+      // Kept OUT of score_breakdown, which the dashboard renders by iterating
+      // every numeric key — "sits 0" beside three component scores reads as a
+      // fourth component worth nothing.
+      board_sits: cs.sits ?? 0,
       score_history: history.slice(-40),
       last_hours_sync: now,
       last_activity: now,
@@ -4462,14 +4606,18 @@ async function computeMetricValue(email, metric, startIso, endIso) {
   // cap watched their bet stop moving while they were still studying.
   if (metric === "study_minutes") {
     const [{ data: techs }, { data: sess }] = await Promise.all([
-      supabaseAdmin.from("study_techniques").select("session_duration")
+      supabaseAdmin.from("study_techniques").select("session_duration, date, created_date, extra")
         .eq("created_by", email).gte("created_date", startIso).lte("created_date", endIso).limit(2000),
-      supabaseAdmin.from("study_sessions").select("duration_minutes, session_duration")
+      supabaseAdmin.from("study_sessions").select("duration_minutes, session_duration, date, created_date, extra")
         .eq("created_by", email).gte("created_date", startIso).lte("created_date", endIso).limit(2000),
     ]);
-    const a = (techs || []).reduce((s, t) => s + (Number(t.session_duration) || 0), 0);
-    const b = (sess || []).reduce((s, x) => s + (Number(x.duration_minutes) || Number(x.session_duration) || 0), 0);
-    return Math.round(a + b);
+    // Countable, not claimed. This decides what a Back Yourself bet PAYS, so
+    // summing the client's own minutes here meant a bet on 300 minutes could
+    // be won by posting 300 minutes.
+    return countableStudyMinutes([
+      ...(techs || []).map((r) => studyRowFor(r, "session_duration")),
+      ...(sess || []).map((r) => studyRowFor(r, r.duration_minutes != null ? "duration_minutes" : "session_duration")),
+    ]);
   }
 
   // ── quiz_marks ────────────────────────────────────────────────────────────
@@ -6974,24 +7122,100 @@ function computeCompeteScore({ minutes = 0, avgAccuracy = 0, activeDays = 0, str
 
 // Compute one user's Compete Score over a competition window [startIso, now].
 // Used to rank battles by "best study" instead of raw hours.
+// A quiz has to be worth sitting before a sit of it counts competitively, and
+// it counts ONCE — at the first sit, never the best. Sitting one easy paper
+// twenty times must not out-rank sitting a hard one once, and taking the best
+// rewards grinding the same quiz until a good roll comes up (the same "wait for
+// a result you like" shape the forecast settlement refuses).
+const BOARD_MIN_QUESTIONS = 8;
+const BOARD_MIN_MARKS = 12;
+
+const isRetryAttemptRow = (a) =>
+  a?.extra?.is_retry === true || / — wrong only$/.test(String(a?.quiz_title || ""));
+
+function quizCountsForBoard(quiz) {
+  const qs = Array.isArray(quiz?.questions) ? quiz.questions : [];
+  if (qs.length < BOARD_MIN_QUESTIONS) return false;
+  // An MCQ with no stated allocation is one mark, which is what
+  // normaliseQuestion resolves it to everywhere else in the app.
+  const marks = qs.reduce((sum, q) => {
+    const m = Number(q?.marks);
+    return sum + (Number.isFinite(m) && m > 0 ? m : 1);
+  }, 0);
+  return marks >= BOARD_MIN_MARKS;
+}
+
+/** The scores a board may read out of a window's attempts. */
+async function boardQuizScores(email, attempts) {
+  const real = (attempts || []).filter((a) => a && a.quiz_id && !isRetryAttemptRow(a));
+  if (!real.length) return [];
+
+  const ids = [...new Set(real.map((a) => a.quiz_id))];
+  const { data: quizRows } = await supabaseAdmin
+    .from("quizzes").select("id, questions").in("id", ids);
+  const byId = new Map((quizRows || []).map((q) => [q.id, q]));
+
+  const firstSit = new Map();
+  real
+    .slice()
+    .sort((a, b) => new Date(a.created_date || 0) - new Date(b.created_date || 0))
+    .forEach((a) => {
+      if (firstSit.has(a.quiz_id)) return;
+      if (!quizCountsForBoard(byId.get(a.quiz_id))) return;
+      firstSit.set(a.quiz_id, a);
+    });
+
+  // The adjusted score is what the student was actually shown once their
+  // written work was marked; the raw one is what the auto-marker guessed.
+  return [...firstSit.values()]
+    .map((a) => (typeof a.adjusted_score === "number" ? a.adjusted_score : a.score))
+    .filter((n) => typeof n === "number" && Number.isFinite(n));
+}
+
 async function competitionCompeteScore(email, startIso) {
   if (!supabaseAdmin) return computeCompeteScore({});
   const [techRes, sessRes, quizRes, profile] = await Promise.all([
-    supabaseAdmin.from("study_techniques").select("session_duration, created_date").eq("created_by", email).gte("created_date", startIso),
-    supabaseAdmin.from("study_sessions").select("duration_minutes, created_date").eq("created_by", email).gte("created_date", startIso),
-    supabaseAdmin.from("quiz_attempts").select("score, created_date").eq("created_by", email).gte("created_date", startIso),
+    supabaseAdmin.from("study_techniques").select("session_duration, date, created_date, extra").eq("created_by", email).gte("created_date", startIso),
+    supabaseAdmin.from("study_sessions").select("duration_minutes, date, created_date, extra").eq("created_by", email).gte("created_date", startIso),
+    supabaseAdmin.from("quiz_attempts").select("quiz_id, quiz_title, score, adjusted_score, created_date, extra").eq("created_by", email).gte("created_date", startIso),
     loadUserProfile(email),
   ]);
   const techs = techRes.data || [], sess = sessRes.data || [], quizzes = quizRes.data || [];
-  const minutes = techs.reduce((a, t) => a + (t.session_duration || 0), 0) + sess.reduce((a, s) => a + (s.duration_minutes || 0), 0);
-  const scores = quizzes.map((q) => q.score).filter((s) => typeof s === "number");
+
+  // Countable, not claimed — the same ceiling every other board now uses.
+  const minutes = countableStudyMinutes([
+    ...techs.map((r) => studyRowFor(r, "session_duration")),
+    ...sess.map((r) => studyRowFor(r, "duration_minutes")),
+  ]);
+
+  // ─── Accuracy is the FIRST sit of each quiz worth sitting ─────────────────
+  //
+  // This averaged every attempt in the window, which made mastery farmable
+  // three separate ways: write an eight-second quiz on your easiest topic and
+  // score 100; sit the same easy quiz twenty times; or run "wrong only"
+  // retries, whose scores are on a different scale by construction and were
+  // being averaged in beside full papers.
+  //
+  // Practice is untouched by any of this — a three-question warm-up still
+  // scores, still feeds the deck, still pays XP. It just does not decide a
+  // contest. Mirrors boardSits() in src/lib/integrity.js.
+  const scores = (await boardQuizScores(email, quizzes));
   const avgAccuracy = scores.length ? scores.reduce((a, b) => a + b, 0) / scores.length : 0;
+  // How many sits actually cleared the floor. Reported so a zero on a
+  // 400-point slice can be EXPLAINED rather than left as a silent penalty on
+  // a student who has only ever sat short quizzes — "never score a student on
+  // a signal they can't reach" applies just as hard to one they CAN reach and
+  // were never told about.
+  const boardSitCount = scores.length;
   const days = new Set([
     ...techs.map((t) => t.created_date?.slice(0, 10)),
     ...sess.map((s) => s.created_date?.slice(0, 10)),
     ...quizzes.map((q) => q.created_date?.slice(0, 10)),
   ].filter(Boolean)).size;
-  return computeCompeteScore({ minutes, avgAccuracy, activeDays: days, streak: profile?.streak_days || 0 });
+  return {
+    ...computeCompeteScore({ minutes, avgAccuracy, activeDays: days, streak: profile?.streak_days || 0 }),
+    sits: boardSitCount,
+  };
 }
 
 app.post("/local-ai/fn/getLeagueStanding", async (req, res) => {
