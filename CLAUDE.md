@@ -770,6 +770,99 @@ restated. Fed by `useLiveCount` off the stakes payload the app already loads,
 never a query of its own: six nav items asking the server whether anything is
 live would be six round trips before the shell painted.
 
+## A column that does not exist is a silent wrong answer
+
+**"It won't let me make a call, even with enough XP."** `placeForecast` read
+the balance with `.eq("email", user.email)` on `user_profiles` — A TABLE WITH
+NO `email` COLUMN. The owner's address is `created_by`, which migration 0001
+says in its own comment and which the other 22 profile lookups in `server.mjs`
+all use. PostgREST rejected the query, `profile` came back null, `held` fell to
+its default `0`, and every student was told "Not enough XP to stake" whatever
+their balance. The feature was completely unusable.
+
+**AND THE ERROR WAS DISCARDED, which is what turned a broken query into a
+plausible lie.** `const { data: profile } = await …` threw away a message
+saying exactly what was wrong and left a default that happened to look like a
+real answer — a 400 reading as the student's own fault instead of a 500 nobody
+could miss. Destructure `error` on anything whose absence changes a branch.
+
+The same query shape found three more, two of them in `calloutAudience`:
+`title` on `study_duels` (no such column) and on `goal_competitions` (it is
+`goal_title`), so BOTH lookups failed, the audience came back empty, and every
+reaction and every call-out backing was refused with "You're not in that one" —
+a broken query reading as a permission decision. And `technique_type` /
+`subject_name` on `study_techniques`, neither of which exists, so both silently
+counted only what `study_sessions` logged: the read-every-table trap this file
+already records twice, in a third disguise where the table IS read with a
+column that is not there.
+
+None of it could be caught by lint, the build, the suite or the page-mount
+sweep, because none of them touch a database. `supabase/schema.json` is the
+REAL schema — every migration applied to a Postgres 16 and `information_schema`
+read back (`scripts/dumpSchema.sh`), not SQL parsed, because a schema checker
+that is itself wrong about the schema is worse than none. `dbColumns.test.mjs`
+checks every column `server.mjs` names against it and asserts it would have
+caught the bug that shipped. **Regenerate the snapshot whenever a migration
+lands**, or the checker is validating against last month's schema.
+
+## Compete: one headline, one feed, one of each panel
+
+**Seven sections stacked above the tabs**, and three of them answered the same
+question. The rework left four: hero -> rivals -> feed -> tabs.
+
+- **Two headlines, and the bigger one said less.** A hero card ("Live now — a
+  call settles today") with a coach strip directly under it whose `<h1>` was
+  the largest type on the page, read "Evening, Miles. Leading 1 of 2 battles",
+  and restated the live/won counters printed two lines above it. The greeting
+  is the small kicker now and the MOVE is the `<h1>`: a student opens this page
+  to find out what to do, not to be greeted.
+- **Rivalries rendered TWICE.** `RivalryStrip` above the tabs and a "Your
+  rivalries" grid inside Battles — same people, same W–L records, different
+  words. The grid's rematch button was the only thing it had that the strip did
+  not, so the button moved up and the grid went.
+- **Movers was already inside the feed.** Its odds rows are `odds_move` events
+  and its ticker rows are `rival_activity` events. It was kept when the feed
+  landed on the reasoning that a price move and a rival's session are separate
+  CLAIMS and must never be joined with "because" — but the feed already keeps
+  them as separate ROWS, which was the actual requirement. Two panels was the
+  wrong way to express it.
+- **`BookPanel` moved into Battles.** It frames the same contests as a market
+  while the feed frames them as a timeline; both are fine, both stacked on
+  arrival is two mental models before a student has read anything.
+
+**ONE ENTRANCE, NOT EIGHT** (`Reveal`). Every section carried its own
+`initial`/`animate` with its own duration and a hand-picked delay, so the page
+did not arrive — it twitched into place in eight unrelated movements, and
+anything added later guessed a delay that did not fit its neighbours. A stagger
+container owns the timing; children declare only that they are part of it.
+
+**And most things should not animate on arrival at all.** A page opened every
+morning should not perform; an entrance is a cost paid on every visit for
+information that was already true. Motion means SOMETHING CHANGED — a number
+moving, a row overtaking, a call-out landing — which the live system already
+owns. The feed animates only rows that genuinely ARRIVE: everything present on
+the first paint is adopted silently through a seen-set, the same rule
+`LiveNumber` and `diffStandings` keep about their first value. Without it the
+feed replayed its whole list on every visit and on every live tick, which is
+both tiring and dishonest — it says "this just happened" about a fortnight-old
+call-out.
+
+**`new Date(x || 0)` IS THE EPOCH, AND THE EPOCH RENDERS AS "20705d ago".** A
+settled battle carrying no `endsAt` printed exactly that under a real headline,
+in the same confident type as every true line beside it. `timeOf` returns null
+rather than falling back to zero, anything before 2020 counts as missing (there
+is no AcedIt data from before then, so a date that old is a coercion artefact),
+an event with no usable timestamp is DROPPED because it has no place on a
+timeline, and `agoLabel` refuses one even if a surface hands it through.
+
+Emoji on Compete are the five reaction glyphs and nothing else — emoji is the
+honest medium for a reaction, where an icon set would read as buttons rather
+than as people responding. The icon audit went the other way instead: a trophy
+beside the word "Settled" is the word again in a picture, and it is gone from
+three places, as is a swords glyph on a "Challenge a rival" button sitting in a
+card that already has a swords tile at its head. The duel/battle icon PAIR
+stays — it differentiates two items in a set, which is the case the rule allows.
+
 ## Compete is a feed, and a call-out is a public event
 
 **Compete was entirely me-centric.** `BookPanel` was your market, `MoversPanel`
@@ -1877,6 +1970,10 @@ another email before this.
   when the app may refetch, who can hold it still, and the push path
 - `src/components/shared/LiveNumber.jsx`, `LiveDot.jsx` — rolling figures and
   the "something is running" mark
+- `src/components/shared/Reveal.jsx` — the one page entrance, and the rule
+  about what should not animate at all
+- `supabase/schema.json` + `scripts/dumpSchema.sh` — the real column list, and
+  how to regenerate it after a migration
 - `src/components/competition/CalloutBacking.jsx` — backing somebody else's
   call-out; guarded by `placeForecast`, not by the component
 - `src/components/competition/SettlementReveal.jsx`, `RivalryStrip.jsx` — the

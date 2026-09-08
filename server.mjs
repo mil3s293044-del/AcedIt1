@@ -5309,22 +5309,32 @@ app.post("/local-ai/fn/verifyMe", async (req, res) => {
  */
 async function calloutAudience(c) {
   if (!c) return { emails: [], title: null, kind: null };
+  // NEITHER TABLE HAS A `title` COLUMN. `study_duels` has none at all and
+  // `goal_competitions` calls it `goal_title` — so both selects were rejected
+  // outright, both rows came back null, and this returned an empty audience
+  // for everybody. Every reaction and every call-out backing was refused with
+  // "You're not in that one", which reads as a permission decision rather than
+  // a broken query. Same shape as the placeForecast balance check.
   if (c.duel_id) {
-    const { data: duel } = await supabaseAdmin
-      .from("study_duels").select("challenger_email, opponent_email, title").eq("id", c.duel_id).maybeSingle();
+    const { data: duel, error } = await supabaseAdmin
+      .from("study_duels").select("challenger_email, opponent_email, metric")
+      .eq("id", c.duel_id).maybeSingle();
+    if (error) console.error("[calloutAudience] duel lookup failed:", error.code, error.message);
     if (!duel) return { emails: [], title: null, kind: "duel" };
     return {
       emails: [duel.challenger_email, duel.opponent_email].filter(Boolean),
-      title: duel.title || "your duel",
+      title: "your duel",
       kind: "duel",
     };
   }
-  const { data: comp } = await supabaseAdmin
-    .from("goal_competitions").select("participants, title").eq("id", c.competition_id).maybeSingle();
+  const { data: comp, error } = await supabaseAdmin
+    .from("goal_competitions").select("participants, goal_title")
+    .eq("id", c.competition_id).maybeSingle();
+  if (error) console.error("[calloutAudience] competition lookup failed:", error.code, error.message);
   if (!comp) return { emails: [], title: null, kind: "competition" };
   return {
     emails: (comp.participants || []).map((p) => p.email).filter(Boolean),
-    title: comp.title || "the battle",
+    title: comp.goal_title || "the battle",
     kind: "competition",
   };
 }
@@ -5920,13 +5930,18 @@ const dayOf = (iso) => String(iso).slice(0, 10);
 /** Every distinct study technique the student has logged in a period. */
 async function techniquesUsed(email, startIso, endIso) {
   const [{ data: techs }, { data: sess }] = await Promise.all([
-    supabaseAdmin.from("study_techniques").select("technique_type, created_date")
+    // `technique_name`, not `technique_type` — the latter has never existed, so
+    // this half of the union silently returned nothing and every "techniques
+    // used" figure counted only what study_sessions logged. The same
+    // read-every-table trap CLAUDE.md records twice, in its third disguise:
+    // the table IS read, with a column that is not there.
+    supabaseAdmin.from("study_techniques").select("technique_name, created_date")
       .eq("created_by", email).gte("created_date", startIso).lte("created_date", endIso).limit(2000),
     supabaseAdmin.from("study_sessions").select("technique, created_date")
       .eq("created_by", email).gte("created_date", startIso).lte("created_date", endIso).limit(2000),
   ]);
   const set = new Set();
-  for (const t of techs || []) if (t.technique_type) set.add(String(t.technique_type).toLowerCase());
+  for (const t of techs || []) if (t.technique_name) set.add(String(t.technique_name).toLowerCase());
   for (const t of sess || []) if (t.technique) set.add(String(t.technique).toLowerCase());
   return set;
 }
@@ -5996,7 +6011,7 @@ async function verifyQuest(email, quest, startIso, endIso) {
     // ── Distinct subjects touched ─────────────────────────────────────────
     case "subjects": {
       const [{ data: techs }, { data: sess }, { data: quizzes }] = await Promise.all([
-        supabaseAdmin.from("study_techniques").select("subject_name")
+        supabaseAdmin.from("study_techniques").select("subject")
           .eq("created_by", email).gte("created_date", startIso).lte("created_date", end).limit(500),
         supabaseAdmin.from("study_sessions").select("subject")
           .eq("created_by", email).gte("created_date", startIso).lte("created_date", end).limit(500),
@@ -6004,7 +6019,7 @@ async function verifyQuest(email, quest, startIso, endIso) {
           .eq("created_by", email).gte("created_date", startIso).lte("created_date", end).limit(200),
       ]);
       const set = new Set();
-      for (const t of techs || []) if (t.subject_name) set.add(t.subject_name);
+      for (const t of techs || []) if (t.subject) set.add(t.subject);
       for (const t of sess || []) if (t.subject) set.add(t.subject);
       void quizzes;
       return { done: set.size >= c.count, progress: set.size, target: c.count,
@@ -7923,9 +7938,34 @@ app.post("/local-ai/fn/placeForecast", async (req, res) => {
       : 0;
 
     if (pays && amount > 0) {
-      const { data: profile } = await supabaseAdmin
-        .from("user_profiles").select("id, total_xp").eq("email", user.email).single();
-      const held = profile?.total_xp ?? 0;
+      // ─── created_by, NOT email ────────────────────────────────────────────
+      //
+      // `user_profiles` HAS NO `email` COLUMN. The owner's address lives in
+      // `created_by`, which migration 0001 says in its own comment, and which
+      // the other 22 profile lookups in this file all use. This one line was
+      // the only `.eq("email", …)` against the table in the whole server, and
+      // it made the forecast feature completely unusable: PostgREST rejected
+      // the query, `profile` came back null, `held` fell to its default 0, and
+      // EVERY student was told "Not enough XP to stake" no matter what their
+      // balance actually was.
+      //
+      // AND THE ERROR WAS DISCARDED, which is what turned a broken query into
+      // a plausible lie. Destructuring only `data` threw away a message that
+      // said exactly what was wrong ("column user_profiles.email does not
+      // exist") and left the code to carry on with a default that happened to
+      // look like a real answer. A 500 nobody can miss beats a 400 that reads
+      // as the student's own fault.
+      const { data: profile, error: profErr } = await supabaseAdmin
+        .from("user_profiles").select("id, total_xp")
+        .eq("created_by", user.email).maybeSingle();
+      if (profErr) {
+        console.error("[placeForecast] profile lookup failed:", profErr.code, profErr.message);
+        return res.status(500).json({ error: "Couldn't read your XP balance." });
+      }
+      if (!profile) {
+        return res.status(404).json({ error: "No profile found for this account." });
+      }
+      const held = profile.total_xp ?? 0;
       // You cannot stake XP you do not have. Without this the balance goes
       // negative and every level and rank derived from it goes with it.
       if (held < amount) {

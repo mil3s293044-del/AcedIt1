@@ -4,8 +4,8 @@ import AceBody from "@/components/ace/AceBody";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
-    Trophy, Swords, Crown, Activity, ClipboardList, Settings as SettingsIcon,
-    LogIn, Loader2, ArrowRight, RotateCcw, Target, Users, ShieldAlert, Flame, LineChart,
+    Trophy, Swords, Crown, ClipboardList, Settings as SettingsIcon,
+    LogIn, Loader2, ArrowRight, Target, Users, ShieldAlert, Flame, LineChart,
 } from "lucide-react";
 import { base44 } from "@/api/base44Client";
 import { useToast } from "@/components/ui/use-toast";
@@ -24,8 +24,7 @@ import { allBattles } from "@/components/competition/normaliseBattle";
 import BattleRow from "@/components/competition/BattleRow";
 import BattleDashboard from "@/components/competition/BattleDashboard";
 import BookPanel from "@/components/competition/BookPanel";
-import MoversPanel from "@/components/competition/MoversPanel";
-import { bookOdds, bookSeries, bookExposure, movers, rivalFeed }
+import { bookOdds, bookSeries, bookExposure }
     from "@/components/competition/portfolio";
 import CalloutQuiz from "@/components/competition/CalloutQuiz";
 import CompeteFeed from "@/components/competition/CompeteFeed";
@@ -36,6 +35,7 @@ import { getReactions } from "@/api/functionsShim";
 import { useLive, useLiveTick } from "@/lib/LiveContext";
 import { fmtDate } from "@/lib/safeDate";
 import HelpButton from "@/components/shared/HelpButton";
+import Reveal from "@/components/shared/Reveal";
 import AceShuffle from "@/components/ace/AceShuffle";
 
 // Battles now rank by Compete Score; fall back to legacy progress for old data.
@@ -252,7 +252,6 @@ export default function Competitions() {
         // loadData is a plain function redefined every render; depending on it
         // would refetch on every keystroke elsewhere on the page. The tick is
         // the trigger, and it is the only one.
-        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [liveTick, loadCallouts, loadReactions]);
 
     // Only what needs answering: aimed at me, still open. A settled one is a
@@ -360,10 +359,6 @@ export default function Competitions() {
         hasDeck: forecasts.length > 0 || allBattles_.length > 0,
     }), [forecastBoardNow, allBattles_, forecasts]);
 
-    const bigMovers = useMemo(() => movers(allBattles_, { hours: 24 }), [allBattles_]);
-    const rivals = useMemo(
-        () => rivalFeed({ battles: allBattles_, ticker, myEmail: user?.email }),
-        [allBattles_, ticker, user?.email]);
 
     // ── THE FEED ────────────────────────────────────────────────────────────
     // Everything that happened, to anybody, in a contest this student is in.
@@ -665,118 +660,108 @@ export default function Competitions() {
 
     return (
         <div className="min-h-screen bg-background">
-            <div className="max-w-6xl mx-auto px-4 lg:px-8 py-6 lg:py-10 space-y-6 lg:space-y-8">
+            {/* ONE entrance for the whole page. Every section used to carry
+                its own initial/animate with its own duration and a hand-picked
+                delay, so the page did not arrive — it twitched into place in
+                eight unrelated movements, and anything added later guessed a
+                delay that did not fit its neighbours. */}
+            <Reveal className="max-w-6xl mx-auto px-4 lg:px-8 py-6 lg:py-10 space-y-6 lg:space-y-8">
 
                 {calloutBanner}
 
-                {/* ── WHAT'S LIVE ─────────────────────────────────────────
-                    One answer to "is anything happening", above the tabs. The
-                    page used to open by asking the student to choose between
-                    three tabs, which is a navigation question standing where an
-                    answer should be. Same move Today's Play makes. */}
-                {lead && (
-                    <motion.button
-                        type="button"
-                        onClick={() => setCompeteTab(lead.tab)}
-                        initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}
-                        transition={{ duration: 0.35 }}
-                        className="w-full text-left relative card-soft on-table overflow-hidden
-                            group focus-visible:outline focus-visible:outline-2
-                            focus-visible:outline-offset-2 focus-visible:outline-ring">
-                        <span aria-hidden="true"
-                            className={`absolute inset-y-0 left-0 w-1.5 ${
-                                lead.kind === "call_closing" ? "bg-xp"
-                                    : lead.kind === "battle_close" ? "bg-streak" : "bg-primary"}`} />
-                        <div className="relative flex items-center gap-4 pl-6 pr-5 py-4">
-                            <div className="min-w-0 flex-1">
-                                <span className="stat-label">Live now</span>
-                                <p className="font-display font-extrabold text-foreground
-                                    text-lg lg:text-xl leading-tight mt-0.5">{lead.title}</p>
-                                <p className="text-[13px] text-muted-foreground mt-1 leading-snug
-                                    line-clamp-2">{lead.detail}</p>
-                            </div>
-                            <span className="flex-shrink-0 inline-flex items-center gap-1.5 text-sm
-                                font-bold text-foreground">
-                                {lead.action}
-                                <ArrowRight className="w-4 h-4 transition-transform
-                                    group-hover:translate-x-0.5" />
-                            </span>
-                        </div>
-                    </motion.button>
-                )}
-
-                {/* ── COACH STRIP ─────────────────────────────────────── */}
-                <motion.section initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.35 }}>
-                    <div className="flex items-center justify-between mb-3">
-                        <div className="flex items-center gap-2 text-xs">
-                            <span className="font-bold text-muted-foreground uppercase tracking-wider">Compete</span>
-                            {stats.active.length > 0 && (
-                                <>
-                                    <span className="text-muted-foreground/40">·</span>
-                                    <span className="inline-flex items-center gap-1 font-extrabold text-chart-3">
-                                        <Activity className="w-3.5 h-3.5" /> {stats.active.length} live
-                                    </span>
-                                </>
-                            )}
-                            {stats.recentWins > 0 && (
-                                <>
-                                    <span className="text-muted-foreground/40">·</span>
-                                    <span className="inline-flex items-center gap-1 font-extrabold text-xp">
-                                        <Trophy className="w-3.5 h-3.5" /> {stats.recentWins} won
-                                    </span>
-                                </>
-                            )}
-                        </div>
+                {/* ── ONE HEADLINE, AND IT IS THE THING TO DO ─────────────
+                    This was TWO sections. A hero button ("Live now — a call
+                    settles today"), and directly under it a coach strip whose
+                    <h1> was the largest type on the page, said "Evening, Miles.
+                    Leading 1 of 2 battles", and restated the live/won counters
+                    printed two lines above it. Two headlines, and the bigger
+                    one carried the less useful sentence.
+                    The greeting is now the SMALL line and the move is the
+                    large one, which is the right way round: a student opens
+                    this page to find out what to do, not to be greeted. With
+                    nothing live the greeting stands alone and the card does
+                    not pretend there is something to press. */}
+                <Reveal.Item>
+                    <div className="flex items-center justify-between gap-3 mb-2">
+                        <p className="text-xs font-bold text-muted-foreground uppercase tracking-wider truncate">
+                            {coachLine}
+                        </p>
                         <HelpButton page="Competitions" />
                     </div>
-                    <h1 className="font-display text-2xl sm:text-3xl lg:text-4xl font-extrabold tracking-tight text-foreground leading-[1.1]">
-                        {coachLine}
-                    </h1>
-                </motion.section>
 
-                {/* ── THE BOOK ───────────────────────────────────────── */}
-                {/* One price, one line, and the counters underneath. Six tiles
-                    of equal weight gave the eye nowhere to land and answered a
-                    question nobody arrives with; a market opens with its price. */}
-                <BookPanel
-                    odds={book.odds}
-                    delta={book.delta}
-                    series={book.series}
-                    exposure={book.exposure}
-                    liveCount={book.liveCount}
-                    record={`${stats.recentWins}\u2013${Math.max(0, stats.completed.length - stats.recentWins)}`}
-                    winRate={stats.completed.length ? winRate : null}
-                />
-                {stats.winStreak > 1 && (
-                    <p className="inline-flex items-center gap-1.5 pill bg-xp/15 text-xp">
-                        <Flame className="w-3.5 h-3.5" /> {stats.winStreak} battle win streak
-                    </p>
-                )}
+                    {lead ? (
+                        <button
+                            type="button"
+                            onClick={() => setCompeteTab(lead.tab)}
+                            className="w-full text-left relative card-soft on-table overflow-hidden
+                                group focus-visible:outline focus-visible:outline-2
+                                focus-visible:outline-offset-2 focus-visible:outline-ring">
+                            <span aria-hidden="true"
+                                className={`absolute inset-y-0 left-0 w-1.5 ${
+                                    lead.kind === "call_closing" ? "bg-xp"
+                                        : lead.kind === "battle_close" ? "bg-streak" : "bg-primary"}`} />
+                            <div className="relative flex items-center gap-4 pl-6 pr-5 py-5">
+                                <div className="min-w-0 flex-1">
+                                    <span className="stat-label">Live now</span>
+                                    <h1 className="font-display font-extrabold text-foreground
+                                        text-xl sm:text-2xl leading-tight mt-1">{lead.title}</h1>
+                                    <p className="text-[13px] text-muted-foreground mt-1 leading-snug
+                                        line-clamp-2">{lead.detail}</p>
+                                </div>
+                                <span className="flex-shrink-0 inline-flex items-center gap-1.5 text-sm
+                                    font-bold text-foreground">
+                                    {lead.action}
+                                    <ArrowRight className="w-4 h-4 transition-transform
+                                        group-hover:translate-x-0.5" />
+                                </span>
+                            </div>
+                        </button>
+                    ) : (
+                        <h1 className="font-display text-2xl sm:text-3xl font-extrabold tracking-tight
+                            text-foreground leading-[1.1]">
+                            Nothing riding on this week yet.
+                        </h1>
+                    )}
+                </Reveal.Item>
 
                 {/* ── WHO IS DOING WHAT TO WHOM ──────────────────────────── */}
-                {/* The feed goes ABOVE the tabs and above the book, because it
-                    is the only surface on this page whose subject is other
-                    people. Everything else is a readout of your own state,
-                    which is a thing a student can already remember. */}
-                <RivalryStrip rivals={myRivals} onOpen={() => setCompeteTab("duels")} />
+                {/* The feed is the only surface here whose subject is other
+                    people; everything else is a readout of your own state,
+                    which is a thing a student can already remember. So it goes
+                    above the tabs, and the market view — which frames the same
+                    contests a second way — moved down into Battles.
 
-                <CompeteFeed
-                    events={feed}
-                    reactions={reactions}
-                    reactionsReady={reactionsReady}
-                    onReacted={loadReactions}
-                    forecastCtx={backingCtx}
-                    onBacked={() => loadForecasts(user?.email)}
-                    onOpen={(e) => {
-                        const b = allBattles_.find(x => x.kind === e.battleRef?.kind && x.id === e.battleRef?.id);
-                        if (b) setOpenBattle(b); else setCompeteTab("duels");
-                    }}
-                />
+                    MOVERS IS GONE, and it is not a deletion. Every row it drew
+                    was already a feed event: its odds rows are `odds_move` and
+                    its ticker rows are `rival_activity`. The reason it was
+                    kept when the feed landed was that a price move and a
+                    rival's session are separate CLAIMS and must never be
+                    joined with "because" — but the feed already keeps them as
+                    separate rows, which was the actual requirement. Two panels
+                    was the wrong way to express it. */}
+                <Reveal.Item>
+                    <RivalryStrip
+                        rivals={myRivals}
+                        onOpen={() => setCompeteTab("duels")}
+                        onRematch={handleRematch}
+                        rematching={rematchingEmail}
+                    />
+                </Reveal.Item>
 
-                {/* Movers keeps its place under the feed: the feed says what
-                    HAPPENED, this says how the prices moved, and collapsing
-                    the two would mean claiming one caused the other. */}
-                <MoversPanel movers={bigMovers} feed={rivals} onOpen={(b) => setOpenBattle(b)} />
+                <Reveal.Item>
+                    <CompeteFeed
+                        events={feed}
+                        reactions={reactions}
+                        reactionsReady={reactionsReady}
+                        onReacted={loadReactions}
+                        forecastCtx={backingCtx}
+                        onBacked={() => loadForecasts(user?.email)}
+                        onOpen={(e) => {
+                            const b = allBattles_.find(x => x.kind === e.battleRef?.kind && x.id === e.battleRef?.id);
+                            if (b) setOpenBattle(b); else setCompeteTab("duels");
+                        }}
+                    />
+                </Reveal.Item>
 
                 {/* ── ONE PAGE, THREE CLEAR MODES ──────────────────────── */}
                 <Tabs value={competeTab} onValueChange={setCompeteTab} className="space-y-5">
@@ -821,6 +806,31 @@ export default function Competitions() {
                         disorganised: you don't have "duels" and "battles", you
                         have things you're racing in. */}
                     <TabsContent value="duels" className="mt-4 space-y-6">
+                {/* ── THE BOOK ───────────────────────────────────────── */}
+                {/* Inside Battles rather than at the top of the page: it is a
+                    second framing of the same contests the feed above already
+                    reports, and two mental models stacked on arrival is most of
+                    why this page was hard to read. Here it is the market view
+                    OF the battles listed under it. */}
+                {/* One price, one line, and the counters underneath. Six tiles
+                    of equal weight gave the eye nowhere to land and answered a
+                    question nobody arrives with; a market opens with its price. */}
+                <BookPanel
+                    odds={book.odds}
+                    delta={book.delta}
+                    series={book.series}
+                    exposure={book.exposure}
+                    liveCount={book.liveCount}
+                    record={`${stats.recentWins}\u2013${Math.max(0, stats.completed.length - stats.recentWins)}`}
+                    winRate={stats.completed.length ? winRate : null}
+                />
+                {stats.winStreak > 1 && (
+                    <p className="inline-flex items-center gap-1.5 pill bg-xp/15 text-xp">
+                        <Flame className="w-3.5 h-3.5" /> {stats.winStreak} battle win streak
+                    </p>
+                )}
+
+
 
                 {/* ── FOCUS PANEL ─────────────────────────────────────── */}
                 {focus && (
@@ -861,7 +871,7 @@ export default function Competitions() {
                 )}
 
                 {allBattles_.length > 0 && (
-                    <motion.section initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.08 }}>
+                    <section>
                         <div className="flex items-baseline justify-between mb-3">
                             <h2 className="font-display font-extrabold text-foreground text-base flex items-center gap-2">
                                 <span className="w-2 h-2 rounded-full bg-primary animate-soft-pulse" /> Live now
@@ -875,8 +885,8 @@ export default function Competitions() {
                         </div>
                         {allBattles_.some(b => b.status === "settled") && (
                             <>
-                                <h2 className="font-display font-extrabold text-foreground text-base mt-6 mb-3 flex items-center gap-2">
-                                    <Trophy className="w-4 h-4 text-chart-4" /> Settled
+                                <h2 className="font-display font-extrabold text-foreground text-base mt-6 mb-3">
+                                    Settled
                                 </h2>
                                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
                                     {allBattles_.filter(b => b.status === "settled").map(b => (
@@ -885,53 +895,18 @@ export default function Competitions() {
                                 </div>
                             </>
                         )}
-                    </motion.section>
+                    </section>
                 )}
 
                 {/* Challenge / spectate / respond still live in the arena. */}
                 <Arena view="actions" />
 
-                {/* ── RIVALRIES (head-to-head records) ────────────────── */}
-                {stats.rivals.length > 0 && (
-                    <motion.section initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.12 }}>
-                        <div className="flex items-center gap-2 mb-3">
-                            <Swords className="w-4 h-4 text-muted-foreground" />
-                            <p className="stat-label">Your rivalries</p>
-                        </div>
-                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                            {stats.rivals.map(r => {
-                                const ahead = r.wins > r.losses;
-                                const even = r.wins === r.losses;
-                                return (
-                                    <div key={r.email} className="card-soft p-4 flex flex-col">
-                                        <div className="flex items-center gap-2 mb-2">
-                                            <div className="w-8 h-8 rounded-lg bg-secondary flex items-center justify-center text-xs font-bold text-foreground flex-shrink-0">{(r.name || '?').slice(0, 2).toUpperCase()}</div>
-                                            <p className="font-bold text-foreground text-sm truncate">{r.name?.split(' ')[0]}</p>
-                                        </div>
-                                        <p className="font-display font-extrabold text-lg leading-none">
-                                            <span className="text-primary">{r.wins}</span>
-                                            <span className="text-muted-foreground/50"> – </span>
-                                            <span className="text-streak">{r.losses}</span>
-                                        </p>
-                                        <p className={`text-xs font-bold mt-1 ${ahead ? 'text-primary' : even ? 'text-muted-foreground' : 'text-streak'}`}>
-                                            {ahead ? 'You lead' : even ? 'Dead even' : 'They lead'}
-                                        </p>
-                                        <button
-                                            onClick={() => handleRematch(r)}
-                                            disabled={rematchingEmail === r.email}
-                                            className="mt-3 inline-flex items-center justify-center gap-1.5 rounded-xl bg-streak/10 hover:bg-streak/20 text-streak font-bold text-xs py-2 transition-colors disabled:opacity-60"
-                                        >
-                                            {rematchingEmail === r.email
-                                                ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                                                : <RotateCcw className="w-3.5 h-3.5" />}
-                                            {even || ahead ? 'Rematch' : 'Run it back'}
-                                        </button>
-                                    </div>
-                                );
-                            })}
-                        </div>
-                    </motion.section>
-                )}
+                {/* The "Your rivalries" grid that used to sit here is gone.
+                    It drew the same people with the same W–L records as
+                    RivalryStrip above the tabs, in different words — two
+                    panels for one object, on one page. Its rematch button was
+                    the only thing it had that the strip did not, so that moved
+                    up rather than the panel staying. */}
 
                 {/* ── START SOMETHING ─────────────────────────────────── */}
                 {/* Was three separate things in three places: a Challenge
@@ -940,7 +915,7 @@ export default function Competitions() {
                     to each other. One card, three routes, at the end of the
                     page where you land after reading what you're already in. */}
                 <motion.section
-                    initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.16 }}
+
                     className="card-soft p-5 lg:p-6"
                 >
                     <p className="stat-label mb-4">Start something new</p>
@@ -1010,8 +985,8 @@ export default function Competitions() {
                                     </div>
                                 </div>
                                 <Button onClick={() => setChallengeOpen(true)}
-                                    className="w-full rounded-xl bg-chart-4 hover:bg-chart-4/90 text-white font-bold gap-2 btn-3d">
-                                    <Swords className="w-4 h-4" /> Challenge a rival
+                                    className="w-full rounded-xl bg-chart-4 hover:bg-chart-4/90 text-white font-bold btn-3d">
+                                    Challenge a rival
                                 </Button>
                             </div>
 
@@ -1053,7 +1028,7 @@ export default function Competitions() {
                     balance={userProfile?.total_xp ?? null}
                     onCreated={() => { setChallengeOpen(false); loadData(); }}
                 />
-            </div>
+            </Reveal>
 
             {/* Join setup dialog */}
             <AnimatePresence>

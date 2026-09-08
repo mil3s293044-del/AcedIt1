@@ -8,7 +8,7 @@
  * own voice rules while being funny at somebody's expense.
  */
 import assert from "node:assert/strict";
-import { competeFeed, rivalries, pick, leftLabel, BANNED } from "@/lib/competeFeed";
+import { competeFeed, rivalries, pick, leftLabel, agoLabel, BANNED } from "@/lib/competeFeed";
 
 let passed = 0;
 const check = (name, fn) => {
@@ -139,6 +139,32 @@ check("a stranger's study is not news — only people racing you", () => {
         myEmail: ME,
     });
     assert.equal(feed.filter((e) => e.kind === "rival_activity").length, 0);
+});
+
+check("A MISSING TIMESTAMP IS NEVER RENDERED AS 1970", () => {
+    // `new Date(x || 0)` is the epoch, and the epoch prints as "20705d ago".
+    // A settled battle with no endsAt did exactly that, in the same confident
+    // type as every true line beside it.
+    const noDate = battle({ id: "nd", status: "completed", endsAt: undefined,
+        created_date: undefined, updated_date: undefined });
+    const feed = competeFeed({ battles: [noDate], myEmail: ME });
+    assert.deepEqual(feed.filter((e) => e.kind === "battle_settled"), [],
+        "an event with no place on a timeline is dropped, not dated 1970");
+
+    // And the label refuses one even if a surface hands it through.
+    assert.equal(agoLabel(0), "");
+    assert.equal(agoLabel(null), "");
+    assert.equal(agoLabel(undefined), "");
+    assert.equal(agoLabel("1970-01-01T00:00:00Z"), "");
+    assert.match(agoLabel(ago(2)), /ago/);
+});
+
+check("a settled battle WITH a date still reports", () => {
+    const done = battle({ id: "d2", status: "completed", endsAt: ago(30) });
+    const e = competeFeed({ battles: [done], myEmail: ME })
+        .find((x) => x.kind === "battle_settled");
+    assert.ok(e, "the ordinary case must not have been broken by the guard");
+    assert.match(agoLabel(e.at), /d ago|h ago/);
 });
 
 check("an empty account gets an empty feed, not placeholders", () => {

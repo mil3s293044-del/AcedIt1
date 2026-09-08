@@ -29,7 +29,7 @@
  * The count is optimistic and reconciles on the server's answer: a reaction
  * that takes 400ms to appear is one nobody presses twice.
  */
-import React, { useCallback, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { motion, AnimatePresence, useReducedMotion } from "framer-motion";
 import {
     Swords, ShieldCheck, ShieldAlert, Clock, TrendingUp, TrendingDown,
@@ -131,7 +131,7 @@ function ReactionRow({ event, state, onReact, disabled }) {
     );
 }
 
-function FeedRow({ event, index, reactions, onReact, onOpen, reactionsReady, backing }) {
+function FeedRow({ event, isNew, reactions, onReact, onOpen, reactionsReady, backing }) {
     const reduce = useReducedMotion();
     // A price sliding drew an UP arrow, in red — the glyph and the colour
     // saying opposite things about the same number, which is the bug
@@ -147,9 +147,15 @@ function FeedRow({ event, index, reactions, onReact, onOpen, reactionsReady, bac
     return (
         <motion.li
             layout
-            initial={{ opacity: 0, y: 14 }}
+            // `initial={false}` on the rows already present: a feed a student
+            // opens every morning must not replay its whole list at them.
+            // AnimatePresence still animates a row that genuinely ARRIVES,
+            // which is the only time the motion means anything — the rule the
+            // live system keeps everywhere else.
+            initial={isNew ? { opacity: 0, y: 14 } : false}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: reduce ? 0 : Math.min(index * 0.04, 0.3), duration: 0.3 }}
+            exit={{ opacity: 0, y: -8 }}
+            transition={{ duration: reduce ? 0 : 0.28, ease: [0.22, 1, 0.36, 1] }}
             className={`rounded-2xl border-2 p-3.5 sm:p-4 transition-colors
                 ${live ? `${tone.ring} bg-xp/5` : "border-border bg-surface"}`}
         >
@@ -220,6 +226,24 @@ export default function CompeteFeed({
 }) {
     const [optimistic, setOptimistic] = useState({});
 
+    // ── Which rows have ALREADY been seen ───────────────────────────────────
+    // Everything present on the first render is adopted silently; only an id
+    // that turns up later is an arrival worth animating. Without this the feed
+    // replayed its entire list on every visit and on every live tick, which is
+    // both tiring and dishonest — it says "this just happened" about a
+    // fortnight-old call-out. Same rule LiveNumber keeps about its first value.
+    const seen = useRef(null);
+    const isNew = useCallback((id) => {
+        if (seen.current === null) return false;      // first paint: nothing is new
+        return !seen.current.has(id);
+    }, []);
+    useEffect(() => {
+        const next = new Set(events.map((e) => e.id));
+        // Adopt AFTER the render that used the old set, so a row gets exactly
+        // one animated arrival and never a second on the next tick.
+        seen.current = next;
+    }, [events]);
+
     const merged = useMemo(() => {
         const out = { ...reactions };
         Object.entries(optimistic).forEach(([k, v]) => { out[k] = v; });
@@ -253,9 +277,8 @@ export default function CompeteFeed({
     if (!events.length) return null;
 
     return (
-        <motion.section
-            initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}
-            className="rounded-3xl bg-surface border border-border shadow-soft p-4 sm:p-6">
+        // No entrance of its own — the page owns one stagger (Reveal).
+        <section className="rounded-3xl bg-surface border border-border shadow-soft p-4 sm:p-6">
             <div className="flex items-baseline justify-between gap-3 mb-4">
                 <h2 className="font-display font-extrabold text-foreground text-base flex items-center gap-2">
                     <Activity className="w-4 h-4 text-chart-3" /> What's happening
@@ -265,9 +288,9 @@ export default function CompeteFeed({
 
             <ul className="space-y-2.5">
                 <AnimatePresence initial={false}>
-                    {events.map((e, i) => (
+                    {events.map((e) => (
                         <FeedRow
-                            key={e.id} event={e} index={i}
+                            key={e.id} event={e} isNew={isNew(e.id)}
                             reactions={merged} onReact={react} onOpen={onOpen}
                             reactionsReady={reactionsReady}
                             backing={e.kind === "callout_live" && !e.involvesMe && forecastCtx
@@ -277,6 +300,6 @@ export default function CompeteFeed({
                     ))}
                 </AnimatePresence>
             </ul>
-        </motion.section>
+        </section>
     );
 }

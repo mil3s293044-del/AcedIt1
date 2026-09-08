@@ -19,7 +19,7 @@
  */
 import React from "react";
 import { motion } from "framer-motion";
-import { Swords, ShieldAlert } from "lucide-react";
+import { Swords, ShieldAlert, RotateCcw, Loader2 } from "lucide-react";
 
 const firstName = (n) => String(n || "").trim().split(/\s+/)[0] || "Someone";
 const initials = (n) => String(n || "?").trim().split(/\s+/).slice(0, 2)
@@ -36,13 +36,14 @@ function hueOf(email) {
 
 const CLOSE = 10;
 
-export default function RivalryStrip({ rivals = [], onOpen }) {
+export default function RivalryStrip({ rivals = [], onOpen, onRematch, rematching = null }) {
     if (!rivals.length) return null;
 
+    // No entrance of its own: the page owns one stagger now (Reveal), and
+    // eight sections each choosing their own delay is what made this page
+    // twitch on arrival rather than assemble.
     return (
-        <motion.section
-            initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}
-            className="space-y-2">
+        <section className="space-y-2">
             <div className="flex items-baseline justify-between gap-3">
                 <h2 className="font-display font-extrabold text-foreground text-base flex items-center gap-2">
                     <Swords className="w-4 h-4 text-chart-4" /> Who you're racing
@@ -52,8 +53,11 @@ export default function RivalryStrip({ rivals = [], onOpen }) {
             {/* Scrolls on a phone rather than shrinking. Six avatars squeezed
                 into 390px are six things nobody can read — the same call the
                 rank ladder makes. */}
-            <div className="flex gap-2.5 overflow-x-auto pb-1 -mx-1 px-1 snap-x">
-                {rivals.map((r, i) => {
+            {/* items-stretch, so a card carrying a rematch button does not
+                stand taller than the one beside it — a scroll row of uneven
+                cards reads as a rendering fault rather than as three people. */}
+            <div className="flex items-stretch gap-2.5 overflow-x-auto pb-1 -mx-1 px-1 snap-x">
+                {rivals.map((r) => {
                     const live = r.live > 0 && r.gap != null;
                     const ahead = (r.gap ?? 0) >= 0;
                     const close = live && Math.abs(r.gap) <= CLOSE;
@@ -64,10 +68,9 @@ export default function RivalryStrip({ rivals = [], onOpen }) {
                             key={r.email}
                             type="button"
                             onClick={() => onOpen?.(r)}
-                            initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}
-                            transition={{ delay: 0.04 * i }}
-                            className="snap-start flex-shrink-0 w-[168px] text-left rounded-2xl border-2 border-border
-                                bg-surface p-3 hover:border-foreground/20 transition-colors"
+                            className="snap-start flex-shrink-0 w-[168px] text-left rounded-2xl border-2
+                                border-border bg-surface p-3 hover:border-foreground/20 transition-colors
+                                flex flex-col"
                         >
                             <div className="flex items-center gap-2 mb-2">
                                 <span className="w-8 h-8 rounded-xl flex items-center justify-center
@@ -127,10 +130,43 @@ export default function RivalryStrip({ rivals = [], onOpen }) {
                                         ? `${r.wins}–${r.losses} between you`
                                         : `${r.live} live`}
                             </p>
+
+                            {/* ── The rematch, which used to live in a SECOND
+                                rivalries panel further down the same page ────
+                                "Your rivalries" rendered the same people with
+                                the same W–L records inside the Battles tab,
+                                in different words, with this button on it. Two
+                                panels for one object is how a student stops
+                                believing either — and the one thing the other
+                                had that this did not was the button, so it
+                                came here rather than the panel staying.
+                                Offered only with no live race: a rematch
+                                against somebody you are already racing is a
+                                second contest with the same person. */}
+                            {onRematch && !live && played > 0 && (
+                                <span
+                                    role="button"
+                                    tabIndex={0}
+                                    onClick={(e) => { e.stopPropagation(); onRematch(r); }}
+                                    onKeyDown={(e) => {
+                                        if (e.key === "Enter" || e.key === " ") {
+                                            e.preventDefault(); e.stopPropagation(); onRematch(r);
+                                        }
+                                    }}
+                                    className="mt-auto pt-2.5 inline-flex w-full items-center justify-center gap-1.5
+                                        rounded-xl bg-streak/10 hover:bg-streak/20 text-streak font-bold
+                                        text-xs py-1.5 transition-colors cursor-pointer"
+                                >
+                                    {rematching === r.email
+                                        ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                        : <RotateCcw className="w-3.5 h-3.5" />}
+                                    {r.wins >= r.losses ? "Rematch" : "Run it back"}
+                                </span>
+                            )}
                         </motion.button>
                     );
                 })}
             </div>
-        </motion.section>
+        </section>
     );
 }

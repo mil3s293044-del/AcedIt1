@@ -48,6 +48,30 @@ const SOURCE_LABEL = {
 const firstName = (n) => String(n || "").trim().split(/\s+/)[0] || "Someone";
 
 /**
+ * The first usable timestamp, or NULL.
+ *
+ * `new Date(x || 0)` is the epoch, and the epoch renders as "20705d ago" — a
+ * settled battle carrying no `endsAt` printed that under a real headline, in
+ * the same confident type as every true line beside it. Falling back to zero
+ * turns "we do not know when" into a specific and wrong claim, which is the
+ * rule this file already keeps everywhere else: return null rather than a
+ * placeholder.
+ *
+ * Anything before 2020 is treated as missing too. There is no AcedIt data from
+ * before then, so a date that old is a coercion artefact rather than a fact,
+ * and it is better caught here than rendered.
+ */
+const FLOOR = Date.UTC(2020, 0, 1);
+export function timeOf(...candidates) {
+    for (const c of candidates) {
+        if (c == null || c === "") continue;
+        const t = new Date(c).getTime();
+        if (Number.isFinite(t) && t >= FLOOR) return new Date(t);
+    }
+    return null;
+}
+
+/**
  * Pick one line from a set, stably.
  *
  * Deterministic on the event's own id rather than random: a feed that reworded
@@ -63,7 +87,12 @@ export function pick(list, seed) {
 }
 
 export function agoLabel(at) {
-    const ms = Date.now() - new Date(at).getTime();
+    if (at == null) return "";
+    const t = new Date(at).getTime();
+    // Guards the caller as well as the data: a surface that hands this a
+    // missing date gets nothing back rather than a confident "20705d ago".
+    if (!Number.isFinite(t) || t < FLOOR) return "";
+    const ms = Date.now() - t;
     if (!Number.isFinite(ms)) return "";
     const m = Math.round(ms / MIN);
     if (m < 1) return "just now";
@@ -98,7 +127,7 @@ function calloutEvent(c, myEmail) {
     const iCalled = c.caller_email === myEmail;
     const iAmTarget = c.target_email === myEmail;
     const seed = `${c.id}:${c.status}`;
-    const at = new Date(c.submitted_at || c.started_at || c.created_date || 0);
+    const at = timeOf(c.submitted_at, c.started_at, c.created_date);
 
     const base = {
         id: `callout:${c.id}:${c.status}`,
@@ -286,9 +315,14 @@ function settledEvent(battle, myEmail) {
     if (!winner) return null;
     const iWon = winner.isMe || winner.email === myEmail;
     const seed = `${battle.kind}:${battle.id}:done`;
+    const at = timeOf(battle.endsAt, battle.updated_date, battle.created_date);
+    // No usable timestamp means no place in a timeline. Dropping the event is
+    // right where inventing one is not: the feed is ordered by time, and a row
+    // dated 1970 sorts to the bottom forever while claiming to be news.
+    if (!at) return null;
     return {
         id: `settled:${battle.kind}:${battle.id}`,
-        at: new Date(battle.endsAt || battle.updated_date || battle.created_date || 0),
+        at,
         kind: "battle_settled",
         tone: iWon ? "win" : "neutral",
         battle,

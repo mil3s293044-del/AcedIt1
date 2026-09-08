@@ -214,7 +214,7 @@ export default function CalloutPanel({ battle, me, rivals, callouts = [], onChan
                 <DialogContent className="max-w-sm rounded-3xl">
                     <DialogHeader>
                         <DialogTitle className="font-display flex items-center gap-2">
-                            <Swords className="w-5 h-5 text-streak" /> Call out {target?.name}?
+                            Call out {target?.name}?
                         </DialogTitle>
                     </DialogHeader>
                     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-3">
