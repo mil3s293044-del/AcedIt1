@@ -54,6 +54,43 @@ function detectLeadChanges(prev, next) {
     });
 }
 
+/**
+ * Somebody is CLOSING ON YOU — the alert that fires before the overtake.
+ *
+ * `detectLeadChanges` above only speaks once the lead has already changed
+ * hands, which is the moment it is too late to do anything about. This is the
+ * one that arrives while there is still something to defend.
+ *
+ * Three conditions, and all three matter:
+ *
+ *   - the gap NARROWED. A rival who was already close and has done nothing is
+ *     not news, and firing on that means the alert goes off on every poll for
+ *     the whole contest until nobody reads it.
+ *   - it is now inside CLOSING_WITHIN. A gap going 800 → 600 is a big move and
+ *     still not a threat.
+ *   - you are still AHEAD. Once they have passed you it is a lead change, and
+ *     that is the other function's line to deliver.
+ */
+export const CLOSING_WITHIN = 25;
+
+function detectClosing(prev, next) {
+    if (!prev?.me || !next?.me) return;
+    const me = next.me;
+    (next.duels || []).filter(d => d.status === "active" && d.live_scores).forEach(d => {
+        const before = (prev.duels || []).find(p => p.id === d.id && p.live_scores);
+        if (!before) return;
+        const rival = rivalOf(d, me);
+        if (!rival?.email) return;
+        const gapNow = myScore(d, me) - (d.live_scores[rival.email] || 0);
+        const gapWas = myScore(before, me) - (before.live_scores[rival.email] || 0);
+        if (gapNow <= 0 || gapNow >= gapWas || gapNow > CLOSING_WITHIN) return;
+        window.dispatchEvent(new CustomEvent("rival_closing", {
+            detail: { duel: d, rivalName: rival.name, gap: Math.round(gapNow),
+                closed: Math.round(gapWas - gapNow) },
+        }));
+    });
+}
+
 // "While you were away" — rival progress since the last session, from a
 // localStorage snapshot. Fires once per app load.
 function checkAwayReport(data) {
@@ -94,6 +131,7 @@ export async function fetchStakes(force = false) {
             if (data?.setup_required) return _cache;
             checkAwayReport(data);
             detectLeadChanges(_cache, data);
+            detectClosing(_cache, data);
             writeSnapshot(data);
             _cache = data;
             _fetchedAt = Date.now();
@@ -137,4 +175,20 @@ export function useStakes() {
     }, []);
 
     return { stakes, refresh: () => fetchStakes(true) };
+}
+
+/**
+ * How much is racing right now, for the nav dot and the poll rate.
+ *
+ * Read off the stakes payload the app ALREADY loads on every page rather than
+ * a query of its own — six nav items asking the server whether anything is
+ * live would be six round trips before the shell painted, and the answer is
+ * sitting in a module-level cache two lines up.
+ */
+export function useLiveCount() {
+    const { stakes } = useStakes();
+    const duels = (stakes?.duels || []).filter(d => d?.status === "active").length;
+    const callouts = (stakes?.callouts || [])
+        .filter(c => ["pending", "active"].includes(c?.status)).length;
+    return { duels, callouts, total: duels + callouts, live: duels + callouts > 0 };
 }

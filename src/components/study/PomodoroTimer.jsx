@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { motion } from "framer-motion";
+import { useBusy, BUSY } from "@/lib/LiveContext";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -69,6 +70,9 @@ export default function PomodoroTimer({ onSessionComplete, userSubjects: initial
     const [session, setSession] = useState(1);
     const [timeLeft, setTimeLeft] = useState(25 * 60);
     const [isRunning, setIsRunning] = useState(false);
+    // The blackout's entire purpose is that nothing on it moves — and a
+    // running clock is work in progress whether or not the blackout is up.
+    useBusy(isFocusMode || isRunning, BUSY.FOCUS);
     const [selectedSubject, setSelectedSubject] = useState("");
     const [topic, setTopic] = useState("");
     const [isFocusMode, setIsFocusMode] = useState(false);

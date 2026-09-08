@@ -1,7 +1,7 @@
 -- ════════════════════════════════════════════════════════════════════════════
 -- AcedIt — everything still to apply, in one script.
 --
--- Covers migrations 0022 through 0033. Paste the whole thing into the Supabase
+-- Covers migrations 0022 through 0035. Paste the whole thing into the Supabase
 -- SQL editor and run it once.
 --
 -- SAFE TO RUN TWICE. Every statement is guarded, so if some of these were
@@ -382,5 +382,101 @@ alter table public.user_profiles
 -- window rather than per-feature counts: {"since": iso, "chips": n}.
 alter table public.user_profiles
     add column if not exists ai_burst jsonb not null default '{}'::jsonb;
+
+-- ── 0034 — reactions on the Compete feed ────────────────────────────────────
+-- Compete now opens on a feed of what people did to each other, and a feed
+-- nobody can answer is a broadcast. One tap is the smallest possible answer.
+--
+-- NO FREE TEXT, and that is the design rather than a first cut: these are
+-- sixteen-year-olds losing in front of their group sometimes, and a text box on
+-- that is a moderation problem the app cannot staff. The glyph is checked here
+-- as well as on the server.
+--
+-- Keyed on the feed EVENT ("callout:<uuid>:passed"), not on a row — most feed
+-- events are derived and have no row of their own, and keying on the moment
+-- means a call-out passing later collects its own reactions rather than
+-- inheriting the ones left when it was issued.
+--
+-- Without this the feature is simply absent: getReactions answers
+-- available:false on a missing table and the buttons never render.
+create table if not exists public.compete_reactions (
+    id            uuid primary key default gen_random_uuid(),
+    created_by    text not null,
+    created_date  timestamptz not null default now(),
+    event_key     text not null,
+    duel_id        uuid references public.study_duels(id) on delete cascade,
+    competition_id uuid references public.goal_competitions(id) on delete cascade,
+    emoji         text not null check (emoji in ('👀','🔥','😮','👏','🧊')),
+    -- One reaction per person per event, so a feed cannot be brigaded by one
+    -- account holding down a button.
+    unique (created_by, event_key)
+);
+
+create index if not exists compete_reactions_event_idx on public.compete_reactions (event_key);
+create index if not exists compete_reactions_comp_idx  on public.compete_reactions (competition_id)
+    where competition_id is not null;
+create index if not exists compete_reactions_duel_idx  on public.compete_reactions (duel_id)
+    where duel_id is not null;
+
+alter table public.compete_reactions enable row level security;
+
+-- Readable by anyone in the contest it is scoped to, and by nobody else. There
+-- is deliberately NO insert policy: writes go through server.mjs under the
+-- service role, which is where the "are you in this battle" check lives. The
+-- client must not be able to invent a scope for itself.
+drop policy if exists "compete_reactions readable by participants" on public.compete_reactions;
+create policy "compete_reactions readable by participants"
+    on public.compete_reactions for select
+    using (
+        (competition_id is not null and exists (
+            select 1 from public.goal_competitions c
+            where c.id = compete_reactions.competition_id
+              and c.participants @> jsonb_build_array(jsonb_build_object('email', auth.jwt() ->> 'email'))
+        ))
+        or (duel_id is not null and exists (
+            select 1 from public.study_duels d
+            where d.id = compete_reactions.duel_id
+              and (d.challenger_email = auth.jwt() ->> 'email'
+                or d.opponent_email = auth.jwt() ->> 'email')
+        ))
+    );
+
+-- ── 0035 — publish the compete tables to realtime ───────────────────────────
+-- LiveContext polls every 45 seconds while a contest is running, which is what
+-- ships and is fine. This makes a rival's score arrive when it changes instead
+-- of up to 45 seconds later.
+--
+-- The push is a TRIGGER, not a data source: src/api/realtime.js throws the
+-- changed row away and refetches through the normal reads, so this cannot
+-- become a second channel where "what the client was told" stands in for what
+-- the server knows. Realtime respects RLS, so a student is only notified about
+-- rows they could already read; nothing here widens any policy.
+--
+-- Entirely optional. Without it the poll carries the whole job and the app
+-- behaves identically, just a little later.
+do $$
+begin
+    if not exists (select 1 from pg_publication where pubname = 'supabase_realtime') then
+        create publication supabase_realtime;
+    end if;
+end $$;
+
+do $$
+declare
+    t text;
+begin
+    foreach t in array array['goal_competitions', 'study_duels', 'callouts']
+    loop
+        if to_regclass('public.' || t) is null then
+            continue;
+        end if;
+        if not exists (
+            select 1 from pg_publication_tables
+            where pubname = 'supabase_realtime' and schemaname = 'public' and tablename = t
+        ) then
+            execute format('alter publication supabase_realtime add table public.%I', t);
+        end if;
+    end loop;
+end $$;
 
 commit;

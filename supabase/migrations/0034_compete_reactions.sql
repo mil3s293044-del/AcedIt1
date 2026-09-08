@@ -19,7 +19,7 @@
 -- passing later collects its own reactions instead of inheriting the ones left
 -- when it was issued.
 
-create table public.compete_reactions (
+create table if not exists public.compete_reactions (
     id            uuid primary key default gen_random_uuid(),
     created_by    text not null,
     created_date  timestamptz not null default now(),
@@ -41,10 +41,12 @@ create table public.compete_reactions (
     unique (created_by, event_key)
 );
 
-create index compete_reactions_event_idx on public.compete_reactions (event_key);
-create index compete_reactions_comp_idx  on public.compete_reactions (competition_id)
+-- Guarded like everything in PENDING_run_me.sql: that file's contract is that
+-- the whole thing is safe to paste twice, and a bare `create` breaks it.
+create index if not exists compete_reactions_event_idx on public.compete_reactions (event_key);
+create index if not exists compete_reactions_comp_idx  on public.compete_reactions (competition_id)
     where competition_id is not null;
-create index compete_reactions_duel_idx  on public.compete_reactions (duel_id)
+create index if not exists compete_reactions_duel_idx  on public.compete_reactions (duel_id)
     where duel_id is not null;
 
 alter table public.compete_reactions enable row level security;
@@ -53,6 +55,7 @@ alter table public.compete_reactions enable row level security;
 -- server, which is where the "are you in this battle" check lives — the same
 -- posture callouts takes, and for the same reason: the client must not be able
 -- to invent a scope for itself.
+drop policy if exists "compete_reactions readable by participants" on public.compete_reactions;
 create policy "compete_reactions readable by participants"
     on public.compete_reactions for select
     using (

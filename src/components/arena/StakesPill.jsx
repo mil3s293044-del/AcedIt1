@@ -43,11 +43,21 @@ export default function StakesPill() {
             setFlash({ kind: "away", ...item });
             setTimeout(() => setFlash(null), 8000);
         };
+        // Somebody closing on you, which arrives while there is still
+        // something to defend — the lead-change event only speaks once it is
+        // already gone. Held a little longer than the others because it is the
+        // one asking for an action rather than reporting a result.
+        const onClosing = (e) => {
+            setFlash({ kind: "closing", ...e.detail });
+            setTimeout(() => setFlash(null), 9000);
+        };
         window.addEventListener("duel_lead_change", onLead);
         window.addEventListener("arena_away_report", onAway);
+        window.addEventListener("rival_closing", onClosing);
         return () => {
             window.removeEventListener("duel_lead_change", onLead);
             window.removeEventListener("arena_away_report", onAway);
+            window.removeEventListener("rival_closing", onClosing);
         };
     }, []);
 
@@ -89,6 +99,17 @@ export default function StakesPill() {
             <Link to="/Competitions" className="flex items-center gap-2 text-sm font-black">
                 <ShieldAlert className="w-4 h-4" />
                 {firstName(callout.caller_name) || "Someone"} called you out — prove it or forfeit
+            </Link>
+        );
+    } else if (flash?.kind === "closing") {
+        // Amber, not red. This is pressure, not a defeat — the student is
+        // still ahead, and colouring it as a loss would be the app telling
+        // them they had lost something they still have.
+        tone = "border-xp bg-xp text-white";
+        content = (
+            <Link to="/Competitions" className="flex items-center gap-2 text-sm font-black">
+                <Swords className="w-4 h-4" />
+                {firstName(flash.rivalName)} pulled back {flash.closed} — {flash.gap} in it now
             </Link>
         );
     } else if (flash?.kind === "lead") {

@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { motion, AnimatePresence } from "framer-motion";
+import { useBusy, BUSY } from "@/lib/LiveContext";
 import AceShuffle from "@/components/ace/AceShuffle";
 import { deckCards } from "@/lib/mistakeBank";
 import {
@@ -114,6 +115,9 @@ function getSourceKey(source) {
 export default function ExamMode({ userSubjects }) {
   const [user, setUser] = useState(null);
   const [phase, setPhase] = useState("setup");
+  // Only while the paper is actually being sat. The setup screen and the
+  // results screen are both fine to refresh under; the exam is not.
+  useBusy(phase === "exam", BUSY.EXAM);
   const [allQuestions, setAllQuestions] = useState([]);
   const [examQuestions, setExamQuestions] = useState([]);
   const [currentIndex, setCurrentIndex] = useState(0);
