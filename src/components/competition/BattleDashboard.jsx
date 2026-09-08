@@ -196,7 +196,7 @@ export default function BattleDashboard({ battle, onBack, footer, activity = [],
                     )}
                     {settled && (
                         <div className="pill bg-chart-4/15 text-chart-4 flex-shrink-0">
-                            <Trophy className="w-3 h-3" /> Settled
+Settled
                         </div>
                     )}
                 </div>

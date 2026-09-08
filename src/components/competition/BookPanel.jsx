@@ -83,7 +83,6 @@ export default function BookPanel({ odds, delta, series, exposure, liveCount, re
 
     return (
         <motion.section
-            initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}
             className="rounded-3xl bg-surface border border-border shadow-soft overflow-hidden">
             <div className="p-5 sm:p-6 pb-0 flex flex-wrap items-start justify-between gap-x-6 gap-y-3">
                 <div className="min-w-0">

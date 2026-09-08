@@ -74,7 +74,7 @@ export default function BattleRow({ battle, onClick }) {
                         Live
                     </span>
                 )}
-                {settled && <span className="pill bg-chart-4/15 text-chart-4 flex-shrink-0"><Trophy className="w-3 h-3" /> Settled</span>}
+                {settled && <span className="pill bg-chart-4/15 text-chart-4 flex-shrink-0">Settled</span>}
             </div>
 
             {/* Line 2 — the head-to-head. With nobody else in it there is no
