@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -11,6 +11,9 @@ import { useToast } from "@/components/ui/use-toast";
 import { parseISO, differenceInDays } from "date-fns";
 import { Countdown, computePot } from "./arenaHelpers";
 import { fmtDate } from "@/lib/safeDate";
+import LiveNumber from "@/components/shared/LiveNumber";
+import { useLiveTick } from "@/lib/LiveContext";
+import { diffStandings } from "@/lib/liveRefresh";
 
 // Flat XP by finishing rank (1st / 2nd / 3rd / 4th+).
 const FLAT_XP = [150, 100, 60, 30];
@@ -71,7 +74,7 @@ function StudyTime({ participant }) {
     );
 }
 
-function ParticipantRow({ participant, rank, currentUserEmail, isCompleted, maxScore, scoreAbove, scoreBelow }) {
+function ParticipantRow({ participant, rank, currentUserEmail, isCompleted, maxScore, scoreAbove, scoreBelow, moved }) {
     const isMe = participant.email === currentUserEmail;
     const rs = RANK_STYLES[Math.min(rank - 1, RANK_STYLES.length - 1)];
     const score = participant.compete_score || 0;
@@ -86,15 +89,42 @@ function ParticipantRow({ participant, rank, currentUserEmail, isCompleted, maxS
 
     return (
         <motion.div
+            // ── OVERTAKING IS THE MOST DRAMATIC THING A LEADERBOARD DOES ────
+            // and it used to be a silent redraw: the rows were simply in a
+            // different order the next time you looked. `layout` makes the two
+            // rows physically swap, and `moved` washes the one that gained a
+            // place so the pair that changed is the pair you look at.
             layout
             initial={{ opacity: 0, y: 8 }}
             animate={{ opacity: 1, y: 0 }}
-            className={`rounded-2xl p-4 border-2 transition-all ${
+            transition={{ layout: { type: "spring", stiffness: 380, damping: 32 }, duration: 0.3 }}
+            className={`relative rounded-2xl p-4 border-2 transition-colors ${
                 inDanger ? 'border-streak/50 bg-streak/5'
                 : isMe ? 'border-primary/40 bg-primary/5'
                 : 'border-border bg-surface'
             }`}
         >
+            {/* ── The flash is its own layer, and that is not a detail ────────
+                Animating `backgroundColor` on the row itself worked exactly
+                once: framer leaves the tween's final value as an inline style,
+                which then outranks the row's Tailwind background forever — so
+                a row that had overtaken somebody lost its own colour for the
+                rest of the session, and the student's highlighted row went
+                plain the moment they took the lead.
+                An overlay has nothing to clobber. It is pointer-events-none so
+                it cannot eat a tap on the row underneath. */}
+            <AnimatePresence>
+                {moved && (
+                    <motion.span
+                        aria-hidden="true"
+                        initial={{ opacity: 0.85 }}
+                        animate={{ opacity: 0 }}
+                        exit={{ opacity: 0 }}
+                        transition={{ duration: 0.9, ease: "easeOut" }}
+                        className="absolute inset-0 rounded-2xl bg-primary/20 pointer-events-none"
+                    />
+                )}
+            </AnimatePresence>
             <div className="flex items-center gap-3">
                 <div className={`w-9 h-9 rounded-xl flex items-center justify-center font-black text-sm flex-shrink-0 shadow-soft ${rs.bg} ${rs.text}`}>
                     {rank <= 3 ? rs.label : rank}
@@ -135,7 +165,15 @@ function ParticipantRow({ participant, rank, currentUserEmail, isCompleted, maxS
                 </div>
 
                 <div className="text-right flex-shrink-0">
-                    <p className="font-black text-foreground text-sm tabular-nums">{score}<span className="text-xs text-muted-foreground font-bold"> pts</span></p>
+                    {/* Rolls to its new value and floats the change beside it.
+                        A number that simply reads 445 the next time you look is,
+                        to the person watching, a number that has always read
+                        445 — there is nothing to notice, which is the whole
+                        difference between a live board and a static one. */}
+                    <p className="font-black text-foreground text-sm">
+                        <LiveNumber value={score} />
+                        <span className="text-xs text-muted-foreground font-bold"> pts</span>
+                    </p>
                     {!isCompleted ? (
                         <StudyTime participant={participant} />
                     ) : participant.bonus_xp_awarded > 0 ? (
@@ -166,6 +204,35 @@ export default function HoursLeaderboard({ competition, currentUserEmail, onUpda
     const accepted = (competition.participants || [])
         .filter(p => p.status === 'accepted' || p.status === 'completed')
         .sort((a, b) => (b.compete_score || 0) - (a.compete_score || 0) || (b.study_minutes || 0) - (a.study_minutes || 0));
+
+    // ── Who moved since the last look ───────────────────────────────────────
+    // The tick is a signal that fresh data has arrived, not the data itself:
+    // `competition` comes down the props as it always did, and this only
+    // records the shape it had last time so the rows can flash the change.
+    //
+    // The first snapshot animates NOTHING — opening a battle must not flash
+    // every row as though it had just overtaken somebody.
+    const tick = useLiveTick();
+    const prevStanding = useRef(null);
+    const [moved, setMoved] = useState([]);
+    useEffect(() => {
+        const now = { rows: accepted.map(p => ({
+            email: p.email, name: p.name, score: p.compete_score || 0,
+            isMe: p.email === currentUserEmail,
+        })) };
+        const d = diffStandings(prevStanding.current, now);
+        prevStanding.current = now;
+        if (!d) return undefined;
+        const gained = d.overtaken.map(o => o.email);
+        if (!gained.length) return undefined;
+        setMoved(gained);
+        // Cleared so a re-render for any other reason does not replay the
+        // flash — it marks a moment, not a state.
+        const t = setTimeout(() => setMoved([]), 1200);
+        return () => clearTimeout(t);
+        // `tick` is in here deliberately: it is what says "this render is
+        // because new data landed", which is the only time a flash is honest.
+    }, [tick, accepted, competition.participants, currentUserEmail]);
 
     const isCompleted = competition.status === 'completed';
     const isCreator = competition.creator_email === currentUserEmail;
@@ -365,6 +432,7 @@ export default function HoursLeaderboard({ competition, currentUserEmail, onUpda
                                 maxScore={maxScore}
                                 scoreAbove={i > 0 ? (accepted[i - 1].compete_score || 0) : null}
                                 scoreBelow={i < accepted.length - 1 ? (accepted[i + 1].compete_score || 0) : null}
+                                moved={moved.includes(p.email)}
                             />
                         ))}
                     </AnimatePresence>

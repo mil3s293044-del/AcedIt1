@@ -11,6 +11,7 @@ import { base44 } from "@/api/base44Client";
 import XPFeedback from "@/components/ranked/XPFeedback";
 import StreakCelebration from "@/components/ranked/StreakCelebration";
 import StakesPill from "@/components/arena/StakesPill";
+import { LiveProvider, useBusy, BUSY } from "@/lib/LiveContext";
 import TopNav from "@/components/layout/TopNav";
 import BottomNav from "@/components/layout/BottomNav";
 import SideRail from "@/components/layout/SideRail";
@@ -135,6 +136,12 @@ const FloatingTimer = React.memo(({
 ));
 
 FloatingTimer.displayName = 'FloatingTimer';
+
+/** Claims "busy" for as long as a study timer is on screen and running. */
+function TimerBusy({ running }) {
+    useBusy(!!running, BUSY.TIMER);
+    return null;
+}
 
 export default function Layout({ children }) {
     const location = useLocation();
@@ -442,7 +449,14 @@ export default function Layout({ children }) {
 
 
     return (
+        // Everything sits inside LiveProvider so any surface can hold the app
+        // still while somebody is mid-question, and any page can read the tick
+        // without a second data layer of its own.
+        <LiveProvider>
         <div className="min-h-screen bg-background relative">
+            {/* A running study timer is work in progress: the numbers must not
+                shuffle under somebody watching a clock. */}
+            <TimerBusy running={showFloatingTimer} />
             <SideRail />
             <TopNav />
 
@@ -518,5 +532,6 @@ export default function Layout({ children }) {
                 modal that used to mount here was a nine-step duplicate of it,
                 gated on a flag nothing ever set, so it never opened. */}
         </div>
+        </LiveProvider>
     );
 }

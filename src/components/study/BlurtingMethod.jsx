@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
+import { useBusy, BUSY } from "@/lib/LiveContext";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -87,6 +88,9 @@ export default function BlurtingMethod({ onSessionComplete }) {
     const [sessionStartTime, setSessionStartTime] = useState(null);
     const [timeLeft, setTimeLeft] = useState(0);
     const [isFocusMode, setIsFocusMode] = useState(false);
+    // Blurting IS a page of unsaved typing, so the phase claim covers what the
+    // document-level typing check would only catch between keystrokes.
+    useBusy(isFocusMode || phase === "active", BUSY.FOCUS);
     const [showFocusPrompt, setShowFocusPrompt] = useState(false);
     const [sourceFiles, setSourceFiles] = useState([]);
     const [aiFeedback, setAiFeedback] = useState(null);

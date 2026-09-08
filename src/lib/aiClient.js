@@ -31,6 +31,7 @@
 import { supabase } from '@/api/supabaseClient';
 import { FEATURES as TIER_FEATURES } from '@/lib/tierAccess';
 import { apiUrl } from '@/lib/apiBase';
+import { globalBusy, BUSY } from "@/lib/liveRefresh";
 
 export const FEATURES = TIER_FEATURES;
 
@@ -57,6 +58,11 @@ async function getAuthHeader() {
 // Non-streaming — returns the parsed result (string or object depending on
 // whether response_json_schema was passed).
 export async function invokeLLM(params) {
+  // Hold the app still while a model call is in flight — a refresh mid-call
+  // can drop what is being written, and the marking path runs through here.
+  // Released in a finally below, because a leaked claim would leave the app
+  // never refreshing again, which is far worse than the refresh it protects.
+  const busy = globalBusy.acquire(BUSY.AI);
   const authHeaders = await getAuthHeader();
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 120_000); // 2 min timeout
@@ -86,6 +92,7 @@ export async function invokeLLM(params) {
     throw err;
   } finally {
     clearTimeout(timeout);
+    globalBusy.release(busy);
   }
 }
 
@@ -93,6 +100,11 @@ export async function invokeLLM(params) {
 // Pass `signal` in options to allow aborting mid-stream.
 export async function invokeLLMStream(params, onText, options = {}) {
   const { signal } = options;
+  const busy = globalBusy.acquire(BUSY.AI);
+  // Every exit from here — return, throw, or an aborted stream — has to
+  // release the claim. A leaked one leaves the app never refreshing again,
+  // which is a far worse failure than the refresh it was protecting.
+  try {
   const authHeaders = await getAuthHeader();
 
   const response = await fetch(apiUrl('/local-ai/invokeAIStream'), {
@@ -149,6 +161,9 @@ export async function invokeLLMStream(params, onText, options = {}) {
     }
   }
   return fullText;
+  } finally {
+    globalBusy.release(busy);
+  }
 }
 
 // ─── Ace study companion ────────────────────────────────────────────────────

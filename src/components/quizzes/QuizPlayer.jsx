@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
+import { useBusy, BUSY } from "@/lib/LiveContext";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -229,6 +230,11 @@ function SelfMarkBox({ maxMarks, currentMark, onMark, onClear }) {
 }
 
 export default function QuizPlayer({ quiz, onExit, mode = "standard", timeLimitMs = null }) {
+    // Nothing in the app may refetch and re-render while a question is on
+    // screen. The refresh is DEFERRED, not dropped — it runs the moment the
+    // student leaves, so the results screen and the board behind it are
+    // current rather than stale.
+    useBusy(true, BUSY.QUIZ);
     const isSAC = mode === "sac" && timeLimitMs > 0;
     const [showSaveProgressDialog, setShowSaveProgressDialog] = useState(false);
     const [savedProgressId, setSavedProgressId] = useState(null);

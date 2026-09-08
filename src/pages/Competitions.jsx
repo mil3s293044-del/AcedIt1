@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useCallback } from "react";
+import React, { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import AceBody from "@/components/ace/AceBody";
 import { Button } from "@/components/ui/button";
@@ -33,6 +33,7 @@ import SettlementReveal, { pendingReveal } from "@/components/competition/Settle
 import RivalryStrip from "@/components/competition/RivalryStrip";
 import { competeFeed, rivalries } from "@/lib/competeFeed";
 import { getReactions } from "@/api/functionsShim";
+import { useLive, useLiveTick } from "@/lib/LiveContext";
 import { fmtDate } from "@/lib/safeDate";
 import HelpButton from "@/components/shared/HelpButton";
 import AceShuffle from "@/components/ace/AceShuffle";
@@ -88,6 +89,12 @@ export default function Competitions() {
     const [reactions, setReactions] = useState({});
     const [reactionsReady, setReactionsReady] = useState(false);
     const [reveal, setReveal] = useState(null);
+    // The app's one refresh clock. This page does not own a timer of its own —
+    // it re-reads what it already knows how to read whenever the provider says
+    // it is a safe moment, which is what keeps the live system from becoming a
+    // second data layer arguing with readCache.
+    const liveTick = useLiveTick();
+    const { setLive } = useLive();
     const [userSubjects, setUserSubjects] = useState([]);
     const [openBattle, setOpenBattle] = useState(null);
     // The challenge dialog is opened from the "Start something" card, so this
@@ -160,6 +167,20 @@ export default function Competitions() {
     }, []);
 
     useEffect(() => { loadData(); }, []);
+
+    // ── The live refetch ────────────────────────────────────────────────────
+    // Skips the very first tick, which fires on mount alongside loadData above
+    // and would double every initial load. From then on, every tick is the
+    // provider saying the student is not mid-anything and it is safe to pull.
+    const firstTick = useRef(true);
+    useEffect(() => {
+        if (firstTick.current) { firstTick.current = false; return; }
+        loadData();
+        loadCallouts();
+        loadReactions();
+        // loadData is redefined each render; depending on it would refetch on
+        // every keystroke elsewhere in the page. The tick is the trigger.
+    }, [liveTick, loadCallouts, loadReactions]);
 
     const loadData = async () => {
         setIsLoading(true);
@@ -344,6 +365,13 @@ export default function Competitions() {
     const feed = useMemo(() => competeFeed({
         callouts: allCallouts, battles: allBattles_, ticker, myEmail: user?.email,
     }), [allCallouts, allBattles_, ticker, user?.email]);
+
+    // What is actually racing, told to the provider — it sets the poll rate,
+    // and the nav dot reads the same answer so the rail and this page cannot
+    // disagree about whether anything is happening.
+    useEffect(() => {
+        setLive({ battles: allBattles_, callouts: allCallouts });
+    }, [allBattles_, allCallouts, setLive]);
 
     const myRivals = useMemo(() => rivalries({
         battles: allBattles_, callouts: allCallouts, myEmail: user?.email,

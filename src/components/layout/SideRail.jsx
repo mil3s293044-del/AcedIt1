@@ -8,6 +8,8 @@ import {
     BookOpen, CreditCard, Settings as SettingsIcon, HelpCircle, LifeBuoy,
 } from "lucide-react";
 import { createPageUrl } from "@/utils";
+import { useLiveCount } from "@/components/arena/useStakes";
+import LiveDot from "@/components/shared/LiveDot";
 
 const NAV_SECTIONS = [
     {
@@ -55,6 +57,7 @@ function pathMatches(currentPath, itemPath) {
 
 export default function SideRail() {
     const location = useLocation();
+    const liveCount = useLiveCount();
     const [expanded, setExpanded] = useState(false);
     const closeTimer = useRef(null);
 
@@ -124,6 +127,10 @@ export default function SideRail() {
                         <div className="space-y-0.5">
                             {section.items.map((item) => {
                                 const Icon = item.icon;
+                                // The only nav item that can be "happening"
+                                // right now. Reads the stakes payload the app
+                                // already has rather than a query of its own.
+                                const liveHere = item.path === "Competitions" ? liveCount : null;
                                 const isActive = pathMatches(location.pathname, item.path);
                                 return (
                                     <Link
@@ -147,7 +154,10 @@ export default function SideRail() {
                                                 transition={{ type: "spring", stiffness: 380, damping: 32 }}
                                             />
                                         )}
-                                        <Icon className="w-5 h-5 flex-shrink-0" />
+                                        <span className="relative flex-shrink-0">
+                                            <Icon className="w-5 h-5" />
+                                            {liveHere?.live && <LiveDot count={liveHere.total} />}
+                                        </span>
                                         <AnimatePresence>
                                             {expanded && (
                                                 <motion.span

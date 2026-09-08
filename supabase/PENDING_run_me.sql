@@ -1,7 +1,7 @@
 -- ════════════════════════════════════════════════════════════════════════════
 -- AcedIt — everything still to apply, in one script.
 --
--- Covers migrations 0022 through 0034. Paste the whole thing into the Supabase
+-- Covers migrations 0022 through 0035. Paste the whole thing into the Supabase
 -- SQL editor and run it once.
 --
 -- SAFE TO RUN TWICE. Every statement is guarded, so if some of these were
@@ -440,5 +440,43 @@ create policy "compete_reactions readable by participants"
                 or d.opponent_email = auth.jwt() ->> 'email')
         ))
     );
+
+-- ── 0035 — publish the compete tables to realtime ───────────────────────────
+-- LiveContext polls every 45 seconds while a contest is running, which is what
+-- ships and is fine. This makes a rival's score arrive when it changes instead
+-- of up to 45 seconds later.
+--
+-- The push is a TRIGGER, not a data source: src/api/realtime.js throws the
+-- changed row away and refetches through the normal reads, so this cannot
+-- become a second channel where "what the client was told" stands in for what
+-- the server knows. Realtime respects RLS, so a student is only notified about
+-- rows they could already read; nothing here widens any policy.
+--
+-- Entirely optional. Without it the poll carries the whole job and the app
+-- behaves identically, just a little later.
+do $$
+begin
+    if not exists (select 1 from pg_publication where pubname = 'supabase_realtime') then
+        create publication supabase_realtime;
+    end if;
+end $$;
+
+do $$
+declare
+    t text;
+begin
+    foreach t in array array['goal_competitions', 'study_duels', 'callouts']
+    loop
+        if to_regclass('public.' || t) is null then
+            continue;
+        end if;
+        if not exists (
+            select 1 from pg_publication_tables
+            where pubname = 'supabase_realtime' and schemaname = 'public' and tablename = t
+        ) then
+            execute format('alter publication supabase_realtime add table public.%I', t);
+        end if;
+    end loop;
+end $$;
 
 commit;

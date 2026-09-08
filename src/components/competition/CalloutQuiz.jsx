@@ -13,6 +13,7 @@
  */
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
+import { useBusy, BUSY } from "@/lib/LiveContext";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { base44 } from "@/api/base44Client";
@@ -24,6 +25,9 @@ const mmss = (s) => `${Math.floor(Math.max(0, s) / 60)}:${String(Math.max(0, s) 
 export default function CalloutQuiz({ callout, open, onOpenChange, onSettled }) {
     const { toast } = useToast();
     const [stage, setStage] = useState("brief");   // brief → running → result
+    // The strictest claim in the app: there is a clock running and somebody's
+    // XP rides on it. Nothing may re-render under this.
+    useBusy(stage === "running", BUSY.CALLOUT);
     const [questions, setQuestions] = useState([]);
     const [answers, setAnswers] = useState({});
     const [idx, setIdx] = useState(0);

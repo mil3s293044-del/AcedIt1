@@ -632,6 +632,87 @@ blank. Framer cannot tween a unitless `0` to a percentage, so bars need
 sizes columns to their content in the cross axis — every percentage height
 resolved against zero. It is `items-stretch`.
 
+## The app is live, and it waits its turn
+
+`src/lib/liveRefresh.js` (the rules, pure and tested) + `src/lib/LiveContext.jsx`
+(the one clock that drives them). Mounted once in Layout, above everything.
+
+**DEFER, NEVER SKIP.** A refresh that lands while the student is busy is
+REMEMBERED and runs the moment they are free. Skipping is the version that
+feels broken: you finish a quiz, open the board, and it shows numbers from
+before you started — because the one refresh that would have fixed it was
+thrown away while you were answering question 7.
+
+**The tick is a NUMBER, not the data.** `useLiveTick()` goes up when it is a
+safe moment; each page refetches what it already knows how to fetch. That is
+what stops this becoming a second data layer arguing with `readCache`, and it
+means adding a page to the live system is one entry in a dependency array
+rather than a new query. `readCache.clear()` runs first or every page would
+re-ask and be handed the same 8s-old promise — an animation with no new data
+behind it.
+
+**What counts as busy:** a quiz, an exam, a call-out (a clock somebody's XP
+rides on), focus mode, a running timer, an AI call in flight, and any unsaved
+typing. Typing is deliberately NOT a registry every form has to remember to
+join — that list would be wrong within a month. It is MEASURED: an `input`
+event in the last few seconds, or a focused text field with something in it.
+An EMPTY box is not work in progress, or a student who clicked a filter once
+holds the whole app stale.
+
+`globalBusy` is a singleton because not everything that must hold the app still
+is a component — an AI stream is a promise inside `aiClient`, and it claims a
+token directly. Two registries would let the provider free-run while that half
+still had work in flight. Every claim releases in a `finally`: a leaked one
+leaves the app never refreshing again, which is far worse than the refresh it
+was protecting. Tokens, not a boolean — a call-out quiz with a timer inside it
+holds two, and the first to finish must not declare the app free.
+
+A hidden tab is not polled; coming BACK to it forces one through, which is the
+only moment freshness actually matters. Focus, visibility and route changes all
+fire together on an alt-tab, so `MIN_GAP_MS` stops that being three refetches.
+
+**Realtime is a FASTER TRIGGER, never a second source of truth.**
+`src/api/realtime.js` throws the changed row away and refetches through the
+normal reads, so the push path and the poll path cannot disagree about a
+student's score — and the payload never has to be trusted. Migration `0035`
+publishes `goal_competitions`, `study_duels` and `callouts`; until it is
+applied the subscription is simply silent and the poll carries the whole job,
+which is why the client shipped first. `SUBSCRIBED` only means the socket is
+up — there is no status for "that table is not in the publication".
+
+**A number that swaps has not changed, as far as the person watching is
+concerned.** `LiveNumber` rolls to the new value and floats the delta beside
+it; the roll is the reading and the chip is the receipt. THE FIRST RENDER
+ANIMATES NOTHING — opening the app must not flash "+400 XP" for XP earned last
+Tuesday, and a screen that animates everything on arrival teaches a student to
+ignore the animation that matters. Same rule in `diffStandings`, which returns
+null rather than deltas-from-zero on the first snapshot.
+
+**Overtaking used to be a silent redraw.** Rows carry `layout` so the pair
+physically swaps, and the row that gained a place washes green.
+
+THE FLASH IS ITS OWN LAYER, and that is not a detail: animating
+`backgroundColor` on the row worked exactly once, because framer leaves the
+tween's final value as an inline style, which then outranks the row's Tailwind
+background forever — so a student's highlighted row went plain the moment they
+took the lead. An overlay has nothing to clobber.
+
+**`rival_closing` fires while there is still something to defend.**
+`detectLeadChanges` only speaks once the lead has already gone, which is too
+late to act on. Three conditions and all three matter: the gap NARROWED (a
+rival who was already close and did nothing is not news, or it fires every poll
+for the whole contest), it is now inside `CLOSING_WITHIN`, and you are still
+ahead. Drawn in amber, not red — the student has not lost anything yet, and
+colouring it as a loss would say they had.
+
+**`LiveDot` appears only while something is running**, so its presence is the
+information. It pulses because the thing it marks is a clock running down; a
+static dot says "there is something here", a pulsing one says "it is moving
+without you". The count is drawn only above one — "1" beside a dot is the dot
+restated. Fed by `useLiveCount` off the stakes payload the app already loads,
+never a query of its own: six nav items asking the server whether anything is
+live would be six round trips before the shell painted.
+
 ## Compete is a feed, and a call-out is a public event
 
 **Compete was entirely me-centric.** `BookPanel` was your market, `MoversPanel`
@@ -1735,6 +1816,10 @@ another email before this.
   `verifiedStudyMinutes` and `boardQuizScores`; change one, change both
 - `src/lib/competeFeed.js`, `src/components/competition/CompeteFeed.jsx` — the
   timeline, the banter and the reactions
+- `src/lib/liveRefresh.js`, `src/lib/LiveContext.jsx`, `src/api/realtime.js` —
+  when the app may refetch, who can hold it still, and the push path
+- `src/components/shared/LiveNumber.jsx`, `LiveDot.jsx` — rolling figures and
+  the "something is running" mark
 - `src/components/competition/CalloutBacking.jsx` — backing somebody else's
   call-out; guarded by `placeForecast`, not by the component
 - `src/components/competition/SettlementReveal.jsx`, `RivalryStrip.jsx` — the
