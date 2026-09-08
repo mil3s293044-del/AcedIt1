@@ -19,12 +19,15 @@ import { useToast } from "@/components/ui/use-toast";
 import { Swords, Loader2, ShieldAlert, ShieldCheck, Clock, Check, X } from "lucide-react";
 import { fmtDate } from "@/lib/safeDate";
 
+// "They" is wrong on a row where the reader IS the target, and wrong again on
+// one between two other people. The label names the outcome and lets the line
+// beside it say who it happened to.
 const STATUS = {
     pending: { label: "Awaiting answer", cls: "bg-xp/15 text-xp", icon: Clock },
-    active:  { label: "Sitting it now", cls: "bg-chart-3/15 text-chart-3", icon: Clock },
-    passed:  { label: "They passed", cls: "bg-primary/15 text-primary", icon: Check },
-    failed:  { label: "They failed", cls: "bg-streak/15 text-streak", icon: X },
-    expired: { label: "Ignored — forfeited", cls: "bg-streak/15 text-streak", icon: X },
+    active:  { label: "Being sat now", cls: "bg-chart-3/15 text-chart-3", icon: Clock },
+    passed:  { label: "Cleared", cls: "bg-primary/15 text-primary", icon: Check },
+    failed:  { label: "Not cleared", cls: "bg-streak/15 text-streak", icon: X },
+    expired: { label: "Clock ran out", cls: "bg-streak/15 text-streak", icon: X },
     voided:  { label: "Voided", cls: "bg-secondary text-muted-foreground", icon: X },
 };
 
@@ -103,18 +106,32 @@ export default function CalloutPanel({ battle, me, rivals, callouts = [], onChan
                 </div>
             </div>
 
-            {/* Live and settled call-outs in this contest */}
+            {/* ── WHO CALLED WHO ─────────────────────────────────────────
+                Every call-out in this contest, not only the ones this student
+                is a party to. It showed a third of the record for its whole
+                life, on the panel whose entire job is to keep it — so a
+                challenge between two other people in your own battle happened
+                where you could not see it.
+
+                Which means the copy can no longer assume you are one of the
+                two. A row between Priya and Tom used to render as "Priya
+                called you out", because the only branch that existed was
+                caller-or-target. */}
             {mine.length > 0 && (
                 <div className="space-y-2 mb-4">
                     {mine.map(c => {
                         const s = STATUS[c.status] || STATUS.voided;
                         const iAmCaller = c.caller_email === me?.email;
+                        const iAmTarget = c.target_email === me?.email;
+                        const line = iAmCaller ? `You called out ${c.target_name}`
+                            : iAmTarget ? `${c.caller_name} called you out`
+                            : `${c.caller_name} called out ${c.target_name}`;
                         return (
-                            <div key={c.id} className="flex items-center justify-between gap-2 rounded-xl border border-border px-3 py-2">
+                            <div key={c.id}
+                                className={`flex items-center justify-between gap-2 rounded-xl border px-3 py-2
+                                    ${iAmCaller || iAmTarget ? "border-border" : "border-border/60 bg-secondary/30"}`}>
                                 <div className="min-w-0">
-                                    <p className="text-xs font-bold text-foreground truncate">
-                                        {iAmCaller ? `You called out ${c.target_name}` : `${c.caller_name} called you out`}
-                                    </p>
+                                    <p className="text-xs font-bold text-foreground truncate">{line}</p>
                                     <p className="text-[11px] text-muted-foreground">
                                         {c.settle_note || `Answer by ${fmtDate(c.respond_by, "EEE h:mmaaa", "soon")}`}
                                         {c.xp_moved > 0 && ` · ${c.xp_moved} XP moved`}

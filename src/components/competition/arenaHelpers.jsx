@@ -87,7 +87,12 @@ export function Countdown({ targetDate, variant = "chip", className = "" }) {
         const bannerCls =
             tone === "streak" ? "bg-streak/15 text-streak"
             : tone === "xp" ? "bg-xp/15 text-xp"
-            : "bg-surface/15 text-white";
+            // Was `text-white` on a 15%-alpha ground: legible on the dark
+            // battle header it was written for, and invisible on every light
+            // surface it was later reused on — including the stats strip on
+            // HoursLeaderboard, where "Ends in 11d 23h" simply did not appear.
+            // A hard-coded ink is the bug; the token follows the theme.
+            : "bg-secondary text-muted-foreground";
         return (
             <div className={`flex items-center justify-center gap-2 rounded-xl px-3 py-2 ${bannerCls} ${className}`}>
                 {c.urgent

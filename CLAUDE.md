@@ -632,6 +632,214 @@ blank. Framer cannot tween a unitless `0` to a percentage, so bars need
 sizes columns to their content in the cross axis — every percentage height
 resolved against zero. It is `items-stretch`.
 
+## Compete is a feed, and a call-out is a public event
+
+**Compete was entirely me-centric.** `BookPanel` was your market, `MoversPanel`
+your rivals, and all three tabs your battles, your bets, your calls. Nothing on
+the page was a SHARED object — so the question that actually brings a student
+back, *did something happen without me?*, had no answer, and the most dramatic
+thing the app can do was invisible.
+
+**A CALL-OUT WAS A PRIVATE TRANSACTION.** `getCallouts` returned only rows where
+you were the caller or the target, and `CalloutPanel` rendered them inside one
+battle. So a challenge between two other people in your own contest happened
+where nobody could see it, and the panel whose entire job is keeping the record
+showed a third of it. It returns `watching` as well now — every call-out in a
+contest you are a participant of, scoped from YOUR memberships and never from a
+client-supplied id.
+
+A spectator gets `spectatorCallout`, which is narrower than `publicCallout`:
+somebody who is neither party has no business with the questions, the answers
+or the settle note, and gets the EVENT rather than the row. The contest is the
+room — visible to the battle, never to the site.
+
+And the panel's copy could no longer assume you were one of the two. A row
+between Priya and Tom rendered as "Priya called you out", because
+caller-or-target were the only branches that existed. `STATUS` lost its "They
+passed" labels for the same reason.
+
+**`competeFeed` is the front page.** Events with VERBS AND PEOPLE — "Priya
+called Tom out", "Tom answered it and took Priya's stake", "Your price is
+sliding". A LIVE CALL-OUT ALWAYS SORTS FIRST whatever its timestamp: it is the
+only thing on the page with a clock running on somebody's behalf, and burying
+one under a fresher odds tick is a forfeit the student did not choose.
+
+Two claims it refuses. An odds move and a rival's session are SEPARATE events,
+never joined with "because" — `MoversPanel`'s rule, carried over, and Movers
+still sits below the feed for exactly that reason rather than being folded in.
+And a move under three points is noise on a line sampled every few hours.
+
+**The banter is aimed at the SCOREBOARD.** A pass is celebrated by name and at
+volume; a miss gets a line with bite in it about the RESULT. "The clock won
+that one" is banter; a line about whether somebody is any good is the app
+kicking a sixteen-year-old, and no amount of engagement is worth that. A test
+walks every generated line against the project's banned words AND against a
+list of insults, in both directions, for every status.
+
+Lines are picked deterministically off the event id (`pick`), never randomly —
+a feed that reworded itself on every render makes a student doubt they read it
+right the first time.
+
+**Backing a call-out is the best-shaped question on the page.** Every other
+forecast is a student predicting their own behaviour, so every other one is
+partly under their control. This one is not: the spectator has no lever, only a
+judgement, so the payout is pure calibration. It reuses the proper scoring rule
+already in `forecast.js` and settles off the `callouts` row's own status, which
+only the server writes.
+
+Four rules `placeForecast` enforces, all server-side where they cannot be
+edited out of a bundle:
+
+- **The caller and the target may not back it.** They decide the outcome — the
+  target by how hard they try, the caller by whom they picked. Either taking a
+  position is the cannot-lose shape the wagering layer was torn out for.
+- **Only inside a contest you are in.** Open to the site, two accounts could
+  stage a call-out for a third to collect on.
+- **One position per person per call-out**, or you could hold 5% and 95% and be
+  paid for whichever landed.
+- **The deadline is the call-out's own clock**, not a client-supplied one.
+
+A VOIDED call-out settles nothing and returns the stake whole. Nothing was
+tested, so nobody was right, and paying out on a question never asked is worse
+than not paying at all.
+
+**`SettlementReveal` is the moment the app never had.** A battle ending — weeks
+of work between four people — was a TOAST. Everything else here pays out
+visibly, and the one place with a real result had no payoff, which is most of
+why Compete read as work rather than as a game. It fires ONCE, keyed in
+`localStorage`, and blocked storage counts as already-seen: replaying somebody's
+defeat at them on every page load is far worse than never showing it. Only for
+events they are IN — watching somebody else's call-out resolve is a feed row,
+not a takeover. A LOSS IS SHORT: the win gets the confetti, the count-up and the
+stagger; a loss gets the verdict, the number and a button, because drawing a
+defeat with the same ceremony is the app enjoying it.
+
+**Reactions have NO FREE TEXT** and never will. Five glyphs the server
+validates, keyed on the feed EVENT rather than on a row — most events are
+derived and have no row, and `callout:<id>:passed` means a call-out passing
+collects its own reactions instead of inheriting the ones left when it was
+issued. A text box on a screen where students lose in front of their group is a
+moderation problem this app cannot staff. Migration `0034`; missing table →
+`available: false` and the buttons never appear, the same posture callouts
+takes.
+
+**`RivalryStrip` answers "who am I racing", because nobody comes back to check
+on a contest.** "Priya is 5 ahead" is the sentence that gets opened; "Chemistry
+Sprint: 400 v 395" is the same fact with the interesting half removed. Derived
+from rows already loaded, so it cannot go stale.
+
+Its bar is HOW MUCH OF A RACE THIS STILL IS, and it shipped backwards for one
+render: drawing the gap meant a 34-point blowout filled solid green and a
+five-point nail-biter drew a stub. Every other bar in this app means full is
+good.
+
+Two more bugs the first render caught, both worth the pattern. The live
+countdown printed TWICE in one line, because `competeFeed` put it in `detail`
+and `FeedRow` also draws a ticking clock. And a sliding price drew an UP arrow
+in red — the glyph and the colour saying opposite things about one number,
+which is precisely the bug `ScalingMark` exists to prevent on Browse. The
+direction comes off the same `tone` the colour does now, so they cannot
+disagree.
+
+## Compete: a claim has to survive something
+
+`src/lib/integrity.js`. **Every rule here DISCOUNTS a claim; none of them
+accuses a person.** A student who studied honestly never notices any of it, and
+a student inflating their hours simply finds the inflation is not worth
+anything — which is the only version of this that can be wrong occasionally
+without doing harm. An app that calls a sixteen-year-old a cheat on the basis
+of a heuristic is a worse outcome than the cheating.
+
+**FABRICATED TIME.** `duration_minutes` and `session_duration` arrive from the
+client, and **four** ranking paths summed them raw — `syncCompetitionSlice`
+(which writes the `study_minutes` the hours board ranks on), the goal engine's
+`study_hours`, the Arena's `study_minutes` metric, and `competitionCompeteScore`.
+A single POST of 600 minutes went to the top of a board. The ATAR's effort
+component has capped its own days since it was written; the boards had no
+equivalent. They all go through `countableStudyMinutes` now:
+
+- one row is at most one sitting (`SESSION_MAX_MINUTES`),
+- one day is at most `DAILY_MINUTE_CAP`,
+- and **you cannot have studied more minutes today than have passed today** —
+  today's ceiling is the minutes since local midnight, which catches the actual
+  attack (ten POSTs of four hours inside one second) exactly and is trivially
+  explainable to anyone who asks. Past days get the flat cap, because once the
+  day is over the app cannot know when a row was earned.
+
+The client mirror is `countableByDay`. Server is the source of truth.
+
+**IDLE FARMING, which was collected and thrown away.** `awardXP` has accepted
+`idle_ratio`, `tab_away_count` and `session_complete` since it was ported;
+`calcFocusTimerXP` destructured only `duration_minutes`, and **no client had
+ever sent one of them**. So the anti-farming inputs existed on the server, no
+producer existed on the client, and a timer left running in a background tab
+paid exactly what an hour of work paid — "collect nothing you don't use",
+inverted, in the one place built to stop this. PomodoroTimer counts them off
+the `visibilitychange` handler that was already mounted, Study.jsx forwards
+them, and `calcFocusTimerXP` finally reads them. Away time is measured **only
+while the clock is running**: a paused timer is a student on a break, which is
+the thing the technique is built around and must never be charged for. A
+tab-away costs a flat minute, not a proportion, or a long honest session pays
+more for one glance at a message than a short one does.
+
+**TRIVIAL, REPEATED AND RETRY QUIZZES.** `competitionCompeteScore` averaged
+every attempt in the window into a 400-point mastery slice, which was farmable
+three ways at once: write an eight-second quiz on your easiest topic and score
+100; sit the same easy quiz twenty times; or run "wrong only" retries, whose
+scores are on a different scale by construction. It reads the FIRST sit of each
+quiz clearing `BOARD_MIN_QUESTIONS`/`BOARD_MIN_MARKS` now — first rather than
+best, because taking the best rewards grinding a paper until a good roll comes
+up, the same "wait for a result you like" shape the forecast settlement
+refuses.
+
+**Practice is untouched by ANY of this.** A three-question warm-up still
+scores, still feeds the deck, still pays XP. It just does not decide a contest.
+
+**And the gate SAYS WHAT UNLOCKS IT.** A student who only ever sits short
+quizzes would otherwise take a silent zero on a 400-point slice — the "never
+score a student on a signal they can't reach" rule applies just as hard to one
+they CAN reach and were never told about. `board_sits` rides on the participant
+and BattleDashboard names the floor, on that student's own row only. It is
+deliberately NOT inside `score_breakdown`, which the dashboard renders by
+iterating every numeric key, so "sits 0" would read as a fourth component worth
+nothing.
+
+**Call-outs: verified hours are drawn differently, never ranked differently.**
+The call-out system (migrations 0025/0026, `createCallout`/`submitCallout`)
+already existed — one competitor challenges another to a short timed quiz built
+from the material that competitor themselves studied. What was missing was any
+consequence on the board. `verifiedStudyMinutes` splits a participant's hours
+into proven and claimed, and the row draws the proven part in solid ink with
+the rest ghosted beside it. Nothing is hidden, flagged, ranked lower or called
+suspect — **verifying is a FLEX, not a defence against an accusation the app
+made.** A student nobody has ever challenged is not at 0% proven; they have
+never been asked, and their row prints the time exactly as it always did.
+
+**A pass proves the window it was BUILT from**, `window_start` → `submitted_at`,
+which is a real column and not a heuristic. `VERIFY_COVERS_HOURS` is only the
+fallback for a verification that arrived without one.
+
+Two bugs this has already had:
+
+- **A `callouts` row carries `status`, not a boolean.** A check for
+  `passed !== false` waved every row through including the failures, because
+  their `passed` field is simply absent — a verification system that is a
+  rubber stamp at exactly the moment it matters. Status is checked first and an
+  unrecognised one verifies nothing.
+- **Verified minutes are capped too.** Passing a quiz must not license an
+  impossible day, or verification becomes the exploit.
+
+**And when a cap bites, the screen says so.** Silently deleting time would be
+worse than the cheating it prevents, so the strip prints what it counted of
+what was logged and states the limit. It states a limit; it does not accuse
+anybody. An honest student never sees the line.
+
+`Countdown variant="banner"` used to fall back to `text-white` on a 15%-alpha
+ground — legible on the dark battle header it was written for, invisible on
+every light surface it was later reused on, including this one. A hard-coded
+ink was the bug; the token follows the theme. Same lesson as the focus-mode
+blackout, arrived at from the other direction.
+
 ## Cards are the app's visual language
 
 `PlayingCard` + `cardIdentity` are used on eighteen surfaces — marketing, the
@@ -1522,6 +1730,15 @@ another email before this.
 - `src/lib/forecast.js`, `src/components/competition/ForecastPanel.jsx` — the
   proper scoring rule, base rates and calibration; settled by `settleForecast`
   in `server.mjs`, which recomputes rather than trusts
+- `src/lib/integrity.js` — the caps, the idle discount, the quiz floors and the
+  verified/claimed split. Mirrored server-side by `countableStudyMinutes`,
+  `verifiedStudyMinutes` and `boardQuizScores`; change one, change both
+- `src/lib/competeFeed.js`, `src/components/competition/CompeteFeed.jsx` — the
+  timeline, the banter and the reactions
+- `src/components/competition/CalloutBacking.jsx` — backing somebody else's
+  call-out; guarded by `placeForecast`, not by the component
+- `src/components/competition/SettlementReveal.jsx`, `RivalryStrip.jsx` — the
+  ceremony, and who you are racing
 - `src/components/shared/MarkdownMath.jsx`, `LatexRenderer.jsx` — KaTeX
 - `supabase/migrations/0001…0006_*.sql` — applied schema
 - `base44/entities/*.jsonc`, `base44/functions/*/` — Base44 reference, kept until cutover

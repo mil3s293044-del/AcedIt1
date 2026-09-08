@@ -1530,9 +1530,119 @@ const PRIORITY_MULT = { low: 0.8, medium: 1.0, high: 1.3 };
 const GOAL_DIFF_MULT = { easy: 0.8, medium: 1.0, hard: 1.4, very_hard: 1.8 };
 const CHALLENGE_BASE = { practice_questions: 40, flashcard_sprint: 30, focus_session: 50, mini_test: 60, revision_schedule: 35 };
 
-function calcFocusTimerXP({ duration_minutes = 0 }) {
-  if (duration_minutes < 2) return 0;
-  return Math.round(Math.min(duration_minutes, 120) * 1.25);
+// Mirrors focusQuality() in src/lib/integrity.js. The client's copy DRAWS the
+// discount on the session summary; this one AWARDS it, and only this one is
+// trusted. Change one, change both.
+const TAB_AWAY_MINUTES = 1;
+
+function countedFocusMinutes({ duration_minutes = 0, idle_ratio = 0, tab_away_count = 0 }) {
+  const claimed = Math.max(0, Number(duration_minutes) || 0);
+  const idle = Math.min(1, Math.max(0, Number(idle_ratio) || 0));
+  const aways = Math.max(0, Math.round(Number(tab_away_count) || 0));
+  return Math.max(0, claimed * (1 - idle) - aways * TAB_AWAY_MINUTES);
+}
+
+// ─── COUNTABLE MINUTES, NOT CLAIMED ONES ───────────────────────────────────
+//
+// `duration_minutes` and `session_duration` arrive from the client, and every
+// board that ranks on hours summed them raw. A single POST of 600 minutes went
+// straight to the top. The ATAR's effort component has capped its own days for
+// exactly this reason since it was written; the leaderboards had no equivalent.
+//
+// Mirrors countableByDay() in src/lib/integrity.js — the client's copy DRAWS
+// the number, this one RANKS on it, and only this one is trusted. Change one,
+// change both.
+const SESSION_MAX_MINUTES = 240;
+const DAILY_MINUTE_CAP = 720;
+
+const dayKeyOf = (d) => {
+  const x = d instanceof Date ? d : new Date(d);
+  if (Number.isNaN(x.getTime())) return null;
+  const p = (n) => String(n).padStart(2, "0");
+  return `${x.getFullYear()}-${p(x.getMonth() + 1)}-${p(x.getDate())}`;
+};
+
+/** The shape countableStudyMinutes wants, out of either study table. */
+const studyRowFor = (r, col) => ({
+  day: String(r?.date || r?.created_date || "").slice(0, 10),
+  at: r?.created_date || r?.date || null,
+  minutes: Math.max(0, Number(r?.[col]) || 0),
+  idle_ratio: r?.idle_ratio ?? r?.extra?.idle_ratio ?? 0,
+  tab_away_count: r?.tab_away_count ?? r?.extra?.tab_away_count ?? 0,
+});
+
+/**
+ * Two limits and a clock. One row is at most one sitting; one day is at most
+ * DAILY_MINUTE_CAP; and TODAY is further capped by the minutes that have
+ * actually passed since midnight — which is what makes ten instant POSTs of
+ * four hours each worth twelve hours instead of forty. Past days get the flat
+ * cap, because once the day is over the app cannot know when a row was earned
+ * and a cap is the honest limit of what it can assert.
+ */
+function countableStudyMinutes(rows = [], now = new Date()) {
+  const perDay = new Map();
+  for (const r of rows) {
+    if (!r?.day) continue;                 // an undated row lands in any window
+    const counted = Math.min(SESSION_MAX_MINUTES, countedFocusMinutes({
+      duration_minutes: r.minutes,
+      idle_ratio: r.idle_ratio,
+      tab_away_count: r.tab_away_count,
+    }));
+    perDay.set(r.day, (perDay.get(r.day) || 0) + counted);
+  }
+  const today = dayKeyOf(now);
+  const midnight = new Date(now); midnight.setHours(0, 0, 0, 0);
+  const elapsedToday = Math.max(0, (new Date(now).getTime() - midnight.getTime()) / 60000);
+
+  let total = 0;
+  perDay.forEach((mins, d) => {
+    const ceiling = d === today ? Math.min(DAILY_MINUTE_CAP, elapsedToday) : DAILY_MINUTE_CAP;
+    total += Math.min(mins, ceiling);
+  });
+  return Math.round(total);
+}
+
+/**
+ * The minutes a passed call-out actually vouches for.
+ *
+ * No heuristic window is needed: a call-out is BUILT from the material the
+ * target studied between `window_start` and the moment it was issued, so
+ * passing it proves exactly that span. Nothing outside it is claimed.
+ *
+ * Nobody is accused by this. Unverified minutes still count, still rank, and
+ * still pay — the board simply draws what has been proven differently, so
+ * verifying is a flex rather than a defence.
+ */
+function verifiedStudyMinutes(rows = [], callouts = [], now = new Date()) {
+  const spans = (callouts || [])
+    .filter((c) => c?.status === "passed")
+    .map((c) => {
+      const a = new Date(c.window_start || c.created_date).getTime();
+      const b = new Date(c.submitted_at || c.created_date).getTime();
+      if (!Number.isFinite(a) || !Number.isFinite(b)) return null;
+      return { from: Math.min(a, b), to: Math.max(a, b) };
+    })
+    .filter(Boolean);
+  if (!spans.length) return 0;
+
+  const covered = rows.filter((r) => {
+    const t = new Date(r?.at || 0).getTime();
+    return Number.isFinite(t) && spans.some((s) => t >= s.from && t <= s.to);
+  });
+  // Capped like everything else. Proof is not a bypass, or verification
+  // becomes the exploit.
+  return countableStudyMinutes(covered, now);
+}
+
+// The idle signals were ACCEPTED AND IGNORED: this function destructured only
+// `duration_minutes` while the call site dutifully passed idle_ratio,
+// tab_away_count and session_complete. So leaving a timer running in a
+// background tab paid exactly what an hour of work paid. They count now —
+// as a discount on the time, never as an accusation about the student.
+function calcFocusTimerXP({ duration_minutes = 0, idle_ratio = 0, tab_away_count = 0 }) {
+  const counted = countedFocusMinutes({ duration_minutes, idle_ratio, tab_away_count });
+  if (counted < 2) return 0;
+  return Math.round(Math.min(counted, 120) * 1.25);
 }
 function calcPracticeQuestionsXP({ questions_attempted = 0, questions_correct = 0, difficulty = "proficient", consecutive_streak = 0 }) {
   if (questions_attempted === 0) return 0;
@@ -2972,15 +3082,18 @@ app.post("/local-ai/fn/updateGoalProgress", async (req, res) => {
               supabaseAdmin.from("study_techniques").select("*").eq("created_by", userEmail),
               supabaseAdmin.from("study_sessions").select("*").eq("created_by", userEmail),
             ]);
-            const techMin = (techs || [])
+            // Countable, not claimed — see countableStudyMinutes(). This used
+            // to sum `session_duration` and `duration_minutes` straight off
+            // the rows, and both arrive from the client.
+            const pick = (rows, col) => (rows || [])
               .filter(afterBaseline)
-              .filter((s) => matchesSubject(s, subjectFilter))
-              .reduce((sum, s) => sum + (s.session_duration || 0), 0);
-            const sessMin = (sess || [])
-              .filter(afterBaseline)
-              .filter((s) => matchesSubject(s, subjectFilter))
-              .reduce((sum, s) => sum + (s.duration_minutes || 0), 0);
-            return Math.min((techMin + sessMin) / 60, subGoal.target);
+              .filter((r) => matchesSubject(r, subjectFilter))
+              .map((r) => studyRowFor(r, col));
+            const totalMin = countableStudyMinutes([
+              ...pick(techs, "session_duration"),
+              ...pick(sess, "duration_minutes"),
+            ]);
+            return Math.min(totalMin / 60, subGoal.target);
           }
           case "quiz_score": {
             const { data: attempts } = await supabaseAdmin
@@ -3728,13 +3841,34 @@ async function syncCompetitionSlice(userEmail, competitionId) {
     supabaseAdmin.from("study_sessions").select("*").eq("created_by", userEmail),
   ]);
 
-  const techMinutes = (techs || [])
+  // THIS is the number the hours board ranks on, and it summed the client's
+  // own minutes with no ceiling of any kind — the single largest hole in
+  // Compete. It goes through countableStudyMinutes() now: one row is one
+  // sitting, one day is one day, and today cannot exceed the minutes that have
+  // actually passed since midnight.
+  const pick = (rows, col) => (rows || [])
     .filter(afterStart).filter(matchesSubject)
-    .reduce((sum, s) => sum + (s.session_duration || 0), 0);
-  const sessMinutes = (sess || [])
-    .filter(afterStart).filter(matchesSubject)
-    .reduce((sum, s) => sum + (s.duration_minutes || 0), 0);
-  const totalMinutes = techMinutes + sessMinutes;
+    .map((r) => studyRowFor(r, col));
+  const studyRows = [
+    ...pick(techs, "session_duration"),
+    ...pick(sess, "duration_minutes"),
+  ];
+  const totalMinutes = countableStudyMinutes(studyRows);
+  const claimedMinutes = Math.round(studyRows.reduce((sum, r) => sum + r.minutes, 0));
+
+  // What a passed call-out in THIS contest actually vouches for. Missing table
+  // (migrations 0025/0026 not run) is not an error here — it simply means
+  // nothing has been verified yet, which is the honest answer.
+  let verifiedMinutes = 0;
+  try {
+    const { data: passes } = await supabaseAdmin
+      .from("callouts")
+      .select("status, window_start, submitted_at, created_date")
+      .eq("competition_id", competitionId)
+      .eq("target_email", userEmail)
+      .eq("status", "passed");
+    verifiedMinutes = verifiedStudyMinutes(studyRows, passes || []);
+  } catch { /* table absent — nothing verified */ }
 
   // Compete Score over the battle window — the ranking basis.
   const cs = await competitionCompeteScore(userEmail, startDate.toISOString());
@@ -3761,8 +3895,18 @@ async function syncCompetitionSlice(userEmail, competitionId) {
     return {
       ...p,
       study_minutes: totalMinutes,
+      // Both halves are recorded so the board can draw proven hours in solid
+      // ink and the rest ghosted, WITHOUT ranking them differently or hiding
+      // anything. `claimed_minutes` is what the client sent; the gap between
+      // it and study_minutes is what the caps took off.
+      verified_minutes: verifiedMinutes,
+      claimed_minutes: claimedMinutes,
       compete_score: cs.total,
       score_breakdown: { effort: cs.effort, mastery: cs.mastery, consistency: cs.consistency },
+      // Kept OUT of score_breakdown, which the dashboard renders by iterating
+      // every numeric key — "sits 0" beside three component scores reads as a
+      // fourth component worth nothing.
+      board_sits: cs.sits ?? 0,
       score_history: history.slice(-40),
       last_hours_sync: now,
       last_activity: now,
@@ -4462,14 +4606,18 @@ async function computeMetricValue(email, metric, startIso, endIso) {
   // cap watched their bet stop moving while they were still studying.
   if (metric === "study_minutes") {
     const [{ data: techs }, { data: sess }] = await Promise.all([
-      supabaseAdmin.from("study_techniques").select("session_duration")
+      supabaseAdmin.from("study_techniques").select("session_duration, date, created_date, extra")
         .eq("created_by", email).gte("created_date", startIso).lte("created_date", endIso).limit(2000),
-      supabaseAdmin.from("study_sessions").select("duration_minutes, session_duration")
+      supabaseAdmin.from("study_sessions").select("duration_minutes, session_duration, date, created_date, extra")
         .eq("created_by", email).gte("created_date", startIso).lte("created_date", endIso).limit(2000),
     ]);
-    const a = (techs || []).reduce((s, t) => s + (Number(t.session_duration) || 0), 0);
-    const b = (sess || []).reduce((s, x) => s + (Number(x.duration_minutes) || Number(x.session_duration) || 0), 0);
-    return Math.round(a + b);
+    // Countable, not claimed. This decides what a Back Yourself bet PAYS, so
+    // summing the client's own minutes here meant a bet on 300 minutes could
+    // be won by posting 300 minutes.
+    return countableStudyMinutes([
+      ...(techs || []).map((r) => studyRowFor(r, "session_duration")),
+      ...(sess || []).map((r) => studyRowFor(r, r.duration_minutes != null ? "duration_minutes" : "session_duration")),
+    ]);
   }
 
   // ── quiz_marks ────────────────────────────────────────────────────────────
@@ -5149,6 +5297,189 @@ app.post("/local-ai/fn/verifyMe", async (req, res) => {
   }
 });
 
+/**
+ * Who is entitled to see a call-out: everyone racing in the contest it belongs
+ * to, and nobody else.
+ *
+ * A call-out used to be a private transaction — `getCallouts` returned only
+ * rows where you were the caller or the target, so the most dramatic thing in
+ * the app happened where nobody could see it. Making it visible to the battle
+ * is what turns it into an event; making it visible to the SITE would turn it
+ * into a stocks. The contest is the room.
+ */
+async function calloutAudience(c) {
+  if (!c) return { emails: [], title: null, kind: null };
+  if (c.duel_id) {
+    const { data: duel } = await supabaseAdmin
+      .from("study_duels").select("challenger_email, opponent_email, title").eq("id", c.duel_id).maybeSingle();
+    if (!duel) return { emails: [], title: null, kind: "duel" };
+    return {
+      emails: [duel.challenger_email, duel.opponent_email].filter(Boolean),
+      title: duel.title || "your duel",
+      kind: "duel",
+    };
+  }
+  const { data: comp } = await supabaseAdmin
+    .from("goal_competitions").select("participants, title").eq("id", c.competition_id).maybeSingle();
+  if (!comp) return { emails: [], title: null, kind: "competition" };
+  return {
+    emails: (comp.participants || []).map((p) => p.email).filter(Boolean),
+    title: comp.title || "the battle",
+    kind: "competition",
+  };
+}
+
+/**
+ * Duel ids this student is in.
+ *
+ * Two queries rather than an interpolated `.or()` filter, for the reason
+ * `getCallouts` already states two functions down: the email comes from a
+ * verified JWT, but building PostgREST filter syntax out of a string is a
+ * habit worth not having.
+ */
+async function myDuelIds(email) {
+  const [a, b] = await Promise.all([
+    supabaseAdmin.from("study_duels").select("id").eq("challenger_email", email).limit(40),
+    supabaseAdmin.from("study_duels").select("id").eq("opponent_email", email).limit(40),
+  ]);
+  return [...new Set([...(a.data || []), ...(b.data || [])].map((d) => d.id))];
+}
+
+/**
+ * The shape a SPECTATOR may see. Narrower than `publicCallout`: somebody who
+ * is neither the caller nor the target has no business with the questions, the
+ * answers, or the internal settle note, and gets the event rather than the row.
+ */
+const spectatorCallout = (row) => {
+  if (!row) return null;
+  return {
+    id: row.id,
+    duel_id: row.duel_id, competition_id: row.competition_id,
+    caller_email: row.caller_email, caller_name: row.caller_name,
+    target_email: row.target_email, target_name: row.target_name,
+    status: row.status,
+    created_date: row.created_date, respond_by: row.respond_by,
+    started_at: row.started_at, submitted_at: row.submitted_at,
+    score: row.score, xp_moved: row.xp_moved,
+    question_count: (row.questions || []).length,
+    seconds_allowed: row.seconds_allowed, pass_mark: row.pass_mark,
+    spectator: true,
+  };
+};
+
+// ─── reactToEvent / getReactions ───────────────────────────────────────────
+//
+// One tap on a feed event. A feed nobody can answer is a broadcast, and the
+// smallest possible answer is the difference between a timeline and a log.
+//
+// NO FREE TEXT. The glyph is validated against a fixed set — these are
+// sixteen-year-olds losing in front of their group sometimes, and a text box on
+// that is a moderation problem this app cannot staff. The fixed set gives all
+// of the "somebody saw this" and none of the risk.
+const REACTIONS = ["👀", "🔥", "😮", "👏", "🧊"];
+const REACTION_MISSING = ["42P01", "PGRST205", "PGRST204"];
+
+app.post("/local-ai/fn/reactToEvent", async (req, res) => {
+  const user = await authenticateRequest(req);
+  if (!user) return res.status(401).json({ error: "Unauthorized" });
+  if (!supabaseAdmin) return res.status(500).json({ error: "Supabase admin not configured" });
+
+  try {
+    const { event_key, emoji, duel_id, competition_id } = req.body || {};
+    if (!event_key) return res.status(400).json({ error: "event_key required" });
+    if (emoji && !REACTIONS.includes(emoji)) {
+      return res.status(400).json({ error: "Not a reaction we know." });
+    }
+    if (!duel_id && !competition_id) {
+      return res.status(400).json({ error: "A reaction belongs to a contest." });
+    }
+
+    // You may only react inside a battle you are in. Scoped from the CONTEST,
+    // never from the event key, which is a client-supplied string.
+    const audience = await calloutAudience({ duel_id, competition_id });
+    if (!audience.emails.includes(user.email)) {
+      return res.status(403).json({ error: "You're not in that one." });
+    }
+
+    // Tapping the same glyph again takes it back; a different one replaces it.
+    // Upsert-then-delete rather than two round trips from the client, so a
+    // double tap cannot leave two rows.
+    const { data: existing } = await supabaseAdmin
+      .from("compete_reactions").select("id, emoji")
+      .eq("created_by", user.email).eq("event_key", event_key).maybeSingle();
+
+    if (existing && (!emoji || existing.emoji === emoji)) {
+      await supabaseAdmin.from("compete_reactions").delete().eq("id", existing.id);
+      return res.json({ success: true, mine: null });
+    }
+    if (existing) {
+      await supabaseAdmin.from("compete_reactions").update({ emoji }).eq("id", existing.id);
+      return res.json({ success: true, mine: emoji });
+    }
+    const { error: insErr } = await supabaseAdmin.from("compete_reactions").insert({
+      created_by: user.email, event_key, emoji,
+      duel_id: duel_id || null, competition_id: competition_id || null,
+    });
+    if (insErr) {
+      if (REACTION_MISSING.includes(insErr.code)) {
+        return res.json({ success: true, available: false, mine: null });
+      }
+      throw insErr;
+    }
+    return res.json({ success: true, mine: emoji });
+  } catch (err) {
+    console.error("[reactToEvent] error:", err);
+    return res.status(500).json({ error: err?.message || String(err) });
+  }
+});
+
+// Every reaction on every event in every battle I'm in, counted.
+app.post("/local-ai/fn/getReactions", async (req, res) => {
+  const user = await authenticateRequest(req);
+  if (!user) return res.status(401).json({ error: "Unauthorized" });
+  if (!supabaseAdmin) return res.status(500).json({ error: "Supabase admin not configured" });
+
+  try {
+    const [{ data: myComps }, { data: myDuels }] = await Promise.all([
+      supabaseAdmin.from("goal_competitions").select("id")
+        .contains("participants", JSON.stringify([{ email: user.email }])).limit(40),
+      myDuelIds(user.email),
+    ]);
+    const compIds = (myComps || []).map((c) => c.id);
+    const duelIds = myDuels;
+    if (!compIds.length && !duelIds.length) return res.json({ success: true, available: true, events: {} });
+
+    const [a, b] = await Promise.all([
+      compIds.length
+        ? supabaseAdmin.from("compete_reactions").select("event_key, emoji, created_by")
+            .in("competition_id", compIds).limit(2000)
+        : Promise.resolve({ data: [], error: null }),
+      duelIds.length
+        ? supabaseAdmin.from("compete_reactions").select("event_key, emoji, created_by")
+            .in("duel_id", duelIds).limit(2000)
+        : Promise.resolve({ data: [], error: null }),
+    ]);
+    // Migration 0034 may not have run yet. Say so plainly rather than
+    // reporting an empty set — the client hides the buttons on this flag, so
+    // they never appear before the table behind them exists.
+    if (a.error && REACTION_MISSING.includes(a.error.code)) {
+      console.warn("[getReactions] compete_reactions missing — run migration 0034.");
+      return res.json({ success: true, available: false, events: {} });
+    }
+
+    const events = {};
+    for (const r of [...(a.data || []), ...(b.data || [])]) {
+      const e = events[r.event_key] || (events[r.event_key] = { counts: {}, mine: null });
+      e.counts[r.emoji] = (e.counts[r.emoji] || 0) + 1;
+      if (r.created_by === user.email) e.mine = r.emoji;
+    }
+    return res.json({ success: true, available: true, events, options: REACTIONS });
+  } catch (err) {
+    console.error("[getReactions] error:", err);
+    return res.status(500).json({ error: err?.message || String(err) });
+  }
+});
+
 // ─── getCallouts ───────────────────────────────────────────────────────────
 // Everything involving me, with answers stripped and expiry applied lazily.
 app.post("/local-ai/fn/getCallouts", async (req, res) => {
@@ -5179,13 +5510,59 @@ app.post("/local-ai/fn/getCallouts", async (req, res) => {
 
     const byId = new Map();
     for (const r of [...(asCaller || []), ...(asTarget || [])]) byId.set(r.id, r);
+
+    // ─── AND EVERY CALL-OUT IN A BATTLE I AM RACING IN ───────────────────────
+    //
+    // The two queries above are "call-outs involving me", which is what this
+    // returned for its whole life — so a challenge between two other people in
+    // your own battle was invisible to you, and the most dramatic thing the app
+    // can do happened where nobody could witness it. The contest is the room:
+    // if you are in it, you see what happens in it.
+    //
+    // Scoped by the contests I am a participant of, never by a client-supplied
+    // id, so this cannot be used to read a battle I am not in.
+    const [{ data: myComps }, { data: myDuels }] = await Promise.all([
+      supabaseAdmin.from("goal_competitions").select("id")
+        .contains("participants", JSON.stringify([{ email: user.email }])).limit(40),
+      myDuelIds(user.email),
+    ]);
+    const compIds = (myComps || []).map((c) => c.id);
+    const duelIds = myDuels;
+
+    const [{ data: inComps }, { data: inDuels }] = await Promise.all([
+      compIds.length
+        ? supabaseAdmin.from("callouts").select("*").in("competition_id", compIds)
+            .order("created_date", { ascending: false }).limit(60)
+        : Promise.resolve({ data: [] }),
+      duelIds.length
+        ? supabaseAdmin.from("callouts").select("*").in("duel_id", duelIds)
+            .order("created_date", { ascending: false }).limit(60)
+        : Promise.resolve({ data: [] }),
+    ]);
+    const spectated = new Map();
+    for (const r of [...(inComps || []), ...(inDuels || [])]) {
+      if (!byId.has(r.id)) spectated.set(r.id, r);
+    }
+
     const data = [...byId.values()].sort((a, b) => new Date(b.created_date) - new Date(a.created_date));
 
     const rows = [];
     for (const row of data || []) {
       rows.push(await settleExpiredCallout(row));
     }
-    return res.json({ success: true, available: true, callouts: rows.map(publicCallout) });
+    // A spectator gets the EVENT, not the row: no questions, no answers, no
+    // settle note. `publicCallout` is already answer-free, but somebody who is
+    // neither party has no business with the rest of it either.
+    const watched = [];
+    for (const row of spectated.values()) {
+      watched.push(spectatorCallout(await settleExpiredCallout(row)));
+    }
+
+    return res.json({
+      success: true, available: true,
+      callouts: rows.map(publicCallout),
+      watching: watched,
+    });
   } catch (err) {
     console.error("[getCallouts] error:", err);
     return res.status(500).json({ error: err?.message || String(err) });
@@ -6974,24 +7351,100 @@ function computeCompeteScore({ minutes = 0, avgAccuracy = 0, activeDays = 0, str
 
 // Compute one user's Compete Score over a competition window [startIso, now].
 // Used to rank battles by "best study" instead of raw hours.
+// A quiz has to be worth sitting before a sit of it counts competitively, and
+// it counts ONCE — at the first sit, never the best. Sitting one easy paper
+// twenty times must not out-rank sitting a hard one once, and taking the best
+// rewards grinding the same quiz until a good roll comes up (the same "wait for
+// a result you like" shape the forecast settlement refuses).
+const BOARD_MIN_QUESTIONS = 8;
+const BOARD_MIN_MARKS = 12;
+
+const isRetryAttemptRow = (a) =>
+  a?.extra?.is_retry === true || / — wrong only$/.test(String(a?.quiz_title || ""));
+
+function quizCountsForBoard(quiz) {
+  const qs = Array.isArray(quiz?.questions) ? quiz.questions : [];
+  if (qs.length < BOARD_MIN_QUESTIONS) return false;
+  // An MCQ with no stated allocation is one mark, which is what
+  // normaliseQuestion resolves it to everywhere else in the app.
+  const marks = qs.reduce((sum, q) => {
+    const m = Number(q?.marks);
+    return sum + (Number.isFinite(m) && m > 0 ? m : 1);
+  }, 0);
+  return marks >= BOARD_MIN_MARKS;
+}
+
+/** The scores a board may read out of a window's attempts. */
+async function boardQuizScores(email, attempts) {
+  const real = (attempts || []).filter((a) => a && a.quiz_id && !isRetryAttemptRow(a));
+  if (!real.length) return [];
+
+  const ids = [...new Set(real.map((a) => a.quiz_id))];
+  const { data: quizRows } = await supabaseAdmin
+    .from("quizzes").select("id, questions").in("id", ids);
+  const byId = new Map((quizRows || []).map((q) => [q.id, q]));
+
+  const firstSit = new Map();
+  real
+    .slice()
+    .sort((a, b) => new Date(a.created_date || 0) - new Date(b.created_date || 0))
+    .forEach((a) => {
+      if (firstSit.has(a.quiz_id)) return;
+      if (!quizCountsForBoard(byId.get(a.quiz_id))) return;
+      firstSit.set(a.quiz_id, a);
+    });
+
+  // The adjusted score is what the student was actually shown once their
+  // written work was marked; the raw one is what the auto-marker guessed.
+  return [...firstSit.values()]
+    .map((a) => (typeof a.adjusted_score === "number" ? a.adjusted_score : a.score))
+    .filter((n) => typeof n === "number" && Number.isFinite(n));
+}
+
 async function competitionCompeteScore(email, startIso) {
   if (!supabaseAdmin) return computeCompeteScore({});
   const [techRes, sessRes, quizRes, profile] = await Promise.all([
-    supabaseAdmin.from("study_techniques").select("session_duration, created_date").eq("created_by", email).gte("created_date", startIso),
-    supabaseAdmin.from("study_sessions").select("duration_minutes, created_date").eq("created_by", email).gte("created_date", startIso),
-    supabaseAdmin.from("quiz_attempts").select("score, created_date").eq("created_by", email).gte("created_date", startIso),
+    supabaseAdmin.from("study_techniques").select("session_duration, date, created_date, extra").eq("created_by", email).gte("created_date", startIso),
+    supabaseAdmin.from("study_sessions").select("duration_minutes, date, created_date, extra").eq("created_by", email).gte("created_date", startIso),
+    supabaseAdmin.from("quiz_attempts").select("quiz_id, quiz_title, score, adjusted_score, created_date, extra").eq("created_by", email).gte("created_date", startIso),
     loadUserProfile(email),
   ]);
   const techs = techRes.data || [], sess = sessRes.data || [], quizzes = quizRes.data || [];
-  const minutes = techs.reduce((a, t) => a + (t.session_duration || 0), 0) + sess.reduce((a, s) => a + (s.duration_minutes || 0), 0);
-  const scores = quizzes.map((q) => q.score).filter((s) => typeof s === "number");
+
+  // Countable, not claimed — the same ceiling every other board now uses.
+  const minutes = countableStudyMinutes([
+    ...techs.map((r) => studyRowFor(r, "session_duration")),
+    ...sess.map((r) => studyRowFor(r, "duration_minutes")),
+  ]);
+
+  // ─── Accuracy is the FIRST sit of each quiz worth sitting ─────────────────
+  //
+  // This averaged every attempt in the window, which made mastery farmable
+  // three separate ways: write an eight-second quiz on your easiest topic and
+  // score 100; sit the same easy quiz twenty times; or run "wrong only"
+  // retries, whose scores are on a different scale by construction and were
+  // being averaged in beside full papers.
+  //
+  // Practice is untouched by any of this — a three-question warm-up still
+  // scores, still feeds the deck, still pays XP. It just does not decide a
+  // contest. Mirrors boardSits() in src/lib/integrity.js.
+  const scores = (await boardQuizScores(email, quizzes));
   const avgAccuracy = scores.length ? scores.reduce((a, b) => a + b, 0) / scores.length : 0;
+  // How many sits actually cleared the floor. Reported so a zero on a
+  // 400-point slice can be EXPLAINED rather than left as a silent penalty on
+  // a student who has only ever sat short quizzes — "never score a student on
+  // a signal they can't reach" applies just as hard to one they CAN reach and
+  // were never told about.
+  const boardSitCount = scores.length;
   const days = new Set([
     ...techs.map((t) => t.created_date?.slice(0, 10)),
     ...sess.map((s) => s.created_date?.slice(0, 10)),
     ...quizzes.map((q) => q.created_date?.slice(0, 10)),
   ].filter(Boolean)).size;
-  return computeCompeteScore({ minutes, avgAccuracy, activeDays: days, streak: profile?.streak_days || 0 });
+  return {
+    ...computeCompeteScore({ minutes, avgAccuracy, activeDays: days, streak: profile?.streak_days || 0 }),
+    sits: boardSitCount,
+  };
 }
 
 app.post("/local-ai/fn/getLeagueStanding", async (req, res) => {
@@ -7405,12 +7858,62 @@ app.post("/local-ai/fn/placeForecast", async (req, res) => {
   if (!supabaseAdmin) return res.status(500).json({ error: "Supabase admin not configured" });
 
   try {
-    const { kind, p, base, stake, deadline, threshold, quiz_id, subject } = req.body || {};
+    const { kind, p, base, stake, deadline, threshold, quiz_id, subject, callout_id } = req.body || {};
     if (!kind || p === undefined || base === undefined) {
       return res.status(400).json({ error: "kind, p and base required" });
     }
     const prob = Math.min(1, Math.max(0, Number(p)));
     const baseRate = Math.min(1, Math.max(0, Number(base)));
+
+    // ─── Backing somebody else's call-out ────────────────────────────────────
+    //
+    // THE CALLER AND THE TARGET MAY NOT TAKE A POSITION. They decide the
+    // outcome — the target by how hard they try, the caller by whom they
+    // picked — so letting either one bet on it is the same cannot-lose shape
+    // the whole wagering layer was torn out for. Refused here, on the server,
+    // where it cannot be edited out of a bundle.
+    //
+    // And you may only back a call-out in a contest you are actually in. A
+    // spectator market open to the whole site would let two accounts stage a
+    // call-out and have a third collect on it.
+    let calloutMeta = null;
+    if (kind === "callout") {
+      if (!callout_id) return res.status(400).json({ error: "callout_id required" });
+      const { data: c } = await supabaseAdmin
+        .from("callouts").select("*").eq("id", callout_id).maybeSingle();
+      if (!c) return res.status(404).json({ error: "That call-out no longer exists." });
+      if (c.caller_email === user.email || c.target_email === user.email) {
+        return res.status(403).json({
+          error: "You're in this one — you can't back it. That's the whole point of it being a call-out.",
+        });
+      }
+      if (!["pending", "active"].includes(c.status)) {
+        return res.status(400).json({ error: "That call-out has already been decided." });
+      }
+      const ctx = await calloutAudience(c);
+      if (!ctx.emails.includes(user.email)) {
+        return res.status(403).json({ error: "You can only back a call-out in a battle you're in." });
+      }
+      // ONE POSITION PER PERSON PER CALL-OUT. Without this a spectator could
+      // place a call at 5% and another at 95% and be paid for whichever landed,
+      // which is a way of buying a guaranteed return out of a proper rule.
+      const { data: existing } = await supabaseAdmin
+        .from("score_wagers").select("id")
+        .eq("bettor_email", user.email).eq("status", "pending")
+        .contains("extra", JSON.stringify({ forecast: { callout_id } }))
+        .limit(1);
+      if (existing?.length) {
+        return res.status(409).json({ error: "You've already backed this one." });
+      }
+      calloutMeta = {
+        callout_id,
+        target_name: c.target_name || null,
+        caller_name: c.caller_name || null,
+        // The call-out's own clock is the deadline. A client-supplied one
+        // would let somebody hold a position open past the verdict.
+        deadline: c.respond_by,
+      };
+    }
 
     // A self-reported call is free and pays nothing: no stake, no escrow, no
     // route to the XP economy at all.
@@ -7449,7 +7952,8 @@ app.post("/local-ai/fn/placeForecast", async (req, res) => {
         forecast: {
           kind, p: prob, base: baseRate, threshold: threshold ?? null,
           quiz_id: quiz_id || null, subject: subject || null,
-          deadline: deadline || null, pays,
+          deadline: calloutMeta?.deadline || deadline || null, pays,
+          ...(calloutMeta || {}),
         },
       },
     }).select().single();
@@ -7545,6 +8049,37 @@ app.post("/local-ai/fn/settleForecast", async (req, res) => {
         const score = first.adjusted_score ?? first.score;
         if (typeof score !== "number") return res.json({ open: true });
         outcome = score > Number(f.threshold || 0);
+      }
+    } else if (kind === "callout") {
+      // Settled off the `callouts` row's OWN status, which only the server
+      // writes. Nothing here comes from the client except which forecast to
+      // settle, which is the rule this whole handler exists to keep.
+      const { data: c } = await supabaseAdmin
+        .from("callouts").select("status, respond_by").eq("id", f.callout_id).maybeSingle();
+      if (!c) return res.status(404).json({ error: "That call-out no longer exists." });
+      if (c.status === "passed") outcome = true;
+      else if (c.status === "failed" || c.status === "expired") outcome = false;
+      else if (c.status === "voided") {
+        // Nothing was tested, so nobody was right. The stake goes back whole
+        // and the position is cancelled rather than scored — paying out on a
+        // question that was never asked is worse than not paying at all.
+        await supabaseAdmin.from("score_wagers").update({
+          status: "cancelled", resolved_at: new Date().toISOString(), xp_outcome: 0,
+          extra: { ...(row.extra || {}), forecast: { ...f, outcome: null, settled_by: "server" } },
+        }).eq("id", forecast_id);
+        const back = Math.max(0, Math.round(Number(row.wagered_xp) || 0));
+        if (back > 0) {
+          await callLocalFn("awardXP", {
+            source: "bet_win", flat_xp: back,
+            description: "Call-out voided — stake returned",
+          }, req.headers.authorization || "");
+        }
+        return res.json({ voided: true, returned: back });
+      } else if (now < new Date(c.respond_by || deadline)) {
+        return res.json({ open: true });
+      } else {
+        // Past its clock with no verdict: the forfeit sweep has not run yet.
+        return res.json({ open: true });
       }
     } else {
       return res.status(400).json({ error: "Unknown forecast kind" });

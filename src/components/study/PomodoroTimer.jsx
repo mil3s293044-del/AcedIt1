@@ -87,6 +87,21 @@ export default function PomodoroTimer({ onSessionComplete, userSubjects: initial
     // from here on: Analytics says so rather than pretending the history is
     // missing by accident.
     const pausesRef = useRef(0);
+
+    // ── And how much of it the tab was not even in front of them ────────────
+    // `awardXP` has accepted `idle_ratio` and `tab_away_count` since it was
+    // ported and NOTHING HAS EVER SENT THEM — the anti-farming inputs existed
+    // on the server and no client produced one, so a timer left running in a
+    // background tab paid exactly what an hour of work paid. Counted here off
+    // the visibilitychange handler that is already mounted.
+    //
+    // Away time is measured only while the clock is RUNNING. A paused timer is
+    // a student on a break, which is the thing the technique is built around
+    // and must never be charged for.
+    const awayCountRef = useRef(0);
+    const awayMsRef = useRef(0);
+    const hiddenAtRef = useRef(null);
+
     const [showSettings, setShowSettings] = useState(false);
 
     const intervalRef = useRef(null);
@@ -214,6 +229,19 @@ export default function PomodoroTimer({ onSessionComplete, userSubjects: initial
         // real study time silently — bank it against General instead.
         if (durationMinutes < 1) return;
         const subject = selectedSubject || "General";
+        // Close an open away-span: saving while hidden is exactly what happens
+        // when a background timer runs out, which is the case this measures.
+        const openAway = hiddenAtRef.current != null ? Date.now() - hiddenAtRef.current : 0;
+        const awayMs = awayMsRef.current + openAway;
+        const attention = {
+            tab_away_count: awayCountRef.current,
+            // Clamped to 1: a restored timer can report more away time than the
+            // session it is attached to, and a ratio over 1 would read as a
+            // negative session downstream.
+            idle_ratio: durationMinutes > 0
+                ? Math.min(1, awayMs / (durationMinutes * 60000))
+                : 0,
+        };
         // Update streak on every completed session
         recordStudyAndGetStreak().catch(() => {});
         try {
@@ -227,9 +255,13 @@ export default function PomodoroTimer({ onSessionComplete, userSubjects: initial
                     pauses: pausesRef.current,
                     completed,
                     planned_minutes: settings.workTime || 25,
+                    ...attention,
                 },
             });
             pausesRef.current = 0;
+            awayCountRef.current = 0;
+            awayMsRef.current = 0;
+            hiddenAtRef.current = null;
             // Dispatch event so goals page can pick up new study time instantly
             window.dispatchEvent(new CustomEvent('studySessionSaved', {
                 detail: { subject, duration_minutes: Math.round(durationMinutes) }
@@ -325,7 +357,18 @@ export default function PomodoroTimer({ onSessionComplete, userSubjects: initial
     // Sync timer when page becomes visible after being hidden
     useEffect(() => {
         const handleVisibilityChange = () => {
-            if (!document.hidden && isRunning) {
+            if (document.hidden) {
+                if (isRunning && hiddenAtRef.current == null) {
+                    hiddenAtRef.current = Date.now();
+                    awayCountRef.current += 1;
+                }
+                return;
+            }
+            if (hiddenAtRef.current != null) {
+                awayMsRef.current += Date.now() - hiddenAtRef.current;
+                hiddenAtRef.current = null;
+            }
+            if (isRunning) {
                 const savedState = localStorage.getItem('pomodoroTimerState');
                 if (savedState) {
                     const state = JSON.parse(savedState);

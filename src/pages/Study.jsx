@@ -264,6 +264,12 @@ export default function Study() {
                     source,
                     event_key: eventKey,
                     duration_minutes: mins,
+                    // The server has accepted these since it was ported and no
+                    // client had ever sent one, so an hour with the tab hidden
+                    // paid what an hour of work paid. They DISCOUNT the time,
+                    // never accuse the student — see calcFocusTimerXP.
+                    idle_ratio: sessionData.extra?.idle_ratio ?? 0,
+                    tab_away_count: sessionData.extra?.tab_away_count ?? 0,
                 });
                 fireXPFeedback(res?.data ?? res, source);
             }

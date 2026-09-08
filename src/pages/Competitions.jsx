@@ -28,6 +28,11 @@ import MoversPanel from "@/components/competition/MoversPanel";
 import { bookOdds, bookSeries, bookExposure, movers, rivalFeed }
     from "@/components/competition/portfolio";
 import CalloutQuiz from "@/components/competition/CalloutQuiz";
+import CompeteFeed from "@/components/competition/CompeteFeed";
+import SettlementReveal, { pendingReveal } from "@/components/competition/SettlementReveal";
+import RivalryStrip from "@/components/competition/RivalryStrip";
+import { competeFeed, rivalries } from "@/lib/competeFeed";
+import { getReactions } from "@/api/functionsShim";
 import { fmtDate } from "@/lib/safeDate";
 import HelpButton from "@/components/shared/HelpButton";
 import AceShuffle from "@/components/ace/AceShuffle";
@@ -75,6 +80,14 @@ export default function Competitions() {
     // 0025/0026 can lag a deploy, and a button that 500s is worse than a
     // feature that hasn't appeared yet.
     const [calloutsReady, setCalloutsReady] = useState(false);
+    // Call-outs in my battles that I am NOT a party to. They are events I am
+    // entitled to watch, and they arrive on their own key rather than mixed
+    // into `callouts` — CalloutPanel and the incoming-challenge banner both
+    // read that list as "things demanding something of me".
+    const [watching, setWatching] = useState([]);
+    const [reactions, setReactions] = useState({});
+    const [reactionsReady, setReactionsReady] = useState(false);
+    const [reveal, setReveal] = useState(null);
     const [userSubjects, setUserSubjects] = useState([]);
     const [openBattle, setOpenBattle] = useState(null);
     // The challenge dialog is opened from the "Start something" card, so this
@@ -192,10 +205,24 @@ export default function Competitions() {
             const d = (await base44.functions.invoke('getCallouts'))?.data ?? {};
             setCalloutsReady(d.available !== false);
             setCallouts(d.callouts || []);
+            setWatching(d.watching || []);
         } catch {
             setCalloutsReady(false);   // the page works fine without them
         }
     }, []);
+
+    // Reactions are a separate read so a missing migration 0034 cannot take
+    // the feed down with it — the buttons simply do not appear.
+    const loadReactions = useCallback(async () => {
+        try {
+            const d = (await getReactions())?.data ?? {};
+            setReactionsReady(d.available !== false);
+            setReactions(d.events || {});
+        } catch {
+            setReactionsReady(false);
+        }
+    }, []);
+    useEffect(() => { if (user?.email) loadReactions(); }, [user?.email, loadReactions]);
 
     // Only what needs answering: aimed at me, still open. A settled one is a
     // record, not a demand.
@@ -306,6 +333,36 @@ export default function Competitions() {
     const rivals = useMemo(
         () => rivalFeed({ battles: allBattles_, ticker, myEmail: user?.email }),
         [allBattles_, ticker, user?.email]);
+
+    // ── THE FEED ────────────────────────────────────────────────────────────
+    // Everything that happened, to anybody, in a contest this student is in.
+    // Both call-out lists go in: the ones aimed at or made by them, and the
+    // ones they are only watching.
+    const allCallouts = useMemo(
+        () => [...callouts, ...watching], [callouts, watching]);
+
+    const feed = useMemo(() => competeFeed({
+        callouts: allCallouts, battles: allBattles_, ticker, myEmail: user?.email,
+    }), [allCallouts, allBattles_, ticker, user?.email]);
+
+    const myRivals = useMemo(() => rivalries({
+        battles: allBattles_, callouts: allCallouts, myEmail: user?.email,
+    }), [allBattles_, allCallouts, user?.email]);
+
+    // The ceremony fires for a result involving this student that this device
+    // has not already played. Once, ever — a celebration you cannot escape is
+    // a punishment, and replaying somebody's defeat at them is worse.
+    useEffect(() => {
+        if (reveal || !feed.length) return;
+        const next = pendingReveal(feed);
+        if (next) setReveal(next);
+    }, [feed, reveal]);
+
+    // The target's own record is what prices a call-out backing, so the
+    // spectator panel needs every call-out on the page, not this student's.
+    const backingCtx = useMemo(
+        () => ({ ...forecastCtx, calloutHistory: allCallouts }),
+        [forecastCtx, allCallouts]);
 
     const stats = useMemo(() => {
         const myEmail = user?.email;
@@ -496,6 +553,12 @@ export default function Competitions() {
         />
     ) : null;
 
+    // The ceremony. Sits outside every branch below so a result lands whether
+    // the student is on the list, inside a battle, or answering a call-out.
+    const revealOverlay = (
+        <SettlementReveal event={reveal} onClose={() => setReveal(null)} />
+    );
+
     // The battle dashboard — one competition read as a live market. Group
     // battles keep their existing management panel (invite code, settle,
     // sub-goals) below it rather than losing those controls.
@@ -506,10 +569,13 @@ export default function Competitions() {
                 <div className="max-w-3xl mx-auto px-4 lg:px-8 py-6 lg:py-8">
                     {calloutBanner.length > 0 && <div className="mb-5 space-y-3">{calloutBanner}</div>}
                     {calloutDialog}
+                    {revealOverlay}
                     <BattleDashboard
                         battle={live}
                         me={{ email: user?.email, name: userProfile?.full_name || user?.full_name }}
-                        callouts={calloutsReady ? { list: callouts, refresh: loadCallouts, onSelfCheck: setAnswering } : null}
+                        callouts={calloutsReady
+                            ? { list: callouts, watching, refresh: loadCallouts, onSelfCheck: setAnswering }
+                            : null}
                         record={userProfile?.extra?.callout_record}
                         activity={(() => {
                             const emails = new Set(live.sides.map(x => x.email));
@@ -649,7 +715,29 @@ export default function Competitions() {
                     </p>
                 )}
 
-                {/* ── WHAT MOVED WHILE YOU WEREN'T LOOKING ───────────────── */}
+                {/* ── WHO IS DOING WHAT TO WHOM ──────────────────────────── */}
+                {/* The feed goes ABOVE the tabs and above the book, because it
+                    is the only surface on this page whose subject is other
+                    people. Everything else is a readout of your own state,
+                    which is a thing a student can already remember. */}
+                <RivalryStrip rivals={myRivals} onOpen={() => setCompeteTab("duels")} />
+
+                <CompeteFeed
+                    events={feed}
+                    reactions={reactions}
+                    reactionsReady={reactionsReady}
+                    onReacted={loadReactions}
+                    forecastCtx={backingCtx}
+                    onBacked={() => loadForecasts(user?.email)}
+                    onOpen={(e) => {
+                        const b = allBattles_.find(x => x.kind === e.battleRef?.kind && x.id === e.battleRef?.id);
+                        if (b) setOpenBattle(b); else setCompeteTab("duels");
+                    }}
+                />
+
+                {/* Movers keeps its place under the feed: the feed says what
+                    HAPPENED, this says how the prices moved, and collapsing
+                    the two would mean claiming one caused the other. */}
                 <MoversPanel movers={bigMovers} feed={rivals} onOpen={(b) => setOpenBattle(b)} />
 
                 {/* ── ONE PAGE, THREE CLEAR MODES ──────────────────────── */}
@@ -974,6 +1062,7 @@ export default function Competitions() {
                 )}
             </AnimatePresence>
             {calloutDialog}
+            {revealOverlay}
         </div>
     );
 }
