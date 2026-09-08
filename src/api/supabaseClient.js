@@ -442,6 +442,8 @@ const PORTED_FUNCTIONS = {
   startCallout:             '/local-ai/fn/startCallout',
   submitCallout:            '/local-ai/fn/submitCallout',
   reactToEvent:             '/local-ai/fn/reactToEvent',
+  getAchievements:          '/local-ai/fn/getAchievements',
+  checkAchievements:        '/local-ai/fn/checkAchievements',
   getReactions:             '/local-ai/fn/getReactions',
   verifyMe:                 '/local-ai/fn/verifyMe',
   respondDuel:              '/local-ai/fn/respondDuel',

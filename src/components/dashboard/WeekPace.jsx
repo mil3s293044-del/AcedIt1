@@ -71,7 +71,7 @@ function PaceBar({ minutes, baseline }) {
     const ahead = minutes >= baseline;
 
     return (
-        <div className="relative h-2.5 rounded-full bg-secondary overflow-hidden mt-3">
+        <div className="relative h-3.5 rounded-full bg-secondary overflow-hidden mt-4">
             <motion.span
                 className={`absolute inset-y-0 left-0 rounded-full ${
                     ahead ? "bg-primary" : "bg-xp"}`}
@@ -123,7 +123,14 @@ export default function WeekPace({ events = [], className = "" }) {
     const ahead = pace.delta != null && pace.delta >= 0;
 
     return (
-        <div data-week-pace={pace.minutes} className={`card-soft on-table p-5 lg:p-6 ${className}`}>
+        // ── FILLS ITS ROW ───────────────────────────────────────────────
+        // This card sits in a grid row sized by a taller sibling, so its
+        // content clustered at the top and left a third of the panel empty.
+        // `h-full` plus a column that spreads its own children is the fix
+        // rather than padding: the space goes into the figure and the bar,
+        // which are the two things worth reading from across a desk.
+        <div data-week-pace={pace.minutes}
+            className={`card-soft on-table p-5 lg:p-6 h-full flex flex-col ${className}`}>
             <div className="flex items-baseline justify-between gap-3 mb-4">
                 <p className="stat-label">Your study week</p>
                 <Link to={createPageUrl("Analytics")}
@@ -134,7 +141,7 @@ export default function WeekPace({ events = [], className = "" }) {
             </div>
 
             <p className="font-display font-extrabold text-foreground leading-none"
-                style={{ fontSize: "clamp(2.25rem, 6vw, 3.25rem)" }}>
+                style={{ fontSize: "clamp(2.75rem, 7.5vw, 4.25rem)" }}>
                 {fmt(pace.minutes)}
             </p>
 
@@ -144,7 +151,7 @@ export default function WeekPace({ events = [], className = "" }) {
                     {/* The comparison in words as well as in the bar, because
                         the bar cannot say WHICH weekday it stopped at, and
                         "behind" without "by Wednesday" is a different claim. */}
-                    <p className="text-[13px] leading-relaxed mt-2.5">
+                    <p className="text-sm leading-relaxed mt-3.5">
                         <span className={`font-bold ${ahead ? "text-primary" : "text-xp"}`}>
                             {ahead ? "Ahead of" : "Behind"} your usual
                         </span>
@@ -154,7 +161,7 @@ export default function WeekPace({ events = [], className = "" }) {
                     </p>
                 </>
             ) : (
-                <p className="text-[13px] text-muted-foreground leading-relaxed mt-3">
+                <p className="text-sm text-muted-foreground leading-relaxed mt-4">
                     {pace.sessions} session{pace.sessions === 1 ? "" : "s"} across{" "}
                     {pace.days} day{pace.days === 1 ? "" : "s"}. Your usual pace shows
                     up here after {MIN_BASELINE_WEEKS} weeks.
@@ -162,17 +169,17 @@ export default function WeekPace({ events = [], className = "" }) {
             )}
 
             {pace.subjects.length > 0 && (
-                <p className="text-[11px] text-muted-foreground/70 mt-2 leading-relaxed">
+                <p className="text-xs text-muted-foreground/70 mt-2.5 leading-relaxed">
                     {pace.subjects.slice(0, 3).join(", ")}
                     {pace.subjects.length > 3 ? ` +${pace.subjects.length - 3}` : ""}
                 </p>
             )}
 
             <Link to={createPageUrl("Study")}
-                className="inline-flex items-center gap-1 text-[11px] font-bold
-                    text-primary hover:underline mt-3">
+                className="inline-flex items-center gap-1.5 text-xs font-bold
+                    text-primary hover:underline mt-auto pt-4">
                 {ahead ? "Keep it going" : "Put some time in"}
-                <ArrowRight className="w-3 h-3" />
+                <ArrowRight className="w-3.5 h-3.5" />
             </Link>
         </div>
     );

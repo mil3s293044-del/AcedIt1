@@ -770,6 +770,84 @@ restated. Fed by `useLiveCount` off the stakes payload the app already loads,
 never a query of its own: six nav items asking the server whether anything is
 live would be six round trips before the shell painted.
 
+## Achievements: every one of them has to be reachable
+
+`src/lib/achievements.js`. The catalogue was 24 objects inline in `server.mjs`
+with boolean `check` functions, and **FIVE of them measured something the app
+does not do**:
+
+- **FRIEND_MAGNET** queried `friendships.friend_email` — a column that has
+  never existed (the table has `requester_email` / `recipient_email`). Rejected
+  query, null count, 150 XP unreachable by construction. The same shape as the
+  placeForecast balance bug, found by the same schema check.
+- **ROADMAP_DONE** counted `study_roadmaps`, and `StudyRoadmap.create` has ZERO
+  call sites — the Study Roadmap page redirects. 600 XP behind a retired
+  feature. Replaced rather than deleted, so nobody loses a target.
+- **COMPETE_FIRST** said "Join your first competition" and counted
+  `creator_email = you`, so joining somebody's battle by code earned nothing.
+  It counts `participants` and both duel sides now.
+- **FIRST_SESSION** said "Complete your first study session" and counted
+  `study_sessions` alone — **the read-every-table trap, for the third time.**
+  Pomodoro, blurting, active recall and spaced repetition all write to
+  `study_techniques`, so a student who only used the Study page never unlocked
+  it. `study_count` sums both.
+
+An achievement nobody can reach is worse than no achievement: it teaches a
+student the grid is decoration, after which the reachable ones stop pulling.
+
+**Two tests hold that, and they need each other.** One feeds a maxed stats
+object through every `progress` function and asserts nothing stays locked —
+that catches an impossible target. The other scans `buildAchievementStats` and
+asserts every stat a progress function READS is one the server actually SETS —
+that catches FRIEND_MAGNET's shape, where the predicate was fine and the query
+behind it was not. The second one shipped with a fixed 6,000-character window
+that truncated the moment the builder grew and reported three healthy stats as
+missing; it brace-matches the function now. A scanner that quietly reads less
+than it claims to is the failure these guards exist to prevent.
+
+**PROGRESS, NOT A BOOLEAN.** Every entry returns `{ value, target }`, so a
+locked tile reads "18 / 25" instead of a padlock — fourteen of twenty-four were
+identical grey boxes, which is two-thirds of the grid telling a student nothing
+about what to chase, and hiding a locked achievement's NAME removes the only
+thing that could make somebody want it. `unlocked` is derived from the same two
+numbers so a tile's bar and its state cannot disagree. Zero progress is the
+exception: "0 of 250" is the whole achievement, not a near miss.
+
+**A GRANTED ACHIEVEMENT IS NEVER TAKEN BACK.** The stored row wins over the
+computed value — a student who sat 25 quizzes and later deleted attempts keeps
+the badge. It records something that HAPPENED; recomputing live and revoking is
+the one thing this must not do.
+
+**RARITY DRIVES THE CEREMONY** (`AchievementUnlock`). Unlocks used to be
+granted silently: the XP folded into a total that moves constantly anyway, and
+a student found out by navigating to a tab inside a tab and noticing a tile had
+changed colour. A common now takes a corner strip and leaves; a legendary takes
+the screen, counts its XP up and holds. Landing them identically would flatten
+the ladder — "sixty days running" arriving as loudly as "add your first
+subject" — so `CEREMONY` owns the numbers beside the XP they scale with.
+
+It fires ONCE ever, keyed in `localStorage` like `SettlementReveal`, and
+blocked storage counts as already-seen: `getAchievements` SELF-HEALS and
+legitimately re-reports old codes, so without the guard opening Ranked would
+fire the entire back catalogue at somebody. Batches play rarest LAST — a
+legendary followed by two commons is an anticlimax.
+
+The sheen on the loud tiers is WIDE AND FAINT. At a third of the width and the
+crest's own glow alpha it rendered as a solid gold bar through the middle of
+the card, washing out the achievement's name; a flourish that hides the thing
+it is celebrating is not a flourish.
+
+**And they are visible to other people** (`CrestRow` on the ranked board). An
+achievement only its owner can see is a private checklist, not something
+competitive — the whole system lived on a tab inside a tab. The board joins the
+rarest three per student in ONE batched query over the emails already on it.
+Commons are excluded: a mark everybody carries distinguishes nobody and would
+be noise on every line.
+
+`getAchievements` and `checkAchievements` are deliberately NOT in
+`READ_ONLY_FUNCTIONS` — both grant rows and pay XP, and caching them would
+leave a student's total stale the moment after an achievement paid them.
+
 ## A column that does not exist is a silent wrong answer
 
 **"It won't let me make a call, even with enough XP."** `placeForecast` read
@@ -1974,6 +2052,11 @@ another email before this.
   about what should not animate at all
 - `supabase/schema.json` + `scripts/dumpSchema.sh` — the real column list, and
   how to regenerate it after a migration
+- `src/lib/achievements.js` — the catalogue, its progress functions and the
+  showcase ordering; `buildAchievementStats` in `server.mjs` is the only reader
+  of the database, and adding an achievement means adding its stat there too
+- `src/components/ranked/AchievementUnlock.jsx`, `CrestRow.jsx` — the moment,
+  and the badges beside somebody's name
 - `src/components/competition/CalloutBacking.jsx` — backing somebody else's
   call-out; guarded by `placeForecast`, not by the component
 - `src/components/competition/SettlementReveal.jsx`, `RivalryStrip.jsx` — the

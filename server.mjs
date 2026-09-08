@@ -9,6 +9,8 @@ import mammoth from "mammoth";
 import JSZip from "jszip";
 import { createClient as createSupabaseClient } from "@supabase/supabase-js";
 import { QUEST_BY_ID, questMultiplier } from "./src/lib/quests.js";
+import { ACHIEVEMENTS, ACHIEVEMENT_BY_CODE, evaluate as evaluateAchievement }
+  from "./src/lib/achievements.js";
 // The same feature map the UI reads. Ace used to be told nothing about
 // AcedIt, so every answer about our own product was invented; importing it
 // here means the model and the interface cannot tell a student two different
@@ -513,79 +515,153 @@ async function addLeagueXP(userEmail, userProfile, deltaXp) {
 // in checkAndGrantAchievements from a single profile + count query.
 //
 // rarities: common | rare | epic | legendary
-const ACHIEVEMENT_CATALOG = [
-  // ─── Common (50-100 XP) ─────────────────────────────────────────────
-  { code: "FIRST_SPARK",       name: "First Spark",       desc: "Earn your first 100 XP",                          icon: "Sparkles",   rarity: "common",    reward_xp: 50,   sort: 1,   check: (s) => s.total_xp >= 100 },
-  { code: "FIRST_SESSION",     name: "Day One",           desc: "Complete your first study session",               icon: "Play",       rarity: "common",    reward_xp: 50,   sort: 2,   check: (s) => s.session_count >= 1 },
-  { code: "FIRST_QUIZ",        name: "Quizmaster Apprentice", desc: "Complete your first quiz",                    icon: "BrainCircuit", rarity: "common",  reward_xp: 50,   sort: 3,   check: (s) => s.quiz_count >= 1 },
-  { code: "SUBJECT_PICKED",    name: "Subject Selector",  desc: "Add your first VCE subject",                      icon: "BookOpen",   rarity: "common",    reward_xp: 50,   sort: 4,   check: (s) => s.subject_count >= 1 },
-  { code: "STREAK_3",          name: "Three In A Row",    desc: "Hit a 3-day study streak",                        icon: "Flame",      rarity: "common",    reward_xp: 100,  sort: 5,   check: (s) => s.peak_streak >= 3 },
-
-  // ─── Rare (150-300 XP) ─────────────────────────────────────────────
-  { code: "STREAK_7",          name: "Week One",          desc: "Hit a 7-day study streak",                        icon: "Flame",      rarity: "rare",      reward_xp: 200,  sort: 10,  check: (s) => s.peak_streak >= 7 },
-  { code: "QUIZ_25",           name: "Quiz Master",       desc: "Complete 25 quizzes",                             icon: "BrainCircuit", rarity: "rare",    reward_xp: 250,  sort: 11,  check: (s) => s.quiz_count >= 25 },
-  { code: "FRIEND_MAGNET",     name: "Friend Magnet",     desc: "Add 3 friends",                                   icon: "Users",      rarity: "rare",      reward_xp: 150,  sort: 12,  check: (s) => s.friend_count >= 3 },
-  { code: "COMPETE_FIRST",     name: "Competitor",        desc: "Join your first competition",                     icon: "Swords",     rarity: "rare",      reward_xp: 150,  sort: 13,  check: (s) => s.competition_count >= 1 },
-  { code: "GOAL_FIRST",        name: "Goal Setter",       desc: "Create your first study goal",                    icon: "Target",     rarity: "rare",      reward_xp: 150,  sort: 14,  check: (s) => s.goal_count >= 1 },
-  { code: "BLURTING_5",        name: "Blurter",           desc: "Complete 5 blurting sessions",                    icon: "PencilLine", rarity: "rare",      reward_xp: 200,  sort: 15,  check: (s) => s.blurting_count >= 5 },
-  { code: "ACTIVE_RECALL_5",   name: "Recall Adept",      desc: "Complete 5 active recall sessions",               icon: "Lightbulb",  rarity: "rare",      reward_xp: 200,  sort: 16,  check: (s) => s.active_recall_count >= 5 },
-
-  // ─── Epic (500-800 XP) ─────────────────────────────────────────────
-  { code: "STREAK_14",         name: "Two-Week Wonder",   desc: "Hit a 14-day study streak",                       icon: "Flame",      rarity: "epic",      reward_xp: 500,  sort: 20,  check: (s) => s.peak_streak >= 14 },
-  { code: "QUIZ_100",          name: "Quiz Legend",       desc: "Complete 100 quizzes",                            icon: "BrainCircuit", rarity: "epic",    reward_xp: 700,  sort: 21,  check: (s) => s.quiz_count >= 100 },
-  { code: "COMPETE_WIN",       name: "First Blood",       desc: "Win your first competition",                      icon: "Trophy",     rarity: "epic",      reward_xp: 500,  sort: 22,  check: (s) => s.competition_wins >= 1 },
-  { code: "ROADMAP_DONE",      name: "Roadmap Runner",    desc: "Complete a study roadmap",                        icon: "Map",        rarity: "epic",      reward_xp: 600,  sort: 23,  check: (s) => s.roadmap_completions >= 1 },
-  { code: "XP_5K",             name: "Five Grand",        desc: "Earn 5,000 lifetime XP",                          icon: "Zap",        rarity: "epic",      reward_xp: 500,  sort: 24,  check: (s) => s.total_xp >= 5000 },
-  { code: "WEEK_TOP_3",        name: "Podium",            desc: "Finish top 3 on the weekly leaderboard",          icon: "Medal",      rarity: "epic",      reward_xp: 750,  sort: 25,  check: (s) => s.best_weekly_rank > 0 && s.best_weekly_rank <= 3 },
-
-  // ─── Legendary (1000-3000 XP) ──────────────────────────────────────
-  { code: "STREAK_30",         name: "Monthly Master",    desc: "Hit a 30-day study streak",                       icon: "Flame",      rarity: "legendary", reward_xp: 1500, sort: 30,  check: (s) => s.peak_streak >= 30 },
-  { code: "STREAK_60",         name: "Marathon",          desc: "Hit a 60-day study streak",                       icon: "Flame",      rarity: "legendary", reward_xp: 3000, sort: 31,  check: (s) => s.peak_streak >= 60 },
-  { code: "XP_25K",            name: "XP Tycoon",         desc: "Earn 25,000 lifetime XP",                         icon: "Crown",      rarity: "legendary", reward_xp: 2000, sort: 32,  check: (s) => s.total_xp >= 25000 },
-  { code: "QUIZ_250",          name: "Quiz Deity",        desc: "Complete 250 quizzes",                            icon: "BrainCircuit", rarity: "legendary", reward_xp: 2000, sort: 33, check: (s) => s.quiz_count >= 250 },
-  { code: "COMPETE_5",         name: "Conqueror",         desc: "Win 5 competitions",                              icon: "Swords",     rarity: "legendary", reward_xp: 2000, sort: 34,  check: (s) => s.competition_wins >= 5 },
-  { code: "WEEK_TOP_1",        name: "Top Dog",           desc: "Finish #1 on the weekly leaderboard",             icon: "Crown",      rarity: "legendary", reward_xp: 2500, sort: 35,  check: (s) => s.best_weekly_rank === 1 },
-];
-
-const ACHIEVEMENT_BY_CODE = Object.fromEntries(ACHIEVEMENT_CATALOG.map(a => [a.code, a]));
+// The catalogue lives in src/lib/achievements.js so the client can draw the
+// grid and the near-miss from the SAME definitions the server grants against.
+// It was inline here, as booleans, and five of the twenty-four measured
+// something the app does not do — see that file's header for which and why.
+const ACHIEVEMENT_CATALOG = ACHIEVEMENTS;
 
 // Build the stats object used by all `check()` predicates.
 async function buildAchievementStats(userEmail, profile) {
   if (!supabaseAdmin || !userEmail) return {};
   const stats = {
-    total_xp:           profile?.total_xp ?? 0,
-    peak_streak:        profile?.peak_streak ?? profile?.streak_days ?? 0,
-    streak_days:        profile?.streak_days ?? 0,
+    total_xp:    profile?.total_xp ?? 0,
+    peak_streak: profile?.peak_streak ?? profile?.streak_days ?? 0,
+    streak_days: profile?.streak_days ?? 0,
   };
 
-  // Count-style stats — use Postgrest count=exact via head request to avoid
-  // pulling the rows themselves.
-  const counts = await Promise.all([
-    supabaseAdmin.from('quiz_attempts').select('id', { count: 'exact', head: true }).eq('created_by', userEmail),
-    supabaseAdmin.from('study_sessions').select('id', { count: 'exact', head: true }).eq('created_by', userEmail),
-    supabaseAdmin.from('user_subjects').select('id', { count: 'exact', head: true }).eq('created_by', userEmail).eq('is_active', true),
-    supabaseAdmin.from('friendships').select('id', { count: 'exact', head: true }).eq('status', 'accepted')
-      .or(`created_by.eq.${userEmail},friend_email.eq.${userEmail}`),
-    supabaseAdmin.from('goal_competitions').select('id', { count: 'exact', head: true })
-      .or(`creator_email.eq.${userEmail}`),
-    supabaseAdmin.from('goal_competitions').select('id', { count: 'exact', head: true }).eq('winner_email', userEmail),
-    supabaseAdmin.from('goals').select('id', { count: 'exact', head: true }).eq('created_by', userEmail),
-    supabaseAdmin.from('blurting_sessions').select('id', { count: 'exact', head: true }).eq('created_by', userEmail),
-    supabaseAdmin.from('active_recall_sessions').select('id', { count: 'exact', head: true }).eq('created_by', userEmail),
-    supabaseAdmin.from('study_roadmaps').select('id', { count: 'exact', head: true }).eq('created_by', userEmail),
-  ]);
-  stats.quiz_count             = counts[0].count ?? 0;
-  stats.session_count          = counts[1].count ?? 0;
-  stats.subject_count          = counts[2].count ?? 0;
-  stats.friend_count           = counts[3].count ?? 0;
-  stats.competition_count      = counts[4].count ?? 0;
-  stats.competition_wins       = counts[5].count ?? 0;
-  stats.goal_count             = counts[6].count ?? 0;
-  stats.blurting_count         = counts[7].count ?? 0;
-  stats.active_recall_count    = counts[8].count ?? 0;
-  stats.roadmap_completions    = counts[9].count ?? 0;
+  // ─── Counts ───────────────────────────────────────────────────────────────
+  // `count: 'exact', head: true` so none of the rows come back — this runs on
+  // every XP award.
+  //
+  // THREE OF THESE WERE WRONG AND SILENTLY RETURNED ZERO FOREVER:
+  //   friendships had no `friend_email` column (it is requester/recipient), so
+  //   PostgREST rejected the query and 150 XP was unreachable;
+  //   study_roadmaps has no writer in the app at all;
+  //   and "a study session" counted study_sessions alone, which misses the
+  //   whole Study page — pomodoro, blurting, recall and spaced repetition all
+  //   write to study_techniques.
+  const count = (q) => q.then(r => {
+    // An error here used to vanish into `?? 0`, which is how a broken query
+    // became a permanently locked achievement rather than a loud failure.
+    if (r.error) console.warn("[achievements] count failed:", r.error.code, r.error.message);
+    return r.count ?? 0;
+  });
 
-  // Best weekly leaderboard rank ever achieved.
+  const [
+    quizCount, sessCount, techCount, subjectCount,
+    friendsAsRequester, friendsAsRecipient,
+    compWins, goalCount, blurtCount, recallCount,
+  ] = await Promise.all([
+    count(supabaseAdmin.from('quiz_attempts').select('id', { count: 'exact', head: true }).eq('created_by', userEmail)),
+    count(supabaseAdmin.from('study_sessions').select('id', { count: 'exact', head: true }).eq('created_by', userEmail)),
+    count(supabaseAdmin.from('study_techniques').select('id', { count: 'exact', head: true }).eq('created_by', userEmail)),
+    count(supabaseAdmin.from('user_subjects').select('id', { count: 'exact', head: true }).eq('created_by', userEmail).eq('is_active', true)),
+    // Two queries rather than an interpolated .or(): the email comes from a
+    // verified JWT, but building PostgREST filter syntax out of a string is a
+    // habit worth not having — the rule getCallouts already states.
+    count(supabaseAdmin.from('friendships').select('id', { count: 'exact', head: true }).eq('status', 'accepted').eq('requester_email', userEmail)),
+    count(supabaseAdmin.from('friendships').select('id', { count: 'exact', head: true }).eq('status', 'accepted').eq('recipient_email', userEmail)),
+    count(supabaseAdmin.from('goal_competitions').select('id', { count: 'exact', head: true }).eq('winner_email', userEmail)),
+    count(supabaseAdmin.from('goals').select('id', { count: 'exact', head: true }).eq('created_by', userEmail)),
+    count(supabaseAdmin.from('blurting_sessions').select('id', { count: 'exact', head: true }).eq('created_by', userEmail)),
+    count(supabaseAdmin.from('active_recall_sessions').select('id', { count: 'exact', head: true }).eq('created_by', userEmail)),
+  ]);
+
+  stats.quiz_count          = quizCount;
+  // BOTH study tables. Neither is a superset of the other.
+  stats.study_count         = sessCount + techCount;
+  stats.subject_count       = subjectCount;
+  stats.friend_count        = friendsAsRequester + friendsAsRecipient;
+  stats.competition_wins    = compWins;
+  stats.goal_count          = goalCount;
+  stats.blurting_count      = blurtCount;
+  stats.active_recall_count = recallCount;
+
+  // ─── Battles you are IN, not only the ones you started ────────────────────
+  // "Join your first competition" counted `creator_email = you`, so joining
+  // somebody else's battle by code earned nothing. A joiner lands in the
+  // participants array; duels are a separate table entirely.
+  const [{ data: myComps }, duelsA, duelsB] = await Promise.all([
+    supabaseAdmin.from('goal_competitions').select('id')
+      .contains('participants', JSON.stringify([{ email: userEmail }])).limit(200),
+    count(supabaseAdmin.from('study_duels').select('id', { count: 'exact', head: true }).eq('challenger_email', userEmail)),
+    count(supabaseAdmin.from('study_duels').select('id', { count: 'exact', head: true }).eq('opponent_email', userEmail)),
+  ]);
+  stats.competition_count = (myComps?.length ?? 0) + duelsA + duelsB;
+
+  // ─── Verified study, and call-outs answered ───────────────────────────────
+  // Both come off `callouts`, which migrations 0025/0026 create. A project
+  // that has not run them yet reports zero rather than failing the whole
+  // build — the same posture getCallouts takes.
+  try {
+    const { data: passed } = await supabaseAdmin
+      .from('callouts').select('window_start, submitted_at, created_date')
+      .eq('target_email', userEmail).eq('status', 'passed').limit(200);
+    stats.callouts_passed = passed?.length ?? 0;
+    stats.verified_minutes = Math.round((passed || []).reduce((sum, c) => {
+      const a = new Date(c.window_start || c.created_date).getTime();
+      const b = new Date(c.submitted_at || c.created_date).getTime();
+      if (!Number.isFinite(a) || !Number.isFinite(b)) return sum;
+      // Capped per call-out for the same reason every board caps: a window is
+      // a span of wall clock, not a claim about time spent inside it.
+      return sum + Math.min(Math.abs(b - a) / 60000, DAILY_MINUTE_CAP);
+    }, 0));
+  } catch {
+    stats.callouts_passed = 0;
+    stats.verified_minutes = 0;
+  }
+
+  // ─── Mistakes actually FIXED ──────────────────────────────────────────────
+  // The bank exists to be emptied and nothing rewarded emptying it. A cleared
+  // card carries `retired_at` — the field /Review already uses for "I know
+  // this" — which is the app's own record of a mistake a student is done with.
+  const { count: fixedCount } = await supabaseAdmin
+    .from('flashcards').select('id', { count: 'exact', head: true })
+    .eq('created_by', userEmail).eq('topic', 'Mistake bank')
+    .not('retired_at', 'is', null);
+  stats.mistakes_fixed = fixedCount ?? 0;
+
+  // ─── Breadth: the best week's distinct subjects ───────────────────────────
+  const since = new Date(Date.now() - 120 * 24 * 3600 * 1000).toISOString();
+  const [{ data: bTech }, { data: bSess }] = await Promise.all([
+    supabaseAdmin.from('study_techniques').select('subject, date')
+      .eq('created_by', userEmail).gte('created_date', since).limit(2000),
+    supabaseAdmin.from('study_sessions').select('subject, date')
+      .eq('created_by', userEmail).gte('created_date', since).limit(2000),
+  ]);
+  const byWeek = new Map();
+  for (const r of [...(bTech || []), ...(bSess || [])]) {
+    if (!r?.subject || !r?.date) continue;
+    const d = new Date(`${String(r.date).slice(0, 10)}T00:00:00`);
+    if (Number.isNaN(d.getTime())) continue;
+    // Monday-start, matching studyLog's own weekStart.
+    const day = (d.getDay() + 6) % 7;
+    d.setDate(d.getDate() - day);
+    const k = d.toISOString().slice(0, 10);
+    if (!byWeek.has(k)) byWeek.set(k, new Set());
+    byWeek.get(k).add(r.subject);
+  }
+  stats.best_week_subjects = Math.max(0, ...[...byWeek.values()].map(v => v.size));
+
+  // ─── Comebacks ────────────────────────────────────────────────────────────
+  // A seven-day run built AFTER a longer one was already lost. The day after a
+  // streak breaks is when most students stop, so rebuilding is the thing worth
+  // catching — and it is only true when the peak is genuinely behind them.
+  stats.comeback_streaks =
+    (stats.peak_streak >= 7 && (profile?.streak_days ?? 0) >= 7
+      && (profile?.peak_streak ?? 0) > (profile?.streak_days ?? 0)) ? 1 : 0;
+
+  // ─── Calibration ──────────────────────────────────────────────────────────
+  // Settled forecasts that paid MORE than nothing — the scoring rule pays zero
+  // for restating the app's own base rate, so a positive payout is the student
+  // knowing something it did not. Unfakeable by construction.
+  const { data: settled } = await supabaseAdmin
+    .from('score_wagers').select('xp_outcome')
+    .eq('bettor_email', userEmail).in('status', ['won', 'lost']).limit(500);
+  stats.calibrated_calls = (settled || []).filter(w => (Number(w.xp_outcome) || 0) > 0).length;
+
+  // ─── Best weekly league finish ────────────────────────────────────────────
   const { data: bestWeek } = await supabaseAdmin
     .from('league_memberships')
     .select('final_position')
@@ -597,6 +673,7 @@ async function buildAchievementStats(userEmail, profile) {
 
   return stats;
 }
+
 
 // Detect newly-qualified achievements, insert unlocks, grant reward XP.
 // Returns array of newly-unlocked achievement codes.
@@ -614,8 +691,10 @@ async function checkAndGrantAchievements(userEmail, profile) {
     if (candidates.length === 0) return [];
 
     const stats = await buildAchievementStats(userEmail, profile);
+    // `evaluate` derives unlocked from value/target, so the grant and the
+    // progress bar a student sees cannot disagree about whether they got there.
     const newlyUnlocked = candidates.filter(a => {
-      try { return !!a.check(stats); } catch { return false; }
+      try { return evaluateAchievement(a, stats).unlocked; } catch { return false; }
     });
     if (newlyUnlocked.length === 0) return [];
 
@@ -7042,6 +7121,29 @@ app.post("/local-ai/fn/getRankedBoards", async (req, res) => {
       schoolMap = Object.fromEntries((schools || []).map((p) => [p.created_by, p.school_name || null]));
     } catch { /* scope toggle just shows global */ }
 
+    // ─── The rarest badge each student holds ──────────────────────────────
+    // An achievement only this student can see is a private checklist, not
+    // something competitive. One batched query over the emails already on the
+    // board — the same shape the school lookup above uses — so this costs one
+    // round trip rather than one per row.
+    let crestMap = {};
+    try {
+      const { data: unlocks } = await supabaseAdmin
+        .from("user_achievements").select("user_email, achievement_code")
+        .in("user_email", emails.slice(0, 300));
+      const byUser = {};
+      for (const u of unlocks || []) (byUser[u.user_email] ||= []).push(u.achievement_code);
+      const rank = { common: 0, rare: 1, epic: 2, legendary: 3 };
+      for (const [email, codes] of Object.entries(byUser)) {
+        crestMap[email] = codes
+          .map((c) => ACHIEVEMENT_BY_CODE[c])
+          .filter(Boolean)
+          .sort((a, b) => (rank[b.rarity] ?? 0) - (rank[a.rarity] ?? 0) || b.reward_xp - a.reward_xp)
+          .slice(0, 3)
+          .map((a) => ({ code: a.code, name: a.name, icon: a.icon, rarity: a.rarity }));
+      }
+    } catch { /* a board without crests is still a board */ }
+
     const myProfile = profileRows?.[0];
     return res.json({
       success: true,
@@ -7054,7 +7156,12 @@ app.post("/local-ai/fn/getRankedBoards", async (req, res) => {
         ...(fA || []).map((f) => f.recipient_email),
         ...(fB || []).map((f) => f.requester_email),
       ],
-      board: (board || []).map((r) => ({ ...r, school_name: schoolMap[r.user_email] || null, band: atarBand(r.acedit_atar) })),
+      board: (board || []).map((r) => ({
+        ...r,
+        school_name: schoolMap[r.user_email] || null,
+        band: atarBand(r.acedit_atar),
+        crests: crestMap[r.user_email] || [],
+      })),
     });
   } catch (err) {
     console.error("[getRankedBoards] error:", err);
@@ -7300,8 +7407,17 @@ app.post("/local-ai/fn/getAchievements", async (req, res) => {
       .eq('user_email', user.email);
     const byCode = Object.fromEntries((unlocks || []).map(u => [u.achievement_code, u]));
 
+    // PROGRESS, not a padlock. Fourteen of twenty-four tiles rendered as
+    // identical grey boxes reading "Locked", which tells a student nothing
+    // about what to chase — the grid was two-thirds wallpaper. The stats are
+    // built once here and every tile reports how far along it is.
+    const progressStats = await buildAchievementStats(user.email, await loadUserProfile(user.email))
+      .catch(e => { console.warn("[getAchievements] stats failed:", e?.message); return {}; });
+
     const items = ACHIEVEMENT_CATALOG.map(a => {
       const u = byCode[a.code];
+      let ev = { value: 0, target: 1, unlocked: false, ratio: 0 };
+      try { ev = evaluateAchievement(a, progressStats); } catch { /* zeroes */ }
       return {
         code:       a.code,
         name:       a.name,
@@ -7310,8 +7426,15 @@ app.post("/local-ai/fn/getAchievements", async (req, res) => {
         rarity:     a.rarity,
         reward_xp:  a.reward_xp,
         sort:       a.sort,
-        unlocked:   !!u,
+        // The stored row WINS: a student who sat 25 quizzes and later deleted
+        // attempts keeps the badge. An achievement records something that
+        // happened, and taking one back is the one thing this must not do.
+        unlocked:   !!u || ev.unlocked,
+        granted:    !!u,
         unlocked_at: u?.unlocked_at || null,
+        value:      ev.value,
+        target:     ev.target,
+        ratio:      u ? 1 : ev.ratio,
       };
     }).sort((a, b) => a.sort - b.sort);
 
