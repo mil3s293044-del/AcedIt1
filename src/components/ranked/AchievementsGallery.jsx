@@ -9,7 +9,7 @@ import React, { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
     Sparkles, Play, BookOpen, Flame, BrainCircuit, Users, Swords, Target,
-    PencilLine, Lightbulb, Trophy, Map, Zap, Medal, Crown, Lock, X,
+    PencilLine, Lightbulb, Trophy, Map, Zap, Medal, Crown, X,
 } from "lucide-react";
 import { supabase } from "@/api/supabaseClient";
 import AceShuffle from "@/components/ace/AceShuffle";
@@ -109,7 +109,10 @@ export default function AchievementsGallery() {
             </div>
 
             {/* Hex-grid gallery */}
-            <div className="grid grid-cols-3 sm:grid-cols-4 lg:grid-cols-6 gap-3">
+            {/* Four across, not six. At six the tile was 12px of type and a 48px
+                glyph, which is why every locked one collapsed to a padlock —
+                there was no room for a name. */}
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
                 {items.map((item) => (
                     <AchievementTile
                         key={item.code || item.id}
@@ -129,30 +132,66 @@ export default function AchievementsGallery() {
     );
 }
 
+/**
+ * ─── A LOCKED TILE SHOWS HOW CLOSE YOU ARE ──────────────────────────────────
+ * Fourteen of twenty-four rendered as identical grey padlocks reading
+ * "Locked", which is two-thirds of the grid telling a student nothing about
+ * what to chase — and hiding the NAME of a locked achievement removes the only
+ * thing that could make somebody want it. Every tile names itself and draws
+ * its own progress now.
+ *
+ * The one exception is zero: "0 of 250" is the whole achievement rather than a
+ * near miss, so an untouched tile stays quiet and simply reads as available.
+ */
 function AchievementTile({ item, onClick }) {
     const Icon = ICON_REGISTRY[item.icon] || Sparkles;
     const r = RARITY[item.rarity] || RARITY.common;
+    const target = Number(item.target) || 0;
+    const value = Math.min(Number(item.value) || 0, target || Infinity);
+    const ratio = item.unlocked ? 1 : Math.max(0, Math.min(1, Number(item.ratio) || 0));
+    const started = !item.unlocked && ratio > 0;
+
     return (
         <button
             onClick={onClick}
-            className={`card-soft card-soft-hover p-3 flex flex-col items-center gap-2 transition-all ${item.unlocked ? r.ring : ""} ${item.unlocked ? "ring-2" : ""}`}
+            className={`card-soft card-soft-hover p-4 flex flex-col items-center gap-2.5 text-center
+                transition-all ${item.unlocked ? `${r.ring} ring-2` : ""}`}
         >
-            <div className={`w-12 h-12 rounded-2xl border flex items-center justify-center ${
-                item.unlocked ? r.haloEarned : "bg-muted/40 text-muted-foreground/40 border-border/30"
+            <div className={`w-14 h-14 rounded-2xl border flex items-center justify-center ${
+                item.unlocked ? r.haloEarned
+                    : started ? "bg-secondary text-muted-foreground border-border"
+                    : "bg-muted/40 text-muted-foreground/40 border-border/30"
             }`}>
-                {item.unlocked
-                    ? <Icon className="w-6 h-6" strokeWidth={2.5} />
-                    : <Lock className="w-5 h-5" strokeWidth={2.5} />}
+                <Icon className="w-7 h-7" strokeWidth={2.4} />
             </div>
-            <p className={`text-[11px] font-display font-extrabold text-center leading-tight line-clamp-2 ${
-                item.unlocked ? "text-foreground" : "text-muted-foreground/60"
+
+            <p className={`text-xs font-display font-extrabold leading-tight line-clamp-2 ${
+                item.unlocked ? "text-foreground" : "text-muted-foreground"
             }`}>
-                {item.unlocked ? item.name : "Locked"}
+                {item.name}
             </p>
-            {item.unlocked && item.reward_xp > 0 && (
-                <span className="pill bg-xp/10 text-xp text-[9px] px-1.5 py-0">
-                    +{item.reward_xp} XP
-                </span>
+
+            {item.unlocked ? (
+                item.reward_xp > 0 && (
+                    <span className="pill bg-xp/10 text-xp text-[10px] px-2 py-0.5">
+                        +{item.reward_xp.toLocaleString()} XP
+                    </span>
+                )
+            ) : (
+                <div className="w-full">
+                    <div className="h-1.5 rounded-full bg-secondary overflow-hidden">
+                        <motion.div
+                            initial={{ width: 0 }}
+                            animate={{ width: `${ratio * 100}%` }}
+                            transition={{ duration: 0.7, ease: [0.2, 0.8, 0.2, 1] }}
+                            className="h-full rounded-full bg-muted-foreground/50"
+                        />
+                    </div>
+                    <p className="text-[10px] font-bold text-muted-foreground/70 mt-1 tabular-nums">
+                        {started ? `${value.toLocaleString()} / ${target.toLocaleString()}`
+                            : `+${item.reward_xp.toLocaleString()} XP`}
+                    </p>
+                </div>
             )}
         </button>
     );
@@ -187,13 +226,11 @@ function DetailModal({ item, onClose }) {
                     <div className={`w-20 h-20 mx-auto rounded-3xl border-2 flex items-center justify-center mb-4 ${
                         item.unlocked ? r.haloEarned : "bg-muted/40 text-muted-foreground/40 border-border/30"
                     }`}>
-                        {item.unlocked
-                            ? <Icon className="w-10 h-10" strokeWidth={2} />
-                            : <Lock className="w-8 h-8" strokeWidth={2} />}
+                        <Icon className="w-10 h-10" strokeWidth={2} />
                     </div>
                     <span className={`pill ${r.chip} text-[10px] mb-2`}>{r.label}</span>
                     <h3 className="font-display font-extrabold text-foreground text-xl tracking-tight">
-                        {item.unlocked ? item.name : "Locked"}
+                        {item.name}
                     </h3>
                     <p className="text-muted-foreground text-sm mt-2 leading-relaxed">
                         {item.desc}

@@ -67,6 +67,11 @@ export const getCallouts               = makeFn('getCallouts');
 export const startCallout              = makeFn('startCallout');
 export const submitCallout             = makeFn('submitCallout');
 export const reactToEvent              = makeFn('reactToEvent');
+// NEITHER is read-only: both self-heal, granting unlock rows and reward XP.
+// Putting them in READ_ONLY_FUNCTIONS would leave a student's XP total stale
+// the moment after an achievement paid them.
+export const getAchievements           = makeFn('getAchievements');
+export const checkAchievements         = makeFn('checkAchievements');
 export const getReactions              = makeFn('getReactions');
 export const verifyMe                  = makeFn('verifyMe');
 

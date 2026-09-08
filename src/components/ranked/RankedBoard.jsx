@@ -44,6 +44,7 @@ import React, { useMemo } from "react";
 import { motion } from "framer-motion";
 import { Flame, Crown, Medal, ChevronUp } from "lucide-react";
 import { avatarHue, initialsOf, rowFlex, BAND_TONE } from "@/lib/ranked";
+import CrestRow from "@/components/ranked/CrestRow";
 
 const TONE_PILL = {
     muted: "bg-secondary text-muted-foreground", xp: "bg-xp/15 text-xp",
@@ -123,6 +124,13 @@ function Row({ row, place, isMe, boardMeta, title, name, gap, gapScale, near }) 
                         {band && (
                             <span className={`pill text-[10px] ${TONE_PILL[BAND_TONE[band]] || TONE_PILL.muted}`}>{band}</span>
                         )}
+                        {/* The rarest badges this student holds. Until now an
+                            achievement was visible only to its owner, on a tab
+                            inside a tab — a private checklist rather than
+                            anything competitive. Commons are excluded by
+                            CrestRow: a mark everybody carries distinguishes
+                            nobody and would be noise on every line. */}
+                        <CrestRow crests={row.crests} />
                     </div>
                     <p className="text-[11px] text-muted-foreground truncate">{flex || " "}</p>
                 </div>

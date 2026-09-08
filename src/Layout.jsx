@@ -12,6 +12,8 @@ import XPFeedback from "@/components/ranked/XPFeedback";
 import StreakCelebration from "@/components/ranked/StreakCelebration";
 import StakesPill from "@/components/arena/StakesPill";
 import { LiveProvider, useBusy, BUSY } from "@/lib/LiveContext";
+import AchievementUnlock from "@/components/ranked/AchievementUnlock";
+import { useAchievementWatch } from "@/lib/useAchievementWatch";
 import TopNav from "@/components/layout/TopNav";
 import BottomNav from "@/components/layout/BottomNav";
 import SideRail from "@/components/layout/SideRail";
@@ -136,6 +138,18 @@ const FloatingTimer = React.memo(({
 ));
 
 FloatingTimer.displayName = 'FloatingTimer';
+
+/**
+ * Watches for unlocks and plays them, over whatever page the student is on.
+ *
+ * Its own component so the polling hook cannot re-render the whole Layout on
+ * every check — the shell repainting under somebody is exactly what the live
+ * system spends its time avoiding.
+ */
+function AchievementWatcher() {
+    const codes = useAchievementWatch(true);
+    return <AchievementUnlock codes={codes} />;
+}
 
 /** Claims "busy" for as long as a study timer is on screen and running. */
 function TimerBusy({ running }) {
@@ -457,6 +471,7 @@ export default function Layout({ children }) {
             {/* A running study timer is work in progress: the numbers must not
                 shuffle under somebody watching a clock. */}
             <TimerBusy running={showFloatingTimer} />
+            <AchievementWatcher />
             <SideRail />
             <TopNav />
 
