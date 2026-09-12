@@ -83,6 +83,7 @@ const Subscription = lazyPage('Subscription', () => import('./pages/Subscription
 const Support = lazyPage('Support', () => import('./pages/Support'));
 const Timer = lazyPage('Timer', () => import('./pages/Timer'));
 const Help = lazyPage('Help', () => import('./pages/Help'));
+const League = lazyPage('League', () => import('./pages/League'));
 const MistakeBank = lazyPage('MistakeBank', () => import('./pages/MistakeBank'));
 const SubjectHub = lazyPage('SubjectHub', () => import('./pages/SubjectHub'));
 import __Layout from './Layout.jsx';
@@ -91,6 +92,7 @@ import __Layout from './Layout.jsx';
 export const PAGES = {
     "AITools": AITools,
     "Help": Help,
+    "League": League,
     "MistakeBank": MistakeBank,
     "AIToolsHistory": AIToolsHistory,
     "Analytics": Analytics,

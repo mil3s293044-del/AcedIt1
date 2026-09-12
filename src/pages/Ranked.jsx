@@ -31,6 +31,7 @@ import MyProfile from "@/components/ranked/MyProfile";
 import AtarDial from "@/components/ranked/AtarDial";
 import RankedBoard from "@/components/ranked/RankedBoard";
 import StandingRail from "@/components/ranked/StandingRail";
+import WeekStrip from "@/components/ranked/WeekStrip";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
     standing, titlesFor, nextBand, weakestComponent, BAND_TONE,
@@ -294,7 +295,13 @@ export default function Ranked() {
                                 most students do not have. StandingRail is the
                                 contest instead — who is above, who is behind,
                                 and what the gap costs in work. */}
-                            <div className="xl:sticky xl:top-6">
+                            <div className="xl:sticky xl:top-6 space-y-3">
+                                {/* The weekly league. Ranked is already the
+                                    page about where you stand — the ATAR board
+                                    over 28 days, this over the week — so the
+                                    way in belongs here rather than as a sixth
+                                    nav item. */}
+                                <WeekStrip />
                                 <StandingRail
                                     mine={mine} boardMeta={meta} board={board}
                                     nameOf={(r) => displayName(r, data?.me)}
