@@ -510,688 +510,149 @@ nothing notices. `routes.test.mjs` asserts it, along with the `lazyPage` name
 argument matching its file — a wrong name there is invisible until the failure
 path lies about which page failed.
 
-## Compete: the page opens on an answer
+## Compete is ONE object: a market
 
-**Three tabs is a navigation question standing where an answer should be.**
-`competeLead` picks the one thing happening, ordered by what is about to be
-DECIDED — a call settling tonight, then a battle close enough to turn, then any
-battle, then an invitation to make a call. Every branch returns null rather than
-a placeholder, so an empty account gets no hero rather than "0 XP at stake".
+**Seven nouns all meant "a thing you can win"** — battles (`goal_competitions`),
+duels (`study_duels`), call-outs, forecasts, progress bets, back-yourself bets
+and the weekly league. Seven mental models, seven card shapes, 6,700 lines
+across 24 components and a 1,087-line page. A student had to learn all seven
+before they could do anything, which is why the page read as confusing however
+it was styled. **Restyling seven objects gives you seven prettier objects.**
 
-**A probability is the most abstract thing on the page, so it is drawn as a
-COUNT.** `OddsDots` — ten dots, N filled, "7 times in 10". The dots the base
-rate would have filled are ringed, which makes the disagreement itself
-countable: those rings are exactly what the scoring rule pays on. Rounded to
-the nearest dot deliberately; 0.68 is not more knowable than "about seven in
-ten" off a dozen observations.
+Polymarket's real lesson is not the look. It is that there is exactly ONE
+object: a question, a price, a side, a resolution. You learn it once and
+everything else is a variant. So a battle is a market on who wins it, a duel is
+a two-outcome market, a call-out is a market with a clock, a SAC is a market on
+a number, and hours and streaks are markets on a study log. `MarketCard` is the
+only card; `src/lib/market.js` is the only model.
 
-`Odometer` rolls the payout numbers rather than swapping them, because on this
-dial the numbers ARE the feedback — rolled, the trade-off is visible as motion
-instead of reconstructed from two remembered states. It springs a motion value
-and formats per frame; animating the string cannot work, there is nothing to
-interpolate between "-5" and "+14".
+**THE PRICE IS THE CROWD, AND BEATING IT IS THE GAME.** `forecast.js` scored a
+student against the HOUSE's base rate, which was right maths and the wrong
+shape — a house number is not a market. The base rate is now only the PRIOR,
+and you are scored against the price the crowd had reached when you took your
+side. That one change is what makes it a market: the price means something,
+early information is what pays, agreeing with it pays EXACTLY ZERO so nothing
+is farmable by repetition, and no counterparty is needed — which matters
+enormously at thirty active students, where a real order book would sit empty
+and every market would read as broken.
 
-**The battle sparkline was already there and was scaled wrong.** BattleRow has
-drawn `oddsSeries` — win probability replayed across the trail — since the
-market dashboard landed, and it plotted every battle on a fixed 0–100:
-`Math.min(...ps, 0)` and `Math.max(...ps, 100)` are constants, so the seeds
-pinned the range open. A race swinging 48 → 55, which is the entire story of a
-close battle, moved the line 1.4px in a 20px box and read as flat.
+The rule stays proper and `market.test.mjs` sweeps it to prove so. **K is 1 and
+there is no clamp**, carried over from forecast.js where it was learned the hard
+way: with the loss floored, extra confidence past the floor is free and the rule
+goes improper in the tails.
 
-`MomentumSpark` scales to the DATA with a floor. The floor matters as much as
-the scaling: without it a steady battle gets stretched to fill the box and
-reads as violent swings, which is the same lie the other way up. Fifty per cent
-is drawn, because a win-probability line without the coin-flip on it is a
-wiggle — crossing it is the event, and the fill is the distance from even.
+**THE FIRST POSITION IS NOT THE PRICE.** `PRIOR_WEIGHT` is a pseudo-stake, so
+one student putting 10 on 95% cannot move a market to 95¢ and have the next
+person read one teenager's guess as a consensus — then be scored against it.
 
-Two things it must keep. The reveal is a CLIP RECTANGLE, never framer's
-`pathLength`: that is implemented as a stroke dash, and a dash pattern inside a
-`preserveAspectRatio="none"` viewBox is stretched horizontally by however much
-wider the box is than it is tall, so the line rendered with gaps torn through
-it. And the end dot is an HTML span positioned by percentage, not an SVG
-circle — the same non-uniform stretch turns a circle into a flattened oval.
+**YOU MAY NEVER HOLD A PAYING POSITION ON A MARKET YOU RESOLVE.** One rule,
+stated about WHO rather than about which feature, and it closes the whole class
+the old wagering layer died of:
 
-Open calls inside 24 hours of settling pulse. Settled calls stamp their verdict
-in with a spring and count their XP up, staggered, so a batch reads as results
-arriving rather than a list rendering.
+- A **SAC mark** is reported by the student, so the student cannot back it.
+  Their line is public and everybody else trades it — which is a better game
+  anyway: being read by twelve people is more motivating than being paid for a
+  number you typed. This is what makes real marks bettable at all.
+- A **call-out's** caller and target decide its outcome, so neither may hold.
+- A **battle's** competitors decide the standings.
+- But a market on your own **study log** IS allowed, deliberately: the app
+  measures that itself under the service role with the integrity caps on top.
+  Betting you will study five days and then doing it is the product working.
 
-## Compete: forecasting, not betting
+**Cred, not XP and not chips.** XP drives level, rank and the ATAR, so staking
+it makes the rational play "never bet" — a market where abstaining is optimal
+is not a market. `chips.js` is already the weekly AI budget, so that word was
+taken. Cred is granted weekly (`CRED_WEEKLY_GRANT`) and capped
+(`CRED_BALANCE_CAP`); the Monday grant is a reason to come back that is not a
+streak, and the cap stops a student who ignored Compete for a term arriving
+with an unanswerable stack. It is TOPPED UP to the grant rather than added to.
 
-**The wagering layer could not lose.** `resolveScoreWager` settled on "user
-enters their actual assessment score" — a number from the request body — and
-the only UI that called it pre-filled that field with the student's own
-prediction (`useState(me?.actual_result ?? me?.self_line ?? 75)`). So the
-default interaction was: set a line, open the form, press submit, collect 3×,
-against the `bet_win` cap of 2000 XP a day. It was the largest faucet in the
-app and the only one that required no study.
+**A MARKET ABOUT YOU SORTS FIRST, whatever its heat.** "Twelve people are
+trading your week" is the single most motivating sentence this app can put on a
+screen and it is most of why this can be a retention engine rather than a
+leaderboard. Otherwise the board is sorted by heat — conviction on the table
+plus a clock running out — never by recency, which would put an untouched
+question above one four people are arguing over.
 
-Two more things were wrong with it as a GAME. **No odds** — a flat 1.8× on the
-client and 3×/1.5× on the server, so backing a certainty paid what backing a
-longshot paid, and a constant carries no information. **No counterparty** — you
-set your own line and settled your own outcome, so nothing anybody did was a
-claim against anyone.
+**It is a different ROOM, on purpose.** Literal ink, not tokens: the focus-mode
+lesson arrived at from the same direction — a token that flips underneath a
+deliberate inversion is the bug, not the fix — so the floor renders identically
+in both themes, which is the point. The brand green stays YES and the streak
+red stays NO so the two colours a student already reads as good and bad mean
+the same things here. Third place on the league board taught the matching
+lesson: `streak` red on a podium read as a warning.
 
-**A forecast is a PROBABILITY on a question the app can settle itself**
-(`forecast.js`). Scored against a base rate with a proper scoring rule:
-`xp = stake × ((base − outcome)² − (p − outcome)²)`. Restating the base rate
-back at the app pays EXACTLY ZERO, which is the property that makes it
-unfarmable — and a test proves the rule is proper, that stating what you
-actually believe maximises expected return at every price.
+**Minting is automatic, because an empty board kills a market site.** The first
+person to arrive on Monday must find something to trade, and "create the first
+market" is work nobody does. Two questions per student per week, minted on
+demand, deduped by a unique index on (kind, subject, period, ref) so two
+students opening the board in the same second cannot post the same question
+twice with the stakes split between the copies.
 
-**K IS 1 AND THERE IS NO CLAMP.** This was K=2 with the loss floored at the
-stake, and the clamp made the rule improper in the tails: against a house at
-50% with a true probability of 10%, saying 0% beat saying 10%, because past the
-point where the clamp bites extra confidence is free. `skill` is already in
-[−1, 1], so at K=1 the payout is bounded by the stake without one. The test
-that catches this is the properness sweep — keep it.
+**Settlement is lazy and recomputed.** No cron here — the sweep runs whenever
+somebody opens the board, the same design the weekly league commits to. THE
+OUTCOME IS RECOMPUTED FROM THE STUDY TABLES AND NEVER ACCEPTED FROM A REQUEST
+BODY. A market past its close with no answer stays OPEN rather than resolving
+false by default: resolving a question nobody could answer is worse than
+leaving it hanging. A void returns every stake whole.
 
-**The stake is ESCROWED, and that is load-bearing.** `awardXP` only adds and is
-cap-bounded, so a losing forecast could not be charged through it — and with no
-charge, saying 100% on everything would be optimal, which is the same
-cannot-lose shape arrived at from the other side. `placeForecast` debits the
-stake; `settleForecast` credits `stake + payout`, which lands in [0, 2×stake]
-so the award path stays add-only.
+**The escrow is unwound on failure.** The stake is taken before the row exists
+and there are no transactions across PostgREST calls, so a failed insert
+refunds — `placeForecast` destroyed real XP for months by not doing exactly
+this, and the refund is written DIRECTLY rather than through `awardXP`, which
+is cap-bounded and would quietly keep part of it.
 
-**THE SERVER RECOMPUTES THE OUTCOME AND NEVER ACCEPTS ONE.** The client may
-only say WHICH forecast to settle; what happened is read back out of
-`study_sessions`, `study_techniques` and `quiz_attempts` under the service
-role. The scoring is mirrored in `server.mjs` deliberately — the client's copy
-DRAWS the number, the server's AWARDS it, and only the server's is trusted.
-Change one, change both. `resolveScoreWager` now returns 410: no client called
-it any more, but an authenticated POST is an authenticated POST.
+**What went, and what was kept.** Deleted: 26 components and `competeFeed.js`,
+`forecast.js`, `portfolio.js` with their tests — all superseded, zero importers,
+and `market.test.mjs` carries its own properness sweep so nothing was lost.
+Kept: `integrity.js` (the server implements the same caps), `StakesPill` /
+`useStakes` / `arenaMeta` (Layout, the nav and Study read them), and
+`arenaHelpers` (League uses `Countdown`).
 
-**A base rate off too little history is a PRIOR and says so.** Under `MIN_OBS`
-observations the panel prints "we haven't seen enough of your history yet"
-rather than "100% — from your last 1". Every kind measures from the student's
-own record, through `studyEvents` so BOTH study tables count.
+**The server endpoints for the seven old objects are deliberately still there.**
+There may be battles, duels and call-outs mid-flight with real XP in them, and
+deleting a settlement path would strand them. They are simply unreachable from
+the UI now, so the old objects drain naturally — and the `callout` and `battle`
+market kinds read those same tables to resolve, which is the point: the old
+objects became market SUBJECTS rather than separate features.
 
-**THE ARENA HAD THE SAME HOLE AND IT WAS WORSE.** `submitPredictionResult`
-took `actual_result` from the request body and settled every bet where
-`target_email === userEmail` — so the subject of the bets decided them, moving
-OTHER PEOPLE's XP at a flat 1.8×. Two accounts is a collusion loop: one bets
-over, the other reports a number that pays it. It settles on the participant's
-SYNCED progress now (the same figure `score_history` and every `battleOdds`
-projection are built from); with nothing synced the bet stays open rather than
-being decided by the one number that cannot be trusted. `actual_result` is
-still recorded — a student's own account of how it went is worth keeping — it
-just no longer decides anybody's XP.
+Next, and deliberately not done yet: a settlement REVEAL. A market resolving is
+the payoff moment and right now it is a line on the tape. `SettlementReveal`
+was deleted with the old page; a market-shaped one is the obvious next thing.
 
-**A self-reported SAC call resolves and pays NOTHING** (`pays: false`, and
-`settleForecast` rejects the kind outright). Real marks are what students care
-most about and the one thing the app cannot see, so keeping them is right —
-paying XP for a number they type is the exact hole this closed.
+## `invoke` returns AN ENVELOPE, and reading it as the payload is invisible
 
-**Settlement takes the FIRST sit after the call, never the best.** Waiting for
-a good result and calling that the outcome is the old exploit in a new costume.
-A quiz never sat is open until the deadline and false after it, or a forecast
-could be left open forever and never be wrong.
-
-Two rendering notes from the reliability chart, both of which rendered it
-blank. Framer cannot tween a unitless `0` to a percentage, so bars need
-`initial={{ height: "0%" }}`. And the track was `items-end`, which on a row
-sizes columns to their content in the cross axis — every percentage height
-resolved against zero. It is `items-stretch`.
-
-## A dependency array is read DURING render
-
-This shipped and took the Compete page down as a white screen:
+`functionsApi._invoke` returns `{ data, error }` — deliberately, to match
+Base44's SDK envelope through the dual run. So this is wrong:
 
 ```js
-useEffect(() => { loadCallouts(); }, [tick, loadCallouts]);   // line 175
-...
-const loadCallouts = useCallback(...);                        // line 224
+const res = await base44.functions.invoke("getMarkets", {});
+if (res?.error) throw new Error(res.error);
+setData(res);                         // ← the envelope, not the payload
 ```
 
-A function called INSIDE an effect body is read when the effect runs, which is
-after render — so `useEffect(() => loadData(), [])` sitting above its own
-`const loadData` is completely fine, and this codebase does exactly that in
-several places. **A dependency array is different: it is evaluated during
-render**, at the point the hook is called. Naming a `const` that has not been
-reached yet is a temporal-dead-zone `ReferenceError`, the component throws on
-its first render, and `PageErrorBoundary` shows "This page didn't load".
-
-The two shapes look almost identical in a diff and one of them is a crash.
-
-**AND A DEPENDENCY ARRAY IS NOT THE ONLY THING READ DURING RENDER.** The same
-crash came back a day later on Study, in a shape the first guard did not cover:
-
-```js
-useBusy(isFocusMode || isRunning, BUSY.FOCUS);            // line 75
-const [isFocusMode, setIsFocusMode] = useState(false);    // line 78
-```
-
-A hook ARGUMENT is evaluated at the call site exactly like a deps array. So the
-rule is not "dependency arrays", it is anything read during render.
-
-`hookDeps.test.mjs` covers both: dependency arrays, and the arguments of any
-hook call carrying no arrow function (a `useEffect(() => …)` always has one, so
-only its array is examined — which is what keeps the safe body-call shape from
-being flagged). Both checks were verified by putting each broken order back and
-watching them fail with the real file and line numbers; a static check nobody
-has seen fail is one that has quietly stopped working.
-
-Three false-positive classes had to go before it was worth having, all found on
-its first run against the real codebase: object-literal keys
-(`useState({ strengths: [] })` names no binding), string contents
-(`useState("duels")`), and calls in a nested helper referring to a module-level
-const, which is legal — indentation stands in for scope.
-
-eslint's own `no-use-before-define` is the general form of this and was measured
-rather than assumed: 74 hits across the app, nearly all of them the SAFE shape.
-Turning it on would mean reshuffling 74 pieces of working code to catch two real
-bugs, so the narrow check earns its place.
-
-**Nothing in lint, the build, or the test suite RENDERS A PAGE**, which is why
-both of these shipped. `scripts/checkPagesMount.mjs` does: it mounts all 36
-pages one at a time against a dev server and reports the ones that throw. It
-needs a browser so it is not in `npm test`, but it is the check that actually
-answers the question, and it named both bugs exactly ("Study: Cannot access
-'isFocusMode' before initialization"). Run it before shipping anything that
-touches a page's hooks.
-
-## The app is live, and it waits its turn
-
-`src/lib/liveRefresh.js` (the rules, pure and tested) + `src/lib/LiveContext.jsx`
-(the one clock that drives them). Mounted once in Layout, above everything.
-
-**DEFER, NEVER SKIP.** A refresh that lands while the student is busy is
-REMEMBERED and runs the moment they are free. Skipping is the version that
-feels broken: you finish a quiz, open the board, and it shows numbers from
-before you started — because the one refresh that would have fixed it was
-thrown away while you were answering question 7.
-
-**The tick is a NUMBER, not the data.** `useLiveTick()` goes up when it is a
-safe moment; each page refetches what it already knows how to fetch. That is
-what stops this becoming a second data layer arguing with `readCache`, and it
-means adding a page to the live system is one entry in a dependency array
-rather than a new query. `readCache.clear()` runs first or every page would
-re-ask and be handed the same 8s-old promise — an animation with no new data
-behind it.
-
-**What counts as busy:** a quiz, an exam, a call-out (a clock somebody's XP
-rides on), focus mode, a running timer, an AI call in flight, and any unsaved
-typing. Typing is deliberately NOT a registry every form has to remember to
-join — that list would be wrong within a month. It is MEASURED: an `input`
-event in the last few seconds, or a focused text field with something in it.
-An EMPTY box is not work in progress, or a student who clicked a filter once
-holds the whole app stale.
-
-`globalBusy` is a singleton because not everything that must hold the app still
-is a component — an AI stream is a promise inside `aiClient`, and it claims a
-token directly. Two registries would let the provider free-run while that half
-still had work in flight. Every claim releases in a `finally`: a leaked one
-leaves the app never refreshing again, which is far worse than the refresh it
-was protecting. Tokens, not a boolean — a call-out quiz with a timer inside it
-holds two, and the first to finish must not declare the app free.
-
-A hidden tab is not polled; coming BACK to it forces one through, which is the
-only moment freshness actually matters. Focus, visibility and route changes all
-fire together on an alt-tab, so `MIN_GAP_MS` stops that being three refetches.
-
-**Realtime is a FASTER TRIGGER, never a second source of truth.**
-`src/api/realtime.js` throws the changed row away and refetches through the
-normal reads, so the push path and the poll path cannot disagree about a
-student's score — and the payload never has to be trusted. Migration `0035`
-publishes `goal_competitions`, `study_duels` and `callouts`; until it is
-applied the subscription is simply silent and the poll carries the whole job,
-which is why the client shipped first. `SUBSCRIBED` only means the socket is
-up — there is no status for "that table is not in the publication".
-
-**A number that swaps has not changed, as far as the person watching is
-concerned.** `LiveNumber` rolls to the new value and floats the delta beside
-it; the roll is the reading and the chip is the receipt. THE FIRST RENDER
-ANIMATES NOTHING — opening the app must not flash "+400 XP" for XP earned last
-Tuesday, and a screen that animates everything on arrival teaches a student to
-ignore the animation that matters. Same rule in `diffStandings`, which returns
-null rather than deltas-from-zero on the first snapshot.
-
-**Overtaking used to be a silent redraw.** Rows carry `layout` so the pair
-physically swaps, and the row that gained a place washes green.
-
-THE FLASH IS ITS OWN LAYER, and that is not a detail: animating
-`backgroundColor` on the row worked exactly once, because framer leaves the
-tween's final value as an inline style, which then outranks the row's Tailwind
-background forever — so a student's highlighted row went plain the moment they
-took the lead. An overlay has nothing to clobber.
-
-**`rival_closing` fires while there is still something to defend.**
-`detectLeadChanges` only speaks once the lead has already gone, which is too
-late to act on. Three conditions and all three matter: the gap NARROWED (a
-rival who was already close and did nothing is not news, or it fires every poll
-for the whole contest), it is now inside `CLOSING_WITHIN`, and you are still
-ahead. Drawn in amber, not red — the student has not lost anything yet, and
-colouring it as a loss would say they had.
-
-**`LiveDot` appears only while something is running**, so its presence is the
-information. It pulses because the thing it marks is a clock running down; a
-static dot says "there is something here", a pulsing one says "it is moving
-without you". The count is drawn only above one — "1" beside a dot is the dot
-restated. Fed by `useLiveCount` off the stakes payload the app already loads,
-never a query of its own: six nav items asking the server whether anything is
-live would be six round trips before the shell painted.
-
-## Achievements: every one of them has to be reachable
-
-`src/lib/achievements.js`. The catalogue was 24 objects inline in `server.mjs`
-with boolean `check` functions, and **FIVE of them measured something the app
-does not do**:
-
-- **FRIEND_MAGNET** queried `friendships.friend_email` — a column that has
-  never existed (the table has `requester_email` / `recipient_email`). Rejected
-  query, null count, 150 XP unreachable by construction. The same shape as the
-  placeForecast balance bug, found by the same schema check.
-- **ROADMAP_DONE** counted `study_roadmaps`, and `StudyRoadmap.create` has ZERO
-  call sites — the Study Roadmap page redirects. 600 XP behind a retired
-  feature. Replaced rather than deleted, so nobody loses a target.
-- **COMPETE_FIRST** said "Join your first competition" and counted
-  `creator_email = you`, so joining somebody's battle by code earned nothing.
-  It counts `participants` and both duel sides now.
-- **FIRST_SESSION** said "Complete your first study session" and counted
-  `study_sessions` alone — **the read-every-table trap, for the third time.**
-  Pomodoro, blurting, active recall and spaced repetition all write to
-  `study_techniques`, so a student who only used the Study page never unlocked
-  it. `study_count` sums both.
-
-An achievement nobody can reach is worse than no achievement: it teaches a
-student the grid is decoration, after which the reachable ones stop pulling.
-
-**A HAND-KEPT ICON LIST IS A BUG WITH A SCHEDULE.** `AchievementsGallery`
-resolved icons through a fifteen-entry `ICON_REGISTRY`, under a comment saying
-"every name used by the catalog must be in here" — and TWELVE of thirty-one
-were not, so both mistake achievements, all four quiz tiers, both call-out
-ones, breadth, comeback and calibration every one of them drew the same generic
-sparkle. `ICON_REGISTRY[name] || Sparkles` fails silently by construction, and
-the list only had to fall one achievement behind to start lying. It is
-`const ICON_REGISTRY = Icons` now — the same namespace lookup AchievementUnlock
-always used, so there is one way a name resolves and nothing to keep in step.
-The namespace is already in the bundle via Layout, so it costs nothing.
-
-Two guards, and the first version of one of them MISSED THIS: checking icon
-names against the real lucide package is worth nothing if the component checks
-against something else. So one test resolves every name against the library,
-and a second asserts no surface resolves through a literal object.
-
-**Two tests hold that, and they need each other.** One feeds a maxed stats
-object through every `progress` function and asserts nothing stays locked —
-that catches an impossible target. The other scans `buildAchievementStats` and
-asserts every stat a progress function READS is one the server actually SETS —
-that catches FRIEND_MAGNET's shape, where the predicate was fine and the query
-behind it was not. The second one shipped with a fixed 6,000-character window
-that truncated the moment the builder grew and reported three healthy stats as
-missing; it brace-matches the function now. A scanner that quietly reads less
-than it claims to is the failure these guards exist to prevent.
-
-**PROGRESS, NOT A BOOLEAN.** Every entry returns `{ value, target }`, so a
-locked tile reads "18 / 25" instead of a padlock — fourteen of twenty-four were
-identical grey boxes, which is two-thirds of the grid telling a student nothing
-about what to chase, and hiding a locked achievement's NAME removes the only
-thing that could make somebody want it. `unlocked` is derived from the same two
-numbers so a tile's bar and its state cannot disagree. Zero progress is the
-exception: "0 of 250" is the whole achievement, not a near miss.
-
-**A GRANTED ACHIEVEMENT IS NEVER TAKEN BACK.** The stored row wins over the
-computed value — a student who sat 25 quizzes and later deleted attempts keeps
-the badge. It records something that HAPPENED; recomputing live and revoking is
-the one thing this must not do.
-
-**RARITY DRIVES THE CEREMONY** (`AchievementUnlock`). Unlocks used to be
-granted silently: the XP folded into a total that moves constantly anyway, and
-a student found out by navigating to a tab inside a tab and noticing a tile had
-changed colour. A common now takes a corner strip and leaves; a legendary takes
-the screen, counts its XP up and holds. Landing them identically would flatten
-the ladder — "sixty days running" arriving as loudly as "add your first
-subject" — so `CEREMONY` owns the numbers beside the XP they scale with.
-
-It fires ONCE ever, keyed in `localStorage` like `SettlementReveal`, and
-blocked storage counts as already-seen: `getAchievements` SELF-HEALS and
-legitimately re-reports old codes, so without the guard opening Ranked would
-fire the entire back catalogue at somebody. Batches play rarest LAST — a
-legendary followed by two commons is an anticlimax.
-
-The sheen on the loud tiers is WIDE AND FAINT. At a third of the width and the
-crest's own glow alpha it rendered as a solid gold bar through the middle of
-the card, washing out the achievement's name; a flourish that hides the thing
-it is celebrating is not a flourish.
-
-**And they are visible to other people** (`CrestRow` on the ranked board). An
-achievement only its owner can see is a private checklist, not something
-competitive — the whole system lived on a tab inside a tab. The board joins the
-rarest three per student in ONE batched query over the emails already on it.
-Commons are excluded: a mark everybody carries distinguishes nobody and would
-be noise on every line.
-
-`getAchievements` and `checkAchievements` are deliberately NOT in
-`READ_ONLY_FUNCTIONS` — both grant rows and pay XP, and caching them would
-leave a student's total stale the moment after an achievement paid them.
-
-## A column that does not exist is a silent wrong answer
-
-**"It won't let me make a call, even with enough XP."** `placeForecast` read
-the balance with `.eq("email", user.email)` on `user_profiles` — A TABLE WITH
-NO `email` COLUMN. The owner's address is `created_by`, which migration 0001
-says in its own comment and which the other 22 profile lookups in `server.mjs`
-all use. PostgREST rejected the query, `profile` came back null, `held` fell to
-its default `0`, and every student was told "Not enough XP to stake" whatever
-their balance. The feature was completely unusable.
-
-**AND THE ERROR WAS DISCARDED, which is what turned a broken query into a
-plausible lie.** `const { data: profile } = await …` threw away a message
-saying exactly what was wrong and left a default that happened to look like a
-real answer — a 400 reading as the student's own fault instead of a 500 nobody
-could miss. Destructure `error` on anything whose absence changes a branch.
-
-The same query shape found three more, two of them in `calloutAudience`:
-`title` on `study_duels` (no such column) and on `goal_competitions` (it is
-`goal_title`), so BOTH lookups failed, the audience came back empty, and every
-reaction and every call-out backing was refused with "You're not in that one" —
-a broken query reading as a permission decision. And `technique_type` /
-`subject_name` on `study_techniques`, neither of which exists, so both silently
-counted only what `study_sessions` logged: the read-every-table trap this file
-already records twice, in a third disguise where the table IS read with a
-column that is not there.
-
-None of it could be caught by lint, the build, the suite or the page-mount
-sweep, because none of them touch a database. `supabase/schema.json` is the
-REAL schema — every migration applied to a Postgres 16 and `information_schema`
-read back (`scripts/dumpSchema.sh`), not SQL parsed, because a schema checker
-that is itself wrong about the schema is worse than none. `dbColumns.test.mjs`
-checks every column `server.mjs` names against it and asserts it would have
-caught the bug that shipped. **Regenerate the snapshot whenever a migration
-lands**, or the checker is validating against last month's schema.
-
-### And a VALUE the column rejects is the same bug wearing a different hat
-
-`placeForecast` was broken a second time, underneath the first. The column was
-right; the string was not. `score_wagers.status` has carried
-
-    check (status in ('active','resolved','cancelled'))
-
-since migration 0008, and the forecast layer — written months later — spoke
-`pending` while open and `won`/`lost` once settled. So the insert was rejected
-by Postgres, `placeForecast` answered 500 on every call ever made, and **the
-feature had never once worked**: fixing the `email` column above only moved the
-failure one line down. `buildAchievementStats` had the read-side twin —
-`.in('status', ['won','lost'])` asked for two values that cannot exist, so the
-calibration stat counted nothing for anybody.
-
-**AND THE STAKE WAS TAKEN BEFORE THE INSERT.** Each attempt debited the XP,
-wrote an `xp_events` row against it, created no forecast, and returned an
-error — the student's stake simply disappeared, every time, invisibly. There
-are no transactions across PostgREST calls, so the debit is remembered and
-unwound in the catch. Anything that charges before it writes needs that, and
-the refund is written DIRECTLY rather than through `awardXP`, which is
-cap-bounded and would quietly keep part of it.
-
-**STATUS IS THE LIFECYCLE. THE OUTCOME IS A SEPARATE FACT.** That is why this
-resolved toward the constraint rather than widening it: `won`/`lost` crams two
-orthogonal axes into one column — did it settle, and did you win — so two
-halves of the codebase reasonably picked different axes and the column could
-not satisfy both. `src/lib/wagerStatus.js` is the one vocabulary, imported by
-BOTH sides; the verdict lives in `extra.forecast.outcome` and the payout in
-`xp_outcome`. `wagerOutcome` reads the recorded verdict rather than inferring
-from `xp_outcome`, because a payout of exactly 0 legitimately means both "a
-maximally wrong call" and "you agreed with the base rate".
-
-Settlement had a third one in the same handler: `row.wager_xp`, which 0008
-RENAMED to `wagered_xp`. The stake read `undefined`, `forecastPayout` floors a
-non-finite stake to zero, and so every forecast — however well judged — settled
-for +0 while the refund line beside it used the right name and returned the
-stake. A rename is not done until the readers move.
-
-`dbEnums.test.mjs` is the guard. It replays the migrations IN ORDER (0008
-drops the constraint and re-adds it, so first-definition-wins would read the
-wrong set), collects every `check (col in (...))`, and asserts every literal
-`server.mjs` binds to such a column is in it — writes and reads both. Verified
-by putting the `pending` insert back and watching it name the real line. A
-table with no constraint on that column is deliberately NOT guessed at:
-`study_bets.status` genuinely uses `won`/`lost`, and flagging it is the false
-positive that gets a checker deleted.
-
-## Weekly leagues: they never settled, and nobody could see them
-
-Shipped with migration 0015, complete with a lazy-rollover design its own
-header describes — "No cron required — rollover is lazy: every awardXP call
-checks if the user's current week_start is stale". Half of it worked: every XP
-award has been crediting `league_memberships.weekly_xp` and rolling a new row
-each Monday for months.
-
-**The settle half never ran.** `final_position` had exactly one writer, inside
-`settleStaleMembership`, whose one call site read
-`if (stale?.[0] && LEAGUES_SCALE_MODE === "tiered")` — and the mode has been
-`"global"` since the feature was written. So the column was NULL on every row
-the table ever held, `promoted`/`demoted` false on all of them, and the
-lifetime counters never incremented once.
-
-**The gate conflated two different things.** In global mode there genuinely is
-no tier rollover — one group, everyone in it, nothing to promote — so skipping
-the TIER dance is right. A final position is not a tier fact; it is where you
-finished among everyone that week, exactly as meaningful in global mode, and it
-went down with the rest. Settlement runs unconditionally now; only promotion
-and demotion stay behind the mode check.
-
-**It settles the WHOLE GROUP, not the returning student.** Settling one
-membership leaves a board full of holes — a week where three people happened to
-open Ranked has three positions and thirty blanks, and whoever finished second
-without logging in that week is missing from their own result. One student's
-return settles the week for everybody in it. Idempotent: any position already
-written means done, and two simultaneous returns compute the same ranking from
-the same finished week.
-
-**ONE RANKING, because there were two and they disagreed.** `getLeagueStanding`
-ranked on Compete Score; settlement ranked on `weekly_xp`. Nobody noticed
-because settlement never ran — but the moment it did, a student who spent a week
-watching themselves sit second would have been handed a different number as
-their result. `leagueStandingRows` is the one ranking and both call it.
-
-**A FIFTH ranking path, with the hole the other four had already fixed.**
-`duration_minutes` and `session_duration` come from the client; integrity.js
-closed that on the hours board, the goal engine, the Arena and
-`competitionCompeteScore`. This one was missed precisely because it had no UI
-and so was not a board anybody could climb — which is the trap: an invisible
-feature does not get audited. It goes through `countableStudyMinutes` now, and
-quizzes through the same first-sit/board-eligible floors, rather than averaging
-the raw score of every attempt in the week.
-
-**And it has a page.** `/League` — the lead, the board with every gap drawn to
-one scale, and the weeks already settled. Reached from a strip on Ranked rather
-than a sixth nav item, because Ranked is already the page about where you
-stand: the ATAR board over 28 days, the league over the week. `src/lib/league.js`
-holds the pure parts (`msUntilReset` refuses a missing date rather than
-returning the epoch; `historySummary` rejects an unsettled week explicitly,
-because `Number(null)` is a perfectly finite 0 and would have won `best` and
-reported a podium nobody was given).
-
-**And the league has three achievements now** — Weigh In (rare), Podium (epic)
-and Top Dog (legendary). They read COUNTS THAT GO UP (`league_weeks`,
-`league_podiums`, `league_wins`), never `best_weekly_rank`, which is gone: a
-rank gets BETTER as it gets smaller, so no `at(value, target)` can express it,
-it cannot draw a progress bar, and the maxed-stats guard — which probes every
-stat at 1e9 — would call it unreachable. "2 of 3 podiums" is a bar; "best
-finish 4th" is a fact with nothing to chase in it.
-
-**A WEEK ONLY COUNTS IF THERE WAS SOMEBODY TO BEAT.** `LEAGUE_COUNTS_FROM` (2)
-and `LEAGUE_RANKED_MIN` (5) are group-size floors, because winning a league of
-one is the "1st of 1" the page itself refuses to print — and paying 2,500 XP
-for it would make Top Dog the easiest legendary in the catalogue, reachable by
-being the only student who studied that week. The size comes from
-`league_groups.member_count`, which settlement now overwrites with the real
-settled count; on an older group it is the join-time counter, which a
-concurrent join can UNDERCOUNT — and undercounting withholds a badge rather
-than granting a wrong one, which is the direction this has to fail in.
-
-`getLeagueStanding` runs the achievement check when a week closes on that
-request and answers `just_settled`, which the page turns into an `xp_awarded`
-event so `useAchievementWatch` plays the unlock there and then. Without it a
-Podium would be discovered by accident on a tab three sessions later — the
-silent-grant problem `AchievementUnlock` exists to fix, reintroduced by the one
-path that grants outside `awardXP`.
-
-## Compete: one headline, one feed, one of each panel
-
-**Seven sections stacked above the tabs**, and three of them answered the same
-question. The rework left four: hero -> rivals -> feed -> tabs.
-
-- **Two headlines, and the bigger one said less.** A hero card ("Live now — a
-  call settles today") with a coach strip directly under it whose `<h1>` was
-  the largest type on the page, read "Evening, Miles. Leading 1 of 2 battles",
-  and restated the live/won counters printed two lines above it. The greeting
-  is the small kicker now and the MOVE is the `<h1>`: a student opens this page
-  to find out what to do, not to be greeted.
-- **Rivalries rendered TWICE.** `RivalryStrip` above the tabs and a "Your
-  rivalries" grid inside Battles — same people, same W–L records, different
-  words. The grid's rematch button was the only thing it had that the strip did
-  not, so the button moved up and the grid went.
-- **Movers was already inside the feed.** Its odds rows are `odds_move` events
-  and its ticker rows are `rival_activity` events. It was kept when the feed
-  landed on the reasoning that a price move and a rival's session are separate
-  CLAIMS and must never be joined with "because" — but the feed already keeps
-  them as separate ROWS, which was the actual requirement. Two panels was the
-  wrong way to express it.
-- **`BookPanel` moved into Battles.** It frames the same contests as a market
-  while the feed frames them as a timeline; both are fine, both stacked on
-  arrival is two mental models before a student has read anything.
-
-**ONE ENTRANCE, NOT EIGHT** (`Reveal`). Every section carried its own
-`initial`/`animate` with its own duration and a hand-picked delay, so the page
-did not arrive — it twitched into place in eight unrelated movements, and
-anything added later guessed a delay that did not fit its neighbours. A stagger
-container owns the timing; children declare only that they are part of it.
-
-**And most things should not animate on arrival at all.** A page opened every
-morning should not perform; an entrance is a cost paid on every visit for
-information that was already true. Motion means SOMETHING CHANGED — a number
-moving, a row overtaking, a call-out landing — which the live system already
-owns. The feed animates only rows that genuinely ARRIVE: everything present on
-the first paint is adopted silently through a seen-set, the same rule
-`LiveNumber` and `diffStandings` keep about their first value. Without it the
-feed replayed its whole list on every visit and on every live tick, which is
-both tiring and dishonest — it says "this just happened" about a fortnight-old
-call-out.
-
-**`new Date(x || 0)` IS THE EPOCH, AND THE EPOCH RENDERS AS "20705d ago".** A
-settled battle carrying no `endsAt` printed exactly that under a real headline,
-in the same confident type as every true line beside it. `timeOf` returns null
-rather than falling back to zero, anything before 2020 counts as missing (there
-is no AcedIt data from before then, so a date that old is a coercion artefact),
-an event with no usable timestamp is DROPPED because it has no place on a
-timeline, and `agoLabel` refuses one even if a surface hands it through.
-
-Emoji on Compete are the five reaction glyphs and nothing else — emoji is the
-honest medium for a reaction, where an icon set would read as buttons rather
-than as people responding. The icon audit went the other way instead: a trophy
-beside the word "Settled" is the word again in a picture, and it is gone from
-three places, as is a swords glyph on a "Challenge a rival" button sitting in a
-card that already has a swords tile at its head. The duel/battle icon PAIR
-stays — it differentiates two items in a set, which is the case the rule allows.
-
-## Compete is a feed, and a call-out is a public event
-
-**Compete was entirely me-centric.** `BookPanel` was your market, `MoversPanel`
-your rivals, and all three tabs your battles, your bets, your calls. Nothing on
-the page was a SHARED object — so the question that actually brings a student
-back, *did something happen without me?*, had no answer, and the most dramatic
-thing the app can do was invisible.
-
-**A CALL-OUT WAS A PRIVATE TRANSACTION.** `getCallouts` returned only rows where
-you were the caller or the target, and `CalloutPanel` rendered them inside one
-battle. So a challenge between two other people in your own contest happened
-where nobody could see it, and the panel whose entire job is keeping the record
-showed a third of it. It returns `watching` as well now — every call-out in a
-contest you are a participant of, scoped from YOUR memberships and never from a
-client-supplied id.
-
-A spectator gets `spectatorCallout`, which is narrower than `publicCallout`:
-somebody who is neither party has no business with the questions, the answers
-or the settle note, and gets the EVENT rather than the row. The contest is the
-room — visible to the battle, never to the site.
-
-And the panel's copy could no longer assume you were one of the two. A row
-between Priya and Tom rendered as "Priya called you out", because
-caller-or-target were the only branches that existed. `STATUS` lost its "They
-passed" labels for the same reason.
-
-**`competeFeed` is the front page.** Events with VERBS AND PEOPLE — "Priya
-called Tom out", "Tom answered it and took Priya's stake", "Your price is
-sliding". A LIVE CALL-OUT ALWAYS SORTS FIRST whatever its timestamp: it is the
-only thing on the page with a clock running on somebody's behalf, and burying
-one under a fresher odds tick is a forfeit the student did not choose.
-
-Two claims it refuses. An odds move and a rival's session are SEPARATE events,
-never joined with "because" — `MoversPanel`'s rule, carried over, and Movers
-still sits below the feed for exactly that reason rather than being folded in.
-And a move under three points is noise on a line sampled every few hours.
-
-**The banter is aimed at the SCOREBOARD.** A pass is celebrated by name and at
-volume; a miss gets a line with bite in it about the RESULT. "The clock won
-that one" is banter; a line about whether somebody is any good is the app
-kicking a sixteen-year-old, and no amount of engagement is worth that. A test
-walks every generated line against the project's banned words AND against a
-list of insults, in both directions, for every status.
-
-Lines are picked deterministically off the event id (`pick`), never randomly —
-a feed that reworded itself on every render makes a student doubt they read it
-right the first time.
-
-**Backing a call-out is the best-shaped question on the page.** Every other
-forecast is a student predicting their own behaviour, so every other one is
-partly under their control. This one is not: the spectator has no lever, only a
-judgement, so the payout is pure calibration. It reuses the proper scoring rule
-already in `forecast.js` and settles off the `callouts` row's own status, which
-only the server writes.
-
-Four rules `placeForecast` enforces, all server-side where they cannot be
-edited out of a bundle:
-
-- **The caller and the target may not back it.** They decide the outcome — the
-  target by how hard they try, the caller by whom they picked. Either taking a
-  position is the cannot-lose shape the wagering layer was torn out for.
-- **Only inside a contest you are in.** Open to the site, two accounts could
-  stage a call-out for a third to collect on.
-- **One position per person per call-out**, or you could hold 5% and 95% and be
-  paid for whichever landed.
-- **The deadline is the call-out's own clock**, not a client-supplied one.
-
-A VOIDED call-out settles nothing and returns the stake whole. Nothing was
-tested, so nobody was right, and paying out on a question never asked is worse
-than not paying at all.
-
-**`SettlementReveal` is the moment the app never had.** A battle ending — weeks
-of work between four people — was a TOAST. Everything else here pays out
-visibly, and the one place with a real result had no payoff, which is most of
-why Compete read as work rather than as a game. It fires ONCE, keyed in
-`localStorage`, and blocked storage counts as already-seen: replaying somebody's
-defeat at them on every page load is far worse than never showing it. Only for
-events they are IN — watching somebody else's call-out resolve is a feed row,
-not a takeover. A LOSS IS SHORT: the win gets the confetti, the count-up and the
-stagger; a loss gets the verdict, the number and a button, because drawing a
-defeat with the same ceremony is the app enjoying it.
-
-**Reactions have NO FREE TEXT** and never will. Five glyphs the server
-validates, keyed on the feed EVENT rather than on a row — most events are
-derived and have no row, and `callout:<id>:passed` means a call-out passing
-collects its own reactions instead of inheriting the ones left when it was
-issued. A text box on a screen where students lose in front of their group is a
-moderation problem this app cannot staff. Migration `0034`; missing table →
-`available: false` and the buttons never appear, the same posture callouts
-takes.
-
-**`RivalryStrip` answers "who am I racing", because nobody comes back to check
-on a contest.** "Priya is 5 ahead" is the sentence that gets opened; "Chemistry
-Sprint: 400 v 395" is the same fact with the interesting half removed. Derived
-from rows already loaded, so it cannot go stale.
-
-Its bar is HOW MUCH OF A RACE THIS STILL IS, and it shipped backwards for one
-render: drawing the gap meant a 34-point blowout filled solid green and a
-five-point nail-biter drew a stub. Every other bar in this app means full is
-good.
-
-Two more bugs the first render caught, both worth the pattern. The live
-countdown printed TWICE in one line, because `competeFeed` put it in `detail`
-and `FeedRow` also draws a ticking clock. And a sliding price drew an UP arrow
-in red — the glyph and the colour saying opposite things about one number,
-which is precisely the bug `ScalingMark` exists to prevent on Browse. The
-direction comes off the same `tone` the colour does now, so they cannot
-disagree.
+Every field the page then reads is `undefined`, so it renders its EMPTY STATE
+and looks like a feature nobody is using rather than one that is broken.
+`res.error` is `null`, so the guard passes and **nothing anywhere reports a
+problem.** That is what makes it dangerous.
+
+It shipped twice in one session without being noticed: the League board read
+the envelope, and `WeekStrip` — the only entrance to that page — checked
+`res.success`, which lives inside `data`, so the strip never rendered at all. A
+feature shipped completely invisible, which is the same failure the league had
+before it was rebuilt, reached from a totally different direction.
+
+`src/lib/fnResult.js` is the one unwrap (`takeFn` / `unwrapFn` / `fnError`).
+`?? res` is not padding: an unported function still falls through to the real
+Base44 SDK, and during the dual run both shapes are live. `fnError` reads BOTH
+levels, because a ported function answers 200 with `{ error }` in its body for
+a refusal it wants the UI to print.
+
+`fnResult.test.mjs` scans for it. Two false-positive classes had to go first,
+the same lesson `hookDeps.test.mjs` learned: `x?.data?.y || x?.y` is the
+CORRECT both-shapes idiom (every Stripe page uses it), so a variable read
+through `.data` anywhere is exempt; and fnResult.js documents the broken
+pattern in its own header. Verified by putting the real WeekStrip bug back.
 
 ## Compete: a claim has to survive something
 
@@ -1218,7 +679,10 @@ equivalent. They all go through `countableStudyMinutes` now:
   explainable to anyone who asks. Past days get the flat cap, because once the
   day is over the app cannot know when a row was earned.
 
-The client mirror is `countableByDay`. Server is the source of truth.
+The client mirror is `countableByDay`. Server is the source of truth — and
+since the Compete rebuild `integrity.js` has NO client consumer: it is kept
+because the server implements the same caps and its test is the guard on them.
+Delete it only together with the server's copies.
 
 **IDLE FARMING, which was collected and thrown away.** `awardXP` has accepted
 `idle_ratio`, `tab_away_count` and `session_complete` since it was ported;
@@ -2179,9 +1643,15 @@ another email before this.
   distribution, and the drag that finally sets `goal_study_score`
 - `src/lib/subjectBrowse.js`, `src/components/subjects/ScalingMark.jsx`,
   `LoadStrip.jsx` — learning areas, sorting, prerequisites, and the load checks
-- `src/lib/forecast.js`, `src/components/competition/ForecastPanel.jsx` — the
-  proper scoring rule, base rates and calibration; settled by `settleForecast`
-  in `server.mjs`, which recomputes rather than trusts
+- `src/lib/market.js` + `market.test.mjs` — THE model: the proper scoring rule
+  against the crowd's price, the prior blend, cred, and the one rule about who
+  may hold a position. Imported by `server.mjs`, never mirrored
+- `src/pages/Competitions.jsx`, `src/components/market/MarketCard.jsx`,
+  `PriceBar.jsx`, `TakeSide.jsx` — the floor, the one card, the price and the
+  gesture; `getMarkets` / `takePosition` / `openMarkMarket` / `reportMark` in
+  `server.mjs` mint, escrow and settle
+- `src/lib/fnResult.js` — the one unwrap for `functions.invoke`; reading its
+  `{ data, error }` envelope as the payload is silent and has shipped twice
 - `src/lib/wagerStatus.js` — the one vocabulary `score_wagers.status` may
   speak, imported by client AND server; `dbEnums.test.mjs` holds it
 - `src/lib/league.js`, `src/pages/League.jsx`,
@@ -2191,8 +1661,6 @@ another email before this.
 - `src/lib/integrity.js` — the caps, the idle discount, the quiz floors and the
   verified/claimed split. Mirrored server-side by `countableStudyMinutes`,
   `verifiedStudyMinutes` and `boardQuizScores`; change one, change both
-- `src/lib/competeFeed.js`, `src/components/competition/CompeteFeed.jsx` — the
-  timeline, the banter and the reactions
 - `src/lib/liveRefresh.js`, `src/lib/LiveContext.jsx`, `src/api/realtime.js` —
   when the app may refetch, who can hold it still, and the push path
 - `src/components/shared/LiveNumber.jsx`, `LiveDot.jsx` — rolling figures and
@@ -2206,10 +1674,6 @@ another email before this.
   of the database, and adding an achievement means adding its stat there too
 - `src/components/ranked/AchievementUnlock.jsx`, `CrestRow.jsx` — the moment,
   and the badges beside somebody's name
-- `src/components/competition/CalloutBacking.jsx` — backing somebody else's
-  call-out; guarded by `placeForecast`, not by the component
-- `src/components/competition/SettlementReveal.jsx`, `RivalryStrip.jsx` — the
-  ceremony, and who you are racing
 - `src/components/shared/MarkdownMath.jsx`, `LatexRenderer.jsx` — KaTeX
 - `supabase/migrations/0001…0006_*.sql` — applied schema
 - `base44/entities/*.jsonc`, `base44/functions/*/` — Base44 reference, kept until cutover

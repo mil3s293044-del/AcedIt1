@@ -60,4 +60,19 @@ union all
 select 'weekly chips (0033)',
        case when exists (select 1 from information_schema.columns
                          where table_name = 'user_profiles' and column_name = 'weekly_chips_spent')
-            then 'ok' else 'MISSING' end;
+            then 'ok' else 'MISSING' end
+union all
+select 'markets table (0036)',
+       case when to_regclass('public.markets') is null
+            then 'MISSING — Compete says the floor is not open'
+            else 'ok' end
+union all
+select 'market_positions table (0036)',
+       case when to_regclass('public.market_positions') is null
+            then 'MISSING — nobody can take a side'
+            else 'ok' end
+union all
+select 'cred columns (0036)',
+       case when exists (select 1 from information_schema.columns
+                         where table_name = 'user_profiles' and column_name = 'cred_balance')
+            then 'ok' else 'MISSING — no stake can be escrowed' end;

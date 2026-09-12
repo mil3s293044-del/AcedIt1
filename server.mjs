@@ -13,6 +13,14 @@ import { QUEST_BY_ID, questMultiplier } from "./src/lib/quests.js";
 // the client deliberately: the forecast layer and the column's CHECK
 // constraint drifting apart is what made placeForecast a guaranteed 500.
 import { WAGER } from "./src/lib/wagerStatus.js";
+// The market model — the ONE object Compete is built on. Imported rather than
+// mirrored: forecast.js was mirrored deliberately and every session since has
+// had to remember "change one, change both". One module, both sides.
+import {
+  payoutFor as marketPayout, priceOf as marketPrice, probFor as marketProb,
+  clampStake as marketStake, blockReason as marketBlockReason,
+  YES as MKT_YES, NO as MKT_NO, CRED_WEEKLY_GRANT, CRED_BALANCE_CAP,
+} from "./src/lib/market.js";
 import { ACHIEVEMENTS, ACHIEVEMENT_BY_CODE, evaluate as evaluateAchievement }
   from "./src/lib/achievements.js";
 // The same feature map the UI reads. Ace used to be told nothing about
@@ -6639,12 +6647,33 @@ app.post("/local-ai/fn/getMyStakes", async (req, res) => {
       if (["pending", "active"].includes(checked.status)) live.push(publicCallout(checked));
     }
 
+    // ── Positions you are holding, for the nav's live dot ────────────────
+    // Compete is markets now, so the "something is running" mark in the rail
+    // has to count markets or it goes dark on the flagship feature — the
+    // "feature gated behind something nobody sees" trap, in the one place
+    // that advertises the feature. One query, no join: the dot only needs a
+    // count, and six nav items asking the server for more would be six round
+    // trips before the shell painted.
+    let openPositions = 0;
+    try {
+      const { data: held } = await supabaseAdmin
+        .from("market_positions").select("market_id")
+        .eq("user_email", user.email).is("settled_at", null).limit(60);
+      const ids = (held || []).map((h) => h.market_id);
+      if (ids.length) {
+        const { data: stillOpen } = await supabaseAdmin
+          .from("markets").select("id").in("id", ids).eq("status", "open");
+        openPositions = (stillOpen || []).length;
+      }
+    } catch { /* markets may not be migrated yet — the dot simply stays dark */ }
+
     return res.json({
       success: true,
       me: user.email,
       duels: core.duels.filter((d) => d.status === "active" || d.status === "pending"),
       bets: core.bets.filter((b) => b.status === "active"),
       callouts: live,
+      positions: openPositions,
       freshly_settled: core.freshlySettled,
     });
   } catch (err) {
@@ -8543,6 +8572,655 @@ app.post("/local-ai/fn/settleForecast", async (req, res) => {
     return res.json({ settled: true, outcome, xp, returned: refund });
   } catch (err) {
     console.error("settleForecast error:", err);
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// ════════════════════════════════════════════════════════════════════════════
+// MARKETS — the one object Compete is built on.
+//
+// Compete carried seven nouns that all meant "a thing you can win". This is
+// the one that replaces them: a question, a price, a side, a resolution. See
+// src/lib/market.js for the model, which is IMPORTED rather than mirrored —
+// the forecast layer was mirrored deliberately and every session since has had
+// to remember "change one, change both". One module, both sides.
+//
+// THREE THINGS THE SERVER OWNS AND THE CLIENT MAY NEVER TOUCH:
+//   · the price at entry, frozen at the moment a position is taken
+//   · who may hold a side, which is the rule the old wagering layer died for
+//   · the OUTCOME, recomputed from the study tables under the service role and
+//     never accepted from a request body
+// ════════════════════════════════════════════════════════════════════════════
+
+/** Not enough history to have a base rate is a PRIOR, and the card says so. */
+const MARKET_MIN_OBS = 3;
+const MARKET_HISTORY_WEEKS = 10;
+
+/** Monday of the week containing `d`, as a date key. */
+function marketWeekKey(d = new Date()) {
+  const x = new Date(d);
+  const day = x.getUTCDay();
+  x.setUTCDate(x.getUTCDate() - ((day + 6) % 7));
+  return x.toISOString().slice(0, 10);
+}
+
+/** Sunday 23:59:59 UTC of the week containing `d`. */
+function marketWeekClose(weekKey) {
+  const start = new Date(`${weekKey}T00:00:00Z`);
+  return new Date(start.getTime() + 7 * 24 * 3600e3 - 1000);
+}
+
+// ─── Cred ───────────────────────────────────────────────────────────────────
+
+/**
+ * The weekly stack. Idempotent through `cred_granted_week`, which is a DATE
+ * rather than a flag — a second call in the same week is a no-op instead of a
+ * second grant, and nothing has to be reset on Monday for the next one to fire.
+ *
+ * Topped UP to the grant rather than added to it, so a student who ignored
+ * Compete for a term arrives with one week's stack and not twelve. The cap
+ * still leaves room to carry a good week forward.
+ */
+async function grantWeeklyCred(profile) {
+  if (!supabaseAdmin || !profile) return profile;
+  const week = marketWeekKey();
+  if (profile.cred_granted_week === week) return profile;
+
+  const held = Math.max(0, Number(profile.cred_balance) || 0);
+  const next = Math.min(CRED_BALANCE_CAP, Math.max(held, CRED_WEEKLY_GRANT));
+  const { error } = await supabaseAdmin.from("user_profiles")
+    .update({ cred_balance: next, cred_granted_week: week })
+    .eq("id", profile.id);
+  if (error) {
+    // Missing columns mean migration 0036 has not been applied. Silence is the
+    // right failure: the board still renders, nobody can stake, and the page
+    // says so — the posture callouts and reactions already take.
+    console.warn("[markets] cred grant failed:", error.message);
+    return profile;
+  }
+  return { ...profile, cred_balance: next, cred_granted_week: week };
+}
+
+// ─── Priors ─────────────────────────────────────────────────────────────────
+
+/**
+ * Base rates for a whole room in ONE pass.
+ *
+ * Per-student queries would be thirty round trips before a board painted, so
+ * this pulls the window once and buckets in memory — the same move
+ * `leagueStandingRows` makes, and the reason the league board is one query
+ * rather than one per member.
+ *
+ * Under MARKET_MIN_OBS observations there is no base rate, and the market
+ * opens at a coin flip with `thin: true` so the card can say "we haven't seen
+ * enough of their history yet" rather than printing "100% — from their last 1".
+ */
+async function marketPriors(emails, now = new Date()) {
+  const out = {};
+  emails.forEach((e) => { out[e] = { streak: null, hours: null, weeks: 0 }; });
+  if (!supabaseAdmin || !emails.length) return out;
+
+  const since = new Date(now.getTime() - MARKET_HISTORY_WEEKS * 7 * 24 * 3600e3);
+  const sinceKey = since.toISOString().slice(0, 10);
+  const [sessRes, techRes] = await Promise.all([
+    supabaseAdmin.from("study_sessions")
+      .select("created_by, duration_minutes, date, created_date, extra")
+      .in("created_by", emails).gte("date", sinceKey),
+    supabaseAdmin.from("study_techniques")
+      .select("created_by, session_duration, date, created_date, extra")
+      .in("created_by", emails).gte("date", sinceKey),
+  ]);
+
+  const byUserWeek = new Map();
+  const add = (row, col) => {
+    const e = row.created_by;
+    if (!out[e]) return;
+    const day = String(row.date || row.created_date || "").slice(0, 10);
+    if (!day) return;
+    const wk = marketWeekKey(new Date(`${day}T00:00:00Z`));
+    const key = `${e}|${wk}`;
+    if (!byUserWeek.has(key)) byUserWeek.set(key, { rows: [], days: new Set() });
+    const b = byUserWeek.get(key);
+    b.rows.push(studyRowFor(row, col));
+    b.days.add(day);
+  };
+  (sessRes.data || []).forEach((r) => add(r, "duration_minutes"));
+  (techRes.data || []).forEach((r) => add(r, "session_duration"));
+
+  const thisWeek = marketWeekKey(now);
+  const per = {};
+  emails.forEach((e) => { per[e] = []; });
+  byUserWeek.forEach((b, key) => {
+    const [e, wk] = key.split("|");
+    // The CURRENT week is half finished and would drag every base rate toward
+    // nothing — the same exclusion `usualMinutes` makes on the subject hub.
+    if (wk === thisWeek || !per[e]) return;
+    per[e].push({
+      days: [...b.days].filter((d) => b.rows.some((r) => r.day === d && r.minutes > 0)).length,
+      minutes: countableStudyMinutes(b.rows, new Date(`${wk}T00:00:00Z`)),
+    });
+  });
+
+  emails.forEach((e) => {
+    const weeks = per[e] || [];
+    out[e].weeks = weeks.length;
+    if (weeks.length < MARKET_MIN_OBS) return;
+    out[e].streak = weeks.filter((w) => w.days >= MARKET_STREAK_TARGET).length / weeks.length;
+    out[e].hours = weeks.filter((w) => w.minutes >= MARKET_HOURS_TARGET).length / weeks.length;
+  });
+  return out;
+}
+
+/** The thresholds the weekly questions ask about. */
+const MARKET_STREAK_TARGET = 5;   // days studied in the week
+const MARKET_HOURS_TARGET = 300;  // countable minutes in the week
+
+// ─── Minting ────────────────────────────────────────────────────────────────
+
+const firstNameOf = (n, email) =>
+  String(n || "").trim().split(/\s+/)[0] || String(email || "").split("@")[0] || "Someone";
+
+/**
+ * Two questions per student per week, minted on demand.
+ *
+ * Auto-minted rather than student-created because an empty board is the
+ * failure mode that kills a market site: the first person to arrive on Monday
+ * must find something to trade, and "create the first market" is work nobody
+ * does. The unique index on (kind, subject, period, ref) makes a double mint —
+ * two students opening the board in the same second — a no-op rather than the
+ * same question twice with the stakes split between the copies.
+ */
+async function mintWeeklyMarkets(members, now = new Date()) {
+  if (!supabaseAdmin || !members.length) return 0;
+  const week = marketWeekKey(now);
+  const closes = marketWeekClose(week).toISOString();
+  const emails = members.map((m) => m.email);
+
+  const { data: existing } = await supabaseAdmin
+    .from("markets").select("kind, subject_email")
+    .eq("status", "open").eq("meta->>period", week)
+    .in("subject_email", emails);
+  const have = new Set((existing || []).map((r) => `${r.kind}|${r.subject_email}`));
+
+  const priors = await marketPriors(emails, now);
+  const rows = [];
+  for (const m of members) {
+    const who = firstNameOf(m.name, m.email);
+    const pri = priors[m.email] || { weeks: 0 };
+    const base = { subject_email: m.email, subject_name: m.name || null,
+      created_by: "system", status: "open", closes_at: closes };
+
+    if (!have.has(`streak|${m.email}`)) {
+      rows.push({ ...base, kind: "streak",
+        title: `Will ${who} study ${MARKET_STREAK_TARGET}+ days this week?`,
+        resolves_note: "From their study log — both tables, Sunday night.",
+        prior: pri.streak ?? 0.5,
+        meta: { period: week, ref: "week", target: MARKET_STREAK_TARGET,
+          thin: pri.streak == null, obs: pri.weeks } });
+    }
+    if (!have.has(`hours|${m.email}`)) {
+      rows.push({ ...base, kind: "hours",
+        title: `Will ${who} log ${Math.round(MARKET_HOURS_TARGET / 60)}+ hours this week?`,
+        resolves_note: "From countable study minutes, capped the way every board caps them.",
+        prior: pri.hours ?? 0.5,
+        meta: { period: week, ref: "week", target: MARKET_HOURS_TARGET,
+          thin: pri.hours == null, obs: pri.weeks } });
+    }
+  }
+  if (!rows.length) return 0;
+
+  // Conflict on the dedupe index is the expected outcome of a race, not an
+  // error worth failing a board load over.
+  const { error } = await supabaseAdmin.from("markets").insert(rows);
+  if (error && !/duplicate key/i.test(error.message || "")) {
+    console.warn("[markets] mint failed:", error.message);
+    return 0;
+  }
+  return rows.length;
+}
+
+// ─── Resolution ─────────────────────────────────────────────────────────────
+
+/**
+ * THE OUTCOME IS RECOMPUTED, NEVER ACCEPTED.
+ *
+ * The client may say which markets to look at and nothing else; what happened
+ * is read back out of study_sessions, study_techniques, quiz_attempts and
+ * callouts under the service role. This is the rule settleForecast already
+ * keeps and the one the Arena had to learn twice.
+ *
+ * Returns true / false / null, where null means "not decidable yet" — a market
+ * past its close with no answer stays OPEN rather than resolving false by
+ * default, because resolving a question nobody could answer is worse than
+ * leaving it hanging.
+ */
+async function resolveMarketOutcome(market, now = new Date()) {
+  const meta = market.meta || {};
+  const closes = market.closes_at ? new Date(market.closes_at) : null;
+  const past = closes ? now >= closes : false;
+
+  if (market.kind === "streak" || market.kind === "hours") {
+    if (!past) return null;
+    const week = meta.period;
+    if (!week) return null;
+    const from = week;
+    const to = new Date(new Date(`${week}T00:00:00Z`).getTime() + 6 * 24 * 3600e3)
+      .toISOString().slice(0, 10);
+    const [sess, tech] = await Promise.all([
+      supabaseAdmin.from("study_sessions")
+        .select("duration_minutes, date, created_date, extra")
+        .eq("created_by", market.subject_email).gte("date", from).lte("date", to),
+      supabaseAdmin.from("study_techniques")
+        .select("session_duration, date, created_date, extra")
+        .eq("created_by", market.subject_email).gte("date", from).lte("date", to),
+    ]);
+    const rows = [
+      ...(sess.data || []).map((r) => studyRowFor(r, "duration_minutes")),
+      ...(tech.data || []).map((r) => studyRowFor(r, "session_duration")),
+    ];
+    if (market.kind === "hours") {
+      return countableStudyMinutes(rows, new Date(`${to}T23:59:59Z`)) >= (meta.target || 0);
+    }
+    const days = new Set(rows.filter((r) => r.minutes > 0).map((r) => r.day));
+    return days.size >= (meta.target || 0);
+  }
+
+  if (market.kind === "quiz") {
+    // The FIRST sit after the market opened, never the best — waiting for a
+    // good result and calling that the outcome is the old exploit in a costume.
+    const { data: sits } = await supabaseAdmin.from("quiz_attempts")
+      .select("score, adjusted_score, extra, created_date")
+      .eq("created_by", market.subject_email)
+      .gt("created_date", market.opens_at)
+      .order("created_date", { ascending: true }).limit(20);
+    const real = (sits || []).filter((a) => !isRetryAttemptRow(a));
+    if (!real.length) return past ? false : null;
+    const s = real[0].adjusted_score ?? real[0].score;
+    if (typeof s !== "number") return null;
+    return s > Number(meta.target || 0);
+  }
+
+  if (market.kind === "callout") {
+    const { data: c } = await supabaseAdmin.from("callouts")
+      .select("status").eq("id", meta.callout_id).maybeSingle();
+    if (!c) return null;
+    if (c.status === "passed") return true;
+    if (c.status === "failed" || c.status === "expired") return false;
+    if (c.status === "voided") return "void";
+    return null;
+  }
+
+  if (market.kind === "battle") {
+    const { data: comp } = await supabaseAdmin.from("goal_competitions")
+      .select("status, participants").eq("id", market.competition_id).maybeSingle();
+    if (!comp || comp.status !== "completed") return null;
+    const parts = Array.isArray(comp.participants) ? comp.participants : [];
+    const best = parts.reduce((a, b) =>
+      (Number(b?.score) || 0) > (Number(a?.score) || 0) ? b : a, parts[0] || {});
+    return String(best?.email || "").toLowerCase()
+      === String(market.subject_email || "").toLowerCase();
+  }
+
+  if (market.kind === "sac") {
+    // Reported by the subject. THEY CANNOT HOLD A POSITION ON IT — that rule
+    // is enforced in takePosition — so a reported number moves other people's
+    // cred and never their own, which is what makes it safe to pay on at all.
+    if (meta.reported == null) return past ? null : null;
+    return Number(meta.reported) >= Number(meta.target || 0);
+  }
+
+  return null;
+}
+
+/**
+ * Settle everything decidable in one pass, and pay it out.
+ *
+ * Runs on board load rather than on a schedule, for exactly the reason the
+ * weekly league's settlement does: there is no cron here, and a lazy sweep
+ * that runs whenever somebody looks is the design this codebase already
+ * committed to. Idempotent — a resolved market is skipped, and a settled
+ * position carries `settled_at`.
+ */
+async function settleDueMarkets(now = new Date()) {
+  if (!supabaseAdmin) return { settled: 0 };
+  const { data: due } = await supabaseAdmin.from("markets")
+    .select("*").eq("status", "open")
+    .lte("closes_at", now.toISOString()).limit(80);
+  if (!due?.length) return { settled: 0 };
+
+  let settled = 0;
+  for (const market of due) {
+    let outcome;
+    try {
+      outcome = await resolveMarketOutcome(market, now);
+    } catch (e) {
+      console.warn("[markets] resolve failed for", market.id, e?.message || e);
+      continue;
+    }
+    // Not decidable yet — stays OPEN. Resolving a question nobody could answer
+    // is worse than leaving it hanging.
+    if (outcome === null || outcome === undefined) continue;
+
+    const voided = outcome === "void";
+    const { data: positions } = await supabaseAdmin
+      .from("market_positions").select("*").eq("market_id", market.id);
+
+    for (const pos of positions || []) {
+      if (pos.settled_at) continue;
+      // A VOID returns the stake whole. Nothing was tested, so nobody was
+      // right, and paying out on a question never asked is worse than not
+      // paying at all.
+      const payout = voided ? 0 : marketPayout(pos.stake, pos.p, pos.price_at_entry, outcome);
+      const back = Math.max(0, Math.round((Number(pos.stake) || 0) + payout));
+      await supabaseAdmin.from("market_positions")
+        .update({ payout, settled_at: now.toISOString() }).eq("id", pos.id);
+      if (back > 0) await creditCred(pos.user_email, back, payout);
+    }
+
+    await supabaseAdmin.from("markets").update({
+      status: voided ? "void" : "resolved",
+      outcome: voided ? null : !!outcome,
+      resolved_at: now.toISOString(),
+      resolution_note: voided ? "Nothing was tested — stakes returned."
+        : (outcome ? "Resolved YES" : "Resolved NO"),
+    }).eq("id", market.id);
+    settled += 1;
+  }
+  return { settled };
+}
+
+/** Credit cred back. Bounded by the cap, and lifetime winnings are recorded. */
+async function creditCred(email, amount, won = 0) {
+  const { data: p } = await supabaseAdmin.from("user_profiles")
+    .select("id, cred_balance, cred_lifetime_won").eq("created_by", email).maybeSingle();
+  if (!p) return;
+  await supabaseAdmin.from("user_profiles").update({
+    cred_balance: Math.min(CRED_BALANCE_CAP, (Number(p.cred_balance) || 0) + amount),
+    cred_lifetime_won: (Number(p.cred_lifetime_won) || 0) + Math.max(0, won),
+  }).eq("id", p.id);
+}
+
+// ─── The board ──────────────────────────────────────────────────────────────
+
+app.post("/local-ai/fn/getMarkets", async (req, res) => {
+  const user = await authenticateRequest(req);
+  if (!user) return res.status(401).json({ error: "Unauthorized" });
+  if (!supabaseAdmin) return res.status(500).json({ error: "Supabase admin not configured" });
+
+  try {
+    let profile = await loadUserProfile(user.email);
+    if (!profile) return res.status(404).json({ error: "Profile not found" });
+
+    // The table may not exist yet. `available: false` and the page says so
+    // rather than showing a broken board — the posture callouts already take.
+    const probe = await supabaseAdmin.from("markets").select("id").limit(1);
+    if (probe.error) {
+      return res.json({ available: false, reason: "Markets need migration 0036." });
+    }
+
+    profile = await grantWeeklyCred(profile);
+
+    // The room is the weekly league, which every student is already in — so
+    // there is always a board, without anybody having to join anything. A
+    // market scoped to a battle is additionally visible to that battle.
+    const { data: roster } = await supabaseAdmin.from("user_profiles")
+      .select("created_by, username, full_name")
+      .not("created_by", "is", null).limit(200);
+    const members = (roster || []).map((r) => ({
+      email: r.created_by, name: r.username || r.full_name || null,
+    })).filter((m) => m.email);
+
+    await mintWeeklyMarkets(members);
+    const swept = await settleDueMarkets();
+
+    const [openRes, posRes, recentRes] = await Promise.all([
+      supabaseAdmin.from("markets").select("*")
+        .eq("status", "open").order("created_date", { ascending: false }).limit(120),
+      supabaseAdmin.from("market_positions").select("*").limit(1000),
+      supabaseAdmin.from("markets").select("*")
+        .neq("status", "open").order("resolved_at", { ascending: false }).limit(30),
+    ]);
+
+    const positions = posRes.data || [];
+    const byMarket = new Map();
+    positions.forEach((p) => {
+      if (!byMarket.has(p.market_id)) byMarket.set(p.market_id, []);
+      byMarket.get(p.market_id).push(p);
+    });
+
+    // Names, so the tape has PEOPLE in it rather than addresses. Emails are
+    // never returned for anybody but the caller.
+    const nameOf = Object.fromEntries(members.map((m) => [m.email, m.name]));
+    const shape = (m) => {
+      const held = byMarket.get(m.id) || [];
+      return {
+        ...m,
+        subject_name: m.subject_name || nameOf[m.subject_email] || null,
+        subject_is_me: m.subject_email === user.email,
+        subject_email: m.subject_email === user.email ? user.email : null,
+        positions: held.map((p) => ({
+          id: p.id, p: Number(p.p), stake: p.stake,
+          price_at_entry: Number(p.price_at_entry),
+          payout: p.payout, settled_at: p.settled_at,
+          user_name: p.user_name || nameOf[p.user_email] || null,
+          user_email: p.user_email === user.email ? user.email : null,
+          is_me: p.user_email === user.email,
+          created_date: p.created_date,
+        })),
+      };
+    };
+
+    const open = (openRes.data || []).map(shape);
+    const recent = (recentRes.data || []).map(shape);
+
+    return res.json({
+      available: true,
+      me: {
+        email: user.email,
+        name: profile.username || profile.full_name || null,
+        cred: Math.max(0, Number(profile.cred_balance) || 0),
+        lifetime_won: Number(profile.cred_lifetime_won) || 0,
+        weekly_grant: CRED_WEEKLY_GRANT,
+        cap: CRED_BALANCE_CAP,
+      },
+      markets: open,
+      recent,
+      swept: swept.settled,
+      week: marketWeekKey(),
+    });
+  } catch (err) {
+    console.error("[getMarkets] error:", err);
+    return res.status(500).json({ error: err?.message || String(err) });
+  }
+});
+
+// ─── Taking a side ──────────────────────────────────────────────────────────
+
+app.post("/local-ai/fn/takePosition", async (req, res) => {
+  const user = await authenticateRequest(req);
+  if (!user) return res.status(401).json({ error: "Unauthorized" });
+  if (!supabaseAdmin) return res.status(500).json({ error: "Supabase admin not configured" });
+
+  let debited = null;
+  try {
+    const { market_id, side, conviction, stake } = req.body || {};
+    if (!market_id) return res.status(400).json({ error: "market_id required" });
+
+    const { data: market, error: mErr } = await supabaseAdmin
+      .from("markets").select("*").eq("id", market_id).maybeSingle();
+    // Destructure `error` on anything whose absence changes a branch: a
+    // discarded error is what turned a broken query into a plausible lie the
+    // last three times this file got it wrong.
+    if (mErr) {
+      console.error("[takePosition] market lookup failed:", mErr.code, mErr.message);
+      return res.status(500).json({ error: "Couldn't read that market." });
+    }
+    if (!market) return res.status(404).json({ error: "That market no longer exists." });
+    if (market.status !== "open") {
+      return res.status(400).json({ error: "That one is already decided." });
+    }
+    if (market.closes_at && new Date(market.closes_at) <= new Date()) {
+      return res.status(400).json({ error: "That market has closed." });
+    }
+
+    // ── THE ONE RULE, enforced on the server where it cannot be edited out of
+    // a bundle. src/lib/market.js states it once; this is the only place it is
+    // allowed to matter.
+    const blocked = marketBlockReason({
+      ...market,
+      competitor_emails: market.meta?.competitor_emails || [],
+    }, user.email);
+    if (blocked) return res.status(403).json({ error: blocked });
+
+    const { data: already } = await supabaseAdmin.from("market_positions")
+      .select("id").eq("market_id", market_id).eq("user_email", user.email).limit(1);
+    if (already?.length) {
+      return res.status(409).json({ error: "You've already taken a side on this one." });
+    }
+
+    const amount = marketStake(stake);
+    const p = marketProb(side === MKT_NO ? MKT_NO : MKT_YES, conviction);
+
+    // ── THE PRICE IS FROZEN HERE, from the positions as they stand right now.
+    // Never recomputed at settlement: repricing after the fact would change
+    // the deal a student agreed to, which is the rule settleForecast keeps
+    // about base rates.
+    const { data: existing } = await supabaseAdmin
+      .from("market_positions").select("p, stake").eq("market_id", market_id);
+    const price = marketPrice(market, existing || []);
+
+    const { data: prof, error: pErr } = await supabaseAdmin.from("user_profiles")
+      .select("id, cred_balance, username, full_name").eq("created_by", user.email).maybeSingle();
+    if (pErr) {
+      console.error("[takePosition] profile lookup failed:", pErr.code, pErr.message);
+      return res.status(500).json({ error: "Couldn't read your balance." });
+    }
+    if (!prof) return res.status(404).json({ error: "No profile found for this account." });
+
+    const held = Math.max(0, Number(prof.cred_balance) || 0);
+    if (held < amount) {
+      return res.status(400).json({ error: "Not enough cred for that stake.", held });
+    }
+
+    // ── ESCROW. `awardXP` only adds, so a losing position could not be charged
+    // through it — and with no charge, saying 97% on everything would be
+    // optimal, which is the cannot-lose shape this whole layer replaced.
+    await supabaseAdmin.from("user_profiles")
+      .update({ cred_balance: held - amount }).eq("id", prof.id);
+    debited = { profileId: prof.id, amount };
+
+    const { data: row, error } = await supabaseAdmin.from("market_positions").insert({
+      market_id, user_email: user.email,
+      user_name: prof.username || prof.full_name || null,
+      p, stake: amount, price_at_entry: price,
+    }).select().single();
+    if (error) throw error;
+
+    return res.json({ position: row, price, staked: amount, balance: held - amount });
+  } catch (err) {
+    console.error("takePosition error:", err);
+    // Unwind the escrow. The stake is taken before the row exists and there
+    // are no transactions across PostgREST calls, so a failed insert has to
+    // give it back — placeForecast destroyed real XP for months by not doing
+    // exactly this.
+    if (debited) {
+      try {
+        const { data: p2 } = await supabaseAdmin.from("user_profiles")
+          .select("cred_balance").eq("id", debited.profileId).maybeSingle();
+        await supabaseAdmin.from("user_profiles")
+          .update({ cred_balance: (Number(p2?.cred_balance) || 0) + debited.amount })
+          .eq("id", debited.profileId);
+      } catch (e) {
+        console.error("[takePosition] REFUND FAILED — student is down",
+          debited.amount, "cred:", e?.message || e);
+      }
+    }
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// ─── Opening a market on your own mark ──────────────────────────────────────
+//
+// You state a line; everybody else trades it. You cannot hold a position on
+// it, because you are the one who reports the result — which is the entire
+// reason this is safe to pay out on, and a better game besides: being read by
+// twelve people is more motivating than being paid for a number you typed.
+app.post("/local-ai/fn/openMarkMarket", async (req, res) => {
+  const user = await authenticateRequest(req);
+  if (!user) return res.status(401).json({ error: "Unauthorized" });
+  if (!supabaseAdmin) return res.status(500).json({ error: "Supabase admin not configured" });
+
+  try {
+    const { subject, target, closes_at } = req.body || {};
+    const line = Math.round(Number(target) || 0);
+    if (!subject || !line || line < 1 || line > 100) {
+      return res.status(400).json({ error: "A subject and a mark out of 100 are required." });
+    }
+    const when = closes_at ? new Date(closes_at) : null;
+    if (!when || !Number.isFinite(when.getTime()) || when <= new Date()) {
+      return res.status(400).json({ error: "Pick a date in the future for the SAC." });
+    }
+
+    const profile = await loadUserProfile(user.email);
+    const who = firstNameOf(profile?.username || profile?.full_name, user.email);
+    const { data: row, error } = await supabaseAdmin.from("markets").insert({
+      kind: "sac", subject_email: user.email,
+      subject_name: profile?.username || profile?.full_name || null,
+      created_by: user.email,
+      title: `Will ${who} score ${line}+ on their ${subject} SAC?`,
+      resolves_note: `On the mark ${who} reports. They can't back it — you can.`,
+      prior: 0.5,
+      closes_at: when.toISOString(),
+      meta: { ref: `sac:${subject}:${line}`, period: marketWeekKey(when),
+        target: line, subject, thin: true },
+    }).select().single();
+    if (error) {
+      if (/duplicate key/i.test(error.message || "")) {
+        return res.status(409).json({ error: "You already have that line open." });
+      }
+      throw error;
+    }
+    return res.json({ market: row });
+  } catch (err) {
+    console.error("openMarkMarket error:", err);
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// Report the mark. Only the subject may, which is what makes them ineligible
+// to hold a position on it, and the settle sweep pays everybody else out.
+app.post("/local-ai/fn/reportMark", async (req, res) => {
+  const user = await authenticateRequest(req);
+  if (!user) return res.status(401).json({ error: "Unauthorized" });
+  if (!supabaseAdmin) return res.status(500).json({ error: "Supabase admin not configured" });
+
+  try {
+    const { market_id, score } = req.body || {};
+    const mark = Math.round(Number(score));
+    if (!market_id || !Number.isFinite(mark) || mark < 0 || mark > 100) {
+      return res.status(400).json({ error: "A market and a mark out of 100 are required." });
+    }
+    const { data: market, error } = await supabaseAdmin
+      .from("markets").select("*").eq("id", market_id).maybeSingle();
+    if (error) {
+      console.error("[reportMark] lookup failed:", error.code, error.message);
+      return res.status(500).json({ error: "Couldn't read that market." });
+    }
+    if (!market) return res.status(404).json({ error: "That market no longer exists." });
+    if (market.kind !== "sac") return res.status(400).json({ error: "That isn't a mark market." });
+    if (market.subject_email !== user.email) {
+      return res.status(403).json({ error: "Only the person it's about can report the mark." });
+    }
+    if (market.status !== "open") return res.json({ already: true });
+
+    await supabaseAdmin.from("markets")
+      .update({ meta: { ...(market.meta || {}), reported: mark },
+        closes_at: new Date().toISOString() })
+      .eq("id", market_id);
+    const swept = await settleDueMarkets();
+    return res.json({ reported: mark, settled: swept.settled });
+  } catch (err) {
+    console.error("reportMark error:", err);
     return res.status(500).json({ error: err.message });
   }
 });

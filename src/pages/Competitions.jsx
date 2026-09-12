@@ -1,1087 +1,462 @@
-import React, { useState, useEffect, useMemo, useCallback, useRef } from "react";
+/**
+ * Compete — the floor. Rebuilt from nothing on ONE object.
+ *
+ * ═══ What this replaces ═════════════════════════════════════════════════════
+ * Seven nouns that all meant "a thing you can win" — battles, duels, call-outs,
+ * forecasts, progress bets, back-yourself bets and the weekly league — spread
+ * over 24 components and a 1,087-line page. A student had to learn all seven
+ * before they could do anything, which is why the page read as confusing
+ * however it was styled. Restyling seven objects gives you seven prettier
+ * objects.
+ *
+ * Everything here is a MARKET: a question, a price, a side, a resolution.
+ *
+ * ═══ IT IS A DIFFERENT ROOM, ON PURPOSE ═════════════════════════════════════
+ * The rest of AcedIt is cream, playing cards and soft panels, and it works. A
+ * trading floor is a different kind of place and walking into one should feel
+ * like it. The ink is LITERAL rather than tokenised — the focus-mode lesson,
+ * arrived at from the same direction: a token that flips underneath a
+ * deliberate inversion is the bug, not the fix, and this room must look the
+ * same in both themes because the room is the point.
+ *
+ * The brand green stays YES and the streak red stays NO, so the two colours a
+ * student already reads as good and bad mean the same things here.
+ *
+ * ═══ Three zones, in the order somebody actually uses them ══════════════════
+ * THE BOARD — what is worth an opinion, sorted by heat, yours first.
+ * YOUR BOOK — what you are holding and what it is worth.
+ * THE TAPE  — what just happened, to whom.
+ */
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import AceBody from "@/components/ace/AceBody";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import {
-    Trophy, Swords, Crown, ClipboardList, Settings as SettingsIcon,
-    LogIn, Loader2, ArrowRight, Target, Users, ShieldAlert, Flame, LineChart,
-} from "lucide-react";
+import { TrendingUp, Loader2, Coins, Plus, X } from "lucide-react";
 import { base44 } from "@/api/base44Client";
-import { useToast } from "@/components/ui/use-toast";
-import GoalCompetitionDetail from "@/components/competition/GoalCompetitionDetail";
-import Arena from "@/components/arena/Arena";
-import ForecastPanel from "@/components/competition/ForecastPanel";
-import { studyEvents } from "@/lib/studyLog";
-import { competeLead } from "@/lib/competeLead";
-import { forecastBoard } from "@/lib/forecast";
-import { isOpenWager } from "@/lib/wagerStatus";
-import CreateDuelDialog from "@/components/arena/CreateDuelDialog";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { joinGoalCompetition, createGoalCompetition } from "@/api/functionsShim";
-import { computePot } from "@/components/competition/arenaHelpers";
-import { momentumOf } from "@/components/competition/battleOdds";
-import { allBattles } from "@/components/competition/normaliseBattle";
-import BattleRow from "@/components/competition/BattleRow";
-import BattleDashboard from "@/components/competition/BattleDashboard";
-import BookPanel from "@/components/competition/BookPanel";
-import { bookOdds, bookSeries, bookExposure }
-    from "@/components/competition/portfolio";
-import CalloutQuiz from "@/components/competition/CalloutQuiz";
-import CompeteFeed from "@/components/competition/CompeteFeed";
-import SettlementReveal, { pendingReveal } from "@/components/competition/SettlementReveal";
-import RivalryStrip from "@/components/competition/RivalryStrip";
-import { competeFeed, rivalries } from "@/lib/competeFeed";
-import { getReactions } from "@/api/functionsShim";
-import { useLive, useLiveTick } from "@/lib/LiveContext";
-import { fmtDate } from "@/lib/safeDate";
-import HelpButton from "@/components/shared/HelpButton";
-import Reveal from "@/components/shared/Reveal";
-import AceShuffle from "@/components/ace/AceShuffle";
+import { useLiveTick } from "@/lib/LiveContext";
+import { takeFn } from "@/lib/fnResult";
+import MarketCard from "@/components/market/MarketCard";
+import {
+    readMarket, sortBoard, isOpen, sideOf, YES, KIND_LIST,
+} from "@/lib/market";
 
-// Battles now rank by Compete Score; fall back to legacy progress for old data.
-const rankVal = (p) => (p?.compete_score ?? p?.progress_percent ?? 0);
+const firstName = (n) => String(n || "").trim().split(/\s+/)[0] || "Someone";
 
-// ─── Coach voice ──────────────────────────────────────────────────────────────
-function getCoachLine({ name, hour, total, active, leading, behind, recentWins }) {
-    const period = hour < 12 ? "Morning" : hour < 17 ? "Afternoon" : hour < 21 ? "Evening" : "Late night";
-    if (total === 0) return `${period}, ${name}. No competitions yet — challenge a friend from any goal.`;
-    if (active === 0 && recentWins > 0) return `${period}, ${name}. ${recentWins} win${recentWins === 1 ? '' : 's'} under your belt. Time for another.`;
-    if (active === 0) return `${period}, ${name}. Nothing live right now — let's get a battle going.`;
-    if (behind > 0 && behind === active) return `${period}, ${name}. You're behind in every active comp. Time to push.`;
-    if (behind > 0 && leading > 0) return `${period}, ${name}. Leading ${leading}, behind in ${behind}. Mixed bag — focus on the gap.`;
-    if (leading === active) return `${period}, ${name}. Leading every active comp. Hold position.`;
-    if (leading > 0) return `${period}, ${name}. Leading ${leading} of ${active} battles. Keep building.`;
-    return `${period}, ${name}. ${active} live battle${active === 1 ? '' : 's'} on the board.`;
+/** Relative time that REFUSES a bad date rather than printing "20705d ago". */
+function ago(iso) {
+    if (!iso) return null;
+    const t = new Date(iso).getTime();
+    if (!Number.isFinite(t) || t < Date.UTC(2020, 0, 1)) return null;
+    const mins = Math.floor((Date.now() - t) / 60000);
+    if (mins < 1) return "just now";
+    if (mins < 60) return `${mins}m ago`;
+    const h = Math.floor(mins / 60);
+    if (h < 24) return `${h}h ago`;
+    return `${Math.floor(h / 24)}d ago`;
 }
 
-// ─── Main page ────────────────────────────────────────────────────────────────
+// ─── The tape ───────────────────────────────────────────────────────────────
+
+/**
+ * Every position taken and every market resolved, newest first.
+ *
+ * Derived from rows already loaded rather than stored as events — the rule
+ * `redoQueue` and `subjectHub` both follow, so the tape cannot go stale,
+ * double up, or disagree with the board above it. An entry with no usable
+ * timestamp is DROPPED, because it has no place on a timeline.
+ */
+function buildTape(markets = [], recent = []) {
+    const rows = [];
+    for (const m of markets) {
+        for (const pos of m.positions || []) {
+            if (!ago(pos.created_date)) continue;
+            rows.push({
+                id: `pos:${pos.id}`, at: pos.created_date,
+                who: firstName(pos.user_name), side: sideOf(pos.p),
+                text: `backed ${sideOf(pos.p) === YES ? "YES" : "NO"} on`,
+                subject: m.title, stake: pos.stake,
+            });
+        }
+    }
+    for (const m of recent) {
+        if (!ago(m.resolved_at)) continue;
+        rows.push({
+            id: `res:${m.id}`, at: m.resolved_at, resolved: true,
+            outcome: m.status === "void" ? null : m.outcome,
+            text: m.status === "void" ? "was voided —" : `resolved ${m.outcome ? "YES" : "NO"} —`,
+            subject: m.title,
+        });
+    }
+    return rows.sort((a, b) => new Date(b.at) - new Date(a.at)).slice(0, 40);
+}
+
+function Tape({ rows }) {
+    if (!rows.length) {
+        return (
+            <p className="text-[13px] text-[#4E6484] px-1">
+                Nothing has happened yet this week. Take a side and you'll be the first line on it.
+            </p>
+        );
+    }
+    return (
+        <div className="space-y-1">
+            {rows.map((r) => (
+                <div key={r.id}
+                    className="flex items-baseline gap-2 py-1.5 border-b border-[#1B2839] last:border-0">
+                    <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 translate-y-[-2px]
+                        ${r.resolved
+                            ? (r.outcome === null ? "bg-[#4E6484]" : r.outcome ? "bg-[#58CC02]" : "bg-[#FF5A5F]")
+                            : r.side === YES ? "bg-[#58CC02]" : "bg-[#FF5A5F]"}`} />
+                    <p className="text-[12px] leading-snug min-w-0 flex-1">
+                        {r.who && <span className="font-bold text-[#E8F0FB]">{r.who} </span>}
+                        <span className="text-[#6F86A8]">{r.text} </span>
+                        <span className="text-[#8FA3BF]">{r.subject}</span>
+                        {r.stake ? <span className="text-[#4E6484]"> · {r.stake}</span> : null}
+                    </p>
+                    <span className="text-[10px] text-[#3D5273] flex-shrink-0 tabular-nums">
+                        {ago(r.at)}
+                    </span>
+                </div>
+            ))}
+        </div>
+    );
+}
+
+// ─── Open a line on your own mark ───────────────────────────────────────────
+
+function LineDialog({ onClose, onOpen, busy }) {
+    const [subject, setSubject] = useState("");
+    const [target, setTarget] = useState(80);
+    const [date, setDate] = useState("");
+    const ok = subject.trim() && target > 0 && date;
+    return (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4"
+            style={{ background: "rgba(4,8,15,0.8)" }} onClick={onClose}>
+            <div onClick={(e) => e.stopPropagation()}
+                className="w-full max-w-sm rounded-2xl border-2 border-[#233247] bg-[#121C2E] p-5">
+                <div className="flex items-start justify-between gap-3 mb-1">
+                    <h2 className="font-display font-black text-[#E8F0FB] text-lg leading-tight">
+                        Call your own SAC
+                    </h2>
+                    <button type="button" onClick={onClose} className="text-[#6F86A8] hover:text-[#E8F0FB]">
+                        <X className="w-4 h-4" />
+                    </button>
+                </div>
+                {/* Says plainly why you can't back it. The rule is more
+                    motivating stated than hidden: being read by the room is
+                    the draw, not the payout you are giving up. */}
+                <p className="text-[12px] text-[#6F86A8] leading-snug mb-4">
+                    You state the line and everyone else trades it. You can't back your own — you're
+                    the one who reports the mark — but you'll see exactly who believes you.
+                </p>
+                <div className="space-y-3">
+                    <div>
+                        <label className="text-[11px] font-bold uppercase tracking-wide text-[#6F86A8]">
+                            Subject
+                        </label>
+                        <input value={subject} onChange={(e) => setSubject(e.target.value)}
+                            placeholder="Chemistry"
+                            className="w-full mt-1 rounded-xl bg-[#0E1929] border-2 border-[#2C3E57]
+                                px-3 py-2 text-[#E8F0FB] text-sm outline-none focus:border-[#1CB0F6]" />
+                    </div>
+                    <div>
+                        <label className="text-[11px] font-bold uppercase tracking-wide text-[#6F86A8]">
+                            The line — you'll score at least
+                        </label>
+                        <div className="flex items-center gap-3 mt-1">
+                            <input type="range" min="40" max="100" value={target}
+                                onChange={(e) => setTarget(Number(e.target.value))}
+                                className="flex-1 accent-[#1CB0F6]" />
+                            <span className="font-display font-black text-[#E8F0FB] text-xl tabular-nums w-12 text-right">
+                                {target}
+                            </span>
+                        </div>
+                    </div>
+                    <div>
+                        <label className="text-[11px] font-bold uppercase tracking-wide text-[#6F86A8]">
+                            SAC date
+                        </label>
+                        <input type="date" value={date} onChange={(e) => setDate(e.target.value)}
+                            className="w-full mt-1 rounded-xl bg-[#0E1929] border-2 border-[#2C3E57]
+                                px-3 py-2 text-[#E8F0FB] text-sm outline-none focus:border-[#1CB0F6]" />
+                    </div>
+                </div>
+                <button type="button" disabled={!ok || busy}
+                    onClick={() => onOpen({ subject: subject.trim(), target,
+                        closes_at: new Date(`${date}T23:59:00`).toISOString() })}
+                    className="w-full mt-4 py-2.5 rounded-xl bg-[#E8F0FB] text-[#0A121F]
+                        font-display font-black text-sm disabled:opacity-40 inline-flex
+                        items-center justify-center gap-2 hover:bg-white transition-colors">
+                    {busy && <Loader2 className="w-4 h-4 animate-spin" />} Open the line
+                </button>
+            </div>
+        </div>
+    );
+}
+
+// ─── The page ───────────────────────────────────────────────────────────────
+
+const FILTERS = [{ id: "all", label: "All" }, ...KIND_LIST.map((k) => ({ id: k.id, label: k.label }))];
+
 export default function Competitions() {
-    const [user, setUser] = useState(null);
-    const [userProfile, setUserProfile] = useState(null);
-    const [competitions, setCompetitions] = useState([]);
-    const [isLoading, setIsLoading] = useState(true);
-    const [selectedComp, setSelectedComp] = useState(null);
-    const [inviteCode, setInviteCode] = useState("");
-    const [competeTab, setCompeteTab] = useState("duels");
-    // Forecasting: the calls themselves, plus the rows they settle against.
-    // Loaded here rather than in the panel so the tab does not refetch every
-    // time it is opened, and through `studyEvents` so BOTH study tables count.
-    const [forecasts, setForecasts] = useState([]);
-    const [forecastRows, setForecastRows] = useState({ events: [], attempts: [] });
-    // Duels for the unified list. The arena owns creating/answering them;
-    // this is a read so both kinds of competition can sit in one place.
-    const [duels, setDuels] = useState([]);
-    const [ticker, setTicker] = useState([]);
-    // Call-outs involving me, in either direction. Loaded once here rather
-    // than per-battle so an incoming one can be surfaced page-wide — a
-    // challenge you never see is a forfeit you didn't choose.
-    const [callouts, setCallouts] = useState([]);
-    const [answering, setAnswering] = useState(null);
-    // False until the server confirms the callouts table is there. Migrations
-    // 0025/0026 can lag a deploy, and a button that 500s is worse than a
-    // feature that hasn't appeared yet.
-    const [calloutsReady, setCalloutsReady] = useState(false);
-    // Call-outs in my battles that I am NOT a party to. They are events I am
-    // entitled to watch, and they arrive on their own key rather than mixed
-    // into `callouts` — CalloutPanel and the incoming-challenge banner both
-    // read that list as "things demanding something of me".
-    const [watching, setWatching] = useState([]);
-    const [reactions, setReactions] = useState({});
-    const [reactionsReady, setReactionsReady] = useState(false);
-    const [reveal, setReveal] = useState(null);
-    // The app's one refresh clock. This page does not own a timer of its own —
-    // it re-reads what it already knows how to read whenever the provider says
-    // it is a safe moment, which is what keeps the live system from becoming a
-    // second data layer arguing with readCache.
+    const [data, setData] = useState(null);
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState(null);
+    const [busy, setBusy] = useState(false);
+    const [filter, setFilter] = useState("all");
+    const [lineOpen, setLineOpen] = useState(false);
     const liveTick = useLiveTick();
-    const { setLive } = useLive();
-    const [userSubjects, setUserSubjects] = useState([]);
-    const [openBattle, setOpenBattle] = useState(null);
-    // The challenge dialog is opened from the "Start something" card, so this
-    // page owns it rather than reaching into Arena for a button that used to
-    // float on its own above the list.
-    const [challengeOpen, setChallengeOpen] = useState(false);
-    const [newBattleTitle, setNewBattleTitle] = useState("");
-    const [newBattleDays, setNewBattleDays] = useState(7);
-    const [newBattleSubject, setNewBattleSubject] = useState('');
-    const [creatingBattle, setCreatingBattle] = useState(false);
 
-    const handleCreateBattle = async () => {
-        if (!newBattleTitle.trim()) return;
-        setCreatingBattle(true);
+    // Declared BEFORE any hook naming it in a dependency array. A deps array is
+    // evaluated DURING render, so a const below its own hook is a temporal-dead-
+    // zone ReferenceError and a white screen — the crash that took the old
+    // Compete down, then Study, in two slightly different shapes.
+    const load = useCallback(async () => {
         try {
-            const res = await createGoalCompetition({
-                standalone: true,
-                title: newBattleTitle.trim(),
-                duration_days: newBattleDays,
-                subject_name: newBattleSubject || undefined,
-            });
-            const data = res?.data ?? res;
-            toast({ title: "Battle created!", description: data?.invite_code ? `Share code ${data.invite_code} with your friends.` : "Open it to grab the invite code." });
-            setNewBattleTitle(""); setNewBattleSubject("");
-            loadData();
+            // takeFn, NOT the raw result: invoke returns { data, error } and
+            // reading the envelope as the payload renders an empty board with
+            // no error — see fnResult.js.
+            setData(takeFn(await base44.functions.invoke("getMarkets", {})));
+            setError(null);
         } catch (e) {
-            toast({ title: "Battle not created", description: e.message, variant: "destructive" });
+            setError(e?.message || "Couldn't open the floor.");
         } finally {
-            setCreatingBattle(false);
-        }
-    };
-    const [joiningCode, setJoiningCode] = useState(false);
-    const [joinSetupChoice, setJoinSetupChoice] = useState(null);
-    const [pendingJoinCode, setPendingJoinCode] = useState(null);
-    const [rematchingEmail, setRematchingEmail] = useState(null);
-    const { toast } = useToast();
-
-    /**
-     * The student's calls, and the study rows that decide them.
-     *
-     * `score_wagers` is reused rather than given a new table: the columns line
-     * up (bettor = the forecaster, wagered_xp = the stake, predicted_score =
-     * the probability as 0-100) and the shape of a forecast rides in `extra`.
-     * A migration against a live database for a field that fits is the kind of
-     * cost this does not need to pay.
-     */
-    const loadForecasts = useCallback(async (email) => {
-        if (!email) return;
-        const fail = () => [];
-        const [rows, sessions, techniques, attempts] = await Promise.all([
-            base44.entities.ScoreWager.filter({ bettor_email: email }).catch(fail),
-            base44.entities.StudySession.filter({ created_by: email }, "-date", 400).catch(fail),
-            base44.entities.StudyTechnique.filter({ created_by: email }, "-date").catch(fail),
-            base44.entities.QuizAttempt.filter({ created_by: email }).catch(fail),
-        ]);
-        setForecasts((rows || [])
-            .filter((r) => r?.extra?.forecast)
-            .map((r) => ({
-                id: r.id,
-                ...r.extra.forecast,
-                stake: r.wagered_xp,
-                created_at: r.created_date,
-                // A row the server has already settled carries its verdict, and
-                // that verdict WINS: the client recomputes for display, the
-                // server decides. Two answers to one question is how a screen
-                // starts disagreeing with the XP it paid.
-                //
-                // Compared against the OPEN status rather than a hard-coded
-                // string: this read `!== "pending"`, and once the server
-                // started writing the value its constraint actually permits,
-                // every live call would have rendered as already settled.
-                settled: !isOpenWager(r),
-            })));
-        setForecastRows({ events: studyEvents(sessions, techniques), attempts: attempts || [] });
-    }, []);
-
-    useEffect(() => { loadData(); }, []);
-
-
-    const loadData = async () => {
-        setIsLoading(true);
-        try {
-            const u = await base44.auth.me();
-            setUser(u);
-            // Fire and forget: the calls tab is not the landing tab, so making
-            // the whole page wait on it would slow the one everybody opens.
-            loadForecasts(u.email);
-            const [allComps, profiles, subjects] = await Promise.all([
-                base44.entities.GoalCompetition.list('-created_date', 50),
-                base44.entities.UserProfile.filter({ created_by: u.email }),
-                base44.entities.UserSubject.filter({ created_by: u.email, is_active: true }).catch(() => []),
-            ]);
-            const seenSub = new Set();
-            setUserSubjects((subjects || []).filter(x => !seenSub.has(x.subject_name) && seenSub.add(x.subject_name)));
-            const myComps = allComps.filter(c => c.creator_email === u.email || (c.participants || []).some(p => p.email === u.email));
-            setCompetitions(myComps);
-            base44.functions.invoke('getArenaState')
-                .then(r => {
-                    const d = r?.data ?? r;
-                    setDuels((d?.duels || []).filter(x => x.status === 'active' || x.status === 'settled'));
-                    setTicker(d?.ticker || []);
-                })
-                .catch(() => {});
-            loadCallouts();
-            setUserProfile(profiles[0] || null);
-
-            // Auto-sync hours for all active competitions the user is in
-            const activeMyComps = myComps.filter(c => c.status === 'active');
-            for (const comp of activeMyComps) {
-                const me = (comp.participants || []).find(p => p.email === u.email);
-                if (me?.status === 'accepted') {
-                    base44.functions.invoke('updateCompetitionProgress', { competition_id: comp.id }).catch(() => {});
-                }
-            }
-        } catch (e) { console.error(e); }
-        finally { setIsLoading(false); }
-    };
-
-    const loadCallouts = useCallback(async () => {
-        try {
-            const d = (await base44.functions.invoke('getCallouts'))?.data ?? {};
-            setCalloutsReady(d.available !== false);
-            setCallouts(d.callouts || []);
-            setWatching(d.watching || []);
-        } catch {
-            setCalloutsReady(false);   // the page works fine without them
+            setLoading(false);
         }
     }, []);
 
-    // Reactions are a separate read so a missing migration 0034 cannot take
-    // the feed down with it — the buttons simply do not appear.
-    const loadReactions = useCallback(async () => {
+    useEffect(() => { load(); }, [load, liveTick]);
+
+    const me = data?.me || {};
+    const board = useMemo(() => {
+        const rows = (data?.markets || [])
+            .map((m) => readMarket(m, m.positions || [], me.email))
+            .filter((m) => isOpen(m));
+        return sortBoard(rows, me.email);
+    }, [data, me.email]);
+
+    const shown = useMemo(
+        () => (filter === "all" ? board : board.filter((m) => m.kind === filter)),
+        [board, filter]);
+
+    const book = useMemo(() => board.filter((m) => m.mine), [board]);
+    const tape = useMemo(() => buildTape(board, data?.recent || []), [board, data]);
+
+    const atStake = book.reduce((s, m) => s + (m.mine?.stake || 0), 0);
+
+    const take = async (market, pick) => {
+        setBusy(true);
         try {
-            const d = (await getReactions())?.data ?? {};
-            setReactionsReady(d.available !== false);
-            setReactions(d.events || {});
-        } catch {
-            setReactionsReady(false);
-        }
-    }, []);
-    useEffect(() => { if (user?.email) loadReactions(); }, [user?.email, loadReactions]);
-
-    // ── The live refetch ────────────────────────────────────────────────────
-    // Every tick is the provider saying the student is not mid-anything and it
-    // is safe to pull. The first one fires on mount alongside the initial
-    // load, so it is skipped rather than doubling it.
-    //
-    // THIS HAS TO SIT BELOW THE LOADERS. It was written above them, next to
-    // the mount effect, and took the page down with a TDZ ReferenceError: a
-    // function named in a DEPENDENCY ARRAY is read during render, while the
-    // same function called inside the effect body is not — which is exactly
-    // why `useEffect(() => loadData(), [])` a few lines up is fine where it is
-    // and this is not.
-    const firstTick = useRef(true);
-    useEffect(() => {
-        if (firstTick.current) { firstTick.current = false; return; }
-        loadData();
-        loadCallouts();
-        loadReactions();
-        // loadData is a plain function redefined every render; depending on it
-        // would refetch on every keystroke elsewhere on the page. The tick is
-        // the trigger, and it is the only one.
-    }, [liveTick, loadCallouts, loadReactions]);
-
-    // Only what needs answering: aimed at me, still open. A settled one is a
-    // record, not a demand.
-    const incoming = useMemo(
-        () => callouts.filter(c => c.target_email === user?.email && ["pending", "active"].includes(c.status)),
-        [callouts, user]);
-
-    const handleJoinByCode = async () => {
-        if (!inviteCode.trim()) return;
-        setPendingJoinCode(inviteCode.trim().toUpperCase());
-        setJoinSetupChoice('prompt');
-    };
-
-    const confirmJoin = async (useOwnSetup) => {
-        setJoiningCode(true);
-        setJoinSetupChoice(null);
-        try {
-            const res = await joinGoalCompetition({ invite_code: pendingJoinCode, use_own_setup: useOwnSetup });
-            const data = res?.data ?? res;
-            if (data?.error) {
-                toast({ title: "Could not join", description: data.error, variant: "destructive" });
-            } else {
-                toast({ title: "Joined! You're in.", description: "Good luck out there." });
-                setInviteCode(""); setPendingJoinCode(null);
-                await loadData();
-            }
+            takeFn(await base44.functions.invoke("takePosition", {
+                market_id: market.id, side: pick.side,
+                conviction: pick.conviction, stake: pick.stake,
+            }));
+            await load();
         } catch (e) {
-            toast({ title: "Error", description: e.message, variant: "destructive" });
-        } finally { setJoiningCode(false); }
-    };
-
-    // Rematch: re-run the most recent battle YOU created against this rival.
-    const handleRematch = async (rival) => {
-        // Find my most recent settled comp where this rival took part.
-        const mine = competitions
-            .filter(c => c.creator_email === user?.email
-                && (c.participants || []).some(p => p.email === rival.email))
-            .sort((a, b) => new Date(b.completed_at || b.updated_date || 0) - new Date(a.completed_at || a.updated_date || 0));
-        const base = mine[0];
-        if (!base?.goal_id) {
-            toast({ title: "Start it from a goal", description: `Open a goal and tap “Compete with friends” to challenge ${rival.name?.split(' ')[0]} again.` });
-            return;
+            setError(e?.message || "That didn't go through.");
         }
-        setRematchingEmail(rival.email);
-        try {
-            const res = await createGoalCompetition({ goal_id: base.goal_id, invite_emails: [rival.email] });
-            const data = res?.data ?? res;
-            if (data?.error) {
-                toast({ title: "Couldn't start rematch", description: data.error, variant: "destructive" });
-            } else {
-                toast({ title: `Rematch on!`, description: `${rival.name?.split(' ')[0]} has been challenged on “${base.goal_title}”.` });
-                await loadData();
-            }
-        } catch (e) {
-            toast({ title: "Error", description: e.message, variant: "destructive" });
-        } finally { setRematchingEmail(null); }
+        setBusy(false);
     };
 
-    // Every competition in one list, most urgent first.
-    const allBattles_ = useMemo(
-        () => allBattles({ duels, competitions, myEmail: user?.email }),
-        [duels, competitions, user],
+    const openLine = async (payload) => {
+        setBusy(true);
+        try {
+            takeFn(await base44.functions.invoke("openMarkMarket", payload));
+            setLineOpen(false);
+            await load();
+        } catch (e) {
+            setError(e?.message || "Couldn't open that line.");
+        }
+        setBusy(false);
+    };
+
+    const report = async (market) => {
+        const raw = window.prompt(`What did you get? (out of 100)\n\n${market.title}`);
+        if (raw == null) return;
+        const score = Math.round(Number(raw));
+        if (!Number.isFinite(score) || score < 0 || score > 100) return;
+        setBusy(true);
+        try {
+            takeFn(await base44.functions.invoke("reportMark", { market_id: market.id, score }));
+            await load();
+        } catch (e) {
+            setError(e?.message || "Couldn't report that.");
+        }
+        setBusy(false);
+    };
+
+    // ── The room paints its own ground, in both themes ──────────────────
+    const Room = ({ children }) => (
+        <div className="min-h-screen bg-[#0A121F] -m-4 sm:-m-6 p-4 sm:p-6">{children}</div>
     );
-    const liveBattleCount = allBattles_.filter(b => b.status === "live").length;
 
-    // ─── Derived stats ────────────────────────────────────────────────────────
-    // ── The book ────────────────────────────────────────────────────────────
-    // Six equal stat tiles is a table, not a dashboard: nothing on it was THE
-    // number. The book is one price across every live battle, weighted by what
-    // is at stake, with the line it moved along — and the old counters live
-    // under it as supporting text.
-    const book = useMemo(() => {
-        const series = bookSeries(allBattles_);
-        const odds = bookOdds(allBattles_);
-        // "Today" is the last 24h of the line, which is the window the movers
-        // list uses too — one definition, so the two panels agree.
-        const dayAgo = Date.now() - 24 * 3600 * 1000;
-        const then = [...series].reverse().find((d) => new Date(d.t).getTime() <= dayAgo);
-        return {
-            odds, series,
-            delta: odds != null && then ? Math.round(odds - then.p) : null,
-            exposure: bookExposure(allBattles_),
-            liveCount: allBattles_.filter((b) => b.status === "live").length,
-        };
-    }, [allBattles_]);
-
-    const forecastCtx = useMemo(
-        () => ({ events: forecastRows.events, attempts: forecastRows.attempts }),
-        [forecastRows]);
-
-    const forecastBoardNow = useMemo(
-        () => forecastBoard(forecasts, forecastCtx), [forecasts, forecastCtx]);
-
-    const openCalls = forecastBoardNow.open.length;
-
-    /**
-     * The one thing happening now, ordered by what is about to be decided.
-     * Null when nothing real is — a hero that invents urgency on an empty
-     * account teaches a student to stop reading it.
-     */
-    const lead = useMemo(() => competeLead({
-        openCalls: forecastBoardNow.open,
-        battles: allBattles_,
-        hasDeck: forecasts.length > 0 || allBattles_.length > 0,
-    }), [forecastBoardNow, allBattles_, forecasts]);
-
-
-    // ── THE FEED ────────────────────────────────────────────────────────────
-    // Everything that happened, to anybody, in a contest this student is in.
-    // Both call-out lists go in: the ones aimed at or made by them, and the
-    // ones they are only watching.
-    const allCallouts = useMemo(
-        () => [...callouts, ...watching], [callouts, watching]);
-
-    const feed = useMemo(() => competeFeed({
-        callouts: allCallouts, battles: allBattles_, ticker, myEmail: user?.email,
-    }), [allCallouts, allBattles_, ticker, user?.email]);
-
-    // What is actually racing, told to the provider — it sets the poll rate,
-    // and the nav dot reads the same answer so the rail and this page cannot
-    // disagree about whether anything is happening.
-    useEffect(() => {
-        setLive({ battles: allBattles_, callouts: allCallouts });
-    }, [allBattles_, allCallouts, setLive]);
-
-    const myRivals = useMemo(() => rivalries({
-        battles: allBattles_, callouts: allCallouts, myEmail: user?.email,
-    }), [allBattles_, allCallouts, user?.email]);
-
-    // The ceremony fires for a result involving this student that this device
-    // has not already played. Once, ever — a celebration you cannot escape is
-    // a punishment, and replaying somebody's defeat at them is worse.
-    useEffect(() => {
-        if (reveal || !feed.length) return;
-        const next = pendingReveal(feed);
-        if (next) setReveal(next);
-    }, [feed, reveal]);
-
-    // The target's own record is what prices a call-out backing, so the
-    // spectator panel needs every call-out on the page, not this student's.
-    const backingCtx = useMemo(
-        () => ({ ...forecastCtx, calloutHistory: allCallouts }),
-        [forecastCtx, allCallouts]);
-
-    const stats = useMemo(() => {
-        const myEmail = user?.email;
-        const active = competitions.filter(c => c.status === 'active' || c.status === 'pending');
-        const completed = competitions.filter(c => c.status === 'completed');
-        const recentWins = completed.filter(c => c.winner_email === myEmail).length;
-
-        let leading = 0, behind = 0;
-        active.forEach(c => {
-            const accepted = (c.participants || []).filter(p => p.status === 'accepted' || p.status === 'completed');
-            if (accepted.length < 2) return;
-            const ranked = [...accepted].sort((a, b) => rankVal(b) - rankVal(a));
-            const myIdx = ranked.findIndex(p => p.email === myEmail);
-            if (myIdx === 0) leading++;
-            else if (myIdx > 0) behind++;
-        });
-
-        // Current win streak — consecutive wins from the most recent settled battle.
-        const settledByDate = [...completed].sort((a, b) =>
-            new Date(b.completed_at || b.updated_date || 0) - new Date(a.completed_at || a.updated_date || 0));
-        let winStreak = 0;
-        for (const c of settledByDate) {
-            if (c.winner_email === myEmail) winStreak++; else break;
-        }
-
-        // Head-to-head rivalries from settled battles.
-        const rivalMap = {};
-        completed.forEach(c => {
-            const iWon = c.winner_email === myEmail;
-            (c.participants || []).filter(p => p.email && p.email !== myEmail).forEach(p => {
-                if (!rivalMap[p.email]) rivalMap[p.email] = { email: p.email, name: p.name, wins: 0, losses: 0 };
-                if (iWon) rivalMap[p.email].wins++;
-                else if (c.winner_email === p.email) rivalMap[p.email].losses++;
-            });
-        });
-        const rivals = Object.values(rivalMap)
-            .map(r => ({ ...r, games: r.wins + r.losses }))
-            .filter(r => r.games > 0)
-            .sort((a, b) => b.games - a.games)
-            .slice(0, 4);
-
-        // Points put on the board today across every live battle, and the XP
-        // riding on them. Both are about the competition you're in right now,
-        // which is what the tier ladder never was.
-        let pointsToday = 0;
-        let xpAtStake = 0;
-        active.forEach(c => {
-            const mine = (c.participants || []).find(p => p.email === myEmail);
-            const mo = momentumOf(mine, 24);
-            if (mo && mo > 0) pointsToday += mo;
-            xpAtStake += computePot(c)?.total || 0;
-        });
-
-        return { active, completed, recentWins, leading, behind, winStreak, rivals, pointsToday, xpAtStake };
-    }, [competitions, user]);
-
-    const firstName = userProfile?.username || user?.full_name?.split(' ')[0] || 'friend';
-    const hour = new Date().getHours();
-    const coachLine = getCoachLine({
-        name: firstName,
-        hour,
-        total: competitions.length,
-        active: stats.active.length,
-        leading: stats.leading,
-        behind: stats.behind,
-        recentWins: stats.recentWins,
-    });
-
-    // Featured: most-active comp where user is behind, OR most recent active
-    const focus = useMemo(() => {
-        if (stats.active.length === 0) return null;
-        const sorted = [...stats.active].sort((a, b) => {
-            const am = (a.participants || []).find(p => p.email === user?.email);
-            const bm = (b.participants || []).find(p => p.email === user?.email);
-            return rankVal(am) - rankVal(bm);
-        });
-        const target = sorted[0];
-        const me = (target.participants || []).find(p => p.email === user?.email);
-        const accepted = (target.participants || []).filter(p => p.status === 'accepted' || p.status === 'completed');
-        // rankVal, not progress_percent. Battles have ranked by Compete Score
-        // since the scoring rewrite; this block kept reading the legacy field,
-        // which is zero on every current battle. So the most prominent card on
-        // the page picked its target by a number that no longer moves and then
-        // reported "0% done. Priya is at 0%" under a live 412-448 race.
-        const ranked = [...accepted].sort((a, b) => rankVal(b) - rankVal(a));
-        const myIdx = ranked.findIndex(p => p.email === user?.email);
-        const leader = ranked[0];
-        const isLeading = myIdx === 0;
-
-        // Nobody has joined yet. "You're leading" against an empty field read
-        // as a contradiction — leading, and alone, in the same breath — and the
-        // useful thing to say is how to get someone in.
-        if (ranked.length < 2) {
-            return {
-                label: "Waiting on players",
-                title: `Share the code for "${target.goal_title}"`,
-                sub: `Nobody's joined yet. Send ${target.invite_code || "the invite code"} to a friend and it becomes a race.`,
-                accent: "chart-4",
-                icon: Users,
-                comp: target,
-            };
-        }
-
-        if (isLeading) {
-            return {
-                label: "You're leading",
-                title: `Hold the lead in "${target.goal_title}"`,
-                sub: `${Math.round(rankVal(me))} pts. ${ranked[1].name?.split(' ')[0]} is on ${Math.round(rankVal(ranked[1]))}.`,
-                accent: "xp",
-                icon: Crown,
-                comp: target,
-            };
-        }
-        return {
-            label: leader ? `${leader.name?.split(' ')[0]} is ahead` : "Time to focus",
-            title: `Catch up on "${target.goal_title}"`,
-            sub: `You're on ${Math.round(rankVal(me))} pts.${leader ? ` ${leader.name?.split(' ')[0]} is on ${Math.round(rankVal(leader))} — ${Math.round(rankVal(leader) - rankVal(me))} to close.` : ''}`,
-            accent: "chart-3",
-            icon: Swords,
-            comp: target,
-        };
-    }, [stats, user]);
-
-    // Direction A: lighter tints, 1px borders, shadow-soft for depth.
-    const FOCUS_THEME = {
-        xp:        { bg: "bg-xp/5",         border: "border-xp/15",        iconBg: "bg-xp/10",        iconText: "text-xp"        },
-        "chart-3": { bg: "bg-chart-3/5",    border: "border-chart-3/15",   iconBg: "bg-chart-3/10",   iconText: "text-chart-3"   },
-        streak:    { bg: "bg-streak/5",     border: "border-streak/15",    iconBg: "bg-streak/10",    iconText: "text-streak"    },
-        "chart-4": { bg: "bg-chart-4/5",    border: "border-chart-4/15",   iconBg: "bg-chart-4/10",   iconText: "text-chart-4"   },
-        primary:   { bg: "bg-primary/5",    border: "border-primary/15",   iconBg: "bg-primary/10",   iconText: "text-primary"   },
-    };
-
-    // Hall of Fame stats — derived from existing data, no new schema needed.
-    const winRate = stats.completed.length > 0
-        ? Math.round((stats.recentWins / stats.completed.length) * 100)
-        : 0;
-
-    if (isLoading) {
+    if (loading) {
         return (
-            <div className="min-h-screen bg-background flex items-center justify-center">
-                <div className="text-center">
-                    <AceShuffle size="lg" className="mb-3 mx-auto" />
-                    <p className="text-muted-foreground text-sm">Loading…</p>
+            <Room>
+                <div className="flex items-center justify-center py-32 text-[#6F86A8] gap-2">
+                    <Loader2 className="w-4 h-4 animate-spin" /> Opening the floor…
                 </div>
-            </div>
+            </Room>
         );
     }
 
-    // Rendered in every branch that can be on screen: the banner because
-    // ignoring a call-out forfeits real XP, and the quiz because it must be
-    // openable from the battle dashboard as well as the list.
-    const calloutBanner = incoming.map(c => (
-        <motion.div key={c.id} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}
-            className="rounded-3xl border-2 border-streak/40 bg-streak/5 p-5 shadow-soft flex flex-wrap items-center gap-4">
-            <div className="w-11 h-11 rounded-2xl bg-streak/15 flex items-center justify-center flex-shrink-0">
-                <ShieldAlert className="w-5 h-5 text-streak" />
-            </div>
-            <div className="flex-1 min-w-[220px]">
-                <p className="stat-label text-streak">Called out</p>
-                <p className="font-display font-extrabold text-foreground mt-0.5">
-                    {c.caller_name || "A rival"} says you didn't actually learn it
-                </p>
-                <p className="text-xs text-muted-foreground mt-0.5">
-                    {c.question_count} questions from your own study ·
-                    {" "}{Math.round((c.seconds_allowed || 300) / 60)} min ·
-                    {" "}{Math.round((c.pass_mark || 0.75) * 100)}% to pass ·
-                    {" "}answer by {fmtDate(c.respond_by, "EEE h:mmaaa", "soon")}
-                </p>
-            </div>
-            <Button onClick={() => setAnswering(c)}
-                className="gap-1.5 bg-streak hover:bg-streak/90 text-white btn-3d flex-shrink-0">
-                <Swords className="w-4 h-4" /> {c.status === "active" ? "Resume" : "Prove it"}
-            </Button>
-        </motion.div>
-    ));
-
-    // `loadData` is deliberately NOT called on settle. It flips isLoading,
-    // which swaps the whole page for a spinner, unmounts this dialog and
-    // throws away the result screen the student just earned. The board
-    // refreshes when they close it instead.
-    const calloutDialog = answering ? (
-        <CalloutQuiz
-            key={answering.id}
-            callout={answering}
-            open={!!answering}
-            onOpenChange={(o) => { if (!o) { setAnswering(null); loadCallouts(); loadData(); } }}
-            onSettled={loadCallouts}
-        />
-    ) : null;
-
-    // The ceremony. Sits outside every branch below so a result lands whether
-    // the student is on the list, inside a battle, or answering a call-out.
-    const revealOverlay = (
-        <SettlementReveal event={reveal} onClose={() => setReveal(null)} />
-    );
-
-    // The battle dashboard — one competition read as a live market. Group
-    // battles keep their existing management panel (invite code, settle,
-    // sub-goals) below it rather than losing those controls.
-    if (openBattle) {
-        const live = allBattles_.find(b => b.kind === openBattle.kind && b.id === openBattle.id) || openBattle;
+    // The tables may not exist yet. Say so plainly rather than rendering an
+    // empty board that looks like nobody is playing — the posture call-outs
+    // and reactions already take.
+    if (data && data.available === false) {
         return (
-            <div className="min-h-screen bg-background">
-                <div className="max-w-3xl mx-auto px-4 lg:px-8 py-6 lg:py-8">
-                    {calloutBanner.length > 0 && <div className="mb-5 space-y-3">{calloutBanner}</div>}
-                    {calloutDialog}
-                    {revealOverlay}
-                    <BattleDashboard
-                        battle={live}
-                        me={{ email: user?.email, name: userProfile?.full_name || user?.full_name }}
-                        callouts={calloutsReady
-                            ? { list: callouts, watching, refresh: loadCallouts, onSelfCheck: setAnswering }
-                            : null}
-                        record={userProfile?.extra?.callout_record}
-                        activity={(() => {
-                            const emails = new Set(live.sides.map(x => x.email));
-                            const label = { quiz: "a quiz", flashcard: "flashcards", study_session: "a session",
-                                active_recall: "active recall", blurting: "blurting", focus_session: "focus",
-                                mini_test: "a mock", loading_quiz: "a warm-up", challenge: "a mission",
-                                practice_questions: "practice" };
-                            const ago = (at) => {
-                                const m = Math.max(1, Math.round((Date.now() - new Date(at).getTime()) / 60000));
-                                return m < 60 ? `${m}m ago` : `${Math.floor(m / 60)}h ago`;
-                            };
-                            return (ticker || []).filter(e => emails.has(e.email)).map(e => ({
-                                ...e, isMe: e.email === user?.email,
-                                label: label[e.source] || e.source, ago: ago(e.at),
-                            }));
-                        })()}
-                        onBack={() => { setOpenBattle(null); loadData(); }}
-                        footer={live.kind === "battle" ? (
-                            <div className="pt-2">
-                                <GoalCompetitionDetail
-                                    competition={live.raw}
-                                    currentUserEmail={user?.email}
-                                    onBack={() => { setOpenBattle(null); loadData(); }}
-                                    onUpdate={loadData}
-                                    embedded
-                                />
-                            </div>
-                        ) : null}
-                    />
+            <Room>
+                <div className="max-w-md mx-auto text-center py-24">
+                    <TrendingUp className="w-8 h-8 text-[#33486A] mx-auto mb-3" />
+                    <h1 className="font-display font-black text-[#E8F0FB] text-xl">
+                        The floor isn't open yet
+                    </h1>
+                    <p className="text-sm text-[#6F86A8] mt-2">
+                        {data.reason || "One database migration to run."}
+                    </p>
                 </div>
-            </div>
-        );
-    }
-
-    if (selectedComp) {
-        return (
-            <div className="min-h-screen bg-background">
-                <div className="max-w-3xl mx-auto px-4 lg:px-8 py-6 lg:py-8">
-                    <GoalCompetitionDetail
-                        competition={selectedComp}
-                        currentUserEmail={user?.email}
-                        onBack={() => { setSelectedComp(null); loadData(); }}
-                        onUpdate={loadData}
-                    />
-                </div>
-            </div>
+            </Room>
         );
     }
 
     return (
-        <div className="min-h-screen bg-background">
-            {/* ONE entrance for the whole page. Every section used to carry
-                its own initial/animate with its own duration and a hand-picked
-                delay, so the page did not arrive — it twitched into place in
-                eight unrelated movements, and anything added later guessed a
-                delay that did not fit its neighbours. */}
-            <Reveal className="max-w-6xl mx-auto px-4 lg:px-8 py-6 lg:py-10 space-y-6 lg:space-y-8">
+        <Room>
+            <div className="max-w-6xl mx-auto">
 
-                {calloutBanner}
-
-                {/* ── ONE HEADLINE, AND IT IS THE THING TO DO ─────────────
-                    This was TWO sections. A hero button ("Live now — a call
-                    settles today"), and directly under it a coach strip whose
-                    <h1> was the largest type on the page, said "Evening, Miles.
-                    Leading 1 of 2 battles", and restated the live/won counters
-                    printed two lines above it. Two headlines, and the bigger
-                    one carried the less useful sentence.
-                    The greeting is now the SMALL line and the move is the
-                    large one, which is the right way round: a student opens
-                    this page to find out what to do, not to be greeted. With
-                    nothing live the greeting stands alone and the card does
-                    not pretend there is something to press. */}
-                <Reveal.Item>
-                    <div className="flex items-center justify-between gap-3 mb-2">
-                        <p className="text-xs font-bold text-muted-foreground uppercase tracking-wider truncate">
-                            {coachLine}
+                {/* ── The strip: who you are on this floor ──────────── */}
+                <header className="flex flex-wrap items-end justify-between gap-4 mb-5">
+                    <div>
+                        <p className="text-[10px] font-black uppercase tracking-widest text-[#4E6484]">
+                            The floor
                         </p>
-                        <HelpButton page="Competitions" />
-                    </div>
-
-                    {lead ? (
-                        <button
-                            type="button"
-                            onClick={() => setCompeteTab(lead.tab)}
-                            className="w-full text-left relative card-soft on-table overflow-hidden
-                                group focus-visible:outline focus-visible:outline-2
-                                focus-visible:outline-offset-2 focus-visible:outline-ring">
-                            <span aria-hidden="true"
-                                className={`absolute inset-y-0 left-0 w-1.5 ${
-                                    lead.kind === "call_closing" ? "bg-xp"
-                                        : lead.kind === "battle_close" ? "bg-streak" : "bg-primary"}`} />
-                            <div className="relative flex items-center gap-4 pl-6 pr-5 py-5">
-                                <div className="min-w-0 flex-1">
-                                    <span className="stat-label">Live now</span>
-                                    <h1 className="font-display font-extrabold text-foreground
-                                        text-xl sm:text-2xl leading-tight mt-1">{lead.title}</h1>
-                                    <p className="text-[13px] text-muted-foreground mt-1 leading-snug
-                                        line-clamp-2">{lead.detail}</p>
-                                </div>
-                                <span className="flex-shrink-0 inline-flex items-center gap-1.5 text-sm
-                                    font-bold text-foreground">
-                                    {lead.action}
-                                    <ArrowRight className="w-4 h-4 transition-transform
-                                        group-hover:translate-x-0.5" />
-                                </span>
-                            </div>
-                        </button>
-                    ) : (
-                        <h1 className="font-display text-2xl sm:text-3xl font-extrabold tracking-tight
-                            text-foreground leading-[1.1]">
-                            Nothing riding on this week yet.
+                        <h1 className="font-display font-black text-[#E8F0FB] text-2xl sm:text-3xl leading-tight">
+                            {book.length > 0
+                                ? `You're holding ${book.length} ${book.length === 1 ? "position" : "positions"}`
+                                : "Read the room, take a side"}
                         </h1>
-                    )}
-                </Reveal.Item>
-
-                {/* ── WHO IS DOING WHAT TO WHOM ──────────────────────────── */}
-                {/* The feed is the only surface here whose subject is other
-                    people; everything else is a readout of your own state,
-                    which is a thing a student can already remember. So it goes
-                    above the tabs, and the market view — which frames the same
-                    contests a second way — moved down into Battles.
-
-                    MOVERS IS GONE, and it is not a deletion. Every row it drew
-                    was already a feed event: its odds rows are `odds_move` and
-                    its ticker rows are `rival_activity`. The reason it was
-                    kept when the feed landed was that a price move and a
-                    rival's session are separate CLAIMS and must never be
-                    joined with "because" — but the feed already keeps them as
-                    separate rows, which was the actual requirement. Two panels
-                    was the wrong way to express it. */}
-                <Reveal.Item>
-                    <RivalryStrip
-                        rivals={myRivals}
-                        onOpen={() => setCompeteTab("duels")}
-                        onRematch={handleRematch}
-                        rematching={rematchingEmail}
-                    />
-                </Reveal.Item>
-
-                <Reveal.Item>
-                    <CompeteFeed
-                        events={feed}
-                        reactions={reactions}
-                        reactionsReady={reactionsReady}
-                        onReacted={loadReactions}
-                        forecastCtx={backingCtx}
-                        onBacked={() => loadForecasts(user?.email)}
-                        onOpen={(e) => {
-                            const b = allBattles_.find(x => x.kind === e.battleRef?.kind && x.id === e.battleRef?.id);
-                            if (b) setOpenBattle(b); else setCompeteTab("duels");
-                        }}
-                    />
-                </Reveal.Item>
-
-                {/* ── ONE PAGE, THREE CLEAR MODES ──────────────────────── */}
-                <Tabs value={competeTab} onValueChange={setCompeteTab} className="space-y-5">
-                    <TabsList className="grid w-full grid-cols-3 h-auto p-1.5 rounded-2xl bg-surface border-2 border-border shadow-soft">
-                        {[
-                            { value: "duels", label: "Battles", icon: Swords, count: liveBattleCount },
-                            { value: "bets", label: "Back yourself", icon: Target },
-                            { value: "calls", label: "Your calls", icon: LineChart,
-                              count: openCalls },
-                        ].map(tab => (
-                            <TabsTrigger key={tab.value} value={tab.value}
-                                className="flex items-center justify-center gap-1 sm:gap-1.5 py-2.5 px-1.5 sm:px-2 rounded-xl text-xs lg:text-sm font-bold text-muted-foreground data-[state=active]:bg-foreground data-[state=active]:text-background data-[state=active]:shadow-soft transition-all min-w-0">
-                                {/* Icon goes at phone width — three labels plus icons
-                                    plus a count badge doesn't fit 390px, and the
-                                    badge was the thing getting clipped off. */}
-                                <tab.icon className="w-3.5 h-3.5 hidden sm:block flex-shrink-0" />
-                                <span className="truncate">{tab.label}</span>
-                                {tab.count > 0 && (
-                                    <span className="bg-primary text-white text-[10px] rounded-full w-4 h-4 flex items-center justify-center font-bold flex-shrink-0">{tab.count}</span>
-                                )}
-                            </TabsTrigger>
-                        ))}
-                    </TabsList>
-
-                    {/* Your calls — forecasting. Replaces the score-prediction
-                        betting that used to sit inside a competition detail
-                        view, which is both where nobody found it and where it
-                        could not lose. */}
-                    <TabsContent value="calls" className="mt-4">
-                        <ForecastPanel forecasts={forecasts} ctx={forecastCtx}
-                            onChanged={() => loadForecasts(user?.email)} />
-                    </TabsContent>
-
-                    {/* Back yourself — solo commitment bets */}
-                    <TabsContent value="bets" className="mt-4">
-                        <Arena view="bets" />
-                    </TabsContent>
-
-                    {/* Battles — every competition the student is in, duels and
-                        group battles together. They were split across two tabs
-                        with two card designs, which is most of why the page felt
-                        disorganised: you don't have "duels" and "battles", you
-                        have things you're racing in. */}
-                    <TabsContent value="duels" className="mt-4 space-y-6">
-                {/* ── THE BOOK ───────────────────────────────────────── */}
-                {/* Inside Battles rather than at the top of the page: it is a
-                    second framing of the same contests the feed above already
-                    reports, and two mental models stacked on arrival is most of
-                    why this page was hard to read. Here it is the market view
-                    OF the battles listed under it. */}
-                {/* One price, one line, and the counters underneath. Six tiles
-                    of equal weight gave the eye nowhere to land and answered a
-                    question nobody arrives with; a market opens with its price. */}
-                <BookPanel
-                    odds={book.odds}
-                    delta={book.delta}
-                    series={book.series}
-                    exposure={book.exposure}
-                    liveCount={book.liveCount}
-                    record={`${stats.recentWins}\u2013${Math.max(0, stats.completed.length - stats.recentWins)}`}
-                    winRate={stats.completed.length ? winRate : null}
-                />
-                {stats.winStreak > 1 && (
-                    <p className="inline-flex items-center gap-1.5 pill bg-xp/15 text-xp">
-                        <Flame className="w-3.5 h-3.5" /> {stats.winStreak} battle win streak
-                    </p>
-                )}
-
-
-
-                {/* ── FOCUS PANEL ─────────────────────────────────────── */}
-                {focus && (
-                    <motion.section
-                        initial={{ opacity: 0, y: 12 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        transition={{ delay: 0.1 }}
-                    >
-                        <div className={`rounded-2xl ${FOCUS_THEME[focus.accent].bg} border ${FOCUS_THEME[focus.accent].border} shadow-soft p-5 lg:p-6`}>
-                            <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
-                                <div className={`w-12 h-12 rounded-xl ${FOCUS_THEME[focus.accent].iconBg} flex items-center justify-center flex-shrink-0`}>
-                                    <focus.icon className={`w-6 h-6 ${FOCUS_THEME[focus.accent].iconText}`} />
-                                </div>
-                                <div className="flex-1 min-w-0">
-                                    <p className="stat-label mb-1">Today's focus · {focus.label}</p>
-                                    <h2 className="font-display font-extrabold text-foreground text-base lg:text-lg leading-snug">
-                                        {focus.title}
-                                    </h2>
-                                    <p className="text-muted-foreground text-sm mt-0.5">{focus.sub}</p>
-                                </div>
-                                {/* setOpenBattle, not setSelectedComp. The rows below open
-                                    the market dashboard — probability, the chart, the book —
-                                    and this button, the most prominent call to action on the
-                                    page, opened the legacy panel instead. */}
-                                <Button
-                                    onClick={() => {
-                                        const b = allBattles_.find(
-                                            (x) => x.kind === "battle" && x.id === focus.comp?.id);
-                                        if (b) setOpenBattle(b); else setSelectedComp(focus.comp);
-                                    }}
-                                    className="w-full sm:w-auto flex-shrink-0"
-                                >
-                                    Open battle <ArrowRight className="w-4 h-4" />
-                                </Button>
-                            </div>
-                        </div>
-                    </motion.section>
-                )}
-
-                {allBattles_.length > 0 && (
-                    <section>
-                        <div className="flex items-baseline justify-between mb-3">
-                            <h2 className="font-display font-extrabold text-foreground text-base flex items-center gap-2">
-                                <span className="w-2 h-2 rounded-full bg-primary animate-soft-pulse" /> Live now
-                                <span className="pill bg-primary/15 text-primary">{liveBattleCount}</span>
-                            </h2>
-                        </div>
-                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
-                            {allBattles_.filter(b => b.status === "live").map(b => (
-                                <BattleRow key={`${b.kind}-${b.id}`} battle={b} onClick={() => setOpenBattle(b)} />
-                            ))}
-                        </div>
-                        {allBattles_.some(b => b.status === "settled") && (
-                            <>
-                                <h2 className="font-display font-extrabold text-foreground text-base mt-6 mb-3">
-                                    Settled
-                                </h2>
-                                <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
-                                    {allBattles_.filter(b => b.status === "settled").map(b => (
-                                        <BattleRow key={`${b.kind}-${b.id}`} battle={b} onClick={() => setOpenBattle(b)} />
-                                    ))}
-                                </div>
-                            </>
-                        )}
-                    </section>
-                )}
-
-                {/* Challenge / spectate / respond still live in the arena. */}
-                <Arena view="actions" />
-
-                {/* The "Your rivalries" grid that used to sit here is gone.
-                    It drew the same people with the same W–L records as
-                    RivalryStrip above the tabs, in different words — two
-                    panels for one object, on one page. Its rematch button was
-                    the only thing it had that the strip did not, so that moved
-                    up rather than the panel staying. */}
-
-                {/* ── START SOMETHING ─────────────────────────────────── */}
-                {/* Was three separate things in three places: a Challenge
-                    button floating alone in dead space, a create bar and a
-                    join bar — all "begin a new competition", none of them next
-                    to each other. One card, three routes, at the end of the
-                    page where you land after reading what you're already in. */}
-                <motion.section
-
-                    className="card-soft p-5 lg:p-6"
-                >
-                    <p className="stat-label mb-4">Start something new</p>
-
-                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                        {/* Group battle */}
-                        <div className="rounded-2xl border border-border p-4">
-                            <div className="flex items-center gap-2.5 mb-3">
-                                <div className="w-9 h-9 rounded-xl bg-chart-4/10 border border-chart-4/15 flex items-center justify-center flex-shrink-0">
-                                    <Trophy className="w-4 h-4 text-chart-4" />
-                                </div>
-                                <div className="min-w-0">
-                                    <p className="font-bold text-foreground text-sm">Group battle</p>
-                                    <p className="text-xs text-muted-foreground">Most study wins. Friends join by code.</p>
-                                </div>
-                            </div>
-                            <Input
-                                placeholder="Name it — e.g. SAC week grind"
-                                value={newBattleTitle}
-                                onChange={e => setNewBattleTitle(e.target.value)}
-                                maxLength={80}
-                                className="mb-2"
-                            />
-                            {/* Subject scopes what counts. The server has always
-                                accepted it on a standalone battle; the form
-                                never asked, so every battle silently counted
-                                every subject. */}
-                            <div className="mb-2">
-                                <p className="stat-label mb-1.5">Counts study in</p>
-                                <div className="flex flex-wrap gap-1.5">
-                                    <button onClick={() => setNewBattleSubject("")}
-                                        className={`px-3 py-1.5 rounded-xl text-xs font-bold border-2 transition-all ${
-                                            !newBattleSubject ? "bg-foreground border-foreground text-background" : "bg-surface border-border text-muted-foreground hover:border-muted-foreground/40"
-                                        }`}>Every subject</button>
-                                    {userSubjects.map(sub => (
-                                        <button key={sub.id} onClick={() => setNewBattleSubject(sub.subject_name)}
-                                            className={`px-3 py-1.5 rounded-xl text-xs font-bold border-2 transition-all ${
-                                                newBattleSubject === sub.subject_name ? "bg-foreground border-foreground text-background" : "bg-surface border-border text-muted-foreground hover:border-muted-foreground/40"
-                                            }`}>{sub.subject_name}</button>
-                                    ))}
-                                </div>
-                            </div>
-                            <p className="stat-label mb-1.5">Runs for</p>
-                            <div className="flex items-center gap-2">
-                                {[3, 7, 14].map(d => (
-                                    <button key={d} onClick={() => setNewBattleDays(d)}
-                                        className={`px-3 py-2 rounded-xl text-xs font-bold border-2 transition-all ${
-                                            newBattleDays === d ? "bg-chart-4 border-chart-4 text-white" : "bg-surface border-border text-foreground hover:border-chart-4/40"
-                                        }`}>{d}d</button>
-                                ))}
-                                <Button onClick={handleCreateBattle} disabled={creatingBattle || !newBattleTitle.trim()} className="ml-auto">
-                                    {creatingBattle ? <Loader2 className="w-4 h-4 animate-spin" /> : <>Create <ArrowRight className="w-4 h-4" /></>}
-                                </Button>
-                            </div>
-                        </div>
-
-                        {/* Duel, and joining someone else's */}
-                        <div className="space-y-3">
-                            <div className="rounded-2xl border border-border p-4">
-                                <div className="flex items-center gap-2.5 mb-3">
-                                    <div className="w-9 h-9 rounded-xl bg-chart-4/10 border border-chart-4/15 flex items-center justify-center flex-shrink-0">
-                                        <Swords className="w-4 h-4 text-chart-4" />
-                                    </div>
-                                    <div className="min-w-0">
-                                        <p className="font-bold text-foreground text-sm">Duel a friend</p>
-                                        <p className="text-xs text-muted-foreground">One rival, one yardstick, winner takes the pot.</p>
-                                    </div>
-                                </div>
-                                <Button onClick={() => setChallengeOpen(true)}
-                                    className="w-full rounded-xl bg-chart-4 hover:bg-chart-4/90 text-white font-bold btn-3d">
-                                    Challenge a rival
-                                </Button>
-                            </div>
-
-                            <div className="rounded-2xl border border-border p-4">
-                                <div className="flex items-center gap-2.5 mb-3">
-                                    <div className="w-9 h-9 rounded-xl bg-chart-3/10 border border-chart-3/15 flex items-center justify-center flex-shrink-0">
-                                        <LogIn className="w-4 h-4 text-chart-3" />
-                                    </div>
-                                    <div className="min-w-0">
-                                        <p className="font-bold text-foreground text-sm">Join with a code</p>
-                                        <p className="text-xs text-muted-foreground">Someone sent you six characters.</p>
-                                    </div>
-                                </div>
-                                <div className="flex items-center gap-2">
-                                    <Input
-                                        placeholder="ABCD12"
-                                        value={inviteCode}
-                                        onChange={e => setInviteCode(e.target.value.toUpperCase())}
-                                        onKeyDown={e => e.key === 'Enter' && handleJoinByCode()}
-                                        className="flex-1 font-mono uppercase text-center tracking-widest"
-                                        maxLength={6}
-                                    />
-                                    <Button onClick={handleJoinByCode} disabled={joiningCode || !inviteCode.trim()}>
-                                        {joiningCode ? <Loader2 className="w-4 h-4 animate-spin" /> : <>Join <ArrowRight className="w-4 h-4" /></>}
-                                    </Button>
-                                </div>
-                            </div>
-                        </div>
                     </div>
-                </motion.section>
-
-                    </TabsContent>
-                </Tabs>
-
-                <CreateDuelDialog
-                    open={challengeOpen}
-                    onOpenChange={setChallengeOpen}
-                    currentUser={user}
-                    balance={userProfile?.total_xp ?? null}
-                    onCreated={() => { setChallengeOpen(false); loadData(); }}
-                />
-            </Reveal>
-
-            {/* Join setup dialog */}
-            <AnimatePresence>
-                {joinSetupChoice === 'prompt' && (
-                    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-                        className="fixed inset-0 z-50 flex items-center justify-center bg-foreground/40 backdrop-blur-sm p-4">
-                        <motion.div initial={{ scale: 0.9, y: 20 }} animate={{ scale: 1, y: 0 }} exit={{ scale: 0.9 }}
-                            className="bg-surface rounded-2xl shadow-soft-lg p-7 max-w-sm w-full text-center space-y-4 border border-border/60">
-                            <AceBody className="w-24 mx-auto" pose="offer" title="Ace" />
+                    <div className="flex items-end gap-5">
+                        <div>
+                            <p className="text-[10px] font-black uppercase tracking-widest text-[#4E6484]">
+                                Cred
+                            </p>
+                            <p className="font-display font-black text-[#FFC800] text-2xl tabular-nums
+                                inline-flex items-center gap-1.5">
+                                <Coins className="w-4 h-4" />{(me.cred ?? 0).toLocaleString()}
+                            </p>
+                        </div>
+                        {atStake > 0 && (
                             <div>
-                                <h2 className="font-display font-extrabold text-foreground text-xl">How do you want to compete?</h2>
-                                <p className="text-sm text-muted-foreground mt-1">Mirror their setup, or build your own path?</p>
+                                <p className="text-[10px] font-black uppercase tracking-widest text-[#4E6484]">
+                                    At stake
+                                </p>
+                                {/* The mark-to-market figure used to sit here as a
+                                    small signed number beside this one, and "100
+                                    -1" read as a subtraction rather than as two
+                                    facts. What a student can act on is per
+                                    position — "+17 if right" — and that is
+                                    already on the card. */}
+                                <p className="font-display font-black text-[#E8F0FB] text-2xl tabular-nums">
+                                    {atStake.toLocaleString()}
+                                </p>
                             </div>
-                            <div className="space-y-3 text-left">
-                                <button
-                                    onClick={() => confirmJoin(false)}
-                                    className="w-full p-4 border border-chart-3/20 rounded-xl shadow-soft hover:bg-chart-3/5 hover:border-chart-3/40 transition-all"
-                                >
-                                    <div className="flex items-center gap-2 mb-1">
-                                        <ClipboardList className="w-4 h-4 text-chart-3" />
-                                        <p className="font-bold text-chart-3 text-sm">Mirror their structure</p>
-                                    </div>
-                                    <p className="text-xs text-muted-foreground">Same sub-goals. Fair head-to-head.</p>
+                        )}
+                    </div>
+                </header>
+
+                {error && (
+                    <div className="mb-4 rounded-xl border-2 border-[#FF5A5F]/40 bg-[#FF5A5F]/10
+                        px-4 py-2.5 text-[13px] text-[#FF9296]">{error}</div>
+                )}
+
+                <div className="grid lg:grid-cols-[minmax(0,1fr)_300px] gap-6 items-start">
+
+                    {/* ── THE BOARD ────────────────────────────────── */}
+                    <div className="min-w-0">
+                        <div className="flex items-center gap-1.5 overflow-x-auto pb-2 -mx-1 px-1">
+                            {FILTERS.map((f) => (
+                                <button key={f.id} type="button" onClick={() => setFilter(f.id)}
+                                    className={`flex-shrink-0 px-3 py-1.5 rounded-lg text-[12px] font-bold
+                                        border-2 transition-colors
+                                        ${filter === f.id
+                                            ? "bg-[#E8F0FB] border-[#E8F0FB] text-[#0A121F]"
+                                            : "border-[#233247] text-[#6F86A8] hover:text-[#E8F0FB]"}`}>
+                                    {f.label}
                                 </button>
-                                <button
-                                    onClick={() => confirmJoin(true)}
-                                    className="w-full p-4 border border-chart-4/20 rounded-xl shadow-soft hover:bg-chart-4/5 hover:border-chart-4/40 transition-all"
-                                >
-                                    <div className="flex items-center gap-2 mb-1">
-                                        <SettingsIcon className="w-4 h-4 text-chart-4" />
-                                        <p className="font-bold text-chart-4 text-sm">Custom setup</p>
-                                    </div>
-                                    <p className="text-xs text-muted-foreground">Your own goal structure, compete on XP.</p>
-                                </button>
-                            </div>
-                            <button
-                                onClick={() => { setJoinSetupChoice(null); setPendingJoinCode(null); }}
-                                className="text-xs text-muted-foreground hover:text-foreground"
-                            >
-                                Cancel
+                            ))}
+                            <button type="button" onClick={() => setLineOpen(true)}
+                                className="flex-shrink-0 ml-auto px-3 py-1.5 rounded-lg text-[12px]
+                                    font-bold border-2 border-[#FFC800]/40 text-[#FFC800]
+                                    hover:bg-[#FFC800]/10 transition-colors inline-flex items-center gap-1">
+                                <Plus className="w-3.5 h-3.5" /> Call a SAC
                             </button>
-                        </motion.div>
-                    </motion.div>
+                        </div>
+
+                        {shown.length === 0 ? (
+                            <div className="rounded-2xl border-2 border-[#233247] bg-[#121C2E] p-8 text-center">
+                                <p className="text-sm text-[#6F86A8]">
+                                    {filter === "all"
+                                        ? "No open questions right now. New ones are minted every Monday."
+                                        : "Nothing of that kind is open. Try another filter."}
+                                </p>
+                            </div>
+                        ) : (
+                            <motion.div layout className="grid sm:grid-cols-2 gap-3">
+                                <AnimatePresence initial={false}>
+                                    {shown.map((m) => (
+                                        <MarketCard key={m.id} market={m} balance={me.cred ?? 0}
+                                            busy={busy} onTake={take} onReport={report} />
+                                    ))}
+                                </AnimatePresence>
+                            </motion.div>
+                        )}
+                    </div>
+
+                    {/* ── THE TAPE ─────────────────────────────────── */}
+                    <aside className="lg:sticky lg:top-6 space-y-4">
+                        <section className="rounded-2xl border-2 border-[#233247] bg-[#121C2E] p-4">
+                            <h2 className="text-[10px] font-black uppercase tracking-widest
+                                text-[#4E6484] mb-2.5">The tape</h2>
+                            {/* Scrolls rather than growing. On a quiet board six
+                                cards sat beside twenty tape rows and the sidebar
+                                became the page. */}
+                            <div className="max-h-[26rem] overflow-y-auto pr-1">
+                                <Tape rows={tape} />
+                            </div>
+                        </section>
+
+                        {book.length > 0 && (
+                            <section className="rounded-2xl border-2 border-[#233247] bg-[#121C2E] p-4">
+                                <h2 className="text-[10px] font-black uppercase tracking-widest
+                                    text-[#4E6484] mb-2.5">Your book</h2>
+                                <div className="space-y-2">
+                                    {book.map((m) => (
+                                        <div key={m.id} className="flex items-baseline justify-between gap-2">
+                                            <span className="text-[12px] text-[#8FA3BF] truncate min-w-0">
+                                                {m.title}
+                                            </span>
+                                            <span className={`text-[11px] font-black tabular-nums flex-shrink-0
+                                                ${sideOf(m.mine.p) === YES ? "text-[#58CC02]" : "text-[#FF5A5F]"}`}>
+                                                {sideOf(m.mine.p) === YES ? "YES" : "NO"} {m.mine.stake}
+                                            </span>
+                                        </div>
+                                    ))}
+                                </div>
+                            </section>
+                        )}
+
+                        <p className="text-[11px] text-[#3D5273] leading-snug px-1">
+                            Cred is not XP — losing a call can't touch your level, rank or ATAR.
+                            You get {(me.weekly_grant ?? 1000).toLocaleString()} a week.
+                            Agreeing with the price pays nothing; you earn by disagreeing and being right.
+                        </p>
+                    </aside>
+                </div>
+            </div>
+
+            <AnimatePresence>
+                {lineOpen && (
+                    <LineDialog onClose={() => setLineOpen(false)} onOpen={openLine} busy={busy} />
                 )}
             </AnimatePresence>
-            {calloutDialog}
-            {revealOverlay}
-        </div>
+        </Room>
     );
 }

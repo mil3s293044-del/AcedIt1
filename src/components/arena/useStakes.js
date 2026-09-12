@@ -190,5 +190,11 @@ export function useLiveCount() {
     const duels = (stakes?.duels || []).filter(d => d?.status === "active").length;
     const callouts = (stakes?.callouts || [])
         .filter(c => ["pending", "active"].includes(c?.status)).length;
-    return { duels, callouts, total: duels + callouts, live: duels + callouts > 0 };
+    // Open market positions count too, and are now the main thing this marks:
+    // Compete is markets, and duels and battles have no UI to create them any
+    // more, so counting only those would leave the dot permanently dark on the
+    // feature the nav is pointing at.
+    const positions = Math.max(0, Number(stakes?.positions) || 0);
+    const total = duels + callouts + positions;
+    return { duels, callouts, positions, total, live: total > 0 };
 }

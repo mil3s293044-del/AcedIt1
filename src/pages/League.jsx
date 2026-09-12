@@ -27,6 +27,7 @@ import {
 import { base44 } from "@/api/base44Client";
 import { createPageUrl } from "@/utils";
 import { useLiveTick } from "@/lib/LiveContext";
+import { takeFn } from "@/lib/fnResult";
 import { Countdown } from "@/components/competition/arenaHelpers";
 import WeeklyBoard from "@/components/league/WeeklyBoard";
 import Reveal from "@/components/shared/Reveal";
@@ -55,16 +56,18 @@ export default function League() {
     // took Compete down, and then Study, in two slightly different shapes.
     const load = useCallback(async () => {
         try {
-            const res = await base44.functions.invoke("getLeagueStanding", {});
-            if (res?.error) throw new Error(res.error);
-            setData(res);
+            // takeFn, NOT the raw result. This read the { data, error }
+            // envelope as the payload, so every field came back undefined and
+            // the whole page rendered its empty state with no error anywhere.
+            const payload = takeFn(await base44.functions.invoke("getLeagueStanding", {}));
+            setData(payload);
             setError(null);
             // A week closed on this request, so Podium or Top Dog may have
             // just been granted. `useAchievementWatch` listens for exactly
             // this event and is mounted in Layout, so the unlock plays here
             // rather than being discovered on a tab three sessions later —
             // which is the silent-grant problem AchievementUnlock exists for.
-            if (res?.just_settled) window.dispatchEvent(new Event("xp_awarded"));
+            if (payload?.just_settled) window.dispatchEvent(new Event("xp_awarded"));
         } catch (e) {
             setError(e?.message || "Could not load the board.");
         } finally {

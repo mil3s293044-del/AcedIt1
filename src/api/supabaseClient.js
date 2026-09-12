@@ -436,6 +436,12 @@ const PORTED_FUNCTIONS = {
   submitPredictionResult:   '/local-ai/fn/submitPredictionResult',
   // The Arena — study duels + back-yourself bets:
   createDuel:               '/local-ai/fn/createDuel',
+  // Markets — the one object Compete is built on. getMarkets MINTS and
+  // SETTLES on the way past, so none of these are reads.
+  getMarkets:               '/local-ai/fn/getMarkets',
+  takePosition:             '/local-ai/fn/takePosition',
+  openMarkMarket:           '/local-ai/fn/openMarkMarket',
+  reportMark:               '/local-ai/fn/reportMark',
   // Weekly leagues — one global board per week, settled lazily on the first
   // visit after it ends. getLeagueStanding also SETTLES, so it is not a read.
   getLeagueStanding:        '/local-ai/fn/getLeagueStanding',

@@ -320,6 +320,18 @@
   "week_start",
   "weekly_xp"
  ],
+ "market_positions": [
+  "created_date",
+  "id",
+  "market_id",
+  "p",
+  "payout",
+  "price_at_entry",
+  "settled_at",
+  "stake",
+  "user_email",
+  "user_name"
+ ],
  "marketing_leads": [
   "created_at",
   "email",
@@ -331,6 +343,28 @@
   "status",
   "updated_at",
   "utm"
+ ],
+ "markets": [
+  "caller_email",
+  "closes_at",
+  "competition_id",
+  "created_by",
+  "created_date",
+  "duel_id",
+  "id",
+  "kind",
+  "meta",
+  "opens_at",
+  "outcome",
+  "prior",
+  "resolution_note",
+  "resolved_at",
+  "resolves_note",
+  "status",
+  "subject_email",
+  "subject_name",
+  "title",
+  "updated_date"
  ],
  "mind_maps": [
   "built_from_memory",
@@ -713,6 +747,9 @@
   "atar_updated_at",
   "created_by",
   "created_date",
+  "cred_balance",
+  "cred_granted_week",
+  "cred_lifetime_won",
   "credits_reset_date",
   "current_league_group_id",
   "current_league_tier",
