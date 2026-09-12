@@ -10,6 +10,7 @@
  */
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
+import * as LucideIcons from "lucide-react";
 import {
     ACHIEVEMENTS, ACHIEVEMENT_BY_CODE, RARITIES, CEREMONY,
     evaluate, board, nearest, summary, showcase,
@@ -111,6 +112,57 @@ check("nothing reads the two stats that were silently always zero", () => {
     assert.ok(!seen.has("session_count"),
         "study_sessions alone misses pomodoro, blurting, recall and spaced repetition");
     assert.ok(seen.has("study_count"), "the replacement reads BOTH study tables");
+});
+
+check("EVERY ICON RESOLVES, because a wrong name fails silently", () => {
+    // Every surface looks an icon up by name with a fallback —
+    // `Icons[item.icon] || Icons.Award` in AchievementUnlock, the same shape on
+    // the gallery tile. A name that misses renders a generic glyph and nothing
+    // anywhere says so: the visual twin of the silent-stat failures above.
+    const missing = ACHIEVEMENTS.filter((a) => !LucideIcons[a.icon])
+        .map((a) => `${a.code} -> ${a.icon}`);
+    assert.deepEqual(missing, [], `\n      ${missing.join("\n      ")}\n`);
+    assert.ok(!LucideIcons.DefinitelyNotAnIcon, "the lookup itself has to be able to miss");
+});
+
+check("AND NO SURFACE LOOKS ICONS UP IN A HAND-KEPT LIST", () => {
+    // Checking against the real package is only worth anything if that is what
+    // the component checks against. AchievementsGallery kept its own registry
+    // of fifteen names, with a comment claiming every catalogue icon was in it,
+    // and TWELVE of thirty-one were not — so both quiz tiers, both mistake
+    // achievements, both call-outs, breadth, comeback and calibration all drew
+    // the same generic sparkle. A lookup with a fallback plus a list somebody
+    // has to remember to update is a bug with a schedule on it, and the first
+    // version of the check above would have passed straight through it.
+    const gallery = readFileSync("src/components/ranked/AchievementsGallery.jsx", "utf8");
+    assert.match(gallery, /const ICON_REGISTRY = Icons;/,
+        "the gallery must resolve against the whole library, not a literal object");
+    const unlock = readFileSync("src/components/ranked/AchievementUnlock.jsx", "utf8");
+    assert.match(unlock, /import \* as Icons from "lucide-react"/);
+});
+
+check("THE LEAGUE ACHIEVEMENTS READ COUNTS, NEVER A RANK", () => {
+    // `best_weekly_rank` gets BETTER as it gets smaller, so an achievement
+    // keyed on it cannot draw a progress bar and comes back unreachable from
+    // the maxed-stats probe above. It was also read by nothing for months. The
+    // three league entries read counts that go up; naming that here stops the
+    // rank coming back.
+    const seen = new Set();
+    const probe = new Proxy({}, { get(_, k) { seen.add(String(k)); return 0; } });
+    ACHIEVEMENTS.forEach((a) => a.progress(probe));
+    assert.ok(!seen.has("best_weekly_rank"), "a rank is backwards and cannot be a target");
+
+    ["LEAGUE_WEEK", "LEAGUE_PODIUM", "LEAGUE_WIN"].forEach((code) => {
+        const a = ACHIEVEMENT_BY_CODE[code];
+        assert.ok(a, `${code} is missing from the catalogue`);
+        // More of the thing is always closer to the badge — which is what
+        // makes it drawable as "1 of 3".
+        const low = evaluate(a, { league_weeks: 0, league_podiums: 0, league_wins: 0 });
+        const high = evaluate(a, { league_weeks: 9, league_podiums: 9, league_wins: 9 });
+        assert.ok(high.ratio > low.ratio, `${code} does not improve as its stat grows`);
+        assert.equal(high.unlocked, true);
+        assert.equal(low.unlocked, false);
+    });
 });
 
 check("the rarity ladder pays more as it climbs", () => {

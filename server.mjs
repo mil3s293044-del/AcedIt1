@@ -326,6 +326,12 @@ const LEAGUE_TIERS = ['bronze', 'silver', 'gold', 'platinum', 'diamond', 'master
 const LEAGUE_GROUP_SIZE = 30;
 const LEAGUE_PROMOTE_COUNT = 5;
 const LEAGUE_DEMOTE_COUNT  = 5;
+// ─── How big a week has to be before it means anything ──────────────────────
+// A week you finished alone is not a result. Two people make it a race worth
+// recording; a top-three placing needs enough of a field that "top three" is
+// not simply "everybody who turned up". Read by buildAchievementStats.
+const LEAGUE_COUNTS_FROM = 2;
+const LEAGUE_RANKED_MIN  = 5;
 
 function nextTier(t) { const i = LEAGUE_TIERS.indexOf(t); return LEAGUE_TIERS[Math.min(i + 1, LEAGUE_TIERS.length - 1)]; }
 function prevTier(t) { const i = LEAGUE_TIERS.indexOf(t); return LEAGUE_TIERS[Math.max(i - 1, 0)]; }
@@ -366,7 +372,8 @@ function prevTier(t) { const i = LEAGUE_TIERS.indexOf(t); return LEAGUE_TIERS[Ma
  * again.
  */
 async function settleLeagueGroup(groupId, meEmail, currentTierOfUser) {
-  if (!supabaseAdmin || !groupId) return currentTierOfUser;
+  const nothing = { tier: currentTierOfUser, settled: 0 };
+  if (!supabaseAdmin || !groupId) return nothing;
 
   const { data: members, error } = await supabaseAdmin
     .from('league_memberships')
@@ -374,10 +381,10 @@ async function settleLeagueGroup(groupId, meEmail, currentTierOfUser) {
     .eq('league_group_id', groupId);
   if (error) {
     console.warn('[leagues] settle: could not read group:', error.message);
-    return currentTierOfUser;
+    return nothing;
   }
-  if (!members?.length) return currentTierOfUser;
-  if (members.some(m => m.final_position)) return currentTierOfUser; // already settled
+  if (!members?.length) return nothing;
+  if (members.some(m => m.final_position)) return nothing; // already settled
 
   const weekStart = members[0].week_start;
   const ranked = await leagueStandingRows(members, weekStart);
@@ -419,8 +426,16 @@ async function settleLeagueGroup(groupId, meEmail, currentTierOfUser) {
     }
   }
 
+  // The settled size is the honest member count for this group, and the only
+  // place it is known exactly. `member_count` is otherwise a read-modify-write
+  // counter bumped at join time, which a concurrent join can undercount — and
+  // the league achievements read it to decide whether a week had anybody in it
+  // worth beating, so it is worth correcting while we have the real number.
+  await supabaseAdmin
+    .from('league_groups').update({ member_count: size }).eq('id', groupId);
+
   console.log(`[leagues] settled ${size} in group ${groupId} (week ${weekStart})`);
-  return myTier;
+  return { tier: myTier, settled: size };
 }
 
 // Find an open league_group for the current week.
@@ -497,9 +512,12 @@ async function ensureCurrentLeagueMembership(userEmail, userProfile) {
   // why `final_position` was never once written in the feature's lifetime —
   // see settleLeagueGroup. Promotion and demotion are still tier-only; a
   // final position is not, and it is what a standings page is made of.
+  let justSettled = 0;
   if (stale?.[0]) {
-    nextStartTier = await settleLeagueGroup(
+    const outcome = await settleLeagueGroup(
       stale[0].league_group_id, userEmail, nextStartTier);
+    nextStartTier = outcome.tier;
+    justSettled = outcome.settled;
   }
 
   // 3. Place into an open group at `nextStartTier`.
@@ -533,6 +551,11 @@ async function ensureCurrentLeagueMembership(userEmail, userProfile) {
     .update({ current_league_tier: nextStartTier, current_league_group_id: group.id })
     .eq('created_by', userEmail);
 
+  // In-memory only, never a column: it tells THIS request that a week just
+  // closed, so getLeagueStanding can run the achievement check and the client
+  // can fire the unlock straight away rather than leaving the student to find
+  // a Podium badge by accident three sessions later.
+  if (newMem && justSettled > 0) newMem.just_settled = justSettled;
   return newMem || null;
 }
 
@@ -711,15 +734,43 @@ async function buildAchievementStats(userEmail, profile) {
     .eq('bettor_email', userEmail).eq('status', WAGER.SETTLED).limit(500);
   stats.calibrated_calls = (settled || []).filter(w => (Number(w.xp_outcome) || 0) > 0).length;
 
-  // ─── Best weekly league finish ────────────────────────────────────────────
-  const { data: bestWeek } = await supabaseAdmin
+  // ─── The weekly league ────────────────────────────────────────────────────
+  //
+  // COUNTS, NOT A RANK. This read `best_weekly_rank` — a number that gets
+  // BETTER as it gets smaller, which no `at(value, target)` progress function
+  // can express and which the maxed-stats guard would report as unreachable.
+  // It was also read by nothing at all: a round-trip on every awardXP feeding
+  // no consumer, off a column that (until settlement was fixed) was NULL on
+  // every row in the table.
+  //
+  // A WEEK ONLY COUNTS IF THERE WAS SOMEBODY TO BEAT. Winning a league of one
+  // is the "1st of 1" the league page refuses to print, and paying 2,500 XP
+  // for it would make Top Dog the easiest legendary in the catalogue —
+  // reachable by being the only student who studied that week.
+  const { data: settledWeeks } = await supabaseAdmin
     .from('league_memberships')
-    .select('final_position')
+    .select('final_position, league_group_id')
     .eq('user_email', userEmail)
     .not('final_position', 'is', null)
-    .order('final_position', { ascending: true })
-    .limit(1);
-  stats.best_weekly_rank = bestWeek?.[0]?.final_position ?? 0;
+    .limit(200);
+  const groupIds = [...new Set((settledWeeks || []).map(r => r.league_group_id).filter(Boolean))];
+  const sizeOf = new Map();
+  if (groupIds.length) {
+    // `member_count` is written at settlement from the real settled size, so
+    // for any week settled by settleLeagueGroup it is exact. On an older group
+    // it is the join-time counter, which a concurrent join can undercount —
+    // and undercounting only ever WITHHOLDS an achievement, never grants a
+    // wrong one, which is the direction this has to fail in.
+    const { data: groups } = await supabaseAdmin
+      .from('league_groups').select('id, member_count').in('id', groupIds);
+    (groups || []).forEach(g => sizeOf.set(g.id, g.member_count ?? 0));
+  }
+  const finishes = (settledWeeks || []).map(r => ({
+    pos: Number(r.final_position), size: sizeOf.get(r.league_group_id) ?? 0,
+  }));
+  stats.league_weeks   = finishes.filter(f => f.size >= LEAGUE_COUNTS_FROM).length;
+  stats.league_podiums = finishes.filter(f => f.size >= LEAGUE_RANKED_MIN && f.pos <= 3).length;
+  stats.league_wins    = finishes.filter(f => f.size >= LEAGUE_RANKED_MIN && f.pos === 1).length;
 
   return stats;
 }
@@ -7753,6 +7804,19 @@ app.post("/local-ai/fn/getLeagueStanding", async (req, res) => {
     const mem = await ensureCurrentLeagueMembership(user.email, profile);
     if (!mem) return res.status(500).json({ error: "Could not place in league" });
 
+    // A week just closed on this request, so any Podium or Top Dog it earned
+    // is grantable RIGHT NOW. Awaited rather than fired and forgotten, because
+    // the response tells the client to look for an unlock and there is no
+    // point asking before the row exists. Failure is not fatal: getAchievements
+    // self-heals, so the worst case is the badge landing a session later.
+    if (mem.just_settled > 0) {
+      try {
+        await checkAndGrantAchievements(user.email, profile);
+      } catch (e) {
+        console.warn('[leagues] achievement check after settle failed:', e?.message || e);
+      }
+    }
+
     // Pull all members of my group.
     const { data: groupMembers, error: gmErr } = await supabaseAdmin
       .from('league_memberships')
@@ -7853,6 +7917,9 @@ app.post("/local-ai/fn/getLeagueStanding", async (req, res) => {
       // every Monday and asks the student to care anyway. These rows only
       // exist because settlement now runs; before this they were all NULL.
       history,
+      // True when THIS request closed a week. The client uses it to go looking
+      // for an unlock immediately.
+      just_settled: mem.just_settled > 0,
     });
   } catch (err) {
     console.error("[getLeagueStanding] error:", err);
