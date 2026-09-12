@@ -133,6 +133,20 @@ export const ACHIEVEMENTS = [
       progress: (s) => at(s.verified_minutes, 300) },
 
     // Breadth, and it reads the same coverage the subject hub draws.
+    // ─── The weekly league ──────────────────────────────────────────────────
+    // These three read COUNTS THAT GO UP, never `best_weekly_rank`. A rank is
+    // backwards — 1 beats 4 — so an achievement keyed on it cannot draw a
+    // progress bar and would come back "unreachable" from the maxed-stats
+    // guard, which probes every stat at 1e9. "2 of 3 podiums" is a bar; "best
+    // finish 4th" is a fact with nothing to chase in it.
+    //
+    // A week only counts if there was somebody to beat — see the group-size
+    // floors in buildAchievementStats. Winning a league of one is the "1st of
+    // 1" the league page already refuses to print.
+    { code: "LEAGUE_WEEK", name: "Weigh In", desc: "Finish your first league week",
+      icon: "CalendarCheck", rarity: "rare", reward_xp: 250, sort: 19,
+      progress: (s) => at(s.league_weeks, 1) },
+
     { code: "BREADTH_4", name: "All Fronts", desc: "Study 4 different subjects in a week",
       icon: "Layers", rarity: "rare", reward_xp: 200, sort: 18,
       progress: (s) => at(s.best_week_subjects, 4) },
@@ -163,6 +177,10 @@ export const ACHIEVEMENTS = [
       icon: "Wrench", rarity: "epic", reward_xp: 600, sort: 25,
       progress: (s) => at(s.mistakes_fixed, 10) },
 
+    { code: "LEAGUE_PODIUM", name: "Podium", desc: "Finish a league week in the top 3",
+      icon: "Medal", rarity: "epic", reward_xp: 750, sort: 27,
+      progress: (s) => at(s.league_podiums, 1) },
+
     // The moment most students quit is the day after they break a streak.
     { code: "COMEBACK", name: "Back From The Dead", desc: "Rebuild a 7-day streak after losing one",
       icon: "RotateCcw", rarity: "epic", reward_xp: 500, sort: 26,
@@ -177,8 +195,12 @@ export const ACHIEVEMENTS = [
       icon: "Flame", rarity: "legendary", reward_xp: 3000, sort: 31,
       progress: (s) => at(s.peak_streak, 60) },
 
+    // Gem rather than Crown: Top Dog took the crown, which fits winning a week
+    // far better than it fits a lifetime XP total, and two unrelated
+    // legendaries under one glyph is not the differentiating-a-set case the
+    // icon rule allows — it is the same picture meaning two things.
     { code: "XP_25K", name: "XP Tycoon", desc: "Earn 25,000 lifetime XP",
-      icon: "Crown", rarity: "legendary", reward_xp: 2000, sort: 32,
+      icon: "Gem", rarity: "legendary", reward_xp: 2000, sort: 32,
       progress: (s) => at(s.total_xp, 25000) },
 
     { code: "QUIZ_250", name: "Two Fifty", desc: "Sit 250 quizzes",
@@ -195,6 +217,13 @@ export const ACHIEVEMENTS = [
     { code: "CALIBRATED", name: "Reads The Room", desc: "Beat the base rate across 10 settled calls",
       icon: "LineChart", rarity: "legendary", reward_xp: 2500, sort: 35,
       progress: (s) => at(s.calibrated_calls, 10) },
+
+    // Top of a whole week's board. The only achievement here that somebody
+    // else can take from you by working harder, which is the entire point of
+    // it being the loudest one on the compete side.
+    { code: "LEAGUE_WIN", name: "Top Dog", desc: "Win a league week outright",
+      icon: "Crown", rarity: "legendary", reward_xp: 2500, sort: 36,
+      progress: (s) => at(s.league_wins, 1) },
 ];
 
 export const ACHIEVEMENT_BY_CODE = Object.fromEntries(ACHIEVEMENTS.map((a) => [a.code, a]));

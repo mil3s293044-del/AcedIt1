@@ -7,18 +7,25 @@
 // ════════════════════════════════════════════════════════════════════════════
 import React, { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import {
-    Sparkles, Play, BookOpen, Flame, BrainCircuit, Users, Swords, Target,
-    PencilLine, Lightbulb, Trophy, Map, Zap, Medal, Crown, X,
-} from "lucide-react";
+import { Sparkles, X, Zap } from "lucide-react";
+import * as Icons from "lucide-react";
 import { supabase } from "@/api/supabaseClient";
 import AceShuffle from "@/components/ace/AceShuffle";
 
-// Lucide icon registry — every name used by the catalog must be in here.
-const ICON_REGISTRY = {
-    Sparkles, Play, BookOpen, Flame, BrainCircuit, Users, Swords, Target,
-    PencilLine, Lightbulb, Trophy, Map, Zap, Medal, Crown,
-};
+// ─── THE WHOLE LIBRARY, NOT A HAND-KEPT LIST ────────────────────────────────
+// This was a registry of fifteen icons imported by name, with a comment saying
+// "every name used by the catalog must be in here" — and TWELVE of the
+// catalogue's thirty-one were not. `ICON_REGISTRY[name] || Sparkles` meant
+// every quiz achievement, both mistake ones, both call-out ones, breadth,
+// comeback and calibration all rendered the same generic sparkle, silently,
+// for as long as the registry had been drifting behind the catalogue.
+//
+// A lookup with a fallback and a hand-maintained key list is a bug with a
+// schedule. AchievementUnlock has always done the namespace lookup; this is
+// the gallery joining it, so there is one way an icon name resolves and the
+// list cannot fall behind again. The namespace is already in the bundle —
+// AchievementUnlock is mounted in Layout — so this costs nothing.
+const ICON_REGISTRY = Icons;
 
 // Per-rarity visual styling. Static Tailwind only.
 const RARITY = {

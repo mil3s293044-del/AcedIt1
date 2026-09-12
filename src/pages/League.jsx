@@ -59,6 +59,12 @@ export default function League() {
             if (res?.error) throw new Error(res.error);
             setData(res);
             setError(null);
+            // A week closed on this request, so Podium or Top Dog may have
+            // just been granted. `useAchievementWatch` listens for exactly
+            // this event and is mounted in Layout, so the unlock plays here
+            // rather than being discovered on a tab three sessions later —
+            // which is the silent-grant problem AchievementUnlock exists for.
+            if (res?.just_settled) window.dispatchEvent(new Event("xp_awarded"));
         } catch (e) {
             setError(e?.message || "Could not load the board.");
         } finally {

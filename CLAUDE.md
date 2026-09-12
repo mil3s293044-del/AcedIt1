@@ -795,6 +795,22 @@ does not do**:
 An achievement nobody can reach is worse than no achievement: it teaches a
 student the grid is decoration, after which the reachable ones stop pulling.
 
+**A HAND-KEPT ICON LIST IS A BUG WITH A SCHEDULE.** `AchievementsGallery`
+resolved icons through a fifteen-entry `ICON_REGISTRY`, under a comment saying
+"every name used by the catalog must be in here" — and TWELVE of thirty-one
+were not, so both mistake achievements, all four quiz tiers, both call-out
+ones, breadth, comeback and calibration every one of them drew the same generic
+sparkle. `ICON_REGISTRY[name] || Sparkles` fails silently by construction, and
+the list only had to fall one achievement behind to start lying. It is
+`const ICON_REGISTRY = Icons` now — the same namespace lookup AchievementUnlock
+always used, so there is one way a name resolves and nothing to keep in step.
+The namespace is already in the bundle via Layout, so it costs nothing.
+
+Two guards, and the first version of one of them MISSED THIS: checking icon
+names against the real lucide package is worth nothing if the component checks
+against something else. So one test resolves every name against the library,
+and a second asserts no surface resolves through a literal object.
+
 **Two tests hold that, and they need each other.** One feeds a maxed stats
 object through every `progress` function and asserts nothing stays locked —
 that catches an impossible target. The other scans `buildAchievementStats` and
@@ -985,11 +1001,30 @@ returning the epoch; `historySummary` rejects an unsettled week explicitly,
 because `Number(null)` is a perfectly finite 0 and would have won `best` and
 reported a podium nobody was given).
 
-`stats.best_weekly_rank` in `buildAchievementStats` reads `final_position` and
-is read by NOTHING — no achievement in the catalogue uses it. It is a
-round-trip on every awardXP feeding no consumer. Left in place because
-settlement now makes it a real number and a league achievement is the obvious
-next thing to add; delete it if that does not happen.
+**And the league has three achievements now** — Weigh In (rare), Podium (epic)
+and Top Dog (legendary). They read COUNTS THAT GO UP (`league_weeks`,
+`league_podiums`, `league_wins`), never `best_weekly_rank`, which is gone: a
+rank gets BETTER as it gets smaller, so no `at(value, target)` can express it,
+it cannot draw a progress bar, and the maxed-stats guard — which probes every
+stat at 1e9 — would call it unreachable. "2 of 3 podiums" is a bar; "best
+finish 4th" is a fact with nothing to chase in it.
+
+**A WEEK ONLY COUNTS IF THERE WAS SOMEBODY TO BEAT.** `LEAGUE_COUNTS_FROM` (2)
+and `LEAGUE_RANKED_MIN` (5) are group-size floors, because winning a league of
+one is the "1st of 1" the page itself refuses to print — and paying 2,500 XP
+for it would make Top Dog the easiest legendary in the catalogue, reachable by
+being the only student who studied that week. The size comes from
+`league_groups.member_count`, which settlement now overwrites with the real
+settled count; on an older group it is the join-time counter, which a
+concurrent join can UNDERCOUNT — and undercounting withholds a badge rather
+than granting a wrong one, which is the direction this has to fail in.
+
+`getLeagueStanding` runs the achievement check when a week closes on that
+request and answers `just_settled`, which the page turns into an `xp_awarded`
+event so `useAchievementWatch` plays the unlock there and then. Without it a
+Podium would be discovered by accident on a tab three sessions later — the
+silent-grant problem `AchievementUnlock` exists to fix, reintroduced by the one
+path that grants outside `awardXP`.
 
 ## Compete: one headline, one feed, one of each panel
 
