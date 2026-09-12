@@ -436,6 +436,10 @@ const PORTED_FUNCTIONS = {
   submitPredictionResult:   '/local-ai/fn/submitPredictionResult',
   // The Arena — study duels + back-yourself bets:
   createDuel:               '/local-ai/fn/createDuel',
+  // Weekly leagues — one global board per week, settled lazily on the first
+  // visit after it ends. getLeagueStanding also SETTLES, so it is not a read.
+  getLeagueStanding:        '/local-ai/fn/getLeagueStanding',
+  setLeagueAnonymity:       '/local-ai/fn/setLeagueAnonymity',
   // Call-outs — prove you learned it, not just that you clocked hours.
   createCallout:            '/local-ai/fn/createCallout',
   getCallouts:              '/local-ai/fn/getCallouts',

@@ -9,6 +9,10 @@ import mammoth from "mammoth";
 import JSZip from "jszip";
 import { createClient as createSupabaseClient } from "@supabase/supabase-js";
 import { QUEST_BY_ID, questMultiplier } from "./src/lib/quests.js";
+// The one vocabulary `score_wagers.status` is allowed to speak. Shared with
+// the client deliberately: the forecast layer and the column's CHECK
+// constraint drifting apart is what made placeForecast a guaranteed 500.
+import { WAGER } from "./src/lib/wagerStatus.js";
 import { ACHIEVEMENTS, ACHIEVEMENT_BY_CODE, evaluate as evaluateAchievement }
   from "./src/lib/achievements.js";
 // The same feature map the UI reads. Ace used to be told nothing about
@@ -326,57 +330,97 @@ const LEAGUE_DEMOTE_COUNT  = 5;
 function nextTier(t) { const i = LEAGUE_TIERS.indexOf(t); return LEAGUE_TIERS[Math.min(i + 1, LEAGUE_TIERS.length - 1)]; }
 function prevTier(t) { const i = LEAGUE_TIERS.indexOf(t); return LEAGUE_TIERS[Math.max(i - 1, 0)]; }
 
-// Settle a stale membership (week_start < current). Sorts the user's group
-// by weekly_xp, marks promoted/demoted, and updates user_profiles.tier.
-// Idempotent — if final_position is already set, no-ops.
-async function settleStaleMembership(membership, currentTierOfUser) {
-  if (!supabaseAdmin) return currentTierOfUser;
-  if (membership.final_position) return currentTierOfUser; // already settled
+/**
+ * Settle a finished week — the WHOLE group at once.
+ *
+ * ─── This never ran ─────────────────────────────────────────────────────────
+ * The previous version settled one membership, and its only call site was
+ * gated on `LEAGUES_SCALE_MODE === "tiered"` while the mode has been "global"
+ * since the feature was written. So `final_position` was NULL on every row the
+ * table had ever held, `promoted`/`demoted` were false on all of them, and the
+ * lifetime counters had never once incremented.
+ *
+ * The gate conflated two different things. In global mode there genuinely is
+ * no tier rollover — one group, everyone in it, nothing to promote — so
+ * skipping the TIER dance is right. But a final position is not a tier fact.
+ * It is "where you finished among everyone that week", which is exactly as
+ * meaningful in global mode, and it went down with the rest. Settlement now
+ * always runs; only promotion and demotion stay behind the mode check.
+ *
+ * ─── THE WHOLE GROUP, because most students will not come back on cue ───────
+ * Settling only the returning user leaves a board full of holes: a week where
+ * three people happened to open Ranked on Tuesday has three positions and
+ * thirty blanks, and the student who finished second but did not log in that
+ * week is simply missing from their own result. One student's return settles
+ * the week for everybody in it.
+ *
+ * ─── It ranks by the SAME measure the live board ranks by ───────────────────
+ * The old version sorted on `weekly_xp` while `getLeagueStanding` ranks on
+ * Compete Score, so the position a student was finally awarded could contradict
+ * the board they had watched all week. `leagueStandingRows` is the one
+ * ranking, used by both.
+ *
+ * Idempotent: a group with any position already written is done. Two students
+ * returning in the same second could both settle it, but both compute the same
+ * ranking from the same finished week, so the second write is the first one
+ * again.
+ */
+async function settleLeagueGroup(groupId, meEmail, currentTierOfUser) {
+  if (!supabaseAdmin || !groupId) return currentTierOfUser;
 
-  // Pull all members of this group, sort by weekly_xp DESC.
-  const { data: groupMembers } = await supabaseAdmin
+  const { data: members, error } = await supabaseAdmin
     .from('league_memberships')
-    .select('id, user_email, weekly_xp')
-    .eq('league_group_id', membership.league_group_id)
-    .order('weekly_xp', { ascending: false });
+    .select('id, user_email, weekly_xp, tier, final_position, week_start')
+    .eq('league_group_id', groupId);
+  if (error) {
+    console.warn('[leagues] settle: could not read group:', error.message);
+    return currentTierOfUser;
+  }
+  if (!members?.length) return currentTierOfUser;
+  if (members.some(m => m.final_position)) return currentTierOfUser; // already settled
 
-  if (!groupMembers?.length) return currentTierOfUser;
+  const weekStart = members[0].week_start;
+  const ranked = await leagueStandingRows(members, weekStart);
+  const size = ranked.length;
 
-  // Find my position in this group.
-  const myIdx = groupMembers.findIndex(m => m.user_email === membership.user_email);
-  if (myIdx < 0) return currentTierOfUser;
+  let myTier = currentTierOfUser;
+  for (let i = 0; i < size; i += 1) {
+    const { m } = ranked[i];
+    const finalPosition = i + 1;
+    // Promotion and demotion are a TIERED-mode idea. In global mode everyone
+    // is in one group, so "bottom 5 demote" would demote five people out of a
+    // league that has nowhere below it.
+    const tiered = LEAGUES_SCALE_MODE === 'tiered';
+    const promoted = tiered && finalPosition <= LEAGUE_PROMOTE_COUNT;
+    const demoted  = tiered && finalPosition > (size - LEAGUE_DEMOTE_COUNT);
 
-  const finalPosition = myIdx + 1;
-  const promoted = finalPosition <= LEAGUE_PROMOTE_COUNT;
-  const demoted  = finalPosition > (groupMembers.length - LEAGUE_DEMOTE_COUNT);
+    await supabaseAdmin
+      .from('league_memberships')
+      .update({ final_position: finalPosition, promoted, demoted })
+      .eq('id', m.id);
 
-  // Compute the resulting tier the user starts the new week in.
-  let newTier = membership.tier;
-  if (promoted) newTier = nextTier(membership.tier);
-  else if (demoted) newTier = prevTier(membership.tier);
+    if (!tiered) continue;
 
-  // Persist outcome on the stale membership row.
-  await supabaseAdmin
-    .from('league_memberships')
-    .update({ final_position: finalPosition, promoted, demoted })
-    .eq('id', membership.id);
+    let newTier = m.tier;
+    if (promoted) newTier = nextTier(m.tier);
+    else if (demoted) newTier = prevTier(m.tier);
+    if (m.user_email === meEmail) myTier = newTier;
 
-  // Bump lifetime counters on user_profiles.
-  const profileUpdate = { current_league_tier: newTier };
-  // The lifetime promote/demote counters get incremented via an RPC pattern
-  // (or we just re-read + write). We'll do the lighter-weight read+write here.
-  const { data: profRow } = await supabaseAdmin
-    .from('user_profiles')
-    .select('id, league_lifetime_promotes, league_lifetime_demotes')
-    .eq('created_by', membership.user_email)
-    .maybeSingle();
-  if (profRow) {
-    if (promoted) profileUpdate.league_lifetime_promotes = (profRow.league_lifetime_promotes ?? 0) + 1;
-    if (demoted)  profileUpdate.league_lifetime_demotes  = (profRow.league_lifetime_demotes ?? 0) + 1;
-    await supabaseAdmin.from('user_profiles').update(profileUpdate).eq('id', profRow.id);
+    const profileUpdate = { current_league_tier: newTier };
+    const { data: profRow } = await supabaseAdmin
+      .from('user_profiles')
+      .select('id, league_lifetime_promotes, league_lifetime_demotes')
+      .eq('created_by', m.user_email)
+      .maybeSingle();
+    if (profRow) {
+      if (promoted) profileUpdate.league_lifetime_promotes = (profRow.league_lifetime_promotes ?? 0) + 1;
+      if (demoted)  profileUpdate.league_lifetime_demotes  = (profRow.league_lifetime_demotes ?? 0) + 1;
+      await supabaseAdmin.from('user_profiles').update(profileUpdate).eq('id', profRow.id);
+    }
   }
 
-  return newTier;
+  console.log(`[leagues] settled ${size} in group ${groupId} (week ${weekStart})`);
+  return myTier;
 }
 
 // Find an open league_group for the current week.
@@ -449,11 +493,13 @@ async function ensureCurrentLeagueMembership(userEmail, userProfile) {
     .limit(1);
 
   let nextStartTier = userProfile?.current_league_tier || 'bronze';
-  // In global mode we skip the tier-rollover dance entirely — everyone
-  // just starts the next week in their existing tier (which is bronze for
-  // everyone by default).
-  if (stale?.[0] && LEAGUES_SCALE_MODE === "tiered") {
-    nextStartTier = await settleStaleMembership(stale[0], nextStartTier);
+  // SETTLE, WHATEVER THE MODE. This used to be gated on tiered mode, which is
+  // why `final_position` was never once written in the feature's lifetime —
+  // see settleLeagueGroup. Promotion and demotion are still tier-only; a
+  // final position is not, and it is what a standings page is made of.
+  if (stale?.[0]) {
+    nextStartTier = await settleLeagueGroup(
+      stale[0].league_group_id, userEmail, nextStartTier);
   }
 
   // 3. Place into an open group at `nextStartTier`.
@@ -656,9 +702,13 @@ async function buildAchievementStats(userEmail, profile) {
   // Settled forecasts that paid MORE than nothing — the scoring rule pays zero
   // for restating the app's own base rate, so a positive payout is the student
   // knowing something it did not. Unfakeable by construction.
+  // `.in('status', ['won','lost'])` here asked for two values the column's
+  // CHECK constraint has never allowed, so this counted nothing for anybody.
+  // A settled forecast is `resolved`; whether it WON is `extra.forecast.outcome`,
+  // and a positive payout already implies it beat the base rate either way.
   const { data: settled } = await supabaseAdmin
     .from('score_wagers').select('xp_outcome')
-    .eq('bettor_email', userEmail).in('status', ['won', 'lost']).limit(500);
+    .eq('bettor_email', userEmail).eq('status', WAGER.SETTLED).limit(500);
   stats.calibrated_calls = (settled || []).filter(w => (Number(w.xp_outcome) || 0) > 0).length;
 
   // ─── Best weekly league finish ────────────────────────────────────────────
@@ -7539,6 +7589,112 @@ async function boardQuizScores(email, attempts) {
     .filter((n) => typeof n === "number" && Number.isFinite(n));
 }
 
+/**
+ * The week's league board, ranked. ONE function, two callers: the live
+ * standings a student watches, and the settlement that writes the final
+ * position into the record.
+ *
+ * ─── Why it is shared rather than duplicated ────────────────────────────────
+ * It was two. `getLeagueStanding` ranked on Compete Score; settlement ranked
+ * on `weekly_xp`. Nobody noticed because settlement never ran — but the moment
+ * it did, a student who spent a week watching themselves sit second would have
+ * been handed a different number as their result, with no way to tell which
+ * was the real one. Two rankings for one board is how a leaderboard stops
+ * being believed.
+ *
+ * ─── A FIFTH RANKING PATH, and it had the hole the other four had fixed ─────
+ * `duration_minutes` and `session_duration` come from the client. integrity.js
+ * closed that on the hours board, the goal engine, the Arena and
+ * `competitionCompeteScore`; this one was missed because the feature had no UI
+ * and so was not a board anybody could climb. Shipping it makes it one, so it
+ * goes through `countableStudyMinutes` — one row is one sitting, one day has a
+ * ceiling, and today's ceiling is the minutes that have actually passed today.
+ *
+ * Same for quizzes: the old code averaged the raw `score` of EVERY attempt in
+ * the week, which pays for sitting a three-question warm-up twenty times and
+ * counts "wrong only" retries, whose scores are on a different scale by
+ * construction. It reads first sits of board-eligible quizzes now, exactly as
+ * `competitionCompeteScore` does.
+ *
+ * Aggregate queries, not per-member ones: three reads plus one quiz lookup for
+ * the whole group, however many are in it.
+ */
+async function leagueStandingRows(members = [], weekStartStr, now = new Date()) {
+  const emails = members.map(m => m.user_email).filter(Boolean);
+  if (!emails.length) return [];
+
+  const [pRes, sessRes, techRes, quizRes] = await Promise.all([
+    supabaseAdmin.from('user_profiles')
+      .select('created_by, username, full_name, streak_days, total_xp').in('created_by', emails),
+    supabaseAdmin.from('study_sessions')
+      .select('created_by, duration_minutes, date, created_date, extra')
+      .in('created_by', emails).gte('date', weekStartStr),
+    supabaseAdmin.from('study_techniques')
+      .select('created_by, session_duration, date, created_date, extra')
+      .in('created_by', emails).gte('date', weekStartStr),
+    supabaseAdmin.from('quiz_attempts')
+      .select('created_by, quiz_id, score, adjusted_score, date, created_date, extra')
+      .in('created_by', emails).gte('date', weekStartStr),
+  ]);
+  const byEmail = Object.fromEntries((pRes.data || []).map(p => [p.created_by, p]));
+
+  // One quiz lookup for the whole group, so the board-eligibility floors cost
+  // a single round trip rather than one per member.
+  const attempts = (quizRes.data || []).filter(a => a?.quiz_id && !isRetryAttemptRow(a));
+  const quizIds = [...new Set(attempts.map(a => a.quiz_id))];
+  let eligible = new Set();
+  if (quizIds.length) {
+    const { data: quizRows } = await supabaseAdmin
+      .from('quizzes').select('id, questions').in('id', quizIds);
+    eligible = new Set((quizRows || []).filter(quizCountsForBoard).map(q => q.id));
+  }
+
+  const bucket = {};
+  emails.forEach(e => { bucket[e] = { study: [], scores: new Map(), days: new Set() }; });
+  const noteDay = (e, d) => { if (d) bucket[e]?.days.add(String(d).slice(0, 10)); };
+
+  (sessRes.data || []).forEach(r => {
+    const b = bucket[r.created_by]; if (!b) return;
+    b.study.push(studyRowFor(r, 'duration_minutes')); noteDay(r.created_by, r.date);
+  });
+  (techRes.data || []).forEach(r => {
+    const b = bucket[r.created_by]; if (!b) return;
+    b.study.push(studyRowFor(r, 'session_duration')); noteDay(r.created_by, r.date);
+  });
+  // FIRST sit of each eligible quiz, never the best — taking the best rewards
+  // grinding one paper until a good roll comes up.
+  attempts
+    .slice()
+    .sort((a, b) => new Date(a.created_date || 0) - new Date(b.created_date || 0))
+    .forEach(a => {
+      const b = bucket[a.created_by]; if (!b) return;
+      noteDay(a.created_by, a.date);
+      if (!eligible.has(a.quiz_id) || b.scores.has(a.quiz_id)) return;
+      const s = typeof a.adjusted_score === 'number' ? a.adjusted_score : a.score;
+      if (typeof s === 'number' && Number.isFinite(s)) b.scores.set(a.quiz_id, s);
+    });
+
+  const scored = members.map(m => {
+    const p = byEmail[m.user_email] || {};
+    const b = bucket[m.user_email] || { study: [], scores: new Map(), days: new Set() };
+    const sits = [...b.scores.values()];
+    const cs = computeCompeteScore({
+      minutes: countableStudyMinutes(b.study, now),
+      avgAccuracy: sits.length ? sits.reduce((s, n) => s + n, 0) / sits.length : 0,
+      activeDays: b.days.size,
+      streak: p.streak_days || 0,
+    });
+    return { m, p, cs, sits: sits.length };
+  });
+
+  scored.sort((x, y) =>
+    (y.cs.total - x.cs.total) ||
+    ((y.m.weekly_xp ?? 0) - (x.m.weekly_xp ?? 0)) ||
+    ((y.p.total_xp ?? 0) - (x.p.total_xp ?? 0)) ||
+    String(x.m.user_email).localeCompare(String(y.m.user_email)));
+  return scored;
+}
+
 async function competitionCompeteScore(email, startIso) {
   if (!supabaseAdmin) return computeCompeteScore({});
   const [techRes, sessRes, quizRes, profile] = await Promise.all([
@@ -7597,58 +7753,20 @@ app.post("/local-ai/fn/getLeagueStanding", async (req, res) => {
     const mem = await ensureCurrentLeagueMembership(user.email, profile);
     if (!mem) return res.status(500).json({ error: "Could not place in league" });
 
-    // Pull all members of my group + the user_profile data we want to show.
+    // Pull all members of my group.
     const { data: groupMembers, error: gmErr } = await supabaseAdmin
       .from('league_memberships')
       .select('id, user_email, weekly_xp, is_anonymous, joined_at')
-      .eq('league_group_id', mem.league_group_id)
-      .order('weekly_xp', { ascending: false });
+      .eq('league_group_id', mem.league_group_id);
     if (gmErr) throw gmErr;
 
-    // Hydrate username + streak per member (fast lookup).
-    const emails = (groupMembers || []).map(m => m.user_email);
-    let profiles = [];
-    if (emails.length) {
-      const { data: pData } = await supabaseAdmin
-        .from('user_profiles')
-        .select('created_by, username, full_name, streak_days, total_xp')
-        .in('created_by', emails);
-      profiles = pData || [];
-    }
-    const byEmail = Object.fromEntries(profiles.map(p => [p.created_by, p]));
-
-    // ── Compute each member's weekly Compete Score from their activity ──
-    // Three aggregate queries total (not per-member), so this scales fine.
+    // THE SAME RANKING SETTLEMENT USES. Sharing it is the point: a board that
+    // ranks one way all week and records another at the end is two answers to
+    // one question, and a student has no way to tell which one counted.
     const weekStartStr = currentWeekStartUTC();
-    const agg = {};
-    emails.forEach(e => { agg[e] = { minutes: 0, accSum: 0, quizCount: 0, days: new Set() }; });
-    if (emails.length) {
-      const [sessRes, techRes, quizRes] = await Promise.all([
-        supabaseAdmin.from('study_sessions').select('created_by, duration_minutes, date').in('created_by', emails).gte('date', weekStartStr),
-        supabaseAdmin.from('study_techniques').select('created_by, session_duration, date').in('created_by', emails).gte('date', weekStartStr),
-        supabaseAdmin.from('quiz_attempts').select('created_by, score, date').in('created_by', emails).gte('date', weekStartStr),
-      ]);
-      (sessRes.data || []).forEach(r => { const a = agg[r.created_by]; if (a) { a.minutes += r.duration_minutes || 0; if (r.date) a.days.add(r.date); } });
-      (techRes.data || []).forEach(r => { const a = agg[r.created_by]; if (a) { a.minutes += r.session_duration || 0; if (r.date) a.days.add(r.date); } });
-      (quizRes.data || []).forEach(r => { const a = agg[r.created_by]; if (a) { if (typeof r.score === 'number') { a.accSum += r.score; a.quizCount++; } if (r.date) a.days.add(r.date); } });
-    }
+    const scored = await leagueStandingRows(groupMembers || [], weekStartStr);
 
-    const scored = (groupMembers || []).map(m => {
-      const p = byEmail[m.user_email] || {};
-      const a = agg[m.user_email] || { minutes: 0, accSum: 0, quizCount: 0, days: new Set() };
-      const avgAccuracy = a.quizCount ? a.accSum / a.quizCount : 0;
-      const cs = computeCompeteScore({ minutes: a.minutes, avgAccuracy, activeDays: a.days.size, streak: p.streak_days || 0 });
-      return { m, p, cs };
-    });
-
-    // Rank by Compete Score (desc); tie-break on weekly XP then lifetime XP.
-    scored.sort((x, y) =>
-      (y.cs.total - x.cs.total) ||
-      ((y.m.weekly_xp ?? 0) - (x.m.weekly_xp ?? 0)) ||
-      ((y.p.total_xp ?? 0) - (x.p.total_xp ?? 0)),
-    );
-
-    const rows = scored.map(({ m, p, cs }, i) => {
+    const rows = scored.map(({ m, p, cs, sits }, i) => {
       const isMe = m.user_email === user.email;
       const displayName = m.is_anonymous && !isMe
         ? `Anon #${(m.id || '').slice(-4)}`
@@ -7664,6 +7782,12 @@ app.post("/local-ai/fn/getLeagueStanding", async (req, res) => {
         streak_days:     p.streak_days ?? 0,
         total_xp:        p.total_xp ?? 0,
         is_anonymous:    m.is_anonymous,
+        // On your OWN row only, and deliberately outside score_breakdown —
+        // the board renders that object by iterating its numeric keys, so a
+        // "sits 0" in there would read as a fourth component worth nothing.
+        // A student who only sits short quizzes otherwise takes a silent zero
+        // on the 400-point mastery slice and is never told what unlocks it.
+        board_sits:      isMe ? sits : null,
       };
     });
 
@@ -7677,6 +7801,25 @@ app.post("/local-ai/fn/getLeagueStanding", async (req, res) => {
     // Compute reset time = next Monday 00:00 UTC
     const weekStart = new Date(`${groupRow?.week_start || mem.week_start}T00:00:00Z`);
     const resetsAt = new Date(weekStart.getTime() + 7 * 24 * 60 * 60 * 1000);
+
+    // Finished weeks, most recent first. `final_position` is only non-null on
+    // a settled week, so filtering on it is exactly "weeks that are over" —
+    // no separate flag to keep in step with the settlement.
+    const { data: past } = await supabaseAdmin
+      .from('league_memberships')
+      .select('week_start, final_position, weekly_xp, promoted, demoted, tier')
+      .eq('user_email', user.email)
+      .not('final_position', 'is', null)
+      .order('week_start', { ascending: false })
+      .limit(12);
+    const history = (past || []).map(h => ({
+      week_start:     h.week_start,
+      position:       h.final_position,
+      weekly_xp:      h.weekly_xp ?? 0,
+      promoted:       !!h.promoted,
+      demoted:        !!h.demoted,
+      tier:           h.tier,
+    }));
 
     return res.json({
       success: true,
@@ -7696,6 +7839,8 @@ app.post("/local-ai/fn/getLeagueStanding", async (req, res) => {
         user_email:    user.email,
         position:      rows.find(r => r.is_me)?.position || null,
         compete_score: rows.find(r => r.is_me)?.compete_score ?? 0,
+        board_sits:    rows.find(r => r.is_me)?.board_sits ?? 0,
+        board_min_questions: BOARD_MIN_QUESTIONS,
         weekly_xp:     mem.weekly_xp ?? 0,
         tier:          mem.tier,
         is_anonymous: mem.is_anonymous,
@@ -7703,6 +7848,11 @@ app.post("/local-ai/fn/getLeagueStanding", async (req, res) => {
         lifetime_demotes:  profile.league_lifetime_demotes ?? 0,
       },
       rows,
+      // ── Weeks already finished ────────────────────────────────────────────
+      // A weekly league with no history is a board that resets to nothing
+      // every Monday and asks the student to care anyway. These rows only
+      // exist because settlement now runs; before this they were all NULL.
+      history,
     });
   } catch (err) {
     console.error("[getLeagueStanding] error:", err);
@@ -7995,6 +8145,17 @@ app.post("/local-ai/fn/placeForecast", async (req, res) => {
   if (!user) return res.status(401).json({ error: "Unauthorized" });
   if (!supabaseAdmin) return res.status(500).json({ error: "Supabase admin not configured" });
 
+  // ─── THE STAKE IS TAKEN BEFORE THE ROW EXISTS, so a failed insert must give
+  // it back. There are no transactions across PostgREST calls, and the order
+  // cannot simply be swapped — inserting first would leave an unfunded
+  // position if the debit then failed, which is the worse of the two. So the
+  // debit is remembered and unwound on any failure below.
+  //
+  // This is not hypothetical. The constraint violation above meant the insert
+  // failed EVERY time, after the debit had already gone through: each attempt
+  // charged the student their stake, wrote an xp_events row against it,
+  // created no forecast, and reported a 500. The XP simply disappeared.
+  let debited = null;
   try {
     const { kind, p, base, stake, deadline, threshold, quiz_id, subject, callout_id } = req.body || {};
     if (!kind || p === undefined || base === undefined) {
@@ -8037,7 +8198,7 @@ app.post("/local-ai/fn/placeForecast", async (req, res) => {
       // which is a way of buying a guaranteed return out of a proper rule.
       const { data: existing } = await supabaseAdmin
         .from("score_wagers").select("id")
-        .eq("bettor_email", user.email).eq("status", "pending")
+        .eq("bettor_email", user.email).eq("status", WAGER.OPEN)
         .contains("extra", JSON.stringify({ forecast: { callout_id } }))
         .limit(1);
       if (existing?.length) {
@@ -8101,6 +8262,7 @@ app.post("/local-ai/fn/placeForecast", async (req, res) => {
         description: `Staked on a forecast (${kind})`,
         event_key: `forecast-stake-${user.email}-${Date.now()}`,
       });
+      debited = { profileId: profile.id, amount };
     }
 
     const { data: row, error } = await supabaseAdmin.from("score_wagers").insert({
@@ -8110,7 +8272,11 @@ app.post("/local-ai/fn/placeForecast", async (req, res) => {
       target_quiz_id: quiz_id || null,
       predicted_score: Math.round(prob * 100),
       wagered_xp: amount,
-      status: "pending",
+      // ── The lifecycle, in the ONE vocabulary the column's CHECK constraint
+      // accepts. This read `"pending"`, which the constraint has forbidden
+      // since migration 0008, so every placement ever attempted was rejected
+      // by Postgres and surfaced to the student as a 500. See wagerStatus.js.
+      status: WAGER.OPEN,
       extra: {
         forecast: {
           kind, p: prob, base: baseRate, threshold: threshold ?? null,
@@ -8125,6 +8291,28 @@ app.post("/local-ai/fn/placeForecast", async (req, res) => {
     return res.json({ forecast: row, staked: amount });
   } catch (err) {
     console.error("placeForecast error:", err);
+    // Unwind the escrow. Written straight back rather than through awardXP,
+    // which is cap-bounded and would silently keep part of a refund on a
+    // student who had already hit their daily ceiling — a refund that returns
+    // less than it took is a second bug wearing the first one's clothes.
+    if (debited) {
+      try {
+        const { data: p } = await supabaseAdmin
+          .from("user_profiles").select("total_xp").eq("id", debited.profileId).maybeSingle();
+        await supabaseAdmin.from("user_profiles")
+          .update({ total_xp: (p?.total_xp ?? 0) + debited.amount })
+          .eq("id", debited.profileId);
+        await supabaseAdmin.from("xp_events").insert({
+          user_email: user.email, source: "wager",
+          xp_awarded: debited.amount, xp_amount: debited.amount,
+          description: "Forecast could not be placed — stake returned",
+          event_key: `forecast-refund-${user.email}-${Date.now()}`,
+        });
+      } catch (e) {
+        console.error("[placeForecast] REFUND FAILED — student is down",
+          debited.amount, "XP:", e?.message || e);
+      }
+    }
     return res.status(500).json({ error: err.message });
   }
 });
@@ -8143,7 +8331,7 @@ app.post("/local-ai/fn/settleForecast", async (req, res) => {
     if (error || !row) return res.status(404).json({ error: "Forecast not found" });
     // Only the person who made the call may settle it, and only once.
     if (row.bettor_email !== user.email) return res.status(403).json({ error: "Not yours" });
-    if (row.status !== "pending") {
+    if (row.status !== WAGER.OPEN) {
       return res.json({ already: true, status: row.status, xp_outcome: row.xp_outcome || 0 });
     }
 
@@ -8227,7 +8415,7 @@ app.post("/local-ai/fn/settleForecast", async (req, res) => {
         // and the position is cancelled rather than scored — paying out on a
         // question that was never asked is worse than not paying at all.
         await supabaseAdmin.from("score_wagers").update({
-          status: "cancelled", resolved_at: new Date().toISOString(), xp_outcome: 0,
+          status: WAGER.VOID, resolved_at: new Date().toISOString(), xp_outcome: 0,
           extra: { ...(row.extra || {}), forecast: { ...f, outcome: null, settled_by: "server" } },
         }).eq("id", forecast_id);
         const back = Math.max(0, Math.round(Number(row.wagered_xp) || 0));
@@ -8252,12 +8440,23 @@ app.post("/local-ai/fn/settleForecast", async (req, res) => {
 
     // The base rate is the one the app PUBLISHED when the call was made, not a
     // fresh one: repricing at settlement would change the deal after the fact.
-    const xp = forecastPayout(row.wager_xp, Number(f.p), Number(f.base), outcome);
+    // ── `wagered_xp`, NOT `wager_xp` ────────────────────────────────────────
+    // Migration 0008 renamed this column and this line was never updated, so
+    // the stake read `undefined` on every settlement: `forecastPayout` floors
+    // a non-finite stake to 0 and returns 0, which means EVERY call — however
+    // well judged — paid exactly nothing. The refund below already used the
+    // right name, so the stake came back and the skill never did, and a
+    // student who called something at 90% that happened watched a correct
+    // forecast settle for +0.
+    const xp = forecastPayout(row.wagered_xp, Number(f.p), Number(f.base), outcome);
 
     await supabaseAdmin.from("score_wagers").update({
-      status: outcome ? "won" : "lost",
+      // STATUS IS THE LIFECYCLE; the verdict is a separate fact and lives in
+      // `extra.forecast.outcome` two lines down. `won`/`lost` here crammed
+      // both axes into one column and the CHECK constraint accepts neither.
+      status: WAGER.SETTLED,
       resolved_at: new Date().toISOString(),
-      accuracy: outcome ? "exact" : null,
+      accuracy: outcome ? "exact" : "wrong",
       xp_outcome: xp,
       extra: { ...(row.extra || {}), forecast: { ...f, outcome, settled_by: "server" } },
     }).eq("id", forecast_id);

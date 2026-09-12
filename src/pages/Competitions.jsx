@@ -15,6 +15,7 @@ import ForecastPanel from "@/components/competition/ForecastPanel";
 import { studyEvents } from "@/lib/studyLog";
 import { competeLead } from "@/lib/competeLead";
 import { forecastBoard } from "@/lib/forecast";
+import { isOpenWager } from "@/lib/wagerStatus";
 import CreateDuelDialog from "@/components/arena/CreateDuelDialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { joinGoalCompetition, createGoalCompetition } from "@/api/functionsShim";
@@ -161,7 +162,12 @@ export default function Competitions() {
                 // that verdict WINS: the client recomputes for display, the
                 // server decides. Two answers to one question is how a screen
                 // starts disagreeing with the XP it paid.
-                settled: r.status !== "pending",
+                //
+                // Compared against the OPEN status rather than a hard-coded
+                // string: this read `!== "pending"`, and once the server
+                // started writing the value its constraint actually permits,
+                // every live call would have rendered as already settled.
+                settled: !isOpenWager(r),
             })));
         setForecastRows({ events: studyEvents(sessions, techniques), attempts: attempts || [] });
     }, []);

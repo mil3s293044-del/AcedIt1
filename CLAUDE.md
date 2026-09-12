@@ -883,6 +883,114 @@ checks every column `server.mjs` names against it and asserts it would have
 caught the bug that shipped. **Regenerate the snapshot whenever a migration
 lands**, or the checker is validating against last month's schema.
 
+### And a VALUE the column rejects is the same bug wearing a different hat
+
+`placeForecast` was broken a second time, underneath the first. The column was
+right; the string was not. `score_wagers.status` has carried
+
+    check (status in ('active','resolved','cancelled'))
+
+since migration 0008, and the forecast layer — written months later — spoke
+`pending` while open and `won`/`lost` once settled. So the insert was rejected
+by Postgres, `placeForecast` answered 500 on every call ever made, and **the
+feature had never once worked**: fixing the `email` column above only moved the
+failure one line down. `buildAchievementStats` had the read-side twin —
+`.in('status', ['won','lost'])` asked for two values that cannot exist, so the
+calibration stat counted nothing for anybody.
+
+**AND THE STAKE WAS TAKEN BEFORE THE INSERT.** Each attempt debited the XP,
+wrote an `xp_events` row against it, created no forecast, and returned an
+error — the student's stake simply disappeared, every time, invisibly. There
+are no transactions across PostgREST calls, so the debit is remembered and
+unwound in the catch. Anything that charges before it writes needs that, and
+the refund is written DIRECTLY rather than through `awardXP`, which is
+cap-bounded and would quietly keep part of it.
+
+**STATUS IS THE LIFECYCLE. THE OUTCOME IS A SEPARATE FACT.** That is why this
+resolved toward the constraint rather than widening it: `won`/`lost` crams two
+orthogonal axes into one column — did it settle, and did you win — so two
+halves of the codebase reasonably picked different axes and the column could
+not satisfy both. `src/lib/wagerStatus.js` is the one vocabulary, imported by
+BOTH sides; the verdict lives in `extra.forecast.outcome` and the payout in
+`xp_outcome`. `wagerOutcome` reads the recorded verdict rather than inferring
+from `xp_outcome`, because a payout of exactly 0 legitimately means both "a
+maximally wrong call" and "you agreed with the base rate".
+
+Settlement had a third one in the same handler: `row.wager_xp`, which 0008
+RENAMED to `wagered_xp`. The stake read `undefined`, `forecastPayout` floors a
+non-finite stake to zero, and so every forecast — however well judged — settled
+for +0 while the refund line beside it used the right name and returned the
+stake. A rename is not done until the readers move.
+
+`dbEnums.test.mjs` is the guard. It replays the migrations IN ORDER (0008
+drops the constraint and re-adds it, so first-definition-wins would read the
+wrong set), collects every `check (col in (...))`, and asserts every literal
+`server.mjs` binds to such a column is in it — writes and reads both. Verified
+by putting the `pending` insert back and watching it name the real line. A
+table with no constraint on that column is deliberately NOT guessed at:
+`study_bets.status` genuinely uses `won`/`lost`, and flagging it is the false
+positive that gets a checker deleted.
+
+## Weekly leagues: they never settled, and nobody could see them
+
+Shipped with migration 0015, complete with a lazy-rollover design its own
+header describes — "No cron required — rollover is lazy: every awardXP call
+checks if the user's current week_start is stale". Half of it worked: every XP
+award has been crediting `league_memberships.weekly_xp` and rolling a new row
+each Monday for months.
+
+**The settle half never ran.** `final_position` had exactly one writer, inside
+`settleStaleMembership`, whose one call site read
+`if (stale?.[0] && LEAGUES_SCALE_MODE === "tiered")` — and the mode has been
+`"global"` since the feature was written. So the column was NULL on every row
+the table ever held, `promoted`/`demoted` false on all of them, and the
+lifetime counters never incremented once.
+
+**The gate conflated two different things.** In global mode there genuinely is
+no tier rollover — one group, everyone in it, nothing to promote — so skipping
+the TIER dance is right. A final position is not a tier fact; it is where you
+finished among everyone that week, exactly as meaningful in global mode, and it
+went down with the rest. Settlement runs unconditionally now; only promotion
+and demotion stay behind the mode check.
+
+**It settles the WHOLE GROUP, not the returning student.** Settling one
+membership leaves a board full of holes — a week where three people happened to
+open Ranked has three positions and thirty blanks, and whoever finished second
+without logging in that week is missing from their own result. One student's
+return settles the week for everybody in it. Idempotent: any position already
+written means done, and two simultaneous returns compute the same ranking from
+the same finished week.
+
+**ONE RANKING, because there were two and they disagreed.** `getLeagueStanding`
+ranked on Compete Score; settlement ranked on `weekly_xp`. Nobody noticed
+because settlement never ran — but the moment it did, a student who spent a week
+watching themselves sit second would have been handed a different number as
+their result. `leagueStandingRows` is the one ranking and both call it.
+
+**A FIFTH ranking path, with the hole the other four had already fixed.**
+`duration_minutes` and `session_duration` come from the client; integrity.js
+closed that on the hours board, the goal engine, the Arena and
+`competitionCompeteScore`. This one was missed precisely because it had no UI
+and so was not a board anybody could climb — which is the trap: an invisible
+feature does not get audited. It goes through `countableStudyMinutes` now, and
+quizzes through the same first-sit/board-eligible floors, rather than averaging
+the raw score of every attempt in the week.
+
+**And it has a page.** `/League` — the lead, the board with every gap drawn to
+one scale, and the weeks already settled. Reached from a strip on Ranked rather
+than a sixth nav item, because Ranked is already the page about where you
+stand: the ATAR board over 28 days, the league over the week. `src/lib/league.js`
+holds the pure parts (`msUntilReset` refuses a missing date rather than
+returning the epoch; `historySummary` rejects an unsettled week explicitly,
+because `Number(null)` is a perfectly finite 0 and would have won `best` and
+reported a podium nobody was given).
+
+`stats.best_weekly_rank` in `buildAchievementStats` reads `final_position` and
+is read by NOTHING — no achievement in the catalogue uses it. It is a
+round-trip on every awardXP feeding no consumer. Left in place because
+settlement now makes it a real number and a league achievement is the obvious
+next thing to add; delete it if that does not happen.
+
 ## Compete: one headline, one feed, one of each panel
 
 **Seven sections stacked above the tabs**, and three of them answered the same
@@ -2039,6 +2147,12 @@ another email before this.
 - `src/lib/forecast.js`, `src/components/competition/ForecastPanel.jsx` — the
   proper scoring rule, base rates and calibration; settled by `settleForecast`
   in `server.mjs`, which recomputes rather than trusts
+- `src/lib/wagerStatus.js` — the one vocabulary `score_wagers.status` may
+  speak, imported by client AND server; `dbEnums.test.mjs` holds it
+- `src/lib/league.js`, `src/pages/League.jsx`,
+  `src/components/league/WeeklyBoard.jsx`, `src/components/ranked/WeekStrip.jsx`
+  — the weekly board; `leagueStandingRows` and `settleLeagueGroup` in
+  `server.mjs` are the one ranking and the settlement that writes it down
 - `src/lib/integrity.js` — the caps, the idle discount, the quiz floors and the
   verified/claimed split. Mirrored server-side by `countableStudyMinutes`,
   `verifiedStudyMinutes` and `boardQuizScores`; change one, change both
