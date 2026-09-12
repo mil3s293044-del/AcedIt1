@@ -34,8 +34,10 @@ import { base44 } from "@/api/base44Client";
 import { useLiveTick } from "@/lib/LiveContext";
 import { takeFn } from "@/lib/fnResult";
 import MarketCard from "@/components/market/MarketCard";
+import SettlementReveal from "@/components/market/SettlementReveal";
 import {
     readMarket, sortBoard, isOpen, sideOf, YES, KIND_LIST,
+    unseenSettlements, markSettlementsSeen,
 } from "@/lib/market";
 
 const firstName = (n) => String(n || "").trim().split(/\s+/)[0] || "Someone";
@@ -238,7 +240,20 @@ export default function Competitions() {
         [board, filter]);
 
     const book = useMemo(() => board.filter((m) => m.mine), [board]);
-    const tape = useMemo(() => buildTape(board, data?.recent || []), [board, data]);
+
+    // Resolved markets, read through the same lens as the open ones so `mine`
+    // is found the same way. `recent` arrives raw from the server.
+    const settledBoard = useMemo(
+        () => (data?.recent || []).map((m) => readMarket(m, m.positions || [], me.email)),
+        [data, me.email]);
+    const tape = useMemo(() => buildTape(board, settledBoard), [board, settledBoard]);
+
+    // ── The payoff moment ────────────────────────────────────────────────
+    // Derived from rows already loaded — nothing new is stored, so the reveal
+    // cannot disagree with the tape line for the same result. The seen-set
+    // lives in the model, not here.
+    const reveals = useMemo(
+        () => unseenSettlements(settledBoard, me.email), [settledBoard, me.email]);
 
     const atStake = book.reduce((s, m) => s + (m.mine?.stake || 0), 0);
 
@@ -457,6 +472,10 @@ export default function Competitions() {
                     <LineDialog onClose={() => setLineOpen(false)} onOpen={openLine} busy={busy} />
                 )}
             </AnimatePresence>
+
+            {/* Everything else on this page pays out visibly; the one place
+                with a real result was a line on the tape. */}
+            <SettlementReveal items={reveals} onSeen={markSettlementsSeen} />
         </Room>
     );
 }

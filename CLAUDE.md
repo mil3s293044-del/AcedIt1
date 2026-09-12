@@ -616,9 +616,41 @@ the UI now, so the old objects drain naturally — and the `callout` and `battle
 market kinds read those same tables to resolve, which is the point: the old
 objects became market SUBJECTS rather than separate features.
 
-Next, and deliberately not done yet: a settlement REVEAL. A market resolving is
-the payoff moment and right now it is a line on the tape. `SettlementReveal`
-was deleted with the old page; a market-shaped one is the obvious next thing.
+**THE REVEAL IS THE TWO NUMBERS, NOT THE CRED** (`SettlementReveal`). Every
+other thing on the floor pays out visibly — the price moves while you watch,
+the payout rolls as you drag — and the one place with a REAL result was a line
+on the tape. What makes this different from any other betting screen is that
+you were scored against WHAT EVERYONE ELSE BELIEVED, so the centre of the card
+is "you said 85, the room said 62" and the cred is the consequence printed
+under it. Lead with the payout and it is a slot machine; lead with the
+disagreement and it is a read you got right.
+
+`edgePoints` is ABSOLUTE error where the payout is squared, deliberately: a
+student can check "23 points closer" by subtracting two numbers both printed on
+the card, which they cannot do with a Brier difference. Its sign can never
+disagree with the payout — |a| < |b| exactly when a² < b² — and a sweep pins
+that, because a screen praising a call that lost cred would be the worst
+possible version of this.
+
+FOUR CASES, not two. `level` (you agreed with the price, so it paid exactly
+zero) and `void` (nothing was tested) are real outcomes and both would read as
+a defeat if collapsed into `lost` — and drawing "restating the price pays
+nothing" as a loss teaches the wrong lesson about the one property the whole
+system rests on.
+
+**A LOSS DOES NOT PERFORM.** The read STAYS on a loss — it is information, and
+the one thing that helps somebody call the next one better, so hiding it would
+be less kind rather than more. What goes is the staging: a win reveals in
+steps with confetti and a count-up, a loss arrives all at once and waits. Every
+delay runs through one `step()` that returns 0 unless it is a win, so a new
+element cannot accidentally stage on a defeat.
+
+It fires ONCE and is marked seen ON ARRIVAL rather than on dismissal — a
+student who closes the tab has still had the result put in front of them.
+`unseenSettlements` owns the seen-set so the rule lives with the model, and
+blocked or absent storage counts as already-seen: `recent` re-reports resolved
+markets forever, so without the guard opening the floor would replay a
+student's whole history of losses at them every time.
 
 ## `invoke` returns AN ENVELOPE, and reading it as the payload is invisible
 
@@ -1647,9 +1679,10 @@ another email before this.
   against the crowd's price, the prior blend, cred, and the one rule about who
   may hold a position. Imported by `server.mjs`, never mirrored
 - `src/pages/Competitions.jsx`, `src/components/market/MarketCard.jsx`,
-  `PriceBar.jsx`, `TakeSide.jsx` — the floor, the one card, the price and the
-  gesture; `getMarkets` / `takePosition` / `openMarkMarket` / `reportMark` in
-  `server.mjs` mint, escrow and settle
+  `PriceBar.jsx`, `TakeSide.jsx`, `SettlementReveal.jsx` — the floor, the one
+  card, the price, the gesture and the payoff moment; `getMarkets` /
+  `takePosition` / `openMarkMarket` / `reportMark` in `server.mjs` mint, escrow
+  and settle
 - `src/lib/fnResult.js` — the one unwrap for `functions.invoke`; reading its
   `{ data, error }` envelope as the payload is silent and has shipped twice
 - `src/lib/wagerStatus.js` — the one vocabulary `score_wagers.status` may

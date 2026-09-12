@@ -357,3 +357,108 @@ export function isOpen(market, now = Date.now()) {
     if (closes != null && Number.isFinite(closes) && closes <= now) return false;
     return true;
 }
+
+// ─── Settlement ─────────────────────────────────────────────────────────────
+
+/**
+ * HOW MUCH BETTER YOU READ IT THAN THE ROOM, in points.
+ *
+ * The payout is a squared-error difference, which is the right thing to PAY on
+ * and an impossible thing to explain. "You said 85, the room said 62, it
+ * happened — you were 23 points closer" is the same finding in a sentence a
+ * student can check by subtracting two numbers they can both see.
+ *
+ * Absolute error, not squared, precisely so it stays checkable. THE SIGN
+ * CANNOT DISAGREE WITH THE PAYOUT: |a| < |b| exactly when a² < b², so a
+ * positive edge is always a positive payout and the screen can never praise a
+ * call that lost cred. A test pins that.
+ */
+export function edgePoints(p, price, outcome) {
+    const o = outcome ? 1 : 0;
+    const mine = Math.abs(clampP(p) - o);
+    const room = Math.abs(clampP(price) - o);
+    return Math.round((room - mine) * 100);
+}
+
+/**
+ * What happened to YOUR position on a resolved market, or null.
+ *
+ * `kind` is four cases and not two, because the two extra ones are real and
+ * both would read as a loss if they were collapsed:
+ *
+ *   won   — you were closer than the room and it paid.
+ *   lost  — the room was closer.
+ *   level — you agreed with the price. The rule pays EXACTLY zero for that by
+ *           design, and a screen that drew it as a defeat would be teaching the
+ *           wrong lesson about the one property the whole system rests on.
+ *   void  — nothing was tested, so nobody was right. Stake back, whole.
+ */
+export function settlementOf(market, email) {
+    if (!market || market.status === "open") return null;
+    const me = String(email || "").toLowerCase();
+    const mine = (market.positions || []).find(
+        (p) => String(p.user_email || "").toLowerCase() === me || p.is_me);
+    if (!mine || !mine.settled_at) return null;
+
+    const voided = market.status === "void";
+    const outcome = !!market.outcome;
+    const payout = voided ? 0 : Math.round(Number(mine.payout) || 0);
+    const stake = Math.max(0, Number(mine.stake) || 0);
+
+    return {
+        id: market.id,
+        title: market.title,
+        kind: voided ? "void" : payout > 0 ? "won" : payout < 0 ? "lost" : "level",
+        outcome: voided ? null : outcome,
+        side: sideOf(mine.p),
+        said: Math.round(clampP(mine.p) * 100),
+        room: Math.round(clampP(mine.price_at_entry) * 100),
+        edge: voided ? 0 : edgePoints(mine.p, mine.price_at_entry, outcome),
+        payout,
+        stake,
+        // What actually lands back in the balance. Never negative: the stake was
+        // escrowed and the payout is bounded by it.
+        returned: voided ? stake : Math.max(0, stake + payout),
+    };
+}
+
+const SETTLED_SEEN_KEY = "acedit.markets.settled.seen";
+
+function seenSettlements() {
+    try {
+        const raw = localStorage.getItem(SETTLED_SEEN_KEY);
+        const arr = raw ? JSON.parse(raw) : [];
+        return new Set(Array.isArray(arr) ? arr : []);
+    } catch {
+        // BLOCKED STORAGE COUNTS AS ALREADY-SEEN. Replaying somebody's loss at
+        // them on every single page load is far worse than never showing it —
+        // the rule the old SettlementReveal kept, and the reason it is stated
+        // here rather than left to the component.
+        return null;
+    }
+}
+
+export function markSettlementsSeen(ids = []) {
+    try {
+        const s = seenSettlements() || new Set();
+        ids.forEach((id) => id && s.add(id));
+        localStorage.setItem(SETTLED_SEEN_KEY, JSON.stringify([...s].slice(-300)));
+    } catch { /* the guard above already treats this as seen */ }
+}
+
+/**
+ * Results this device has not shown yet, quietest FIRST.
+ *
+ * A Monday sweep can settle several at once, and a batch that opens on its
+ * biggest number and trails off is an anticlimax — the same ordering
+ * `AchievementUnlock` arrived at. Zero-payout and void results sort before the
+ * ones with something at stake.
+ */
+export function unseenSettlements(markets = [], email = null) {
+    const seen = seenSettlements();
+    if (seen === null) return [];
+    return markets
+        .map((m) => settlementOf(m, email))
+        .filter((s) => s && !seen.has(s.id))
+        .sort((a, b) => Math.abs(a.payout) - Math.abs(b.payout));
+}

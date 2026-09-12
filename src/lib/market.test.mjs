@@ -20,6 +20,7 @@ import {
     clampStake, STAKE_MIN, STAKE_MAX, CRED_WEEKLY_GRANT, CRED_BALANCE_CAP,
     KINDS, blockReason, canTakePosition,
     readMarket, markToMarket, heatOf, sortBoard, isOpen,
+    edgePoints, settlementOf, unseenSettlements, markSettlementsSeen,
 } from "@/lib/market";
 
 let passed = 0;
@@ -295,5 +296,147 @@ check("a market past its close is not open, whatever its status says", () => {
     assert.equal(isOpen({ status: "open" }, now), true, "no clock is fine");
     assert.equal(isOpen(null, now), false);
 });
+
+// ─── settlement ─────────────────────────────────────────────────────────────
+
+const settled = (over, mine) => ({
+    id: "m1", title: "Will Priya study 5+ days this week?",
+    status: "resolved", outcome: over, prior: 0.5,
+    positions: [{ ...mine, user_email: "me@x.com", settled_at: "2026-09-08T00:00:00Z" }],
+});
+
+check("THE EDGE AND THE PAYOUT CAN NEVER DISAGREE IN SIGN", () => {
+    // The reveal prints "you read that 23 points better than the room" beside
+    // a cred figure. The edge is an ABSOLUTE error difference so a student can
+    // check it by subtracting two numbers they can both see; the payout is
+    // squared. |a| < |b| exactly when a² < b², so the signs always agree — and
+    // if they ever did not, the screen would praise a call that lost cred.
+    for (const price of [0.1, 0.3, 0.5, 0.7, 0.9]) {
+        for (let p = 0; p <= 1.0001; p += 0.05) {
+            for (const o of [true, false]) {
+                const e = edgePoints(p, price, o);
+                const x = payoutFor(100, p, price, o);
+                if (e > 0) assert.ok(x >= 0, `edge +${e} but payout ${x}`);
+                if (e < 0) assert.ok(x <= 0, `edge ${e} but payout ${x}`);
+            }
+        }
+    }
+});
+
+check("the edge is what a student can check by subtracting", () => {
+    // Said 85, room said 62, it happened: you were 15 off, they were 38 off.
+    assert.equal(edgePoints(0.85, 0.62, true), 23);
+    assert.equal(edgePoints(0.62, 0.62, true), 0, "agreeing with the room is a zero edge");
+});
+
+check("a win reads as a win, with both numbers on it", () => {
+    const s = settlementOf(settled(true, { p: 0.85, stake: 100, price_at_entry: 0.62, payout: 41 }), "me@x.com");
+    assert.equal(s.kind, "won");
+    assert.equal(s.said, 85);
+    assert.equal(s.room, 62);
+    assert.equal(s.edge, 23);
+    assert.equal(s.payout, 41);
+    assert.equal(s.returned, 141, "stake plus payout comes back");
+});
+
+check("a loss never returns a negative", () => {
+    const s = settlementOf(settled(false, { p: 0.85, stake: 100, price_at_entry: 0.62, payout: -41 }), "me@x.com");
+    assert.equal(s.kind, "lost");
+    assert.ok(s.edge < 0);
+    assert.equal(s.returned, 59, "the stake was escrowed, so what comes back is stake + payout");
+    const wipeout = settlementOf(settled(false, { p: 0.97, stake: 100, price_at_entry: 0.5, payout: -100 }), "me@x.com");
+    assert.equal(wipeout.returned, 0, "a maximally wrong call returns nothing, never less");
+});
+
+check("AGREEING WITH THE ROOM IS ITS OWN CASE, NOT A LOSS", () => {
+    // The rule pays exactly zero for restating the price, by design. Drawing
+    // that as a defeat would teach the wrong lesson about the one property the
+    // whole system rests on.
+    const s = settlementOf(settled(true, { p: 0.62, stake: 100, price_at_entry: 0.62, payout: 0 }), "me@x.com");
+    assert.equal(s.kind, "level");
+    assert.equal(s.returned, 100, "the stake comes back whole");
+});
+
+check("a void is its own case too, and returns the stake", () => {
+    const m = settled(true, { p: 0.9, stake: 80, price_at_entry: 0.5, payout: 0 });
+    m.status = "void"; m.outcome = null;
+    const s = settlementOf(m, "me@x.com");
+    assert.equal(s.kind, "void");
+    assert.equal(s.outcome, null, "nothing was tested, so there is no verdict to print");
+    assert.equal(s.returned, 80);
+});
+
+check("nothing to reveal without a settled position of your own", () => {
+    assert.equal(settlementOf({ status: "open", positions: [] }, "me@x.com"), null);
+    assert.equal(settlementOf(settled(true, { p: 0.8, stake: 10, price_at_entry: 0.5, payout: 3 }), "other@x.com"), null,
+        "watching somebody else's resolve is a feed row, not a takeover");
+    const unsettled = settled(true, { p: 0.8, stake: 10, price_at_entry: 0.5, payout: 3 });
+    unsettled.positions[0].settled_at = null;
+    assert.equal(settlementOf(unsettled, "me@x.com"), null);
+});
+
+/** A working localStorage, since node has none and "no storage" means "seen". */
+function withStorage(fn) {
+    const store = new Map();
+    const real = globalThis.localStorage;
+    globalThis.localStorage = {
+        getItem: (k) => store.get(k) ?? null,
+        setItem: (k, v) => store.set(k, v),
+    };
+    try { return fn(); }
+    finally { if (real === undefined) delete globalThis.localStorage; else globalThis.localStorage = real; }
+}
+
+check("NO STORAGE AT ALL IS ALSO 'ALREADY SEEN'", () => {
+    // node has no localStorage, and neither does a server render. The read
+    // throws, which is caught, and nothing is revealed — the safe direction.
+    assert.deepEqual(unseenSettlements([{
+        id: "x", title: "t", status: "resolved", outcome: true, prior: 0.5,
+        positions: [{ is_me: true, p: 0.8, stake: 10, price_at_entry: 0.5, payout: 3,
+            settled_at: "2026-09-08T00:00:00Z" }],
+    }], "me@x.com"), []);
+});
+
+check("a batch plays QUIETEST FIRST", () => withStorage(() => {
+    // A run that opens on its biggest number and trails off is an anticlimax —
+    // the ordering AchievementUnlock arrived at, for the same reason.
+    const mk = (id, payout) => ({
+        id, title: id, status: "resolved", outcome: true, prior: 0.5,
+        positions: [{ is_me: true, p: 0.8, stake: 100, price_at_entry: 0.5,
+            payout, settled_at: "2026-09-08T00:00:00Z" }],
+    });
+    const order = unseenSettlements([mk("big", 60), mk("nil", 0), mk("mid", -20)], "me@x.com")
+        .map((r) => r.id);
+    assert.deepEqual(order, ["nil", "mid", "big"]);
+}));
+
+check("BLOCKED STORAGE COUNTS AS ALREADY-SEEN", () => {
+    // Replaying somebody's loss at them on every page load is far worse than
+    // never showing it. Asserted against a localStorage that throws.
+    const real = globalThis.localStorage;
+    globalThis.localStorage = { getItem() { throw new Error("blocked"); },
+        setItem() { throw new Error("blocked"); } };
+    try {
+        const m = { id: "x", title: "t", status: "resolved", outcome: true, prior: 0.5,
+            positions: [{ is_me: true, p: 0.8, stake: 10, price_at_entry: 0.5, payout: 3,
+                settled_at: "2026-09-08T00:00:00Z" }] };
+        assert.deepEqual(unseenSettlements([m], "me@x.com"), []);
+        markSettlementsSeen(["x"]);   // must not throw
+    } finally {
+        if (real === undefined) delete globalThis.localStorage; else globalThis.localStorage = real;
+    }
+});
+
+check("and it fires ONCE — a seen result never comes back", () => withStorage(() => {
+    {
+        const m = { id: "one", title: "t", status: "resolved", outcome: true, prior: 0.5,
+            positions: [{ is_me: true, p: 0.8, stake: 10, price_at_entry: 0.5, payout: 3,
+                settled_at: "2026-09-08T00:00:00Z" }] };
+        assert.equal(unseenSettlements([m], "me@x.com").length, 1);
+        markSettlementsSeen(["one"]);
+        assert.deepEqual(unseenSettlements([m], "me@x.com"), [],
+            "the server self-heals and re-reports resolved markets forever");
+    }
+}));
 
 console.log(`\n${passed} passed`);
