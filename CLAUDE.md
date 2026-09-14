@@ -1403,6 +1403,33 @@ Layout stands AceIntro and AceBuddy down while it runs; they share the corner
 and the mascot. It goes quiet on the payment flow, because the wizard sends
 premium-intent signups straight to /Subscription.
 
+## The science rail folds away
+
+`NeuroPanel` is 380px of every Study screen, on every technique, permanently —
+and it is REFERENCE. Read once, maybe twice, then sitting beside the thing the
+student actually opened the page to do. A timer running next to a brain diagram
+is the diagram winning an argument it should not be having.
+
+It collapses now, and **the grid goes with it**: keeping the 380px column and
+putting a bar in it would leave the tool at the same width with a hole beside
+it, which is the whole thing the student was collapsing. One column, and the
+technique takes the page.
+
+**It is not deleted and it does not hide itself.** What is worth reading once is
+worth being able to find again, so the collapsed state is a real control that
+NAMES what is behind it — "The science behind Pomodoro" — rather than a chevron
+on nothing.
+
+**ONE preference for every technique**, keyed `acedit.study.science`. A student
+who folds it away on Pomodoro has said what they think of a reference rail;
+asking again on Active Recall is the app not listening. It defaults OPEN —
+folding somebody's content away for them on a first visit is not the app's
+decision to make — and a blocked or absent `localStorage` costs a render rather
+than a crash, the same posture every other stored preference here takes.
+
+Sticky only while it is a rail. A one-line bar that follows the page down is a
+thing stuck to the screen for no reason.
+
 ## Study intent
 
 The Dashboard modal asks what today is for (homework / cramming / free study)
