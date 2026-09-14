@@ -282,70 +282,22 @@ export function retrievalStrength(quizzes = [], attempts = [], now = Date.now())
     return out.sort((a, b) => a.strength - b.strength);
 }
 
-// ─── 4. One queue, because a student has one next thing ─────────────────────
-
-/**
- * What to work on, in order.
- *
- * ─── Why this replaced three panels ─────────────────────────────────────────
- * The rail used to be "Where you're losing marks", "What the verb is costing
- * you" and "Fading fastest", stacked. Add the mistake bank panel and the
- * "Next quiz" strip on the same page and a student opening Quizzes was told
- * four different things to do next, each with its own heading, its own bar
- * chart and its own idea of what mattered. Four next moves is no next move;
- * choosing between them is work the app is supposed to have already done.
- *
- * So the diagnosis panels moved to /MistakeBank — the screen whose entire job
- * is "what am I getting wrong, and am I fixing it" — and what stays here is
- * the one thing this page can act on: a single ordered list, with a button
- * that plays it.
- *
- * ─── The order is by KIND first, and that is deliberate ─────────────────────
- * A question you have now missed twice is EVIDENCE. A quiz that is fading is
- * an ESTIMATE off a decay curve fitted to nobody's data, and the panel has
- * always said so. Blending them into one number would have meant inventing an
- * exchange rate between the two — how many days of estimated decay equal one
- * demonstrated miss — and then presenting the result as though it were
- * measured. Evidence first, estimate second, each sorted by its own measure,
- * and every row says which it is and why it is there.
- */
-export function workQueue(quizzes = [], attempts = [], { limit = 6, now = Date.now() } = {}) {
-    const spots = weakSpots(attempts, { limit: 20 });
-    const fading = retrievalStrength(quizzes, attempts, now).filter(f => f.overdue);
-
-    const misses = spots.map(s => ({
-        id: `miss:${s.key}`,
-        kind: "miss",
-        title: s.question,
-        where: s.quizTitle,
-        // The count IS the reason. "Missed 4 of 4" needs no interpreting and
-        // cannot be argued with, which is the whole advantage evidence has
-        // over an estimate.
-        detail: `missed ${s.missed} of ${s.seen}`,
-        term: s.commandTerm?.term || null,
-        quizId: s.quizId,
-        qIndex: s.qIndex,
-        spot: s,
-    }));
-
-    const stale = fading.map(f => ({
-        id: `fade:${f.key}`,
-        kind: "fade",
-        title: f.title,
-        where: null,
-        detail: `${f.lastScore}% · ${f.daysSince === 0 ? "today" : `${f.daysSince}d ago`}`,
-        quizId: f.quizId,
-        strength: f.strength,
-        fade: f,
-    }));
-
-    return {
-        rows: [...misses, ...stale].slice(0, limit),
-        misses,
-        stale,
-        total: misses.length + stale.length,
-    };
-}
+// ─── 4. The queue that used to live here ────────────────────────────────────
+//
+// `workQueue` is deleted. It fed the "What to work on" rail beside the quiz
+// shelf — questions missed more than once, then quizzes due a retake — and
+// /MistakeBank answers both of those properly: `redoQueue` below is the same
+// evidence, and the individual dropped marks are that page's whole reason to
+// exist. Two screens ordering the same work differently is how a student stops
+// believing either, and the rail was the smaller and less capable of the two
+// while taking 380px off the shelf it sat beside.
+//
+// `weakSpots`, `retrievalStrength` and `buildDrillQuestions` above are what it
+// was built from. They now have no caller — they were already close to it
+// before this — and are kept rather than swept up: this project has twice
+// found that an "unused" symbol here marked a half-wired feature rather than
+// dead code, and all three are tested, general, and the obvious material for
+// anything that wants to rank weak questions again.
 
 // ─── 5. The redo queue ──────────────────────────────────────────────────────
 

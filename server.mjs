@@ -7214,6 +7214,83 @@ async function refreshAcedItATAR(email, force = false) {
   }
 }
 
+/**
+ * THE ATAR GOES STALE ON THE CLOCK ALONE, and until now nothing noticed.
+ *
+ * It is a TRAILING 28-DAY score, so a student's number changes for two reasons:
+ * new work, and old work ageing out of the window. `refreshAcedItATAR` only
+ * ever ran on the student's OWN activity — fired from `awardXP`, or forced when
+ * they opened Ranked — so the second reason had no trigger at all.
+ *
+ * A student who stops logging in therefore keeps the score they had on the day
+ * they left, indefinitely. Not merely stale: WRONG, and wrong in a direction
+ * that costs everybody else. Their 28-day window is emptying while the board
+ * still ranks them on a full one, so they sit above students who are actually
+ * studying, and nothing ever moves them.
+ *
+ * ─── A BOUNDED SWEEP, AFTER THE RESPONSE ────────────────────────────────────
+ * Recomputing all 300 board rows on every load is not an option: each compute
+ * pages `xp_events` and hits four more tables, so a full pass is hundreds of
+ * round trips with a student waiting on it. Instead the stalest few are
+ * refreshed AFTER the payload has gone out — fire-and-forget, exactly as
+ * `awardXP` already calls this — so the viewer waits for nothing and the board
+ * converges over the next few loads.
+ *
+ * The window moves in DAYS, so once a day is as live as this measure can
+ * meaningfully be; `ATAR_STALE_HOURS` is under 24 so a student does not drift
+ * later and later each day and skip one.
+ *
+ * The viewer is skipped because `getRankedBoards` has just forced theirs. They
+ * are still swept by everybody ELSE's visit, which is what keeps their score
+ * fresh on the Dashboard and every other screen that reads the stored value.
+ *
+ * Like the weekly league's settlement and the market sweep, this is lazy: it
+ * needs somebody to open the board. On a site where that happens several times
+ * a day it converges within one; if Ranked went unvisited for a week, nothing
+ * would move. That is the trade this codebase has taken everywhere rather than
+ * introduce a scheduler, and it is worth knowing.
+ */
+const ATAR_STALE_HOURS = 20;
+const ATAR_SWEEP_BUDGET = 6;
+
+async function sweepStaleATARs(emails = [], viewer = null) {
+  if (!supabaseAdmin || !emails.length) return 0;
+  const cutoff = new Date(Date.now() - ATAR_STALE_HOURS * 3600000).toISOString();
+  const { data: rows, error } = await supabaseAdmin
+    .from("user_profiles")
+    .select("created_by, atar_updated_at")
+    .in("created_by", emails.slice(0, 300));
+  // Destructure `error` on anything whose absence changes a branch: a missing
+  // column here (migration 0022) would otherwise read as "nothing is stale".
+  if (error) {
+    console.warn("[acedit_atar] sweep could not read profiles:", error.message);
+    return 0;
+  }
+
+  const stale = (rows || [])
+    .filter((r) => r.created_by && r.created_by !== viewer)
+    // A profile that has NEVER been computed sorts first: "" precedes every
+    // ISO timestamp, so nulls are picked up before merely-old rows.
+    .filter((r) => !r.atar_updated_at || r.atar_updated_at < cutoff)
+    .sort((a, b) => String(a.atar_updated_at || "")
+      .localeCompare(String(b.atar_updated_at || "")))
+    .slice(0, ATAR_SWEEP_BUDGET);
+
+  let done = 0;
+  // Serial, not Promise.all: six concurrent recomputes each paging xp_events is
+  // a spike on a database nobody is waiting on. Slower is the right trade here.
+  for (const r of stale) {
+    try {
+      await refreshAcedItATAR(r.created_by, true);
+      done += 1;
+    } catch (e) {
+      console.warn("[acedit_atar] sweep failed for one profile:", e?.message || e);
+    }
+  }
+  if (done) console.log(`[acedit_atar] swept ${done} stale score${done === 1 ? "" : "s"}`);
+  return done;
+}
+
 // ─── getRankedBoards — the three boards + my score, one call ───────────────
 app.post("/local-ai/fn/getRankedBoards", async (req, res) => {
   const user = await authenticateRequest(req);
@@ -7275,6 +7352,13 @@ app.post("/local-ai/fn/getRankedBoards", async (req, res) => {
     } catch { /* a board without crests is still a board */ }
 
     const myProfile = profileRows?.[0];
+
+    // Fire-and-forget: the viewer waits for nothing, and the scores of students
+    // who have not logged in start decaying the way a 28-day window says they
+    // should. See sweepStaleATARs.
+    sweepStaleATARs(emails, me).catch((e) =>
+      console.warn("[acedit_atar] sweep hook failed:", e?.message || e));
+
     return res.json({
       success: true,
       me,

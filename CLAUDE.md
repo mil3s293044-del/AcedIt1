@@ -81,6 +81,28 @@ multiplier. And every window query pages (`fetchAllRows`): an unordered
 `.limit(n)` on `xp_events` handed heavy users an arbitrary prefix of their own
 log, which cost them breadth, effort and mastery at once.
 
+**IT GOES STALE ON THE CLOCK ALONE, and for a long time nothing noticed.**
+A trailing-28-day score changes for two reasons: new work, and old work ageing
+OUT of the window. `refreshAcedItATAR` only ever ran on the student's own
+activity — fired from `awardXP`, or forced when they opened Ranked — so the
+second reason had no trigger at all. A student who stopped logging in kept the
+score they had the day they left, forever. Not merely stale: WRONG, and wrong
+in a direction that cost everybody else, because their window was emptying
+while the board still ranked them on a full one.
+
+`sweepStaleATARs` fixes it. `getRankedBoards` fires it FIRE-AND-FORGET once the
+payload has gone out, refreshing the few stalest rows on the board — recomputing
+all 300 is hundreds of round trips with a student waiting on them, so the viewer
+waits for nothing and the board converges over the next few loads. Serial, not
+`Promise.all`: six concurrent recomputes each paging `xp_events` is a spike on a
+database nobody is waiting on. `ATAR_STALE_HOURS` is under 24 so a student does
+not drift later each day and skip one, and a profile never computed sorts first.
+
+Lazy, like the league's settlement and the market sweep: it needs somebody to
+open Ranked. Several visits a day converges within one; a week with nobody on
+the board and nothing moves. That is the trade this codebase takes everywhere
+rather than introduce a scheduler.
+
 Client mirror of the band thresholds is `src/lib/atarBands.js`. Server is the
 source of truth; keep them in sync.
 
@@ -216,18 +238,38 @@ cannot be trusted and are skipped rather than half-believed. The split rule
 everywhere: a retry COUNTS as activity ("3 tries") and never as a MEASUREMENT
 (best, average, last score, what is left to fix).
 
-**One page, one next move.** Quizzes carried five: a mistake-bank panel, a
-"next quiz" strip, and a three-panel rail (losing marks / command terms /
-fading fastest). Each was defensible alone; together they were five headings
-answering the same question differently, and choosing between them is work the
-app was supposed to have done. The rail is ONE panel now (`workQueue`), and the
-command-term breakdown moved to /MistakeBank, which is the diagnosis screen.
+**One page, one next move — and eventually NONE.** Quizzes carried five: a
+mistake-bank panel, a "next quiz" strip, and a three-panel rail (losing marks /
+command terms / fading fastest). That collapsed to one rail (`workQueue`), and
+the rail is now gone too: /MistakeBank answers the same question properly —
+questions missed more than once are its "Sit again" tab, individual dropped
+marks are its whole reason to exist — so the rail was a second, smaller answer
+to a question another screen owns, taking 380px off the shelf beside it.
+`workQueue` is deleted; `weakSpots`, `retrievalStrength` and
+`buildDrillQuestions` are what it was built from and are KEPT, with a note
+where it stood, because twice now an "unused" symbol here has marked a
+half-wired feature rather than dead code.
 
-Order inside it is by KIND, deliberately: a question missed twice is EVIDENCE,
-a fading quiz is an ESTIMATE off a curve fitted to nobody's data. Blending them
-would mean inventing an exchange rate between the two and printing it as though
-it were measured, so evidence sorts first, each half sorts by its own measure,
-and a line between them says which is which.
+The single-tab `Tabs` went with it. **A tab bar with exactly one tab is chrome
+pretending to be navigation**: nothing can be switched to, and the only thing
+it carried that was not decoration was the count, which belongs beside a
+heading.
+
+**A PACK IS A FIXED WIDTH, so a wider container does not make the shelf
+better.** `PACK_W` has to stay fixed — the same pack is dealt on the flashcard
+shelf and one per row on a phone is the right call there — so taking the rail's
+380px just moved the dead space from beside the list to the right of it. The
+subject sections are CSS `columns-2` at xl instead: two subjects side by side
+on a wide screen, each keeping its own heading and its own wrapping row.
+Columns rather than a grid so the sections pack tightly instead of leaving a
+ragged cell under the shorter one, and `break-inside-avoid` is what stops a
+subject being split from its packs.
+
+**With no quizzes the whole section is not rendered.** The featured strip above
+already makes the one ask, so a heading, a toolbar and a large dashed empty box
+would be three more things saying "you have none" — and the toolbar's own
+generate button made THREE buttons for one dialog on a single screen, which is
+the exact paper-cut this page had already been through once.
 
 **A MISTAKE AND A QUESTION ARE DIFFERENT SIZES, and they get different
 treatment.** The bank is for small specific errors — a criterion the assessor

@@ -13,7 +13,7 @@
 import assert from "node:assert/strict";
 import {
     isRetryAttempt, isLegacyRetry, baseQuizTitle, weakSpots, retrievalStrength,
-    workQueue, redoQueue, redoQuestions, buildDrillQuestions,
+    redoQueue, redoQuestions, buildDrillQuestions,
 } from "@/lib/quizInsight";
 
 let passed = 0;
@@ -144,25 +144,6 @@ check("the drill rebuilds the real questions, by parent index", () => {
     const qs = buildDrillQuestions(spots, [QUIZ]);
     assert.equal(qs.length, 1);
     assert.equal(qs[0].question, QUIZ.questions[0].question);
-});
-
-// ─── the one queue ──────────────────────────────────────────────────────────
-
-check("evidence sorts above estimate, and each row says which it is", () => {
-    const stale = {
-        quiz_id: "q2", quiz_title: "Legal — Remedies", score: 50, date: ago(90),
-        extra: { question_results: [] },
-    };
-    const q = workQueue([QUIZ, { id: "q2", title: "Legal — Remedies", questions: [] }],
-        [attempt({ date: ago(5) }), attempt({ date: ago(1) }), stale]);
-    assert.equal(q.rows[0].kind, "miss", "a demonstrated miss outranks a decay estimate");
-    assert.ok(q.rows.some(r => r.kind === "fade"));
-    assert.match(q.rows[0].detail, /missed 2 of 2/);
-});
-
-check("a quiz that is not overdue is not in the queue", () => {
-    const fresh = { quiz_id: "q2", quiz_title: "Legal", score: 90, date: ago(0), extra: { question_results: [] } };
-    assert.equal(workQueue([], [fresh]).stale.length, 0);
 });
 
 // ─── the redo queue ─────────────────────────────────────────────────────────
