@@ -105,6 +105,26 @@ export default function Study() {
     const [assessments, setAssessments] = useState([]);
     const [activeTab, setActiveTab] = useState("pomodoro");
 
+    // ── The science rail is a PREFERENCE, answered once ─────────────────────
+    // One key for every technique, not one per technique: a student who folds
+    // it away on Pomodoro has said what they think of a reference rail, and
+    // asking again on Active Recall is the app not listening. Read lazily so a
+    // blocked or absent localStorage costs a render rather than a crash, and
+    // defaults OPEN — folding somebody's content away for them on first visit
+    // is a decision that is not the app's to make.
+    const [scienceOpen, setScienceOpen] = useState(() => {
+        try { return localStorage.getItem("acedit.study.science") !== "closed"; }
+        catch { return true; }
+    });
+    const toggleScience = useCallback(() => {
+        setScienceOpen((wasOpen) => {
+            const next = !wasOpen;
+            try { localStorage.setItem("acedit.study.science", next ? "open" : "closed"); }
+            catch { /* the choice just does not survive the session */ }
+            return next;
+        });
+    }, []);
+
     // Deep links: /Study?tab=spaced_repetition etc. — duel shortcuts land on
     // the exact technique that scores their yardstick.
     useEffect(() => {
@@ -734,8 +754,16 @@ export default function Study() {
                     The tool sits left and the evidence rail fills the space that
                     used to be dead margin. It only splits at xl: below that the
                     rail would squeeze the tool, so it stacks underneath — still
-                    read, just after the thing the student came for. */}
-                <div className="grid xl:grid-cols-[minmax(0,1fr)_380px] gap-6 items-start">
+                    read, just after the thing the student came for.
+
+                    FOLDED AWAY, THE GRID GOES WITH IT. Keeping the 380px column
+                    and putting a bar in it would leave the tool at the same
+                    width with a hole beside it, which is the whole thing the
+                    student was collapsing. One column, and the technique takes
+                    the page. */}
+                <div className={scienceOpen
+                    ? "grid xl:grid-cols-[minmax(0,1fr)_380px] gap-6 items-start"
+                    : "space-y-4"}>
                     <motion.div
                         key={activeTab}
                         initial={{ opacity: 0, y: 12 }}
@@ -746,10 +774,15 @@ export default function Study() {
                         {techniqueComponents[activeTab]}
                     </motion.div>
 
-                    <div className="xl:sticky xl:top-6">
+                    {/* Sticky only while it is a rail. A one-line bar that
+                        follows the page down is a thing stuck to the screen for
+                        no reason. */}
+                    <div className={scienceOpen ? "xl:sticky xl:top-6" : ""}>
                         <NeuroPanel
                             techniqueId={activeTab}
                             techniqueName={(TECHNIQUES.find(t => t.id === activeTab) || {}).name || "this"}
+                            open={scienceOpen}
+                            onToggle={toggleScience}
                         />
                     </div>
                 </div>

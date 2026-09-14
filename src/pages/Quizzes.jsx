@@ -1320,34 +1320,51 @@ Return valid JSON only.`,
                                 </div>
                             </div>
                         ) : filteredQuizzes.length > 0 ? (
-                            /* ── THE FREED WIDTH GOES TO THE SHELF ───────────
-                               A pack is a FIXED width (`PACK_W`, and it has to
-                               be — the same pack is dealt on the flashcard
-                               shelf and one per row on a phone is the right
-                               call there), so a wider container does not make
-                               the cards bigger. Left in one column, taking the
-                               rail's 380px just moved the dead space from
-                               beside the list to the right of it.
+                            /* ── ONE SUBJECT PER BAND, SCROLLED THROUGH ──────
+                               This was briefly CSS `columns-2`, on the
+                               reasoning that a fixed-width pack cannot use the
+                               width the rail gave back. Against real data it
+                               was worse, and obviously so: most students have
+                               one or two quizzes per subject, so the columns
+                               filled with single cards at unequal heights and
+                               the page became a zigzag of headings starting at
+                               four different vertical positions. Balancing a
+                               masonry needs sections of comparable size and
+                               these are not.
 
-                               Two COLUMNS of subjects at xl instead. Each
-                               subject keeps its own heading and its own
-                               wrapping row of packs, two subjects sit side by
-                               side on a wide screen, and the width is used by
-                               the thing the page is for. CSS columns rather
-                               than a grid so the sections pack tightly instead
-                               of leaving a ragged cell under the shorter one —
-                               `break-inside-avoid` is what keeps a subject and
-                               its packs from being split down the middle. */
-                            <div className="space-y-6 xl:columns-2 xl:gap-8 xl:space-y-0">
+                               Stacked bands instead — one subject, one row,
+                               scrolled through. The rhythm is the point: every
+                               heading starts at the same x, so the eye runs
+                               straight down the subjects instead of hunting
+                               for the next one. */
+                            <div className="space-y-7">
                                 {Object.entries(quizzesBySubject).map(([subjectName, subjectQuizzes]) => {
                                     const userSubject = userSubjects.find(s => s.subject_name === subjectName);
                                     const tone = subjectColor(userSubject);
                                     return (
-                                        <div key={subjectName} className="break-inside-avoid xl:mb-8">
+                                        <div key={subjectName}>
+                                            {/* A RULE TO THE END OF THE ROW is what
+                                                makes a left-aligned row of
+                                                fixed-width cards read as a
+                                                shelf rather than as a hole: it
+                                                terminates the band, so the
+                                                space to the right of two packs
+                                                is margin somebody chose rather
+                                                than somewhere content failed to
+                                                reach. Free, and it does the job
+                                                the columns were attempting.
+
+                                                A colour SPINE, not a dot —
+                                                Subjects identifies a subject by
+                                                a spine down its row, and the
+                                                two shelves in this app that
+                                                list a student's own work should
+                                                not label them differently. */}
                                             <div className="flex items-center gap-2.5 mb-3">
-                                                <div className="w-3 h-3 rounded-full flex-shrink-0" style={{ backgroundColor: tone }} />
-                                                <h3 className="font-bold text-foreground">{subjectName}</h3>
-                                                <span className="text-xs text-muted-foreground/60">{subjectQuizzes.length} quiz{subjectQuizzes.length !== 1 ? 'zes' : ''}</span>
+                                                <span className="w-1.5 h-5 rounded-full flex-shrink-0" style={{ backgroundColor: tone }} />
+                                                <h3 className="font-display font-extrabold text-foreground">{subjectName}</h3>
+                                                <span className="text-xs font-bold text-muted-foreground/50 tabular-nums">{subjectQuizzes.length}</span>
+                                                <span className="flex-1 h-px bg-border" aria-hidden="true" />
                                             </div>
                                             {/* A shelf, not a grid. Same row of
                                                 packs the flashcard decks are

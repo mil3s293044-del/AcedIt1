@@ -258,12 +258,26 @@ heading.
 **A PACK IS A FIXED WIDTH, so a wider container does not make the shelf
 better.** `PACK_W` has to stay fixed — the same pack is dealt on the flashcard
 shelf and one per row on a phone is the right call there — so taking the rail's
-380px just moved the dead space from beside the list to the right of it. The
-subject sections are CSS `columns-2` at xl instead: two subjects side by side
-on a wide screen, each keeping its own heading and its own wrapping row.
-Columns rather than a grid so the sections pack tightly instead of leaving a
-ragged cell under the shorter one, and `break-inside-avoid` is what stops a
-subject being split from its packs.
+380px just moved the dead space from beside the list to the right of it.
+
+The first answer was CSS `columns-2` at xl, and against REAL DATA it was
+worse. Most students have one or two quizzes per subject, so the columns filled
+with single cards at unequal heights and the page became a zigzag of headings
+starting at four different vertical positions. Balancing a masonry needs
+sections of comparable size and these are not — which a fixture of three
+quizzes per subject hid completely, and one screenshot of a real account made
+obvious. **Check a layout against the shape of the data somebody actually has.**
+
+It is stacked bands — one subject, one row, scrolled through. **The rhythm is
+what makes it read:** every heading starts at the same x, so the eye runs
+straight down the subjects instead of hunting for the next one. And each header
+ends in A RULE TO THE END OF THE ROW, which is what turns a left-aligned row of
+fixed-width cards from a hole into a shelf: the rule terminates the band, so
+the space beside two packs is margin somebody chose rather than somewhere
+content failed to reach. Free, and it does the job the columns were attempting.
+The colour is a SPINE rather than a dot, because Subjects already identifies a
+subject that way and the two shelves listing a student's own work should not
+label them differently.
 
 **With no quizzes the whole section is not rendered.** The featured strip above
 already makes the one ask, so a heading, a toolbar and a large dashed empty box
@@ -1388,6 +1402,33 @@ Two rules it exists to keep:
 Layout stands AceIntro and AceBuddy down while it runs; they share the corner
 and the mascot. It goes quiet on the payment flow, because the wizard sends
 premium-intent signups straight to /Subscription.
+
+## The science rail folds away
+
+`NeuroPanel` is 380px of every Study screen, on every technique, permanently —
+and it is REFERENCE. Read once, maybe twice, then sitting beside the thing the
+student actually opened the page to do. A timer running next to a brain diagram
+is the diagram winning an argument it should not be having.
+
+It collapses now, and **the grid goes with it**: keeping the 380px column and
+putting a bar in it would leave the tool at the same width with a hole beside
+it, which is the whole thing the student was collapsing. One column, and the
+technique takes the page.
+
+**It is not deleted and it does not hide itself.** What is worth reading once is
+worth being able to find again, so the collapsed state is a real control that
+NAMES what is behind it — "The science behind Pomodoro" — rather than a chevron
+on nothing.
+
+**ONE preference for every technique**, keyed `acedit.study.science`. A student
+who folds it away on Pomodoro has said what they think of a reference rail;
+asking again on Active Recall is the app not listening. It defaults OPEN —
+folding somebody's content away for them on a first visit is not the app's
+decision to make — and a blocked or absent `localStorage` costs a render rather
+than a crash, the same posture every other stored preference here takes.
+
+Sticky only while it is a rail. A one-line bar that follows the page down is a
+thing stuck to the screen for no reason.
 
 ## Study intent
 

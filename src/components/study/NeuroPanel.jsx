@@ -15,7 +15,7 @@
  */
 import React, { useState } from "react";
 import { motion } from "framer-motion";
-import { ChevronDown, BookOpen, TrendingUp, AlertTriangle, Sparkles,
+import { ChevronDown, BookOpen, TrendingUp, AlertTriangle, Sparkles, Brain,
 } from "lucide-react";
 import BrainModel from "./BrainModel";
 import EvidenceChart from "./EvidenceChart";
@@ -30,11 +30,40 @@ const TONE_PILL = {
     streak: "bg-streak/15 text-streak", map: "bg-map/15 text-map",
 };
 
-export default function NeuroPanel({ techniqueId, techniqueName }) {
+export default function NeuroPanel({ techniqueId, techniqueName, open = true, onToggle }) {
     const data = TECHNIQUE_NEURO[techniqueId];
     const [showSources, setShowSources] = useState(false);
     if (!data) return null;
     const utility = data.utility ? UTILITY[data.utility] : null;
+
+    // ── COLLAPSED: a bar, and the tool gets the width ───────────────────────
+    //
+    // This rail is 380px of the screen on every technique, permanently, and it
+    // is REFERENCE — read once, maybe twice, then in the way of the thing the
+    // student actually opened the page to do. A timer running next to a brain
+    // diagram is the diagram winning an argument it should not be having.
+    //
+    // It is not deleted, and it does not hide itself: what is worth reading
+    // once is worth being able to find again, so the collapsed state is a real
+    // control that names what is behind it rather than a chevron on nothing.
+    // Study remembers the choice, so this is answered once and not per visit.
+    if (!open) {
+        return (
+            <button
+                type="button"
+                onClick={onToggle}
+                aria-expanded={false}
+                className="w-full flex items-center gap-2.5 rounded-2xl border-2 border-border
+                    bg-surface px-4 py-3 text-left hover:border-foreground/20 transition-colors"
+            >
+                <Brain className="w-4 h-4 text-muted-foreground flex-shrink-0" />
+                <span className="stat-label text-muted-foreground flex-1 min-w-0 truncate">
+                    The science behind {techniqueName}
+                </span>
+                <ChevronDown className="w-4 h-4 text-muted-foreground flex-shrink-0" />
+            </button>
+        );
+    }
 
     // One column as a side rail; two when it stacks under the tool and has the
     // width, so the space it gains is used rather than spent on 1100px-long
@@ -48,6 +77,23 @@ export default function NeuroPanel({ techniqueId, techniqueName }) {
             className="grid gap-3 items-start md:grid-cols-2 xl:grid-cols-1"
             aria-label={`The science behind ${techniqueName}`}
         >
+            {/* The way out. In the grid's flow rather than floated over a card,
+                so it cannot land on top of the brain at the width where the
+                rail becomes two columns. */}
+            <button
+                type="button"
+                onClick={onToggle}
+                aria-expanded
+                className="md:col-span-2 xl:col-span-1 w-full flex items-center gap-2.5
+                    rounded-2xl border-2 border-border bg-surface px-4 py-2.5 text-left
+                    hover:border-foreground/20 transition-colors"
+            >
+                <Brain className="w-4 h-4 text-muted-foreground flex-shrink-0" />
+                <span className="stat-label text-muted-foreground flex-1 min-w-0 truncate">
+                    The science behind {techniqueName}
+                </span>
+                <ChevronDown className="w-4 h-4 text-muted-foreground flex-shrink-0 rotate-180" />
+            </button>
             {/* ── The brain ──────────────────────────────────────────────── */}
             <div className="rounded-3xl border-2 border-border bg-gradient-to-b from-secondary/40 to-transparent overflow-hidden">
                 <div className="flex items-center gap-2 px-4 pt-4">
