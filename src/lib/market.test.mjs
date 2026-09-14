@@ -21,6 +21,7 @@ import {
     KINDS, blockReason, canTakePosition,
     readMarket, markToMarket, heatOf, sortBoard, isOpen,
     edgePoints, settlementOf, unseenSettlements, markSettlementsSeen,
+    multiplierOf, multiplierLabel, multipliers, priceHistory, featuredOf,
 } from "@/lib/market";
 
 let passed = 0;
@@ -438,5 +439,189 @@ check("and it fires ONCE — a seen result never comes back", () => withStorage(
             "the server self-heals and re-reports resolved markets forever");
     }
 }));
+
+// ─── Multipliers: the reading, and only the reading ─────────────────────────
+
+check("a multiplier is 1/price, and the two sides are reciprocal complements", () => {
+    assert.equal(multiplierOf(0.5, YES).toFixed(2), "2.00");
+    assert.equal(multiplierOf(0.5, NO).toFixed(2), "2.00");
+    assert.equal(multiplierOf(0.62, YES).toFixed(2), "1.61");
+    assert.equal(multiplierOf(0.62, NO).toFixed(2), "2.63");
+    // The pair always implies one whole outcome between them.
+    for (const p of [0.05, 0.2, 0.5, 0.77, 0.95]) {
+        const inv = 1 / multiplierOf(p, YES) + 1 / multiplierOf(p, NO);
+        assert.ok(Math.abs(inv - 1) < 1e-9, `sides must sum to one at ${p}`);
+    }
+});
+
+check("MONEY ON A SIDE SHORTENS IT — the whole reason this reads as a market", () => {
+    const m = { prior: 0.5 };
+    const before = priceOf(m, []);
+    const after = priceOf(m, [{ p: 0.9, stake: 400 }]);
+    assert.ok(after > before, "yes conviction must raise the price");
+    assert.ok(multiplierOf(after, YES) < multiplierOf(before, YES), "yes must shorten");
+    assert.ok(multiplierOf(after, NO) > multiplierOf(before, NO), "no must lengthen");
+});
+
+check("odds are floored rather than infinite at the ends", () => {
+    assert.ok(Number.isFinite(multiplierOf(0, YES)));
+    assert.ok(Number.isFinite(multiplierOf(1, NO)));
+    assert.equal(multiplierLabel(multiplierOf(0, YES)), "100×");
+    assert.equal(multiplierLabel(NaN), "—");
+    assert.equal(multiplierLabel(1.6129), "1.61×");
+    assert.equal(multiplierLabel(12.44), "12.4×");
+    assert.equal(multiplierLabel(45.7), "46×");
+});
+
+check("THE MULTIPLIER IS NEVER THE PAYOUT, and the gap is large", () => {
+    // The exact case market.js documents: 100 at 85¢ into a 62¢ market.
+    const paid = payoutFor(100, 0.85, 0.62, true);
+    const asOdds = Math.round(100 * (multipliers(0.62).yes - 1));
+    assert.equal(paid, 12);
+    assert.equal(asOdds, 61);
+    assert.ok(paid < asOdds / 3,
+        "if these ever converge, printing odds next to a stake stops being a lie");
+});
+
+// ─── The tape ───────────────────────────────────────────────────────────────
+
+const tapeMarket = { prior: 0.4, status: "open", opens_at: "2026-09-07T00:00:00Z" };
+const tapePositions = (() => {
+    const out = [];
+    let t = Date.parse("2026-09-08T09:00:00Z");
+    for (const [p, stake] of [[0.9, 300], [0.15, 200], [0.8, 100]]) {
+        out.push({
+            p, stake, price_at_entry: priceOf(tapeMarket, out),
+            created_date: new Date(t).toISOString(), user_name: "Someone",
+        });
+        t += 7200e3;
+    }
+    return out;
+})();
+
+check("THE TAPE REPRODUCES price_at_entry EXACTLY — it is a replay, not a guess", () => {
+    const h = priceHistory(tapeMarket, tapePositions, Date.parse("2026-09-11T00:00:00Z"));
+    const steps = h.points.filter((x) => x.kind === "trade");
+    assert.equal(steps.length, 3);
+    tapePositions.forEach((pos, i) => {
+        // The price BEFORE step i is the point before it on the tape.
+        assert.ok(Math.abs(h.points[i].price - pos.price_at_entry) < 1e-12,
+            `frozen entry price ${i} must be reconstructible from the positions alone`);
+    });
+});
+
+check("the tape opens on the prior and runs to the right edge", () => {
+    const now = Date.parse("2026-09-11T00:00:00Z");
+    const h = priceHistory(tapeMarket, tapePositions, now);
+    assert.equal(h.points[0].kind, "open");
+    assert.equal(h.points[0].price, 0.4);
+    assert.equal(h.points[h.points.length - 1].kind, "now");
+    assert.equal(h.points[h.points.length - 1].t, now,
+        "without this a quiet market draws as a stub in the corner");
+    assert.equal(h.last, h.points[h.points.length - 1].price);
+    assert.equal(h.change, Math.round((h.last - 0.4) * 100));
+});
+
+check("a market nobody has touched is a flat line at the prior, not an error", () => {
+    const h = priceHistory({ prior: 0.35, status: "open", opens_at: "2026-09-07T00:00:00Z" },
+        [], Date.parse("2026-09-09T00:00:00Z"));
+    assert.equal(h.trades, 0);
+    assert.equal(h.points.length, 2);
+    assert.equal(h.low, 0.35);
+    assert.equal(h.high, 0.35);
+    assert.equal(h.change, 0);
+});
+
+check("A CLOCK SKEW NEVER RUNS THE TAPE BACKWARDS", () => {
+    const m = { prior: 0.5, status: "open", opens_at: "2026-09-08T00:00:00Z" };
+    // Second row stamped BEFORE the first, which a client clock can produce.
+    const h = priceHistory(m, [
+        { p: 0.9, stake: 100, created_date: "2026-09-08T10:00:00Z" },
+        { p: 0.1, stake: 100, created_date: "2026-09-08T09:00:00Z" },
+    ], Date.parse("2026-09-09T00:00:00Z"));
+    for (let i = 1; i < h.points.length; i += 1) {
+        assert.ok(h.points[i].t >= h.points[i - 1].t,
+            "a step landing before the one before it draws as a line doubling back");
+    }
+});
+
+check("zero-stake rows are not steps", () => {
+    const h = priceHistory(tapeMarket,
+        [...tapePositions, { p: 0.9, stake: 0, created_date: "2026-09-09T00:00:00Z" }],
+        Date.parse("2026-09-11T00:00:00Z"));
+    assert.equal(h.trades, 3);
+});
+
+// ─── The special lines ──────────────────────────────────────────────────────
+
+check("every new kind is a variant and not a feature", () => {
+    for (const id of ["versus", "cohort", "longshot", "prep"]) {
+        assert.ok(KINDS[id], `${id} must exist`);
+        assert.ok(KINDS[id].label && KINDS[id].icon && KINDS[id].resolves,
+            `${id} needs a glyph and a sentence — that is all a kind may carry`);
+        assert.equal(KINDS[id].selfResolving, false);
+    }
+    // Two kinds must never print the same kicker, or the board cannot be read.
+    const labels = Object.values(KINDS).map((k) => k.label);
+    assert.equal(new Set(labels).size, labels.length, "kind labels must be distinct");
+});
+
+check("NEITHER SIDE OF A HEAD-TO-HEAD MAY HOLD A POSITION ON IT", () => {
+    const m = { kind: "versus", status: "open", in_contest: true };
+    assert.ok(blockReason(m, "a@x.com"), "a competitor must be blocked");
+    assert.equal(blockReason({ ...m, in_contest: false }, "c@x.com"), null,
+        "everybody else trades it");
+});
+
+check("a cohort or longshot line is open to EVERYONE, deliberately", () => {
+    // Measured by the app out of the study tables; the only way a student can
+    // push one is by studying, which is the outcome the app exists to cause.
+    for (const kind of ["cohort", "longshot", "prep"]) {
+        assert.equal(blockReason({ kind, status: "open", subject_email: "me@x.com" },
+            "me@x.com"), null, `${kind} must not block its own subject`);
+    }
+});
+
+const featureRow = (id, kind, extra = {}) => ({
+    id, kind, status: "open", subject_email: "@board", volume: 10, traders: 2, ...extra });
+
+check("featured is the room's questions, never your own, and never a closed one", () => {
+    const rows = [
+        featureRow("a", "cohort"),
+        featureRow("a2", "longshot"),
+        // About you: already sorts first on the floor, so featuring it too
+        // would print the same card twice on one screen.
+        featureRow("b", "versus", { subject_email: "me@x.com", subject_is_me: true,
+            volume: 99, traders: 9 }),
+        featureRow("c", "streak", { subject_email: "z@x.com", volume: 50, traders: 5 }),
+        featureRow("d", "longshot", { status: "resolved" }),
+    ];
+    const got = featuredOf(rows, "me@x.com", 4).map((m) => m.id).sort();
+    assert.deepEqual(got, ["a", "a2"],
+        "b is yours, c is not a featured kind, d is shut");
+});
+
+check("A FEATURED STRIP IS EVEN, or the two-column grid ends in a hole", () => {
+    const three = [featureRow("x", "cohort"), featureRow("y", "longshot"),
+        featureRow("z", "versus")];
+    assert.equal(featuredOf(three, "me@x.com", 4).length, 2,
+        "the trimmed one is not lost — it falls through to the floor below");
+    assert.equal(featuredOf(three.slice(0, 1), "me@x.com", 4).length, 0,
+        "one card under its own heading is more furniture than content");
+    const five = [...three, featureRow("p", "prep"), featureRow("q", "cohort")];
+    assert.equal(featuredOf(five, "me@x.com", 4).length, 4);
+});
+
+check("FRIENDS SORT, THEY DO NOT FILTER", () => {
+    const rows = [
+        { id: "hot", kind: "streak", status: "open", volume: 900, traders: 9 },
+        { id: "pal", kind: "streak", status: "open", subject_is_friend: true, volume: 5, traders: 1 },
+        { id: "mine", kind: "streak", status: "open", subject_is_me: true, volume: 1, traders: 1 },
+    ];
+    const got = sortBoard(rows, "me@x.com").map((m) => m.id);
+    assert.deepEqual(got, ["mine", "pal", "hot"]);
+    assert.equal(sortBoard(rows, "me@x.com").length, 3,
+        "a friends-only board would give each question five possible traders and kill the price");
+});
 
 console.log(`\n${passed} passed`);

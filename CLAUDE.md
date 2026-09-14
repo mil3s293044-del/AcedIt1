@@ -623,6 +623,57 @@ taken. Cred is granted weekly (`CRED_WEEKLY_GRANT`) and capped
 streak, and the cap stops a student who ignored Compete for a term arriving
 with an unanswerable stack. It is TOPPED UP to the grant rather than added to.
 
+**THE MULTIPLIER IS THE READING AND IS NEVER THE PAYOUT.** `1 / price` is how
+a market prints what it believes, and "1.61× yes / 2.63× no" says *the
+favourite* to somebody who has never met a probability. `priceOf` has always
+moved that way — money on YES shortens YES and lengthens NO — so this is the
+same number in the units people read odds in, not a change to the model.
+
+What it must never do is sit beside a button as though it were the return. The
+payout is a proper scoring rule against the price you entered at, not stake ×
+odds: **100 at 85¢ into a 62¢ market pays +12, where 1.61× would promise +61.**
+A figure that visibly disagrees with the one under it costs the screen its
+credibility, the lesson `quizMarking` learned about a total contradicting its
+own criteria. `market.test.mjs` pins the gap so the two can never converge
+quietly.
+
+Switching to real multiplier payouts was considered and refused. It reopens the
+farm the who-may-resolve rule closed — a market on your own study log is
+allowed deliberately, and under a scoring rule backing a near-certainty you
+control pays ~nothing, while under a multiplier it prints cred — and a
+pari-mutuel needs two sides this board will not have: four people all on YES
+with YES landing means an empty loser pool and a market that pays nothing when
+you were right.
+
+**THE PRICE HISTORY IS ALREADY RECORDED, so nothing about the chart is stored.**
+Every position carries its stake, its probability and its timestamp, and
+`priceOf` is a pure function of the positions standing at the time — so
+replaying them reproduces the path EXACTLY, including every frozen
+`price_at_entry`, with no snapshot table and nothing that can drift from the
+board it describes. `priceHistory` does it; the test asserts the reconstruction
+rather than approximating it.
+
+**It plots the PRICE and prints the multiplier.** A multiplier is not a
+chartable quantity: it is 1/p, so the whole favourite half lives between 1.0×
+and 2.0× while the underdog half runs to infinity, and a market drifting 10¢ →
+5¢ would dwarf every other line on the board. One line, never two — NO is
+100 − YES, so a second line is the first one's reflection. And it is a STEP
+chart because it is a step function: at thirty students a market's week is
+three or four steps with flat stretches between, and smoothing draws a line
+through data that is not there. The steps are the better object anyway, because
+a step knows WHO took it. The y-window is padded but never narrower than
+`MIN_SPAN`, since tight auto-scaling draws a two-point wander as a crash and a
+fixed 0–100 draws every market near even as a flat line.
+
+**"If you're right" was a lie under a scoring rule, and it printed one.** A
+side is not a position here; a DISTANCE FROM THE PRICE is. Take NO at 55% into
+a market already pricing NO at 80¢ and you are further from NO than the price
+is, so the rule pays you when YES lands — and the old panel drew that as "If
+you're right: −16", a negative number under the winning label in the winning
+colour. The tiles name the two OUTCOMES now, the colour follows the sign of the
+money, and when the two disagree the panel says so and names the conviction
+that would actually back your side.
+
 **A MARKET ABOUT YOU SORTS FIRST, whatever its heat.** "Twelve people are
 trading your week" is the single most motivating sentence this app can put on a
 screen and it is most of why this can be a retention engine rather than a
@@ -640,10 +691,91 @@ lesson: `streak` red on a podium read as a warning.
 
 **Minting is automatic, because an empty board kills a market site.** The first
 person to arrive on Monday must find something to trade, and "create the first
-market" is work nobody does. Two questions per student per week, minted on
-demand, deduped by a unique index on (kind, subject, period, ref) so two
-students opening the board in the same second cannot post the same question
-twice with the stakes split between the copies.
+market" is work nobody does. Minted on demand, deduped by a unique index on
+(kind, subject, period, ref) so two students opening the board in the same
+second cannot post the same question twice with the stakes split between the
+copies.
+
+**THE SCARCE RESOURCE IS TRADERS, NOT QUESTIONS, and the first version had it
+exactly backwards.** It minted two markets per member per week over the whole
+`user_profiles` roster: ~264 questions a week about ~132 accounts, most of whom
+had not opened the app since the migration. Against that, ~30 active students
+take maybe 110 positions between them in a week — **under half a trader per
+market**, so most questions ended the week untouched and the floor read as a
+site nobody uses.
+
+The failure was structural rather than cosmetic: supply scaled with SIGNUPS and
+demand scaled with ACTIVES, so the board got worse as the app grew. A market
+has to do the opposite. The target is roughly fifteen to twenty questions,
+which is five to seven traders each and a price that means something.
+
+Three cuts get there, and none of them takes anybody off the board:
+
+- **The activity gate.** Solo markets are minted only about students who have
+  studied inside `MARKET_ACTIVE_DAYS`. Nobody can hold a view on a stranger who
+  last studied in May — and it closes a live farm: a student under
+  `MARKET_MIN_OBS` weeks gets prior 0.5, so "Will <dormant> study 5+ days?"
+  opened at even and resolved NO with near-certainty. Taking NO at 97% paid
+  **+125 on a 500 stake, risk-free**, across two hundred such markets.
+- **One question per person, not two.** Streak and hours about the same student
+  correlate so hard that holding both is one position taken twice. They
+  alternate on the week and the address, so the board is not thirty streak
+  questions one week and thirty hours questions the next.
+- **PAIR THE ROOM UP.** `pairUpRoom` sorts by base rate and pairs neighbours
+  into head-to-heads, so thirty students become fifteen markets with everybody
+  still on the board. Two solo markets about two similar students are two
+  private facts; ONE market asking which of them logs more is a question the
+  whole room can hold a view on. Matched on the prior because an even question
+  is the tradeable one — a mismatch prices at 90¢ and pays nobody. The offset
+  alternates weekly so the same two are not rivals all term, and ties break on
+  the address or two students swap places between board loads.
+
+**The special lines are four more QUESTIONS, not four more objects.** `kind`
+picks a glyph and a sentence and nothing else — same card, same gesture, same
+`payoutFor`, same sweep. That is the line between a variant and a feature, and
+it is the line this rebuild was about. `versus` is the pairing above; `cohort`
+is the whole board's week as one question (best value per row on the floor —
+one market, thirty people with a genuine view, and nobody needs to know the
+subject); `longshot` is deliberately unlikely, with the threshold ESCALATING
+until the base rate is actually long, because a longshot the room clears most
+weeks is a question with a bad name; `prep` comes off an assessment already on
+somebody's planner.
+
+**The planner mints PREP and not a mark market, and that is a deliberate
+deviation.** A SAC mark line is the best content this board has and
+`openMarkMarket` already builds one — on request, by the student it is about.
+Minting those automatically would publish "this person has a Chemistry SAC on
+Friday" and put a sixteen-year-old's mark up for the room, for someone who
+asked for neither. Streak and hours are already auto-minted about everyone, but
+a MARK is a different order of private than an hours total, and consent nobody
+sought is not something a settlement can hand back. So the planner mints the
+question beside it — whether they START — which resolves off the study log that
+is already on the board, publishes no mark, and is the better question anyway.
+The mark line stays one tap away, opened by the person whose mark it is.
+
+**FRIENDS ARE A SORT AND NEVER A FILTER.** A friends-only board is the obvious
+fix for a floor full of strangers and it makes the real problem strictly worse:
+five friends means five possible traders per question and a price that means
+nothing. Thin markets need CONCENTRATION — the same arithmetic that rules out
+an order book here. School fragments it harder still at two to five students
+each, and is worth having later as a TEAM dimension ("Melbourne High vs
+Brighton" is one market both schools trade) rather than as a room. So everybody
+trades one floor, and knowing somebody lifts their question up it.
+`subject_is_friend` and `in_contest` are computed server-side for the same
+reason: the subject's email is stripped from the payload for everyone but its
+owner, so the client has nothing to match on.
+
+**Some `meta` keys may never be published.** A head-to-head carries both
+addresses and a cohort line carries the roster it was minted against — both
+needed to SETTLE, neither publishable. `publicMeta` strips them in `shape()`
+rather than at each call site, where the next kind to carry one would quietly
+leak it. The roster is FROZEN at mint and never re-derived at settlement:
+recomputing who is "active" afterwards would change the denominator after every
+position was taken against the old one.
+
+**A dead heat VOIDS.** "Did A beat B" has no answer when they tied, and
+defaulting it to NO would pay everyone who happened to be on the second-named
+side for a question that was never settled.
 
 **Settlement is lazy and recomputed.** No cron here — the sweep runs whenever
 somebody opens the board, the same design the weekly league commits to. THE
@@ -1766,6 +1898,9 @@ another email before this.
   card, the price, the gesture and the payoff moment; `getMarkets` /
   `takePosition` / `openMarkMarket` / `reportMark` in `server.mjs` mint, escrow
   and settle
+- `src/components/market/PriceChart.jsx` — the tape. Replayed from positions,
+  plotted as a price and printed as a multiplier; `header={false}` inside
+  TakeSide, where the card above already prints the odds
 - `src/lib/fnResult.js` — the one unwrap for `functions.invoke`; reading its
   `{ data, error }` envelope as the payload is silent and has shipped twice
 - `src/lib/wagerStatus.js` — the one vocabulary `score_wagers.status` may

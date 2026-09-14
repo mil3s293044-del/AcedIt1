@@ -36,7 +36,7 @@ import { takeFn } from "@/lib/fnResult";
 import MarketCard from "@/components/market/MarketCard";
 import SettlementReveal from "@/components/market/SettlementReveal";
 import {
-    readMarket, sortBoard, isOpen, sideOf, YES, KIND_LIST,
+    readMarket, sortBoard, isOpen, sideOf, YES, KINDS, featuredOf,
     unseenSettlements, markSettlementsSeen,
 } from "@/lib/market";
 
@@ -196,7 +196,42 @@ function LineDialog({ onClose, onOpen, busy }) {
 
 // ─── The page ───────────────────────────────────────────────────────────────
 
-const FILTERS = [{ id: "all", label: "All" }, ...KIND_LIST.map((k) => ({ id: k.id, label: k.label }))];
+/**
+ * THE CHIPS ARE WHAT IS ON THE BOARD, not what the model can express.
+ *
+ * Built from KIND_LIST this was ten chips, three of which (quiz, call-out,
+ * battle) are legacy kinds that no longer mint — so a third of the filter row
+ * led to an empty board and read as a broken page. Computed off the markets
+ * actually present, a chip cannot promise something that is not there. Same
+ * rule Browse keeps about its area chips, arrived at from the other side.
+ */
+function filtersFor(markets) {
+    const seen = [];
+    markets.forEach((m) => { if (!seen.includes(m.kind)) seen.push(m.kind); });
+    return [
+        { id: "all", label: "All" },
+        ...seen.map((id) => ({ id, label: KINDS[id]?.label || id })),
+    ];
+}
+
+/**
+ * A band heading that ends in a rule to the end of the row.
+ *
+ * The same device the Quizzes shelf uses, for the same reason: it TERMINATES
+ * the band, so the space beside two cards reads as margin somebody chose
+ * rather than somewhere content failed to reach.
+ */
+function BoardHeading({ label, note }) {
+    return (
+        <div className="flex items-center gap-3 mb-2.5">
+            <h2 className="text-[11px] font-black uppercase tracking-widest text-[#8FA3BF]">
+                {label}
+            </h2>
+            {note && <span className="text-[11px] font-bold text-[#4E6484]">{note}</span>}
+            <span className="flex-1 h-px bg-[#233247]" aria-hidden="true" />
+        </div>
+    );
+}
 
 export default function Competitions() {
     const [data, setData] = useState(null);
@@ -238,6 +273,28 @@ export default function Competitions() {
     const shown = useMemo(
         () => (filter === "all" ? board : board.filter((m) => m.kind === filter)),
         [board, filter]);
+
+    const filters = useMemo(() => filtersFor(board), [board]);
+
+    // ── FEATURED: the questions the whole room can argue about ───────────
+    // A board of solo markets is a board of private facts — "will Maya study
+    // five days" is a question maybe four people have a view on. The lines up
+    // here are cohort totals, rivalries, longshots and a SAC on Friday, and
+    // anybody can hold an opinion on one without knowing the person. That is
+    // what makes a market board feel busy at thirty students.
+    //
+    // Only on the unfiltered board: a student who asked for one kind has asked
+    // for one ranking, and chopping that into a featured strip and a remainder
+    // breaks the very order they requested — the lesson Browse's sections
+    // record about sorting.
+    const featured = useMemo(
+        () => (filter === "all" ? featuredOf(board, me.email, 4) : []),
+        [board, me.email, filter]);
+    const rest = useMemo(() => {
+        if (!featured.length) return shown;
+        const up = new Set(featured.map((m) => m.id));
+        return shown.filter((m) => !up.has(m.id));
+    }, [shown, featured]);
 
     const book = useMemo(() => board.filter((m) => m.mine), [board]);
 
@@ -387,7 +444,7 @@ export default function Competitions() {
                     {/* ── THE BOARD ────────────────────────────────── */}
                     <div className="min-w-0">
                         <div className="flex items-center gap-1.5 overflow-x-auto pb-2 -mx-1 px-1">
-                            {FILTERS.map((f) => (
+                            {filters.map((f) => (
                                 <button key={f.id} type="button" onClick={() => setFilter(f.id)}
                                     className={`flex-shrink-0 px-3 py-1.5 rounded-lg text-[12px] font-bold
                                         border-2 transition-colors
@@ -414,14 +471,39 @@ export default function Competitions() {
                                 </p>
                             </div>
                         ) : (
-                            <motion.div layout className="grid sm:grid-cols-2 gap-3">
-                                <AnimatePresence initial={false}>
-                                    {shown.map((m) => (
-                                        <MarketCard key={m.id} market={m} balance={me.cred ?? 0}
-                                            busy={busy} onTake={take} onReport={report} />
-                                    ))}
-                                </AnimatePresence>
-                            </motion.div>
+                            <div className="space-y-5">
+                                {featured.length > 0 && (
+                                    <section>
+                                        <BoardHeading label="Featured"
+                                            note="questions the whole room can call" />
+                                        <motion.div layout className="grid sm:grid-cols-2 gap-3">
+                                            <AnimatePresence initial={false}>
+                                                {featured.map((m) => (
+                                                    <MarketCard key={m.id} market={m} balance={me.cred ?? 0}
+                                                        busy={busy} onTake={take} onReport={report} />
+                                                ))}
+                                            </AnimatePresence>
+                                        </motion.div>
+                                    </section>
+                                )}
+
+                                {rest.length > 0 && (
+                                    <section>
+                                        {featured.length > 0 && (
+                                            <BoardHeading label="The floor"
+                                                note={`${rest.length} open`} />
+                                        )}
+                                        <motion.div layout className="grid sm:grid-cols-2 gap-3">
+                                            <AnimatePresence initial={false}>
+                                                {rest.map((m) => (
+                                                    <MarketCard key={m.id} market={m} balance={me.cred ?? 0}
+                                                        busy={busy} onTake={take} onReport={report} />
+                                                ))}
+                                            </AnimatePresence>
+                                        </motion.div>
+                                    </section>
+                                )}
+                            </div>
                         )}
                     </div>
 
