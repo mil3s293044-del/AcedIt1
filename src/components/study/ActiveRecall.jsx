@@ -11,6 +11,7 @@ import { format } from "date-fns";
 import ReactMarkdown from 'react-markdown';
 import { useToast } from "@/components/ui/use-toast";
 import { base44 } from "@/api/base44Client";
+import { acceptFiles, uploadAll, STUDY_ACCEPT, STUDY_ACCEPT_LABEL } from "@/lib/pickFiles";
 import { aceDone } from "@/components/ace/AceReacts";
 import { FEATURES, checkLiveTier } from "@/lib/tierAccess";
 import { getExaminerPrompt } from "@/lib/subjectExaminerPrompts";
@@ -367,7 +368,12 @@ export default function ActiveRecall({ onSessionComplete, userSubjects: initialU
 
         setIsGeneratingQuestions(true);
         try {
-            const uploaded = await Promise.all(sourceFiles.map(f => base44.integrations.Core.UploadFile({ file: f }).then(r => ({ url: r.file_url, name: f.name, ext: f.name.split('.').pop().toLowerCase() }))));
+            const { uploaded, failed } = await uploadAll(sourceFiles, base44.integrations.Core.UploadFile);
+            failed.forEach(f => toast({
+                title: "Skipped a file",
+                description: `${f.name} couldn't be uploaded, so it isn't included.`,
+                variant: "destructive",
+            }));
             const docxPptx = uploaded.filter(f => f.ext === 'docx' || f.ext === 'pptx');
             const directFiles = uploaded.filter(f => f.ext !== 'docx' && f.ext !== 'pptx');
             let documentContext = '';
@@ -568,7 +574,12 @@ Questions should:
         setIsGeneratingMarking(true);
         setMarkingResults([]);
         try {
-            const uploaded = await Promise.all(sourceFiles.map(f => base44.integrations.Core.UploadFile({ file: f }).then(r => ({ url: r.file_url, name: f.name, ext: f.name.split('.').pop().toLowerCase() }))));
+            const { uploaded, failed } = await uploadAll(sourceFiles, base44.integrations.Core.UploadFile);
+            failed.forEach(f => toast({
+                title: "Skipped a file",
+                description: `${f.name} couldn't be uploaded, so it isn't included.`,
+                variant: "destructive",
+            }));
             const docxPptx = uploaded.filter(f => f.ext === 'docx' || f.ext === 'pptx');
             const directFiles = uploaded.filter(f => f.ext !== 'docx' && f.ext !== 'pptx');
             let documentContext = '';
@@ -803,14 +814,15 @@ For each answer:
                             </div>
                             <div className="flex-1 min-w-0">
                                 <p className={`text-sm font-medium ${sourceFiles.length ? 'text-chart-4' : 'text-muted-foreground'}`}>
-                                    {sourceFiles.length ? `${sourceFiles.length} file${sourceFiles.length > 1 ? 's' : ''} selected` : 'Upload PDF / DOCX / PPTX'}
+                                    {sourceFiles.length ? `${sourceFiles.length} file${sourceFiles.length > 1 ? 's' : ''} selected` : 'Upload study material'}
                                 </p>
-                                <p className="text-xs text-muted-foreground/60">Multiple files supported</p>
+                                <p className="text-xs text-muted-foreground/60">{STUDY_ACCEPT_LABEL}</p>
                             </div>
-                            <input type="file" className="hidden" multiple onChange={e => {
-                                const files = Array.from(e.target.files || []);
-                                setSourceFiles(prev => { const names = new Set(prev.map(f => f.name)); return [...prev, ...files.filter(f => !names.has(f.name))]; });
-                            }} accept=".pdf,.docx,.pptx" />
+                            <input type="file" className="hidden" multiple onChange={async e => {
+                                const picked = e.target.files;
+                                e.target.value = "";
+                                setSourceFiles(await acceptFiles(picked, { toast, existing: sourceFiles }));
+                            }} accept={STUDY_ACCEPT} />
                         </label>
                         {sourceFiles.length > 0 && (
                             <div className="px-4 pb-3 space-y-1" onClick={e => e.stopPropagation()}>
@@ -1024,10 +1036,11 @@ For each answer:
                                         <Upload className="w-4 h-4 text-muted-foreground/60" />
                                         <span className="text-sm text-muted-foreground">Upload notes (PDF/DOCX/PPTX, multiple allowed)</span>
                                     </div>
-                                    <input type="file" className="hidden" multiple onChange={e => {
-                                        const files = Array.from(e.target.files || []);
-                                        setSourceFiles(prev => { const names = new Set(prev.map(f => f.name)); return [...prev, ...files.filter(f => !names.has(f.name))]; });
-                                    }} accept=".pdf,.docx,.pptx" />
+                                    <input type="file" className="hidden" multiple onChange={async e => {
+                                        const picked = e.target.files;
+                                        e.target.value = "";
+                                        setSourceFiles(await acceptFiles(picked, { toast, existing: sourceFiles }));
+                                    }} accept={STUDY_ACCEPT} />
                                 </label>
                             ) : (
                                 <Button

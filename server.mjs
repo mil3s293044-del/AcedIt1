@@ -1171,33 +1171,185 @@ function splitSystemAndUser(prompt) {
   return { system: null, user: prompt };
 }
 
-// In-memory file store for uploads. Keyed by UUID, value is {buffer, mimeType, originalName}.
-// Files live for the lifetime of the server process — fine for dev. For production
-// we'd swap this for real storage (Supabase Storage, S3, etc.).
-const fileStore = new Map();
+/**
+ * UPLOADS LIVE IN SUPABASE STORAGE, with memory only as a read cache.
+ *
+ * ─── What this replaces, and why it was breaking the site ───────────────────
+ * This was a bare `Map` capped at 150 files with a 30 MB-per-file limit — up to
+ * 4.5 GB of buffers on a Render `starter` instance with **512 MB of RAM**. One
+ * 30 MB PDF costs ~70 MB transient on its own (the buffer, plus the base64
+ * string built from it), so a couple of ordinary uploads were enough to OOM the
+ * box. Render then restarts it, which wipes every stored file.
+ *
+ * And `render.yaml` sets `autoDeploy: true`, so EVERY PUSH TO MAIN wiped it too.
+ * Upload and generate are two separate HTTP calls; anything in between — a
+ * deploy, a restart, or 150 other students' uploads — and the file was gone.
+ * The model then received a "[ATTACHMENT PROBLEM]" block and told the student
+ * it could not see their file. That is the whole of "sometimes it just doesn't
+ * generate", and it was worst exactly when the app was being worked on.
+ *
+ * ─── Write-through, not write-around ────────────────────────────────────────
+ * The upload writes to BOTH: memory so the generate call that follows a second
+ * later costs no round trip, and storage so a restart cannot lose it. The read
+ * tries memory first and falls back. The cache is bounded in BYTES rather than
+ * in files, because 150 files is not a number that means anything on a box this
+ * size — 48 MB is.
+ *
+ * With no service-role key (local dev, or a misconfigured deploy) it degrades
+ * to memory-only and says so once. That is the old behaviour, which is the
+ * right fallback: uploads still work for the length of a session.
+ */
+const UPLOAD_BUCKET = process.env.SUPABASE_UPLOAD_BUCKET || "ai-uploads";
 
-// Cap memory: keep at most 150 files; evict oldest first.
-const MAX_FILES = 150;
-function storeFile(buffer, mimeType, originalName) {
-  if (fileStore.size >= MAX_FILES) {
-    const oldestKey = fileStore.keys().next().value;
-    if (oldestKey) fileStore.delete(oldestKey);
+/** What the memory cache may hold, in bytes. Sized for a 512 MB instance. */
+const FILE_CACHE_BYTES = 48 * 1024 * 1024;
+
+const fileStore = new Map();
+let fileCacheBytes = 0;
+let bucketReady = null;
+let warnedNoStorage = false;
+
+function cacheFile(id, entry) {
+  if (fileStore.has(id)) return;
+  const size = entry.buffer?.length || 0;
+  // Oldest out first until the newcomer fits. A Map iterates in insertion
+  // order, so `keys().next()` is genuinely the oldest.
+  while (fileCacheBytes + size > FILE_CACHE_BYTES && fileStore.size > 0) {
+    const oldest = fileStore.keys().next().value;
+    const dropped = fileStore.get(oldest);
+    fileStore.delete(oldest);
+    fileCacheBytes -= dropped?.buffer?.length || 0;
   }
-  const id = randomUUID();
-  fileStore.set(id, { buffer, mimeType, originalName, uploadedAt: Date.now() });
+  // A single file bigger than the whole budget is not cached at all rather
+  // than emptying the cache for one item that storage can serve anyway.
+  if (size > FILE_CACHE_BYTES) return;
+  fileStore.set(id, entry);
+  fileCacheBytes += size;
+}
+
+/** Created on first use, so there is no manual setup step on a new project. */
+async function ensureBucket() {
+  if (!supabaseAdmin) return false;
+  if (bucketReady !== null) return bucketReady;
+  try {
+    const { error } = await supabaseAdmin.storage.createBucket(UPLOAD_BUCKET, {
+      public: false,
+      fileSizeLimit: 32 * 1024 * 1024,
+    });
+    // "already exists" is the expected outcome on every call but the first.
+    if (error && !/exist/i.test(error.message || "")) throw error;
+    bucketReady = true;
+  } catch (err) {
+    console.warn("[local-ai] upload bucket unavailable:", err?.message || err);
+    bucketReady = false;
+  }
+  return bucketReady;
+}
+
+/**
+ * The id carries the original filename, because the PROMPT uses it — "Contents
+ * of file X" is how the model knows what it is reading. Keeping it in the key
+ * means a file recovered from storage after a restart still has its name,
+ * without a second table to look it up in.
+ */
+const safeName = (name) =>
+  String(name || "file").replace(/[^\w.\- ]+/g, "_").slice(-80) || "file";
+
+async function storeFile(buffer, mimeType, originalName) {
+  const id = `${randomUUID()}/${safeName(originalName)}`;
+  const entry = { buffer, mimeType, originalName, uploadedAt: Date.now() };
+  cacheFile(id, entry);
+
+  if (await ensureBucket()) {
+    const { error } = await supabaseAdmin.storage.from(UPLOAD_BUCKET).upload(id, buffer, {
+      contentType: mimeType || "application/octet-stream",
+      upsert: false,
+    });
+    if (error) console.warn("[local-ai] upload persist failed:", error.message);
+  } else if (!warnedNoStorage) {
+    warnedNoStorage = true;
+    console.warn("[local-ai] no storage bucket — uploads are memory-only and "
+      + "will not survive a restart. Set SUPABASE_SERVICE_ROLE_KEY to fix.");
+  }
   return id;
+}
+
+/** Memory, then storage. Async everywhere, because the fallback is a network call. */
+async function loadFile(id) {
+  if (!id) return null;
+  const cached = fileStore.get(id);
+  if (cached) return cached;
+  if (!(await ensureBucket())) return null;
+  try {
+    const { data, error } = await supabaseAdmin.storage.from(UPLOAD_BUCKET).download(id);
+    if (error || !data) return null;
+    const buffer = Buffer.from(await data.arrayBuffer());
+    const entry = {
+      buffer,
+      mimeType: data.type || "application/octet-stream",
+      // The name was put in the key precisely so it survives this round trip.
+      originalName: decodeURIComponent(String(id).split("/").slice(1).join("/")) || "file",
+      uploadedAt: Date.now(),
+    };
+    cacheFile(id, entry);
+    return entry;
+  } catch (err) {
+    console.warn("[local-ai] upload fetch failed:", err?.message || err);
+    return null;
+  }
+}
+
+/**
+ * THE MIME TYPE IS A HINT, NOT A VERDICT.
+ *
+ * The same JPEG arrives as `image/jpeg` from one browser, `image/jpg` from
+ * another, and `application/octet-stream` from a drag-and-drop or an Android
+ * file picker. Matching on the type alone dropped the last two as "unsupported
+ * file type" — a small, valid, readable file refused over a string the student
+ * never chose, which is most of what "even smaller ones get rejected" turned
+ * out to be. The extension decides whenever the type is missing or unknown.
+ */
+const EXT_MIME = {
+  jpg: "image/jpeg", jpeg: "image/jpeg", png: "image/png",
+  gif: "image/gif", webp: "image/webp", heic: "image/heic", heif: "image/heif",
+  pdf: "application/pdf",
+  docx: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  pptx: "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+  txt: "text/plain", md: "text/plain", csv: "text/csv",
+};
+const KNOWN_MIME = new Set(Object.values(EXT_MIME));
+
+function resolveMime(file) {
+  const declared = String(file?.mimeType || "").toLowerCase().split(";")[0].trim();
+  if (KNOWN_MIME.has(declared)) return declared;
+  const ext = String(file?.originalName || "").split(".").pop()?.toLowerCase() || "";
+  if (EXT_MIME[ext]) return EXT_MIME[ext];
+  // `image/jpg` and friends: right family, wrong spelling.
+  if (declared === "image/jpg") return "image/jpeg";
+  if (declared.startsWith("text/")) return declared;
+  return declared || "application/octet-stream";
 }
 
 // Anthropic only accepts these image media types. HEIC (iPhone default) needs
 // transcoding to JPEG before Claude will read it.
 const CLAUDE_IMAGE_TYPES = new Set(["image/jpeg", "image/png", "image/gif", "image/webp"]);
 
+// The real ceilings, mirrored from src/lib/uploadPrep.js — the client enforces
+// them so a student hears about it before uploading, and this enforces them so
+// the API never has to. Both derive from the same two API facts: an image may
+// be 10 MB BASE64 (÷ 4/3 ≈ 7.5 MB of file) and the whole request may be 32 MB.
+const UPLOAD_IMAGE_CAP = Math.floor(10 * 1024 * 1024 * 3 / 4);
+const UPLOAD_PDF_CAP = 16 * 1024 * 1024;
+const UPLOAD_DOC_CAP = 25 * 1024 * 1024;
+
 // Max chars to extract from a document before sending to Claude. 150k chars ≈
 // 37k tokens — leaves room for system prompt + output within 200k context.
 const MAX_EXTRACTED_CHARS = 150_000;
 
 async function convertFileForClaude(file) {
-  const mt = file.mimeType || "application/octet-stream";
+  // Resolved, not declared: a JPEG that arrived as `application/octet-stream`
+  // is still a JPEG, and dropping it as "unsupported" is the bug.
+  const mt = resolveMime(file);
 
   // HEIC / HEIF → JPEG.
   if (mt === "image/heic" || mt === "image/heif") {
@@ -1301,7 +1453,7 @@ async function buildFileContentBlocks(fileUrls) {
         // Local upload — base64-encode the cached bytes (transcoding if needed).
         if (url.startsWith("local-file://")) {
           const id = url.slice("local-file://".length);
-          const file = fileStore.get(id);
+          const file = await loadFile(id);
           if (!file) {
             console.warn(`[local-ai] missing local file for ${url}`);
             // Uploads live in memory and expire on server restart. Say so —
@@ -1404,8 +1556,13 @@ app.get("/health", (_req, res) => {
 // The returned URL uses our `local-file://` scheme so we can recognize it
 // later in InvokeLLM and serve the cached bytes inline as base64.
 const upload = multer({
+  // The OUTER backstop, and it has to be tight: multer buffers the whole body
+  // into memory before any handler sees it, so a 30 MB limit meant 30 MB was
+  // already sitting in a 512 MB instance by the time the size check ran. This
+  // is the largest per-kind cap plus a little slack for the multipart wrapper;
+  // the endpoint then applies the real per-kind limit with a readable message.
   storage: multer.memoryStorage(),
-  limits: { fileSize: 30 * 1024 * 1024 }, // 30 MB
+  limits: { fileSize: 26 * 1024 * 1024, files: 1 },
 });
 // Mirrors Base44's `extractDocumentText` server function. Quizzes calls this
 // for DOCX/PPTX files (it asks Base44 to convert them to text before passing
@@ -1420,7 +1577,7 @@ app.post("/local-ai/extractDocumentText", async (req, res) => {
     }
 
     const id = file_url.slice("local-file://".length);
-    const file = fileStore.get(id);
+    const file = await loadFile(id);
     if (!file) return res.status(404).json({ error: "File not found in local store" });
 
     // Prefer explicit file_extension param; fall back to mime-based detection.
@@ -2586,15 +2743,58 @@ app.post("/local-ai/fn/awardGoalXP", async (req, res) => {
   }
 });
 
-app.post("/local-ai/uploadFile", upload.any(), (req, res) => {
+/**
+ * Multer's own failures have to answer like ours do.
+ *
+ * `upload.any()` passes a LIMIT_FILE_SIZE straight to Express's default error
+ * handler, which returns a 500 with a stack — so the LARGEST files, the ones
+ * most likely to be refused, failed in the most opaque way available. Anything
+ * the endpoint itself rejects already says what and why; this makes the outer
+ * gate do the same.
+ */
+const receiveUpload = (req, res, next) => upload.any()(req, res, (err) => {
+  if (!err) return next();
+  if (err.code === "LIMIT_FILE_SIZE") {
+    return res.status(413).json({
+      message: `That file is too big to upload. The largest we take is `
+        + `${(UPLOAD_DOC_CAP / 1048576).toFixed(0)} MB, and photos need to be under `
+        + `${(UPLOAD_IMAGE_CAP / 1048576).toFixed(1)} MB.`,
+    });
+  }
+  console.warn("[local-ai] upload rejected:", err.code, err.message);
+  return res.status(400).json({ message: "That file couldn't be read. Try a different one." });
+});
+
+app.post("/local-ai/uploadFile", receiveUpload, async (req, res) => {
   try {
     const file = req.files?.[0];
     if (!file) {
       return res.status(400).json({ message: "No file uploaded" });
     }
-    const id = storeFile(file.buffer, file.mimetype, file.originalname);
+    // ── THE LIMIT THAT ACTUALLY APPLIES ───────────────────────────────────
+    // multer allowed 30 MB, which is a number from nowhere: Claude's own
+    // ceiling is 10 MB of BASE64 for an image (~7.5 MB of file, since base64
+    // inflates by 4/3) and 32 MB for the whole request. So a 12 MB photo
+    // passed our check, got encoded to 16 MB, and was refused by the API with
+    // nothing on screen to explain it. Refusing it HERE, by name and with the
+    // limit stated, is the difference between a fixable problem and "it
+    // doesn't work". The client shrinks photos before they ever get here, so
+    // this is the backstop rather than the mechanism.
+    const mt = resolveMime({ mimeType: file.mimetype, originalName: file.originalname });
+    const cap = mt.startsWith("image/") ? UPLOAD_IMAGE_CAP
+      : mt === "application/pdf" ? UPLOAD_PDF_CAP : UPLOAD_DOC_CAP;
+    if (file.size > cap) {
+      // One decimal on BOTH numbers. Rounding the cap to a whole number told a
+      // student with a 7.8 MB photo that "the limit is 8 MB" and then refused
+      // it — a message that makes the app look broken rather than the file.
+      return res.status(413).json({
+        message: `${file.originalname} is ${(file.size / 1048576).toFixed(1)} MB. `
+          + `The limit for this kind of file is ${(cap / 1048576).toFixed(1)} MB.`,
+      });
+    }
+    const id = await storeFile(file.buffer, mt, file.originalname);
     console.log(
-      `[local-ai] upload: ${file.originalname} (${file.size} bytes, ${file.mimetype}) -> local-file://${id}`,
+      `[local-ai] upload: ${file.originalname} (${file.size} bytes, ${file.mimetype} -> ${mt}) -> local-file://${id}`,
     );
     return res.json({ file_url: `local-file://${id}` });
   } catch (err) {
@@ -8161,7 +8361,7 @@ app.post("/local-ai/fn/sendSupportTicket", async (req, res) => {
     let screenshotAttachment = null;
     if (screenshotUrl && typeof screenshotUrl === "string" && screenshotUrl.startsWith("local-file://")) {
       const fid = screenshotUrl.slice("local-file://".length);
-      const fileEntry = fileStore.get(fid);
+      const fileEntry = await loadFile(fid);
       if (fileEntry) {
         screenshotAttachment = {
           filename: fileEntry.originalName || `screenshot-${ticketShort}.png`,

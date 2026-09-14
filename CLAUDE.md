@@ -1889,6 +1889,89 @@ unconfirmed, which is what makes "Send it again" on the check-your-inbox screen
 the identical call rather than a second code path. There was no way to ask for
 another email before this.
 
+## Uploads: where files live, and why they kept failing
+
+**"Uploading and generating is broken all over the site, especially flashcards,
+and even smaller files get rejected."** Four separate causes, none of them the
+one it looked like.
+
+**THE FILE STORE WAS NINE TIMES LARGER THAN THE SERVER.** Uploads lived in a
+plain `Map` in `server.mjs`, capped at 150 files × 30 MB — up to **4.5 GB** on a
+Render `starter` instance with **512 MB of RAM**. One 30 MB PDF costs ~70 MB
+transient on its own (the buffer, plus the base64 string built from it), so a
+couple of ordinary uploads OOM'd the box; Render restarted it, and every stored
+file went with it. `render.yaml` also sets `autoDeploy: true`, so **every push
+to main wiped it too**. Upload and generate are two separate HTTP calls, and
+anything in between — a deploy, a restart, or 150 other students' uploads — left
+the model holding an `[ATTACHMENT PROBLEM]` block and telling the student it
+could not see their file. That is the whole of "sometimes it just doesn't
+generate", and it was worst exactly when the app was being worked on.
+
+Files go to **Supabase Storage** now (`ai-uploads`, bucket created on first use
+so there is no setup step), with memory kept only as a **write-through read
+cache bounded in BYTES** — 48 MB, a number that means something on a 512 MB box,
+where "150 files" did not. With no service-role key it degrades to memory-only
+and logs that ONCE, so a misconfigured deploy is visible without spamming.
+
+**THE SIZE LIMIT WAS A NUMBER FROM NOWHERE.** multer allowed 30 MB. The real
+ceilings, which everything now derives from rather than restates:
+
+- an image may be **10 MB of BASE64**, and base64 inflates by 4/3 — so the
+  number a file picker must enforce is **≈7.5 MB of actual file**;
+- the whole request may be **32 MB**, which is what bounds a PDF (16 MB raw
+  leaves real headroom once encoded);
+- images must be JPEG/PNG/GIF/WebP; both models the app uses have 1M context, so
+  the PDF page ceiling is 600, not 100 — a long PDF is a cost and quality
+  problem, not an API one, which is why the page count is a WARNING.
+
+`IMAGE_RAW_CAP` is written as `IMAGE_BASE64_CAP / BASE64_INFLATION` so the step
+that was got wrong stays visible, and `uploadPrep.test.mjs` asserts the server's
+copies match — the "change one, change both" guard this codebase keeps needing.
+
+**THE FIX FOR PHOTOS IS A RESIZE, NOT A LIMIT.** Claude downsamples every image
+to 1568 px (2576 px on newer models) on its long edge before reading anything,
+so the megapixels in a phone photo are thrown away on arrival — they only ever
+cost upload time on school wifi, tokens, and the chance of being refused.
+`prepareFiles` resizes to 2000 px in the browser first: **11.8 MB → 1.6 MB**
+measured, and nothing the model reads is lost. An image already small enough is
+returned UNTOUCHED, or a clean PNG diagram would collect JPEG artefacts for
+nothing, and the canvas is filled white first, or a transparent PNG flattens to
+black. HEIC cannot be decoded by a browser, so it travels whole and the server
+converts it.
+
+**A FILE IS NEVER REFUSED OVER A HEADER.** The same JPEG arrives as
+`image/jpeg`, `image/jpg`, or `application/octet-stream` depending on the
+browser, the OS and whether it was dragged or picked. The server matched on the
+MIME type alone and CheatSheetMaker had its own `allowed.includes(f.type)`
+whitelist, so two of those three were dropped as "unsupported file type" — a
+small, valid, readable file refused over a string the student never chose. That
+is most of what "even smaller ones get rejected" was. `resolveMime` (server) and
+`kindOf` (client) fall back to the extension whenever the type is missing or
+unrecognised.
+
+**AND THE PICKERS DID NOT ACCEPT IMAGES AT ALL.** Flashcards took
+`.pdf,.txt,.docx,.pptx`; Active Recall took `.pdf,.docx,.pptx` and not even
+plain text. Four surfaces, four different answers, none of them a photo — on an
+app for sixteen-year-olds, whose server has read images the whole time.
+Photographing your notes is the most natural way a student has of getting
+material in, and it was the one thing they could not do. `STUDY_ACCEPT` and
+`STUDY_ACCEPT_LABEL` in `pickFiles.js` are now the single answer, and the label
+is derived from the same constant so the copy under the button cannot drift from
+what the button takes.
+
+**`Promise.all` IS THE WRONG PRIMITIVE FOR A LIST OF UPLOADS.** It rejects on the
+first failure and discards every result that succeeded, so one unreadable file
+turned a five-file generate into nothing at all with no clue which file was the
+problem. `uploadAll` is `allSettled`: what landed goes, what did not is named.
+Quizzes already did this; the three study tools did not.
+
+**Every refusal names the file, the size and the limit** — including multer's
+own. `LIMIT_FILE_SIZE` went to Express's default handler as a **500 with a
+stack**, so the largest files failed in the most opaque way available. Both
+numbers print to one decimal: rounding the cap told a student with a 7.8 MB
+photo that "the limit is 8 MB" and then refused it, which makes the app look
+broken rather than the file.
+
 ## Voice / UX guardrails (from prior decisions)
 
 - **Tone**: chill motivational coach. Never cocky.
@@ -1977,6 +2060,10 @@ another email before this.
 - `src/api/supabaseClient.js`, `runtimeConfig.js`, `entitiesShim.js`, `functionsShim.js`, `_dualRunDevTools.js`
 - `src/lib/AuthContext.jsx` — still on Base44, swap pending
 - `src/lib/streamingAI.js`, `src/lib/reconcileXP.js`, `src/lib/subjectExaminerPrompts.js`
+- `src/lib/uploadPrep.js` + `uploadPrep.test.mjs`, `src/lib/pickFiles.js` — the
+  real API limits and the arithmetic behind them, in-browser photo resizing, and
+  the one `accept` string every upload surface uses. `storeFile` / `loadFile` /
+  `resolveMime` in `server.mjs` are the server half; the test pins them together
 - `src/data/vceSubjects.js` — VCE subject catalog (`assessment_structure` and
   `key_skills` are read by `subjectHub.js`)
 - `src/lib/subjectHub.js`, `src/pages/SubjectHub.jsx` — one subject, gathered
