@@ -8,12 +8,35 @@
  * anybody can walk — `probFor` collapses the two back into the one value the
  * scoring rule needs.
  *
+ * ─── YOUR CONVICTION IS YOUR PRICE, so the panel says so in odds ────────────
+ * Saying 85 into a market trading at 62 is exactly "I think yes is cheap at
+ * 62". That is a limit order in everything but name, and printing it as one —
+ * the room is offering 1.61×, your call is 1.18× — is what makes this read as
+ * a market rather than a survey, without changing a line of the model. The
+ * tick above the slider is where the room already sits.
+ *
  * ─── THE PAYOUT ROLLS, BECAUSE THE NUMBERS ARE THE FEEDBACK ─────────────────
  * Dragging conviction changes what you win and what you lose at the same time,
  * in opposite directions, and that trade-off is the entire decision. Swapped,
  * it has to be reconstructed from two remembered states; rolled, it is visible
  * as motion. Same argument `Odometer` on the old Compete made, kept because it
  * was the one thing on that page that genuinely worked.
+ *
+ * ─── THE TILES ARE LABELLED BY OUTCOME, NOT BY "RIGHT" ──────────────────────
+ * They used to read "If you're right" / "If you're wrong", with right meaning
+ * your own side, and that is WRONG under a scoring rule in a way that printed
+ * a lie. Take NO at 55% into a market already pricing NO at 80¢ and you are
+ * further from NO than the price is: the rule pays you when YES lands and
+ * charges you when NO does. The old panel showed that as "If you're right:
+ * −16" in green — a negative number under the winning label, in the winning
+ * colour.
+ *
+ * A side is not a position here; a DISTANCE FROM THE PRICE is. So the tiles
+ * name the two outcomes, the colour follows the sign of the money rather than
+ * the side of the bet, and when the two disagree the panel says out loud that
+ * you are backing the other side of the room's price and where the line is.
+ * Discovering that at settlement instead would be the worst possible way to
+ * learn how the scoring works.
  *
  * ─── AND IT SHOWS THE LOSS AS LOUDLY AS THE WIN ─────────────────────────────
  * A proper scoring rule is symmetric: confidence costs exactly what it pays.
@@ -23,8 +46,9 @@
 import React, { useMemo, useState } from "react";
 import { useMotionValue, useSpring, useReducedMotion } from "framer-motion";
 import { Loader2 } from "lucide-react";
+import PriceChart from "./PriceChart";
 import {
-    YES, NO, probFor, payoutFor, clampStake,
+    YES, NO, probFor, payoutFor, clampStake, multiplierOf, multiplierLabel,
     STAKE_MIN, STAKE_MAX, CONVICTION_MIN, CONVICTION_MAX,
 } from "@/lib/market";
 
@@ -47,19 +71,39 @@ function Roll({ value, className = "" }) {
 }
 
 const STAKES = [25, 50, 100, 250];
+const pct = (v) => Math.round(v * 100);
 
-export default function TakeSide({ price, balance = 0, busy = false, onTake, onCancel }) {
+export default function TakeSide({
+    price, balance = 0, busy = false, onTake, onCancel, history = null, myEntry = null,
+}) {
     const [side, setSide] = useState(YES);
     const [conviction, setConviction] = useState(0.7);
     const [stake, setStake] = useState(50);
 
     const p = probFor(side, conviction);
-    const win = useMemo(() => payoutFor(stake, p, price, side === YES), [stake, p, price, side]);
-    const lose = useMemo(() => payoutFor(stake, p, price, side !== YES), [stake, p, price, side]);
+    const ifYes = useMemo(() => payoutFor(stake, p, price, true), [stake, p, price]);
+    const ifNo = useMemo(() => payoutFor(stake, p, price, false), [stake, p, price]);
     const tooMuch = stake > balance;
+
+    // Where your call sits against the room's, in the units above the chart.
+    const roomMult = multiplierOf(price, side);
+    const myMult = multiplierOf(p, side);
+
+    // The conviction at which you exactly restate the price. Below it, your
+    // "side" is really a position on the other one.
+    const breakeven = side === YES ? price : 1 - price;
+    const level = Math.abs(p - price) < 0.005;
+    const inverted = !level && (side === YES ? ifYes < 0 : ifNo < 0);
+    const tickAt = (breakeven - CONVICTION_MIN) / (CONVICTION_MAX - CONVICTION_MIN);
+    const tickVisible = tickAt > 0.01 && tickAt < 0.99;
 
     return (
         <div className="space-y-3 pt-3 border-t border-[#233247]">
+            {/* ── What the price has done. The case for disagreeing. ── */}
+            {history && history.points?.length > 1 && (
+                <PriceChart history={history} myEntry={myEntry} height={150} header={false} />
+            )}
+
             {/* ── Side ─────────────────────────────────────────────── */}
             <div className="grid grid-cols-2 gap-2">
                 {[[YES, "Yes"], [NO, "No"]].map(([v, label]) => {
@@ -74,6 +118,9 @@ export default function TakeSide({ price, balance = 0, busy = false, onTake, onC
                             className={`rounded-xl border-2 py-2.5 font-display font-black text-sm
                                 transition-colors ${tone}`}>
                             {label}
+                            <span className="block text-[10px] font-bold opacity-70 tabular-nums">
+                                {multiplierLabel(multiplierOf(price, v))}
+                            </span>
                         </button>
                     );
                 })}
@@ -86,19 +133,42 @@ export default function TakeSide({ price, balance = 0, busy = false, onTake, onC
                         How sure
                     </span>
                     <span className="font-display font-black text-sm text-[#E8F0FB] tabular-nums">
-                        {Math.round(conviction * 100)}%
+                        {pct(conviction)}%
                     </span>
                 </div>
-                <input
-                    type="range" min={CONVICTION_MIN * 100} max={CONVICTION_MAX * 100}
-                    value={Math.round(conviction * 100)}
-                    onChange={(e) => setConviction(Number(e.target.value) / 100)}
-                    className="w-full accent-[#1CB0F6] cursor-pointer"
-                    aria-label="How sure are you"
-                />
-                <div className="flex justify-between text-[10px] font-bold text-[#4E6484]">
-                    <span>coin flip</span><span>near certain</span>
+                {/* The room's line, drawn on your own scale. A slider with a
+                    mark on it is a limit price; a slider without one is a dial
+                    with no reference, which is what this was. */}
+                <div className="relative">
+                    {tickVisible && (
+                        <span aria-hidden="true"
+                            className="absolute -top-1 w-px h-2 bg-[#8FA3BF]"
+                            style={{ left: `${tickAt * 100}%` }} />
+                    )}
+                    <input
+                        type="range" min={CONVICTION_MIN * 100} max={CONVICTION_MAX * 100}
+                        value={pct(conviction)}
+                        onChange={(e) => setConviction(Number(e.target.value) / 100)}
+                        className="w-full accent-[#1CB0F6] cursor-pointer"
+                        aria-label="How sure are you"
+                    />
                 </div>
+                <div className="flex justify-between text-[10px] font-bold text-[#4E6484]">
+                    <span>coin flip</span>
+                    {tickVisible && <span className="text-[#8FA3BF]">the room</span>}
+                    <span>near certain</span>
+                </div>
+                <p className="text-[11px] text-[#8FA3BF] mt-1.5 leading-snug">
+                    Room&apos;s price <span className="font-bold tabular-nums text-[#E8F0FB]">
+                        {multiplierLabel(roomMult)}</span>
+                    {" · your call "}
+                    <span className="font-bold tabular-nums text-[#E8F0FB]">
+                        {multiplierLabel(myMult)}</span>
+                    {!level && !inverted && (
+                        <span> — you rate {side === YES ? "yes" : "no"} more likely
+                            than the room does, and that gap is what pays.</span>
+                    )}
+                </p>
             </div>
 
             {/* ── Stake ────────────────────────────────────────────── */}
@@ -126,30 +196,44 @@ export default function TakeSide({ price, balance = 0, busy = false, onTake, onC
                 </div>
             </div>
 
-            {/* ── What it pays, and what it costs ──────────────────── */}
-            {/* Both, the same size. A proper rule is symmetric and drawing only
-                the upside would make this feel like a free dial. */}
+            {/* ── What each outcome pays ───────────────────────────── */}
+            {/* Labelled by OUTCOME and coloured by SIGN, so the two can never
+                contradict each other the way "if you're right: −16" did. */}
             <div className="flex items-center justify-between rounded-xl bg-[#0E1929] px-3 py-2.5">
                 <div>
                     <p className="text-[10px] font-bold uppercase tracking-wide text-[#4E6484]">
-                        If you're right
+                        If it lands yes
                     </p>
-                    <Roll value={win} className="font-display font-black text-lg text-[#58CC02]" />
+                    <Roll value={ifYes} className={`font-display font-black text-lg
+                        ${ifYes > 0 ? "text-[#58CC02]" : ifYes < 0 ? "text-[#FF5A5F]" : "text-[#8FA3BF]"}`} />
                 </div>
                 <div className="text-right">
                     <p className="text-[10px] font-bold uppercase tracking-wide text-[#4E6484]">
-                        If you're wrong
+                        If it lands no
                     </p>
-                    <Roll value={lose} className="font-display font-black text-lg text-[#FF5A5F]" />
+                    <Roll value={ifNo} className={`font-display font-black text-lg
+                        ${ifNo > 0 ? "text-[#58CC02]" : ifNo < 0 ? "text-[#FF5A5F]" : "text-[#8FA3BF]"}`} />
                 </div>
             </div>
 
+            {/* You picked a side but priced it below where the room already has
+                it, which makes this a position on the OTHER outcome. Said here,
+                with the line, rather than discovered at settlement. */}
+            {inverted && (
+                <p className="text-[11px] text-[#FFC800] leading-snug">
+                    The room already has {side === YES ? "yes" : "no"} at {multiplierLabel(roomMult)}.
+                    At {pct(conviction)}% you&apos;re calling it less likely than that, so this pays
+                    if it lands {side === YES ? "no" : "yes"}. Go past {pct(breakeven)}% to back{" "}
+                    {side === YES ? "yes" : "no"}.
+                </p>
+            )}
+
             {/* Agreeing with the price pays nothing, and the panel says so
                 rather than letting a student discover a zero at settlement. */}
-            {win === 0 && lose === 0 && (
+            {level && (
                 <p className="text-[11px] text-[#6F86A8] leading-snug">
-                    That's exactly where the market already sits — it'd pay nothing either way.
-                    You only earn by disagreeing with the price and being right.
+                    That&apos;s exactly where the market already sits — it&apos;d pay nothing either
+                    way. You only earn by disagreeing with the price and being right.
                 </p>
             )}
 

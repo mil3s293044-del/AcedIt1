@@ -146,6 +146,144 @@ export function convictionOf(p) {
     return v >= 0.5 ? v : 1 - v;
 }
 
+// ─── The multiplier ─────────────────────────────────────────────────────────
+
+/**
+ * THE MULTIPLIER IS THE READING. IT IS NEVER THE PAYOUT.
+ *
+ * `1 / price` is how a market prints what it believes, and it is far more
+ * legible to a sixteen-year-old than "62¢": 1.61× says "the favourite" without
+ * anybody needing to know what a probability is, and it moves the way everyone
+ * already expects odds to move — money on YES shortens YES and lengthens NO.
+ * `priceOf` has always done exactly that. This is the same number in the units
+ * people actually read it in.
+ *
+ * WHAT IT MUST NEVER DO is sit next to a button as though it were the return.
+ * The payout here is a proper scoring rule against the price you entered at,
+ * not a bookmaker's stake × odds. On a 100 stake at 85¢ into a market priced
+ * 62¢ the rule pays +12 when YES lands; a 1.61× would promise +61. A figure
+ * that visibly disagrees with the one under it costs the whole screen its
+ * credibility — the lesson quizMarking learned about a total contradicting its
+ * own criteria. So: the multiplier for the reading, `payoutFor` for the money,
+ * and the take-side sheet prints the real figure for BOTH outcomes under the
+ * slider, where the decision is actually made.
+ *
+ * A multiplier is also not a chartable quantity. It is 1/p, so the entire
+ * favourite half of every market lives between 1.0× and 2.0× while the
+ * underdog half runs to infinity — a market drifting 10¢ → 5¢ would dwarf
+ * every other line on the board. PriceChart plots the PRICE and prints the
+ * multiplier beside it, which is what a real exchange does, for this reason.
+ */
+
+/** Odds are undefined at the ends, so the reading is floored rather than ∞. */
+export const MULTIPLIER_FLOOR = 0.01;      // 100× is as long as a price prints
+
+export function multiplierOf(price, side = YES) {
+    const p = Math.min(1 - MULTIPLIER_FLOOR, Math.max(MULTIPLIER_FLOOR, clampP(price)));
+    return 1 / (side === NO ? 1 - p : p);
+}
+
+/** Bookmaker precision: tight where it matters, coarse where it cannot. */
+export function multiplierLabel(m) {
+    const v = Number(m);
+    if (!Number.isFinite(v) || v <= 0) return "—";
+    if (v >= 20) return `${Math.round(v)}×`;
+    if (v >= 10) return `${v.toFixed(1)}×`;
+    return `${v.toFixed(2)}×`;
+}
+
+/** Both sides at once, which is how a board prints a price. */
+export function multipliers(price) {
+    const yes = multiplierOf(price, YES);
+    const no = multiplierOf(price, NO);
+    return { yes, no, yesLabel: multiplierLabel(yes), noLabel: multiplierLabel(no) };
+}
+
+// ─── The tape ───────────────────────────────────────────────────────────────
+
+const timeOf = (v) => {
+    const t = new Date(v || 0).getTime();
+    return Number.isFinite(t) && t > 0 ? t : null;
+};
+
+/**
+ * THE PRICE HISTORY IS ALREADY RECORDED, so nothing here is stored.
+ *
+ * Every position carries its stake, its probability and the moment it was
+ * taken, and `priceOf` is a pure function of the positions standing at the
+ * time. Replaying them in order therefore reproduces the price path EXACTLY —
+ * every step, with who caused it — without a snapshot table, a scheduler, or a
+ * column that can drift away from the board it is meant to describe. The rule
+ * `redoQueue` and `subjectHub` already follow: derived, so it cannot go stale,
+ * double up, or disagree with the screen it came from.
+ *
+ * (It reproduces `price_at_entry` too, which is the check that this is a
+ * reconstruction and not an approximation — market.test.mjs pins it.)
+ *
+ * IT IS A STEP FUNCTION AND IT IS DRAWN AS ONE. Polymarket's smooth curves are
+ * a picture of continuous liquidity; this board has thirty active students, so
+ * a market's whole week is three or four steps with flat stretches between
+ * them. Smoothing that draws a line through data that is not there. The steps
+ * are the better object anyway — a step knows WHO took it and by how much,
+ * which is a sentence about a person rather than a curve.
+ */
+export function priceHistory(market, positions = null, now = Date.now()) {
+    const held = positions || market?.positions || [];
+    const prior = clampP(market?.prior ?? 0.5);
+    const ordered = [...held]
+        .filter((x) => x && Number(x.stake) > 0)
+        .sort((a, b) => (timeOf(a.created_date) ?? 0) - (timeOf(b.created_date) ?? 0));
+
+    const firstT = timeOf(ordered[0]?.created_date);
+    const openT = timeOf(market?.opens_at) ?? timeOf(market?.created_date) ?? firstT ?? now;
+    const endT = timeOf(market?.resolved_at)
+        ?? (market?.status && market.status !== "open"
+            ? (timeOf(market?.closes_at) ?? now)
+            : now);
+
+    const points = [{ t: openT, price: prior, kind: "open", delta: 0 }];
+    const run = [];
+    for (const pos of ordered) {
+        run.push(pos);
+        const price = priceOf(market, run);
+        const prev = points[points.length - 1];
+        points.push({
+            // A clock skew must never run the tape backwards: a step landing
+            // before the one before it draws as a line doubling back on itself.
+            t: Math.max(prev.t, timeOf(pos.created_date) ?? prev.t),
+            price,
+            kind: "trade",
+            delta: Math.round((price - prev.price) * 100),
+            by: pos.user_name || null,
+            is_me: !!pos.is_me,
+            stake: Math.max(0, Number(pos.stake) || 0),
+            p: clampP(pos.p),
+            side: sideOf(pos.p),
+        });
+    }
+
+    const last = points[points.length - 1];
+    // The tape runs to the right edge. Without this a market nobody has
+    // touched since Monday draws as a stub in the corner and reads as a chart
+    // that failed to load rather than as a quiet market.
+    if (endT > last.t) points.push({ t: endT, price: last.price, kind: "now", delta: 0 });
+
+    const prices = points.map((x) => x.price);
+    const span = points[points.length - 1].t - points[0].t;
+    return {
+        points,
+        open: prior,
+        last: last.price,
+        high: Math.max(...prices),
+        low: Math.min(...prices),
+        // Against the PRIOR, because that is where this market started and it
+        // is the one fixed point everybody in it entered against.
+        change: Math.round((last.price - prior) * 100),
+        trades: ordered.length,
+        span: Math.max(1, span),
+    };
+}
+
 // ─── Stakes ─────────────────────────────────────────────────────────────────
 
 /**
@@ -197,14 +335,48 @@ export const KINDS = {
         selfResolving: false,
     },
     callout: {
-        id: "callout", label: "Call-out", icon: "Swords",
+        id: "callout", label: "Call-out", icon: "Megaphone",
         resolves: "when the call-out is answered",
         selfResolving: false,
     },
     battle: {
-        id: "battle", label: "Head to head", icon: "Trophy",
+        id: "battle", label: "Battle", icon: "Trophy",
         resolves: "on the contest's own final standings",
         selfResolving: false,
+    },
+    // ─── THE SPECIAL LINES ──────────────────────────────────────────────
+    // Four more QUESTIONS, not four more objects. Same card, same gesture,
+    // same settlement — `kind` picks the glyph and the sentence and nothing
+    // else, which is the line that keeps this from becoming the seven nouns
+    // the rebuild deleted. What they buy is board SUPPLY: each one of these
+    // stands where several solo markets used to, so the same thirty students
+    // concentrate on fifteen questions instead of scattering over two hundred.
+    versus: {
+        id: "versus", label: "Head to head", icon: "Swords",
+        resolves: "on the two study logs, side by side",
+        selfResolving: false, featured: true,
+    },
+    cohort: {
+        id: "cohort", label: "The board", icon: "Users",
+        resolves: "from everybody's study log on Sunday night",
+        // NOBODY IS BLOCKED, deliberately. A cohort line is resolved by the
+        // app from the study tables, and one student cannot decide it — they
+        // can only contribute to it by studying, which is the product working.
+        // Exactly the reasoning that lets somebody back their own study log.
+        selfResolving: false, featured: true,
+    },
+    longshot: {
+        id: "longshot", label: "Longshot", icon: "Rocket",
+        resolves: "from the board's study log",
+        // The long price IS the draw, and it is safe to make one: the payout
+        // is scored on your edge against the price, never on the odds, so a
+        // 12× cannot be farmed by anybody who simply agrees it is unlikely.
+        selfResolving: false, featured: true,
+    },
+    prep: {
+        id: "prep", label: "Prep", icon: "CalendarClock",
+        resolves: "from their study log in the lead-up",
+        selfResolving: false, featured: true,
     },
     sac: {
         id: "sac", label: "SAC mark", icon: "GraduationCap",
@@ -258,6 +430,19 @@ export function blockReason(market, email) {
     if (market.kind === "battle" && (market.competitor_emails || []).some(is)) {
         return "You're competing in this one — you can't take a position on yourself.";
     }
+    // A head-to-head is settled by the two logs in it, so neither of the two
+    // may hold: the battle rule, stated about the PEOPLE rather than about the
+    // feature, which is what made it general enough to cover a kind that did
+    // not exist when it was written. `in_contest` is computed server-side
+    // because the two emails never leave it — the card names them, the payload
+    // does not, and a client cannot be trusted to enforce a rule about itself.
+    if (market.kind === "versus" && market.in_contest) {
+        return "You're one of the two in this one, so you can't hold a side on it.";
+    }
+    // cohort, longshot and prep fall through ON PURPOSE. Each is measured by
+    // the app out of the study tables under the service role, and the only way
+    // a student can push one is by studying — which is the outcome the whole
+    // app exists to cause, not an exploit to close.
     return null;
 }
 
@@ -341,11 +526,64 @@ export function heatOf(market, now = Date.now()) {
     return volume + crowd + urgency * 6;
 }
 
+/**
+ * FEATURED IS A HANDFUL OF QUESTIONS THE WHOLE ROOM CAN ARGUE ABOUT.
+ *
+ * A board of solo markets is a board of private facts: "will Maya study five
+ * days" is a question about one person that maybe four people in the room have
+ * a view on. The lines flagged `featured` are the opposite — a cohort total, a
+ * rivalry, a longshot, a SAC on Friday — and every one of them is something
+ * anybody can hold an opinion about without knowing the person. That is what
+ * makes a market board feel busy at thirty students rather than at three
+ * thousand: concentrate the traders, don't multiply the questions.
+ *
+ * A market ABOUT YOU is never featured here even when its kind is, because it
+ * already sorts first on the board proper — featuring it too would print the
+ * same card twice on one screen, which is the paper-cut this page has had
+ * before.
+ */
+export function featuredOf(markets = [], email = null, limit = 4) {
+    const me = String(email || "").toLowerCase();
+    const pool = markets.filter((m) => KINDS[m.kind]?.featured
+        && String(m.subject_email || "").toLowerCase() !== me
+        && !m.subject_is_me
+        && isOpen(m));
+    const ranked = sortBoard(pool, email).slice(0, Math.max(0, limit));
+    // AN EVEN NUMBER, because the strip is a two-column grid and three cards
+    // leaves a hole beside the third — a gap in the middle of a short section
+    // reads as a card that failed to render rather than as the end of a row.
+    // Nothing is lost: whatever is trimmed falls through to the floor below,
+    // which is a long grid where a ragged last row is simply how grids end.
+    const even = ranked.length - (ranked.length % 2);
+    // One featured card under its own heading is more furniture than content.
+    return even >= 2 ? ranked.slice(0, even) : [];
+}
+
+/**
+ * FRIENDS ARE A SORT AND NEVER A FILTER, and the difference is the whole board.
+ *
+ * A friends-only board sounds like the obvious fix for a floor flooded with
+ * strangers, and it makes the real problem strictly worse: if your board is
+ * your five friends' questions, each of those questions has at most five
+ * people who can trade it, and the price stops meaning anything. It is the
+ * same arithmetic that rules out an order book here — thin markets need
+ * CONCENTRATION, so the answer is fewer questions on one floor, not the same
+ * questions split across a room per person. School would fragment it harder
+ * still: two to five students each.
+ *
+ * So everybody trades one board, and knowing somebody moves their question up
+ * it. `subject_is_friend` is computed server-side for the same reason
+ * `in_contest` is — the subject's email is stripped from the payload for
+ * everyone but its owner, so the client has nothing to match on.
+ */
 export function sortBoard(markets = [], email = null) {
     const me = String(email || "").toLowerCase();
-    const aboutMe = (m) => String(m.subject_email || "").toLowerCase() === me;
+    const aboutMe = (m) => String(m.subject_email || "").toLowerCase() === me
+        || !!m.subject_is_me;
+    const known = (m) => !!m.subject_is_friend;
     return [...markets].sort((a, b) => {
         if (aboutMe(a) !== aboutMe(b)) return aboutMe(a) ? -1 : 1;
+        if (known(a) !== known(b)) return known(a) ? -1 : 1;
         return heatOf(b) - heatOf(a);
     });
 }

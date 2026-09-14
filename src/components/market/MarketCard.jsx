@@ -15,18 +15,32 @@
  * retention engine rather than a leaderboard. It gets its own ink and its own
  * line, and it sorts to the top of the board (see `sortBoard`).
  *
+ * ─── THE PRICE IS PRINTED AS ODDS AND DRAWN AS A LINE ───────────────────────
+ * A card that says "62¢" has told a sixteen-year-old nothing. "1.61× yes /
+ * 2.63× no" is the same fact in the units they already read on every sports
+ * app they have ever opened, and the sparkline under it is why the card is
+ * worth opening: a market that has swung twenty points this week is an
+ * argument, and a flat one is a question nobody has bothered with yet. Both of
+ * those are decisions, and neither is visible in a single number.
+ *
+ * The multiplier is the READING and never the payout — market.js says why at
+ * length, and the real figures for both outcomes live under the slider in
+ * TakeSide, which is where the money is actually committed.
+ *
  * ─── The crowd is drawn as PEOPLE, not just a price ─────────────────────────
  * "8 backing yes · 3 no" with names on hover. A market where you cannot see
  * who is on which side is a private bet, which is exactly what the old
  * wagering layer was and why nothing about it felt social.
  */
-import React, { useState } from "react";
+import React, { useMemo, useState } from "react";
 import { motion } from "framer-motion";
 import * as Icons from "lucide-react";
 import { Clock, Lock } from "lucide-react";
-import PriceBar from "./PriceBar";
+import PriceChart from "./PriceChart";
 import TakeSide from "./TakeSide";
-import { KINDS, sideOf, YES, priceLabel, payoutFor } from "@/lib/market";
+import {
+    KINDS, sideOf, YES, priceLabel, payoutFor, multipliers, priceHistory,
+} from "@/lib/market";
 
 function untilLabel(iso) {
     if (!iso) return null;
@@ -52,6 +66,16 @@ export default function MarketCard({ market, balance, busy, onTake, onReport }) 
     const mine = market.mine;
     const names = (market.positions || [])
         .filter((p) => sideOf(p.p) === YES).map((p) => firstName(p.user_name)).slice(0, 4);
+
+    const mult = multipliers(market.price);
+    // Replayed from the positions the card already holds — no query, no stored
+    // history, and it cannot disagree with the price printed beside it.
+    const history = useMemo(() => priceHistory(market), [market]);
+    const myEntry = useMemo(() => {
+        if (!mine?.created_date) return null;
+        const t = new Date(mine.created_date).getTime();
+        return Number.isFinite(t) ? { t, price: Number(mine.price_at_entry) } : null;
+    }, [mine]);
 
     return (
         <motion.article
@@ -93,11 +117,60 @@ export default function MarketCard({ market, balance, busy, onTake, onReport }) 
                 </p>
             )}
 
-            <PriceBar price={market.price} prior={market.prior} thin={!!market.meta?.thin} />
+            {/* ── The odds, then the line ──────────────────────────── */}
+            <div className="flex items-stretch gap-2">
+                <div className="flex-1 rounded-xl bg-[#0E1929] px-2.5 py-1.5">
+                    <p className="text-[9px] font-black uppercase tracking-widest text-[#4E6484]">
+                        Yes
+                    </p>
+                    <p className="font-display font-black text-xl leading-none tabular-nums
+                        text-[#58CC02]">{mult.yesLabel}</p>
+                </div>
+                <div className="flex-1 rounded-xl bg-[#0E1929] px-2.5 py-1.5">
+                    <p className="text-[9px] font-black uppercase tracking-widest text-[#4E6484]">
+                        No
+                    </p>
+                    <p className="font-display font-black text-xl leading-none tabular-nums
+                        text-[#FF5A5F]">{mult.noLabel}</p>
+                </div>
+                <div className="flex flex-col justify-center items-end pl-1 min-w-[62px]">
+                    <span className="font-display font-black text-base leading-none tabular-nums
+                        text-[#E8F0FB]">{priceLabel(market.price)}</span>
+                    {/* A market nobody has traded has not moved, and "0 from
+                        open" is a measurement of nothing dressed as one. The
+                        flat line and the thin note below already say it. */}
+                    {history.trades > 0 && (
+                        <span className={`text-[10px] font-bold tabular-nums mt-1
+                            ${history.change > 0 ? "text-[#58CC02]"
+                                : history.change < 0 ? "text-[#FF5A5F]" : "text-[#6F86A8]"}`}>
+                            {history.change > 0 ? "▲" : history.change < 0 ? "▼" : "■"}
+                            {" "}{Math.abs(history.change)}
+                        </span>
+                    )}
+                </div>
+            </div>
+
+            <div className="mt-1.5">
+                <PriceChart history={history} compact myEntry={myEntry} />
+            </div>
+
+            {/* A market with no base rate SAYS SO. Printing a confident 50¢ off
+                nothing is the "100% — from your last 1" failure the forecast
+                panel already refuses, and the line above is flat for the same
+                reason rather than because the market is quiet. */}
+            {market.meta?.thin && (
+                <p className="text-[10px] text-[#6F86A8] mt-1">
+                    No base rate yet — this one opened at even.
+                </p>
+            )}
 
             {/* ── The crowd, as people ─────────────────────────────── */}
+            {/* The names grow and TRUNCATE; the volume never wraps. Without the
+                min-w-0 the names span refuses to shrink below its content and
+                pushes "1,150 in" onto a line of its own, splitting a figure
+                from its own unit. */}
             <div className="flex items-center justify-between gap-3 mt-2.5 text-[11px]">
-                <span className="text-[#6F86A8] font-bold">
+                <span className="text-[#6F86A8] font-bold min-w-0 truncate">
                     {market.traders === 0 ? (
                         <span className="text-[#4E6484]">No one has taken a side yet</span>
                     ) : (
@@ -112,7 +185,8 @@ export default function MarketCard({ market, balance, busy, onTake, onReport }) 
                         </>
                     )}
                 </span>
-                <span className="text-[#4E6484] font-bold tabular-nums">
+                <span className="text-[#4E6484] font-bold tabular-nums flex-shrink-0
+                    whitespace-nowrap">
                     {market.volume.toLocaleString()} in
                 </span>
             </div>
@@ -140,6 +214,7 @@ export default function MarketCard({ market, balance, busy, onTake, onReport }) 
             {open ? (
                 <TakeSide
                     price={market.price} balance={balance} busy={busy}
+                    history={history} myEntry={myEntry}
                     onCancel={() => setOpen(false)}
                     onTake={async (pick) => { await onTake?.(market, pick); setOpen(false); }}
                 />

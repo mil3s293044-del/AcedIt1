@@ -76,3 +76,20 @@ select 'cred columns (0036)',
        case when exists (select 1 from information_schema.columns
                          where table_name = 'user_profiles' and column_name = 'cred_balance')
             then 'ok' else 'MISSING — no stake can be escrowed' end;
+
+union all
+select 'market kinds (0037)',
+    case when (select count(*) from pg_constraint con
+                 join pg_class rel on rel.oid = con.conrelid
+                 join pg_namespace nsp on nsp.oid = rel.relnamespace
+                where nsp.nspname = 'public' and rel.relname = 'markets'
+                  and con.contype = 'c'
+                  and pg_get_constraintdef(con.oid) like '%longshot%') = 1
+         then 'ok' else 'MISSING' end
+
+union all
+select 'market indexes (0037)',
+    case when (select count(*) from pg_indexes
+                where schemaname = 'public'
+                  and indexname in ('markets_open_idx','market_positions_market_idx')) = 2
+         then 'ok' else 'MISSING' end

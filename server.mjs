@@ -2,7 +2,7 @@ import "dotenv/config";
 import express from "express";
 import cors from "cors";
 import multer from "multer";
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import Anthropic from "@anthropic-ai/sdk";
 import heicConvert from "heic-convert";
 import mammoth from "mammoth";
@@ -8740,9 +8740,12 @@ async function grantWeeklyCred(profile) {
  * enough of their history yet" rather than printing "100% — from their last 1".
  */
 async function marketPriors(emails, now = new Date()) {
-  const out = {};
-  emails.forEach((e) => { out[e] = { streak: null, hours: null, weeks: 0 }; });
-  if (!supabaseAdmin || !emails.length) return out;
+  const per = {};
+  emails.forEach((e) => {
+    per[e] = { streak: null, hours: null, prep: null, weeks: 0, lastDay: null };
+  });
+  const byWeek = new Map();
+  if (!supabaseAdmin || !emails.length) return { per, byWeek };
 
   const since = new Date(now.getTime() - MARKET_HISTORY_WEEKS * 7 * 24 * 3600e3);
   const sinceKey = since.toISOString().slice(0, 10);
@@ -8755,16 +8758,19 @@ async function marketPriors(emails, now = new Date()) {
       .in("created_by", emails).gte("date", sinceKey),
   ]);
 
-  const byUserWeek = new Map();
+  const buckets = new Map();
   const add = (row, col) => {
     const e = row.created_by;
-    if (!out[e]) return;
+    if (!per[e]) return;
     const day = String(row.date || row.created_date || "").slice(0, 10);
     if (!day) return;
+    // Tracked BEFORE the current week is excluded: the base rates want
+    // finished weeks, the activity gate wants the most recent day there is.
+    if (!per[e].lastDay || day > per[e].lastDay) per[e].lastDay = day;
     const wk = marketWeekKey(new Date(`${day}T00:00:00Z`));
     const key = `${e}|${wk}`;
-    if (!byUserWeek.has(key)) byUserWeek.set(key, { rows: [], days: new Set() });
-    const b = byUserWeek.get(key);
+    if (!buckets.has(key)) buckets.set(key, { rows: [], days: new Set() });
+    const b = buckets.get(key);
     b.rows.push(studyRowFor(row, col));
     b.days.add(day);
   };
@@ -8772,40 +8778,130 @@ async function marketPriors(emails, now = new Date()) {
   (techRes.data || []).forEach((r) => add(r, "session_duration"));
 
   const thisWeek = marketWeekKey(now);
-  const per = {};
-  emails.forEach((e) => { per[e] = []; });
-  byUserWeek.forEach((b, key) => {
-    const [e, wk] = key.split("|");
+  const history = {};
+  emails.forEach((e) => { history[e] = []; });
+  buckets.forEach((b, key) => {
+    const cut = key.lastIndexOf("|");
+    const e = key.slice(0, cut);
+    const wk = key.slice(cut + 1);
+    if (!history[e]) return;
+    const days = [...b.days].filter((d) => b.rows.some((r) => r.day === d && r.minutes > 0)).length;
+    const minutes = countableStudyMinutes(b.rows, new Date(`${wk}T00:00:00Z`));
+    if (!byWeek.has(wk)) byWeek.set(wk, new Map());
+    byWeek.get(wk).set(e, { days, minutes });
     // The CURRENT week is half finished and would drag every base rate toward
     // nothing — the same exclusion `usualMinutes` makes on the subject hub.
-    if (wk === thisWeek || !per[e]) return;
-    per[e].push({
-      days: [...b.days].filter((d) => b.rows.some((r) => r.day === d && r.minutes > 0)).length,
-      minutes: countableStudyMinutes(b.rows, new Date(`${wk}T00:00:00Z`)),
-    });
+    if (wk !== thisWeek) history[e].push({ days, minutes });
   });
 
   emails.forEach((e) => {
-    const weeks = per[e] || [];
-    out[e].weeks = weeks.length;
-    if (weeks.length < MARKET_MIN_OBS) return;
-    out[e].streak = weeks.filter((w) => w.days >= MARKET_STREAK_TARGET).length / weeks.length;
-    out[e].hours = weeks.filter((w) => w.minutes >= MARKET_HOURS_TARGET).length / weeks.length;
+    const w = history[e];
+    per[e].weeks = w.length;
+    if (w.length < MARKET_MIN_OBS) return;
+    const rate = (f) => w.filter(f).length / w.length;
+    per[e].streak = rate((x) => x.days >= MARKET_STREAK_TARGET);
+    per[e].hours = rate((x) => x.minutes >= MARKET_HOURS_TARGET);
+    per[e].prep = rate((x) => x.days >= MARKET_PREP_TARGET);
   });
-  return out;
+  return { per, byWeek, thisWeek };
 }
 
 /** The thresholds the weekly questions ask about. */
 const MARKET_STREAK_TARGET = 5;   // days studied in the week
 const MARKET_HOURS_TARGET = 300;  // countable minutes in the week
+const MARKET_PREP_TARGET = 3;     // days studied in the lead-up to an assessment
+const MARKET_PREP_WINDOW = 7;     // ...counted over this many days before it
+const MARKET_PREP_MAX = 3;        // prep lines per week, so a board is not a calendar
+
+/**
+ * WHO IS ACTUALLY HERE. A market about a dormant account is not a question.
+ *
+ * 0036 minted about the whole roster, which is ~132 accounts of whom perhaps
+ * thirty have opened the app this month. Three things were wrong with that at
+ * once and only the first is cosmetic:
+ *
+ *  · nobody can hold a view on a stranger who last studied in May, so those
+ *    cards sat at the opening price all week and made the floor look dead;
+ *  · a student with under MARKET_MIN_OBS weeks gets prior 0.5, so "Will
+ *    <dormant> study 5+ days?" opened at even and resolved NO with near
+ *    certainty — taking NO at 97% paid +125 on a 500 stake, RISK-FREE, across
+ *    two hundred such markets. An activity gate closes that farm completely,
+ *    which is the real reason this is not merely a tidy-up;
+ *  · and supply scaled with SIGNUPS while demand scaled with ACTIVES, so the
+ *    board got worse as the app grew. That is backwards for a market: more
+ *    people has to mean more traders per question, never more questions.
+ */
+const MARKET_ACTIVE_DAYS = 14;
 
 // ─── Minting ────────────────────────────────────────────────────────────────
 
 const firstNameOf = (n, email) =>
   String(n || "").trim().split(/\s+/)[0] || String(email || "").split("@")[0] || "Someone";
 
+/** Board-wide questions are about nobody, and '@board' is not an address. */
+const MARKET_BOARD = "@board";
+
+/** Whole weeks since the epoch — the parity that alternates the pairings. */
+const weekIndexOf = (weekKey) =>
+  Math.floor(new Date(`${weekKey}T00:00:00Z`).getTime() / (7 * 24 * 3600e3));
+
 /**
- * Two questions per student per week, minted on demand.
+ * A stable id for a pairing that CARRIES NO ADDRESS.
+ *
+ * `meta` is spread to the client, so the dedupe ref cannot be the two emails
+ * joined — that would publish an address on every head-to-head card. A hash of
+ * the sorted pair is stable across loads, identical for (a,b) and (b,a) so two
+ * students opening the board at once cannot mint the same rivalry twice, and
+ * reveals nothing.
+ */
+const pairRef = (a, b) => createHash("sha1")
+  .update([a, b].map((x) => String(x || "").toLowerCase()).sort().join("|"))
+  .digest("hex").slice(0, 16);
+
+const emailParity = (email) =>
+  parseInt(createHash("sha1").update(String(email || "")).digest("hex").slice(0, 4), 16) % 2;
+
+/**
+ * PAIR THE ROOM UP, because a rivalry is one market where two used to be.
+ *
+ * This is the cut that gets the board from ~264 questions to ~20 without
+ * taking anybody off it. Two solo markets about two students of similar output
+ * are two private facts; ONE market asking which of them logs more is a
+ * question the whole room can hold a view on, and both of them are still on
+ * the board. Supply halves and interest goes up, which is the only kind of
+ * reduction worth making.
+ *
+ * Sorted by base rate so the two are actually matched — an even question is
+ * the tradeable one, and a mismatch prices at 90¢ and pays nobody anything.
+ * The offset alternates week to week so the same two are not each other's
+ * rival all term, and ties break on the address or two students swap places
+ * between one board load and the next.
+ */
+function pairUpRoom(live, per, weekKey) {
+  const sorted = [...live].sort((a, b) => {
+    const pa = per[a.email]?.hours ?? 0.5;
+    const pb = per[b.email]?.hours ?? 0.5;
+    if (pa !== pb) return pb - pa;
+    return a.email < b.email ? -1 : 1;
+  });
+  const pairs = [];
+  const solos = [];
+  // Shifting by one on alternate weeks re-partners everybody while keeping
+  // neighbours (and therefore similar base rates) together.
+  if (weekIndexOf(weekKey) % 2 === 1 && sorted.length > 1) solos.push(sorted.shift());
+  let i = 0;
+  for (; i + 1 < sorted.length; i += 2) pairs.push([sorted[i], sorted[i + 1]]);
+  if (i < sorted.length) solos.push(sorted[i]);
+  return { pairs, solos };
+}
+
+/** Longshots escalate until the price is actually long. */
+const LONGSHOT_TARGETS = [900, 1200, 1500];   // countable minutes in one week
+const LONGSHOT_MAX_PRIOR = 0.35;
+const MARKET_MINT_CAP = 60;
+
+/**
+ * The week's card, minted on demand.
  *
  * Auto-minted rather than student-created because an empty board is the
  * failure mode that kills a market site: the first person to arrive on Monday
@@ -8813,6 +8909,22 @@ const firstNameOf = (n, email) =>
  * does. The unique index on (kind, subject, period, ref) makes a double mint —
  * two students opening the board in the same second — a no-op rather than the
  * same question twice with the stakes split between the copies.
+ *
+ * The shape of the card, and why each line is here:
+ *   versus    the room, paired. One market per two students, everybody on the
+ *             board, and every question has two names in it.
+ *   solo      whoever was left over by the pairing. ONE question, not two:
+ *             streak and hours about the same person correlate so hard that
+ *             holding both is one position taken twice, so they alternate.
+ *   cohort    the whole board's week. Best value per row on the floor — one
+ *             market, every trader with a genuine view, and nobody needs to
+ *             know the subject to have one.
+ *   longshot  a deliberately unlikely question, where the long price is the
+ *             draw. Safe because the payout is scored on your edge against the
+ *             price and never on the odds.
+ *   prep      an assessment already on somebody's planner. A real date, and it
+ *             resolves off the study log — see the note above `mintPrepLines`
+ *             for why the planner mints this rather than a mark market.
  */
 async function mintWeeklyMarkets(members, now = new Date()) {
   if (!supabaseAdmin || !members.length) return 0;
@@ -8820,47 +8932,246 @@ async function mintWeeklyMarkets(members, now = new Date()) {
   const closes = marketWeekClose(week).toISOString();
   const emails = members.map((m) => m.email);
 
+  const { per, byWeek } = await marketPriors(emails, now);
+
+  // ── The gate ────────────────────────────────────────────────────────────
+  const cutoff = new Date(now.getTime() - MARKET_ACTIVE_DAYS * 24 * 3600e3)
+    .toISOString().slice(0, 10);
+  const live = members.filter((m) => (per[m.email]?.lastDay || "") >= cutoff);
+  if (!live.length) return 0;
+  const liveSet = new Set(live.map((m) => m.email));
+  const roster = [...liveSet];
+
+  // Keyed exactly as the unique index is, so what this function thinks already
+  // exists and what the database will actually reject cannot disagree. The
+  // period is NOT filtered in SQL: a prep line is keyed on its own due date,
+  // which is frequently not this week.
   const { data: existing } = await supabaseAdmin
-    .from("markets").select("kind, subject_email")
-    .eq("status", "open").eq("meta->>period", week)
-    .in("subject_email", emails);
-  const have = new Set((existing || []).map((r) => `${r.kind}|${r.subject_email}`));
+    .from("markets").select("kind, subject_email, meta").eq("status", "open").limit(300);
+  const have = new Set((existing || []).map(
+    (r) => `${r.kind}|${r.subject_email}|${r.meta?.period || ""}|${r.meta?.ref || ""}`));
+  const wanted = (kind, subject, period, ref) =>
+    !have.has(`${kind}|${subject}|${period}|${ref}`);
 
-  const priors = await marketPriors(emails, now);
   const rows = [];
-  for (const m of members) {
-    const who = firstNameOf(m.name, m.email);
-    const pri = priors[m.email] || { weeks: 0 };
-    const base = { subject_email: m.email, subject_name: m.name || null,
-      created_by: "system", status: "open", closes_at: closes };
+  const base = { created_by: "system", status: "open", closes_at: closes };
+  const thin = (e) => (per[e]?.weeks || 0) < MARKET_MIN_OBS;
 
-    if (!have.has(`streak|${m.email}`)) {
-      rows.push({ ...base, kind: "streak",
-        title: `Will ${who} study ${MARKET_STREAK_TARGET}+ days this week?`,
-        resolves_note: "From their study log — both tables, Sunday night.",
-        prior: pri.streak ?? 0.5,
-        meta: { period: week, ref: "week", target: MARKET_STREAK_TARGET,
-          thin: pri.streak == null, obs: pri.weeks } });
+  // ── Head to head ────────────────────────────────────────────────────────
+  const { pairs, solos } = pairUpRoom(live, per, week);
+  for (const [a, b] of pairs) {
+    const ref = `vs:${pairRef(a.email, b.email)}`;
+    if (!wanted("versus", a.email, week, ref)) continue;
+    const an = firstNameOf(a.name, a.email);
+    const bn = firstNameOf(b.name, b.email);
+    rows.push({
+      ...base, kind: "versus",
+      subject_email: a.email, subject_name: a.name || null,
+      title: `Who logs more hours this week — ${an} or ${bn}?`,
+      resolves_note: `YES if ${an} logs more countable minutes than ${bn}. A dead heat voids and everyone gets their cred back.`,
+      // Matched on base rate, so even is the honest opening and not a shrug.
+      prior: 0.5,
+      meta: {
+        period: week, ref, names: [an, bn], emails: [a.email, b.email],
+        thin: thin(a.email) || thin(b.email),
+      },
+    });
+  }
+
+  // ── Whoever the pairing left over ───────────────────────────────────────
+  for (const m of solos) {
+    const who = firstNameOf(m.name, m.email);
+    const pri = per[m.email] || {};
+    // ONE question per person. Which one alternates on the week AND on the
+    // address, so the board is not thirty streak questions one week and thirty
+    // hours questions the next.
+    const askHours = (weekIndexOf(week) + emailParity(m.email)) % 2 === 0;
+    const kind = askHours ? "hours" : "streak";
+    if (!wanted(kind, m.email, week, "week")) continue;
+    rows.push({
+      ...base, kind,
+      subject_email: m.email, subject_name: m.name || null,
+      title: askHours
+        ? `Will ${who} log ${Math.round(MARKET_HOURS_TARGET / 60)}+ hours this week?`
+        : `Will ${who} study ${MARKET_STREAK_TARGET}+ days this week?`,
+      resolves_note: askHours
+        ? "From countable study minutes, capped the way every board caps them."
+        : "From their study log — both tables, Sunday night.",
+      prior: (askHours ? pri.hours : pri.streak) ?? 0.5,
+      meta: {
+        period: week, ref: "week",
+        target: askHours ? MARKET_HOURS_TARGET : MARKET_STREAK_TARGET,
+        thin: thin(m.email), obs: pri.weeks || 0,
+      },
+    });
+  }
+
+  // ── The board's own week ────────────────────────────────────────────────
+  const pastWeeks = [...byWeek.entries()]
+    .filter(([wk]) => wk !== week)
+    .sort((a, b) => (a[0] < b[0] ? -1 : 1));
+  const sliceOf = (m, pick) => {
+    let n = 0;
+    m.forEach((v, e) => { if (liveSet.has(e)) n += pick(v); });
+    return n;
+  };
+
+  if (live.length >= 4) {
+    const dayTarget = MARKET_STREAK_TARGET;
+    const target = Math.max(2, Math.ceil(live.length / 2));
+    const hits = pastWeeks.map(([, m]) => sliceOf(m, (v) => (v.days >= dayTarget ? 1 : 0)) >= target);
+    const ref = `half-${dayTarget}d`;
+    if (wanted("cohort", MARKET_BOARD, week, ref)) {
+      rows.push({
+        ...base, kind: "cohort",
+        subject_email: MARKET_BOARD, subject_name: null,
+        title: `Will ${target}+ of the board study ${dayTarget}+ days this week?`,
+        resolves_note: `Counted across the ${live.length} people active on the board right now.`,
+        prior: hits.length >= MARKET_MIN_OBS
+          ? hits.filter(Boolean).length / hits.length : 0.5,
+        meta: {
+          period: week, ref, metric: "half_days", target, day_target: dayTarget,
+          roster, thin: hits.length < MARKET_MIN_OBS,
+        },
+      });
     }
-    if (!have.has(`hours|${m.email}`)) {
-      rows.push({ ...base, kind: "hours",
-        title: `Will ${who} log ${Math.round(MARKET_HOURS_TARGET / 60)}+ hours this week?`,
-        resolves_note: "From countable study minutes, capped the way every board caps them.",
-        prior: pri.hours ?? 0.5,
-        meta: { period: week, ref: "week", target: MARKET_HOURS_TARGET,
-          thin: pri.hours == null, obs: pri.weeks } });
+
+    // Total hours, against what this room usually does. Median rather than
+    // mean, or one cram week before a SAC block sets the bar for the term —
+    // the lesson WeekPace already records about a student's own baseline.
+    const totals = pastWeeks.map(([, m]) => sliceOf(m, (v) => v.minutes)).filter((t) => t > 0);
+    if (totals.length >= MARKET_MIN_OBS) {
+      const sorted = [...totals].sort((x, y) => x - y);
+      const median = sorted[Math.floor(sorted.length / 2)];
+      const target = Math.max(60, Math.round(median / 60) * 60);
+      const ref = `total-${Math.round(target / 60)}h`;
+      if (wanted("cohort", MARKET_BOARD, week, ref)) {
+        rows.push({
+          ...base, kind: "cohort",
+          subject_email: MARKET_BOARD, subject_name: null,
+          title: `Will the board log ${Math.round(target / 60)}+ hours between them this week?`,
+          resolves_note: "Every active person's countable minutes, added up on Sunday night.",
+          prior: totals.filter((t) => t >= target).length / totals.length,
+          meta: { period: week, ref, metric: "total_minutes", target, roster, thin: false },
+        });
+      }
+    }
+
+    // ── The longshot ────────────────────────────────────────────────────
+    let pick = null;
+    for (const target of LONGSHOT_TARGETS) {
+      const hits = pastWeeks.map(([, m]) => {
+        let best = 0;
+        m.forEach((v, e) => { if (liveSet.has(e)) best = Math.max(best, v.minutes); });
+        return best >= target;
+      });
+      const enough = hits.length >= MARKET_MIN_OBS;
+      const prior = enough ? hits.filter(Boolean).length / hits.length : 0.15;
+      // A "longshot" the room clears most weeks is a question with a bad name,
+      // so the threshold escalates until the price is genuinely long.
+      if (prior <= LONGSHOT_MAX_PRIOR) { pick = { target, prior, thin: !enough }; break; }
+    }
+    if (pick) {
+      const ref = `any-${Math.round(pick.target / 60)}h`;
+      if (wanted("longshot", MARKET_BOARD, week, ref)) {
+        rows.push({
+          ...base, kind: "longshot",
+          subject_email: MARKET_BOARD, subject_name: null,
+          title: `Will anyone log ${Math.round(pick.target / 60)}+ hours this week?`,
+          resolves_note: "The single biggest countable week on the board, whoever it turns out to be.",
+          prior: pick.prior,
+          meta: { period: week, ref, target: pick.target, roster, thin: pick.thin },
+        });
+      }
     }
   }
-  if (!rows.length) return 0;
 
+  rows.push(...await mintPrepLines(live, per, week, now, wanted));
+
+  if (!rows.length) return 0;
   // Conflict on the dedupe index is the expected outcome of a race, not an
   // error worth failing a board load over.
-  const { error } = await supabaseAdmin.from("markets").insert(rows);
+  const { error } = await supabaseAdmin.from("markets").insert(rows.slice(0, MARKET_MINT_CAP));
   if (error && !/duplicate key/i.test(error.message || "")) {
     console.warn("[markets] mint failed:", error.message);
     return 0;
   }
   return rows.length;
+}
+
+/**
+ * Assessments already on somebody's planner become dated questions.
+ *
+ * ─── WHY THIS ASKS ABOUT PREP AND NOT ABOUT THE MARK ────────────────────────
+ * A SAC mark market is the best content this board has, and `openMarkMarket`
+ * already builds one — on request, by the student it is about. Minting those
+ * automatically off the planner would publish "this person has a Chemistry SAC
+ * on Friday" and then put their mark up for the room to trade, for a sixteen-
+ * year-old who never asked for either. The weekly streak and hours lines are
+ * already auto-minted about everyone, but a MARK is a different order of
+ * private than an hours total, and consent that was never sought is not
+ * something a settlement can give back.
+ *
+ * So the planner mints the question next to it: whether they START. That
+ * resolves off the study log, which is already on the board, publishes no
+ * mark, and is the more interesting question anyway — the marks follow the
+ * prep, and the prep is the thing still in the student's hands while the
+ * market is open. The mark line stays exactly one tap away, opened by the
+ * person whose mark it is.
+ */
+async function mintPrepLines(live, per, week, now, wanted) {
+  const emails = live.map((m) => m.email);
+  if (!emails.length) return [];
+  const from = new Date(now.getTime() + 2 * 24 * 3600e3).toISOString().slice(0, 10);
+  const to = new Date(now.getTime() + 14 * 24 * 3600e3).toISOString().slice(0, 10);
+
+  const { data: due, error } = await supabaseAdmin.from("subject_assessments")
+    .select("id, created_by, subject_name, title, due_date, assessment_type, is_completed")
+    .in("created_by", emails)
+    .gte("due_date", from).lte("due_date", to)
+    .order("due_date", { ascending: true }).limit(40);
+  if (error) {
+    console.warn("[markets] prep lines skipped:", error.message);
+    return [];
+  }
+
+  const nameOf = Object.fromEntries(live.map((m) => [m.email, m.name]));
+  const seen = new Set();
+  const rows = [];
+  for (const a of due || []) {
+    if (a.is_completed) continue;
+    // One per student per week. A student with four assessments would
+    // otherwise take four rows of a twenty-row board on their own.
+    if (seen.has(a.created_by)) continue;
+    const ref = `prep:${a.id}`;
+    // Keyed on the DUE DATE rather than the current week: a SAC ten days out
+    // is minted this week and would mint again next week under a week key,
+    // which is the same question posted twice with the stakes split.
+    if (!wanted("prep", a.created_by, String(a.due_date), ref)) continue;
+    seen.add(a.created_by);
+
+    const who = firstNameOf(nameOf[a.created_by], a.created_by);
+    const subj = a.subject_name || "their next";
+    const what = String(a.assessment_type || "assessment").toLowerCase();
+    rows.push({
+      created_by: "system", status: "open",
+      kind: "prep",
+      subject_email: a.created_by, subject_name: nameOf[a.created_by] || null,
+      // Closes when the assessment arrives, so the window it asks about is
+      // exactly the run-up and the answer is known the moment it shuts.
+      closes_at: new Date(`${a.due_date}T00:00:00Z`).toISOString(),
+      title: `Will ${who} study on ${MARKET_PREP_TARGET}+ days before their ${subj} ${what}?`,
+      resolves_note: `From their study log over the ${MARKET_PREP_WINDOW} days before it.`,
+      prior: per[a.created_by]?.prep ?? 0.5,
+      meta: {
+        period: String(a.due_date), ref, target: MARKET_PREP_TARGET,
+        window: MARKET_PREP_WINDOW, due: String(a.due_date), subject: a.subject_name || null,
+        thin: (per[a.created_by]?.weeks || 0) < MARKET_MIN_OBS,
+      },
+    });
+    if (rows.length >= MARKET_PREP_MAX) break;
+  }
+  return rows;
 }
 
 // ─── Resolution ─────────────────────────────────────────────────────────────
@@ -8878,6 +9189,59 @@ async function mintWeeklyMarkets(members, now = new Date()) {
  * default, because resolving a question nobody could answer is worse than
  * leaving it hanging.
  */
+/**
+ * Everybody's countable week, in ONE pair of queries.
+ *
+ * A cohort or longshot line is about the whole room, so resolving it per
+ * member would be sixty round trips inside a sweep that already runs while a
+ * student waits for a board. Same move `leagueStandingRows` and `marketPriors`
+ * make, for the same reason.
+ */
+async function marketRowsBetween(emails, from, to) {
+  const list = Array.isArray(emails) ? emails : [emails];
+  if (!list.length) return new Map();
+  const [sess, tech] = await Promise.all([
+    supabaseAdmin.from("study_sessions")
+      .select("created_by, duration_minutes, date, created_date, extra")
+      .in("created_by", list).gte("date", from).lte("date", to),
+    supabaseAdmin.from("study_techniques")
+      .select("created_by, session_duration, date, created_date, extra")
+      .in("created_by", list).gte("date", from).lte("date", to),
+  ]);
+  const out = new Map();
+  const add = (r, col) => {
+    if (!out.has(r.created_by)) out.set(r.created_by, []);
+    out.get(r.created_by).push(studyRowFor(r, col));
+  };
+  (sess.data || []).forEach((r) => add(r, "duration_minutes"));
+  (tech.data || []).forEach((r) => add(r, "session_duration"));
+  return out;
+}
+
+const weekEndKey = (week) =>
+  new Date(new Date(`${week}T00:00:00Z`).getTime() + 6 * 24 * 3600e3)
+    .toISOString().slice(0, 10);
+
+/** Days studied and countable minutes, per person, over one week. */
+async function marketWeekByUser(emails, week) {
+  const to = weekEndKey(week);
+  const rowsBy = await marketRowsBetween(emails, week, to);
+  const at = new Date(`${to}T23:59:59Z`);
+  const out = new Map();
+  rowsBy.forEach((rows, email) => {
+    out.set(email, {
+      days: new Set(rows.filter((r) => r.minutes > 0).map((r) => r.day)).size,
+      minutes: countableStudyMinutes(rows, at),
+    });
+  });
+  // Somebody with no rows logged nothing; absent is not unknown here, because
+  // a week that has closed has an answer for everyone in it.
+  (Array.isArray(emails) ? emails : [emails]).forEach((e) => {
+    if (!out.has(e)) out.set(e, { days: 0, minutes: 0 });
+  });
+  return out;
+}
+
 async function resolveMarketOutcome(market, now = new Date()) {
   const meta = market.meta || {};
   const closes = market.closes_at ? new Date(market.closes_at) : null;
@@ -8885,28 +9249,75 @@ async function resolveMarketOutcome(market, now = new Date()) {
 
   if (market.kind === "streak" || market.kind === "hours") {
     if (!past) return null;
-    const week = meta.period;
-    if (!week) return null;
-    const from = week;
-    const to = new Date(new Date(`${week}T00:00:00Z`).getTime() + 6 * 24 * 3600e3)
-      .toISOString().slice(0, 10);
-    const [sess, tech] = await Promise.all([
-      supabaseAdmin.from("study_sessions")
-        .select("duration_minutes, date, created_date, extra")
-        .eq("created_by", market.subject_email).gte("date", from).lte("date", to),
-      supabaseAdmin.from("study_techniques")
-        .select("session_duration, date, created_date, extra")
-        .eq("created_by", market.subject_email).gte("date", from).lte("date", to),
-    ]);
-    const rows = [
-      ...(sess.data || []).map((r) => studyRowFor(r, "duration_minutes")),
-      ...(tech.data || []).map((r) => studyRowFor(r, "session_duration")),
-    ];
-    if (market.kind === "hours") {
-      return countableStudyMinutes(rows, new Date(`${to}T23:59:59Z`)) >= (meta.target || 0);
+    if (!meta.period) return null;
+    const mine = (await marketWeekByUser([market.subject_email], meta.period))
+      .get(market.subject_email);
+    return market.kind === "hours"
+      ? mine.minutes >= (meta.target || 0)
+      : mine.days >= (meta.target || 0);
+  }
+
+  // ── Head to head ────────────────────────────────────────────────────────
+  // A DEAD HEAT VOIDS rather than resolving false. "Did A beat B" has no
+  // answer when they tied, and defaulting it to NO would pay everybody who
+  // happened to be on the second-named side for a question that was never
+  // settled — the same reasoning that keeps an undecidable market open.
+  if (market.kind === "versus") {
+    if (!past) return null;
+    const pair = Array.isArray(meta.emails) ? meta.emails : [];
+    if (pair.length !== 2 || !meta.period) return null;
+    const by = await marketWeekByUser(pair, meta.period);
+    const a = by.get(pair[0])?.minutes || 0;
+    const b = by.get(pair[1])?.minutes || 0;
+    if (a === b) return "void";
+    return a > b;
+  }
+
+  // ── The board's own week ────────────────────────────────────────────────
+  // The roster is the one FROZEN at mint, never recomputed here. Re-deriving
+  // who is "active" at settlement would change the denominator after every
+  // position was taken against the old one, which is the repricing this
+  // codebase refuses everywhere else.
+  if (market.kind === "cohort" || market.kind === "longshot") {
+    if (!past) return null;
+    const roster = Array.isArray(meta.roster) ? meta.roster : [];
+    if (!roster.length || !meta.period) return null;
+    const by = await marketWeekByUser(roster, meta.period);
+
+    if (market.kind === "longshot") {
+      let best = 0;
+      by.forEach((v) => { best = Math.max(best, v.minutes); });
+      return best >= Number(meta.target || 0);
     }
+    if (meta.metric === "total_minutes") {
+      let total = 0;
+      by.forEach((v) => { total += v.minutes; });
+      return total >= Number(meta.target || 0);
+    }
+    if (meta.metric === "half_days") {
+      let n = 0;
+      by.forEach((v) => { if (v.days >= Number(meta.day_target || 0)) n += 1; });
+      return n >= Number(meta.target || 0);
+    }
+    // An unrecognised metric resolves NOTHING. Guessing at one would pay real
+    // cred on a question the server no longer understands — the posture the
+    // callout `status` check had to learn after waving every failure through.
+    return null;
+  }
+
+  // ── Prep before an assessment ───────────────────────────────────────────
+  if (market.kind === "prep") {
+    if (!past) return null;
+    if (!meta.due) return null;
+    const end = new Date(`${meta.due}T00:00:00Z`);
+    const start = new Date(end.getTime() - (Number(meta.window) || 7) * 24 * 3600e3);
+    const rowsBy = await marketRowsBetween(
+      [market.subject_email],
+      start.toISOString().slice(0, 10),
+      end.toISOString().slice(0, 10));
+    const rows = rowsBy.get(market.subject_email) || [];
     const days = new Set(rows.filter((r) => r.minutes > 0).map((r) => r.day));
-    return days.size >= (meta.target || 0);
+    return days.size >= Number(meta.target || 0);
   }
 
   if (market.kind === "quiz") {
@@ -9057,13 +9468,35 @@ app.post("/local-ai/fn/getMarkets", async (req, res) => {
     await mintWeeklyMarkets(members);
     const swept = await settleDueMarkets();
 
-    const [openRes, posRes, recentRes] = await Promise.all([
+    // Who this student knows. A sort, never a filter — a friends-only board
+    // would give each question at most five possible traders and kill the
+    // price, which is the arithmetic sortBoard's own header spells out.
+    const { data: friendRows } = await supabaseAdmin.from("friendships")
+      .select("requester_email, recipient_email, status")
+      .eq("status", "accepted")
+      .or(`requester_email.eq.${user.email},recipient_email.eq.${user.email}`)
+      .limit(300);
+    const friends = new Set((friendRows || []).flatMap((f) => [
+      f.requester_email, f.recipient_email,
+    ]).filter((e) => e && e !== user.email).map((e) => String(e).toLowerCase()));
+
+    const [openRes, recentRes] = await Promise.all([
       supabaseAdmin.from("markets").select("*")
         .eq("status", "open").order("created_date", { ascending: false }).limit(120),
-      supabaseAdmin.from("market_positions").select("*").limit(1000),
       supabaseAdmin.from("markets").select("*")
         .neq("status", "open").order("resolved_at", { ascending: false }).limit(30),
     ]);
+
+    // POSITIONS ARE FETCHED FOR THE MARKETS BEING RETURNED, not as a slice of
+    // the whole table. `select("*").limit(1000)` truncated silently once the
+    // table passed a thousand rows, and a truncated position list does not
+    // produce a missing card — it produces a WRONG PRICE on every card below
+    // the cut, with nothing anywhere reporting a problem. Same failure the
+    // ATAR's window queries had, and the reason fetchPaged exists.
+    const ids = [...(openRes.data || []), ...(recentRes.data || [])].map((m) => m.id);
+    const posRes = ids.length
+      ? await supabaseAdmin.from("market_positions").select("*").in("market_id", ids)
+      : { data: [] };
 
     const positions = posRes.data || [];
     const byMarket = new Map();
@@ -9075,12 +9508,37 @@ app.post("/local-ai/fn/getMarkets", async (req, res) => {
     // Names, so the tape has PEOPLE in it rather than addresses. Emails are
     // never returned for anybody but the caller.
     const nameOf = Object.fromEntries(members.map((m) => [m.email, m.name]));
+    const me = String(user.email || "").toLowerCase();
+
+    // `meta` is spread to the client, and some kinds carry addresses in it —
+    // the two in a head-to-head, the roster a cohort line was minted against.
+    // Those are needed to SETTLE and must never be published, so they come off
+    // here rather than at each call site, where the next kind to carry one
+    // would quietly leak it.
+    const PRIVATE_META = new Set(["emails", "roster"]);
+    const publicMeta = (meta) => Object.fromEntries(
+      Object.entries(meta || {}).filter(([k]) =>
+        !PRIVATE_META.has(k) && !/email/i.test(k)));
+
     const shape = (m) => {
       const held = byMarket.get(m.id) || [];
+      const meta = m.meta || {};
+      // Everyone the question is ABOUT: the subject, a call-out's caller, and
+      // both sides of a head-to-head. `subject_is_me` generalises to the pair
+      // so a rivalry sorts to the top for BOTH of them, not just whichever
+      // address happened to land in subject_email.
+      const involved = [m.subject_email, m.caller_email, ...(meta.emails || [])]
+        .filter(Boolean).map((x) => String(x).toLowerCase());
       return {
         ...m,
+        meta: publicMeta(meta),
         subject_name: m.subject_name || nameOf[m.subject_email] || null,
-        subject_is_me: m.subject_email === user.email,
+        subject_is_me: involved.includes(me),
+        subject_is_friend: involved.some((e) => friends.has(e)),
+        // Read by blockReason for a head-to-head: the two in it decide it, so
+        // neither may hold a side, and the client cannot work that out for
+        // itself because the addresses never reach it.
+        in_contest: m.kind === "versus" && involved.includes(me),
         subject_email: m.subject_email === user.email ? user.email : null,
         positions: held.map((p) => ({
           id: p.id, p: Number(p.p), stake: p.stake,
@@ -9153,6 +9611,13 @@ app.post("/local-ai/fn/takePosition", async (req, res) => {
     const blocked = marketBlockReason({
       ...market,
       competitor_emails: market.meta?.competitor_emails || [],
+      // The client learns this as a boolean because the two addresses never
+      // reach it; here the row itself is in hand, so the rule is checked
+      // against the real pair. Both halves of the same sentence: whoever
+      // decides a market may not hold a paying position on it.
+      in_contest: (market.meta?.emails || [])
+        .map((e) => String(e || "").toLowerCase())
+        .includes(String(user.email || "").toLowerCase()),
     }, user.email);
     if (blocked) return res.status(403).json({ error: blocked });
 
