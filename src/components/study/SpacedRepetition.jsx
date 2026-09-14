@@ -21,6 +21,7 @@ import {
     Users, UserPlus, ChevronLeft, FileText, ListChecks
 } from "lucide-react";
 import { base44 } from "@/api/base44Client";
+import { acceptFiles, uploadAll, STUDY_ACCEPT, STUDY_ACCEPT_LABEL } from "@/lib/pickFiles";
 import { format } from "date-fns";
 import { moderationPresets } from "@/components/shared/contentModeration";
 import { recordStudyAndGetStreak } from "@/components/shared/streakHelpers";
@@ -366,7 +367,15 @@ export default function SpacedRepetition() {
         setIsShowingGenerated(false);
         setIsGenerating(true);
         try {
-            const uploaded = await Promise.all(uploadedFiles.map(f => base44.integrations.Core.UploadFile({ file: f }).then(r => ({ url: r.file_url, name: f.name, ext: f.name.split('.').pop().toLowerCase() }))));
+            const { uploaded, failed } = await uploadAll(uploadedFiles, base44.integrations.Core.UploadFile);
+            failed.forEach(f => toast({
+                title: "Skipped a file",
+                description: `${f.name} couldn't be uploaded, so it isn't in these cards.`,
+                variant: "destructive",
+            }));
+            if (!uploaded.length && uploadedFiles.length) {
+                throw new Error("None of your files could be uploaded. Check your connection and try again.");
+            }
             const docxPptx = uploaded.filter(f => f.ext === 'docx' || f.ext === 'pptx');
             const directFiles = uploaded.filter(f => f.ext !== 'docx' && f.ext !== 'pptx');
             let documentContext = '';
@@ -1230,11 +1239,16 @@ The documents provided may be PowerPoint slides, Word documents, PDFs or text fi
                                         <p className={`font-semibold ${uploadedFiles.length ? 'text-chart-4' : 'text-foreground'}`}>
                                             {uploadedFiles.length ? `${uploadedFiles.length} file${uploadedFiles.length > 1 ? 's' : ''} selected` : 'Upload Study Material'}
                                         </p>
-                                        <p className="text-xs text-muted-foreground">PDF, DOCX, PPTX, or TXT — multiple files supported</p>
+                                        <p className="text-xs text-muted-foreground">{STUDY_ACCEPT_LABEL}</p>
                                     </div>
-                                    <input type="file" className="hidden" accept=".pdf,.txt,.docx,.pptx" multiple onChange={e => {
-                                        const files = Array.from(e.target.files || []);
-                                        setUploadedFiles(prev => { const names = new Set(prev.map(f => f.name)); return [...prev, ...files.filter(f => !names.has(f.name))]; });
+                                    <input type="file" className="hidden" accept={STUDY_ACCEPT} multiple onChange={async e => {
+                                        const picked = e.target.files;
+                                        e.target.value = "";
+                                        // Resized, checked and reported HERE rather than at
+                                        // generate time: a problem with a file is worth knowing
+                                        // when you pick it, not sixty seconds later under a
+                                        // spinner that has already failed.
+                                        setUploadedFiles(await acceptFiles(picked, { toast, existing: uploadedFiles }));
                                     }} />
                                 </label>
                                 {uploadedFiles.length > 0 && (

@@ -5,6 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/components/ui/use-toast";
 import { base44 } from "@/api/base44Client";
+import { acceptFiles, STUDY_ACCEPT, STUDY_ACCEPT_LABEL } from "@/lib/pickFiles";
 import {
     Upload, X, FileText, Loader2, Wand2, Printer, Plus, RotateCcw,
     Sigma, BookOpen, Check, Lightbulb, ChevronDown, Download, Eye
@@ -69,25 +70,16 @@ export default function CheatSheetMaker() {
     }, []);
 
     // ─── File handling ───────────────────────────────────────────────────────
-    const allowed = [
-        "application/pdf",
-        "text/plain",
-        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-        "application/vnd.openxmlformats-officedocument.presentationml.presentation",
-    ];
-
-    const handleFiles = (newFiles) => {
-        const valid = Array.from(newFiles).filter((f) => {
-            if (!allowed.includes(f.type)) {
-                toast({ title: `Unsupported: ${f.name}`, description: "Only PDF, TXT, DOCX, PPTX", variant: "destructive" });
-                return false;
-            }
-            return true;
-        });
-        if (valid.length) {
-            setUploadedFiles((prev) => {
-                const names = new Set(prev.map((f) => f.name));
-                const merged = [...prev, ...valid.filter((f) => !names.has(f.name))];
+    // The old gate was `allowed.includes(f.type)` — a strict MIME whitelist, which
+    // is precisely the check that refused small valid files. The same JPEG is
+    // `image/jpeg` from one browser, `image/jpg` from another and
+    // `application/octet-stream` from a drag-and-drop, and two of those three
+    // got "Unsupported: notes.jpg". acceptFiles falls back to the extension,
+    // and resizes photos on the way through.
+    const handleFiles = async (newFiles) => {
+        const merged = await acceptFiles(newFiles, { toast, existing: uploadedFiles });
+        if (merged.length !== uploadedFiles.length) {
+            setUploadedFiles(() => {
                 if (!title && merged.length > 0) setTitle(merged[0].name.replace(/\.[^/.]+$/, ""));
                 return merged;
             });
@@ -313,12 +305,12 @@ ${sourceText ? `\nEXTRACTED CONTENT:${sourceText}` : ""}`;
                             isDragging ? "border-primary bg-primary/5" : uploadedFiles.length ? "border-primary/40 bg-primary/5" : "border-border hover:border-primary/40 hover:bg-primary/5"
                         }`}
                     >
-                        <input ref={fileInputRef} type="file" className="hidden" accept=".pdf,.txt,.docx,.pptx" multiple onChange={(e) => handleFiles(e.target.files)} />
+                        <input ref={fileInputRef} type="file" className="hidden" accept={STUDY_ACCEPT} multiple onChange={(e) => { handleFiles(e.target.files); e.target.value = ""; }} />
                         {uploadedFiles.length === 0 ? (
                             <div>
                                 <Upload className="w-8 h-8 text-muted-foreground/40 mx-auto mb-2" />
                                 <p className="text-sm font-bold text-foreground">Drop notes here, or click to browse</p>
-                                <p className="text-xs text-muted-foreground mt-1">PDF, TXT, DOCX, PPTX — multiple files supported</p>
+                                <p className="text-xs text-muted-foreground mt-1">{STUDY_ACCEPT_LABEL}</p>
                             </div>
                         ) : (
                             <div className="space-y-2" onClick={(e) => e.stopPropagation()}>

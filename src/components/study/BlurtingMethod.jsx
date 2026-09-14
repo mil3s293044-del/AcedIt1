@@ -11,6 +11,7 @@ import { PenTool, Play, Clock, CheckCircle, RotateCcw, Maximize, Wand2, Loader2,
 import { format } from "date-fns";
 import { useToast } from "@/components/ui/use-toast";
 import { base44 } from "@/api/base44Client";
+import { acceptFiles, uploadAll, STUDY_ACCEPT, STUDY_ACCEPT_LABEL } from "@/lib/pickFiles";
 import { aceDone } from "@/components/ace/AceReacts";
 import WhatToTest from "./WhatToTest";
 import { FEATURES, checkLiveTier } from "@/lib/tierAccess";
@@ -215,7 +216,14 @@ export default function BlurtingMethod({ onSessionComplete }) {
 
         setIsGeneratingFeedback(true);
         try {
-            const uploaded = hasNotes ? await Promise.all(sourceFiles.map(f => base44.integrations.Core.UploadFile({ file: f }).then(r => ({ url: r.file_url, name: f.name, ext: f.name.split('.').pop().toLowerCase() })))) : [];
+            const { uploaded, failed } = hasNotes
+                ? await uploadAll(sourceFiles, base44.integrations.Core.UploadFile)
+                : { uploaded: [], failed: [] };
+            failed.forEach(f => toast({
+                title: "Skipped a file",
+                description: `${f.name} couldn't be uploaded, so it isn't included.`,
+                variant: "destructive",
+            }));
             const docxPptx = uploaded.filter(f => f.ext === 'docx' || f.ext === 'pptx');
             const directFiles = uploaded.filter(f => f.ext !== 'docx' && f.ext !== 'pptx');
             let documentContext = '';
@@ -512,12 +520,13 @@ Reference Study Design requirements in your feedback.`,
                                     <p className={`text-sm font-medium ${sourceFiles.length ? 'text-xp' : 'text-muted-foreground'}`}>
                                         {sourceFiles.length ? `${sourceFiles.length} file${sourceFiles.length > 1 ? 's' : ''} selected` : 'Upload notes'}
                                     </p>
-                                    <p className="text-xs text-muted-foreground/60">PDF, DOCX, PPTX, TXT — multiple files</p>
+                                    <p className="text-xs text-muted-foreground/60">{STUDY_ACCEPT_LABEL}</p>
                                 </div>
-                                <input type="file" className="hidden" multiple onChange={e => {
-                                    const files = Array.from(e.target.files || []);
-                                    setSourceFiles(prev => { const names = new Set(prev.map(f => f.name)); return [...prev, ...files.filter(f => !names.has(f.name))]; });
-                                }} accept=".pdf,.docx,.pptx,.txt" />
+                                <input type="file" className="hidden" multiple onChange={async e => {
+                                    const picked = e.target.files;
+                                    e.target.value = "";
+                                    setSourceFiles(await acceptFiles(picked, { toast, existing: sourceFiles }));
+                                }} accept={STUDY_ACCEPT} />
                             </label>
                             {sourceFiles.length > 0 && (
                                 <div className="px-3.5 pb-3 space-y-1" onClick={e => e.stopPropagation()}>

@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { base44 } from "@/api/base44Client";
+import { acceptFiles, STUDY_ACCEPT, STUDY_ACCEPT_LABEL } from "@/lib/pickFiles";
 import { createPageUrl } from "@/utils";
 import { BANK_TOPIC, bankSummary } from "@/lib/mistakeBank";
 import { isDue, isNew } from "@/lib/due";
@@ -1705,14 +1706,12 @@ Return valid JSON only.`,
                                                id="pdf-upload"
                                                className="hidden"
                                                multiple
-                                               onChange={(e) => {
-                                                   const files = Array.from(e.target.files || []);
-                                                   setUploadedFiles(prev => {
-                                                       const names = new Set(prev.map(f => f.name));
-                                                       return [...prev, ...files.filter(f => !names.has(f.name))];
-                                                   });
+                                               onChange={async (e) => {
+                                                   const picked = e.target.files;
+                                                   e.target.value = "";
+                                                   setUploadedFiles(await acceptFiles(picked, { toast, existing: uploadedFiles }));
                                                }}
-                                               accept=".pdf,.txt,.docx,.pptx,application/pdf,text/plain,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.openxmlformats-officedocument.presentationml.presentation"
+                                               accept={STUDY_ACCEPT}
                                            />
                                             <label
                                                htmlFor="pdf-upload"
@@ -1741,7 +1740,7 @@ Return valid JSON only.`,
                                                    <>
                                                        <Upload className="w-12 h-12 text-muted-foreground/60 mb-3" />
                                                        <p className="font-medium text-foreground">Click to upload documents</p>
-                                                       <p className="text-sm text-muted-foreground mt-1">PDF, TXT, DOCX, PPTX — multiple files supported</p>
+                                                       <p className="text-sm text-muted-foreground mt-1">{STUDY_ACCEPT_LABEL}</p>
                                                    </>
                                                )}
                                            </label>
