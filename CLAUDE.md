@@ -258,12 +258,26 @@ heading.
 **A PACK IS A FIXED WIDTH, so a wider container does not make the shelf
 better.** `PACK_W` has to stay fixed — the same pack is dealt on the flashcard
 shelf and one per row on a phone is the right call there — so taking the rail's
-380px just moved the dead space from beside the list to the right of it. The
-subject sections are CSS `columns-2` at xl instead: two subjects side by side
-on a wide screen, each keeping its own heading and its own wrapping row.
-Columns rather than a grid so the sections pack tightly instead of leaving a
-ragged cell under the shorter one, and `break-inside-avoid` is what stops a
-subject being split from its packs.
+380px just moved the dead space from beside the list to the right of it.
+
+The first answer was CSS `columns-2` at xl, and against REAL DATA it was
+worse. Most students have one or two quizzes per subject, so the columns filled
+with single cards at unequal heights and the page became a zigzag of headings
+starting at four different vertical positions. Balancing a masonry needs
+sections of comparable size and these are not — which a fixture of three
+quizzes per subject hid completely, and one screenshot of a real account made
+obvious. **Check a layout against the shape of the data somebody actually has.**
+
+It is stacked bands — one subject, one row, scrolled through. **The rhythm is
+what makes it read:** every heading starts at the same x, so the eye runs
+straight down the subjects instead of hunting for the next one. And each header
+ends in A RULE TO THE END OF THE ROW, which is what turns a left-aligned row of
+fixed-width cards from a hole into a shelf: the rule terminates the band, so
+the space beside two packs is margin somebody chose rather than somewhere
+content failed to reach. Free, and it does the job the columns were attempting.
+The colour is a SPINE rather than a dot, because Subjects already identifies a
+subject that way and the two shelves listing a student's own work should not
+label them differently.
 
 **With no quizzes the whole section is not rendered.** The featured strip above
 already makes the one ask, so a heading, a toolbar and a large dashed empty box
