@@ -64,6 +64,10 @@ const AIToolsHistory = lazyPage('AIToolsHistory', () => import('./pages/AIToolsH
 const Analytics = lazyPage('Analytics', () => import('./pages/Analytics'));
 const Checkout = lazyPage('Checkout', () => import('./pages/Checkout'));
 const Competitions = lazyPage('Competitions', () => import('./pages/Competitions'));
+// One question, in full. The id rides in the query string — createPageUrl
+// builds /PageName and a second URL scheme for one page is how routes start
+// disagreeing with the router.
+const Market = lazyPage('Market', () => import('./pages/Market'));
 const Dashboard = lazyPage('Dashboard', () => import('./pages/Dashboard'));
 const Friends = lazyPage('Friends', () => import('./pages/Friends'));
 const Goals = lazyPage('Goals', () => import('./pages/Goals'));
@@ -98,6 +102,7 @@ export const PAGES = {
     "Analytics": Analytics,
     "Checkout": Checkout,
     "Competitions": Competitions,
+    "Market": Market,
     "Dashboard": Dashboard,
     "Friends": Friends,
     "Goals": Goals,

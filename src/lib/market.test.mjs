@@ -21,7 +21,8 @@ import {
     KINDS, blockReason, canTakePosition,
     readMarket, markToMarket, heatOf, sortBoard, isOpen,
     edgePoints, settlementOf, unseenSettlements, markSettlementsSeen,
-    multiplierOf, multiplierLabel, multipliers, priceHistory, featuredOf,
+    returnMultiple, RETURN_CEILING, bestReturn, returns, multiplierLabel,
+    priceHistory, featuredOf,
 } from "@/lib/market";
 
 let passed = 0;
@@ -440,18 +441,95 @@ check("and it fires ONCE — a seen result never comes back", () => withStorage(
     }
 }));
 
-// ─── Multipliers: the reading, and only the reading ─────────────────────────
+// ─── The multiplier IS the money ────────────────────────────────────────────
 
-check("a multiplier is 1/price, and the two sides are reciprocal complements", () => {
-    assert.equal(multiplierOf(0.5, YES).toFixed(2), "2.00");
-    assert.equal(multiplierOf(0.5, NO).toFixed(2), "2.00");
-    assert.equal(multiplierOf(0.62, YES).toFixed(2), "1.61");
-    assert.equal(multiplierOf(0.62, NO).toFixed(2), "2.63");
-    // The pair always implies one whole outcome between them.
-    for (const p of [0.05, 0.2, 0.5, 0.77, 0.95]) {
-        const inv = 1 / multiplierOf(p, YES) + 1 / multiplierOf(p, NO);
-        assert.ok(Math.abs(inv - 1) < 1e-9, `sides must sum to one at ${p}`);
+check("THE MULTIPLE IS EXACTLY WHAT COMES BACK, at every stake", () => {
+    // The bug this replaces: the card printed 1/price, which is a number about
+    // the odds and not about the student's cred. If these two ever drift apart
+    // the headline on every card is a lie again.
+    for (const stake of [10, 37, 100, 500]) {
+        for (const price of [0.05, 0.3, 0.5, 0.62, 0.9]) {
+            for (const p of [0.03, 0.25, 0.5, 0.75, 0.97]) {
+                for (const outcome of [true, false]) {
+                    const back = stake + payoutFor(stake, p, price, outcome);
+                    const mult = returnMultiple(p, price, outcome);
+                    // Cred is whole, so the payout rounds: the multiple can
+                    // only ever agree to within half a cred of the stake. On a
+                    // 10 stake that is 5%, which is why the smallest stakes
+                    // cannot express the difference between 1.00× and 1.04×.
+                    const slack = 0.5 / stake + 1e-9;
+                    assert.ok(Math.abs(back / stake - mult) <= slack,
+                        `stake ${stake} at p=${p} into ${price}: card says ${mult.toFixed(3)}× `
+                        + `but ${back} of ${stake} comes back`);
+                }
+            }
+        }
     }
+});
+
+check("THE 2× CEILING IS STRUCTURAL and nothing can print past it", () => {
+    assert.equal(RETURN_CEILING, 2);
+    let top = 0;
+    for (let q = 0; q <= 1.0001; q += 0.02) {
+        for (let p = 0; p <= 1.0001; p += 0.02) {
+            for (const outcome of [true, false]) {
+                const m = returnMultiple(p, q, outcome);
+                assert.ok(m >= 0, "a stake is escrowed, so nobody can owe");
+                assert.ok(m <= RETURN_CEILING + 1e-9, `${m} exceeds the ceiling`);
+                top = Math.max(top, m);
+            }
+        }
+    }
+    assert.ok(Math.abs(top - RETURN_CEILING) < 1e-6,
+        "and the ceiling must be reachable, or it is the wrong number");
+});
+
+check("the old 1/price figures were unreachable — the exact numbers that shipped", () => {
+    // A longshot card printed 7.24× when the true ceiling on it was ~1.8×.
+    assert.ok(bestReturn(0.12, YES).win < 1.85);
+    assert.ok(bestReturn(0.05, YES).win < 1.95);
+    // 1/0.05 = 20×, which is ten times what the position can ever return.
+    assert.ok(1 / 0.05 > bestReturn(0.05, YES).win * 5,
+        "kept as the record of how far off the odds reading was");
+});
+
+check("the underdog still pays more — the ordering the odds got right", () => {
+    for (const price of [0.1, 0.25, 0.4]) {
+        const r = returns(price);
+        assert.ok(r.yes > r.no,
+            `at ${price} the unlikely side must pay more than the likely one`);
+    }
+    // Even money pays the same both ways, and pays it symmetrically.
+    const even = returns(0.5);
+    assert.ok(Math.abs(even.yes - even.no) < 1e-9);
+});
+
+check("and the risk is the other half of the sentence", () => {
+    // A max-conviction call on a heavy favourite wins little and risks plenty.
+    const fav = bestReturn(0.85, YES);
+    assert.ok(fav.win < 1.05, "backing an 85¢ favourite barely pays");
+    assert.ok(fav.risk < 0.85, "and it puts most of the stake up to do it");
+    // Backing the longshot is the mirror image.
+    const dog = bestReturn(0.85, NO);
+    assert.ok(dog.win > 1.5);
+    assert.ok(dog.risk < 0.2);
+});
+
+check("AGREEING WITH THE PRICE RETURNS EXACTLY THE STAKE", () => {
+    for (const price of [0.2, 0.5, 0.77]) {
+        for (const outcome of [true, false]) {
+            assert.ok(Math.abs(returnMultiple(price, price, outcome) - 1) < 1e-9,
+                "1.00× is the same statement as 'pays nothing either way'");
+        }
+    }
+});
+
+check("two decimals always, because the whole band is 1.00 to 2.00", () => {
+    assert.equal(multiplierLabel(1.1435), "1.14×");
+    assert.equal(multiplierLabel(1.4), "1.40×");
+    assert.equal(multiplierLabel(2), "2.00×");
+    assert.equal(multiplierLabel(0), "0.00×");
+    assert.equal(multiplierLabel(NaN), "—");
 });
 
 check("MONEY ON A SIDE SHORTENS IT — the whole reason this reads as a market", () => {
@@ -459,28 +537,10 @@ check("MONEY ON A SIDE SHORTENS IT — the whole reason this reads as a market",
     const before = priceOf(m, []);
     const after = priceOf(m, [{ p: 0.9, stake: 400 }]);
     assert.ok(after > before, "yes conviction must raise the price");
-    assert.ok(multiplierOf(after, YES) < multiplierOf(before, YES), "yes must shorten");
-    assert.ok(multiplierOf(after, NO) > multiplierOf(before, NO), "no must lengthen");
-});
-
-check("odds are floored rather than infinite at the ends", () => {
-    assert.ok(Number.isFinite(multiplierOf(0, YES)));
-    assert.ok(Number.isFinite(multiplierOf(1, NO)));
-    assert.equal(multiplierLabel(multiplierOf(0, YES)), "100×");
-    assert.equal(multiplierLabel(NaN), "—");
-    assert.equal(multiplierLabel(1.6129), "1.61×");
-    assert.equal(multiplierLabel(12.44), "12.4×");
-    assert.equal(multiplierLabel(45.7), "46×");
-});
-
-check("THE MULTIPLIER IS NEVER THE PAYOUT, and the gap is large", () => {
-    // The exact case market.js documents: 100 at 85¢ into a 62¢ market.
-    const paid = payoutFor(100, 0.85, 0.62, true);
-    const asOdds = Math.round(100 * (multipliers(0.62).yes - 1));
-    assert.equal(paid, 12);
-    assert.equal(asOdds, 61);
-    assert.ok(paid < asOdds / 3,
-        "if these ever converge, printing odds next to a stake stops being a lie");
+    // And the return on yes falls as it gets more likely, which is what a
+    // shortening price MEANS — now stated in cred rather than in odds.
+    assert.ok(returns(after).yes < returns(before).yes, "yes must shorten");
+    assert.ok(returns(after).no > returns(before).no, "no must lengthen");
 });
 
 // ─── The tape ───────────────────────────────────────────────────────────────

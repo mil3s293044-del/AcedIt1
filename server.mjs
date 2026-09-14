@@ -5583,20 +5583,56 @@ app.post("/local-ai/fn/reactToEvent", async (req, res) => {
   if (!supabaseAdmin) return res.status(500).json({ error: "Supabase admin not configured" });
 
   try {
-    const { event_key, emoji, duel_id, competition_id } = req.body || {};
-    if (!event_key) return res.status(400).json({ error: "event_key required" });
+    const { emoji, duel_id, competition_id, market_id, position_id } = req.body || {};
+    let { event_key } = req.body || {};
     if (emoji && !REACTIONS.includes(emoji)) {
       return res.status(400).json({ error: "Not a reaction we know." });
     }
-    if (!duel_id && !competition_id) {
-      return res.status(400).json({ error: "A reaction belongs to a contest." });
-    }
 
-    // You may only react inside a battle you are in. Scoped from the CONTEST,
-    // never from the event key, which is a client-supplied string.
-    const audience = await calloutAudience({ duel_id, competition_id });
-    if (!audience.emails.includes(user.email)) {
-      return res.status(403).json({ error: "You're not in that one." });
+    // ── A reaction on the market floor ──────────────────────────────────────
+    // The audience of a market is the whole board — everybody can see every
+    // question — so there is no contest to check membership against. What
+    // replaces that check is that the KEY IS DERIVED HERE and never accepted:
+    // a client that could name its own event_key could park a reaction on any
+    // string it liked, including another feature's. The contest path keeps the
+    // client-supplied key because its membership check is what guards it.
+    //
+    // NO FREE TEXT, still. Migration 0034 ruled that out for the feed and the
+    // reasoning got stronger, not weaker, when markets started being minted
+    // about named students: a comment box under "Will Maya study 5+ days this
+    // week?" is an unmoderated thread about a sixteen-year-old. The glyph set
+    // gives all of "somebody saw this" and none of the moderation surface.
+    if (market_id) {
+      const { data: mk, error: mkErr } = await supabaseAdmin
+        .from("markets").select("id").eq("id", market_id).maybeSingle();
+      if (mkErr && REACTION_MISSING.includes(mkErr.code)) {
+        return res.json({ success: true, available: false, mine: null });
+      }
+      if (mkErr) throw mkErr;
+      if (!mk) return res.status(404).json({ error: "That market no longer exists." });
+
+      if (position_id) {
+        // ...and a position reaction has to be ON this market, or one id could
+        // attach a glyph to a position on a question nobody was looking at.
+        const { data: pos } = await supabaseAdmin.from("market_positions")
+          .select("id").eq("id", position_id).eq("market_id", market_id).maybeSingle();
+        if (!pos) return res.status(404).json({ error: "That position is not on this market." });
+        event_key = `pos:${position_id}`;
+      } else {
+        event_key = `market:${market_id}`;
+      }
+    } else {
+      if (!event_key) return res.status(400).json({ error: "event_key required" });
+      if (!duel_id && !competition_id) {
+        return res.status(400).json({ error: "A reaction belongs to a contest." });
+      }
+
+      // You may only react inside a battle you are in. Scoped from the CONTEST,
+      // never from the event key, which is a client-supplied string.
+      const audience = await calloutAudience({ duel_id, competition_id });
+      if (!audience.emails.includes(user.email)) {
+        return res.status(403).json({ error: "You're not in that one." });
+      }
     }
 
     // Tapping the same glyph again takes it back; a different one replaces it.
@@ -9557,14 +9593,7 @@ app.post("/local-ai/fn/getMarkets", async (req, res) => {
 
     return res.json({
       available: true,
-      me: {
-        email: user.email,
-        name: profile.username || profile.full_name || null,
-        cred: Math.max(0, Number(profile.cred_balance) || 0),
-        lifetime_won: Number(profile.cred_lifetime_won) || 0,
-        weekly_grant: CRED_WEEKLY_GRANT,
-        cap: CRED_BALANCE_CAP,
-      },
+      me: { ...creditSummary(profile), email: user.email },
       markets: open,
       recent,
       swept: swept.settled,
@@ -9572,6 +9601,224 @@ app.post("/local-ai/fn/getMarkets", async (req, res) => {
     });
   } catch (err) {
     console.error("[getMarkets] error:", err);
+    return res.status(500).json({ error: err?.message || String(err) });
+  }
+});
+
+
+/** The cred header both the floor and the book print. One definition. */
+function creditSummary(profile) {
+  return {
+    email: profile.created_by || profile.user_email || null,
+    name: profile.username || profile.full_name || null,
+    cred: Math.max(0, Number(profile.cred_balance) || 0),
+    lifetime_won: Number(profile.cred_lifetime_won) || 0,
+    weekly_grant: CRED_WEEKLY_GRANT,
+    cap: CRED_BALANCE_CAP,
+  };
+}
+
+// ─── Your own book ──────────────────────────────────────────────────────────
+
+/**
+ * Every position this student has ever held, with the market it sits on.
+ *
+ * SEPARATE FROM getMarkets ON PURPOSE. That endpoint returns the 30 most
+ * recently resolved markets on the whole board, which is the right payload for
+ * a tape and the wrong one for a history: a student's own tenth-most-recent
+ * call can easily be outside it, so a portfolio built off it would silently
+ * report a fraction of somebody's record as all of it. The rule the ATAR
+ * window queries had to learn — an unordered prefix is not a sample.
+ *
+ * It MINTS NOTHING and SETTLES NOTHING, which is what lets it sit in
+ * READ_ONLY_FUNCTIONS and not flush the read cache on every visit.
+ */
+app.post("/local-ai/fn/getPortfolio", async (req, res) => {
+  const user = await authenticateRequest(req);
+  if (!user) return res.status(401).json({ error: "Unauthorized" });
+  if (!supabaseAdmin) return res.status(500).json({ error: "Supabase admin not configured" });
+
+  try {
+    const profile = await loadUserProfile(user.email);
+    if (!profile) return res.status(404).json({ error: "Profile not found" });
+
+    const probe = await supabaseAdmin.from("markets").select("id").limit(1);
+    if (probe.error) {
+      return res.json({ available: false, reason: "Markets need migration 0036." });
+    }
+
+    // Paged, because a whole term of positions can pass PostgREST's silent
+    // 1000-row ceiling and a truncated book is a WRONG record rather than a
+    // short one — the equity curve would simply stop mid-term.
+    const mine = await fetchAllRows(() => supabaseAdmin
+      .from("market_positions").select("*")
+      .eq("user_email", user.email)
+      .order("created_date", { ascending: true }));
+    if (!mine.length) {
+      return res.json({ available: true, me: creditSummary(profile), holdings: [] });
+    }
+
+    const ids = [...new Set(mine.map((p) => p.market_id))];
+    const { data: markets, error: mErr } = await supabaseAdmin
+      .from("markets").select("*").in("id", ids);
+    if (mErr) throw mErr;
+    const byId = new Map((markets || []).map((m) => [m.id, m]));
+
+    // The CURRENT price of an open market needs every position on it, not just
+    // this student's — a price computed from one holding is that holding's own
+    // conviction read back to them as the crowd.
+    const openIds = (markets || []).filter((m) => m.status === "open").map((m) => m.id);
+    const crowd = new Map();
+    if (openIds.length) {
+      const { data: all } = await supabaseAdmin
+        .from("market_positions").select("market_id, p, stake").in("market_id", openIds);
+      (all || []).forEach((p) => {
+        if (!crowd.has(p.market_id)) crowd.set(p.market_id, []);
+        crowd.get(p.market_id).push(p);
+      });
+    }
+
+    const holdings = mine.map((pos) => {
+      const m = byId.get(pos.market_id);
+      if (!m) return null;
+      const held = crowd.get(m.id) || [];
+      return {
+        id: pos.id, market_id: pos.market_id,
+        p: Number(pos.p), stake: pos.stake,
+        price_at_entry: Number(pos.price_at_entry),
+        payout: pos.payout, settled_at: pos.settled_at,
+        created_date: pos.created_date,
+        market: {
+          id: m.id, kind: m.kind, title: m.title, status: m.status,
+          outcome: m.outcome, prior: Number(m.prior),
+          // An open market is priced from the room as it stands. A RESOLVED
+          // one has no live price and must not be given one: pricing it off
+          // the positions this student happens to hold would hand them their
+          // own conviction back as the crowd's, and pricing it off the prior
+          // would draw every settled call as though nobody had ever traded it.
+          // The book reads `price_at_entry` and the outcome instead.
+          price: m.status === "open" ? marketPrice(m, held) : null,
+          closes_at: m.closes_at, resolved_at: m.resolved_at,
+          traders: held.length,
+        },
+      };
+    }).filter(Boolean);
+
+    return res.json({ available: true, me: creditSummary(profile), holdings });
+  } catch (err) {
+    console.error("[getPortfolio] error:", err);
+    return res.status(500).json({ error: err?.message || String(err) });
+  }
+});
+
+// ─── One market, in full ────────────────────────────────────────────────────
+
+/**
+ * Everything about a single question: the whole tape, everyone on it, and the
+ * reactions.
+ *
+ * The board card carries a summary because thirty of them share a screen. This
+ * is the opposite payload — one market, every position with a name on it, and
+ * no cap, because the interesting thing about a market with fourteen people in
+ * it is the fourteen people.
+ */
+app.post("/local-ai/fn/getMarket", async (req, res) => {
+  const user = await authenticateRequest(req);
+  if (!user) return res.status(401).json({ error: "Unauthorized" });
+  if (!supabaseAdmin) return res.status(500).json({ error: "Supabase admin not configured" });
+
+  try {
+    const { market_id } = req.body || {};
+    if (!market_id) return res.status(400).json({ error: "market_id required" });
+
+    const { data: market, error } = await supabaseAdmin
+      .from("markets").select("*").eq("id", market_id).maybeSingle();
+    if (error) {
+      if (REACTION_MISSING.includes(error.code)) {
+        return res.json({ available: false, reason: "Markets need migration 0036." });
+      }
+      throw error;
+    }
+    if (!market) return res.status(404).json({ error: "That market no longer exists." });
+
+    const [posRes, reactRes, rosterRes] = await Promise.all([
+      supabaseAdmin.from("market_positions").select("*")
+        .eq("market_id", market_id).order("created_date", { ascending: true }),
+      supabaseAdmin.from("compete_reactions").select("created_by, event_key, emoji")
+        .like("event_key", `%${market_id}%`),
+      supabaseAdmin.from("user_profiles").select("created_by, username, full_name")
+        .not("created_by", "is", null).limit(300),
+    ]);
+
+    const nameOf = Object.fromEntries((rosterRes.data || [])
+      .map((r) => [r.created_by, r.username || r.full_name || null]));
+    const me = String(user.email || "").toLowerCase();
+    const meta = market.meta || {};
+    const involved = [market.subject_email, market.caller_email, ...(meta.emails || [])]
+      .filter(Boolean).map((x) => String(x).toLowerCase());
+
+    // Friends lift a name on the tape the way they lift a card on the board.
+    const { data: friendRows } = await supabaseAdmin.from("friendships")
+      .select("requester_email, recipient_email, status").eq("status", "accepted")
+      .or(`requester_email.eq.${user.email},recipient_email.eq.${user.email}`).limit(300);
+    const friends = new Set((friendRows || [])
+      .flatMap((f) => [f.requester_email, f.recipient_email])
+      .filter((e) => e && e !== user.email).map((e) => String(e).toLowerCase()));
+
+    const positions = (posRes.data || []).map((p) => ({
+      id: p.id, p: Number(p.p), stake: p.stake,
+      price_at_entry: Number(p.price_at_entry),
+      payout: p.payout, settled_at: p.settled_at, created_date: p.created_date,
+      user_name: p.user_name || nameOf[p.user_email] || null,
+      user_email: p.user_email === user.email ? user.email : null,
+      is_me: p.user_email === user.email,
+      is_friend: friends.has(String(p.user_email || "").toLowerCase()),
+    }));
+
+    // Grouped by what they are attached to — the market itself, or one
+    // position on it — so the page never has to parse an event key.
+    const reactions = { market: {}, positions: {}, mine: { market: null, positions: {} } };
+    const bump = (bag, key, emoji) => {
+      if (!bag[key]) bag[key] = {};
+      bag[key][emoji] = (bag[key][emoji] || 0) + 1;
+    };
+    (reactRes.data || []).forEach((r) => {
+      const isMine = r.created_by === user.email;
+      if (r.event_key === `market:${market_id}`) {
+        reactions.market[r.emoji] = (reactions.market[r.emoji] || 0) + 1;
+        if (isMine) reactions.mine.market = r.emoji;
+        return;
+      }
+      const m = /^pos:([0-9a-f-]+)$/i.exec(r.event_key || "");
+      if (!m) return;
+      if (!positions.some((p) => p.id === m[1])) return;
+      bump(reactions.positions, m[1], r.emoji);
+      if (isMine) reactions.mine.positions[m[1]] = r.emoji;
+    });
+
+    const PRIVATE_META = new Set(["emails", "roster"]);
+    const publicMeta = Object.fromEntries(Object.entries(meta)
+      .filter(([k]) => !PRIVATE_META.has(k) && !/email/i.test(k)));
+
+    const profile = await loadUserProfile(user.email);
+    return res.json({
+      available: true,
+      me: profile ? creditSummary(profile) : null,
+      market: {
+        ...market,
+        meta: publicMeta,
+        subject_name: market.subject_name || nameOf[market.subject_email] || null,
+        subject_is_me: involved.includes(me),
+        subject_is_friend: involved.some((e) => friends.has(e)),
+        in_contest: market.kind === "versus" && involved.includes(me),
+        subject_email: market.subject_email === user.email ? user.email : null,
+        positions,
+      },
+      reactions,
+      glyphs: REACTIONS,
+    });
+  } catch (err) {
+    console.error("[getMarket] error:", err);
     return res.status(500).json({ error: err?.message || String(err) });
   }
 });

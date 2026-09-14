@@ -15,17 +15,19 @@
  * retention engine rather than a leaderboard. It gets its own ink and its own
  * line, and it sorts to the top of the board (see `sortBoard`).
  *
- * ─── THE PRICE IS PRINTED AS ODDS AND DRAWN AS A LINE ───────────────────────
- * A card that says "62¢" has told a sixteen-year-old nothing. "1.61× yes /
- * 2.63× no" is the same fact in the units they already read on every sports
- * app they have ever opened, and the sparkline under it is why the card is
- * worth opening: a market that has swung twenty points this week is an
- * argument, and a flat one is a question nobody has bothered with yet. Both of
- * those are decisions, and neither is visible in a single number.
+ * ─── THE PRICE IS PRINTED AS A RETURN AND DRAWN AS A LINE ───────────────────
+ * A card that says "62¢" has told a sixteen-year-old nothing. "Yes pays 1.14×"
+ * is a number about their own cred, and the sparkline under it is why the card
+ * is worth opening: a market that has swung twenty points this week is an
+ * argument, and a flat one is a question nobody has bothered with. Neither is
+ * visible in a single number.
  *
- * The multiplier is the READING and never the payout — market.js says why at
- * length, and the real figures for both outcomes live under the slider in
- * TakeSide, which is where the money is actually committed.
+ * These figures are the CEILING for each side — what the strongest call the
+ * slider allows returns if it lands — so every one of them is reachable by
+ * dragging to the end. They are small, because a proper scoring rule bounded
+ * by the stake cannot pay more than double; market.js explains why that is
+ * structural. Printing 7.24× here, as this card briefly did, was printing a
+ * figure with no relationship to money on a screen made of money.
  *
  * ─── The crowd is drawn as PEOPLE, not just a price ─────────────────────────
  * "8 backing yes · 3 no" with names on hover. A market where you cannot see
@@ -38,8 +40,9 @@ import * as Icons from "lucide-react";
 import { Clock, Lock } from "lucide-react";
 import PriceChart from "./PriceChart";
 import TakeSide from "./TakeSide";
+import { createPageUrl } from "@/utils";
 import {
-    KINDS, sideOf, YES, priceLabel, payoutFor, multipliers, priceHistory,
+    KINDS, sideOf, YES, priceLabel, payoutFor, returns, priceHistory,
 } from "@/lib/market";
 
 function untilLabel(iso) {
@@ -67,7 +70,7 @@ export default function MarketCard({ market, balance, busy, onTake, onReport }) 
     const names = (market.positions || [])
         .filter((p) => sideOf(p.p) === YES).map((p) => firstName(p.user_name)).slice(0, 4);
 
-    const mult = multipliers(market.price);
+    const pays = returns(market.price);
     // Replayed from the positions the card already holds — no query, no stored
     // history, and it cannot disagree with the price printed beside it.
     const history = useMemo(() => priceHistory(market), [market]);
@@ -104,8 +107,16 @@ export default function MarketCard({ market, balance, busy, onTake, onReport }) 
             </div>
 
             {/* ── The question ─────────────────────────────────────── */}
-            <h3 className="font-display font-extrabold text-[#E8F0FB] text-base leading-snug mb-3">
-                {market.title}
+            {/* THE TITLE IS THE WAY IN, not the whole card. Making the card
+                itself a link would swallow the take-side sheet inside it, and
+                the primary action on a board card is taking a side — the detail
+                page is the second thing you want, so it gets the second-biggest
+                target rather than the first. */}
+            <h3 className="font-display font-extrabold text-base leading-snug mb-3">
+                <a href={`${createPageUrl("Market")}?id=${encodeURIComponent(market.id)}`}
+                    className="text-[#E8F0FB] hover:text-[#1CB0F6] transition-colors">
+                    {market.title}
+                </a>
             </h3>
 
             {/* ── IT'S ABOUT YOU ───────────────────────────────────── */}
@@ -121,17 +132,17 @@ export default function MarketCard({ market, balance, busy, onTake, onReport }) 
             <div className="flex items-stretch gap-2">
                 <div className="flex-1 rounded-xl bg-[#0E1929] px-2.5 py-1.5">
                     <p className="text-[9px] font-black uppercase tracking-widest text-[#4E6484]">
-                        Yes
+                        Yes pays
                     </p>
                     <p className="font-display font-black text-xl leading-none tabular-nums
-                        text-[#58CC02]">{mult.yesLabel}</p>
+                        text-[#58CC02]">{pays.yesLabel}</p>
                 </div>
                 <div className="flex-1 rounded-xl bg-[#0E1929] px-2.5 py-1.5">
                     <p className="text-[9px] font-black uppercase tracking-widest text-[#4E6484]">
-                        No
+                        No pays
                     </p>
                     <p className="font-display font-black text-xl leading-none tabular-nums
-                        text-[#FF5A5F]">{mult.noLabel}</p>
+                        text-[#FF5A5F]">{pays.noLabel}</p>
                 </div>
                 <div className="flex flex-col justify-center items-end pl-1 min-w-[62px]">
                     <span className="font-display font-black text-base leading-none tabular-nums
