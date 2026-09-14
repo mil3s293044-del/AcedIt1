@@ -23,6 +23,7 @@ import { ChevronRight, Trophy, Loader2 } from "lucide-react";
 import { base44 } from "@/api/base44Client";
 import { createPageUrl } from "@/utils";
 import { useLiveTick } from "@/lib/LiveContext";
+import { unwrapFn } from "@/lib/fnResult";
 import { msUntilReset, untilLabel, isClosing, ordinal } from "@/lib/league";
 
 export default function WeekStrip() {
@@ -32,8 +33,11 @@ export default function WeekStrip() {
 
     const load = useCallback(async () => {
         try {
-            const res = await base44.functions.invoke("getLeagueStanding", {});
-            if (!res?.error) setState(res);
+            // unwrapFn: this checked `res.success`, which lives INSIDE data —
+            // so the check never passed and the only entrance to the league
+            // page never rendered. The feature shipped invisible.
+            const payload = unwrapFn(await base44.functions.invoke("getLeagueStanding", {}));
+            if (payload && !payload.error) setState(payload);
         } catch { /* the strip simply does not render */ }
         setLoading(false);
     }, []);

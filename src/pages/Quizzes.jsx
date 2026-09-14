@@ -12,7 +12,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Textarea } from "@/components/ui/textarea";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+
 import { Label } from "@/components/ui/label";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import {
@@ -48,7 +48,6 @@ import QuizDeck from "@/components/cards/QuizDeck";
 import { quizDeckStats, quizzingSummary, effectiveScore, RECENT_WINDOW } from "@/lib/quizDeck";
 import { normaliseQuestions, formatGeneratedParts } from "@/lib/quizSchema";
 import QuizPlayer from "../components/quizzes/QuizPlayer";
-import QuizInsightRail from "../components/quizzes/QuizInsightRail";
 import MarkdownMath from "@/components/shared/MarkdownMath";
 import QuizModePicker from "../components/quizzes/QuizModePicker";
 import { subjectColor } from "@/components/cards/cardIdentity";
@@ -801,40 +800,6 @@ Return valid JSON only.`,
         }
     };
 
-    /**
-     * Build a drill from the questions that keep catching the student out.
-     *
-     * Copies the original question objects rather than generating new ones: it
-     * costs nothing, it's instant, and re-facing the exact question you've now
-     * missed twice is the point. Saved as a real quiz so it plays through the
-     * normal player and its attempts feed back into the same analysis.
-     */
-    const handleDrill = async (questions, spots) => {
-        if (!questions?.length) return;
-        const subjects = [...new Set(spots.map(x => x.quizCategory).filter(Boolean))];
-        try {
-            const created = await base44.entities.Quiz.create({
-                title: `Drill · ${questions.length} question${questions.length === 1 ? "" : "s"} to nail`,
-                subject: subjects.length === 1 ? subjects[0] : null,
-                questions,
-                difficulty: "intermediate",
-                category: "subject_content",
-                extra: { drill_of: spots.map(x => x.key) },
-            });
-            if (created?.id) {
-                setQuizzes(prev => [created, ...prev]);
-                setSelectedQuiz(created);
-                toast({
-                    variant: "success",
-                    title: "Drill ready",
-                    description: `${questions.length} question${questions.length === 1 ? "" : "s"} you've missed more than once.`,
-                });
-            }
-        } catch (e) {
-            toast({ title: "Couldn't build the drill", description: e.message, variant: "destructive" });
-        }
-    };
-
     const filteredQuizzes = useMemo(() => {
         return quizzes.filter(quiz => {
             const matchesSearch = quiz.title?.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -1274,25 +1239,57 @@ Return valid JSON only.`,
                     </motion.section>
                 )}
 
-                {/* The quiz list sits left and the insight rail fills what used
-                    to be dead margin. It only splits at xl — below that the rail
-                    would squeeze the list, so it stacks underneath. */}
-                <div className="grid xl:grid-cols-[minmax(0,1fr)_380px] gap-6 items-start">
-                <div className="min-w-0">
-                <Tabs defaultValue="my-quizzes" className="space-y-5">
-                    <TabsList className="grid w-full grid-cols-1 h-auto p-1.5 rounded-2xl bg-surface border-2 border-border shadow-soft">
-                        <TabsTrigger value="my-quizzes" className="flex items-center justify-center gap-1.5 py-2.5 rounded-xl text-sm font-bold text-muted-foreground data-[state=active]:bg-foreground data-[state=active]:text-background data-[state=active]:shadow-soft transition-all">
-                            <Brain className="w-4 h-4" />
-                            My Quizzes
-                            <span className="pill bg-secondary text-muted-foreground text-[11px] py-0.5 data-[state=active]:bg-background/20">{quizzes.length}</span>
-                        </TabsTrigger>
+                {/* ── THE SHELF, FULL WIDTH ───────────────────────────────
+                    The "What to work on" rail used to take 380px down the right
+                    of this list. It is gone: /MistakeBank answers the same
+                    question properly — questions missed twice are its "Sit
+                    again" tab, and the individual dropped marks are its whole
+                    reason to exist — so the rail was a second, smaller answer
+                    to a question another screen already owns, sitting where the
+                    packs needed the room.
 
-                    </TabsList>
+                    The single-tab Tabs went with it. A tab bar with exactly one
+                    tab is chrome pretending to be navigation: nothing can be
+                    switched to, and the only thing it carried that was not
+                    decoration was the count, which belongs beside a heading. */}
+                {/* ── ONE ASK WHEN THERE IS NOTHING HERE ──────────────────
+                    With no quizzes the featured strip above already makes the
+                    case, so the heading, the toolbar and a large dashed empty
+                    box would be three more things saying "you have none" — and
+                    the toolbar's own generate button made THREE buttons for one
+                    dialog on a single screen, which is the exact paper-cut this
+                    page had already been through once. Nothing to shelve, no
+                    shelf. */}
+                {quizzes.length > 0 && (
+                <section className="space-y-4">
+                    <div className="flex items-baseline justify-between gap-3 flex-wrap">
+                        <h2 className="font-display font-extrabold text-foreground text-lg">
+                            Your quizzes
+                            <span className="text-muted-foreground/60 font-bold text-base ml-2 tabular-nums">
+                                {quizzes.length}
+                            </span>
+                        </h2>
+                        <div className="flex items-center gap-2">
+                            <Button onClick={() => setIsManualCreate(true)} variant="outline" size="sm" className="rounded-xl border-border gap-1.5 text-xs font-semibold">
+                                <PlusCircle className="w-3.5 h-3.5" /> Create
+                            </Button>
+                            {/* "AI Generate" said which technology it used
+                                and not what it did. A student who has never
+                                used it cannot tell whether it makes a quiz,
+                                marks one, or generates an answer. */}
+                            <Button onClick={() => setShowAIDialog(true)} size="sm" className="bg-chart-3 hover:bg-chart-3/90 text-white rounded-xl gap-1.5 text-xs font-semibold shadow-soft">
+                                <Wand2 className="w-3.5 h-3.5" /> Make a quiz from notes
+                            </Button>
+                        </div>
+                    </div>
 
-                    <TabsContent value="my-quizzes" className="space-y-4">
-                        {/* Toolbar */}
+                    <div className="space-y-4">
+                        {/* Search gets its own line rather than competing with
+                            the subject chips for a wrapping row — at the old
+                            width the two collided and the chips reflowed under
+                            a half-width box on every viewport in between. */}
                         <div className="flex items-center gap-2 flex-wrap">
-                            <div className="relative flex-1 min-w-[180px]">
+                            <div className="relative flex-1 min-w-[180px] max-w-sm">
                                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground/60 w-4 h-4" />
                                 <Input placeholder="Search quizzes..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="pl-9 h-9 rounded-xl bg-surface border-border text-sm" />
                             </div>
@@ -1311,18 +1308,6 @@ Return valid JSON only.`,
                                     ))}
                                 </div>
                             )}
-                            <div className="flex items-center gap-2 ml-auto">
-                                <Button onClick={() => setIsManualCreate(true)} variant="outline" size="sm" className="rounded-xl border-border gap-1.5 text-xs font-semibold">
-                                    <PlusCircle className="w-3.5 h-3.5" /> Create
-                                </Button>
-                                {/* "AI Generate" said which technology it used
-                                    and not what it did. A student who has never
-                                    used it cannot tell whether it makes a quiz,
-                                    marks one, or generates an answer. */}
-                                <Button onClick={() => setShowAIDialog(true)} size="sm" className="bg-chart-3 hover:bg-chart-3/90 text-white rounded-xl gap-1.5 text-xs font-semibold shadow-soft">
-                                    <Wand2 className="w-3.5 h-3.5" /> Make a quiz from notes
-                                </Button>
-                            </div>
                         </div>
 
                         {isLoading ? (
@@ -1335,12 +1320,30 @@ Return valid JSON only.`,
                                 </div>
                             </div>
                         ) : filteredQuizzes.length > 0 ? (
-                            <div className="space-y-6">
+                            /* ── THE FREED WIDTH GOES TO THE SHELF ───────────
+                               A pack is a FIXED width (`PACK_W`, and it has to
+                               be — the same pack is dealt on the flashcard
+                               shelf and one per row on a phone is the right
+                               call there), so a wider container does not make
+                               the cards bigger. Left in one column, taking the
+                               rail's 380px just moved the dead space from
+                               beside the list to the right of it.
+
+                               Two COLUMNS of subjects at xl instead. Each
+                               subject keeps its own heading and its own
+                               wrapping row of packs, two subjects sit side by
+                               side on a wide screen, and the width is used by
+                               the thing the page is for. CSS columns rather
+                               than a grid so the sections pack tightly instead
+                               of leaving a ragged cell under the shorter one —
+                               `break-inside-avoid` is what keeps a subject and
+                               its packs from being split down the middle. */
+                            <div className="space-y-6 xl:columns-2 xl:gap-8 xl:space-y-0">
                                 {Object.entries(quizzesBySubject).map(([subjectName, subjectQuizzes]) => {
                                     const userSubject = userSubjects.find(s => s.subject_name === subjectName);
                                     const tone = subjectColor(userSubject);
                                     return (
-                                        <div key={subjectName}>
+                                        <div key={subjectName} className="break-inside-avoid xl:mb-8">
                                             <div className="flex items-center gap-2.5 mb-3">
                                                 <div className="w-3 h-3 rounded-full flex-shrink-0" style={{ backgroundColor: tone }} />
                                                 <h3 className="font-bold text-foreground">{subjectName}</h3>
@@ -1420,25 +1423,9 @@ Return valid JSON only.`,
                                 </div>
                             </motion.div>
                         )}
-                    </TabsContent>
-
-
-
-                </Tabs>
-                </div>
-
-                <div className="xl:sticky xl:top-6" data-insight-rail>
-                    <QuizInsightRail
-                        quizzes={quizzes}
-                        attempts={quizAttempts}
-                        onOpenQuiz={(id) => {
-                            const q = quizzes.find(x => x.id === id);
-                            if (q) setSelectedQuiz(q);
-                        }}
-                        onDrill={handleDrill}
-                    />
-                </div>
-                </div>
+                    </div>
+                </section>
+                )}
 
                 {/* Manual Create Dialog */}
                 <Dialog open={isManualCreate} onOpenChange={setIsManualCreate}>
