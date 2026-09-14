@@ -439,6 +439,10 @@ const PORTED_FUNCTIONS = {
   // Markets — the one object Compete is built on. getMarkets MINTS and
   // SETTLES on the way past, so none of these are reads.
   getMarkets:               '/local-ai/fn/getMarkets',
+  // ...but getPortfolio and getMarket only READ, which is why they are also
+  // in READ_ONLY_FUNCTIONS below.
+  getPortfolio:             '/local-ai/fn/getPortfolio',
+  getMarket:                '/local-ai/fn/getMarket',
   takePosition:             '/local-ai/fn/takePosition',
   openMarkMarket:           '/local-ai/fn/openMarkMarket',
   reportMark:               '/local-ai/fn/reportMark',
@@ -486,6 +490,7 @@ const PORTED_FUNCTIONS = {
 // it, so a function whose behaviour you are unsure of does NOT go here.
 const READ_ONLY_FUNCTIONS = new Set([
   'getRankedBoards', 'getArenaState', 'getMyStakes', 'getCallouts', 'getReactions',
+  'getPortfolio', 'getMarket',
   'extractDocumentText', 'invokeAI', 'mindMapGaps',
 ]);
 

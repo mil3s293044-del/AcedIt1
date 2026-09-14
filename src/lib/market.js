@@ -149,54 +149,89 @@ export function convictionOf(p) {
 // ─── The multiplier ─────────────────────────────────────────────────────────
 
 /**
- * THE MULTIPLIER IS THE READING. IT IS NEVER THE PAYOUT.
+ * THE MULTIPLIER IS WHAT COMES BACK. It used to be 1/price, and that was WRONG
+ * BY UP TO TEN TIMES.
  *
- * `1 / price` is how a market prints what it believes, and it is far more
- * legible to a sixteen-year-old than "62¢": 1.61× says "the favourite" without
- * anybody needing to know what a probability is, and it moves the way everyone
- * already expects odds to move — money on YES shortens YES and lengthens NO.
- * `priceOf` has always done exactly that. This is the same number in the units
- * people actually read it in.
+ * The reasoning that shipped it: a multiplier is how a market prints what it
+ * believes, "1.61× yes" says *the favourite* to somebody who has never met a
+ * probability, and the payout tiles beside it carried the real cred. All true,
+ * and all beside the point — the largest number on the card was a figure with
+ * no relationship to money, sitting on a screen where every other number is
+ * money. A longshot card printed **7.24×** when the most that position could
+ * ever return was about **1.8×**.
  *
- * WHAT IT MUST NEVER DO is sit next to a button as though it were the return.
- * The payout here is a proper scoring rule against the price you entered at,
- * not a bookmaker's stake × odds. On a 100 stake at 85¢ into a market priced
- * 62¢ the rule pays +12 when YES lands; a 1.61× would promise +61. A figure
- * that visibly disagrees with the one under it costs the whole screen its
- * credibility — the lesson quizMarking learned about a total contradicting its
- * own criteria. So: the multiplier for the reading, `payoutFor` for the money,
- * and the take-side sheet prints the real figure for BOTH outcomes under the
- * slider, where the decision is actually made.
+ * The honest multiple exists and it is simple. A position returns
+ * `stake + payout`, and `payout = stake · K · skill`, so:
  *
- * A multiplier is also not a chartable quantity. It is 1/p, so the entire
- * favourite half of every market lives between 1.0× and 2.0× while the
- * underdog half runs to infinity — a market drifting 10¢ → 5¢ would dwarf
- * every other line on the board. PriceChart plots the PRICE and prints the
- * multiplier beside it, which is what a real exchange does, for this reason.
+ *     back / staked  =  1 + K · skill(p, price, outcome)
+ *
+ * The stake cancels. There IS a stake-free multiple; it just is not the odds.
+ *
+ * ─── THE 2× CEILING IS STRUCTURAL, not a setting ────────────────────────────
+ * `skill` is bounded in [-1, 1], so at K = 1 the return is bounded in [0, 2].
+ * Raising `PAYOUT_K` does not lift it: the escrow has to cover K · stake, so
+ * the ratio against what you actually put up is unchanged. A proper scoring
+ * rule whose downside is bounded by the stake CANNOT pay more than double.
+ * Anything on this board printing more than 2.00× is unreachable by
+ * construction, and `market.test.mjs` asserts that nothing can.
+ *
+ * The ordering survives, which is what made the old number plausible: the
+ * underdog still pays more than the favourite, because the crowd being further
+ * from the truth is exactly what the rule pays for. Only the magnitudes were
+ * fiction. Returns genuinely live in a narrow 1.0–2.0× band, and printing that
+ * narrowly is the price of printing something true.
  */
 
-/** Odds are undefined at the ends, so the reading is floored rather than ∞. */
-export const MULTIPLIER_FLOOR = 0.01;      // 100× is as long as a price prints
-
-export function multiplierOf(price, side = YES) {
-    const p = Math.min(1 - MULTIPLIER_FLOOR, Math.max(MULTIPLIER_FLOOR, clampP(price)));
-    return 1 / (side === NO ? 1 - p : p);
+/** What comes back per cred staked. Stake-free, because the payout is linear. */
+export function returnMultiple(p, price, outcome) {
+    // Never negative: the stake is escrowed and the payout is bounded by it,
+    // so the worst case is that nothing comes back, not that you owe.
+    return Math.max(0, 1 + PAYOUT_K * skill(clampP(p), clampP(price), outcome));
 }
 
-/** Bookmaker precision: tight where it matters, coarse where it cannot. */
-export function multiplierLabel(m) {
-    const v = Number(m);
-    if (!Number.isFinite(v) || v <= 0) return "—";
-    if (v >= 20) return `${Math.round(v)}×`;
-    if (v >= 10) return `${v.toFixed(1)}×`;
-    return `${v.toFixed(2)}×`;
+/** The most any position can ever return. Bounded by the rule, not by choice. */
+export const RETURN_CEILING = 1 + PAYOUT_K;
+
+/**
+ * The best a side can do at the strongest conviction the slider allows — and
+ * what that same call risks, which is the other half of the sentence.
+ *
+ * `CONVICTION_MAX` rather than an average, because this is the CEILING the
+ * card advertises and a ceiling has to be reachable: every figure here is a
+ * call a student can actually place by dragging the slider to the end.
+ */
+export function bestReturn(price, side = YES) {
+    const p = probFor(side, CONVICTION_MAX);
+    const wins = side === YES;
+    return {
+        win: returnMultiple(p, price, wins),
+        risk: returnMultiple(p, price, !wins),
+    };
 }
 
 /** Both sides at once, which is how a board prints a price. */
-export function multipliers(price) {
-    const yes = multiplierOf(price, YES);
-    const no = multiplierOf(price, NO);
-    return { yes, no, yesLabel: multiplierLabel(yes), noLabel: multiplierLabel(no) };
+export function returns(price) {
+    const yes = bestReturn(price, YES);
+    const no = bestReturn(price, NO);
+    return {
+        yes: yes.win, no: no.win,
+        yesRisk: yes.risk, noRisk: no.risk,
+        yesLabel: multiplierLabel(yes.win), noLabel: multiplierLabel(no.win),
+    };
+}
+
+/**
+ * Two decimals, always.
+ *
+ * The old ramp coarsened past 10× and rounded past 20×, which only ever
+ * applied to figures that cannot occur — and inside a 1.00–2.00 band the
+ * second decimal is the whole signal. `1.1×` and `1.4×` are the same glyph
+ * count and a third of the information.
+ */
+export function multiplierLabel(m) {
+    const v = Number(m);
+    if (!Number.isFinite(v) || v < 0) return "—";
+    return `${v.toFixed(2)}×`;
 }
 
 // ─── The tape ───────────────────────────────────────────────────────────────

@@ -8,14 +8,12 @@
  * disagreeing with it in the right direction is the entire game — so the
  * history is not decoration here, it is the case for taking a side.
  *
- * ─── IT PLOTS THE PRICE AND PRINTS THE MULTIPLIER ───────────────────────────
- * The multiplier is the readable unit — 1.61× says "the favourite" to somebody
- * who has never met a probability — but it is NOT a chartable quantity. It is
- * 1/p, so every favourite in the world lives between 1.0× and 2.0× while the
- * underdog half runs to infinity: a market drifting 10¢ → 5¢ would dwarf every
- * other line on the board while one drifting 50¢ → 45¢ looked motionless. So
- * the line is the price, on a linear axis, and the multiplier is printed large
- * beside it. A real exchange does exactly this, for exactly this reason.
+ * ─── IT PLOTS THE PRICE AND PRINTS THE RETURN ───────────────────────────────
+ * The line is the price on a linear axis, because that is the quantity with a
+ * meaningful scale; the return each side pays is printed large beside it,
+ * because that is the quantity made of the student's own cred. They are not
+ * the same number and the chart must not imply they are — the header figures
+ * move with the line but they are bounded in [0, 2] while the line runs 0–100.
  *
  * ONE LINE, NOT TWO. NO is 100 − YES by construction, so a YES line and a NO
  * line are one line and its own reflection. Drawing both is drawing the same
@@ -48,7 +46,7 @@
  * so there are no design tokens in this file and that is deliberate.
  */
 import React, { useMemo, useState } from "react";
-import { priceLabel, multipliers, YES } from "@/lib/market";
+import { priceLabel, returns, YES } from "@/lib/market";
 
 /* The floor's palette, literal because the room does not follow the theme. */
 const INK = {
@@ -124,7 +122,7 @@ export default function PriceChart({
         : change > 0 ? INK.up : change < 0 ? INK.down : INK.flat;
     const trades = pts.filter((p) => p.kind === "trade");
     const shown = picked ?? trades[trades.length - 1] ?? null;
-    const mult = multipliers(history.last);
+    const pays = returns(history.last);
 
     /* ── The sparkline: a shape, no furniture ───────────────────────────── */
     if (compact) {
@@ -167,15 +165,15 @@ export default function PriceChart({
                 <div className="flex items-end gap-3">
                     <div>
                         <p className="text-[10px] font-bold uppercase tracking-wide"
-                            style={{ color: INK.dim }}>Yes</p>
+                            style={{ color: INK.dim }}>Yes pays</p>
                         <p className="font-display font-black text-2xl leading-none tabular-nums"
-                            style={{ color: INK.up }}>{mult.yesLabel}</p>
+                            style={{ color: INK.up }}>{pays.yesLabel}</p>
                     </div>
                     <div>
                         <p className="text-[10px] font-bold uppercase tracking-wide"
-                            style={{ color: INK.dim }}>No</p>
+                            style={{ color: INK.dim }}>No pays</p>
                         <p className="font-display font-black text-2xl leading-none tabular-nums"
-                            style={{ color: INK.down }}>{mult.noLabel}</p>
+                            style={{ color: INK.down }}>{pays.noLabel}</p>
                     </div>
                 </div>
                 <div className="text-right">
@@ -198,7 +196,7 @@ export default function PriceChart({
                     <line x1="0" x2="100" y1={geo.y(history.open)} y2={geo.y(history.open)}
                         stroke={INK.prior} strokeWidth="1" strokeDasharray="4 4"
                         vectorEffect="non-scaling-stroke" />
-                    <path d={geo.area} fill={ink} opacity="0.13" />
+                    <path d={geo.area} fill={ink} opacity="0.09" />
                     <path d={geo.d} fill="none" stroke={ink} strokeWidth="2"
                         strokeLinejoin="round" vectorEffect="non-scaling-stroke"
                         strokeDasharray={history.trades === 0 ? "4 4" : undefined} />
@@ -228,13 +226,22 @@ export default function PriceChart({
                         onFocus={() => setPicked(p)}
                         onClick={() => setPicked(p)}
                         aria-label={`${p.by || "Someone"} took ${p.side} — price went to ${priceLabel(p.price)}`}
-                        className="absolute rounded-full border-2 focus:outline-none"
+                        className="absolute border-2 focus:outline-none"
                         style={{
                             left: `${geo.x(p.t)}%`, top: `${geo.y(p.price)}%`,
                             width: Math.min(16, 8 + Math.round(p.stake / 90)),
                             height: Math.min(16, 8 + Math.round(p.stake / 90)),
                             background: "#0E1929",
                             borderColor: p.is_me ? INK.mine : p.side === YES ? INK.up : INK.down,
+                            // SHAPE CARRIES THE SIDE, NOT JUST COLOUR. The brand
+                            // green and the streak red sit at ΔE 7.0 under
+                            // deuteranopia — fine everywhere else on the floor,
+                            // where the word "yes" or "no" is printed beside
+                            // them, and NOT fine here, where a bare dot was the
+                            // only thing saying which way somebody leaned. A
+                            // circle against a square reads at 8px and needs no
+                            // colour at all.
+                            borderRadius: p.side === YES ? "50%" : "2px",
                             transform: "translate(-50%, -50%)",
                             opacity: shown === p ? 1 : 0.85,
                         }} />

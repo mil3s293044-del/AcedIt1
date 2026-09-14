@@ -623,27 +623,48 @@ taken. Cred is granted weekly (`CRED_WEEKLY_GRANT`) and capped
 streak, and the cap stops a student who ignored Compete for a term arriving
 with an unanswerable stack. It is TOPPED UP to the grant rather than added to.
 
-**THE MULTIPLIER IS THE READING AND IS NEVER THE PAYOUT.** `1 / price` is how
-a market prints what it believes, and "1.61× yes / 2.63× no" says *the
-favourite* to somebody who has never met a probability. `priceOf` has always
-moved that way — money on YES shortens YES and lengthens NO — so this is the
-same number in the units people read odds in, not a change to the model.
+**THE MULTIPLIER IS WHAT COMES BACK. It was 1/price, and that was WRONG BY UP
+TO TEN TIMES.** The reasoning that shipped it sounded fine — a multiplier is how
+a market prints what it believes, "1.61× yes" says *the favourite* to somebody
+who has never met a probability, and the real cred sat in the tiles beside it.
+All true and all beside the point: the largest figure on the card had no
+relationship to money, on a screen where everything else is money. A longshot
+card printed **7.24×** when the most that position could ever return was 1.8×.
 
-What it must never do is sit beside a button as though it were the return. The
-payout is a proper scoring rule against the price you entered at, not stake ×
-odds: **100 at 85¢ into a 62¢ market pays +12, where 1.61× would promise +61.**
-A figure that visibly disagrees with the one under it costs the screen its
-credibility, the lesson `quizMarking` learned about a total contradicting its
-own criteria. `market.test.mjs` pins the gap so the two can never converge
-quietly.
+The honest multiple is simple and it exists. A position returns `stake +
+payout` and `payout = stake · K · skill`, so `back / staked = 1 + K · skill`.
+The stake cancels. `returnMultiple` is that, `bestReturn` is the ceiling per
+side at `CONVICTION_MAX`, and every figure a card prints is now a call a
+student can actually place by dragging the slider to the end.
 
-Switching to real multiplier payouts was considered and refused. It reopens the
+**THE 2× CEILING IS STRUCTURAL, not a setting.** `skill` is bounded in [-1, 1],
+so at K = 1 the return is bounded in [0, 2] — and raising `PAYOUT_K` does not
+lift it, because the escrow has to cover K · stake and the ratio against what
+you put up is unchanged. A proper scoring rule whose downside is bounded by the
+stake CANNOT pay more than double. Returns genuinely live in a narrow 1.0–2.0×
+band; printing that narrowly is the price of printing something true, and
+`market.test.mjs` sweeps the whole (p, price, outcome) space to prove nothing
+escapes it and that the multiple equals the cred to within one rounded unit.
+
+The ordering survived, which is what made the old number plausible: the
+underdog still pays more than the favourite. Only the magnitudes were fiction.
+
+Switching to real bookmaker payouts was considered and refused. It reopens the
 farm the who-may-resolve rule closed — a market on your own study log is
 allowed deliberately, and under a scoring rule backing a near-certainty you
-control pays ~nothing, while under a multiplier it prints cred — and a
+control pays ~nothing while under a multiplier it prints cred — and a
 pari-mutuel needs two sides this board will not have: four people all on YES
-with YES landing means an empty loser pool and a market that pays nothing when
-you were right.
+with YES landing is an empty loser pool and a market that pays nothing when you
+were right.
+
+**"If you're right" was a lie under a scoring rule, and it printed one.** A side
+is not a position here; a DISTANCE FROM THE PRICE is. Take NO at 55% into a
+market already pricing NO at 80¢ and you are further from NO than the price is,
+so the rule pays you when YES lands — which the old panel drew as "If you're
+right: −16", a negative number under the winning label in the winning colour.
+The tiles name the two OUTCOMES now, the colour follows the sign of the money,
+and when the two disagree the panel says so and names the conviction that would
+actually back the chosen side.
 
 **THE PRICE HISTORY IS ALREADY RECORDED, so nothing about the chart is stored.**
 Every position carries its stake, its probability and its timestamp, and
@@ -653,26 +674,23 @@ replaying them reproduces the path EXACTLY, including every frozen
 board it describes. `priceHistory` does it; the test asserts the reconstruction
 rather than approximating it.
 
-**It plots the PRICE and prints the multiplier.** A multiplier is not a
-chartable quantity: it is 1/p, so the whole favourite half lives between 1.0×
-and 2.0× while the underdog half runs to infinity, and a market drifting 10¢ →
-5¢ would dwarf every other line on the board. One line, never two — NO is
-100 − YES, so a second line is the first one's reflection. And it is a STEP
-chart because it is a step function: at thirty students a market's week is
-three or four steps with flat stretches between, and smoothing draws a line
-through data that is not there. The steps are the better object anyway, because
-a step knows WHO took it. The y-window is padded but never narrower than
-`MIN_SPAN`, since tight auto-scaling draws a two-point wander as a crash and a
-fixed 0–100 draws every market near even as a flat line.
+**It plots the PRICE and prints the return.** The price is the quantity with a
+meaningful scale (0–100); the return is bounded in [0, 2] and is a different
+number that must not share an axis with it. One line, never two — NO is
+100 − YES, so a second line is the first one's reflection. It is a STEP chart
+because it is a step function: at thirty students a market's week is three or
+four steps with flat stretches between, and smoothing draws a line through data
+that is not there. The y-window is padded but never narrower than `MIN_SPAN`,
+since tight auto-scaling draws a two-point wander as a crash and a fixed 0–100
+draws every market near even as a flat line.
 
-**"If you're right" was a lie under a scoring rule, and it printed one.** A
-side is not a position here; a DISTANCE FROM THE PRICE is. Take NO at 55% into
-a market already pricing NO at 80¢ and you are further from NO than the price
-is, so the rule pays you when YES lands — and the old panel drew that as "If
-you're right: −16", a negative number under the winning label in the winning
-colour. The tiles name the two OUTCOMES now, the colour follows the sign of the
-money, and when the two disagree the panel says so and names the conviction
-that would actually back your side.
+**SHAPE CARRIES THE SIDE ON THE CHART, NOT JUST COLOUR.** The brand green and
+the streak red sit at ΔE 7.0 under deuteranopia — fine everywhere else on the
+floor, where the word "yes" or "no" is printed beside them, and NOT fine on the
+step dots, where a bare mark was the only thing saying which way somebody
+leaned. A circle against a square reads at 8px and needs no colour at all.
+Anything on this floor encoding yes/no in those two hues needs a second channel
+or a label; run the palette through a CVD check before assuming otherwise.
 
 **A MARKET ABOUT YOU SORTS FIRST, whatever its heat.** "Twelve people are
 trading your week" is the single most motivating sentence this app can put on a
@@ -776,6 +794,82 @@ position was taken against the old one.
 **A dead heat VOIDS.** "Did A beat B" has no answer when they tied, and
 defaulting it to NO would pay everyone who happened to be on the second-named
 side for a question that was never settled.
+
+**THE BOOK IS THE SECOND TAB, and calibration is the centre of it.** The floor
+answers "what can I take a side on" and has no way to answer "how am I doing" —
+which is the question that brings somebody back midweek. The cred figure in the
+header is not an answer: it moves for two unrelated reasons, the Monday grant
+and your own calls, so a number that goes up when you did nothing teaches that
+the number means nothing.
+
+`holdings.js` derives all of it from positions that already exist — equity from
+settled payouts in order, the record, the expected value of the open book, and
+the calibration bands. Nothing is stored, so the curve cannot disagree with the
+tape and the record cannot disagree with the reveal.
+
+**Calibration is the one thing a betting app cannot show you.** The model asks
+for a BELIEF rather than an accepted price, so the beliefs are on file: when you
+said 80%, were you right 80% of the time? It is bucketed on CONVICTION and not
+on P(yes) — backing no at 80% is the same claim as backing yes at 80%, and
+bucketing on the raw probability would split one skill across two ends of the
+axis and report neither. Count is the DOT'S SIZE and never a second y-axis: how
+many calls sit in a band and how accurate they were are different scales, and a
+second axis would invent a relationship between them.
+
+**And it refuses to score somebody on two calls.** A band under
+`CALIBRATION_MIN` is a tick with its count, never a point; under
+`CALIBRATION_MIN_TOTAL` settled calls the panel says how many more are needed
+and draws nothing. Telling a sixteen-year-old with three resolved calls they are
+overconfident is a personality judgement made off a coin flip — the same rule
+as TREND_MIN, MARKET_MIN_OBS and MIN_BASELINE_WEEKS, each added after the same
+mistake.
+
+**EXPECTED IS NOT UNREALISED.** There is no way to close a position early here,
+so there is no exit value; the tile holds the expected payout at today's prices
+and says so. Calling it unrealised P/L implies a sell button that does not
+exist.
+
+**A LEVEL AND A VOID ARE NEVER LOSSES** — not in the record, not in the hit
+rate's denominator, and not in the streak. The whole board rests on "restating
+the price pays exactly nothing", and a book that files that under defeats
+teaches the opposite of the one property the system has.
+
+**`getPortfolio` is separate from `getMarkets` on purpose.** That endpoint
+returns the 30 most recently resolved markets on the whole board, which is the
+right payload for a tape and the wrong one for a history: a student's own tenth
+call can easily fall outside it, so a book built on it would report a fraction
+of somebody's record as all of it. It pages, it mints nothing, it settles
+nothing, and it is in `READ_ONLY_FUNCTIONS`.
+
+**`/Market?id=` is one question in full**, because a market is a thing you send
+somebody — "twelve people are trading your week" is worth far more with a link
+under it, which an in-place expansion cannot give. The id rides in the query
+string for the reason SubjectHub's does. The card's TITLE is the way in, not the
+whole card: the primary action on a board card is taking a side, and a card-wide
+link would swallow the take-side sheet inside it.
+
+**THE TAPE IS THE CONVERSATION, and that is why there are no comments.**
+Migration 0034 ruled out free text on Compete in its own words — "16-year-olds
+competing with each other and sometimes losing in front of the group; a text box
+on that is a moderation problem this app has no way to staff" — and that got
+STRONGER, not weaker, once markets were being auto-minted about named students.
+A thread under "Will Maya study 5+ days this week?" is an unmoderated public
+conversation about a named minor on a page her school can open. What replaces it
+is already there: "Maya took no at 71¢ with 300 cred" is a statement with a name
+and money behind it and needs no moderation, because the only vocabulary is a
+price. Reactions are the rest — `reactToEvent` grew a market branch reusing
+0034's glyph set and its `unique (created_by, event_key)`, so **no migration was
+needed**; a position gets its own glyphs too. THE EVENT KEY IS DERIVED ON THE
+SERVER for the market path, because the contest path's membership check is what
+guards its client-supplied keys and a market has no contest to check.
+
+**`Room` had a negative margin cancelling padding that does not exist.** It
+carried `-m-4 sm:-m-6 p-4 sm:p-6` to pull the dark ground past the page padding —
+except Layout's `<main>` has none, and every other page is a plain
+`min-h-screen bg-background` that owns its width and pads inside. So the margin
+had nothing to cancel and pushed the floor 24px wider than the viewport, giving
+/Competitions a horizontal scrollbar at `sm` and up for as long as it has
+existed. Extracted to a component so the market page cannot re-copy the bug.
 
 **Settlement is lazy and recomputed.** No cron here — the sweep runs whenever
 somebody opens the board, the same design the weekly league commits to. THE
@@ -1899,8 +1993,14 @@ another email before this.
   `takePosition` / `openMarkMarket` / `reportMark` in `server.mjs` mint, escrow
   and settle
 - `src/components/market/PriceChart.jsx` — the tape. Replayed from positions,
-  plotted as a price and printed as a multiplier; `header={false}` inside
-  TakeSide, where the card above already prints the odds
+  plotted as a price and printed as a return; `header={false}` inside TakeSide,
+  where the card above already prints it
+- `src/lib/holdings.js` + `holdings.test.mjs` — the book: equity, calibration,
+  the four-outcome record. `getPortfolio` in `server.mjs` is its only read
+- `src/components/market/PortfolioPanel.jsx`, `CalibrationCurve.jsx`,
+  `EquityCurve.jsx` — the second tab on the floor
+- `src/pages/Market.jsx` + `Reactions.jsx` + `Room.jsx` — one question in full,
+  the glyphs, and the floor's shared ground; `getMarket` in `server.mjs`
 - `src/lib/fnResult.js` — the one unwrap for `functions.invoke`; reading its
   `{ data, error }` envelope as the payload is silent and has shipped twice
 - `src/lib/wagerStatus.js` — the one vocabulary `score_wagers.status` may

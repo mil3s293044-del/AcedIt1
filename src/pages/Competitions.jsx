@@ -33,7 +33,10 @@ import { TrendingUp, Loader2, Coins, Plus, X } from "lucide-react";
 import { base44 } from "@/api/base44Client";
 import { useLiveTick } from "@/lib/LiveContext";
 import { takeFn } from "@/lib/fnResult";
+import { createPageUrl } from "@/utils";
 import MarketCard from "@/components/market/MarketCard";
+import PortfolioPanel from "@/components/market/PortfolioPanel";
+import Room from "@/components/market/Room";
 import SettlementReveal from "@/components/market/SettlementReveal";
 import {
     readMarket, sortBoard, isOpen, sideOf, YES, KINDS, featuredOf,
@@ -239,6 +242,10 @@ export default function Competitions() {
     const [error, setError] = useState(null);
     const [busy, setBusy] = useState(false);
     const [filter, setFilter] = useState("all");
+    // Floor or book. Two tabs and no more: the floor is what you can do and the
+    // book is what you have done, which is the whole split. A third tab here
+    // would be a second answer to one of those two questions.
+    const [tab, setTab] = useState("floor");
     const [lineOpen, setLineOpen] = useState(false);
     const liveTick = useLiveTick();
 
@@ -312,6 +319,13 @@ export default function Competitions() {
     const reveals = useMemo(
         () => unseenSettlements(settledBoard, me.email), [settledBoard, me.email]);
 
+    // One place a market is opened from, because two would drift: the board
+    // card and the book row must land on the same screen or a student learns
+    // that tapping something here does different things depending where.
+    const openMarket = useCallback((id) => {
+        if (id) window.location.href = `${createPageUrl("Market")}?id=${encodeURIComponent(id)}`;
+    }, []);
+
     const atStake = book.reduce((s, m) => s + (m.mine?.stake || 0), 0);
 
     const take = async (market, pick) => {
@@ -354,11 +368,6 @@ export default function Competitions() {
         }
         setBusy(false);
     };
-
-    // ── The room paints its own ground, in both themes ──────────────────
-    const Room = ({ children }) => (
-        <div className="min-h-screen bg-[#0A121F] -m-4 sm:-m-6 p-4 sm:p-6">{children}</div>
-    );
 
     if (loading) {
         return (
@@ -439,6 +448,24 @@ export default function Competitions() {
                         px-4 py-2.5 text-[13px] text-[#FF9296]">{error}</div>
                 )}
 
+                {/* ── Floor or book ────────────────────────────────── */}
+                <div className="flex items-center gap-1.5 mb-4" role="tablist">
+                    {[["floor", "The floor"], ["book", "Your book"]].map(([id, label]) => (
+                        <button key={id} type="button" role="tab" aria-selected={tab === id}
+                            onClick={() => setTab(id)}
+                            className={`px-3.5 py-2 rounded-xl text-[13px] font-display font-black
+                                border-2 transition-colors
+                                ${tab === id
+                                    ? "bg-[#E8F0FB] border-[#E8F0FB] text-[#0A121F]"
+                                    : "border-[#233247] text-[#6F86A8] hover:text-[#E8F0FB]"}`}>
+                            {label}
+                        </button>
+                    ))}
+                </div>
+
+                {tab === "book" ? (
+                    <PortfolioPanel onOpenMarket={openMarket} />
+                ) : (
                 <div className="grid lg:grid-cols-[minmax(0,1fr)_300px] gap-6 items-start">
 
                     {/* ── THE BOARD ────────────────────────────────── */}
@@ -547,6 +574,7 @@ export default function Competitions() {
                         </p>
                     </aside>
                 </div>
+                )}
             </div>
 
             <AnimatePresence>

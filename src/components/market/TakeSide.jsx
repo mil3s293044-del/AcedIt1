@@ -8,12 +8,19 @@
  * anybody can walk — `probFor` collapses the two back into the one value the
  * scoring rule needs.
  *
- * ─── YOUR CONVICTION IS YOUR PRICE, so the panel says so in odds ────────────
+ * ─── YOUR CONVICTION IS YOUR PRICE, so the panel prints both ────────────────
  * Saying 85 into a market trading at 62 is exactly "I think yes is cheap at
- * 62". That is a limit order in everything but name, and printing it as one —
- * the room is offering 1.61×, your call is 1.18× — is what makes this read as
- * a market rather than a survey, without changing a line of the model. The
- * tick above the slider is where the room already sits.
+ * 62". That is a limit order in everything but name, and putting the two
+ * prices side by side — the room says 62¢, you are calling it 85¢ — is what
+ * makes this read as a market rather than a survey, without changing a line of
+ * the model. It is also the sentence SettlementReveal will use when this
+ * resolves, so the student meets the comparison they will be scored on BEFORE
+ * they commit rather than afterwards. The tick above the slider is where the
+ * room already sits.
+ *
+ * Both prices are in ¢ and neither is an odds figure. An earlier version put
+ * implied odds here ("the room is offering 1.61×") which was 1/price — a
+ * number with no relationship to cred, next to two tiles made of cred.
  *
  * ─── THE PAYOUT ROLLS, BECAUSE THE NUMBERS ARE THE FEEDBACK ─────────────────
  * Dragging conviction changes what you win and what you lose at the same time,
@@ -48,7 +55,8 @@ import { useMotionValue, useSpring, useReducedMotion } from "framer-motion";
 import { Loader2 } from "lucide-react";
 import PriceChart from "./PriceChart";
 import {
-    YES, NO, probFor, payoutFor, clampStake, multiplierOf, multiplierLabel,
+    YES, NO, probFor, payoutFor, clampStake, priceLabel,
+    returnMultiple, bestReturn, multiplierLabel,
     STAKE_MIN, STAKE_MAX, CONVICTION_MIN, CONVICTION_MAX,
 } from "@/lib/market";
 
@@ -85,9 +93,14 @@ export default function TakeSide({
     const ifNo = useMemo(() => payoutFor(stake, p, price, false), [stake, p, price]);
     const tooMuch = stake > balance;
 
-    // Where your call sits against the room's, in the units above the chart.
-    const roomMult = multiplierOf(price, side);
-    const myMult = multiplierOf(p, side);
+    // What this exact call returns per cred staked — the same multiple the
+    // card advertises, now pinned to the conviction actually on the slider.
+    const backIfYes = returnMultiple(p, price, true);
+    const backIfNo = returnMultiple(p, price, false);
+    // Your price against the room's, both in ¢, which is what they are.
+    const myCents = Math.round(p * 100);
+    const roomCents = Math.round(price * 100);
+    const gap = Math.abs(myCents - roomCents);
 
     // The conviction at which you exactly restate the price. Below it, your
     // "side" is really a position on the other one.
@@ -119,7 +132,7 @@ export default function TakeSide({
                                 transition-colors ${tone}`}>
                             {label}
                             <span className="block text-[10px] font-bold opacity-70 tabular-nums">
-                                {multiplierLabel(multiplierOf(price, v))}
+                                up to {multiplierLabel(bestReturn(price, v).win)}
                             </span>
                         </button>
                     );
@@ -159,14 +172,13 @@ export default function TakeSide({
                     <span>near certain</span>
                 </div>
                 <p className="text-[11px] text-[#8FA3BF] mt-1.5 leading-snug">
-                    Room&apos;s price <span className="font-bold tabular-nums text-[#E8F0FB]">
-                        {multiplierLabel(roomMult)}</span>
-                    {" · your call "}
+                    The room says <span className="font-bold tabular-nums text-[#E8F0FB]">
+                        {priceLabel(price)}</span>
+                    {" · you're calling it "}
                     <span className="font-bold tabular-nums text-[#E8F0FB]">
-                        {multiplierLabel(myMult)}</span>
+                        {priceLabel(p)}</span>
                     {!level && !inverted && (
-                        <span> — you rate {side === YES ? "yes" : "no"} more likely
-                            than the room does, and that gap is what pays.</span>
+                        <span> — that {gap}-point gap is the whole thing you get paid on.</span>
                     )}
                 </p>
             </div>
@@ -206,6 +218,12 @@ export default function TakeSide({
                     </p>
                     <Roll value={ifYes} className={`font-display font-black text-lg
                         ${ifYes > 0 ? "text-[#58CC02]" : ifYes < 0 ? "text-[#FF5A5F]" : "text-[#8FA3BF]"}`} />
+                    {/* The multiple, beside the cred it is a multiple OF. This
+                        is the only place both appear together, which is what
+                        makes the × on the board checkable rather than a claim. */}
+                    <p className="text-[10px] font-bold tabular-nums text-[#4E6484]">
+                        {multiplierLabel(backIfYes)} back
+                    </p>
                 </div>
                 <div className="text-right">
                     <p className="text-[10px] font-bold uppercase tracking-wide text-[#4E6484]">
@@ -213,6 +231,9 @@ export default function TakeSide({
                     </p>
                     <Roll value={ifNo} className={`font-display font-black text-lg
                         ${ifNo > 0 ? "text-[#58CC02]" : ifNo < 0 ? "text-[#FF5A5F]" : "text-[#8FA3BF]"}`} />
+                    <p className="text-[10px] font-bold tabular-nums text-[#4E6484]">
+                        {multiplierLabel(backIfNo)} back
+                    </p>
                 </div>
             </div>
 
@@ -221,9 +242,10 @@ export default function TakeSide({
                 with the line, rather than discovered at settlement. */}
             {inverted && (
                 <p className="text-[11px] text-[#FFC800] leading-snug">
-                    The room already has {side === YES ? "yes" : "no"} at {multiplierLabel(roomMult)}.
-                    At {pct(conviction)}% you&apos;re calling it less likely than that, so this pays
-                    if it lands {side === YES ? "no" : "yes"}. Go past {pct(breakeven)}% to back{" "}
+                    The room already has {side === YES ? "yes" : "no"} at {priceLabel(
+                        side === YES ? price : 1 - price)}. At {pct(conviction)}% you&apos;re calling
+                    it less likely than that, so this pays if it lands{" "}
+                    {side === YES ? "no" : "yes"}. Go past {pct(breakeven)}% to back{" "}
                     {side === YES ? "yes" : "no"}.
                 </p>
             )}
