@@ -3,6 +3,7 @@ import express from "express";
 import cors from "cors";
 import multer from "multer";
 import { createHash, randomUUID } from "node:crypto";
+import fsp from "node:fs/promises";
 import Anthropic from "@anthropic-ai/sdk";
 import heicConvert from "heic-convert";
 import mammoth from "mammoth";
@@ -36,6 +37,15 @@ import { estimateCostMicros, isUnpricedModel, formatMicros } from "./src/lib/aiC
 // is resolved here rather than trusted from the request body.
 import { modelFor } from "./src/lib/aiModels.js";
 import { priceOf, stackOf, spendableFor, WEEKLY_CHIPS, chipsSpent } from "./src/lib/chips.js";
+// A textbook is stored whole and read a CHAPTER at a time — the caps, the
+// range maths and the chip price all live in one module because the number
+// under the range picker has to be the number that gets charged.
+import {
+  MEGA_FILE_CAP, MEGA_PAGE_CAP, MEGA_ACTIVE_MAX, MEGA_TTL_HOURS,
+  MEGA_MODEL, MEGA_MODEL_LABEL, RANGE_PAGE_CAP,
+  chipsForRange, normaliseRange, pageIndices,
+} from "./src/lib/megaUpload.js";
+import { PDFDocument } from "pdf-lib";
 import Stripe from "stripe";
 import { Resend } from "resend";
 
@@ -952,7 +962,7 @@ function burstState(profile, now = Date.now()) {
   return { since: b.since, chips: Number(b.chips) || 0 };
 }
 
-function checkTierAccess(profile, feature) {
+function checkTierAccess(profile, feature, extraChips = 0) {
   // Dev-only bypass — set VITE_TIER_BYPASS=true in .env.local to disable all
   // caps for testing. The frontend has its own copy of this check so the UI
   // doesn't show "limit reached" warnings either.
@@ -979,7 +989,11 @@ function checkTierAccess(profile, feature) {
     // still claimed they had three quizzes left; a light student was stopped
     // at three flashcard decks having spent a seventh of their budget.
     const tier = profile.ai_model_preference === "saver" ? "saver" : "standard";
-    const price = priceOf(feature, tier);
+    // The feature's published price PLUS whatever reading a book costs this
+    // time. A mega read is the one action whose price is not fixed — it is the
+    // pages, and the picker showed the student that same number before they
+    // pressed anything (chipsForRange, in src/lib/megaUpload.js).
+    const price = priceOf(feature, tier) + Math.max(0, Math.round(extraChips) || 0);
     const stack = stackOf(profile);
     // spendableFor, not stack.remaining: the bottom of the stack is kept for
     // Ace so the app never goes completely silent in exam week. Using the raw
@@ -1069,7 +1083,7 @@ async function recordTierUsage(profile, feature, usage, options = {}) {
     // charged 30, whether the model was chatty that time or terse. The real
     // cost is recorded above; this is the thing they were quoted.
     const tier = profile.ai_model_preference === "saver" ? "saver" : "standard";
-    const chipPrice = priceOf(feature, tier);
+    const chipPrice = priceOf(feature, tier) + Math.max(0, Math.round(options.extraChips) || 0);
     updates.weekly_chips_spent = (sameWeek ? chipsSpent(profile) : 0) + chipPrice;
 
     // Roll the burst window forward on the same write.
@@ -1299,6 +1313,185 @@ async function loadFile(id) {
   }
 }
 
+/* ═══ MEGA UPLOADS: a textbook, stored whole, read a chapter at a time ══════
+ *
+ * See src/lib/megaUpload.js for why this exists at all — the short version is
+ * that reading 600 pages costs about $8 of input tokens against a $1.95 weekly
+ * budget for the whole student, so the book is stored once and each generate
+ * sends only the pages it names.
+ *
+ * ─── What the box can actually take ───────────────────────────────────────
+ * MEASURED, not assumed, because this codebase has already OOM'd a 512 MB
+ * instance on a 30 MB PDF. pdf-lib's `load` is LAZY: it reads the xref and the
+ * object index and materialises page contents only when they are copied. A
+ * 74.8 MB book loads in 93 ms for ~7 MB above the buffer, and slicing 40 pages
+ * out of it costs another 7 MB and 34 ms. So the whole cost is essentially the
+ * bytes themselves, and one slice of a 100 MB book is ~115 MB transient.
+ *
+ * Two at once is not, which is why `megaGate` exists: one slice at a time,
+ * server-wide. It is a queue rather than a refusal because the second student
+ * waits 200 ms, and it is the cheapest possible insurance against the exact
+ * failure already written up in CLAUDE.md.
+ *
+ * ─── A HANDLE IS SCOPED TO ITS OWNER ──────────────────────────────────────
+ * `local-file://` ids are unguessable UUIDs and that is all that protects
+ * them. A stored textbook is a much larger and more personal object, so the
+ * owner is IN the key and checked on every read: a handle lifted from one
+ * student's network tab does nothing in another student's session.
+ */
+
+const MEGA_BUCKET = process.env.SUPABASE_MEGA_BUCKET || "ai-mega";
+let megaBucketReady = null;
+
+/** Created on first use, like the uploads bucket, so there is no setup step. */
+async function ensureMegaBucket() {
+  if (!supabaseAdmin) return false;
+  if (megaBucketReady !== null) return megaBucketReady;
+  try {
+    const { error } = await supabaseAdmin.storage.createBucket(MEGA_BUCKET, {
+      public: false,
+      fileSizeLimit: MEGA_FILE_CAP,
+    });
+    if (error && !/exist/i.test(error.message || "")) throw error;
+    megaBucketReady = true;
+  } catch (err) {
+    console.warn("[local-ai] mega bucket unavailable:", err?.message || err);
+    megaBucketReady = false;
+  }
+  return megaBucketReady;
+}
+
+/**
+ * ONE SLICE AT A TIME, server-wide.
+ *
+ * A promise chain rather than a lock with a flag: every caller awaits the tail
+ * and appends itself, so the ordering is FIFO and nothing can be dropped by a
+ * flag that is read before the previous write landed. The chain never rejects
+ * — a failing slice settles it so the next caller is not deadlocked behind a
+ * rejection nobody handled.
+ */
+let megaGate = Promise.resolve();
+function withMegaGate(fn) {
+  const run = megaGate.then(fn, fn);
+  megaGate = run.then(() => {}, () => {});
+  return run;
+}
+
+/**
+ * The storage key IS the record: owner, id, page count and name.
+ *
+ * No table and no migration — the same trick `storeFile` already uses to keep
+ * a filename through a restart, extended by the two other facts a mega handle
+ * needs. The owner is hashed rather than stored plainly, because a bucket
+ * listing should not be a list of our students' email addresses.
+ */
+const ownerTag = (email) =>
+  createHash("sha1").update(String(email || "").toLowerCase()).digest("hex").slice(0, 16);
+
+const megaKey = (email, id, pages, name) =>
+  `u/${ownerTag(email)}/${id}/${Math.max(1, Math.round(pages))}/${safeName(name)}`;
+
+/** The inverse. Returns null for anything that is not one of ours. */
+function parseMegaKey(key) {
+  const parts = String(key || "").split("/");
+  if (parts.length < 5 || parts[0] !== "u") return null;
+  const pages = Number(parts[3]);
+  if (!Number.isFinite(pages) || pages < 1) return null;
+  return { owner: parts[1], id: parts[2], pages, name: parts.slice(4).join("/") };
+}
+
+/** Every book this student has stored, newest first, expired ones dropped. */
+async function listMegaFiles(email) {
+  if (!(await ensureMegaBucket())) return [];
+  const prefix = `u/${ownerTag(email)}`;
+  const out = [];
+  // Storage lists one directory level at a time, so this walks id → pages →
+  // file. Bounded by MEGA_ACTIVE_MAX in practice; the limits are the guard for
+  // a prefix that somehow grew.
+  const { data: ids } = await supabaseAdmin.storage.from(MEGA_BUCKET)
+    .list(prefix, { limit: 50 });
+  for (const idDir of ids || []) {
+    const { data: pageDirs } = await supabaseAdmin.storage.from(MEGA_BUCKET)
+      .list(`${prefix}/${idDir.name}`, { limit: 5 });
+    for (const pageDir of pageDirs || []) {
+      const { data: files } = await supabaseAdmin.storage.from(MEGA_BUCKET)
+        .list(`${prefix}/${idDir.name}/${pageDir.name}`, { limit: 5 });
+      for (const f of files || []) {
+        const key = `${prefix}/${idDir.name}/${pageDir.name}/${f.name}`;
+        const meta = parseMegaKey(key);
+        if (!meta) continue;
+        out.push({
+          key,
+          // What the client is handed. It carries no email and no bucket path.
+          handle: `mega-file://${idDir.name}`,
+          name: decodeURIComponent(meta.name),
+          pages: meta.pages,
+          size: f.metadata?.size ?? null,
+          uploaded_at: f.created_at || f.updated_at || null,
+        });
+      }
+    }
+  }
+  out.sort((a, b) => String(b.uploaded_at || "").localeCompare(String(a.uploaded_at || "")));
+  return out;
+}
+
+/**
+ * Expired books go, and so does anything past the active limit.
+ *
+ * Lazy and fired from the student's own upload, like the league's settlement
+ * and the market sweep — the trade this codebase takes everywhere rather than
+ * introduce a scheduler. It only ever touches ONE student's prefix, so it
+ * cannot turn one upload into a scan of the whole bucket.
+ */
+async function sweepMegaFiles(email) {
+  const files = await listMegaFiles(email);
+  const cutoff = Date.now() - MEGA_TTL_HOURS * 3600_000;
+  const doomed = [];
+  files.forEach((f, i) => {
+    const age = f.uploaded_at ? Date.parse(f.uploaded_at) : NaN;
+    // An unreadable timestamp is NOT treated as expired: deleting a student's
+    // textbook because storage answered oddly is the worse error by far.
+    if (Number.isFinite(age) && age < cutoff) doomed.push(f.key);
+    else if (i >= MEGA_ACTIVE_MAX) doomed.push(f.key);
+  });
+  if (doomed.length === 0) return { removed: 0 };
+  const { error } = await supabaseAdmin.storage.from(MEGA_BUCKET).remove(doomed);
+  if (error) console.warn("[local-ai] mega sweep failed:", error.message);
+  return { removed: error ? 0 : doomed.length };
+}
+
+/** The stored key for one handle, or null when it is not this student's. */
+async function findMegaKey(email, id) {
+  const files = await listMegaFiles(email);
+  return files.find((f) => f.handle === `mega-file://${id}`) || null;
+}
+
+/**
+ * The pages themselves, as a PDF of their own.
+ *
+ * `from`/`to` are 1-BASED, because that is what is printed on the paper. The
+ * single conversion to indices happens here and nowhere else.
+ */
+async function sliceMegaPages(key, from, to) {
+  const { data, error } = await supabaseAdmin.storage.from(MEGA_BUCKET).download(key);
+  if (error || !data) throw new Error("That book is no longer stored. Upload it again.");
+  const buffer = Buffer.from(await data.arrayBuffer());
+  const src = await PDFDocument.load(buffer, { updateMetadata: false });
+  const total = src.getPageCount();
+  // ONE conversion, in one place, asserted against a book whose pages carry
+  // their own numbers. An off-by-one here is invisible in the output.
+  const indices = pageIndices(from, to, total);
+  const out = await PDFDocument.create();
+  const copied = await out.copyPages(src, indices);
+  copied.forEach((pg) => out.addPage(pg));
+  return {
+    bytes: Buffer.from(await out.save()),
+    from: indices[0] + 1, to: indices[indices.length - 1] + 1,
+    pages: indices.length, total,
+  };
+}
+
 /**
  * THE MIME TYPE IS A HINT, NOT A VERDICT.
  *
@@ -1440,16 +1633,86 @@ async function convertFileForClaude(file) {
   };
 }
 
-// Convert file_urls → Anthropic content blocks. Three URL shapes are supported:
-//   1. local-file://<uuid>  — file we just uploaded; pulled from in-memory store
-//   2. https://...pdf       — pass through as document URL source
-//   3. https://...           — pass through as image URL source
-async function buildFileContentBlocks(fileUrls) {
+/**
+ * The mega reads in a request, parsed and nothing else.
+ *
+ * `mega-file://<id>#214-248` — the range rides in the FRAGMENT because a
+ * handle and the pages you want out of it are two different facts, and a
+ * student can ask for chapter 7 today and chapter 9 tomorrow off one upload.
+ *
+ * PURE, with no I/O, because the chip price and the model choice both have to
+ * be settled BEFORE anything is downloaded: charging for a read and then
+ * discovering the book is gone is the wrong order.
+ */
+function megaRequests(fileUrls) {
+  if (!Array.isArray(fileUrls)) return [];
+  const out = [];
+  for (const url of fileUrls) {
+    if (typeof url !== "string" || !url.startsWith("mega-file://")) continue;
+    const [id, frag] = url.slice("mega-file://".length).split("#");
+    if (!id) continue;
+    const m = String(frag || "").match(/^(\d+)-(\d+)$/);
+    // No range means the FIRST page only, never the whole book. A missing
+    // fragment is a client that has not asked yet, and defaulting that to
+    // "everything" is how somebody spends their term's chips by accident.
+    const from = m ? Number(m[1]) : 1;
+    const to = m ? Number(m[2]) : 1;
+    const r = normaliseRange(from, to, MEGA_PAGE_CAP);
+    out.push({ id, ...r });
+  }
+  return out;
+}
+
+/** Pages across every mega read in one request — what the surcharge is on. */
+const megaPageCount = (fileUrls) =>
+  megaRequests(fileUrls).reduce((sum, r) => sum + r.pages, 0);
+
+// Convert file_urls → Anthropic content blocks. Four URL shapes are supported:
+//   1. local-file://<uuid>       — file we just uploaded; pulled from the store
+//   2. mega-file://<id>#214-248  — a stored book, sliced to those pages
+//   3. https://...pdf            — pass through as document URL source
+//   4. https://...               — pass through as image URL source
+async function buildFileContentBlocks(fileUrls, ctx = {}) {
   if (!Array.isArray(fileUrls) || fileUrls.length === 0) return [];
   const blocks = await Promise.all(
     fileUrls
       .filter((u) => typeof u === "string" && u.length > 0)
       .map(async (url) => {
+        // A stored book, sliced to the pages the student asked for. THE OWNER
+        // IS CHECKED: a handle lifted from somebody else's session resolves to
+        // nothing, because the key it would need is under their prefix.
+        if (url.startsWith("mega-file://")) {
+          const [id, frag] = url.slice("mega-file://".length).split("#");
+          const m = String(frag || "").match(/^(\d+)-(\d+)$/);
+          const want = normaliseRange(m ? m[1] : 1, m ? m[2] : 1, MEGA_PAGE_CAP);
+          try {
+            const found = ctx.email ? await findMegaKey(ctx.email, id) : null;
+            if (!found) {
+              return {
+                type: "text",
+                text: `[ATTACHMENT PROBLEM: a book the user attached is no longer stored (books are kept for ${Math.round(MEGA_TTL_HOURS / 24)} days). Tell the user to upload it again.]`,
+              };
+            }
+            const slice = await withMegaGate(() => sliceMegaPages(found.key, want.from, want.to));
+            console.log(`[local-ai] mega slice: ${found.name} pp${slice.from}-${slice.to} (${slice.pages}pp, ${slice.bytes.length} bytes)`);
+            return {
+              type: "document",
+              source: { type: "base64", media_type: "application/pdf", data: slice.bytes.toString("base64") },
+              // The model is told WHICH pages it is holding, so a question
+              // about "page 231" lands on the page the student means rather
+              // than on the 18th page of the slice.
+              title: `${found.name} — pages ${slice.from}\u2013${slice.to}`,
+              context: `Pages ${slice.from} to ${slice.to} of "${found.name}" (${slice.total} pages in total). Page numbers in this excerpt are the book's own.`,
+            };
+          } catch (err) {
+            console.error(`[local-ai] mega slice failed for ${id}:`, err?.message || err);
+            return {
+              type: "text",
+              text: `[ATTACHMENT PROBLEM: the pages the user asked for could not be read out of their book (${err?.message || "slice failed"}). Tell them to try a different range or upload it again.]`,
+            };
+          }
+        }
+
         // Local upload — base64-encode the cached bytes (transcoding if needed).
         if (url.startsWith("local-file://")) {
           const id = url.slice("local-file://".length);
@@ -2803,6 +3066,132 @@ app.post("/local-ai/uploadFile", receiveUpload, async (req, res) => {
   }
 });
 
+/**
+ * A mega upload goes to DISK, never through memory.
+ *
+ * The ordinary picker uses `memoryStorage`, which is right for a 7 MB photo
+ * and catastrophic for a 100 MB book: multer buffers the whole body before any
+ * handler runs, so the size check would fire with the damage already done.
+ * This writes to the OS temp directory and the handler streams from there.
+ */
+const megaUpload = multer({
+  storage: multer.diskStorage({}),
+  limits: { fileSize: MEGA_FILE_CAP, files: 1 },
+});
+
+const receiveMega = (req, res, next) => megaUpload.any()(req, res, (err) => {
+  if (!err) return next();
+  if (err.code === "LIMIT_FILE_SIZE") {
+    return res.status(413).json({
+      message: `That book is too big. The largest we store is ${(MEGA_FILE_CAP / 1048576).toFixed(0)} MB.`,
+    });
+  }
+  console.warn("[local-ai] mega upload rejected:", err.code, err.message);
+  return res.status(400).json({ message: "That file couldn't be read. Try a different one." });
+});
+
+/**
+ * Store a book and report what it is.
+ *
+ * AUTH IS REQUIRED here, unlike the ordinary upload path: the handle is scoped
+ * to an owner, so there has to be one. It answers with the page count and the
+ * ceiling on a single read, which is everything the picker needs to price a
+ * range before the student commits to it.
+ */
+app.post("/local-ai/uploadMega", receiveMega, async (req, res) => {
+  const tmp = req.files?.[0]?.path;
+  const cleanUp = async () => { try { if (tmp) await fsp.unlink(tmp); } catch {} };
+  try {
+    const user = await authenticateRequest(req);
+    if (!user) { await cleanUp(); return res.status(401).json({ message: "Sign in to upload a book." }); }
+    const file = req.files?.[0];
+    if (!file) return res.status(400).json({ message: "No file uploaded" });
+
+    const mt = resolveMime({ mimeType: file.mimetype, originalName: file.originalname });
+    if (mt !== "application/pdf") {
+      await cleanUp();
+      return res.status(400).json({
+        message: "Big uploads are PDFs only — a Word file or a slide deck is read as text and has no pages to pick from.",
+      });
+    }
+    if (!(await ensureMegaBucket())) {
+      await cleanUp();
+      return res.status(503).json({ message: "Book storage isn't set up on this server yet." });
+    }
+
+    // Counting pages needs the bytes, so it takes the gate like a slice does.
+    let pages;
+    try {
+      pages = await withMegaGate(async () => {
+        const buffer = await fsp.readFile(tmp);
+        const doc = await PDFDocument.load(buffer, { updateMetadata: false });
+        return doc.getPageCount();
+      });
+    } catch (err) {
+      await cleanUp();
+      console.warn("[local-ai] mega parse failed:", err?.message || err);
+      return res.status(400).json({
+        message: `${file.originalname} couldn't be read as a PDF. It may be password-protected.`,
+      });
+    }
+    if (pages > MEGA_PAGE_CAP) {
+      await cleanUp();
+      return res.status(413).json({
+        message: `${file.originalname} is ${pages} pages. The longest book we store is ${MEGA_PAGE_CAP}.`,
+      });
+    }
+
+    // Old and over-the-limit books go BEFORE the new one lands, so the student
+    // is never briefly over their own allowance.
+    await sweepMegaFiles(user.email).catch(() => {});
+
+    const id = randomUUID();
+    const key = megaKey(user.email, id, pages, file.originalname);
+    const { error } = await supabaseAdmin.storage.from(MEGA_BUCKET)
+      .upload(key, await fsp.readFile(tmp), { contentType: "application/pdf", upsert: false });
+    await cleanUp();
+    if (error) {
+      console.error("[local-ai] mega store failed:", error.message);
+      return res.status(500).json({ message: "That book couldn't be stored. Try again." });
+    }
+
+    console.log(`[local-ai] mega upload: ${file.originalname} (${pages}pp, ${file.size} bytes) -> mega-file://${id}`);
+    return res.json({
+      file_url: `mega-file://${id}`,
+      name: file.originalname,
+      pages,
+      size: file.size,
+      // So the picker can price a range without restating the cost model.
+      range_page_cap: RANGE_PAGE_CAP,
+      chips_per_page_hint: chipsForRange(RANGE_PAGE_CAP),
+      model: MEGA_MODEL_LABEL,
+    });
+  } catch (err) {
+    await cleanUp();
+    console.error("[local-ai] mega upload error:", err);
+    return res.status(500).json({ message: err?.message || String(err) });
+  }
+});
+
+/** The books this student has stored, for the picker. Reads nothing else. */
+app.get("/local-ai/megaFiles", async (req, res) => {
+  try {
+    const user = await authenticateRequest(req);
+    if (!user) return res.status(401).json({ message: "Sign in to see your books." });
+    const files = await listMegaFiles(user.email);
+    return res.json({
+      files: files.map(({ key, ...rest }) => rest),   // the bucket path is ours
+      range_page_cap: RANGE_PAGE_CAP,
+      model: MEGA_MODEL_LABEL,
+      ttl_hours: MEGA_TTL_HOURS,
+      active_max: MEGA_ACTIVE_MAX,
+    });
+  } catch (err) {
+    console.error("[local-ai] megaFiles error:", err);
+    return res.status(500).json({ message: "Couldn't list your books." });
+  }
+});
+
 // Streaming variant of /local-ai/invokeAI. Same request shape, but emits
 // Server-Sent Events:
 //   event: text   data: {"text": "...delta..."}     (one per output chunk)
@@ -2864,9 +3253,15 @@ app.post("/local-ai/invokeAIStream", async (req, res) => {
     const tierUser = await authenticateRequest(req);
     let tierProfile = null;
     const feature = params.feature || "ai_tool";
+    // Settled BEFORE the gate: a mega read's price is its pages, and it is the
+    // same `chipsForRange` the picker printed under the range. `megaPages` is
+    // also what forces the model below — reading a textbook is the whole cost
+    // of the call, so it runs on the cheap one and the screen says so.
+    const megaPages = megaPageCount(params.file_urls);
+    const megaChips = chipsForRange(megaPages);
     if (tierUser) {
       tierProfile = await loadUserProfile(tierUser.email);
-      const access = checkTierAccess(tierProfile, feature);
+      const access = checkTierAccess(tierProfile, feature, megaChips);
       if (!access.allowed) {
         console.log(`[local-ai] (stream) tier-gate blocked: ${tierUser.email} feature=${feature} status=${access.status}`);
         sse("error", { message: access.reason, upgradeRequired: access.status === 402 });
@@ -2877,7 +3272,7 @@ app.post("/local-ai/invokeAIStream", async (req, res) => {
     }
 
     const { system, user } = splitSystemAndUser(promptText);
-    const fileBlocks = await buildFileContentBlocks(params.file_urls);
+    const fileBlocks = await buildFileContentBlocks(params.file_urls, { email: tierUser?.email });
     const userContent = [...fileBlocks, { type: "text", text: user }];
 
     // Chat tools (Math Tutor, Teaching Assistant) are meant to give short,
@@ -2891,7 +3286,13 @@ app.post("/local-ai/invokeAIStream", async (req, res) => {
       // This path previously ignored `fast` entirely, so a tool passing it got
       // the full model here and the cheap one there — same tool, two prices,
       // depending only on whether it happened to stream.
-      model: modelFor(tierProfile?.ai_model_preference, feature, {
+      // A mega read always goes to MEGA_MODEL, whatever the student's tier
+      // says. Input tokens ARE the cost here — three times the rate on a
+      // 40-page chapter is 95 chips against 283 — and pulling facts out of a
+      // textbook is bulk comprehension rather than the judgement marking
+      // needs. The screen names the model rather than leaving somebody to
+      // wonder why a chapter read thinner than a quiz mark.
+      model: megaPages > 0 ? MEGA_MODEL : modelFor(tierProfile?.ai_model_preference, feature, {
         fast: params.fast,
         vision: params.vision === true,
         standardModel: MODEL,
@@ -2929,7 +3330,7 @@ app.post("/local-ai/invokeAIStream", async (req, res) => {
     }
 
     if (tierProfile) {
-      recordTierUsage(tierProfile, feature, finalMessage.usage, { model: request.model }).catch((e) =>
+      recordTierUsage(tierProfile, feature, finalMessage.usage, { model: request.model, extraChips: megaChips }).catch((e) =>
         console.error("[local-ai] (stream) recordTierUsage failed:", e?.message || e),
       );
     }
@@ -3228,9 +3629,15 @@ app.post("/local-ai/invokeAI", async (req, res) => {
     const tierUser = await authenticateRequest(req);
     let tierProfile = null;
     const feature = params.feature || "ai_tool";
+    // Settled BEFORE the gate: a mega read's price is its pages, and it is the
+    // same `chipsForRange` the picker printed under the range. `megaPages` is
+    // also what forces the model below — reading a textbook is the whole cost
+    // of the call, so it runs on the cheap one and the screen says so.
+    const megaPages = megaPageCount(params.file_urls);
+    const megaChips = chipsForRange(megaPages);
     if (tierUser) {
       tierProfile = await loadUserProfile(tierUser.email);
-      const access = checkTierAccess(tierProfile, feature);
+      const access = checkTierAccess(tierProfile, feature, megaChips);
       if (!access.allowed) {
         console.log(`[local-ai] tier-gate blocked: ${tierUser.email} feature=${feature} status=${access.status}`);
         return res.status(access.status).json({
@@ -3243,7 +3650,7 @@ app.post("/local-ai/invokeAI", async (req, res) => {
     }
 
     const { system, user } = splitSystemAndUser(promptText);
-    const fileBlocks = await buildFileContentBlocks(params.file_urls);
+    const fileBlocks = await buildFileContentBlocks(params.file_urls, { email: tierUser?.email });
 
     // Compose the user message: any image/PDF blocks first, then the text.
     const userContent = [
@@ -3258,7 +3665,13 @@ app.post("/local-ai/invokeAI", async (req, res) => {
       // The student's own choice of model tier. Read server-side from the
       // profile rather than taken from the request body — a client-supplied
       // model id is a client-supplied bill.
-      model: modelFor(tierProfile?.ai_model_preference, feature, {
+      // A mega read always goes to MEGA_MODEL, whatever the student's tier
+      // says. Input tokens ARE the cost here — three times the rate on a
+      // 40-page chapter is 95 chips against 283 — and pulling facts out of a
+      // textbook is bulk comprehension rather than the judgement marking
+      // needs. The screen names the model rather than leaving somebody to
+      // wonder why a chapter read thinner than a quiz mark.
+      model: megaPages > 0 ? MEGA_MODEL : modelFor(tierProfile?.ai_model_preference, feature, {
         fast: params.fast,
         vision: params.vision === true,
         standardModel: MODEL,
@@ -3389,7 +3802,7 @@ app.post("/local-ai/invokeAI", async (req, res) => {
     // may be a cheaper tier than MODEL, and billing it at MODEL's rate would
     // burn a user's ceiling faster than their calls really cost.
     if (tierProfile) {
-      recordTierUsage(tierProfile, feature, response.usage, { model: request.model }).catch((e) =>
+      recordTierUsage(tierProfile, feature, response.usage, { model: request.model, extraChips: megaChips }).catch((e) =>
         console.error("[local-ai] recordTierUsage failed:", e?.message || e),
       );
     }

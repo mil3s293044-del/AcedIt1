@@ -2016,6 +2016,83 @@ numbers print to one decimal: rounding the cap told a student with a 7.8 MB
 photo that "the limit is 8 MB" and then refused it, which makes the app look
 broken rather than the file.
 
+## Mega uploads: a textbook, stored whole, read a chapter at a time
+
+**A BIG UPLOAD IS NOT JUST A BIGGER UPLOAD.** The ordinary path caps a PDF at
+16 MB because a request may be 32 MB. Raising that is the easy half and it is
+not the problem. The problem is that **a document costs input tokens for every
+page, every time it is read**, and the docs are explicit: 1,500–3,000 tokens of
+text per page PLUS the image tokens, because each page is rendered and read as
+a picture as well. About 4,600 tokens a page all in.
+
+So 600 pages is ~2.8M input tokens — **about $8.30 on Sonnet, against a $1.95
+weekly budget for the entire student**. One press of "make flashcards from my
+textbook" would cost four weeks of everything else they do. Anything that
+sends a whole book is unshippable at any price the chip stack can express.
+
+**UPLOAD WHOLE, GENERATE FROM A RANGE.** The book is stored once; each generate
+names its pages and only those are sent and only those are charged. Three
+things fall out and all three are improvements: a 40-page chapter is a normal
+action (95 chips of reading); "make cards from chapter 7" is a better ask than
+"from these 600 pages", which returns mush; and a textbook never sits in the
+512 MB box, because only the slice is ever encoded.
+
+`src/lib/megaUpload.js` is the model — caps, ranges and the price — and the
+server IMPORTS it rather than mirroring it, so the number under the range
+picker is the number on the bill. `megaUpload.test.mjs` scans the tree to keep
+it that way; a second copy of the page price is the one thing this must never
+grow.
+
+**THE PRICE IS ON SCREEN BEFORE IT IS SPENT.** This is the only action in the
+app whose price is not fixed — every other button costs what `chips.js`
+published, and a mega read costs its PAGES. The surcharge threads through
+`canAfford` → `canUseFeature` on the client and `checkTierAccess` →
+`recordTierUsage` on the server, so the button cannot say yes to something the
+server is about to refuse.
+
+**IT READS ON HAIKU AND THE PANEL SAYS SO.** Input tokens are the whole cost
+here and Haiku is 3× cheaper on them — the same chapter is 95 chips rather than
+283 — and pulling facts out of a textbook is bulk comprehension rather than the
+judgement marking needs. `megaPages > 0` forces the model past the student's
+own tier. An app that quietly downgrades the model and lets a student conclude
+it is just bad has spent their trust to save its own money.
+
+**A MISSING RANGE MEANS ONE PAGE, NEVER THE WHOLE BOOK.** Every clamp points
+the same way, because the failure modes are wildly asymmetric: reading too few
+pages wastes one press, reading 600 spends a term's chips. The picker opens on
+30 pages — a typical chapter — rather than on `RANGE_PAGE_CAP`, which would
+greet somebody with a third of their weekly stack and a slider already pinned
+to the right.
+
+**PAGE NUMBERS ARE 1-BASED EVERYWHERE, and `pageIndices` is the one
+conversion.** An off-by-one here is invisible: page 214 looks exactly like page
+215 unless something checks the number printed on it. The round-trip is
+asserted against a book whose every page carries its own number.
+
+**A HANDLE IS SCOPED TO ITS OWNER.** `local-file://` ids are unguessable UUIDs
+and that is all that protects them; a stored textbook is far larger and more
+personal, so the owner is hashed INTO the bucket key and checked on every read.
+The client only ever holds `mega-file://<uuid>` — `megaFiles` strips the
+storage key before answering, and a test asserts it does.
+
+**ONE SLICE AT A TIME, server-wide** (`megaGate`). MEASURED, not assumed: a
+74.8 MB book loads in 93 ms for ~7 MB above the buffer (pdf-lib's `load` is
+lazy) and slicing 40 pages costs another 7 MB. So one slice of a 100 MB book is
+~115 MB transient and two at once is not something a 512 MB instance should be
+asked to survive — this file has OOM'd that box once already.
+
+**STORAGE IS THE CONSTRAINT, NOT COST.** `MEGA_ACTIVE_MAX` books per student at
+100 MB each, swept on the student's own next upload (lazy, like every other
+sweep here). At 2 books × 30 actives that is up to 6 GB, and **Supabase's free
+tier is 1 GB** — so this needs a paid plan, or a smaller `MEGA_FILE_CAP`, or
+fewer active books. The constants are in one place precisely so that is a
+one-line decision. There is deliberately no separate weekly upload counter: the
+sweep already bounds the resource, and a constant that looks like a rule and
+enforces nothing is worse than no rule.
+
+`pdf-lib` is the one new dependency and it is load-bearing — nothing else in
+the tree can count a PDF's pages or cut a range out of one.
+
 ## Voice / UX guardrails (from prior decisions)
 
 - **Tone**: chill motivational coach. Never cocky.
@@ -2132,6 +2209,11 @@ broken rather than the file.
   `EquityCurve.jsx` — the second tab on the floor
 - `src/pages/Market.jsx` + `Reactions.jsx` + `Room.jsx` — one question in full,
   the glyphs, and the floor's shared ground; `getMarket` in `server.mjs`
+- `src/lib/megaUpload.js` + `megaUpload.test.mjs`, `src/api/megaUploads.js`,
+  `src/components/shared/MegaPicker.jsx` — a textbook stored whole and read a
+  chapter at a time: the caps, the 1-based ranges and the per-page chip price.
+  `uploadMega` / `megaFiles` / `sliceMegaPages` in `server.mjs` are the other
+  half and IMPORT this module; the test scans so a second price cannot appear
 - `src/lib/quizScore.js` + `quizScore.test.mjs` — ONE mark per question, read
   by every surface that prints one; the test scans for the hand-rolled
   allocation and the unreconciled claim, both of which render perfectly

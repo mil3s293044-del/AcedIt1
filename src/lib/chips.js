@@ -171,15 +171,26 @@ export function spendableFor(profile, feature) {
     return Math.max(0, remaining - ACE_RESERVE);
 }
 
-/** Can they afford this, and if not, what would help? */
-export function canAfford(profile, feature, tier = "standard") {
+/**
+ * Can they afford this, and if not, what would help?
+ *
+ * `extraChips` is the one thing whose price is not published in advance: a
+ * mega read costs its PAGES (see megaUpload.js), so the caller adds what the
+ * range picker just quoted. Everything else passes 0 and behaves as it always
+ * did — and this mirror has to take it, or the button says yes and the server
+ * then says no, which is the drift the header of tierAccess.js warns about.
+ */
+export function canAfford(profile, feature, tier = "standard", extraChips = 0) {
     const remaining = spendableFor(profile, feature);
-    const price = priceOf(feature, tier);
+    const extra = Math.max(0, Math.round(Number(extraChips) || 0));
+    const price = priceOf(feature, tier) + extra;
     if (remaining >= price) return { ok: true, price, remaining };
 
     // The useful part of a refusal is what to do about it. Saver is a real
-    // answer here and a wall is not.
-    const saverPrice = priceOf(feature, "saver");
+    // answer here and a wall is not — but only for the feature's own half.
+    // Saver does not make a book shorter, so a refusal that is mostly pages
+    // must not promise that switching tier fixes it.
+    const saverPrice = priceOf(feature, "saver") + extra;
     return {
         ok: false,
         price,

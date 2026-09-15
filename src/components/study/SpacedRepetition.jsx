@@ -22,6 +22,8 @@ import {
 } from "lucide-react";
 import { base44 } from "@/api/base44Client";
 import { acceptFiles, uploadAll, STUDY_ACCEPT, STUDY_ACCEPT_LABEL } from "@/lib/pickFiles";
+import MegaPicker from "@/components/shared/MegaPicker";
+import { PRICE } from "@/lib/chips";
 import { format } from "date-fns";
 import { moderationPresets } from "@/components/shared/contentModeration";
 import { recordStudyAndGetStreak } from "@/components/shared/streakHelpers";
@@ -164,6 +166,10 @@ export default function SpacedRepetition() {
     const [selectedGroups, setSelectedGroups] = useState([]);
     const [isShowingGenerated, setIsShowingGenerated] = useState(false);
     const [uploadedFiles, setUploadedFiles] = useState([]);
+    // A chapter of a stored book: `{ url, pages, name, chips }` or null. Kept
+    // apart from `uploadedFiles` because it is not a file the student is
+    // holding — the book is already on the server and this is a range.
+    const [megaPick, setMegaPick] = useState(null);
     const [isGenerating, setIsGenerating] = useState(false);
     const [generatedFlashcards, setGeneratedFlashcards] = useState(null);
     const [searchTerm, setSearchTerm] = useState('');
@@ -350,11 +356,17 @@ export default function SpacedRepetition() {
     }, [isShowingGenerated, generatedFlashcards, newDeck, saveDraft]);
 
     const handleGenerateFlashcardsFromFile = async () => {
-        if (!uploadedFiles.length) {
-            toast({ title: "No file selected", description: "Please upload at least one file.", variant: "destructive" });
+        // A chapter of a stored book is material too. Requiring an UPLOAD
+        // here would make the book picker a control that cannot be used on
+        // its own — which is the exact "feature gated behind an
+        // optional-looking step" shape this codebase already has a note about.
+        if (!uploadedFiles.length && !megaPick) {
+            toast({ title: "Nothing to read", description: "Upload a file, or pick a chapter from one of your books.", variant: "destructive" });
             return;
         }
-        const access = canUseFeature(userProfile, FEATURES.FLASHCARD_AI_GEN);
+        // The pages are priced into the gate, so the button cannot say yes to
+        // something the server is about to refuse.
+        const access = canUseFeature(userProfile, FEATURES.FLASHCARD_AI_GEN, megaPick?.read || 0);
         if (!access.allowed) {
             toast({
                 title: access.upgradeRequired ? "Premium feature" : "Daily limit reached",
@@ -426,7 +438,13 @@ The documents provided may be PowerPoint slides, Word documents, PDFs or text fi
 
             // Only pass PDF/TXT files to Gemini — it cannot natively read DOCX/PPTX.
             // DOCX/PPTX content is already injected as text in documentContext above.
-            const geminiCompatibleUrls = directFiles.map(f => f.url);
+            // The chapter rides in with the files. It is a document like any
+            // other by the time the server has sliced it; what makes it
+            // different is the price, which the picker already showed.
+            const geminiCompatibleUrls = [
+                ...directFiles.map(f => f.url),
+                ...(megaPick ? [megaPick.url] : []),
+            ];
 
             const response = await base44.integrations.Core.InvokeLLM({
                 feature: "flashcard_ai_gen",
@@ -1265,6 +1283,15 @@ The documents provided may be PowerPoint slides, Word documents, PDFs or text fi
                                         ))}
                                     </div>
                                 )}
+                            </div>
+
+                            {/* A textbook is stored once and read a chapter at a
+                                time — the ordinary picker tops out well below one,
+                                and sending 600 pages would cost more than a
+                                fortnight of everything else. See megaUpload.js. */}
+                            <div className="rounded-2xl border-2 border-border bg-secondary/30 p-4">
+                                <MegaPicker featurePrice={PRICE.flashcard_ai_gen}
+                                    onChange={setMegaPick} toast={toast} />
                             </div>
 
                             {/* Settings */}
