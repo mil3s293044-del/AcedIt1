@@ -163,4 +163,37 @@ check("THE SERVER ENFORCES THE SAME CAPS — change one, change both", () => {
         "multer's 30 MB limit was the number from nowhere");
 });
 
+check("A LIVE FileList IS NEVER READ ACROSS AN INPUT RESET", () => {
+    // The bug this exists to prevent: `const picked = e.target.files` followed
+    // by `e.target.value = ""` hands every downstream reader an EMPTY list,
+    // with no error and no toast — indistinguishable from a cancelled dialog.
+    // It shipped to five pickers at once. Only a source scan can see it, which
+    // is the same device fnResult.test.mjs uses for the envelope bug.
+    const files = [];
+    const walk = (dir) => {
+        for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
+            const full = `${dir}/${e.name}`;
+            if (e.isDirectory()) { if (e.name !== "node_modules") walk(full); }
+            else if (/\.(jsx?|mjs)$/.test(e.name)) files.push(full);
+        }
+    };
+    walk("src");
+
+    const offenders = [];
+    for (const file of files) {
+        const text = fs.readFileSync(file, "utf8");
+        text.split("\n").forEach((line, i) => {
+            if (!/target\.files/.test(line)) return;
+            // Safe: copied to a real array, or read by index there and then.
+            if (/Array\.from\s*\(\s*[^)]*target\.files/.test(line)) return;
+            if (/target\.files\s*\??\.?\[/.test(line)) return;
+            // Safe: the file documenting the trap talks about it.
+            if (file.endsWith("pickFiles.js") || file.endsWith("uploadPrep.test.mjs")) return;
+            offenders.push(`${file}:${i + 1}  ${line.trim().slice(0, 80)}`);
+        });
+    }
+    assert.deepEqual(offenders, [],
+        "a FileList must be copied with Array.from before the input is reset");
+});
+
 console.log(`\n${passed} passed`);

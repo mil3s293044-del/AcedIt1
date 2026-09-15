@@ -1707,7 +1707,7 @@ Return valid JSON only.`,
                                                className="hidden"
                                                multiple
                                                onChange={async (e) => {
-                                                   const picked = e.target.files;
+                                                   const picked = Array.from(e.target.files || []);
                                                    e.target.value = "";
                                                    setUploadedFiles(await acceptFiles(picked, { toast, existing: uploadedFiles }));
                                                }}
