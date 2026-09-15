@@ -55,6 +55,10 @@ function BookRow({ book, active, onPick }) {
 
 export default function MegaPicker({ featurePrice = 0, onChange, toast }) {
     const [books, setBooks] = useState([]);
+    // Whether a NEW book would be taken. Books are the first thing to stand
+    // down when storage gets tight (see storageBudget.js), and a student
+    // should hear that BEFORE pushing 40 MB up school wifi, not after.
+    const [accepting, setAccepting] = useState({ ok: true, reason: null });
     const [loading, setLoading] = useState(true);
     const [busy, setBusy] = useState(false);
     const [progress, setProgress] = useState(0);
@@ -65,8 +69,11 @@ export default function MegaPicker({ featurePrice = 0, onChange, toast }) {
 
     const refresh = useCallback(async () => {
         setLoading(true);
-        try { setBooks((await listMega()).files || []); }
-        catch { setBooks([]); }        // not signed in, or no storage — not an error to shout about
+        try {
+            const res = await listMega();
+            setBooks(res.files || []);
+            setAccepting({ ok: res.accepting !== false, reason: res.accepting_reason || null });
+        } catch { setBooks([]); }      // not signed in, or no storage — not an error to shout about
         finally { setLoading(false); }
     }, []);
 
@@ -162,13 +169,19 @@ export default function MegaPicker({ featurePrice = 0, onChange, toast }) {
             )}
 
             <input ref={inputRef} type="file" accept=".pdf,application/pdf" className="hidden" onChange={onUpload} />
-            <Button type="button" variant="outline" size="sm" disabled={busy}
+            <Button type="button" variant="outline" size="sm" disabled={busy || !accepting.ok}
                 onClick={() => inputRef.current?.click()}
                 className="gap-2 rounded-xl">
                 {busy
                     ? <><Loader2 className="w-4 h-4 animate-spin" /> Uploading {Math.round(progress * 100)}%</>
                     : <><Upload className="w-4 h-4" /> {books.length ? "Add another book" : "Upload a book"}</>}
             </Button>
+            {/* A disabled button says WHY, the rule Active Recall's already
+                records. And it names what is unaffected, because "storage is
+                full" on a study app reads as "nothing works". */}
+            {!accepting.ok && accepting.reason && (
+                <p className="text-xs text-muted-foreground">{accepting.reason}</p>
+            )}
 
             {picked && range && (
                 <motion.div initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }}

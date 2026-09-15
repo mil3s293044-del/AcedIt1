@@ -4,6 +4,8 @@ import cors from "cors";
 import multer from "multer";
 import { createHash, randomUUID } from "node:crypto";
 import fsp from "node:fs/promises";
+import path from "node:path";
+import os from "node:os";
 import Anthropic from "@anthropic-ai/sdk";
 import heicConvert from "heic-convert";
 import mammoth from "mammoth";
@@ -46,6 +48,11 @@ import {
   chipsForRange, normaliseRange, pageIndices,
 } from "./src/lib/megaUpload.js";
 import { PDFDocument } from "pdf-lib";
+// The free tier is a CLIFF: going over 1 GB of storage 402s EVERY service, not
+// just uploads. This is the order things stand down in so nothing reaches it.
+import {
+  storageVerdict, megaRefusal, pctOf, expiredKeys, MEGA_BUCKET_BYTES,
+} from "./src/lib/storageBudget.js";
 import Stripe from "stripe";
 import { Resend } from "resend";
 
@@ -1274,12 +1281,30 @@ async function storeFile(buffer, mimeType, originalName) {
   const entry = { buffer, mimeType, originalName, uploadedAt: Date.now() };
   cacheFile(id, entry);
 
+  // ─── AN ORDINARY UPLOAD IS NEVER REFUSED ────────────────────────────────
+  // Past the persist threshold the bytes simply stay in memory, which is the
+  // path a deploy with no service key has always taken and which serves a
+  // generate perfectly: upload and generate are seconds apart and the file is
+  // in the cache. What is given up is surviving a restart — strictly better
+  // than letting the bucket reach a ceiling that 402s the whole project.
+  const state = await storageState();
+  if (!state.persistAllowed) {
+    console.warn(`[local-ai] storage at ${pctOf(state.used)} — keeping `
+      + `${originalName} in memory only`);
+    // Fired anyway: the sweep is what gets us back under.
+    sweepUploads(state.ttlHours).catch(() => {});
+    return id;
+  }
+
   if (await ensureBucket()) {
     const { error } = await supabaseAdmin.storage.from(UPLOAD_BUCKET).upload(id, buffer, {
       contentType: mimeType || "application/octet-stream",
       upsert: false,
     });
     if (error) console.warn("[local-ai] upload persist failed:", error.message);
+    else noteUsage(buffer.length);
+    // Lazy, like every other sweep here, and rate-limited inside.
+    sweepUploads(state.ttlHours).catch(() => {});
   } else if (!warnedNoStorage) {
     warnedNoStorage = true;
     console.warn("[local-ai] no storage bucket — uploads are memory-only and "
@@ -1310,6 +1335,135 @@ async function loadFile(id) {
   } catch (err) {
     console.warn("[local-ai] upload fetch failed:", err?.message || err);
     return null;
+  }
+}
+
+/* ═══ HOW FULL IS STORAGE, AND WHAT STANDS DOWN FIRST ══════════════════════
+ *
+ * `ai-uploads` had NO sweep. Every file any student had ever uploaded was kept
+ * forever, and at 230 accounts three files each at 3 MB is 2.0 GB against a
+ * 1 GB plan. It was going to take the whole project down on its own, before
+ * books existed and whether or not anybody ever used them.
+ *
+ * Usage is TRACKED rather than measured per call: listing a bucket to answer
+ * "how full is it" on every upload is itself an API call and would be the
+ * slowest thing in the path. It is seeded from one listing, moved by every
+ * write and delete, and re-seeded on a timer — eventually consistent, which is
+ * why storageBudget.js puts its thresholds well short of the cliff.
+ */
+
+const USAGE_RESEED_MS = 10 * 60 * 1000;
+const usage = { total: 0, mega: 0, seededAt: 0, seeding: null };
+
+/** Walk one bucket and total its bytes. Bounded; a prefix is not a failure. */
+async function bucketBytes(bucket, prefix = "", depth = 0) {
+  if (depth > 4) return 0;
+  const { data, error } = await supabaseAdmin.storage.from(bucket)
+    .list(prefix, { limit: 1000 });
+  if (error || !data) return 0;
+  let bytes = 0;
+  for (const entry of data) {
+    const path = prefix ? `${prefix}/${entry.name}` : entry.name;
+    // A row with no id is a FOLDER in Storage's listing, not a zero-byte file.
+    if (entry.id) bytes += Number(entry.metadata?.size) || 0;
+    else bytes += await bucketBytes(bucket, path, depth + 1);
+  }
+  return bytes;
+}
+
+/** Seed the counters from the real buckets, at most one walk at a time. */
+async function seedUsage() {
+  if (usage.seeding) return usage.seeding;
+  usage.seeding = (async () => {
+    try {
+      const [up, mega] = await Promise.all([
+        ensureBucket().then((ok) => (ok ? bucketBytes(UPLOAD_BUCKET) : 0)),
+        ensureMegaBucket().then((ok) => (ok ? bucketBytes(MEGA_BUCKET) : 0)),
+      ]);
+      usage.total = up + mega;
+      usage.mega = mega;
+      usage.seededAt = Date.now();
+      console.log(`[local-ai] storage: ${pctOf(usage.total)} of the plan `
+        + `(${(usage.total / 1048576).toFixed(0)} MB, books ${(mega / 1048576).toFixed(0)} MB)`);
+    } catch (err) {
+      console.warn("[local-ai] storage usage unknown:", err?.message || err);
+    } finally {
+      usage.seeding = null;
+    }
+  })();
+  return usage.seeding;
+}
+
+/** Moved on every write and delete, so the counters do not need re-walking. */
+function noteUsage(bytes, { mega = false } = {}) {
+  usage.total = Math.max(0, usage.total + bytes);
+  if (mega) usage.mega = Math.max(0, usage.mega + bytes);
+}
+
+/**
+ * What may be written right now.
+ *
+ * Re-seeds in the BACKGROUND when stale rather than making an upload wait on a
+ * bucket walk — a slightly old number is what the thresholds are sized for,
+ * and a student waiting three seconds for a listing is not.
+ */
+async function storageState() {
+  if (!supabaseAdmin) return storageVerdict(0, 0);
+  if (usage.seededAt === 0) await seedUsage();
+  else if (Date.now() - usage.seededAt > USAGE_RESEED_MS) seedUsage().catch(() => {});
+  return storageVerdict(usage.total, usage.mega);
+}
+
+/**
+ * THE SWEEP ORDINARY UPLOADS NEVER HAD.
+ *
+ * A file here is read ONCE, by the generate that follows its upload by
+ * seconds. Keeping it forever was never buying anything — the memory cache is
+ * what serves the actual read — so a day's TTL reclaims essentially the whole
+ * bucket, and tightens to four hours when space gets short.
+ *
+ * Lazy and fired from an upload, like every other sweep in this codebase, and
+ * bounded: one listing page, so it cannot turn one student's upload into a
+ * walk of the whole bucket.
+ */
+let lastUploadSweep = 0;
+const UPLOAD_SWEEP_EVERY_MS = 5 * 60 * 1000;
+
+async function sweepUploads(ttlHours) {
+  if (Date.now() - lastUploadSweep < UPLOAD_SWEEP_EVERY_MS) return { removed: 0 };
+  lastUploadSweep = Date.now();
+  if (!(await ensureBucket())) return { removed: 0 };
+  try {
+    const { data, error } = await supabaseAdmin.storage.from(UPLOAD_BUCKET)
+      .list("", { limit: 1000, sortBy: { column: "created_at", order: "asc" } });
+    if (error || !data) return { removed: 0 };
+    const entries = [];
+    for (const folder of data) {
+      // Uploads are stored as "<uuid>/<name>", so the top level is folders.
+      const kids = folder.id ? [folder] : (await supabaseAdmin.storage
+        .from(UPLOAD_BUCKET).list(folder.name, { limit: 10 })).data || [];
+      for (const f of kids) {
+        entries.push({
+          key: folder.id ? f.name : `${folder.name}/${f.name}`,
+          // `Date.parse("")` is NaN, which `expiredKeys` reads as "no
+          // timestamp" and protects. Never coerce it to a number here.
+          at: f.created_at || f.updated_at ? Date.parse(f.created_at || f.updated_at) : null,
+          size: Number(f.metadata?.size) || 0,
+        });
+      }
+    }
+    // The decision is a tested pure function, because it DELETES.
+    const { keys: doomed, freed } = expiredKeys(entries, { ttlHours });
+    if (doomed.length === 0) return { removed: 0 };
+    const { error: delErr } = await supabaseAdmin.storage.from(UPLOAD_BUCKET).remove(doomed);
+    if (delErr) { console.warn("[local-ai] upload sweep failed:", delErr.message); return { removed: 0 }; }
+    noteUsage(-freed);
+    console.log(`[local-ai] upload sweep: ${doomed.length} files, `
+      + `${(freed / 1048576).toFixed(1)} MB freed, now ${pctOf(usage.total)}`);
+    return { removed: doomed.length, freed };
+  } catch (err) {
+    console.warn("[local-ai] upload sweep error:", err?.message || err);
+    return { removed: 0 };
   }
 }
 
@@ -1446,19 +1600,24 @@ async function listMegaFiles(email) {
  */
 async function sweepMegaFiles(email) {
   const files = await listMegaFiles(email);
-  const cutoff = Date.now() - MEGA_TTL_HOURS * 3600_000;
-  const doomed = [];
-  files.forEach((f, i) => {
-    const age = f.uploaded_at ? Date.parse(f.uploaded_at) : NaN;
-    // An unreadable timestamp is NOT treated as expired: deleting a student's
-    // textbook because storage answered oddly is the worse error by far.
-    if (Number.isFinite(age) && age < cutoff) doomed.push(f.key);
-    else if (i >= MEGA_ACTIVE_MAX) doomed.push(f.key);
-  });
+  // Same tested decision the uploads sweep runs, with `keepNewest` holding the
+  // book a sitting may be using right now. Anything past that count goes
+  // regardless of age, which is what bounds a student to MEGA_ACTIVE_MAX.
+  const entries = files.map((f) => ({
+    key: f.key,
+    at: f.uploaded_at ? Date.parse(f.uploaded_at) : null,
+    size: Number(f.size) || 0,
+  }));
+  const aged = expiredKeys(entries, { ttlHours: MEGA_TTL_HOURS, keepNewest: MEGA_ACTIVE_MAX });
+  const overflow = entries.slice(MEGA_ACTIVE_MAX).map((e) => e.key);
+  const doomed = [...new Set([...aged.keys, ...overflow])];
   if (doomed.length === 0) return { removed: 0 };
+  const freed = entries.filter((e) => doomed.includes(e.key))
+    .reduce((sum, e) => sum + e.size, 0);
   const { error } = await supabaseAdmin.storage.from(MEGA_BUCKET).remove(doomed);
-  if (error) console.warn("[local-ai] mega sweep failed:", error.message);
-  return { removed: error ? 0 : doomed.length };
+  if (error) { console.warn("[local-ai] mega sweep failed:", error.message); return { removed: 0 }; }
+  noteUsage(-freed, { mega: true });
+  return { removed: doomed.length, freed };
 }
 
 /** The stored key for one handle, or null when it is not this student's. */
@@ -1473,10 +1632,48 @@ async function findMegaKey(email, id) {
  * `from`/`to` are 1-BASED, because that is what is printed on the paper. The
  * single conversion to indices happens here and nowhere else.
  */
-async function sliceMegaPages(key, from, to) {
+/**
+ * A book on local disk, so a SITTING costs one download rather than four.
+ *
+ * Egress is the other free-tier ceiling — 5 GB a month — and slicing pulls the
+ * whole book every time, so four chapters off one 40 MB book would be 160 MB
+ * of it. A student works several chapters in one go far more often than one,
+ * which makes this the difference between ~128 sittings a month and ~32.
+ *
+ * DISK, not the byte-bounded memory cache: a book is most of that cache's
+ * whole budget on a 512 MB box, and Render's filesystem is ephemeral, which is
+ * exactly the right lifetime for something Supabase still holds the copy of.
+ * A miss is a download, so losing it costs nothing but egress.
+ */
+const megaDiskDir = path.join(os.tmpdir(), "acedit-mega");
+const MEGA_DISK_TTL_MS = 60 * 60 * 1000;
+
+const megaDiskPath = (key) =>
+  path.join(megaDiskDir, createHash("sha1").update(key).digest("hex") + ".pdf");
+
+async function megaBytes(key) {
+  const cached = megaDiskPath(key);
+  try {
+    const stat = await fsp.stat(cached);
+    if (Date.now() - stat.mtimeMs < MEGA_DISK_TTL_MS) return await fsp.readFile(cached);
+  } catch { /* not cached — fall through and fetch it */ }
+
   const { data, error } = await supabaseAdmin.storage.from(MEGA_BUCKET).download(key);
   if (error || !data) throw new Error("That book is no longer stored. Upload it again.");
   const buffer = Buffer.from(await data.arrayBuffer());
+  // Best effort. A cache that cannot be written is a slower path, never a
+  // failure — the bytes are already in hand.
+  try {
+    await fsp.mkdir(megaDiskDir, { recursive: true });
+    await fsp.writeFile(cached, buffer);
+  } catch (err) {
+    console.warn("[local-ai] mega disk cache unavailable:", err?.message || err);
+  }
+  return buffer;
+}
+
+async function sliceMegaPages(key, from, to) {
+  const buffer = await megaBytes(key);
   const src = await PDFDocument.load(buffer, { updateMetadata: false });
   const total = src.getPageCount();
   // ONE conversion, in one place, asserted against a book whose pages carry
@@ -3119,6 +3316,21 @@ app.post("/local-ai/uploadMega", receiveMega, async (req, res) => {
       return res.status(503).json({ message: "Book storage isn't set up on this server yet." });
     }
 
+    // ─── BOOKS YIELD FIRST ──────────────────────────────────────────────
+    // They are the largest objects and the rarest feature, so they are what
+    // stands down when the plan gets tight — one student cannot store a
+    // textbook today, and nobody loses the app. Checked BEFORE the file is
+    // parsed, so a refusal costs nothing.
+    const budget = await storageState();
+    const refusal = megaRefusal(budget, file.size);
+    if (refusal) {
+      await cleanUp();
+      console.warn(`[local-ai] mega refused at ${pctOf(budget.used)} `
+        + `(books ${(usage.mega / 1048576).toFixed(0)} MB of `
+        + `${(MEGA_BUCKET_BYTES / 1048576).toFixed(0)} MB)`);
+      return res.status(507).json({ message: refusal });
+    }
+
     // Counting pages needs the bytes, so it takes the gate like a slice does.
     let pages;
     try {
@@ -3154,6 +3366,7 @@ app.post("/local-ai/uploadMega", receiveMega, async (req, res) => {
       console.error("[local-ai] mega store failed:", error.message);
       return res.status(500).json({ message: "That book couldn't be stored. Try again." });
     }
+    noteUsage(file.size, { mega: true });
 
     console.log(`[local-ai] mega upload: ${file.originalname} (${pages}pp, ${file.size} bytes) -> mega-file://${id}`);
     return res.json({
@@ -3179,12 +3392,18 @@ app.get("/local-ai/megaFiles", async (req, res) => {
     const user = await authenticateRequest(req);
     if (!user) return res.status(401).json({ message: "Sign in to see your books." });
     const files = await listMegaFiles(user.email);
+    // Whether a NEW book would be taken, so the picker can say so before a
+    // student spends five minutes pushing 40 MB up school wifi to be refused
+    // at the other end. Their existing books still open either way.
+    const budget = await storageState();
     return res.json({
       files: files.map(({ key, ...rest }) => rest),   // the bucket path is ours
       range_page_cap: RANGE_PAGE_CAP,
       model: MEGA_MODEL_LABEL,
       ttl_hours: MEGA_TTL_HOURS,
       active_max: MEGA_ACTIVE_MAX,
+      accepting: budget.megaAllowed,
+      accepting_reason: megaRefusal(budget),
     });
   } catch (err) {
     console.error("[local-ai] megaFiles error:", err);

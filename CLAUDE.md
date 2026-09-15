@@ -1794,6 +1794,10 @@ through all of them.
 ## Known issues / paper-cuts
 
 - Console 400s on `/study_plans` and `/flashcards` — missing-column patches. Non-blocking.
+- Supabase is on the FREE plan and the app now self-limits to stay inside it
+  (see the storage section). If you raise any upload cap, re-read the
+  arithmetic there first — the failure mode is the whole project 402ing, not a
+  failed upload.
 - Lint is at ~46 warnings, down from 190. What's left is mostly unread state; the
   genuinely dead things have been removed. Worth reading a warning before deleting
   it — twice now an "unused" symbol turned out to mark a half-wired feature, not
@@ -2081,17 +2085,72 @@ lazy) and slicing 40 pages costs another 7 MB. So one slice of a 100 MB book is
 ~115 MB transient and two at once is not something a 512 MB instance should be
 asked to survive — this file has OOM'd that box once already.
 
-**STORAGE IS THE CONSTRAINT, NOT COST.** `MEGA_ACTIVE_MAX` books per student at
-100 MB each, swept on the student's own next upload (lazy, like every other
-sweep here). At 2 books × 30 actives that is up to 6 GB, and **Supabase's free
-tier is 1 GB** — so this needs a paid plan, or a smaller `MEGA_FILE_CAP`, or
-fewer active books. The constants are in one place precisely so that is a
-one-line decision. There is deliberately no separate weekly upload counter: the
-sweep already bounds the resource, and a constant that looks like a rule and
-enforces nothing is worse than no rule.
+**STORAGE IS THE CONSTRAINT, NOT COST**, and it is sized by the plan rather
+than by PDFs: 40 MB a book, ONE active book, a 24-hour TTL and a 250 MB share
+of the bucket. See the storage section below for why those numbers and not
+others. A book is cached on local disk for an hour after it is fetched, so a
+student working four chapters in one sitting costs one download of egress
+rather than four.
 
 `pdf-lib` is the one new dependency and it is load-bearing — nothing else in
 the tree can count a PDF's pages or cut a range out of one.
+
+## The free tier is a CLIFF, and a full bucket breaks the whole app
+
+`src/lib/storageBudget.js`. Supabase's free plan is 1 GB of file storage and
+5 GB of egress a month, and exceeding it does NOT degrade storage and leave the
+rest running: the organisation gets a grace period, and after it **every
+service returns 402** — database, auth, the lot. A second grace period is not
+granted. So a bucket quietly filling up does not break uploads, it breaks the
+app for every student including the ones who never uploaded anything.
+
+**`ai-uploads` had NO SWEEP. Ever.** Every file any student had uploaded was
+kept forever. At 230 accounts (130 live plus a 100-student trial) three files
+each at 3 MB is 2.0 GB; five at 4 MB is 4.5 GB. There is no plausible usage
+pattern where that bucket stays under 1 GB, and it was already on that path
+before mega uploads existed and whether or not anybody ever used one. That —
+not books — was the thing about to take the site down.
+
+**THE ORDER OF YIELDING IS THE DESIGN**, and `storageBudget.test.mjs` asserts
+it rather than trusting the comments:
+
+1. **Sweep.** An ordinary upload is read ONCE, by the generate seconds later.
+   Keeping it for a week bought nothing, so a day's TTL reclaims essentially
+   the whole bucket, tightening to four hours at `SWEEP_HARDER_AT`.
+2. **Books refuse**, at `MEGA_STOPS_AT` or once they fill their own 250 MB
+   share — whichever comes first, because one enthusiastic student can fill
+   the share while total usage is still low. The picker asks the server whether
+   a book would be taken and disables the button with the reason, so nobody
+   pushes 40 MB up school wifi to be refused at the far end. **Books already
+   stored keep working**; only new ones stand down.
+3. **Ordinary uploads stop being PERSISTED and keep working.** `storeFile`
+   already had this path for a deploy with no service key, and it serves a
+   generate perfectly — upload and generate are seconds apart and the bytes are
+   in the memory cache. What is given up is surviving a restart, which is
+   strictly better than a 402 across the whole project.
+4. There is no step four. **A GENERATE NEVER FAILS BECAUSE OF STORAGE.**
+
+Usage is TRACKED, not measured per call: listing a bucket to answer "how full"
+on every upload would be the slowest thing in the path. Seeded from one
+listing, moved by every write and delete, re-seeded on a timer — eventually
+consistent, which is why every threshold sits well short of the cliff.
+
+**`expiredKeys` is a pure function because it DELETES.** Same reasoning as
+`pageIndices`: a deletion decision inside a loop in a handler cannot be checked
+until it has already removed the wrong thing. Two rules, both asserted:
+**a file with no timestamp is NEVER swept** — and watch `Number(null) === 0`,
+which turns "no timestamp" into 1970 and deletes exactly the file the rule
+protects, the identical trap `criterionIndexFor` records, caught here by one
+fixture row with a null date; and **`keepNewest` protects the book a sitting is
+using**, so a sweep firing mid-session cannot pull it out from under them.
+
+**Do we need the paid plan?** Not for this. With the sweep and the caps above,
+ordinary uploads hold about a day's worth (~370 MB at 230 accounts uploading
+normally) and books are hard-bounded at 250 MB. What a paid plan buys is
+concurrency in the book feature — roughly six students holding a book at once
+at these caps — and `MEGA_FILE_CAP`, `MEGA_ACTIVE_MAX`, `MEGA_TTL_HOURS` and
+`MEGA_BUCKET_BYTES` are in one place precisely so raising them is one line each
+once it is worth paying for.
 
 ## Voice / UX guardrails (from prior decisions)
 
@@ -2214,6 +2273,10 @@ the tree can count a PDF's pages or cut a range out of one.
   chapter at a time: the caps, the 1-based ranges and the per-page chip price.
   `uploadMega` / `megaFiles` / `sliceMegaPages` in `server.mjs` are the other
   half and IMPORT this module; the test scans so a second price cannot appear
+- `src/lib/storageBudget.js` + `storageBudget.test.mjs` — the free tier's
+  cliff, the order things stand down in so a generate never fails for want of
+  storage, and `expiredKeys`, the tested decision both sweeps delete through.
+  `storageState` / `sweepUploads` / `noteUsage` in `server.mjs` are its half
 - `src/lib/quizScore.js` + `quizScore.test.mjs` — ONE mark per question, read
   by every surface that prints one; the test scans for the hand-rolled
   allocation and the unreconciled claim, both of which render perfectly

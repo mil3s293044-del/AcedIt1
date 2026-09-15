@@ -51,8 +51,21 @@
 import { MICROS_PER_CHIP } from "./chips.js";
 import { PDF_RAW_CAP } from "./uploadPrep.js";
 
-/** The ceiling on a stored book. The Files API would take 500 MB; this is ours. */
-export const MEGA_FILE_CAP = 100 * 1024 * 1024;
+/**
+ * The ceiling on a stored book.
+ *
+ * 40 MB, and the number is set by SUPABASE'S FREE TIER rather than by anything
+ * about PDFs. The plan gives 1 GB of file storage in total and going over it
+ * 402s the entire project, not just uploads — so `MEGA_BUCKET_BYTES` is what
+ * books may occupy, and this is what one of them may be inside that.
+ *
+ * It was 100 MB, at which TEN students storing two books each is 1.95 GB. See
+ * storageBudget.js for the arithmetic and the order things stand down in.
+ *
+ * Raising this is exactly what a paid plan buys, and it is a one-line change
+ * here and in `MEGA_BUCKET_BYTES`.
+ */
+export const MEGA_FILE_CAP = 40 * 1024 * 1024;
 
 /**
  * The API's page ceiling, which applies to a REQUEST and not to the file.
@@ -89,10 +102,19 @@ export const RANGE_PAGE_CAP = 120;
  * day holding two. A constant that looks like a rule and enforces nothing is
  * the "collect nothing you don't use" trap in its most confusing form.
  */
-export const MEGA_ACTIVE_MAX = 2;
+export const MEGA_ACTIVE_MAX = 1;
 
-/** How long a stored book lives. Long enough to work a term's chapters from. */
-export const MEGA_TTL_HOURS = 7 * 24;
+/**
+ * How long a stored book lives.
+ *
+ * A DAY, not a week. The unit of use here is a sitting — pick a chapter, make
+ * cards, maybe do the next chapter — and holding a 40 MB object for six more
+ * days against a 1 GB plan buys nothing but risk. What makes this acceptable
+ * rather than mean is that concurrency becomes "students with a book open
+ * today" instead of "students who have ever uploaded one", which is the only
+ * version of this that fits the free tier at all.
+ */
+export const MEGA_TTL_HOURS = 24;
 
 /**
  * Tokens one page costs to read, all in.
