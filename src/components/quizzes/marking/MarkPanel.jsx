@@ -22,6 +22,14 @@
  * did not, `normaliseMark` has already recomputed the number from the list and
  * flagged it, and this says so rather than printing a total it knows is wrong.
  *
+ * AND THE FRACTION COMES FROM `quizScore`, not from the mark on its own. This
+ * panel had the reconciled number when nothing else did, which is how a student
+ * got a header pill reading 3/5 over this panel reading 0/5 on the same
+ * question. One model now answers "what did this question score", every surface
+ * reads it, and the two things it knows that a criteria list cannot — a blank
+ * answer scores nothing, and marks the student awarded themselves on paper are
+ * not in the itemisation — are SAID rather than left to look like an error.
+ *
  * FULL MARKS SAYS NOTHING ELSE. No praise, no "great job". The existing marker
  * prompt already refuses to write praise for a clean mark; printing an empty
  * feedback card under it would undo that.
@@ -47,13 +55,13 @@ const BAND = {
     some: "text-xp",
     none: "text-streak",
 };
-const bandFor = (m) => {
-    if (m.outOf <= 0) return "none";
-    const r = m.marks / m.outOf;
+const bandFor = (awarded, outOf) => {
+    if (outOf <= 0) return "none";
+    const r = awarded / outOf;
     return r >= 1 ? "full" : r >= 0.7 ? "most" : r >= 0.4 ? "some" : "none";
 };
 
-export default function MarkPanel({ mark, title, answer, onBank, banked = new Set(), saving = new Set(), questionIndex = 0 }) {
+export default function MarkPanel({ mark, score, title, answer, onBank, banked = new Set(), saving = new Set(), questionIndex = 0 }) {
     const ledger = useMemo(() => markLedger(mark), [mark]);
     // Which module a phrase belongs to, so pointing at one finds the other in
     // either direction.
@@ -88,7 +96,12 @@ export default function MarkPanel({ mark, title, answer, onBank, banked = new Se
     }, [moduleForAnnotation, reveal]);
 
     if (!mark) return null;
-    const clean = isFullMarks(mark);
+    // The printed pair. `score` is quizScore's answer for this question and is
+    // what every other surface prints; without one (a panel rendered on a mark
+    // alone) fall back to the mark's own reconciled total.
+    const awarded = score ? score.awarded : mark.marks;
+    const outOf = score ? score.outOf : mark.outOf;
+    const clean = score ? awarded >= outOf && outOf > 0 : isFullMarks(mark);
     // Everything still worth saving. The header offers the lot in one gesture
     // because a student with four dropped marks should not have to open four
     // modules to keep them.
@@ -103,8 +116,8 @@ export default function MarkPanel({ mark, title, answer, onBank, banked = new Se
                     {clean && <span className="pill bg-primary/15 text-primary">Clean mark</span>}
                 </div>
                 <p className="font-display font-black tabular-nums leading-none">
-                    <span className={`text-2xl ${BAND[bandFor(mark)]}`}>{mark.marks}</span>
-                    <span className="text-sm text-muted-foreground">/{mark.outOf}</span>
+                    <span className={`text-2xl ${BAND[bandFor(awarded, outOf)]}`}>{awarded}</span>
+                    <span className="text-sm text-muted-foreground">/{outOf}</span>
                 </p>
             </div>
 
@@ -149,6 +162,33 @@ export default function MarkPanel({ mark, title, answer, onBank, banked = new Se
                     {mark.reconciled && (
                         <p className="text-xs text-muted-foreground italic">
                             Total taken from the criteria above.
+                        </p>
+                    )}
+
+                    {/* The two ways the fraction at the top can legitimately
+                        differ from the list under it, as ONE sentence rather
+                        than two. Stated, because a number that does not add up
+                        is indistinguishable from a broken one — which is the
+                        whole reason this panel and the pill above it had to be
+                        reconciled in the first place. Said separately they
+                        contradicted each other: "nothing scored" sat directly
+                        under a 4/5 on a question marked from paper. */}
+                    {(score?.blank || score?.selfMarked) && (
+                        <p className="text-xs text-muted-foreground italic">
+                            {score.blank && !score.selfMarked && (
+                                <>Nothing was written, so nothing scored — the criteria above are
+                                what a full-mark answer needed.</>
+                            )}
+                            {score.blank && score.selfMarked && (
+                                <>Nothing was written here, so the marker scored none of it.
+                                The {score.self} above {score.self === 1 ? "is" : "are"} yours,
+                                from paper.</>
+                            )}
+                            {!score.blank && score.selfMarked && (
+                                <>Includes {score.self} mark{score.self === 1 ? "" : "s"} you
+                                marked yourself.</>
+                            )}
+                            {score.selfMarked && <> XP is paid on {score.auto}/{score.outOf}.</>}
                         </p>
                     )}
                 </>

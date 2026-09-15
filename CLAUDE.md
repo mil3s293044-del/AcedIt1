@@ -521,6 +521,50 @@ and visible; mislinked blames the wrong mark, which is what the join exists to
 prevent. Watch `Number(null) === 0`: coercing the index attached every unlinked
 annotation to the first criterion on the page, silently and plausibly.
 
+**ONE MARK PER QUESTION, AND `quizScore.js` IS IT.** A student photographed a
+header pill reading **3/5** sitting eight inches above a red **0/5** on the same
+card, over an answer box that said "No answer written". Eight readers worked the
+mark out for themselves and disagreed about both halves of the fraction:
+
+- **The reconciliation existed and nothing read it.** `normaliseMark` has always
+  recomputed the total from the criteria when the model's stated figure
+  contradicts them — that is the rule the whole panel rests on — but the
+  reconciled number lives on `fb.mark.marks` and every other reader took
+  `fb.marks`, the raw claim. So the small panel was right and the big number,
+  the score, the saved attempt **and the XP payout** were all wrong.
+- **The denominator was hand-rolled** as `q.type === "mcq" ? 1 : (q.marks || 5)`
+  in four more places, which reads 5 for a multipart question worth nine. It is
+  the same expression this file already records being fixed three times.
+  `quizScore.test.mjs` scans the tree for it now, and for `fb.marks` inside
+  QuizPlayer, because both render perfectly and are simply a different number
+  from the one beside them.
+- **A BLANK ANSWER SCORES ZERO, whatever the marker says.** That 3/5 was awarded
+  to text that does not exist, and no amount of reconciliation catches it when
+  the criteria come back equally invented. The only legitimate way a blank
+  answer scores is the student's own "I answered this on paper" box.
+  `blank` is false for anything answered by SELECTION — a legacy MCQ, and a
+  multipart question whose parts are all MCQs, whose joined answer is correctly
+  the empty string however well it went.
+
+`questionMark` returns BOTH `auto` (what pays XP and what is persisted) and
+`awarded` (`auto` + self-marked, what the student sees). Anything printing a
+number reads `markFor(i)`; anything paying out reads `.auto`.
+
+**And where the fraction legitimately differs from the list under it, the panel
+SAYS SO** — one sentence, because said separately "nothing scored" appeared
+directly under a 4/5 on a question marked from paper.
+
+**The review card is part-aware too, and was not.** `userAnswers[index]` is
+empty for a multipart question (its parts are keyed "3a", "3b") and
+`q.model_answer` is undefined (the model answers live on the parts), so every
+multipart question reviewed after marking printed "No answer written" above "No
+model answer provided" and offered the self-mark box for a question that had
+been answered in full. The answer comes through `answerTextFor`, the model
+answer through `modelAnswerFor`, and the self-mark box is gated on
+`currentMark.blank` — the SAME test the zero it explains was computed from. A
+model answer that genuinely does not exist renders no panel at all rather than a
+box headed "Model Answer" containing "No model answer provided".
+
 **The ink pad holds one line.** Write a step, it is recognised, it lifts off
 the pad into the typeset stack above, the pad clears. That is the whole
 anti-crowding design: nothing accumulates on the writing surface. Recognition
@@ -2088,6 +2132,9 @@ broken rather than the file.
   `EquityCurve.jsx` — the second tab on the floor
 - `src/pages/Market.jsx` + `Reactions.jsx` + `Room.jsx` — one question in full,
   the glyphs, and the floor's shared ground; `getMarket` in `server.mjs`
+- `src/lib/quizScore.js` + `quizScore.test.mjs` — ONE mark per question, read
+  by every surface that prints one; the test scans for the hand-rolled
+  allocation and the unreconciled claim, both of which render perfectly
 - `src/lib/fnResult.js` — the one unwrap for `functions.invoke`; reading its
   `{ data, error }` envelope as the payload is silent and has shipped twice
 - `src/lib/wagerStatus.js` — the one vocabulary `score_wagers.status` may

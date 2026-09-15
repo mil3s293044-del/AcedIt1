@@ -47,7 +47,7 @@ import { FEATURES, canUseFeature } from "@/lib/tierAccess";
 
 import QuizDeck from "@/components/cards/QuizDeck";
 import { quizDeckStats, quizzingSummary, effectiveScore, RECENT_WINDOW } from "@/lib/quizDeck";
-import { normaliseQuestions, formatGeneratedParts } from "@/lib/quizSchema";
+import { normaliseQuestions, formatGeneratedParts, DEFAULT_SHORT_MARKS } from "@/lib/quizSchema";
 import QuizPlayer from "../components/quizzes/QuizPlayer";
 import MarkdownMath from "@/components/shared/MarkdownMath";
 import QuizModePicker from "../components/quizzes/QuizModePicker";
@@ -765,7 +765,7 @@ Return valid JSON only.`,
                     options: q.type === 'mcq' || q.type !== 'short_answer' ? q.options : undefined,
                     correct_answer: q.type === 'mcq' || q.type !== 'short_answer' ? (q.correct_answer ?? 0) : undefined,
                     model_answer: q.type === 'short_answer' ? (q.model_answer || "") : undefined,
-                    marks: q.type === 'short_answer' ? (q.marks || 5) : undefined,
+                    marks: q.type === 'short_answer' ? (q.marks || DEFAULT_SHORT_MARKS) : undefined,
                     explanation: q.explanation || ""
                 }))
                 .filter(q => q.type !== 'multipart' || q.parts.length > 0);

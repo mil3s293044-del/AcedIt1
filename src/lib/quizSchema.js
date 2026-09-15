@@ -27,8 +27,16 @@
  * genuinely multi-part questions use the suffixed form.
  */
 
-/** Marks a part is worth when it does not say. MCQs are one mark, always. */
-const DEFAULT_SHORT_MARKS = 5;
+/**
+ * Marks a part is worth when it does not say. MCQs are one mark, always.
+ *
+ * Exported because the generators WRITE this value onto a question they are
+ * creating, and a second copy of it is how a question comes out worth 5 here
+ * and 4 there. Readers never need it: `normaliseQuestion(q, i).marks` already
+ * applies it, and hand-rolling `q.marks || 5` is the expression that reads 5
+ * for a multipart question worth nine.
+ */
+export const DEFAULT_SHORT_MARKS = 5;
 
 const isPart = (p) => p && typeof p === "object" && (p.prompt || p.question || p.type);
 

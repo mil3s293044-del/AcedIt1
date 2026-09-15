@@ -27,6 +27,10 @@ import MultipartQuestion from "@/components/quizzes/MultipartQuestion";
 import MarkPanel from "@/components/quizzes/marking/MarkPanel";
 import { normaliseMark } from "@/lib/quizMarking";
 import { normaliseQuestion } from "@/lib/quizSchema";
+// Aliased: this component already has an `isCorrect` STATE variable for the
+// live MCQ verdict, which would shadow the import and turn every call into
+// "isCorrect is not a function" at runtime.
+import { questionMark, attemptScore, needsDrill, isCorrect as gradeOf } from "@/lib/quizScore";
 import { cardFromModule, bankKey } from "@/lib/mistakeBank";
 import MarkdownMath from "@/components/shared/MarkdownMath";
 import MathText from "@/components/shared/LatexRenderer";
@@ -349,6 +353,57 @@ export default function QuizPlayer({ quiz, onExit, mode = "standard", timeLimitM
     // Bookmark a question + model/correct answer into the revise-later library
     // (stored as an AISavedResult — no new table needed).
     /**
+     * Everything the student wrote for one question, as one string.
+     *
+     * The annotation layer matches the marker's quotes against this, so a
+     * multipart question has to hand over all of its parts joined rather than
+     * an answer at the bare index, which it does not have.
+     */
+    const answerTextFor = (index) => {
+        const shape = normaliseQuestion(shuffledQuiz.questions[index], index);
+        if (!shape.multipart) {
+            const a = userAnswers[index];
+            return typeof a === "string" ? a : "";
+        }
+        return shape.parts
+            .filter((p) => p.type !== "mcq" && typeof userAnswers[p.key] === "string")
+            .map((p) => `(${p.label}) ${userAnswers[p.key]}`)
+            .join("\n\n");
+    };
+
+    /**
+     * The model answer, for a question that may be in parts.
+     *
+     * `q.model_answer` is undefined on a multipart question — the model answers
+     * live on the PARTS — so the review card printed "No model answer provided"
+     * under every multipart question in the app, beside an answer box that said
+     * "No answer written" for the same reason.
+     */
+    const modelAnswerFor = (index) => {
+        const shape = normaliseQuestion(shuffledQuiz.questions[index], index);
+        if (!shape.multipart) return shuffledQuiz.questions[index]?.model_answer || "";
+        return shape.parts
+            .filter((p) => p.type !== "mcq" && p.model_answer)
+            .map((p) => `**(${p.label})** ${p.model_answer}`)
+            .join("\n\n");
+    };
+
+    /**
+     * ONE question's mark, and the only place this file computes one.
+     *
+     * Eight readers used to work it out for themselves — the header pill, the
+     * itemised panel, the sidebar badge, the mobile pill, the verdict tally,
+     * the drill count, the adaptive-review filter and the saved attempt — off
+     * `fb.marks` (the model's unreconciled claim) over `q.marks || 5` (an
+     * allocation that reads 5 for a multipart question worth nine). They
+     * disagreed on screen: a pill saying 3/5 above a panel saying 0/5, on a
+     * question whose answer box read "No answer written".
+     */
+    const markFor = (index) => questionMark(
+        shuffledQuiz.questions[index], index, aiFeedback[index],
+        selfMarkedMarks[index], answerTextFor(index));
+
+    /**
      * Which questions actually cost marks. Read off the AI marks where they
      * exist and off the MCQ key where they don't, so it still works when
      * marking was skipped for a tier limit.
@@ -356,12 +411,16 @@ export default function QuizPlayer({ quiz, onExit, mode = "standard", timeLimitM
     const missedIndexes = useMemo(() => shuffledQuiz.questions
         .map((q, i) => {
             const fb = aiFeedback[i];
-            const max = q.type === 'mcq' ? 1 : (q.marks || 5);
-            if (fb) return (fb.marks || 0) >= max * (q.type === 'mcq' ? 1 : 0.8) ? -1 : i;
+            // `gradeOf` reads the AUTO mark, so a question answered on paper
+            // and self-marked still counts as missed here. That is deliberate:
+            // this pile feeds "make cards from what you missed", and the app
+            // has seen no work on that question to say otherwise.
+            if (fb) return gradeOf(q, markFor(i)) ? -1 : i;
             if (q.type !== 'mcq') return -1;
             return parseInt(userAnswers[i], 10) === q.correct_answer ? -1 : i;
         })
-        .filter(i => i >= 0), [shuffledQuiz.questions, aiFeedback, userAnswers]);
+        .filter(i => i >= 0),
+        [shuffledQuiz.questions, aiFeedback, userAnswers, selfMarkedMarks]);
 
     /**
      * The missed questions become real flashcards in the subject's deck.
@@ -511,10 +570,9 @@ In two or three sentences, explain what makes that the right answer and what the
      * is the kind of small lie that makes a screen untrustworthy.
      */
     const drillCount = useMemo(() => shuffledQuiz.questions.filter((q, i) => {
-        const fb = aiFeedback[i];
-        if (!fb) return false;
-        return q.type === 'mcq' ? fb.marks < 1 : fb.marks < (q.marks || 5) * 0.6;
-    }).length, [shuffledQuiz.questions, aiFeedback]);
+        if (!aiFeedback[i]) return false;
+        return needsDrill(q, markFor(i));
+    }).length, [shuffledQuiz.questions, aiFeedback, userAnswers, selfMarkedMarks]);
 
     const handleSaveAnswer = async (idx) => {
         if (savedQuestions.has(idx)) return;
@@ -835,7 +893,7 @@ In two or three sentences, explain what makes that the right answer and what the
                     const correctOption = question.options[question.correct_answer];
                     return { q_num: index + 1, type: 'mcq', question: question.question, student_answer: selectedOption, correct_answer: correctOption, is_correct: parseInt(userAnswer) === question.correct_answer };
                 } else {
-                    return { q_num: index + 1, type: 'short', question: question.question, student_answer: userAnswer || "No answer provided", previous_answer: prevAnswer || null, model_answer: question.model_answer || "Not provided", marks_allocation: question.marks || 5 };
+                    return { q_num: index + 1, type: 'short', question: question.question, student_answer: userAnswer || "No answer provided", previous_answer: prevAnswer || null, model_answer: question.model_answer || "Not provided", marks_allocation: normaliseQuestion(question, index).marks };
                 }
             });
 
@@ -1030,20 +1088,27 @@ invent a theme from a single question.`,
             setThemes(cleanThemes(response.themes, shuffledQuiz.questions.length));
 
             const finalScore = calcScoreFromFeedback(mappedFeedback);
-            const questionsCorrect = mappedFeedback.filter((fb, idx) => {
-                const q = shuffledQuiz.questions[idx];
-                const outOf = normaliseQuestion(q, idx).marks;
-                return q?.type === 'mcq' ? fb.marks === 1 : fb.marks >= outOf * 0.8;
-            }).length;
+            // Every one of these read `fb.marks` — the model's unreconciled
+            // claim — while the criteria beside them said something else. The
+            // per-question rows carried the raw mark next to the ledger's own
+            // criteria, so /MistakeBank could be told a criterion was earned on
+            // a question the same row scored at zero.
+            const markOf = (i) => questionMark(
+                shuffledQuiz.questions[i], i, mappedFeedback[i], undefined, answerTextFor(i));
 
-            const aiResults = buildQuestionResults((q, i, max) => {
-                const fb = mappedFeedback[i];
-                if (!fb) return { marks: undefined, correct: null };
-                const marks = fb.marks || 0;
-                return { marks, correct: q.type === 'mcq' ? marks === 1 : marks >= max * 0.8 };
+            const questionsCorrect = mappedFeedback.filter((fb, idx) =>
+                gradeOf(shuffledQuiz.questions[idx], markOf(idx))).length;
+
+            const aiResults = buildQuestionResults((q, i) => {
+                if (!mappedFeedback[i]) return { marks: undefined, correct: null };
+                const m = markOf(i);
+                return { marks: m.auto, correct: gradeOf(q, m) };
             }, (i) => mappedFeedback[i]?.mark?.criteria);
 
-            const totalMarksAwarded = mappedFeedback.reduce((sum, fb) => sum + (fb.marks || 0), 0);
+            // XP on the AUTO mark only — never the self-mark, which the box
+            // itself promises does not affect it.
+            const totalMarksAwarded = mappedFeedback.reduce(
+                (sum, _fb, i) => sum + markOf(i).auto, 0);
             const xpEarned = totalMarksAwarded * 2;
 
             try {
@@ -1076,60 +1141,33 @@ invent a theme from a single question.`,
      * `max` only counts questions that came back, so ten right out of ten
      * marked is 100%, not 50% because the marker skipped the rest.
      */
-    const calcScoreFromFeedback = (feedback) => {
-        let total = 0, max = 0;
-        shuffledQuiz.questions.forEach((q, i) => {
-            const fb = feedback[i];
-            if (!fb) return;
-            total += fb.marks || 0;
-            max += normaliseQuestion(q, i).marks;
-        });
-        return max > 0 ? Math.round((total / max) * 100) : 0;
-    };
+    // The REAL score: reconciled against the criteria, blank answers at zero,
+    // and never including a self-mark. This is what is persisted and what XP is
+    // paid on — see quizScore.js for why those two must not include self-marks.
+    const calcScoreFromFeedback = (feedback) =>
+        attemptScore(shuffledQuiz.questions, feedback, {}, answerTextFor).autoPct;
 
     const overallScore = calcScoreFromFeedback(aiFeedback);
     const getCurrentAnswer = () => userAnswers[currentQuestionIndex];
 
-    /**
-     * Everything the student wrote for one question, as one string.
-     *
-     * The annotation layer matches the marker's quotes against this, so a
-     * multipart question has to hand over all of its parts joined rather than
-     * an answer at the bare index, which it does not have.
-     */
-    const answerTextFor = (index) => {
-        const shape = normaliseQuestion(shuffledQuiz.questions[index], index);
-        if (!shape.multipart) {
-            const a = userAnswers[index];
-            return typeof a === "string" ? a : "";
-        }
-        return shape.parts
-            .filter((p) => p.type !== "mcq" && typeof userAnswers[p.key] === "string")
-            .map((p) => `(${p.label}) ${userAnswers[p.key]}`)
-            .join("\n\n");
-    };
-
     // ─── Adjusted score (auto + self-marked) ────────────────────────────────
     // Sums the user's self-marked marks on top of the AI-marked total.
     // Only used for the on-screen "your total" display — never persisted.
+    // The DISPLAYED total, which adds anything the student marked themselves.
+    //
+    // This used to compute its own denominator as `q.type === "mcq" ? 1 :
+    // (q.marks || 5)` — the exact hand-rolled allocation that reads 5 for a
+    // multipart question worth nine, fixed in three other places and still
+    // live here. It goes through the one model now, like everything else.
     const calcAdjustedScore = () => {
         if (!aiFeedback.length || aiFeedback.length !== shuffledQuiz.questions.length) {
             return { adjustedPct: overallScore, extraMarks: 0, hasSelfMarked: false };
         }
-        let total = 0, max = 0;
-        shuffledQuiz.questions.forEach((q, i) => {
-            const fb = aiFeedback[i];
-            const qMax = q.type === "mcq" ? 1 : (q.marks || 5);
-            max += qMax;
-            const autoMarks = fb?.marks || 0;
-            const selfMarks = selfMarkedMarks[i] || 0;
-            total += Math.min(qMax, autoMarks + selfMarks);
-        });
-        const extraMarks = Object.values(selfMarkedMarks).reduce((a, b) => a + (Number(b) || 0), 0);
+        const t = attemptScore(shuffledQuiz.questions, aiFeedback, selfMarkedMarks, answerTextFor);
         return {
-            adjustedPct: max > 0 ? Math.round((total / max) * 100) : 0,
-            extraMarks,
-            hasSelfMarked: extraMarks > 0,
+            adjustedPct: t.awardedPct,
+            extraMarks: t.selfMarked,
+            hasSelfMarked: t.hasSelfMarked,
         };
     };
     const adjusted = calcAdjustedScore();
@@ -1152,14 +1190,12 @@ invent a theme from a single question.`,
     // ─── RESULTS VIEW ──────────────────────────────────────────────────────────
     // ─── ADAPTIVE REVIEW ───────────────────────────────────────────────────────
     if (showAdaptiveReview) {
+        // The same predicate `drillCount` counts with. They were two copies of
+        // one threshold and the count is printed on the button that opens this.
         const wrongQuestions = shuffledQuiz.questions
             .map((q, i) => ({ question: q, originalIndex: i }))
-            .filter(({ question, originalIndex }) => {
-                const fb = aiFeedback[originalIndex];
-                if (!fb) return false;
-                if (question.type === 'mcq') return fb.marks < 1;
-                return fb.marks < (question.marks || 5) * 0.6;
-            });
+            .filter(({ question, originalIndex }) =>
+                !!aiFeedback[originalIndex] && needsDrill(question, markFor(originalIndex)));
         return (
             <div className="max-w-2xl mx-auto py-4">
                 <AdaptiveReview
@@ -1181,6 +1217,11 @@ invent a theme from a single question.`,
         const currentQ = shuffledQuiz.questions[currentFeedbackIndex];
         const currentFeedback = aiFeedback[currentFeedbackIndex];
         const currentUserAnswer = userAnswers[currentFeedbackIndex];
+        // Computed ONCE for the whole review card. Every number on this screen —
+        // the allocation in the kicker, the pill, the self-mark ceiling and the
+        // itemised panel — reads it, because five of them reading five different
+        // things is what put 3/5 above a 0/5 on the same question.
+        const currentMark = markFor(currentFeedbackIndex);
         const tier = tierFromScore(overallScore);
         const TierIcon = tier.icon;
 
@@ -1236,15 +1277,19 @@ invent a theme from a single question.`,
                                 let itemClass = 'bg-secondary/50 text-muted-foreground border-border';
                                 let badge = null;
                                 if (fb) {
+                                    // Same fraction as the pill on the card and the
+                                    // panel under it. This badge is the one a student
+                                    // sees beside the card, so it disagreeing was half
+                                    // of what "it differs part by part" meant.
+                                    const m = markFor(index);
                                     if (q.type === 'mcq') {
-                                        const t = fb.marks === 1 ? SCORE_TIER.excellent : SCORE_TIER.poor;
+                                        const t = m.awarded >= 1 ? SCORE_TIER.excellent : SCORE_TIER.poor;
                                         itemClass = `${t.tile} ${t.text} ${t.border}`;
-                                        badge = fb.marks === 1 ? <Check className="w-3.5 h-3.5" /> : <X className="w-3.5 h-3.5" />;
+                                        badge = m.awarded >= 1 ? <Check className="w-3.5 h-3.5" /> : <X className="w-3.5 h-3.5" />;
                                     } else {
-                                        const pct = (fb.marks / (q.marks || 5)) * 100;
-                                        const t = markTier(pct);
+                                        const t = markTier(m.outOf > 0 ? (m.awarded / m.outOf) * 100 : 0);
                                         itemClass = `${t.tile} ${t.text} ${t.border}`;
-                                        badge = `${fb.marks}/${q.marks || 5}`;
+                                        badge = `${m.awarded}/${m.outOf}`;
                                     }
                                 }
                                 return (
@@ -1269,10 +1314,11 @@ invent a theme from a single question.`,
                                     const isActive = currentFeedbackIndex === index;
                                     let pillClass = 'bg-secondary text-muted-foreground';
                                     if (fb) {
+                                        const m = markFor(index);
                                         if (q.type === 'mcq') {
-                                            pillClass = fb.marks === 1 ? 'bg-primary text-white' : 'bg-streak text-white';
+                                            pillClass = m.awarded >= 1 ? 'bg-primary text-white' : 'bg-streak text-white';
                                         } else {
-                                            const pct = fb.marks / (q.marks || 5);
+                                            const pct = m.outOf > 0 ? m.awarded / m.outOf : 0;
                                             pillClass = pct >= 0.8 ? 'bg-primary text-white' : pct >= 0.5 ? 'bg-xp text-white' : 'bg-streak text-white';
                                         }
                                     }
@@ -1425,7 +1471,7 @@ invent a theme from a single question.`,
                                             <div className="flex items-center justify-between gap-3">
                                                 <div className="flex items-center gap-2">
                                                     <span className={`pill ${currentQ.type === 'mcq' ? 'bg-chart-4/10 text-chart-4' : 'bg-chart-3/10 text-chart-3'}`}>
-                                                        {currentQ.type === 'mcq' ? 'Multiple Choice' : `Short Answer • ${currentQ.marks || 5} marks`}
+                                                        {currentQ.type === 'mcq' ? 'Multiple Choice' : `Short Answer • ${currentMark.outOf} marks`}
                                                     </span>
                                                     <button
                                                         onClick={() => handleSaveAnswer(currentFeedbackIndex)}
@@ -1437,12 +1483,18 @@ invent a theme from a single question.`,
                                                     </button>
                                                 </div>
                                                 {currentFeedback && (() => {
+                                                    // THE one number. It reads the criteria-reconciled
+                                                    // mark, zeroes a blank answer, and includes anything
+                                                    // self-marked — so it cannot disagree with the panel
+                                                    // below it, which is exactly what a student saw when
+                                                    // this pill said 3/5 over a ledger reading 0/5.
                                                     const t = currentQ.type === 'mcq'
-                                                        ? (currentFeedback.marks === 1 ? SCORE_TIER.excellent : SCORE_TIER.poor)
-                                                        : markTier((currentFeedback.marks / (currentQ.marks || 5)) * 100);
+                                                        ? (currentMark.awarded >= 1 ? SCORE_TIER.excellent : SCORE_TIER.poor)
+                                                        : markTier(currentMark.outOf > 0
+                                                            ? (currentMark.awarded / currentMark.outOf) * 100 : 0);
                                                     return (
                                                         <span className={`text-sm font-black px-3 py-1 rounded-xl ${t.badge}`}>
-                                                            {currentQ.type === 'mcq' ? `${currentFeedback.marks}/1` : `${currentFeedback.marks}/${currentQ.marks || 5}`}
+                                                            {currentMark.awarded}/{currentMark.outOf}
                                                         </span>
                                                     );
                                                 })()}
@@ -1479,13 +1531,20 @@ invent a theme from a single question.`,
                                                 <div className="space-y-3">
                                                     <div className="bg-secondary/50 rounded-2xl p-4 border border-border">
                                                         <p className="text-xs font-bold text-muted-foreground/60 uppercase tracking-wide mb-2">Your Answer</p>
-                                                        {currentUserAnswer
-                                                            ? <div className="text-sm text-foreground whitespace-pre-wrap"><MarkdownMath>{currentUserAnswer}</MarkdownMath></div>
+                                                        {/* `userAnswers[index]` is empty on a multipart
+                                                            question — its parts are keyed "3a", "3b" — so
+                                                            this read "No answer written" over a fully
+                                                            answered question and offered the self-mark box
+                                                            for it. `currentMark.blank` is the SAME test the
+                                                            mark above was computed from, so the box appears
+                                                            exactly when the zero it explains does. */}
+                                                        {!currentMark.blank
+                                                            ? <div className="text-sm text-foreground whitespace-pre-wrap"><MarkdownMath>{answerTextFor(currentFeedbackIndex)}</MarkdownMath></div>
                                                             : (
                                                                 <div className="space-y-3">
                                                                     <p className="text-sm text-foreground"><span className="text-muted-foreground/60 italic">No answer written</span></p>
                                                                     <SelfMarkBox
-                                                                        maxMarks={currentQ.marks || 5}
+                                                                        maxMarks={currentMark.outOf}
                                                                         currentMark={selfMarkedMarks[currentFeedbackIndex]}
                                                                         onMark={(m) => setSelfMarkedMarks(prev => ({ ...prev, [currentFeedbackIndex]: m }))}
                                                                         onClear={() => setSelfMarkedMarks(prev => {
@@ -1498,12 +1557,18 @@ invent a theme from a single question.`,
                                                             )
                                                         }
                                                     </div>
-                                                    <div className="bg-primary/10 rounded-2xl p-4 border border-primary/20">
-                                                        <p className="text-xs font-bold text-primary uppercase tracking-wide mb-2">Model Answer</p>
-                                                        <div className="text-sm text-foreground prose prose-sm max-w-none">
-                                                            <MarkdownMath>{currentQ.model_answer || "No model answer provided"}</MarkdownMath>
+                                                    {/* Not rendered at all when there isn't one. A panel
+                                                        headed "Model Answer" whose contents read "No model
+                                                        answer provided" is a placeholder wearing the
+                                                        clothes of real content. */}
+                                                    {modelAnswerFor(currentFeedbackIndex) && (
+                                                        <div className="bg-primary/10 rounded-2xl p-4 border border-primary/20">
+                                                            <p className="text-xs font-bold text-primary uppercase tracking-wide mb-2">Model Answer</p>
+                                                            <div className="text-sm text-foreground prose prose-sm max-w-none">
+                                                                <MarkdownMath>{modelAnswerFor(currentFeedbackIndex)}</MarkdownMath>
+                                                            </div>
                                                         </div>
-                                                    </div>
+                                                    )}
                                                 </div>
                                             )}
 
@@ -1526,6 +1591,12 @@ invent a theme from a single question.`,
                                                     {currentFeedback.mark?.itemised && (
                                                         <MarkPanel
                                                             mark={currentFeedback.mark}
+                                                            /* The same number the pill above prints. Passed
+                                                               rather than recomputed: this panel used to read
+                                                               the reconciled mark while the pill read the
+                                                               model's raw claim, which is how one question
+                                                               showed 3/5 and 0/5 at once. */
+                                                            score={currentMark}
                                                             /* A multipart question has no single answer — its
                                                                parts are under "3a", "3b". Joined so the marker's
                                                                quotes still find the text they came from. */
