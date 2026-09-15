@@ -1242,7 +1242,7 @@ The documents provided may be PowerPoint slides, Word documents, PDFs or text fi
                                         <p className="text-xs text-muted-foreground">{STUDY_ACCEPT_LABEL}</p>
                                     </div>
                                     <input type="file" className="hidden" accept={STUDY_ACCEPT} multiple onChange={async e => {
-                                        const picked = e.target.files;
+                                        const picked = Array.from(e.target.files || []);
                                         e.target.value = "";
                                         // Resized, checked and reported HERE rather than at
                                         // generate time: a problem with a file is worth knowing

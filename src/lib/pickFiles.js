@@ -19,6 +19,22 @@
  * most of what "even smaller files get rejected" turned out to be: a 2 MB photo
  * refused by a file picker, not by a size limit.
  *
+ * ═══ A FileList IS LIVE, AND CLEARING THE INPUT EMPTIES IT ══════════════════
+ * `e.target.files` is not an array and not a snapshot — it is a reference to
+ * the input's CURRENT selection. Every picker resets the input after a pick so
+ * the same file can be chosen twice in a row (without the reset, re-picking
+ * fires no `change` event at all), and this is the order that has to hold:
+ *
+ *     const picked = Array.from(e.target.files || []);   // copy FIRST
+ *     e.target.value = "";                               // then reset
+ *
+ * Read straight through — `const picked = e.target.files` before the reset —
+ * the list is already empty by the time anything looks at it. `prepareFiles`
+ * then returns `{ ready: [], skipped: [] }`, which is indistinguishable from a
+ * cancelled dialog: NO error, NO toast, no file in the list. It shipped to five
+ * pickers at once and made uploading look completely dead across the app.
+ * `uploadPrep.test.mjs` scans for it, because nothing else can see it.
+ *
  * ═══ NOTHING THROWS, AND NOTHING SILENTLY VANISHES ══════════════════════════
  * A file that cannot be used is reported BY NAME with the reason, and every
  * other file still goes through. Three of the four study tools ran their

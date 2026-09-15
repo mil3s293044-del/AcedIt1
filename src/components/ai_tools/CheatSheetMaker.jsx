@@ -305,7 +305,7 @@ ${sourceText ? `\nEXTRACTED CONTENT:${sourceText}` : ""}`;
                             isDragging ? "border-primary bg-primary/5" : uploadedFiles.length ? "border-primary/40 bg-primary/5" : "border-border hover:border-primary/40 hover:bg-primary/5"
                         }`}
                     >
-                        <input ref={fileInputRef} type="file" className="hidden" accept={STUDY_ACCEPT} multiple onChange={(e) => { handleFiles(e.target.files); e.target.value = ""; }} />
+                        <input ref={fileInputRef} type="file" className="hidden" accept={STUDY_ACCEPT} multiple onChange={(e) => { handleFiles(Array.from(e.target.files || [])); e.target.value = ""; }} />
                         {uploadedFiles.length === 0 ? (
                             <div>
                                 <Upload className="w-8 h-8 text-muted-foreground/40 mx-auto mb-2" />

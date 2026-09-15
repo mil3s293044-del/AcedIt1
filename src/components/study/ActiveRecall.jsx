@@ -819,7 +819,7 @@ For each answer:
                                 <p className="text-xs text-muted-foreground/60">{STUDY_ACCEPT_LABEL}</p>
                             </div>
                             <input type="file" className="hidden" multiple onChange={async e => {
-                                const picked = e.target.files;
+                                const picked = Array.from(e.target.files || []);
                                 e.target.value = "";
                                 setSourceFiles(await acceptFiles(picked, { toast, existing: sourceFiles }));
                             }} accept={STUDY_ACCEPT} />
@@ -1037,7 +1037,7 @@ For each answer:
                                         <span className="text-sm text-muted-foreground">Upload notes (PDF/DOCX/PPTX, multiple allowed)</span>
                                     </div>
                                     <input type="file" className="hidden" multiple onChange={async e => {
-                                        const picked = e.target.files;
+                                        const picked = Array.from(e.target.files || []);
                                         e.target.value = "";
                                         setSourceFiles(await acceptFiles(picked, { toast, existing: sourceFiles }));
                                     }} accept={STUDY_ACCEPT} />
