@@ -30,6 +30,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { TrendingUp, Loader2, Coins, Plus, X } from "lucide-react";
+import AceDeal from "@/components/market/AceDeal";
 import { base44 } from "@/api/base44Client";
 import { useLiveTick } from "@/lib/LiveContext";
 import { takeFn } from "@/lib/fnResult";
@@ -39,7 +40,7 @@ import PortfolioPanel from "@/components/market/PortfolioPanel";
 import Room from "@/components/market/Room";
 import SettlementReveal from "@/components/market/SettlementReveal";
 import {
-    readMarket, sortBoard, isOpen, sideOf, YES, KINDS, featuredOf,
+    readMarket, sortBoard, isOpen, sideOf, YES, KINDS, featuredOf, inRoom, roomsFor, ROOMS,
     unseenSettlements, markSettlementsSeen,
 } from "@/lib/market";
 
@@ -242,6 +243,11 @@ export default function Competitions() {
     const [error, setError] = useState(null);
     const [busy, setBusy] = useState(false);
     const [filter, setFilter] = useState("all");
+    // WHICH ROOM, which is a VIEW of one floor and never a floor of its own.
+    // Everybody trades the same market at the same price; this only decides
+    // which of them are listed — see the ROOMS block in market.js for why that
+    // distinction is the whole thing.
+    const [room, setRoom] = useState(ROOMS.all.id);
     // Floor or book. Two tabs and no more: the floor is what you can do and the
     // book is what you have done, which is the whole split. A third tab here
     // would be a second answer to one of those two questions.
@@ -277,11 +283,28 @@ export default function Competitions() {
         return sortBoard(rows, me.email);
     }, [data, me.email]);
 
-    const shown = useMemo(
-        () => (filter === "all" ? board : board.filter((m) => m.kind === filter)),
-        [board, filter]);
+    // The room narrows first, then the kind chips narrow within it — so the
+    // chips only ever offer kinds that are actually in the room you are in.
+    const roomed = useMemo(
+        () => board.filter((m) => inRoom(m, room, me.email)),
+        [board, room, me.email]);
 
-    const filters = useMemo(() => filtersFor(board), [board]);
+    const shown = useMemo(
+        () => (filter === "all" ? roomed : roomed.filter((m) => m.kind === filter)),
+        [roomed, filter]);
+
+    const filters = useMemo(() => filtersFor(roomed), [roomed]);
+
+    // A room is OFFERED only once it holds something. A student with no
+    // friends yet never meets an empty Friends tab on their first visit —
+    // a tab that is always empty teaches that the feature is broken.
+    const { rooms, counts } = useMemo(() => roomsFor(board, me.email), [board, me.email]);
+
+    // A room that empties underneath you (the last friend's question closed)
+    // must not strand the view on a tab that no longer exists.
+    useEffect(() => {
+        if (!rooms.some((r) => r.id === room)) setRoom(ROOMS.all.id);
+    }, [rooms, room]);
 
     // ── FEATURED: the questions the whole room can argue about ───────────
     // A board of solo markets is a board of private facts — "will Maya study
@@ -295,8 +318,8 @@ export default function Competitions() {
     // breaks the very order they requested — the lesson Browse's sections
     // record about sorting.
     const featured = useMemo(
-        () => (filter === "all" ? featuredOf(board, me.email, 4) : []),
-        [board, me.email, filter]);
+        () => (filter === "all" ? featuredOf(roomed, me.email, 4) : []),
+        [roomed, me.email, filter]);
     const rest = useMemo(() => {
         if (!featured.length) return shown;
         const up = new Set(featured.map((m) => m.id));
@@ -370,13 +393,11 @@ export default function Competitions() {
     };
 
     if (loading) {
-        return (
-            <Room>
-                <div className="flex items-center justify-center py-32 text-[#6F86A8] gap-2">
-                    <Loader2 className="w-4 h-4 animate-spin" /> Opening the floor…
-                </div>
-            </Room>
-        );
+        // Ace deals the board onto the grid the real cards are about to fill.
+        // The wait IS the deal, and the dealt cards ARE the skeleton — an
+        // animation that plays and then hands over to a loading state makes a
+        // student wait twice. See AceDeal.
+        return <Room><AceDeal /></Room>;
     }
 
     // The tables may not exist yet. Say so plainly rather than rendering an
@@ -470,6 +491,30 @@ export default function Competitions() {
 
                     {/* ── THE BOARD ────────────────────────────────── */}
                     <div className="min-w-0">
+                        {/* ── WHICH ROOM ───────────────────────────────
+                            A view of one floor, never a floor of its own:
+                            every room lists markets from the same pool at the
+                            same price. Rendered only when there is more than
+                            one to choose between, because a single tab is
+                            chrome pretending to be navigation — the rule the
+                            Quizzes shelf already records. */}
+                        {rooms.length > 1 && (
+                            <div className="flex items-center gap-1.5 mb-2.5">
+                                {rooms.map((r) => (
+                                    <button key={r.id} type="button"
+                                        onClick={() => { setRoom(r.id); setFilter("all"); }}
+                                        className={`px-3 py-1.5 rounded-lg text-[12px] font-bold
+                                            border-2 transition-colors inline-flex items-center gap-1.5
+                                            ${room === r.id
+                                                ? "bg-[#FFC800] border-[#FFC800] text-[#0A121F]"
+                                                : "border-[#233247] text-[#6F86A8] hover:text-[#E8F0FB]"}`}>
+                                        {r.label}
+                                        <span className="tabular-nums opacity-70">{counts[r.id]}</span>
+                                    </button>
+                                ))}
+                            </div>
+                        )}
+
                         <div className="flex items-center gap-1.5 overflow-x-auto pb-2 -mx-1 px-1">
                             {filters.map((f) => (
                                 <button key={f.id} type="button" onClick={() => setFilter(f.id)}
@@ -492,9 +537,14 @@ export default function Competitions() {
                         {shown.length === 0 ? (
                             <div className="rounded-2xl border-2 border-[#233247] bg-[#121C2E] p-8 text-center">
                                 <p className="text-sm text-[#6F86A8]">
-                                    {filter === "all"
-                                        ? "No open questions right now. New ones are minted every Monday."
-                                        : "Nothing of that kind is open. Try another filter."}
+                                    {filter !== "all"
+                                        ? "Nothing of that kind is open here. Try another filter."
+                                        : room === ROOMS.all.id
+                                            ? "No open questions right now. New ones are minted every Monday."
+                                            // Naming the room matters: "nothing open" on a
+                                            // floor that plainly has questions on it reads
+                                            // as broken rather than as filtered.
+                                            : "Nothing open in this room. The Everyone tab has the rest."}
                                 </p>
                             </div>
                         ) : (

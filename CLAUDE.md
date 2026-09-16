@@ -751,6 +751,24 @@ red stays NO so the two colours a student already reads as good and bad mean
 the same things here. Third place on the league board taught the matching
 lesson: `streak` red on a podium read as a warning.
 
+**ACE DEALS THE BOARD WHILE IT LOADS** (`AceDeal`). Opening the floor is an
+ARRIVAL — a dark room a student has not seen, and the thing they are waiting
+for is a table with cards on it — so the wait IS the deal rather than the grey
+spinner this was the last screen in the app still showing.
+
+**IT IS THE SKELETON, NOT A CURTAIN IN FRONT OF ONE.** The dealt cards are on
+the same grid at the same size in the same places, so the content fills in
+underneath and nothing jumps. An animation that plays and THEN hands over to a
+loading state has made the student wait twice.
+
+It reuses `pose="toss"` — Ace flicking a card out of frame and watching it go,
+written for a gag and exactly a deal — so there is no new artwork and he
+arrives the way he arrives everywhere else. `tone`/`card` are CLASS NAMES and
+not colours, and they are passed the floor's literal inks taken from
+`MarketCard`, because the room renders identically in both themes. Under
+`prefers-reduced-motion` the cards are simply placed. `AceShuffle` stays right
+for the other twenty-five screens: small, beside a line of text, out of the way.
+
 **Minting is automatic, because an empty board kills a market site.** The first
 person to arrive on Monday must find something to trade, and "create the first
 market" is work nobody does. Minted on demand, deduped by a unique index on
@@ -815,17 +833,60 @@ question beside it — whether they START — which resolves off the study log t
 is already on the board, publishes no mark, and is the better question anyway.
 The mark line stays one tap away, opened by the person whose mark it is.
 
-**FRIENDS ARE A SORT AND NEVER A FILTER.** A friends-only board is the obvious
-fix for a floor full of strangers and it makes the real problem strictly worse:
-five friends means five possible traders per question and a price that means
+**FRIENDS MAY NEVER SPLIT A PRICE — BUT THEY MAY NARROW A VIEW**, and the
+difference is everything. A friends-only *market pool* is the obvious fix for a
+floor full of strangers and it makes the real problem strictly worse: five
+friends means five possible traders per question and a price that means
 nothing. Thin markets need CONCENTRATION — the same arithmetic that rules out
 an order book here. School fragments it harder still at two to five students
 each, and is worth having later as a TEAM dimension ("Melbourne High vs
-Brighton" is one market both schools trade) rather than as a room. So everybody
-trades one floor, and knowing somebody lifts their question up it.
+Brighton" is one market both schools trade) rather than as a pool.
+
+So `ROOMS` are a VIEW of one floor. Everybody trades the same market at the
+same price; a room only decides which of them are LISTED. The rule was never
+about what may be shown — it was about what may be PRICED, and this note used
+to conflate the two. Three rooms: **Everyone** (the floor, always offered),
+**Friends** (people you know, plus yourself — the most motivating market on the
+board is the one about you), and **Whole cohort** (`cohort` and `longshot`, the
+questions about nobody in particular).
+
+**A ROOM WITH NOTHING IN IT IS NOT OFFERED.** A student with no friends yet
+never sees a Friends tab, rather than meeting an empty one on their first
+visit; and the page falls back to Everyone if the room they are in empties
+underneath them. Switching rooms resets the kind chips, because a chip from
+the old room may not exist in the new one.
+
 `subject_is_friend` and `in_contest` are computed server-side for the same
 reason: the subject's email is stripped from the payload for everyone but its
 owner, so the client has nothing to match on.
+
+**THE FLOOR HAS A SIZE, AND IT IS ABOUT TRADERS RATHER THAN STUDENTS.**
+Minting makes one question per active student, so the board grew with the room:
+~18 markets at 30 actives, which is the target, and **~68 at 130**, which is
+nearly four times it. That is the "supply scales with the roster" failure this
+board was rebuilt to fix, arriving a SECOND time — through growth rather than
+through signups — and at ~110 positions a week it puts under two traders on
+each question. "Having all users is too much" was that, and a room filter alone
+would only have hidden it.
+
+`pickBoard` caps the floor at `BOARD_TARGET` and chooses what makes it:
+
+- **The special lines always make it.** `cohort`, `longshot` and `prep` are few
+  and each is the best value per row — one market the whole room can hold a
+  view on. Capping those for a head-to-head is backwards.
+- **An EVEN question beats a lopsided one**, the same reason `pairUpRoom`
+  matches on the base rate: a market priced at 90¢ pays nobody.
+- **BUT THE BOARD ROTATES.** Ranking on evenness alone means a student whose
+  prior sits at 0.85 never once sees a question about themselves, which is the
+  single most motivating thing this board does. The tradeable ones are rotated
+  by a stable hash of the WEEK before slicing, so everybody surfaces — just not
+  all at once, and the same week always picks the same board, because a floor
+  that reshuffles between two page loads is one nobody can come back to.
+- **What is already open counts against the target**, or a second visit in one
+  week mints another twenty.
+
+`MARKET_MINT_CAP` survives as the outer valve on a single insert. It is not the
+board's size and never was.
 
 **Some `meta` keys may never be published.** A head-to-head carries both
 addresses and a cohort line carries the roster it was minted against — both
@@ -2344,6 +2405,9 @@ is the textbook, and only as something to generate MORE from.
   `EquityCurve.jsx` — the second tab on the floor
 - `src/pages/Market.jsx` + `Reactions.jsx` + `Room.jsx` — one question in full,
   the glyphs, and the floor's shared ground; `getMarket` in `server.mjs`
+- `src/components/market/AceDeal.jsx` — the floor's arrival: Ace dealing the
+  board onto the grid the real cards fill, which is the skeleton rather than a
+  curtain in front of one
 - `src/lib/megaUpload.js` + `megaUpload.test.mjs`, `src/api/megaUploads.js`,
   `src/components/shared/MegaPicker.jsx` — a textbook stored whole and read a
   chapter at a time: the caps, the 1-based ranges and the per-page chip price.

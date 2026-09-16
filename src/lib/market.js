@@ -594,6 +594,149 @@ export function featuredOf(markets = [], email = null, limit = 4) {
     return even >= 2 ? ranked.slice(0, even) : [];
 }
 
+/* ═══ ROOMS: a VIEW of one floor, never a floor of its own ══════════════════
+ *
+ * "Having all users is too much" is a real complaint and it has two causes,
+ * only one of which is browsing.
+ *
+ * THE CAUSE IS SUPPLY. Minting makes one question per active student, paired
+ * into head-to-heads — so 30 actives is ~18 markets, which is the design
+ * target, and 130 actives is ~68, which is nearly four times it. That is the
+ * "supply scales with the roster" failure this board was rebuilt to fix,
+ * arriving the second time through GROWTH rather than through signups. At ~110
+ * positions a week it puts under two traders on each question. `pickBoard` is
+ * the fix; a room is the browsing.
+ *
+ * AND A ROOM IS A VIEW. Everybody trades the same market at the same price;
+ * the room only decides which of them are listed. That keeps the property the
+ * "friends are a sort and never a filter" rule below exists to protect —
+ * five friends means five possible traders, and a question priced by five
+ * teenagers is not priced — while still giving a student a floor they can read.
+ * The rule was never about what may be SHOWN. It was about what may be PRICED.
+ */
+
+export const ROOMS = {
+    // Everything. The floor as it has always been, and the default.
+    all: { id: "all", label: "Everyone" },
+    // Questions about people they know, and about themselves. The subject's
+    // address never reaches the client, so this reads the server's own flags.
+    friends: { id: "friends", label: "Friends" },
+    // The questions that are about NOBODY in particular — the whole board's
+    // week, and the longshot. Best value per row on the floor: one market,
+    // everybody has a genuine view, and no names are involved at all.
+    cohort: { id: "cohort", label: "Whole cohort" },
+};
+
+/** The kinds that are about the room rather than about a person. */
+const COHORT_KINDS = new Set(["cohort", "longshot"]);
+
+export const isAboutMe = (m, email) =>
+    !!m?.subject_is_me
+    || (!!email && String(m?.subject_email || "").toLowerCase() === String(email).toLowerCase());
+
+/** Does this market belong in that room? `all` takes everything. */
+export function inRoom(market, room = "all", email = null) {
+    if (!market) return false;
+    if (room === ROOMS.cohort.id) return COHORT_KINDS.has(market.kind);
+    if (room === ROOMS.friends.id) {
+        // Your own questions belong with your friends': the room is "people I
+        // have a reason to care about", and the most motivating market on the
+        // board is the one about you.
+        return !!market.subject_is_friend || isAboutMe(market, email);
+    }
+    return true;
+}
+
+/**
+ * Which rooms to OFFER, and how many each holds.
+ *
+ * A tab that is always empty teaches that the feature is broken, so a room is
+ * offered only once it has something in it — a student with no friends yet
+ * never sees a Friends tab rather than meeting an empty one on their first
+ * visit. `all` is always offered, because it is the floor.
+ */
+export function roomsFor(markets = [], email = null) {
+    const counts = {};
+    for (const id of Object.keys(ROOMS)) {
+        counts[id] = markets.filter((m) => inRoom(m, id, email)).length;
+    }
+    return {
+        counts,
+        rooms: Object.values(ROOMS).filter((r) => r.id === ROOMS.all.id || counts[r.id] > 0),
+    };
+}
+
+/* ═══ HOW MANY QUESTIONS THE FLOOR SHOULD CARRY ════════════════════════════ */
+
+/**
+ * The target, which is about TRADERS and not about students.
+ *
+ * ~110 positions a week across the room, and a price only means something at
+ * five to seven traders a question. That is fifteen to twenty questions, and
+ * it does not change when the roster does — which is exactly why minting one
+ * per student cannot be right at any size.
+ */
+export const BOARD_TARGET = 20;
+
+/** How far from even a question may price and still be worth anybody's time. */
+export const TRADEABLE_EDGE = 0.25;
+
+const evenness = (m) => Math.abs((Number(m?.prior) || 0.5) - 0.5);
+
+/**
+ * WHICH QUESTIONS MAKE THE BOARD when more were minted than it should carry.
+ *
+ * Three rules, in order:
+ *
+ *  1. **The special lines always make it.** `cohort`, `longshot` and `prep` are
+ *     few, and each is the best value per row on the floor — one market the
+ *     whole room can hold a view on, or one that came off somebody's planner.
+ *     Capping those to make space for a head-to-head is backwards.
+ *  2. **An EVEN question beats a lopsided one.** A market priced at 90¢ pays
+ *     nobody and teaches that the board is decoration — the same reasoning
+ *     that makes `pairUpRoom` match on the base rate in the first place.
+ *  3. **BUT THE BOARD ROTATES, or the same students own it every week.**
+ *     Ranking on evenness alone would mean a student whose prior sits at 0.85
+ *     never once sees a question about themselves, which is the single most
+ *     motivating thing this board does. So the tradeable ones are rotated by
+ *     the week before slicing: everybody surfaces, just not all at once.
+ *
+ * Pure and tested, because it decides who appears on a social board — the kind
+ * of thing that is invisible until a student notices they are never on it.
+ */
+export function pickBoard(candidates = [], { target = BOARD_TARGET, weekKey = "", existing = 0 } = {}) {
+    const rows = Array.isArray(candidates) ? candidates.filter(Boolean) : [];
+    const special = rows.filter((m) => COHORT_KINDS.has(m.kind) || m.kind === "prep");
+    const people = rows.filter((m) => !COHORT_KINDS.has(m.kind) && m.kind !== "prep");
+
+    // What is already open counts against the target: the cap is on the BOARD,
+    // not on one minting run, or a second visit doubles it.
+    const room = Math.max(0, target - Math.max(0, existing) - special.length);
+    if (room <= 0) return special;
+
+    const tradeable = people.filter((m) => evenness(m) <= TRADEABLE_EDGE)
+        .sort((a, b) => evenness(a) - evenness(b) || String(a.subject_email).localeCompare(String(b.subject_email)));
+    const rest = people.filter((m) => evenness(m) > TRADEABLE_EDGE)
+        .sort((a, b) => evenness(a) - evenness(b) || String(a.subject_email).localeCompare(String(b.subject_email)));
+
+    // The rotation. A stable hash of the week, so the same week always picks
+    // the same board — a floor that reshuffles between two page loads is a
+    // floor nobody can come back to.
+    const spin = tradeable.length > 0
+        ? Math.abs(hashWeek(weekKey)) % tradeable.length
+        : 0;
+    const rotated = [...tradeable.slice(spin), ...tradeable.slice(0, spin)];
+
+    return [...special, ...rotated, ...rest].slice(0, special.length + room);
+}
+
+/** A small stable hash, so the rotation is deterministic across processes. */
+function hashWeek(key) {
+    let h = 0;
+    for (const ch of String(key || "")) h = (h * 31 + ch.charCodeAt(0)) | 0;
+    return h;
+}
+
 /**
  * FRIENDS ARE A SORT AND NEVER A FILTER, and the difference is the whole board.
  *
