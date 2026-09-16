@@ -24,6 +24,8 @@ import {
     returnMultiple, RETURN_CEILING, bestReturn, returns, multiplierLabel,
     priceHistory, featuredOf,
     ROOMS, inRoom, roomsFor, pickBoard, BOARD_TARGET,
+    convictionRange, startingConviction, CONVICTION_MIN,
+    markPercent, priorForLine, MARK_MIN_OBS, selfLine, selfRecord,
 } from "@/lib/market";
 
 let passed = 0;
@@ -820,6 +822,196 @@ check("nothing to pick is not an error", () => {
 check("a market with no prior is treated as even rather than dropped", () => {
     const picked = pickBoard([{ kind: "versus", subject_email: "a@x.com" }], { target: 5, weekKey: "W" });
     assert.equal(picked.length, 1);
+});
+
+// ─── THE SLIDER CANNOT EXPRESS A POSITION ON THE OTHER SIDE ─────────────────
+//
+// The whole point of anchoring the track at the room's price. These are the
+// assertions that make the deleted warning paragraph unnecessary rather than
+// merely hidden: if any conviction the slider can reach pays on the OPPOSITE
+// outcome, the inversion is back and nothing on screen says so any more.
+
+const cents = (v) => Math.round(v * 100);
+
+check("every reachable conviction is a real position on the side you picked", () => {
+    for (let c = 2; c <= 98; c += 1) {
+        const price = c / 100;
+        for (const side of [YES, NO]) {
+            const r = convictionRange(side, price);
+            if (!r.tradeable) continue;
+            // Walk the whole track, including both ends.
+            for (let v = r.floor; v <= r.ceiling + 1e-9; v += 0.005) {
+                const conviction = Math.min(r.ceiling, v);
+                const p = probFor(side, conviction);
+                const win = payoutFor(100, p, price, side === YES);
+                assert.ok(win >= -0.5,
+                    `${side} at ${cents(conviction)}% into ${c}¢ pays ${win} when its OWN `
+                    + "side lands — the track still reaches the other position");
+            }
+        }
+    }
+});
+
+check("the floor is the room's line, or the coin flip when that is higher", () => {
+    const high = convictionRange(YES, 0.8);
+    assert.equal(cents(high.floor), 80);
+    assert.equal(high.atRoom, true);
+
+    // Yes at 30¢: any belief above even money already beats the price, so the
+    // coin flip is the real anchor and the label must not claim otherwise.
+    const low = convictionRange(YES, 0.3);
+    assert.equal(low.floor, CONVICTION_MIN);
+    assert.equal(low.atRoom, false);
+
+    // NO reads the MIRROR price, which is the whole reason this is a function
+    // rather than `price` written out twice.
+    assert.equal(cents(convictionRange(NO, 0.3).floor), 70);
+    assert.equal(convictionRange(NO, 0.8).floor, CONVICTION_MIN);
+});
+
+check("a side the room has already run past has NO call left, and says so", () => {
+    const r = convictionRange(YES, 0.99);
+    assert.equal(r.tradeable, false, "99¢ yes leaves nothing to win");
+    assert.ok(r.headroom < 0.01);
+    // Reported rather than clamped into a one-pixel track that pays nothing.
+    assert.equal(r.floor, CONVICTION_MAX);
+    assert.equal(convictionRange(YES, 0.9).tradeable, true, "90¢ still has room");
+});
+
+check("switching sides moves the handle rather than carrying it under the floor", () => {
+    // The inversion coming back in through the other door: a conviction picked
+    // for one side is meaningless once the floor moves.
+    const carried = startingConviction(NO, 0.2, 0.55);
+    assert.ok(carried > convictionRange(NO, 0.2).floor,
+        "0.55 is below no's 80¢ floor and must not survive the switch");
+    // One that IS still above the new floor is kept — re-picking a side should
+    // not throw away a drag that is still a valid call.
+    assert.equal(startingConviction(YES, 0.6, 0.85), 0.85);
+});
+
+check("the panel never opens on a call worth exactly nothing", () => {
+    for (const price of [0.1, 0.35, 0.5, 0.62, 0.88]) {
+        for (const side of [YES, NO]) {
+            const r = convictionRange(side, price);
+            const start = startingConviction(side, price);
+            assert.ok(start > r.floor && start <= r.ceiling,
+                `${side} at ${price} opens at ${start}, floor ${r.floor}`);
+        }
+    }
+});
+
+// ─── A MARK, AND THE LINE SOMEBODY CALLS ON IT ──────────────────────────────
+
+check("a mark is a percentage of its OWN denominator", () => {
+    assert.equal(markPercent(48, 60), 80);
+    assert.equal(markPercent(25, 25), 100);
+    assert.equal(markPercent(0, 40), 0);
+    // Rounds to whole points, because that is the scale the line is stated on.
+    assert.equal(markPercent(17, 30), 57);
+});
+
+check("a mark nobody has entered is NULL and never a zero", () => {
+    // `Number(null) === 0` would settle the market as a fail for a student who
+    // simply has not typed their result in yet. The trap this file keeps
+    // meeting, here with somebody's SAC on the other end of it.
+    for (const bad of [[null, 60], [undefined, 60], ["", 60], [48, null], [48, 0], [48, ""]]) {
+        assert.equal(markPercent(bad[0], bad[1]), null, JSON.stringify(bad));
+    }
+    assert.equal(markPercent("48", "60"), 80, "a numeric string is still a mark");
+});
+
+check("a line REFUSES to price itself off too few marks", () => {
+    const thin = priorForLine([90, 88], 80);
+    assert.equal(thin.prior, 0.5);
+    assert.equal(thin.thin, true);
+    assert.equal(thin.seen, 2);
+    assert.equal(thin.average, 89, "it still reports what it saw");
+    assert.equal(priorForLine([], 80).prior, 0.5);
+});
+
+check("and past that it prices off what they have actually scored", () => {
+    // The hole the flat 0.5 left: a 95 line from a student averaging 58 opened
+    // at even money and paid whoever took no, on a fact anybody could see.
+    const stretch = priorForLine([55, 61, 58, 60], 95);
+    assert.ok(stretch.prior < 0.35, `95 off a 58 average opened at ${stretch.prior}`);
+    const gimme = priorForLine([84, 88, 91, 86], 70);
+    assert.ok(gimme.prior > 0.65, `70 off an 87 average opened at ${gimme.prior}`);
+});
+
+check("but it never opens somewhere nobody can disagree with", () => {
+    // Four from four is not certainty, and a market at 100¢ has nothing to
+    // trade. Smoothed and then clamped, the same reasoning as PRIOR_WEIGHT.
+    const perfect = priorForLine([90, 92, 95, 91, 99], 60);
+    assert.ok(perfect.prior <= 0.88 && perfect.prior > 0.5, `${perfect.prior}`);
+    const hopeless = priorForLine([40, 44, 38, 41, 35], 99);
+    assert.ok(hopeless.prior >= 0.12 && hopeless.prior < 0.5, `${hopeless.prior}`);
+});
+
+const sacMarket = (over = {}) => ({
+    id: "m1", kind: "sac", status: "resolved", prior: 0.5,
+    title: "Will Sam score 80+ on their Chemistry SAC?",
+    subject_is_me: true,
+    meta: { target: 80, subject: "Chemistry", reported: 84 },
+    positions: [
+        { p: 0.7, stake: 100, price_at_entry: 0.5 },
+        { p: 0.65, stake: 50, price_at_entry: 0.55 },
+        { p: 0.25, stake: 100, price_at_entry: 0.6 },
+    ],
+    ...over,
+});
+
+check("the subject gets the room's read, and no cred anywhere in it", () => {
+    const line = selfLine(sacMarket());
+    assert.equal(line.called, 80);
+    assert.equal(line.actual, 84);
+    assert.equal(line.cleared, true);
+    assert.equal(line.backed, 2);
+    assert.equal(line.faded, 1);
+    assert.equal(line.roomBacked, true);
+    assert.ok(line.room > 0 && line.room < 100);
+    // Nothing in the payload is a payout. The subject cannot hold a position,
+    // so there is no branch here that moves cred toward them.
+    assert.equal(JSON.stringify(line).includes("payout"), false);
+});
+
+check("a line with no mark yet reports NO mark, not a fail", () => {
+    const open = selfLine(sacMarket({ status: "open", meta: { target: 80, subject: "Chemistry" } }));
+    assert.equal(open.actual, null);
+    assert.equal(open.cleared, null, "unreported must never read as missed");
+    // And with nobody trading it, the room has not said anything either.
+    const quiet = selfLine(sacMarket({ positions: [] }));
+    assert.equal(quiet.traders, 0);
+    assert.equal(quiet.roomBacked, null);
+});
+
+check("selfLine only speaks about mark markets", () => {
+    assert.equal(selfLine({ kind: "streak", meta: { target: 5 } }), null);
+    assert.equal(selfLine(sacMarket({ meta: {} })), null, "no line, nothing to report");
+    assert.equal(selfLine(null), null);
+});
+
+check("the self record refuses to grade somebody on two SACs", () => {
+    const two = selfRecord([sacMarket(), sacMarket({ id: "m2" })], "sam@x.com");
+    assert.equal(two.closed, 2);
+    assert.equal(two.enough, false, `${MARK_MIN_OBS} closed lines is the floor`);
+
+    const runs = [84, 71, 90, 66].map((reported, i) => sacMarket({
+        id: `s${i}`, meta: { target: 80, subject: "Chemistry", reported },
+    }));
+    const rec = selfRecord(runs, "sam@x.com");
+    assert.equal(rec.enough, true);
+    assert.equal(rec.cleared, 2, "84 and 90 cleared 80; 71 and 66 did not");
+    assert.equal(rec.rate, 0.5);
+    // Signed drift: positive means they beat their own call on average.
+    assert.equal(rec.drift, Math.round((4 + -9 + 10 + -14) / 4));
+});
+
+check("an OPEN line is not part of the record", () => {
+    // Nothing has been tested, so counting it would report a miss for a SAC
+    // that has not happened yet.
+    const rec = selfRecord([sacMarket({ status: "open", meta: { target: 80 } })], "sam@x.com");
+    assert.equal(rec.closed, 0);
+    assert.equal(rec.rate, null);
 });
 
 console.log(`\n${passed} passed`);

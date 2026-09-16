@@ -42,7 +42,15 @@ import SettlementReveal from "@/components/market/SettlementReveal";
 import {
     readMarket, sortBoard, isOpen, sideOf, YES, KINDS, featuredOf, inRoom, roomsFor, ROOMS,
     unseenSettlements, markSettlementsSeen,
+    markPercent, priorForLine, priceLabel, MARK_MIN_OBS, selfLine, selfRecord,
 } from "@/lib/market";
+
+/** A SAC's date, the way a planner prints one. */
+const sacDate = (iso) => {
+    const d = new Date(`${iso}T00:00:00`);
+    if (!Number.isFinite(d.getTime())) return iso;
+    return d.toLocaleDateString(undefined, { weekday: "short", day: "numeric", month: "short" });
+};
 
 const firstName = (n) => String(n || "").trim().split(/\s+/)[0] || "Someone";
 
@@ -128,16 +136,85 @@ function Tape({ rows }) {
 
 // ─── Open a line on your own mark ───────────────────────────────────────────
 
-function LineDialog({ onClose, onOpen, busy }) {
-    const [subject, setSubject] = useState("");
+/**
+ * LineDialog — call a SAC that is already on your planner.
+ *
+ * ═══ THE SUBJECT IS NOT SOMETHING TO TYPE ═══════════════════════════════════
+ * This asked for a subject, a target and a date, in three free inputs, none of
+ * which the app checked against anything it already knew. So "Chem" and
+ * "Chemistry" were two subjects to every screen that groups by one, the date
+ * was whatever got typed, and the SAC the student was actually thinking about
+ * was sitting on their planner two pages away with its real name and real date
+ * on it. Asking somebody to retype what the app already holds is how two
+ * screens start disagreeing about one thing.
+ *
+ * It lists assessments now. Everything but the number comes off the row, the
+ * row is what settles the market, and calling a SAC is one tap and one drag.
+ *
+ * ═══ AND THE LINE IS PRICED AGAINST THEIR OWN RECORD ════════════════════════
+ * The server opens it at `priorForLine` rather than at even money, so the
+ * dialog says what that will be built from — "pricing off your last 4
+ * Chemistry marks, which average 74%". A student setting a line deserves to
+ * know the room is about to be handed their average, and it is the single most
+ * useful thing this screen can tell them before they choose a number.
+ *
+ * ═══ NOTHING ON THE PLANNER IS NOTHING TO CALL ══════════════════════════════
+ * An empty list is not an empty state here — it is a different action, on a
+ * different page. It says so and links there, rather than rendering a dead
+ * dialog with a disabled button, which is the shape this file already records
+ * about a feature gated behind an optional-looking step.
+ */
+// Exported for `scripts/_floorProbe.jsx`, which renders it against fixture
+// assessments — this page is auth-gated, so there is no other way to look at
+// the dialog. Not an unused symbol; see that file before removing the export.
+export function LineDialog({ onClose, onOpen, busy, taken, email }) {
+    const [sacs, setSacs] = useState(null);
+    const [picked, setPicked] = useState(null);
     const [target, setTarget] = useState(80);
-    const [date, setDate] = useState("");
-    const ok = subject.trim() && target > 0 && date;
+
+    useEffect(() => {
+        let alive = true;
+        (async () => {
+            try {
+                const rows = await base44.entities.SubjectAssessment.filter(
+                    { created_by: email, is_completed: false }, "due_date", 30);
+                const today = new Date().toISOString().slice(0, 10);
+                if (alive) {
+                    setSacs((rows || []).filter((a) => a.due_date && a.due_date > today
+                        && !taken.has(a.id)));
+                }
+            } catch { if (alive) setSacs([]); }
+        })();
+        return () => { alive = false; };
+    }, [email, taken]);
+
+    // Their own marks in the picked subject, which is what the server will
+    // price the opening line off. Loaded here so the number on screen and the
+    // number the market opens at come from the same rows.
+    const [past, setPast] = useState(null);
+    useEffect(() => {
+        if (!picked) { setPast(null); return undefined; }
+        let alive = true;
+        (async () => {
+            try {
+                const rows = await base44.entities.SubjectAssessment.filter(
+                    { created_by: email, subject_name: picked.subject_name }, "-due_date", 40);
+                const pcts = (rows || [])
+                    .map((a) => markPercent(a.score, a.out_of)).filter((v) => v !== null);
+                if (alive) setPast(pcts);
+            } catch { if (alive) setPast([]); }
+        })();
+        return () => { alive = false; };
+    }, [picked, email]);
+
+    const priced = past ? priorForLine(past, target) : null;
+
     return (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4"
             style={{ background: "rgba(4,8,15,0.8)" }} onClick={onClose}>
             <div onClick={(e) => e.stopPropagation()}
-                className="w-full max-w-sm rounded-2xl border-2 border-[#233247] bg-[#121C2E] p-5">
+                className="w-full max-w-sm rounded-2xl border-2 border-[#233247] bg-[#121C2E] p-5
+                    max-h-[85vh] overflow-y-auto">
                 <div className="flex items-start justify-between gap-3 mb-1">
                     <h2 className="font-display font-black text-[#E8F0FB] text-lg leading-tight">
                         Call your own SAC
@@ -150,49 +227,104 @@ function LineDialog({ onClose, onOpen, busy }) {
                     motivating stated than hidden: being read by the room is
                     the draw, not the payout you are giving up. */}
                 <p className="text-[12px] text-[#6F86A8] leading-snug mb-4">
-                    You state the line and everyone else trades it. You can't back your own — you're
-                    the one who reports the mark — but you'll see exactly who believes you.
+                    You state the line and everyone else trades it. You can&apos;t back your own — you
+                    enter the mark — but you&apos;ll see exactly who believes you.
                 </p>
-                <div className="space-y-3">
-                    <div>
-                        <label className="text-[11px] font-bold uppercase tracking-wide text-[#6F86A8]">
-                            Subject
-                        </label>
-                        <input value={subject} onChange={(e) => setSubject(e.target.value)}
-                            placeholder="Chemistry"
-                            className="w-full mt-1 rounded-xl bg-[#0E1929] border-2 border-[#2C3E57]
-                                px-3 py-2 text-[#E8F0FB] text-sm outline-none focus:border-[#1CB0F6]" />
+
+                {sacs === null && (
+                    <p className="text-[12px] text-[#6F86A8] inline-flex items-center gap-1.5">
+                        <Loader2 className="w-3.5 h-3.5 animate-spin" /> Reading your planner…
+                    </p>
+                )}
+
+                {/* Not an empty state — a different action, on another page. */}
+                {sacs !== null && sacs.length === 0 && (
+                    <div className="text-[12px] text-[#6F86A8] leading-snug space-y-3">
+                        <p>
+                            Nothing on your planner to call yet. Put the SAC in with its date and
+                            it&apos;ll show up here — the planner is also where you enter the mark
+                            that settles it.
+                        </p>
+                        <a href={createPageUrl("Goals")}
+                            className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl
+                                bg-[#E8F0FB] text-[#0A121F] font-display font-black text-sm
+                                hover:bg-white transition-colors">
+                            Open your planner
+                        </a>
                     </div>
-                    <div>
-                        <label className="text-[11px] font-bold uppercase tracking-wide text-[#6F86A8]">
-                            The line — you'll score at least
-                        </label>
-                        <div className="flex items-center gap-3 mt-1">
-                            <input type="range" min="40" max="100" value={target}
-                                onChange={(e) => setTarget(Number(e.target.value))}
-                                className="flex-1 accent-[#1CB0F6]" />
-                            <span className="font-display font-black text-[#E8F0FB] text-xl tabular-nums w-12 text-right">
-                                {target}
-                            </span>
+                )}
+
+                {sacs !== null && sacs.length > 0 && (
+                    <div className="space-y-3">
+                        <div className="space-y-1.5">
+                            {sacs.map((a) => {
+                                const on = picked?.id === a.id;
+                                return (
+                                    <button key={a.id} type="button" onClick={() => setPicked(a)}
+                                        className={`w-full text-left px-3 py-2.5 rounded-xl border-2
+                                            transition-colors ${on
+                                            ? "border-[#FFC800] bg-[#FFC800]/10"
+                                            : "border-[#2C3E57] hover:border-[#FFC800]/50"}`}>
+                                        <span className="block text-sm font-bold text-[#E8F0FB] truncate">
+                                            {a.subject_name} · {a.title}
+                                        </span>
+                                        <span className="block text-[11px] text-[#6F86A8] tabular-nums">
+                                            {sacDate(a.due_date)}
+                                            {a.out_of ? ` · out of ${a.out_of}` : ""}
+                                        </span>
+                                    </button>
+                                );
+                            })}
                         </div>
+
+                        {picked && (
+                            <>
+                                <div>
+                                    <label className="text-[11px] font-bold uppercase tracking-wide text-[#6F86A8]">
+                                        The line — you&apos;ll score at least
+                                    </label>
+                                    <div className="flex items-center gap-3 mt-1">
+                                        <input type="range" min="40" max="100" value={target}
+                                            onChange={(e) => setTarget(Number(e.target.value))}
+                                            className="flex-1 accent-[#FFC800]" />
+                                        <span className="font-display font-black text-[#E8F0FB] text-xl
+                                            tabular-nums w-14 text-right">
+                                            {target}%
+                                        </span>
+                                    </div>
+                                </div>
+
+                                {/* What the room is about to be handed. Stated
+                                    before the line is set rather than after. */}
+                                {priced && (
+                                    <p className="text-[11px] text-[#8FA3BF] leading-snug">
+                                        {priced.thin
+                                            ? `The room prices this from scratch — you've got ${priced.seen} `
+                                                + `past ${picked.subject_name} mark${priced.seen === 1 ? "" : "s"} `
+                                                + `on your planner, and it takes ${MARK_MIN_OBS}.`
+                                            : <>
+                                                Opening at{" "}
+                                                <span className="font-bold tabular-nums text-[#E8F0FB]">
+                                                    {priceLabel(priced.prior)}</span>
+                                                {" "}— off your last {priced.seen} {picked.subject_name}{" "}
+                                                mark{priced.seen === 1 ? "" : "s"}, averaging{" "}
+                                                <span className="font-bold tabular-nums text-[#E8F0FB]">
+                                                    {priced.average}%</span>.
+                                            </>}
+                                    </p>
+                                )}
+                            </>
+                        )}
+
+                        <button type="button" disabled={!picked || busy}
+                            onClick={() => onOpen({ assessment_id: picked.id, target })}
+                            className="w-full py-2.5 rounded-xl bg-[#E8F0FB] text-[#0A121F]
+                                font-display font-black text-sm disabled:opacity-40 inline-flex
+                                items-center justify-center gap-2 hover:bg-white transition-colors">
+                            {busy && <Loader2 className="w-4 h-4 animate-spin" />} Open the line
+                        </button>
                     </div>
-                    <div>
-                        <label className="text-[11px] font-bold uppercase tracking-wide text-[#6F86A8]">
-                            SAC date
-                        </label>
-                        <input type="date" value={date} onChange={(e) => setDate(e.target.value)}
-                            className="w-full mt-1 rounded-xl bg-[#0E1929] border-2 border-[#2C3E57]
-                                px-3 py-2 text-[#E8F0FB] text-sm outline-none focus:border-[#1CB0F6]" />
-                    </div>
-                </div>
-                <button type="button" disabled={!ok || busy}
-                    onClick={() => onOpen({ subject: subject.trim(), target,
-                        closes_at: new Date(`${date}T23:59:00`).toISOString() })}
-                    className="w-full mt-4 py-2.5 rounded-xl bg-[#E8F0FB] text-[#0A121F]
-                        font-display font-black text-sm disabled:opacity-40 inline-flex
-                        items-center justify-center gap-2 hover:bg-white transition-colors">
-                    {busy && <Loader2 className="w-4 h-4 animate-spin" />} Open the line
-                </button>
+                )}
             </div>
         </div>
     );
@@ -351,6 +483,27 @@ export default function Competitions() {
 
     const atStake = book.reduce((s, m) => s + (m.mine?.stake || 0), 0);
 
+    // ── Your own lines ───────────────────────────────────────────────────
+    // A SAC you have already called must not be offered again — the dedupe
+    // index would refuse it, and a dialog whose list produces a 409 is a list
+    // that lied. Open and settled both, so the record below can be drawn from
+    // the same read.
+    const myLines = useMemo(
+        () => [...board, ...settledBoard]
+            .filter((m) => m.kind === "sac" && m.subject_is_me)
+            .map(selfLine).filter(Boolean),
+        [board, settledBoard]);
+    // How well they call their OWN marks — the mirror of the calibration curve
+    // the book draws for their calls on everybody else.
+    const record = useMemo(
+        () => selfRecord([...board, ...settledBoard], me.email),
+        [board, settledBoard, me.email]);
+    const takenSacs = useMemo(
+        () => new Set(board
+            .filter((m) => m.kind === "sac" && m.subject_is_me)
+            .map((m) => m.meta?.assessment_id).filter(Boolean)),
+        [board]);
+
     const take = async (market, pick) => {
         setBusy(true);
         try {
@@ -377,20 +530,17 @@ export default function Competitions() {
         setBusy(false);
     };
 
-    const report = async (market) => {
-        const raw = window.prompt(`What did you get? (out of 100)\n\n${market.title}`);
-        if (raw == null) return;
-        const score = Math.round(Number(raw));
-        if (!Number.isFinite(score) || score < 0 || score > 100) return;
-        setBusy(true);
-        try {
-            takeFn(await base44.functions.invoke("reportMark", { market_id: market.id, score }));
-            await load();
-        } catch (e) {
-            setError(e?.message || "Couldn't report that.");
-        }
-        setBusy(false);
-    };
+    // ── THE MARK IS ENTERED ONCE, WHERE THE SAC LIVES ────────────────────
+    // This was a `window.prompt` asking for a number out of 100 — which was
+    // both the least gamified surface in the app and a SECOND place to type a
+    // mark, while `subject_assessments.score` sat null on every row. It is one
+    // entry on the planner now: it fills the column, and settling reads it
+    // back. So the button goes there rather than opening a box here.
+    const report = useCallback((market) => {
+        const id = market?.meta?.assessment_id;
+        window.location.href = createPageUrl("Goals")
+            + (id ? `?mark=${encodeURIComponent(id)}` : "");
+    }, []);
 
     if (loading) {
         // Ace deals the board onto the grid the real cards are about to fill.
@@ -597,6 +747,49 @@ export default function Competitions() {
                             </div>
                         </section>
 
+                        {/* ── YOUR OWN LINES ───────────────────────────── */}
+                        {/* The subject of a market cannot hold a position on
+                            it, so the floor used to tell the one person the
+                            whole board was trading absolutely nothing. This is
+                            what they get instead, and it is the better payoff:
+                            how many people are reading you, and which way. */}
+                        {myLines.length > 0 && (
+                            <section className="rounded-2xl border-2 border-[#FFC800]/25 bg-[#121C2E] p-4">
+                                <h2 className="text-[10px] font-black uppercase tracking-widest
+                                    text-[#4E6484] mb-2.5">Your lines</h2>
+                                <div className="space-y-2.5">
+                                    {myLines.map((l) => (
+                                        <div key={l.id}>
+                                            <p className="text-[12px] text-[#8FA3BF] leading-snug">
+                                                <span className="font-bold text-[#E8F0FB]">{l.subject}</span>
+                                                {" — you called "}
+                                                <span className="font-bold tabular-nums text-[#E8F0FB]">
+                                                    {l.called}%</span>
+                                            </p>
+                                            <p className="text-[11px] text-[#4E6484] tabular-nums">
+                                                {l.traders === 0
+                                                    ? "nobody's taken a side yet"
+                                                    : `${l.traders} trading · room ${l.room}¢ · `
+                                                        + `${l.backed} backing, ${l.faded} fading`}
+                                                {l.actual !== null && ` · you got ${l.actual}%`}
+                                            </p>
+                                        </div>
+                                    ))}
+                                </div>
+                                {/* REFUSES to grade somebody on two SACs — the
+                                    same floor TREND_MIN and CALIBRATION_MIN keep. */}
+                                {record.enough && (
+                                    <p className="text-[11px] text-[#6F86A8] mt-3 pt-3
+                                        border-t border-[#233247] leading-snug">
+                                        You&apos;ve called {record.closed} and cleared {record.cleared}
+                                        {record.drift !== null && (record.drift >= 0
+                                            ? `, usually beating your own line by ${record.drift}.`
+                                            : `, usually landing ${Math.abs(record.drift)} under it.`)}
+                                    </p>
+                                )}
+                            </section>
+                        )}
+
                         {book.length > 0 && (
                             <section className="rounded-2xl border-2 border-[#233247] bg-[#121C2E] p-4">
                                 <h2 className="text-[10px] font-black uppercase tracking-widest
@@ -629,7 +822,8 @@ export default function Competitions() {
 
             <AnimatePresence>
                 {lineOpen && (
-                    <LineDialog onClose={() => setLineOpen(false)} onOpen={openLine} busy={busy} />
+                    <LineDialog onClose={() => setLineOpen(false)} onOpen={openLine} busy={busy}
+                        taken={takenSacs} email={me.email} />
                 )}
             </AnimatePresence>
 

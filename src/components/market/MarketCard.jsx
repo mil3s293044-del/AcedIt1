@@ -120,11 +120,17 @@ export default function MarketCard({ market, balance, busy, onTake, onReport }) 
             </h3>
 
             {/* ── IT'S ABOUT YOU ───────────────────────────────────── */}
+            {/* THE NOUN FOLLOWS THE KIND. Every market about a student used to
+                be "your week", which is right for a streak or an hours line and
+                simply wrong on a SAC — the one market where what is being
+                traded is a mark, and the sentence naming it is the whole
+                payoff the subject gets in place of a stake. */}
             {market.subject_is_me && market.traders > 0 && (
                 <p className="text-[13px] font-bold text-[#FFC800] mb-3 leading-snug">
                     {market.traders === 1
-                        ? "Someone has taken a position on your week."
-                        : `${market.traders} people are trading your week.`}
+                        ? `Someone has taken a position on your ${market.kind === "sac" ? "mark" : "week"}.`
+                        : `${market.traders} people are trading your `
+                            + `${market.kind === "sac" ? "mark" : "week"}.`}
                 </p>
             )}
 
@@ -245,12 +251,17 @@ export default function MarketCard({ market, balance, busy, onTake, onReport }) 
                 </button>
             )}
 
-            {/* ── Your own mark to report ──────────────────────────── */}
+            {/* ── Your own mark ────────────────────────────────────── */}
+            {/* This opened a `window.prompt` asking for a number out of 100 —
+                a SECOND place to type a mark, while the column built to hold
+                it stayed null on every row. It goes to the planner now, where
+                the SAC already is, and settling reads the mark back off that
+                row. One mark, one place. */}
             {market.kind === "sac" && market.subject_is_me && onReport && (
                 <button type="button" onClick={() => onReport(market)}
                     className="w-full mt-2 py-2 rounded-xl bg-[#FFC800] text-[#0A121F]
                         font-display font-black text-sm hover:bg-[#ffd433] transition-colors">
-                    Report your mark
+                    Enter your mark on the planner
                 </button>
             )}
 
