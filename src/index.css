@@ -106,6 +106,163 @@
     --ring: 89 97% 45%;
   }
 
+  /* ─── THE COMPETE FLOOR ───────────────────────────────────────────────
+     Its own palette, scoped to `.floor` (see components/market/Room.jsx).
+
+     The floor is a DIFFERENT ROOM and stays one — the identity was never the
+     darkness, it was being somewhere that is not the rest of the app. So the
+     light floor is COOL SLATE where the app is warm cream: same hues as the
+     dark floor, inverted, rather than the dashboard with market cards on it.
+
+     Scoped rather than global on purpose. These names would be meaningless
+     anywhere else, and `.floor` sitting on one wrapper is what lets a
+     `position: fixed` overlay inside it — the settlement reveal, the take-side
+     sheet — inherit the room without being told which room it is in.
+
+     ─── THREE TOKENS PER BRAND HUE, and each has a job ────────────────────
+     `--floor-yes` is the FILL and is the brand green on both floors, because a
+     filled pill is bright either way and near-black ink reads on it.
+     `--floor-yes-ink` is TEXT and strokes, deepened on light: #58CC02 is about
+     2:1 on white, which is below any legibility floor, and a price printed at
+     2:1 is a price nobody can read. `--floor-yes-rgb` is the same colour as
+     channels, for the seventeen places that want a tint — Tailwind's `/40`
+     modifier cannot compute alpha from a `var()` holding a whole colour, and
+     a tint of the BRIGHT hue on white is invisible, so the tint follows the
+     ink rather than the fill.
+
+     The two colours a student already reads as good and bad mean the same
+     things on both floors. Only their depth moves. */
+  .floor {
+    --floor-ground:       #E6ECF4;
+    --floor-card:         #FFFFFF;
+    --floor-well:         #EDF2F9;   /* inset tiles, a step IN from the card */
+    --floor-inset:        #E3EBF4;
+    --floor-bone:         #DEE7F1;   /* a skeleton bar, against the card */
+    --floor-edge:         #CBD7E6;
+    --floor-edge-strong:  #B3C4D8;   /* a control's border */
+    --floor-edge-hover:   #94A9C4;
+
+    /* Four levels of ink, brightest-to-dimmest on dark and darkest-to-lightest
+       on light. They INVERT rather than shift, or the hierarchy flips. */
+    --floor-ink:          #16202F;
+    --floor-muted:        #3A4A63;
+    --floor-muted-2:      #55688A;
+    --floor-dim:          #7A8CA8;
+    --floor-dimmest:      #9AAAC2;
+
+    /* The strong fill — the primary button. Ink on the floor, floor on the
+       ink: it is the one pair that has to swap outright between the two. */
+    --floor-solid:        #16202F;
+    --floor-on-solid:     #FFFFFF;
+    /* Ink on a BRAND fill. Near-black on both floors, because the fills are
+       bright on both floors. */
+    --floor-on-bright:    #0A121F;
+
+    --floor-yes:          #58CC02;
+    --floor-yes-ink:      #3D8F00;
+    --floor-yes-rgb:      61 143 0;
+    --floor-no:           #FF5A5F;
+    --floor-no-ink:       #D32B32;
+    --floor-no-rgb:       211 43 50;
+    --floor-no-soft:      #E8686E;
+    --floor-warn:         #FFC800;
+    --floor-warn-ink:     #8A6A00;
+    --floor-warn-rgb:     138 106 0;
+    --floor-warn-hover:   #ffd433;
+    --floor-accent:       #1CB0F6;
+    --floor-accent-ink:   #0A7FB8;
+    --floor-accent-rgb:   10 127 184;
+
+    /* What a modal sits on. */
+    --floor-scrim:        rgba(22, 32, 47, 0.55);
+  }
+
+  /* ─── The floor draws its own slider ─────────────────────────────────────
+     `accent-color` leaves the UNFILLED half of the track to the user agent,
+     and Chromium paints that from `color-scheme` rather than from anything on
+     the page — so the one control on a room that draws everything else itself
+     came out #3B3B3B on the light floor: a black bar across a white card.
+
+     The gradient goes on the INPUT's own background with the track made
+     transparent, because a pseudo-element cannot take an inline style and the
+     fill position has to come from the value. `--range-fill` is that position
+     and `--range-ink` is the hue, both set at the call site — the conviction
+     slider is the floor's accent, the SAC line's is its amber. */
+  .floor input[type="range"].floor-range {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 100%;
+    height: 6px;
+    border-radius: 999px;
+    outline: none;
+    cursor: pointer;
+    background: linear-gradient(
+      to right,
+      var(--range-ink, var(--floor-accent)) 0 var(--range-fill, 50%),
+      var(--floor-edge-strong) var(--range-fill, 50%) 100%);
+  }
+  .floor input[type="range"].floor-range::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 16px;
+    height: 16px;
+    border-radius: 999px;
+    background: var(--range-ink, var(--floor-accent));
+    /* Ringed in the card it sits on, so the thumb stays a thumb where it
+       overlaps its own filled track. */
+    border: 2px solid var(--floor-card);
+    cursor: pointer;
+  }
+  .floor input[type="range"].floor-range::-moz-range-thumb {
+    width: 16px;
+    height: 16px;
+    border-radius: 999px;
+    border: 2px solid var(--floor-card);
+    background: var(--range-ink, var(--floor-accent));
+    cursor: pointer;
+  }
+  .floor input[type="range"].floor-range::-moz-range-track { background: transparent; }
+  .floor input[type="range"].floor-range:focus-visible {
+    box-shadow: 0 0 0 3px rgb(var(--floor-accent-rgb) / 0.35);
+  }
+
+  .dark .floor {
+    --floor-ground:       #0A121F;
+    --floor-card:         #121C2E;
+    --floor-well:         #0E1929;
+    --floor-inset:        #182335;
+    --floor-bone:         #1B2840;
+    --floor-edge:         #233247;
+    --floor-edge-strong:  #2C3E57;
+    --floor-edge-hover:   #33486A;
+
+    --floor-ink:          #E8F0FB;
+    --floor-muted:        #8FA3BF;
+    --floor-muted-2:      #6F86A8;
+    --floor-dim:          #4E6484;
+    --floor-dimmest:      #3D5273;
+
+    --floor-solid:        #E8F0FB;
+    --floor-on-solid:     #0A121F;
+    --floor-on-bright:    #0A121F;
+
+    --floor-yes:          #58CC02;
+    --floor-yes-ink:      #58CC02;
+    --floor-yes-rgb:      88 204 2;
+    --floor-no:           #FF5A5F;
+    --floor-no-ink:       #FF5A5F;
+    --floor-no-rgb:       255 90 95;
+    --floor-no-soft:      #FF9296;
+    --floor-warn:         #FFC800;
+    --floor-warn-ink:     #FFC800;
+    --floor-warn-rgb:     255 200 0;
+    --floor-warn-hover:   #ffd433;
+    --floor-accent:       #1CB0F6;
+    --floor-accent-ink:   #1CB0F6;
+    --floor-accent-rgb:   28 176 246;
+
+    --floor-scrim:        rgba(4, 8, 15, 0.86);
+  }
+
   /* Pins every token back to its light value regardless of an ancestor
      `.dark` — for surfaces like the public landing page that must read the
      same to every visitor rather than following the viewer's app theme. */

@@ -50,10 +50,10 @@ import { priceLabel, returns, YES } from "@/lib/market";
 
 /* The floor's palette, literal because the room does not follow the theme. */
 const INK = {
-    up: "#58CC02", down: "#FF5A5F", flat: "#6F86A8",
-    grid: "#233247", prior: "#4E6484",
-    dim: "#4E6484", mid: "#8FA3BF", bright: "#E8F0FB",
-    mine: "#FFC800",
+    up: "var(--floor-yes-ink)", down: "var(--floor-no-ink)", flat: "var(--floor-muted-2)",
+    grid: "var(--floor-edge)", prior: "var(--floor-dim)",
+    dim: "var(--floor-dim)", mid: "var(--floor-muted)", bright: "var(--floor-ink)",
+    mine: "var(--floor-warn-ink)",
 };
 
 /**
@@ -148,7 +148,7 @@ export default function PriceChart({
                     <span className="absolute rounded-full border-2"
                         style={{
                             left: `${geo.x(myEntry.t)}%`, top: `${geo.y(myEntry.price)}%`,
-                            width: 8, height: 8, borderColor: INK.mine, background: "#121C2E",
+                            width: 8, height: 8, borderColor: INK.mine, background: "var(--floor-card)",
                             transform: "translate(-50%, -50%)",
                         }} />
                 )}
@@ -188,7 +188,7 @@ export default function PriceChart({
             )}
 
             <div className="relative w-full rounded-xl overflow-hidden"
-                style={{ height, background: "#0E1929" }}>
+                style={{ height, background: "var(--floor-well)" }}>
                 <svg className="absolute inset-0 w-full h-full" viewBox="0 0 100 100"
                     preserveAspectRatio="none">
                     {/* The house's opening call, which is what every position on
@@ -212,7 +212,7 @@ export default function PriceChart({
                     transparent label here always sits on top of the stroke. */}
                 <span className="absolute left-1.5 text-[9px] font-bold px-1 rounded"
                     style={{
-                        color: INK.prior, background: "#0E1929",
+                        color: INK.prior, background: "var(--floor-well)",
                         top: `calc(${geo.y(history.open)}% - 7px)`,
                     }}>
                     open
@@ -231,7 +231,7 @@ export default function PriceChart({
                             left: `${geo.x(p.t)}%`, top: `${geo.y(p.price)}%`,
                             width: Math.min(16, 8 + Math.round(p.stake / 90)),
                             height: Math.min(16, 8 + Math.round(p.stake / 90)),
-                            background: "#0E1929",
+                            background: "var(--floor-well)",
                             borderColor: p.is_me ? INK.mine : p.side === YES ? INK.up : INK.down,
                             // SHAPE CARRIES THE SIDE, NOT JUST COLOUR. The brand
                             // green and the streak red sit at ΔE 7.0 under
@@ -254,7 +254,7 @@ export default function PriceChart({
                     <span className="absolute rounded-full border-2"
                         style={{
                             left: `${geo.x(myEntry.t)}%`, top: `${geo.y(myEntry.price)}%`,
-                            width: 10, height: 10, borderColor: INK.mine, background: "#0E1929",
+                            width: 10, height: 10, borderColor: INK.mine, background: "var(--floor-well)",
                             transform: "translate(-50%, -50%)",
                         }} />
                 )}

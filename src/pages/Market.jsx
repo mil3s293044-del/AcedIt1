@@ -42,8 +42,8 @@ import {
     payoutFor, markToMarket, blockReason, settlementOf,
 } from "@/lib/market";
 
-const INK = { dim: "#4E6484", mid: "#8FA3BF", bright: "#E8F0FB",
-    up: "#58CC02", down: "#FF5A5F", gold: "#FFC800" };
+const INK = { dim: "var(--floor-dim)", mid: "var(--floor-muted)", bright: "var(--floor-ink)",
+    up: "var(--floor-yes-ink)", down: "var(--floor-no-ink)", gold: "var(--floor-warn-ink)" };
 
 const firstName = (n) => String(n || "").trim().split(/\s+/)[0] || "Someone";
 
@@ -116,8 +116,8 @@ export default function Market() {
 
     const back = (
         <a href={createPageUrl("Competitions")}
-            className="inline-flex items-center gap-1.5 text-[12px] font-bold text-[#6F86A8]
-                hover:text-[#E8F0FB] transition-colors mb-4">
+            className="inline-flex items-center gap-1.5 text-[12px] font-bold text-[var(--floor-muted-2)]
+                hover:text-[var(--floor-ink)] transition-colors mb-4">
             <ArrowLeft className="w-3.5 h-3.5" /> The floor
         </a>
     );
@@ -127,7 +127,7 @@ export default function Market() {
             <Room>
                 <div className="flex flex-col items-center justify-center py-32 gap-3">
                     <AceShuffle size="lg" label="Opening it" ink="floor" />
-                    <p className="text-sm text-[#6F86A8]">Opening it…</p>
+                    <p className="text-sm text-[var(--floor-muted-2)]">Opening it…</p>
                 </div>
             </Room>
         );
@@ -138,12 +138,12 @@ export default function Market() {
             <Room>
                 <div className="max-w-md mx-auto text-center py-24">
                     {back}
-                    <p className="font-display font-black text-[#E8F0FB] text-lg">
+                    <p className="font-display font-black text-[var(--floor-ink)] text-lg">
                         {state.data?.available === false
                             ? "The floor isn't open yet."
                             : "That question isn't here any more."}
                     </p>
-                    <p className="text-[13px] text-[#8FA3BF] mt-2 leading-snug">
+                    <p className="text-[13px] text-[var(--floor-muted)] mt-2 leading-snug">
                         {state.data?.reason
                             || state.error
                             || "It may have settled and been cleared, or the link is wrong."}
@@ -172,20 +172,20 @@ export default function Market() {
                 {/* ── The question ─────────────────────────────────── */}
                 <div className="flex items-center justify-between gap-3 mb-2">
                     <span className="inline-flex items-center gap-1.5 text-[10px] font-black
-                        uppercase tracking-widest text-[#6F86A8]">
+                        uppercase tracking-widest text-[var(--floor-muted-2)]">
                         <KindIcon className="w-3.5 h-3.5" /> {kind.label}
                     </span>
                     {left && (
                         <span className="inline-flex items-center gap-1 text-[11px] font-bold
-                            tabular-nums text-[#6F86A8]">
+                            tabular-nums text-[var(--floor-muted-2)]">
                             <Clock className="w-3 h-3" /> {left}
                         </span>
                     )}
                 </div>
-                <h1 className="font-display font-black text-[#E8F0FB] text-xl sm:text-2xl
+                <h1 className="font-display font-black text-[var(--floor-ink)] text-xl sm:text-2xl
                     leading-tight">{market.title}</h1>
                 {market.subject_is_me && market.traders > 0 && (
-                    <p className="text-[13px] font-bold text-[#FFC800] mt-1.5">
+                    <p className="text-[13px] font-bold text-[var(--floor-warn-ink)] mt-1.5">
                         {market.traders === 1
                             ? "Someone is trading this."
                             : `${market.traders} people are trading this.`}
@@ -193,17 +193,17 @@ export default function Market() {
                 )}
 
                 {/* ── Where it stands ──────────────────────────────── */}
-                <div className="rounded-2xl border-2 border-[#233247] bg-[#121C2E] p-4 mt-4">
+                <div className="rounded-2xl border-2 border-[var(--floor-edge)] bg-[var(--floor-card)] p-4 mt-4">
                     <PriceChart history={history} myEntry={myEntry} height={200} />
                 </div>
 
                 {market.status !== "open" && (
                     <div className="rounded-2xl border-2 p-4 mt-3"
                         style={{ borderColor: `${market.status === "void" ? INK.mid : INK.gold}55`,
-                            background: "#121C2E" }}>
+                            background: "var(--floor-card)" }}>
                         <p className="text-[10px] font-black uppercase tracking-widest"
                             style={{ color: INK.dim }}>Settled</p>
-                        <p className="font-display font-black text-[#E8F0FB] text-lg mt-0.5">
+                        <p className="font-display font-black text-[var(--floor-ink)] text-lg mt-0.5">
                             {market.status === "void"
                                 ? "Voided — every stake came back whole."
                                 : `It resolved ${market.outcome ? "YES" : "NO"}.`}
@@ -230,13 +230,13 @@ export default function Market() {
                 )}
 
                 {error && (
-                    <div className="mt-3 rounded-xl border-2 border-[#FF5A5F]/40 bg-[#FF5A5F]/10
-                        px-4 py-2.5 text-[13px] text-[#FF9296]">{error}</div>
+                    <div className="mt-3 rounded-xl border-2 border-[rgb(var(--floor-no-rgb)/0.4)] bg-[rgb(var(--floor-no-rgb)/0.1)]
+                        px-4 py-2.5 text-[13px] text-[var(--floor-no-soft)]">{error}</div>
                 )}
 
                 {/* ── Your side ────────────────────────────────────── */}
                 {mine ? (
-                    <div className="rounded-2xl border-2 border-[#233247] bg-[#121C2E] p-4 mt-3">
+                    <div className="rounded-2xl border-2 border-[var(--floor-edge)] bg-[var(--floor-card)] p-4 mt-3">
                         <p className="text-[10px] font-black uppercase tracking-widest"
                             style={{ color: INK.dim }}>Your position</p>
                         <p className="text-[14px] font-bold mt-1" style={{ color: INK.mid }}>
@@ -263,7 +263,7 @@ export default function Market() {
                     // wrapping it in a bordered card just prints a large empty
                     // rectangle. Same paper-cut as the single-tab Tabs bar.
                     open ? (
-                        <div className="rounded-2xl border-2 border-[#233247] bg-[#121C2E] p-4 mt-3">
+                        <div className="rounded-2xl border-2 border-[var(--floor-edge)] bg-[var(--floor-card)] p-4 mt-3">
                             <TakeSide price={market.price} balance={state.data?.me?.cred ?? 0}
                                 busy={busy} history={history} myEntry={myEntry}
                                 onCancel={() => setOpen(false)} onTake={take} />
@@ -275,9 +275,9 @@ export default function Market() {
                         </p>
                     ) : (
                         <button type="button" onClick={() => setOpen(true)}
-                            className="w-full mt-3 py-3 rounded-xl border-2 border-[#2C3E57]
-                                text-[#E8F0FB] font-display font-black text-sm
-                                hover:border-[#1CB0F6] hover:bg-[#1CB0F6]/10 transition-colors">
+                            className="w-full mt-3 py-3 rounded-xl border-2 border-[var(--floor-edge-strong)]
+                                text-[var(--floor-ink)] font-display font-black text-sm
+                                hover:border-[var(--floor-accent-ink)] hover:bg-[rgb(var(--floor-accent-rgb)/0.1)] transition-colors">
                             Take a side
                         </button>
                     )
@@ -290,23 +290,23 @@ export default function Market() {
 
                 {/* ── The tape ─────────────────────────────────────── */}
                 <div className="flex items-center gap-3 mt-6 mb-2.5">
-                    <h2 className="text-[11px] font-black uppercase tracking-widest text-[#8FA3BF]">
+                    <h2 className="text-[11px] font-black uppercase tracking-widest text-[var(--floor-muted)]">
                         Who&apos;s on it
                     </h2>
                     <span className="text-[11px] font-bold" style={{ color: INK.dim }}>
                         {market.traders === 0 ? "nobody yet" : `${market.traders}`}
                     </span>
-                    <span className="flex-1 h-px bg-[#233247]" aria-hidden="true" />
+                    <span className="flex-1 h-px bg-[var(--floor-edge)]" aria-hidden="true" />
                 </div>
 
                 {market.positions.length === 0 ? (
-                    <p className="text-[13px] rounded-2xl border-2 border-[#233247] bg-[#121C2E]
+                    <p className="text-[13px] rounded-2xl border-2 border-[var(--floor-edge)] bg-[var(--floor-card)]
                         p-6 text-center" style={{ color: INK.mid }}>
                         No one has taken a side yet. The first position is what starts the price
                         moving.
                     </p>
                 ) : (
-                    <ul className="rounded-2xl border-2 border-[#233247] bg-[#121C2E] overflow-hidden">
+                    <ul className="rounded-2xl border-2 border-[var(--floor-edge)] bg-[var(--floor-card)] overflow-hidden">
                         {market.positions.map((p, i) => {
                             const yes = sideOf(p.p) === YES;
                             const win = payoutFor(p.stake, p.p, p.price_at_entry, yes);
@@ -314,8 +314,8 @@ export default function Market() {
                                 <motion.li key={p.id}
                                     initial={{ opacity: 0 }} animate={{ opacity: 1 }}
                                     transition={{ delay: Math.min(0.2, i * 0.03) }}
-                                    className={`px-4 py-3 ${i ? "border-t border-[#233247]" : ""}
-                                        ${p.is_me ? "bg-[#FFC800]/5" : ""}`}>
+                                    className={`px-4 py-3 ${i ? "border-t border-[var(--floor-edge)]" : ""}
+                                        ${p.is_me ? "bg-[rgb(var(--floor-warn-rgb)/0.05)]" : ""}`}>
                                     <div className="flex items-center gap-3">
                                         <span className="text-[10px] font-black uppercase
                                             tracking-wide w-9 flex-shrink-0"

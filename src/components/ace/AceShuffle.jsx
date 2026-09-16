@@ -74,11 +74,13 @@ const INK = {
         card: "bg-surface", border: "border-border",
         tone: "fill-foreground", knock: "fill-surface", stroke: "stroke-surface",
     },
-    // The Compete floor, taken from MarketCard so the loader and the card that
-    // replaces it are the same object.
+    // The Compete floor. It reads the room's OWN tokens rather than copying two
+    // of its hexes, so it follows the floor into light mode for free — and it
+    // is only ever rendered inside `.floor`, which is where those resolve.
     floor: {
-        card: "bg-[#121C2E]", border: "border-[#233247]",
-        tone: "fill-[#E8F0FB]", knock: "fill-[#121C2E]", stroke: "stroke-[#121C2E]",
+        card: "bg-[var(--floor-well)]", border: "border-[var(--floor-edge-strong)]",
+        tone: "fill-[var(--floor-ink)]", knock: "fill-[var(--floor-well)]",
+        stroke: "stroke-[var(--floor-well)]",
     },
 };
 

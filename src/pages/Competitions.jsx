@@ -106,7 +106,7 @@ function buildTape(markets = [], recent = []) {
 function Tape({ rows }) {
     if (!rows.length) {
         return (
-            <p className="text-[13px] text-[#4E6484] px-1">
+            <p className="text-[13px] text-[var(--floor-dim)] px-1">
                 Nothing has happened yet this week. Take a side and you'll be the first line on it.
             </p>
         );
@@ -115,18 +115,18 @@ function Tape({ rows }) {
         <div className="space-y-1">
             {rows.map((r) => (
                 <div key={r.id}
-                    className="flex items-baseline gap-2 py-1.5 border-b border-[#1B2839] last:border-0">
+                    className="flex items-baseline gap-2 py-1.5 border-b border-[var(--floor-edge)] last:border-0">
                     <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 translate-y-[-2px]
                         ${r.resolved
-                            ? (r.outcome === null ? "bg-[#4E6484]" : r.outcome ? "bg-[#58CC02]" : "bg-[#FF5A5F]")
-                            : r.side === YES ? "bg-[#58CC02]" : "bg-[#FF5A5F]"}`} />
+                            ? (r.outcome === null ? "bg-[var(--floor-dim)]" : r.outcome ? "bg-[var(--floor-yes)]" : "bg-[var(--floor-no)]")
+                            : r.side === YES ? "bg-[var(--floor-yes)]" : "bg-[var(--floor-no)]"}`} />
                     <p className="text-[12px] leading-snug min-w-0 flex-1">
-                        {r.who && <span className="font-bold text-[#E8F0FB]">{r.who} </span>}
-                        <span className="text-[#6F86A8]">{r.text} </span>
-                        <span className="text-[#8FA3BF]">{r.subject}</span>
-                        {r.stake ? <span className="text-[#4E6484]"> · {r.stake}</span> : null}
+                        {r.who && <span className="font-bold text-[var(--floor-ink)]">{r.who} </span>}
+                        <span className="text-[var(--floor-muted-2)]">{r.text} </span>
+                        <span className="text-[var(--floor-muted)]">{r.subject}</span>
+                        {r.stake ? <span className="text-[var(--floor-dim)]"> · {r.stake}</span> : null}
                     </p>
-                    <span className="text-[10px] text-[#3D5273] flex-shrink-0 tabular-nums">
+                    <span className="text-[10px] text-[var(--floor-dimmest)] flex-shrink-0 tabular-nums">
                         {ago(r.at)}
                     </span>
                 </div>
@@ -212,35 +212,35 @@ export function LineDialog({ onClose, onOpen, busy, taken, email }) {
 
     return (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4"
-            style={{ background: "rgba(4,8,15,0.8)" }} onClick={onClose}>
+            style={{ background: "var(--floor-scrim)" }} onClick={onClose}>
             <div onClick={(e) => e.stopPropagation()}
-                className="w-full max-w-sm rounded-2xl border-2 border-[#233247] bg-[#121C2E] p-5
+                className="w-full max-w-sm rounded-2xl border-2 border-[var(--floor-edge)] bg-[var(--floor-card)] p-5
                     max-h-[85vh] overflow-y-auto">
                 <div className="flex items-start justify-between gap-3 mb-1">
-                    <h2 className="font-display font-black text-[#E8F0FB] text-lg leading-tight">
+                    <h2 className="font-display font-black text-[var(--floor-ink)] text-lg leading-tight">
                         Call your own SAC
                     </h2>
-                    <button type="button" onClick={onClose} className="text-[#6F86A8] hover:text-[#E8F0FB]">
+                    <button type="button" onClick={onClose} className="text-[var(--floor-muted-2)] hover:text-[var(--floor-ink)]">
                         <X className="w-4 h-4" />
                     </button>
                 </div>
                 {/* Says plainly why you can't back it. The rule is more
                     motivating stated than hidden: being read by the room is
                     the draw, not the payout you are giving up. */}
-                <p className="text-[12px] text-[#6F86A8] leading-snug mb-4">
+                <p className="text-[12px] text-[var(--floor-muted-2)] leading-snug mb-4">
                     You state the line and everyone else trades it. You can&apos;t back your own — you
                     enter the mark — but you&apos;ll see exactly who believes you.
                 </p>
 
                 {sacs === null && (
-                    <p className="text-[12px] text-[#6F86A8] inline-flex items-center gap-2">
+                    <p className="text-[12px] text-[var(--floor-muted-2)] inline-flex items-center gap-2">
                         <AceShuffle size="sm" label="Reading your planner" ink="floor" /> Reading your planner…
                     </p>
                 )}
 
                 {/* Not an empty state — a different action, on another page. */}
                 {sacs !== null && sacs.length === 0 && (
-                    <div className="text-[12px] text-[#6F86A8] leading-snug space-y-3">
+                    <div className="text-[12px] text-[var(--floor-muted-2)] leading-snug space-y-3">
                         <p>
                             Nothing on your planner to call yet. Put the SAC in with its date and
                             it&apos;ll show up here — the planner is also where you enter the mark
@@ -248,7 +248,7 @@ export function LineDialog({ onClose, onOpen, busy, taken, email }) {
                         </p>
                         <a href={createPageUrl("Goals")}
                             className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl
-                                bg-[#E8F0FB] text-[#0A121F] font-display font-black text-sm
+                                bg-[var(--floor-solid)] text-[var(--floor-on-solid)] font-display font-black text-sm
                                 hover:bg-white transition-colors">
                             Open your planner
                         </a>
@@ -264,12 +264,12 @@ export function LineDialog({ onClose, onOpen, busy, taken, email }) {
                                     <button key={a.id} type="button" onClick={() => setPicked(a)}
                                         className={`w-full text-left px-3 py-2.5 rounded-xl border-2
                                             transition-colors ${on
-                                            ? "border-[#FFC800] bg-[#FFC800]/10"
-                                            : "border-[#2C3E57] hover:border-[#FFC800]/50"}`}>
-                                        <span className="block text-sm font-bold text-[#E8F0FB] truncate">
+                                            ? "border-[var(--floor-warn-ink)] bg-[rgb(var(--floor-warn-rgb)/0.1)]"
+                                            : "border-[var(--floor-edge-strong)] hover:border-[rgb(var(--floor-warn-rgb)/0.5)]"}`}>
+                                        <span className="block text-sm font-bold text-[var(--floor-ink)] truncate">
                                             {a.subject_name} · {a.title}
                                         </span>
-                                        <span className="block text-[11px] text-[#6F86A8] tabular-nums">
+                                        <span className="block text-[11px] text-[var(--floor-muted-2)] tabular-nums">
                                             {sacDate(a.due_date)}
                                             {a.out_of ? ` · out of ${a.out_of}` : ""}
                                         </span>
@@ -281,14 +281,16 @@ export function LineDialog({ onClose, onOpen, busy, taken, email }) {
                         {picked && (
                             <>
                                 <div>
-                                    <label className="text-[11px] font-bold uppercase tracking-wide text-[#6F86A8]">
+                                    <label className="text-[11px] font-bold uppercase tracking-wide text-[var(--floor-muted-2)]">
                                         The line — you&apos;ll score at least
                                     </label>
                                     <div className="flex items-center gap-3 mt-1">
                                         <input type="range" min="40" max="100" value={target}
                                             onChange={(e) => setTarget(Number(e.target.value))}
-                                            className="flex-1 accent-[#FFC800]" />
-                                        <span className="font-display font-black text-[#E8F0FB] text-xl
+                                            className="floor-range flex-1"
+                                            style={{ "--range-ink": "var(--floor-warn)",
+                                                "--range-fill": `${((target - 40) / 60) * 100}%` }} />
+                                        <span className="font-display font-black text-[var(--floor-ink)] text-xl
                                             tabular-nums w-14 text-right">
                                             {target}%
                                         </span>
@@ -298,18 +300,18 @@ export function LineDialog({ onClose, onOpen, busy, taken, email }) {
                                 {/* What the room is about to be handed. Stated
                                     before the line is set rather than after. */}
                                 {priced && (
-                                    <p className="text-[11px] text-[#8FA3BF] leading-snug">
+                                    <p className="text-[11px] text-[var(--floor-muted)] leading-snug">
                                         {priced.thin
                                             ? `The room prices this from scratch — you've got ${priced.seen} `
                                                 + `past ${picked.subject_name} mark${priced.seen === 1 ? "" : "s"} `
                                                 + `on your planner, and it takes ${MARK_MIN_OBS}.`
                                             : <>
                                                 Opening at{" "}
-                                                <span className="font-bold tabular-nums text-[#E8F0FB]">
+                                                <span className="font-bold tabular-nums text-[var(--floor-ink)]">
                                                     {priceLabel(priced.prior)}</span>
                                                 {" "}— off your last {priced.seen} {picked.subject_name}{" "}
                                                 mark{priced.seen === 1 ? "" : "s"}, averaging{" "}
-                                                <span className="font-bold tabular-nums text-[#E8F0FB]">
+                                                <span className="font-bold tabular-nums text-[var(--floor-ink)]">
                                                     {priced.average}%</span>.
                                             </>}
                                     </p>
@@ -319,7 +321,7 @@ export function LineDialog({ onClose, onOpen, busy, taken, email }) {
 
                         <button type="button" disabled={!picked || busy}
                             onClick={() => onOpen({ assessment_id: picked.id, target })}
-                            className="w-full py-2.5 rounded-xl bg-[#E8F0FB] text-[#0A121F]
+                            className="w-full py-2.5 rounded-xl bg-[var(--floor-solid)] text-[var(--floor-on-solid)]
                                 font-display font-black text-sm disabled:opacity-40 inline-flex
                                 items-center justify-center gap-2 hover:bg-white transition-colors">
                             {busy && <AceShuffle size="sm" />} Open the line
@@ -361,11 +363,11 @@ function filtersFor(markets) {
 function BoardHeading({ label, note }) {
     return (
         <div className="flex items-center gap-3 mb-2.5">
-            <h2 className="text-[11px] font-black uppercase tracking-widest text-[#8FA3BF]">
+            <h2 className="text-[11px] font-black uppercase tracking-widest text-[var(--floor-muted)]">
                 {label}
             </h2>
-            {note && <span className="text-[11px] font-bold text-[#4E6484]">{note}</span>}
-            <span className="flex-1 h-px bg-[#233247]" aria-hidden="true" />
+            {note && <span className="text-[11px] font-bold text-[var(--floor-dim)]">{note}</span>}
+            <span className="flex-1 h-px bg-[var(--floor-edge)]" aria-hidden="true" />
         </div>
     );
 }
@@ -558,11 +560,11 @@ export default function Competitions() {
         return (
             <Room>
                 <div className="max-w-md mx-auto text-center py-24">
-                    <TrendingUp className="w-8 h-8 text-[#33486A] mx-auto mb-3" />
-                    <h1 className="font-display font-black text-[#E8F0FB] text-xl">
+                    <TrendingUp className="w-8 h-8 text-[var(--floor-edge-hover)] mx-auto mb-3" />
+                    <h1 className="font-display font-black text-[var(--floor-ink)] text-xl">
                         The floor isn't open yet
                     </h1>
-                    <p className="text-sm text-[#6F86A8] mt-2">
+                    <p className="text-sm text-[var(--floor-muted-2)] mt-2">
                         {data.reason || "One database migration to run."}
                     </p>
                 </div>
@@ -577,10 +579,10 @@ export default function Competitions() {
                 {/* ── The strip: who you are on this floor ──────────── */}
                 <header className="flex flex-wrap items-end justify-between gap-4 mb-5">
                     <div>
-                        <p className="text-[10px] font-black uppercase tracking-widest text-[#4E6484]">
+                        <p className="text-[10px] font-black uppercase tracking-widest text-[var(--floor-dim)]">
                             The floor
                         </p>
-                        <h1 className="font-display font-black text-[#E8F0FB] text-2xl sm:text-3xl leading-tight">
+                        <h1 className="font-display font-black text-[var(--floor-ink)] text-2xl sm:text-3xl leading-tight">
                             {book.length > 0
                                 ? `You're holding ${book.length} ${book.length === 1 ? "position" : "positions"}`
                                 : "Read the room, take a side"}
@@ -588,17 +590,17 @@ export default function Competitions() {
                     </div>
                     <div className="flex items-end gap-5">
                         <div>
-                            <p className="text-[10px] font-black uppercase tracking-widest text-[#4E6484]">
+                            <p className="text-[10px] font-black uppercase tracking-widest text-[var(--floor-dim)]">
                                 Cred
                             </p>
-                            <p className="font-display font-black text-[#FFC800] text-2xl tabular-nums
+                            <p className="font-display font-black text-[var(--floor-warn-ink)] text-2xl tabular-nums
                                 inline-flex items-center gap-1.5">
                                 <Coins className="w-4 h-4" />{(me.cred ?? 0).toLocaleString()}
                             </p>
                         </div>
                         {atStake > 0 && (
                             <div>
-                                <p className="text-[10px] font-black uppercase tracking-widest text-[#4E6484]">
+                                <p className="text-[10px] font-black uppercase tracking-widest text-[var(--floor-dim)]">
                                     At stake
                                 </p>
                                 {/* The mark-to-market figure used to sit here as a
@@ -607,7 +609,7 @@ export default function Competitions() {
                                     facts. What a student can act on is per
                                     position — "+17 if right" — and that is
                                     already on the card. */}
-                                <p className="font-display font-black text-[#E8F0FB] text-2xl tabular-nums">
+                                <p className="font-display font-black text-[var(--floor-ink)] text-2xl tabular-nums">
                                     {atStake.toLocaleString()}
                                 </p>
                             </div>
@@ -616,8 +618,8 @@ export default function Competitions() {
                 </header>
 
                 {error && (
-                    <div className="mb-4 rounded-xl border-2 border-[#FF5A5F]/40 bg-[#FF5A5F]/10
-                        px-4 py-2.5 text-[13px] text-[#FF9296]">{error}</div>
+                    <div className="mb-4 rounded-xl border-2 border-[rgb(var(--floor-no-rgb)/0.4)] bg-[rgb(var(--floor-no-rgb)/0.1)]
+                        px-4 py-2.5 text-[13px] text-[var(--floor-no-soft)]">{error}</div>
                 )}
 
                 {/* ── Floor or book ────────────────────────────────── */}
@@ -628,8 +630,8 @@ export default function Competitions() {
                             className={`px-3.5 py-2 rounded-xl text-[13px] font-display font-black
                                 border-2 transition-colors
                                 ${tab === id
-                                    ? "bg-[#E8F0FB] border-[#E8F0FB] text-[#0A121F]"
-                                    : "border-[#233247] text-[#6F86A8] hover:text-[#E8F0FB]"}`}>
+                                    ? "bg-[var(--floor-solid)] border-[var(--floor-solid)] text-[var(--floor-on-solid)]"
+                                    : "border-[var(--floor-edge)] text-[var(--floor-muted-2)] hover:text-[var(--floor-ink)]"}`}>
                             {label}
                         </button>
                     ))}
@@ -657,8 +659,8 @@ export default function Competitions() {
                                         className={`px-3 py-1.5 rounded-lg text-[12px] font-bold
                                             border-2 transition-colors inline-flex items-center gap-1.5
                                             ${room === r.id
-                                                ? "bg-[#FFC800] border-[#FFC800] text-[#0A121F]"
-                                                : "border-[#233247] text-[#6F86A8] hover:text-[#E8F0FB]"}`}>
+                                                ? "bg-[var(--floor-warn)] border-[var(--floor-warn-ink)] text-[var(--floor-on-bright)]"
+                                                : "border-[var(--floor-edge)] text-[var(--floor-muted-2)] hover:text-[var(--floor-ink)]"}`}>
                                         {r.label}
                                         <span className="tabular-nums opacity-70">{counts[r.id]}</span>
                                     </button>
@@ -672,22 +674,22 @@ export default function Competitions() {
                                     className={`flex-shrink-0 px-3 py-1.5 rounded-lg text-[12px] font-bold
                                         border-2 transition-colors
                                         ${filter === f.id
-                                            ? "bg-[#E8F0FB] border-[#E8F0FB] text-[#0A121F]"
-                                            : "border-[#233247] text-[#6F86A8] hover:text-[#E8F0FB]"}`}>
+                                            ? "bg-[var(--floor-solid)] border-[var(--floor-solid)] text-[var(--floor-on-solid)]"
+                                            : "border-[var(--floor-edge)] text-[var(--floor-muted-2)] hover:text-[var(--floor-ink)]"}`}>
                                     {f.label}
                                 </button>
                             ))}
                             <button type="button" onClick={() => setLineOpen(true)}
                                 className="flex-shrink-0 ml-auto px-3 py-1.5 rounded-lg text-[12px]
-                                    font-bold border-2 border-[#FFC800]/40 text-[#FFC800]
-                                    hover:bg-[#FFC800]/10 transition-colors inline-flex items-center gap-1">
+                                    font-bold border-2 border-[rgb(var(--floor-warn-rgb)/0.4)] text-[var(--floor-warn-ink)]
+                                    hover:bg-[rgb(var(--floor-warn-rgb)/0.1)] transition-colors inline-flex items-center gap-1">
                                 <Plus className="w-3.5 h-3.5" /> Call a SAC
                             </button>
                         </div>
 
                         {shown.length === 0 ? (
-                            <div className="rounded-2xl border-2 border-[#233247] bg-[#121C2E] p-8 text-center">
-                                <p className="text-sm text-[#6F86A8]">
+                            <div className="rounded-2xl border-2 border-[var(--floor-edge)] bg-[var(--floor-card)] p-8 text-center">
+                                <p className="text-sm text-[var(--floor-muted-2)]">
                                     {filter !== "all"
                                         ? "Nothing of that kind is open here. Try another filter."
                                         : room === ROOMS.all.id
@@ -737,9 +739,9 @@ export default function Competitions() {
 
                     {/* ── THE TAPE ─────────────────────────────────── */}
                     <aside className="lg:sticky lg:top-6 space-y-4">
-                        <section className="rounded-2xl border-2 border-[#233247] bg-[#121C2E] p-4">
+                        <section className="rounded-2xl border-2 border-[var(--floor-edge)] bg-[var(--floor-card)] p-4">
                             <h2 className="text-[10px] font-black uppercase tracking-widest
-                                text-[#4E6484] mb-2.5">The tape</h2>
+                                text-[var(--floor-dim)] mb-2.5">The tape</h2>
                             {/* Scrolls rather than growing. On a quiet board six
                                 cards sat beside twenty tape rows and the sidebar
                                 became the page. */}
@@ -755,19 +757,19 @@ export default function Competitions() {
                             what they get instead, and it is the better payoff:
                             how many people are reading you, and which way. */}
                         {myLines.length > 0 && (
-                            <section className="rounded-2xl border-2 border-[#FFC800]/25 bg-[#121C2E] p-4">
+                            <section className="rounded-2xl border-2 border-[rgb(var(--floor-warn-rgb)/0.25)] bg-[var(--floor-card)] p-4">
                                 <h2 className="text-[10px] font-black uppercase tracking-widest
-                                    text-[#4E6484] mb-2.5">Your lines</h2>
+                                    text-[var(--floor-dim)] mb-2.5">Your lines</h2>
                                 <div className="space-y-2.5">
                                     {myLines.map((l) => (
                                         <div key={l.id}>
-                                            <p className="text-[12px] text-[#8FA3BF] leading-snug">
-                                                <span className="font-bold text-[#E8F0FB]">{l.subject}</span>
+                                            <p className="text-[12px] text-[var(--floor-muted)] leading-snug">
+                                                <span className="font-bold text-[var(--floor-ink)]">{l.subject}</span>
                                                 {" — you called "}
-                                                <span className="font-bold tabular-nums text-[#E8F0FB]">
+                                                <span className="font-bold tabular-nums text-[var(--floor-ink)]">
                                                     {l.called}%</span>
                                             </p>
-                                            <p className="text-[11px] text-[#4E6484] tabular-nums">
+                                            <p className="text-[11px] text-[var(--floor-dim)] tabular-nums">
                                                 {l.traders === 0
                                                     ? "nobody's taken a side yet"
                                                     : `${l.traders} trading · room ${l.room}¢ · `
@@ -780,8 +782,8 @@ export default function Competitions() {
                                 {/* REFUSES to grade somebody on two SACs — the
                                     same floor TREND_MIN and CALIBRATION_MIN keep. */}
                                 {record.enough && (
-                                    <p className="text-[11px] text-[#6F86A8] mt-3 pt-3
-                                        border-t border-[#233247] leading-snug">
+                                    <p className="text-[11px] text-[var(--floor-muted-2)] mt-3 pt-3
+                                        border-t border-[var(--floor-edge)] leading-snug">
                                         You&apos;ve called {record.closed} and cleared {record.cleared}
                                         {record.drift !== null && (record.drift >= 0
                                             ? `, usually beating your own line by ${record.drift}.`
@@ -792,17 +794,17 @@ export default function Competitions() {
                         )}
 
                         {book.length > 0 && (
-                            <section className="rounded-2xl border-2 border-[#233247] bg-[#121C2E] p-4">
+                            <section className="rounded-2xl border-2 border-[var(--floor-edge)] bg-[var(--floor-card)] p-4">
                                 <h2 className="text-[10px] font-black uppercase tracking-widest
-                                    text-[#4E6484] mb-2.5">Your book</h2>
+                                    text-[var(--floor-dim)] mb-2.5">Your book</h2>
                                 <div className="space-y-2">
                                     {book.map((m) => (
                                         <div key={m.id} className="flex items-baseline justify-between gap-2">
-                                            <span className="text-[12px] text-[#8FA3BF] truncate min-w-0">
+                                            <span className="text-[12px] text-[var(--floor-muted)] truncate min-w-0">
                                                 {m.title}
                                             </span>
                                             <span className={`text-[11px] font-black tabular-nums flex-shrink-0
-                                                ${sideOf(m.mine.p) === YES ? "text-[#58CC02]" : "text-[#FF5A5F]"}`}>
+                                                ${sideOf(m.mine.p) === YES ? "text-[var(--floor-yes-ink)]" : "text-[var(--floor-no-ink)]"}`}>
                                                 {sideOf(m.mine.p) === YES ? "YES" : "NO"} {m.mine.stake}
                                             </span>
                                         </div>
@@ -811,7 +813,7 @@ export default function Competitions() {
                             </section>
                         )}
 
-                        <p className="text-[11px] text-[#3D5273] leading-snug px-1">
+                        <p className="text-[11px] text-[var(--floor-dimmest)] leading-snug px-1">
                             Cred is not XP — losing a call can't touch your level, rank or ATAR.
                             You get {(me.weekly_grant ?? 1000).toLocaleString()} a week.
                             Agreeing with the price pays nothing; you earn by disagreeing and being right.

@@ -776,13 +776,58 @@ leaderboard. Otherwise the board is sorted by heat — conviction on the table
 plus a clock running out — never by recency, which would put an untouched
 question above one four people are arguing over.
 
-**It is a different ROOM, on purpose.** Literal ink, not tokens: the focus-mode
-lesson arrived at from the same direction — a token that flips underneath a
-deliberate inversion is the bug, not the fix — so the floor renders identically
-in both themes, which is the point. The brand green stays YES and the streak
-red stays NO so the two colours a student already reads as good and bad mean
-the same things here. Third place on the league board taught the matching
-lesson: `streak` red on a podium read as a warning.
+**It is a different ROOM, on purpose — AND THE DARKNESS WAS NEVER WHAT MADE IT
+ONE.** This note used to say the floor rendered identically in both themes and
+that THAT was the point, on the focus-mode reasoning: a token that flips
+underneath a deliberate inversion is the bug rather than the fix. Half of that
+holds and half of it does not, and the difference is what the two screens are
+FOR. Focus mode is a BLACKOUT — bright is the one thing it must never be, so a
+token that could turn it white is a genuine fault and its ink stays literal.
+The floor is not a blackout; it is somewhere else. A light floor does that
+perfectly well as long as it is COOL SLATE where the app is warm cream, rather
+than the dashboard with market cards on it.
+
+So the floor has its OWN palette rather than no palette: `.floor` scopes about
+thirty `--floor-*` tokens (index.css) with a light and a dark value each, and
+it follows the app theme. A student who set the app light no longer walks into
+a near-black page halfway through a navigation, which was the real cost of the
+old rule and never something it intended. The class sits on ONE wrapper
+(`Room`), which is what lets a `position: fixed` overlay inside the room — the
+settlement reveal, the take-side sheet, the line dialog — inherit the palette
+without being told which room it is in: custom properties inherit down the DOM
+tree, and `fixed` escapes layout rather than the cascade.
+
+**THREE TOKENS PER BRAND HUE, and each has a job.** `--floor-yes` is the FILL
+and is the brand green on both floors, because a filled pill is bright either
+way and near-black ink reads on it. `--floor-yes-ink` is TEXT and strokes and
+is DEEPENED on light: `#58CC02` is about 2:1 on white, so a price printed in it
+is a price nobody can read. `--floor-yes-rgb` is the same colour as channels,
+for the seventeen places wanting a tint — Tailwind's `/40` modifier cannot
+compute alpha from a `var()` holding a whole colour, and a tint of the BRIGHT
+hue on white is invisible, so a tint follows the ink rather than the fill. The
+two colours a student already reads as good and bad mean the same things on
+both floors; only their depth moves. Third place on the league board taught the
+matching lesson: `streak` red on a podium read as a warning.
+
+**A DESIGNED ROOM DOES NOT LEAVE A CONTROL TO THE BROWSER.** `accent-color`
+paints the filled half of a range track and leaves the rest to the user agent,
+which draws it from `color-scheme` rather than from anything on the page — so
+the floor's one slider came out as a `#3B3B3B` bar across a white card. The
+`.floor-range` rule puts the gradient on the INPUT's own background with the
+track made transparent, because a pseudo-element cannot take an inline style
+and the fill position has to come from the value: `--range-fill` is that
+position and `--range-ink` the hue, both set at the call site.
+
+**EVERY WAY TO BREAK THIS IS SILENT**, which is why `floorInk.test.mjs` exists
+rather than a comment. A misspelled token is an invalid declaration, so the
+element simply inherits; a floor token used outside `.floor` is blank; the
+`floor` class going missing blanks all of them at once. That last one HAPPENED
+during the refactor — an earlier pass had already rewritten the string the edit
+was looking for, so the replace matched nothing and the page rendered in
+inherited ink. And `--floor-solid` is the one pair that swaps outright between
+the floors, so sharing `--floor-on-bright` with the brand fills made the
+primary button dark-on-dark the moment the floor went light. All four are
+assertions now; only a screenshot caught any of them.
 
 **ACE DEALS THE BOARD WHILE IT LOADS** (`AceDeal`). Opening the floor is an
 ARRIVAL — a dark room a student has not seen, and the thing they are waiting
@@ -2557,7 +2602,12 @@ is the textbook, and only as something to generate MORE from.
 - `src/components/market/PortfolioPanel.jsx`, `CalibrationCurve.jsx`,
   `EquityCurve.jsx` — the second tab on the floor
 - `src/pages/Market.jsx` + `Reactions.jsx` + `Room.jsx` — one question in full,
-  the glyphs, and the floor's shared ground; `getMarket` in `server.mjs`
+  the glyphs, and the floor's shared ground; `getMarket` in `server.mjs`.
+  `Room` is where the `floor` class goes, which is what scopes the palette
+- `src/index.css` `.floor` / `.dark .floor` + `src/lib/floorInk.test.mjs` — the
+  floor's own light and dark palette, and the four silent ways to break it.
+  `scripts/_floorProbe.jsx?v=floor` draws the board, a card and the take-side
+  sheet in one screen so the room can be judged as a room
 - `src/components/ace/AceShuffle.jsx` + `src/lib/aceLoading.test.mjs` — THE
   loader, its three sizes and its two rooms; the scan that stops a generic
   spinner reappearing beside it. `scripts/_floorProbe.jsx?v=loaders` draws
