@@ -31,6 +31,9 @@
  * MIN_BASELINE_WEEKS, all of which were added after the same mistake.
  */
 import { clampP, convictionOf, markToMarket, sideOf, YES } from "@/lib/market";
+// One Monday, shared with the study log — rolling the week again here would
+// be a second copy of it, and `dayKey` exists because `toISOString` is UTC.
+import { weekStart } from "@/lib/studyLog";
 
 /** Settled calls needed in a bucket before it is drawn as a point. */
 export const CALIBRATION_MIN = 3;
@@ -96,8 +99,146 @@ export function bookOf(holdings = []) {
         // either in the denominator makes a good week look like a mediocre one.
         hitRate: decided > 0 ? record.won / decided : null,
         streak: streakOf(closed),
-        best: closed.reduce((b, h) =>
-            (Math.round(num(h.payout)) > Math.round(num(b?.payout || -Infinity)) ? h : b), null),
+        // THE BEST AND THE WORST, both of them. `best` was computed here and
+        // rendered nowhere, which this codebase treats as a bug rather than as
+        // spare capacity — and a book that only names your best call is a
+        // highlight reel. The pair is the useful read: what your best read was
+        // worth, against what your worst one cost.
+        best: pickBy(closed, (a, b) => a > b),
+        worst: pickBy(closed, (a, b) => a < b),
+        // What has landed since Monday. The grant, the board and the league all
+        // run on that week, so the book has to use the same one — and it comes
+        // from `studyLog`'s `weekStart` rather than a second copy of the Monday
+        // maths, which is how two screens start disagreeing about a week.
+        week: sinceWeek(closed),
+    };
+}
+
+/** The settled call at an extreme of payout, or null. Voids tested nothing. */
+function pickBy(closed, better) {
+    return closed
+        .filter((h) => !isVoid(h))
+        .reduce((pick, h) => (pick === null
+            || better(Math.round(num(h.payout)), Math.round(num(pick.payout))) ? h : pick), null);
+}
+
+/**
+ * This week's results, Monday-anchored.
+ *
+ * Reported as `null` rather than a row of zeroes when nothing has settled since
+ * Monday: "0 calls, +0 cred" printed every Monday morning is a strip that says
+ * nothing three days out of seven, and the same refusal Today's Play keeps
+ * about its rail.
+ */
+export function sinceWeek(closed = [], now = new Date()) {
+    const from = weekStart(now).getTime();
+    const rows = (closed || []).filter((h) => (timeOf(h.settled_at) ?? -Infinity) >= from);
+    if (!rows.length) return null;
+    const record = { won: 0, lost: 0, level: 0, void: 0 };
+    rows.forEach((h) => { const o = outcomeOf(h); if (o) record[o] += 1; });
+    return {
+        settled: rows.length,
+        cred: rows.reduce((s, h) => s + Math.round(num(h.payout)), 0),
+        record,
+        from,
+    };
+}
+
+/**
+ * WHERE YOUR CRED ACTUALLY IS — the one read this book had no version of.
+ *
+ * A position screen's whole job is showing concentration, and four tiles and a
+ * list cannot: "most of my stake is on one kind of question" is invisible
+ * until it is drawn as a share. Grouped by `kind` because that is what a
+ * student can act on — they can go and take a side on a different sort of
+ * question — where grouping by yes/no would only say which way they lean,
+ * which the hit rate already covers.
+ *
+ * Sorted by size, because the point is what DOMINATES. Ties break on the kind
+ * so two equal slices do not swap places between renders, the same rule the
+ * subject shelf keeps about its colour wheel.
+ */
+export function exposureOf(open = [], { top = EXPOSURE_SLICES } = {}) {
+    const rows = (open || []).filter(Boolean);
+    const total = rows.reduce((s, h) => s + Math.max(0, num(h.stake)), 0);
+    if (!total) return { total: 0, slices: [], top: null };
+
+    const by = new Map();
+    for (const h of rows) {
+        const kind = h.market?.kind || "other";
+        by.set(kind, (by.get(kind) || 0) + Math.max(0, num(h.stake)));
+    }
+    const all = [...by.entries()]
+        .map(([kind, stake]) => ({ kind, stake, share: stake / total }))
+        .sort((a, b) => (b.stake - a.stake) || a.kind.localeCompare(b.kind));
+
+    // FOLDED PAST `top`. Seven kinds mint on this board, so an uncapped bar
+    // needs seven distinguishable hues — and the floor has four, after which it
+    // is reaching for greys that read as the same slice twice. A legend nobody
+    // can map back to the bar has stopped being a legend. Only folded when the
+    // tail holds MORE than one: rolling a single slice into "Other" is renaming
+    // it, which loses the name and tells the student nothing.
+    const slices = all.length > top + 1
+        ? [...all.slice(0, top), all.slice(top).reduce((o, s) => ({
+            kind: "other", stake: o.stake + s.stake, share: o.share + s.share,
+            folded: (o.folded || 0) + 1,
+        }), { kind: "other", stake: 0, share: 0, folded: 0 })]
+        : all;
+
+    return { total, slices, top: all[0] || null };
+}
+
+/**
+ * HOW MANY SETTLED CALLS BEFORE THE BOOK WILL RANK SOMEBODY.
+ *
+ * The same floor as the calibration curve and for the same reason: a P/L off
+ * three calls is a coin flip, and telling a sixteen-year-old they are in the
+ * bottom quarter of the room on that basis is a judgement the data cannot
+ * support.
+ */
+/** How many named slices the exposure bar draws before folding the tail. */
+export const EXPOSURE_SLICES = 4;
+
+export const RANK_MIN_CALLS = 5;
+
+/**
+ * Where you sit among everyone else — as a PERCENTILE, never a position.
+ *
+ * "4th of 31" is a leaderboard, and Compete already has one of those; putting a
+ * second on the page that exists to answer "how am I doing" turns a private
+ * screen into a public one. A band — "ahead of 68% of traders" — is the same
+ * information about YOU with nobody else named, and it cannot be gamed by
+ * refreshing to watch somebody drop.
+ *
+ * `peers` is every OTHER trader's figure; the server sends it with no
+ * addresses attached, so there is nothing here to put a name to. Under
+ * `RANK_MIN_CALLS` of your own, or with too few peers to rank against, it
+ * REFUSES and says which.
+ */
+export function standingOf(mine, peers = [], { decided = 0, min = RANK_MIN_CALLS } = {}) {
+    // `Number(null)` is 0, NOT NaN, so coercing first turns every missing peer
+    // into a trader sitting flat — which drags the whole band toward the middle
+    // and puts anybody with a positive book ahead of people who do not exist.
+    // The identical trap `expiredKeys` and `markPercent` both record.
+    const vals = (Array.isArray(peers) ? peers : [])
+        .filter((v) => v !== null && v !== undefined && v !== "")
+        .map((v) => Number(v))
+        .filter(Number.isFinite);
+    if (decided < min) {
+        return { ready: false, reason: "calls", needs: min - decided, peers: vals.length };
+    }
+    if (vals.length < 2) return { ready: false, reason: "peers", needs: 0, peers: vals.length };
+
+    const me = Number(mine) || 0;
+    const below = vals.filter((v) => v < me).length;
+    // Ties count as half, or everybody on a flat book reads as ahead of
+    // everybody else on a flat book.
+    const tied = vals.filter((v) => v === me).length;
+    return {
+        ready: true,
+        pct: Math.round(((below + tied / 2) / vals.length) * 100),
+        peers: vals.length,
+        value: me,
     };
 }
 

@@ -27,7 +27,7 @@ const INK = {
     zero: "var(--floor-dimmest)", dim: "var(--floor-dim)", mid: "var(--floor-muted)", bright: "var(--floor-ink)",
 };
 
-export default function EquityCurve({ curve, height = 120 }) {
+export default function EquityCurve({ curve, height = 120, footer = true }) {
     const pts = curve?.points || [];
     if (pts.length < 2) {
         return (
@@ -75,17 +75,25 @@ export default function EquityCurve({ curve, height = 120 }) {
                     0
                 </span>
             </div>
-            <p className="text-[11px] mt-1.5 leading-snug" style={{ color: INK.mid }}>
-                <span className="font-bold tabular-nums" style={{ color: ink }}>
-                    {curve.last > 0 ? "+" : ""}{curve.last.toLocaleString()} cred
-                </span>
-                {" from "}{pts.length - 1} settled {pts.length === 2 ? "call" : "calls"}
-                {curve.best > 0 && (
-                    <span style={{ color: INK.dim }}>
-                        {" "}· best +{curve.best.toLocaleString()}
+            {/* OFF WHERE A HERO ALREADY PRINTS THE FIGURE. The book leads with
+                this exact number four inches above the chart, and a curve that
+                restates its own headline underneath is the finding said twice —
+                which this codebase refuses everywhere from MarkPanel to the
+                dashboard's footer strip. It stays on anywhere the chart has to
+                explain itself. */}
+            {footer && (
+                <p className="text-[11px] mt-1.5 leading-snug" style={{ color: INK.mid }}>
+                    <span className="font-bold tabular-nums" style={{ color: ink }}>
+                        {curve.last > 0 ? "+" : ""}{curve.last.toLocaleString()} cred
                     </span>
-                )}
-            </p>
+                    {" from "}{pts.length - 1} settled {pts.length === 2 ? "call" : "calls"}
+                    {curve.best > 0 && (
+                        <span style={{ color: INK.dim }}>
+                            {" "}· best +{curve.best.toLocaleString()}
+                        </span>
+                    )}
+                </p>
+            )}
         </div>
     );
 }

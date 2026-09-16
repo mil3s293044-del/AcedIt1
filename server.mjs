@@ -10616,6 +10616,13 @@ function creditSummary(profile) {
  * It MINTS NOTHING and SETTLES NOTHING, which is what lets it sit in
  * READ_ONLY_FUNCTIONS and not flush the read cache on every visit.
  */
+// The floor the book refuses to rank anybody below. `holdings.js` owns this
+// number and CANNOT be imported here — it resolves `@/lib/...`, which only the
+// client's bundler and the test alias loader understand — so it is restated,
+// and `holdings.test.mjs` asserts the two copies agree. The same "change one,
+// change both" guard `uploadPrep.test.mjs` keeps over the upload caps.
+const RANK_MIN_CALLS = 5;
+
 app.post("/local-ai/fn/getPortfolio", async (req, res) => {
   const user = await authenticateRequest(req);
   if (!user) return res.status(401).json({ error: "Unauthorized" });
@@ -10687,7 +10694,45 @@ app.post("/local-ai/fn/getPortfolio", async (req, res) => {
       };
     }).filter(Boolean);
 
-    return res.json({ available: true, me: creditSummary(profile), holdings });
+    // ─── WHERE THEY SIT, AS FIGURES WITH NO NAMES ON THEM ─────────────────
+    //
+    // Every other trader's settled cred, as a bare list. NOT a leaderboard and
+    // deliberately not shaped like one: Compete already has a board, and a
+    // second one on the page that exists to answer "how am I doing" turns a
+    // private screen public. The client turns this into a percentile band
+    // (`standingOf`), which is the same information about THEM with nobody
+    // else identifiable — so no address, no name and no ordering leaves here.
+    //
+    // Best effort. A book that renders without a band is a book missing one
+    // line; a book that fails to load because a ranking query did is worse.
+    let peers = [];
+    try {
+      // Paged: a term of settled positions across the whole roster passes
+      // PostgREST's silent 1000-row cap, and a truncated read would rank a
+      // student against an arbitrary prefix of the room.
+      const settled = await fetchAllRows(() => supabaseAdmin
+        .from("market_positions").select("user_email, payout, settled_at")
+        .not("settled_at", "is", null));
+      const byTrader = new Map();
+      for (const row of settled || []) {
+        const who = String(row.user_email || "").toLowerCase();
+        if (!who || who === String(user.email).toLowerCase()) continue;
+        const cur = byTrader.get(who) || { cred: 0, calls: 0 };
+        cur.cred += Math.round(Number(row.payout) || 0);
+        cur.calls += 1;
+        byTrader.set(who, cur);
+      }
+      // Ranked against people who have actually traded, on the same floor the
+      // client refuses below — a room padded with one-call accounts would put
+      // everybody in the top quarter of it.
+      peers = [...byTrader.values()]
+        .filter((t) => t.calls >= RANK_MIN_CALLS)
+        .map((t) => t.cred);
+    } catch (err) {
+      console.warn("[getPortfolio] standing unavailable:", err?.message || err);
+    }
+
+    return res.json({ available: true, me: creditSummary(profile), holdings, peers });
   } catch (err) {
     console.error("[getPortfolio] error:", err);
     return res.status(500).json({ error: err?.message || String(err) });
