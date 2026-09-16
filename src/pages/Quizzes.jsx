@@ -25,7 +25,6 @@ import {
     Plus,
     FileText,
     Upload,
-    Loader2,
     X,
     ArrowLeft,
     Sparkles,
@@ -54,6 +53,7 @@ import QuizPlayer from "../components/quizzes/QuizPlayer";
 import MarkdownMath from "@/components/shared/MarkdownMath";
 import QuizModePicker from "../components/quizzes/QuizModePicker";
 import { subjectColor } from "@/components/cards/cardIdentity";
+import AceShuffle from "@/components/ace/AceShuffle";
 
 // ─── Coach voice helpers (chill + motivational) ──────────────────────────────
 function getCoachLine({ name, hour, totalQuizzes, recentAttempts, avgScore, lowScore }) {
@@ -2042,7 +2042,7 @@ Return valid JSON only.`,
                                     >
                                         {isGenerating ? (
                                             <>
-                                                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                                                <AceShuffle size="sm" className="mr-2" />
                                                 Generating...
                                             </>
                                         ) : blocked ? (

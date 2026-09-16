@@ -17,8 +17,9 @@ import {
     Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { CalendarDays, Sparkles, AlertTriangle, Check, Loader2, Info } from "lucide-react";
+import { CalendarDays, Sparkles, AlertTriangle, Check, Info } from "lucide-react";
 import { planWeek } from "@/lib/weekPlan";
+import AceShuffle from "@/components/ace/AceShuffle";
 
 const HOURS = [3, 5, 8, 12];
 const LENGTHS = [25, 40, 60];
@@ -238,7 +239,7 @@ export default function WeekPlanDialog({
                     </Button>
                     <Button onClick={() => onSave(chosen)} disabled={!chosen.length || saving}
                         className="sm:flex-[2] gap-1.5 bg-chart-4 hover:bg-chart-4/90 text-white rounded-xl btn-3d">
-                        {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
+                        {saving ? <AceShuffle size="sm" /> : <Sparkles className="w-4 h-4" />}
                         Put {chosen.length} session{chosen.length === 1 ? "" : "s"} on my week
                     </Button>
                 </div>

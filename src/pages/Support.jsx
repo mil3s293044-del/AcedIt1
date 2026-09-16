@@ -6,7 +6,7 @@ import { Label } from "@/components/ui/label";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { HelpCircle, Upload as UploadIcon, Info, Loader2, History, Clock, Camera, MessageSquareWarning } from "lucide-react";
+import { HelpCircle, Upload as UploadIcon, Info, History, Clock, Camera, MessageSquareWarning } from "lucide-react";
 import EmptyState from "@/components/shared/EmptyState";
 import { useToast } from "@/components/ui/use-toast";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -271,7 +271,7 @@ export default function Support() {
                                 >
                                     {isSubmittingSupport ? (
                                         <>
-                                            <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                                            <AceShuffle size="sm" className="mr-2" />
                                             Submitting…
                                         </>
                                     ) : (

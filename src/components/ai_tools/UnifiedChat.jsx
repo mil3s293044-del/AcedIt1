@@ -14,7 +14,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
     Plus, Send, Square, Trash2, ChevronDown, ChevronRight, Paperclip,
-    Loader2, History, X, Archive, Wand2
+    History, X, Archive, Wand2
 } from "lucide-react";
 import { base44 } from "@/api/base44Client";
 import { saveResult, deleteResult, loadSavedResults } from "@/lib/saveResult";
@@ -29,6 +29,7 @@ import LineMemoriserArtifact from "./LineMemoriserArtifact";
 import { actionById } from "./chatActions";
 import { todaysIntent } from "@/lib/studyIntent";
 import { fmtDate } from "@/lib/safeDate";
+import AceShuffle from "@/components/ace/AceShuffle";
 
 const MAX_TURNS_IN_PROMPT = 12;
 
@@ -502,7 +503,7 @@ export default function UnifiedChat() {
                                 onChange={e => attachFile(e.target.files?.[0])} />
                             <button onClick={() => fileRef.current?.click()} disabled={uploading} aria-label="Attach a file"
                                 className="w-8 h-8 rounded-lg flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors">
-                                {uploading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Paperclip className="w-4 h-4" />}
+                                {uploading ? <AceShuffle size="sm" /> : <Paperclip className="w-4 h-4" />}
                             </button>
                         </>
                     )}
@@ -622,7 +623,7 @@ export default function UnifiedChat() {
                                         <div className="min-w-0 text-sm text-foreground leading-relaxed prose-sm">
                                             {m.content
                                                 ? <MarkdownMath isStreaming={!!m.streaming}>{m.content}</MarkdownMath>
-                                                : <span className="inline-flex items-center gap-1.5 text-muted-foreground"><Loader2 className="w-3.5 h-3.5 animate-spin" /> Thinking…</span>}
+                                                : <span className="inline-flex items-center gap-1.5 text-muted-foreground"><AceShuffle size="sm" /> Thinking…</span>}
                                             {m.artifact?.kind === "cheat_sheet" && (
                                                 <CheatSheetArtifact
                                                     initialItems={m.artifact.data}
@@ -653,7 +654,7 @@ export default function UnifiedChat() {
                                                             onClick={() => runAction(a.id)}
                                                             className="rounded-xl gap-1.5 text-xs font-semibold">
                                                             {runningAction === a.id
-                                                                ? <><Loader2 className="w-3.5 h-3.5 animate-spin" /> {a.busy}</>
+                                                                ? <><AceShuffle size="sm" /> {a.busy}</>
                                                                 : <><Wand2 className="w-3.5 h-3.5" /> {a.label}</>}
                                                         </Button>
                                                     ))}

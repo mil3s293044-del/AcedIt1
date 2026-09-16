@@ -26,6 +26,7 @@ const Terms = lazyPage('Terms', () => import('./pages/Terms'));
 import { AuthProvider, useAuth } from '@/lib/AuthContext';
 import { ThemeProvider } from '@/lib/useTheme';
 import UserNotRegisteredError from '@/components/UserNotRegisteredError';
+import AceShuffle from '@/components/ace/AceShuffle';
 import CardStorm from '@/components/marketing/CardStorm';
 
 const { Pages, Layout, mainPage } = pagesConfig;
@@ -38,12 +39,20 @@ const MainPage = mainPageKey ? Pages[mainPageKey] : <></>;
  * rail and the theme are already on screen and should stay there, so a
  * navigation reads as the page filling in rather than the app blinking out.
  *
- * The spinner matches the auth one below it — same size, same tokens — so the
- * two never look like different states of the same wait.
+ * ─── IT HAS TO MATCH WHAT COMES NEXT, NOT WHAT SITS BESIDE IT ───────────────
+ * This was a green ring, and the comment here said it matched the auth spinner
+ * below "so the two never look like different states of the same wait". Right
+ * instinct, wrong pair. The auth spinner fires once a session; THIS one fires
+ * on every single navigation, and the thing a student sees a tenth of a second
+ * after it is the page's own `AceShuffle`. So the commonest wait in the app
+ * played two different loaders back to back — a ring, then a riffle — which
+ * reads as the app having started over rather than as one wait continuing.
+ *
+ * One loader, everywhere. See AceShuffle's header.
  */
 const PageFallback = () => (
-  <div className="flex items-center justify-center py-24" role="status" aria-label="Loading">
-    <div className="w-8 h-8 border-4 border-border border-t-primary rounded-full animate-spin" />
+  <div className="flex items-center justify-center py-24">
+    <AceShuffle size="lg" label="Loading" />
   </div>
 );
 
@@ -72,7 +81,7 @@ const AuthenticatedApp = () => {
   if (isLoadingPublicSettings || isLoadingAuth) {
     return (
       <div className="fixed inset-0 flex items-center justify-center">
-        <div className="w-8 h-8 border-4 border-border border-t-primary rounded-full animate-spin"></div>
+        <AceShuffle size="lg" label="Signing you in" />
       </div>
     );
   }
@@ -201,7 +210,7 @@ function App() {
                 boundary first and keep their chrome. */}
             <Suspense fallback={
               <div className="fixed inset-0 flex items-center justify-center">
-                <div className="w-8 h-8 border-4 border-border border-t-primary rounded-full animate-spin" />
+                <AceShuffle size="lg" label="Loading" />
               </div>
             }>
               <AuthenticatedApp />

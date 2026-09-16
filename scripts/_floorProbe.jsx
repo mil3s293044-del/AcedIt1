@@ -13,6 +13,8 @@ import Room from "@/components/market/Room";
 import MarkEntry from "@/components/planner/MarkEntry";
 import { LineDialog } from "@/pages/Competitions";
 import { readMarket } from "@/lib/market";
+import AceShuffle, { AceLoading } from "@/components/ace/AceShuffle";
+import { Button } from "@/components/ui/button";
 import { base44 } from "@/api/base44Client";
 
 const which = new URLSearchParams(location.search).get("v") || "deal";
@@ -70,6 +72,39 @@ const views = {
             <LineDialog onClose={() => {}} onOpen={() => {}} busy={false}
                 taken={new Set()} email="me@x.com" />
         </Room>
+    ),
+    // Every size of the one loader, on both grounds, plus the in-control case
+    // that 58 buttons now use.
+    loaders: () => (
+        <div className="min-h-screen bg-background p-8 space-y-8">
+            <div className="flex items-end gap-8">
+                {["sm", "md", "lg"].map((z) => (
+                    <div key={z} className="text-center">
+                        <AceShuffle size={z} />
+                        <p className="text-xs text-muted-foreground mt-2">{z}</p>
+                    </div>
+                ))}
+            </div>
+            <div className="card-soft max-w-md"><AceLoading>Loading the board…</AceLoading></div>
+            <div className="flex flex-wrap items-center gap-3">
+                <Button className="gap-2"><AceShuffle size="sm" /> Generating…</Button>
+                <Button size="sm" className="gap-2"><AceShuffle size="sm" /> Saving…</Button>
+                <Button variant="outline" className="gap-2"><AceShuffle size="sm" /> Marking…</Button>
+                <button type="button" className="px-2.5 py-1.5 rounded-xl text-xs font-bold border-2
+                    border-border inline-flex items-center gap-1.5">
+                    <AceShuffle size="sm" /> Set
+                </button>
+            </div>
+            <p className="text-sm text-muted-foreground inline-flex items-center gap-2">
+                <AceShuffle size="sm" /> Loading your books…
+            </p>
+            {/* The floor: literal ink, both themes. */}
+            <div className="rounded-2xl p-8 flex items-center gap-6" style={{ background: "#0A121F" }}>
+                <AceShuffle size="lg" ink="floor" />
+                <AceShuffle size="lg" />
+                <span className="text-xs" style={{ color: "#6F86A8" }}>floor ink · token ink</span>
+            </div>
+        </div>
     ),
     mark: () => (
         <div className="min-h-screen bg-background p-8">

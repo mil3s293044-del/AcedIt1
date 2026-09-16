@@ -29,7 +29,7 @@
  */
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { TrendingUp, Loader2, Coins, Plus, X } from "lucide-react";
+import { TrendingUp, Coins, Plus, X } from "lucide-react";
 import AceDeal from "@/components/market/AceDeal";
 import { base44 } from "@/api/base44Client";
 import { useLiveTick } from "@/lib/LiveContext";
@@ -39,6 +39,7 @@ import MarketCard from "@/components/market/MarketCard";
 import PortfolioPanel from "@/components/market/PortfolioPanel";
 import Room from "@/components/market/Room";
 import SettlementReveal from "@/components/market/SettlementReveal";
+import AceShuffle from "@/components/ace/AceShuffle";
 import {
     readMarket, sortBoard, isOpen, sideOf, YES, KINDS, featuredOf, inRoom, roomsFor, ROOMS,
     unseenSettlements, markSettlementsSeen,
@@ -232,8 +233,8 @@ export function LineDialog({ onClose, onOpen, busy, taken, email }) {
                 </p>
 
                 {sacs === null && (
-                    <p className="text-[12px] text-[#6F86A8] inline-flex items-center gap-1.5">
-                        <Loader2 className="w-3.5 h-3.5 animate-spin" /> Reading your planner…
+                    <p className="text-[12px] text-[#6F86A8] inline-flex items-center gap-2">
+                        <AceShuffle size="sm" label="Reading your planner" ink="floor" /> Reading your planner…
                     </p>
                 )}
 
@@ -321,7 +322,7 @@ export function LineDialog({ onClose, onOpen, busy, taken, email }) {
                             className="w-full py-2.5 rounded-xl bg-[#E8F0FB] text-[#0A121F]
                                 font-display font-black text-sm disabled:opacity-40 inline-flex
                                 items-center justify-center gap-2 hover:bg-white transition-colors">
-                            {busy && <Loader2 className="w-4 h-4 animate-spin" />} Open the line
+                            {busy && <AceShuffle size="sm" />} Open the line
                         </button>
                     </div>
                 )}

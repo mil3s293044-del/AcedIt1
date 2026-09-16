@@ -8,7 +8,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import {
     Users, UserPlus, UserMinus, Inbox, Check, X, Mail,
-    Sparkles, Send, Loader2, FileText, Brain, Share2, Gift,
+    Sparkles, Send, FileText, Brain, Share2, Gift,
     Search, ArrowRight,
     Heart, Trophy
 } from "lucide-react";
@@ -18,6 +18,7 @@ import HelpButton from "@/components/shared/HelpButton";
 import FriendsLeaderboard from "@/components/friends/FriendsLeaderboard";
 import AceBody from "@/components/ace/AceBody";
 import { deckCards } from "@/lib/mistakeBank";
+import AceShuffle from "@/components/ace/AceShuffle";
 
 // ── Coach voice (chill + motivational, social) ────────────────────────────
 function getCoachLine({ name, hour, friendCount, pendingCount, sharedCount }) {
@@ -956,7 +957,7 @@ export default function Friends() {
                         <Button variant="outline" onClick={() => setShowAddFriend(false)} className="flex-1 rounded-xl">Cancel</Button>
                         <Button onClick={handleAddFriend} disabled={isAddingFriend || !friendEmail.trim()}
                             className="flex-1 bg-chart-3 hover:bg-chart-3/90 text-white rounded-xl gap-2">
-                            {isAddingFriend ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
+                            {isAddingFriend ? <AceShuffle size="sm" /> : <Send className="w-4 h-4" />}
                             Send Request
                         </Button>
                     </div>
@@ -1052,7 +1053,7 @@ export default function Friends() {
                             <Button variant="outline" onClick={() => setSharingToFriend(null)} className="flex-1 rounded-xl text-sm">Cancel</Button>
                             <Button onClick={handleShare} disabled={isSharing || (selectedQuizzes.length === 0 && selectedDecks.length === 0)}
                                 className="flex-1 bg-chart-4 hover:bg-chart-4/90 text-white rounded-xl text-sm gap-2">
-                                {isSharing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Share2 className="w-4 h-4" />}
+                                {isSharing ? <AceShuffle size="sm" /> : <Share2 className="w-4 h-4" />}
                                 Share {selectedQuizzes.length + selectedDecks.length > 0 ? `(${selectedQuizzes.length + selectedDecks.length})` : ''}
                             </Button>
                         </div>

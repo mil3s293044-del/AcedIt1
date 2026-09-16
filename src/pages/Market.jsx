@@ -28,7 +28,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { motion } from "framer-motion";
 import * as Icons from "lucide-react";
-import { ArrowLeft, Clock, Loader2, Lock } from "lucide-react";
+import { ArrowLeft, Clock, Lock } from "lucide-react";
 import { base44 } from "@/api/base44Client";
 import { takeFn, fnError } from "@/lib/fnResult";
 import { createPageUrl } from "@/utils";
@@ -36,6 +36,7 @@ import Room from "@/components/market/Room";
 import PriceChart from "@/components/market/PriceChart";
 import TakeSide from "@/components/market/TakeSide";
 import Reactions from "@/components/market/Reactions";
+import AceShuffle from "@/components/ace/AceShuffle";
 import {
     KINDS, readMarket, priceHistory, priceLabel, sideOf, YES,
     payoutFor, markToMarket, blockReason, settlementOf,
@@ -124,8 +125,9 @@ export default function Market() {
     if (state.loading) {
         return (
             <Room>
-                <div className="flex items-center justify-center py-32 text-[#6F86A8] gap-2">
-                    <Loader2 className="w-4 h-4 animate-spin" /> Opening it…
+                <div className="flex flex-col items-center justify-center py-32 gap-3">
+                    <AceShuffle size="lg" label="Opening it" ink="floor" />
+                    <p className="text-sm text-[#6F86A8]">Opening it…</p>
                 </div>
             </Room>
         );

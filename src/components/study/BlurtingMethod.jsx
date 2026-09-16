@@ -7,7 +7,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
-import { PenTool, Play, Clock, CheckCircle, RotateCcw, Maximize, Wand2, Loader2, X, Sparkles, FolderOpen, Trash2, FileText, AlertCircle, Lightbulb, Brain, Check, ChevronRight, Layers } from "lucide-react";
+import { PenTool, Play, Clock, CheckCircle, RotateCcw, Maximize, Wand2, X, Sparkles, FolderOpen, Trash2, FileText, AlertCircle, Lightbulb, Brain, Check, ChevronRight, Layers } from "lucide-react";
 import { format } from "date-fns";
 import { useToast } from "@/components/ui/use-toast";
 import { base44 } from "@/api/base44Client";
@@ -18,6 +18,7 @@ import { FEATURES, checkLiveTier } from "@/lib/tierAccess";
 import { getExaminerPrompt } from "@/lib/subjectExaminerPrompts";
 import { fmtDate } from "@/lib/safeDate";
 import { deckCards } from "@/lib/mistakeBank";
+import AceShuffle from "@/components/ace/AceShuffle";
 
 // Static class lookup for AI score pill — Tailwind JIT cannot see interpolated tokens.
 const SCORE_PILL = {
@@ -737,7 +738,7 @@ Reference Study Design requirements in your feedback.`,
                                 className="h-11 bg-xp hover:bg-xp/90 text-white rounded-xl font-medium gap-2 shadow-soft"
                             >
                                 {isGeneratingFeedback ? (
-                                    <><Loader2 className="w-4 h-4 animate-spin" /> Analysing your recall...</>
+                                    <><AceShuffle size="sm" /> Analysing your recall...</>
                                 ) : (
                                     <><Wand2 className="w-4 h-4" /> Mark what I missed</>
                                 )}
@@ -815,7 +816,7 @@ Reference Study Design requirements in your feedback.`,
                                     value of the blurt thrown away. */}
                                 <Button onClick={makeCardsFromMisses} disabled={makingCards || cardsMade > 0}
                                     className="mt-3 w-full gap-2 rounded-xl bg-streak hover:bg-streak/90 text-white">
-                                    {makingCards ? <Loader2 className="w-4 h-4 animate-spin" />
+                                    {makingCards ? <AceShuffle size="sm" />
                                         : cardsMade > 0 ? <Check className="w-4 h-4" /> : <Layers className="w-4 h-4" />}
                                     {cardsMade > 0
                                         ? `${cardsMade} card${cardsMade === 1 ? "" : "s"} made — due now`

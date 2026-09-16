@@ -21,7 +21,6 @@ import {
     Trash2,
     Download,
     CreditCard,
-    Loader2,
     Crown,
     Sparkles,
     LogOut,
@@ -33,6 +32,7 @@ import DataExportModal from "@/components/shared/DataExportModal";
 import HelpButton from "@/components/shared/HelpButton";
 import { useToast } from "@/components/ui/use-toast";
 import AppearanceSettings from "@/components/settings/AppearanceSettings";
+import AceShuffle from "@/components/ace/AceShuffle";
 
 const TIER_META = {
     free:    { label: "Free",    icon: Sparkles, accent: "muted-foreground", bg: "bg-secondary",       text: "text-foreground" },
@@ -446,7 +446,7 @@ export default function Settings() {
                                 {isUsernameEditing ? (
                                     <div className="flex gap-2">
                                         <Button onClick={saveUsername} disabled={isSaving} size="sm">
-                                            {isSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+                                            {isSaving ? <AceShuffle size="sm" /> : <Save className="w-4 h-4" />}
                                             Save
                                         </Button>
                                         <Button
@@ -532,7 +532,7 @@ export default function Settings() {
                             >
                                 {isLoadingPortal ? (
                                     <>
-                                        <Loader2 className="w-4 h-4 animate-spin" />
+                                        <AceShuffle size="sm" />
                                         Loading…
                                     </>
                                 ) : (

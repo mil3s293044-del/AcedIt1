@@ -23,7 +23,7 @@
 import React, { useState, useEffect, useMemo } from "react";
 import { motion } from "framer-motion";
 import {
-    GraduationCap, Zap, Clock, Trophy, Info, Loader2, Target, TrendingUp, Users,
+    GraduationCap, Zap, Clock, Trophy, Info, Target, TrendingUp, Users,
 } from "lucide-react";
 import { base44 } from "@/api/base44Client";
 import HelpButton from "@/components/shared/HelpButton";
@@ -38,6 +38,7 @@ import {
 } from "@/lib/ranked";
 import AceTip from "@/components/ace/AceTip";
 import { planningEvidence } from "@/lib/atarBands";
+import { AceLoading } from "@/components/ace/AceShuffle";
 
 const TONE_PILL = {
     muted: "bg-secondary text-muted-foreground", xp: "bg-xp/15 text-xp",
@@ -268,8 +269,8 @@ export default function Ranked() {
                                 </div>
 
                                 {loading ? (
-                                    <div className="card-soft p-10 flex items-center justify-center text-muted-foreground gap-2">
-                                        <Loader2 className="w-4 h-4 animate-spin" /> Loading the board…
+                                    <div className="card-soft p-10">
+                                        <AceLoading>Loading the board…</AceLoading>
                                     </div>
                                 ) : data?.setup_required ? (
                                     <div className="card-soft p-8 text-center text-sm text-muted-foreground">

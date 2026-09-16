@@ -18,7 +18,6 @@ import {
     Brain,
     Target,
     BookOpen,
-    Loader2,
     X,
     Trash2
 } from 'lucide-react';
@@ -67,7 +66,7 @@ const MessageBubble = ({ message, isUser }) => (
                         <div key={idx} className="text-xs bg-blue-50 text-blue-700 px-2 py-1 rounded flex items-center gap-1">
                             <Brain className="w-3 h-3" />
                             {toolCall.name.replace('_', ' ')}
-                            {toolCall.status === 'running' && <Loader2 className="w-3 h-3 animate-spin" />}
+                            {toolCall.status === 'running' && <AceShuffle size="sm" />}
                         </div>
                     ))}
                 </div>
@@ -410,7 +409,7 @@ export default function StudyAssistant({ user }) {
                                         {isLoading && (
                                             <div className="flex justify-start mb-4">
                                                 <div className="flex items-center gap-2 bg-secondary rounded-full px-4 py-2">
-                                                    <Loader2 className="w-4 h-4 animate-spin" />
+                                                    <AceShuffle size="sm" />
                                                     <span className="text-sm text-muted-foreground">Assistant is thinking...</span>
                                                 </div>
                                             </div>
@@ -496,7 +495,7 @@ export default function StudyAssistant({ user }) {
                                 {isLoading && (
                                     <div className="flex justify-start mb-4">
                                         <div className="flex items-center gap-2 bg-secondary rounded-full px-3 py-1">
-                                            <Loader2 className="w-3 h-3 animate-spin" />
+                                            <AceShuffle size="sm" />
                                             <span className="text-xs text-muted-foreground">Thinking...</span>
                                         </div>
                                     </div>

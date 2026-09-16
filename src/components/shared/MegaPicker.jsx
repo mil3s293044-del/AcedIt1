@@ -26,9 +26,10 @@
  */
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { motion } from "framer-motion";
-import { BookOpen, Loader2, Upload, X } from "lucide-react";
+import { BookOpen, Upload, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { listMega, megaUrl, uploadMega } from "@/api/megaUploads";
+import AceShuffle from "@/components/ace/AceShuffle";
 import {
     MEGA_ACTIVE_MAX, MEGA_FILE_CAP, MEGA_MODEL_LABEL, MEGA_TTL_HOURS, RANGE_PAGE_CAP,
     defaultRange, megaPrice, normaliseRange, parseRange,
@@ -152,7 +153,7 @@ export default function MegaPicker({ featurePrice = 0, onChange, toast }) {
 
             {loading ? (
                 <p className="text-xs text-muted-foreground inline-flex items-center gap-1.5">
-                    <Loader2 className="w-3.5 h-3.5 animate-spin" /> Loading your books…
+                    <AceShuffle size="sm" /> Loading your books…
                 </p>
             ) : (
                 <div className="space-y-2">
@@ -183,7 +184,7 @@ export default function MegaPicker({ featurePrice = 0, onChange, toast }) {
                 onClick={() => inputRef.current?.click()}
                 className="gap-2 rounded-xl">
                 {busy
-                    ? <><Loader2 className="w-4 h-4 animate-spin" /> Uploading {Math.round(progress * 100)}%</>
+                    ? <><AceShuffle size="sm" /> Uploading {Math.round(progress * 100)}%</>
                     : <><Upload className="w-4 h-4" /> {books.length ? "Add another book" : "Upload a book"}</>}
             </Button>
             {/* A disabled button says WHY, the rule Active Recall's already

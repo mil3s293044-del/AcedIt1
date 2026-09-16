@@ -17,7 +17,7 @@ import { FEATURES, canUseFeature } from "@/lib/tierAccess";
 import AISkeleton from "../shared/AISkeleton";
 import {
     Plus, Play, Edit, Trash2, Share2, Check, X, Sparkles,
-    Loader2, Brain, AlertTriangle, Search, Clock,
+    Brain, AlertTriangle, Search, Clock,
     Users, UserPlus, ChevronLeft, FileText, ListChecks
 } from "lucide-react";
 import { base44 } from "@/api/base44Client";
@@ -1431,11 +1431,11 @@ The documents provided may be PowerPoint slides, Word documents, PDFs or text fi
                         <Button variant="outline" onClick={() => { clearDraft(); setIsShowingGenerated(false); setGeneratedFlashcards(null); setUploadedFiles([]); }} className="rounded-xl">Cancel</Button>
                         {!generatedFlashcards ? (
                             <Button onClick={handleGenerateFlashcardsFromFile} disabled={!uploadedFiles.length || isGenerating} className="btn-3d bg-chart-4 hover:bg-chart-4 text-white rounded-xl gap-2">
-                                {isGenerating ? <><Loader2 className="w-4 h-4 animate-spin" /> Generating...</> : <><Sparkles className="w-4 h-4" /> {aiSettings.cardCount === 'max' ? 'Make every card it supports' : `Make ${aiSettings.cardCount} cards`}</>}
+                                {isGenerating ? <><AceShuffle size="sm" /> Generating...</> : <><Sparkles className="w-4 h-4" /> {aiSettings.cardCount === 'max' ? 'Make every card it supports' : `Make ${aiSettings.cardCount} cards`}</>}
                             </Button>
                         ) : (
                             <Button onClick={() => handleSaveGeneratedFlashcards(newDeck)} disabled={!newDeck.subject_name || !newDeck.topic || isSavingDeck} className="btn-3d bg-chart-3 hover:bg-chart-3 text-white rounded-xl gap-2">
-                                {isSavingDeck ? <><Loader2 className="w-4 h-4 animate-spin" /> Saving...</> : <><Check className="w-4 h-4" /> Save Deck</>}
+                                {isSavingDeck ? <><AceShuffle size="sm" /> Saving...</> : <><Check className="w-4 h-4" /> Save Deck</>}
                             </Button>
                         )}
                     </DialogFooter>

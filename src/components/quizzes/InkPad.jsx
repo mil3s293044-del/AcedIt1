@@ -40,11 +40,12 @@
  */
 import React, { useCallback, useMemo, useRef, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Undo2, Trash2, Check, Loader2, Pencil, X } from "lucide-react";
+import { Undo2, Trash2, Check, Pencil, X } from "lucide-react";
 import { base44 } from "@/api/base44Client";
 import { useToast } from "@/components/ui/use-toast";
 import MarkdownMath from "@/components/shared/MarkdownMath";
 import { newStroke, addPoint, isBlank, inkBounds, strokePath, compact } from "@/lib/ink";
+import AceShuffle from "@/components/ace/AceShuffle";
 
 /** Pad geometry in its own coordinate space; the SVG scales it to the box. */
 const PAD_W = 900, PAD_H = 190;
@@ -292,7 +293,7 @@ Transcribe exactly what is written. Rules:
                             text-primary-foreground px-3.5 py-2 text-sm font-bold hover:bg-primary/90
                             disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer transition-colors">
                         {busy
-                            ? <><Loader2 className="w-4 h-4 animate-spin" /> Reading…</>
+                            ? <><AceShuffle size="sm" /> Reading…</>
                             : <><Check className="w-4 h-4" /> Add line</>}
                     </button>
                 </div>

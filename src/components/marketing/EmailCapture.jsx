@@ -2,7 +2,8 @@ import React, { useState } from "react";
 import { base44 } from "@/api/base44Client";
 import { getAttribution } from "@/lib/attribution";
 import { trackLeadMagnet } from "@/lib/analytics";
-import { Check, Loader2 } from "lucide-react";
+import { Check } from "lucide-react";
+import AceShuffle from "@/components/ace/AceShuffle";
 
 /**
  * Top-of-funnel email capture. Drop it anywhere on the landing page (or a
@@ -94,7 +95,7 @@ export default function EmailCapture({
           disabled={state === "loading"}
           className="h-12 px-6 rounded-2xl bg-primary hover:bg-primary/90 text-white font-bold text-sm shadow-soft-lg disabled:opacity-70 cursor-pointer flex items-center justify-center gap-2"
         >
-          {state === "loading" ? <Loader2 className="w-4 h-4 animate-spin" /> : cta}
+          {state === "loading" ? <AceShuffle size="sm" /> : cta}
         </button>
       </form>
       {error && <p className="text-xs text-red-500 mt-2">{error}</p>}

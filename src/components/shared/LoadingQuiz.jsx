@@ -1,10 +1,11 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Check, X, Clock, Sparkles, Loader2 } from "lucide-react";
+import { Check, X, Clock, Sparkles } from "lucide-react";
 import { base44 } from "@/api/base44Client";
 import MathText from "@/components/shared/LatexRenderer";
 import { fireXPFeedback } from "@/components/ranked/XPFeedback";
 import { deckCards } from "@/lib/mistakeBank";
+import AceShuffle, { AceLoading } from "@/components/ace/AceShuffle";
 
 // ─── Loading mini-quiz ───────────────────────────────────────────────────────
 // Shown while a slow AI generation runs. Pulls quick MCQs from the student's
@@ -144,8 +145,8 @@ export default function LoadingQuiz() {
 
     if (loadingDeck || !current) {
         return (
-            <div className="card-soft p-6 flex items-center justify-center gap-2 text-sm text-muted-foreground">
-                <Loader2 className="w-4 h-4 animate-spin text-primary" /> Building your cheat sheet…
+            <div className="card-soft p-6">
+                <AceLoading>Building your cheat sheet…</AceLoading>
             </div>
         );
     }
@@ -156,7 +157,7 @@ export default function LoadingQuiz() {
         <div className="card-soft overflow-hidden">
             <div className="flex items-center justify-between px-5 py-3 border-b border-border bg-secondary/30">
                 <div className="flex items-center gap-2">
-                    <Loader2 className="w-4 h-4 animate-spin text-primary" />
+                    <AceShuffle size="sm" />
                     <span className="text-sm font-bold text-foreground">Quick quiz while we build your cheat sheet</span>
                 </div>
                 {xpEarned > 0 && (

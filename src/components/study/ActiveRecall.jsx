@@ -6,7 +6,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
-import { Brain, Play, Clock, CheckCircle, Upload, Wand2, Maximize, ArrowRight, ArrowLeft, RotateCcw, X, FolderOpen, Trash2, Sparkles, Loader2, ChevronDown, ChevronUp, FileText, Zap } from "lucide-react";
+import { Brain, Play, Clock, CheckCircle, Upload, Wand2, Maximize, ArrowRight, ArrowLeft, RotateCcw, X, FolderOpen, Trash2, Sparkles, ChevronDown, ChevronUp, FileText, Zap } from "lucide-react";
 import { format } from "date-fns";
 import ReactMarkdown from 'react-markdown';
 import { useToast } from "@/components/ui/use-toast";
@@ -24,6 +24,7 @@ import CalibrationReport from "./CalibrationReport";
 import WhatToTest from "./WhatToTest";
 import { questionsFromCards, questionsFromMap } from "@/lib/recallSuggest";
 import { deckCards } from "@/lib/mistakeBank";
+import AceShuffle from "@/components/ace/AceShuffle";
 
 // Static class lookups so Tailwind JIT can see every utility.
 const verdictConfig = {
@@ -868,7 +869,7 @@ For each answer:
                         className="w-full h-11 bg-chart-4 hover:bg-chart-4/90 text-white rounded-xl font-medium gap-2"
                     >
                         {isGeneratingQuestions ? (
-                            <><Loader2 className="w-4 h-4 animate-spin" /> Reading your notes…</>
+                            <><AceShuffle size="sm" /> Reading your notes…</>
                         ) : (
                             <><Wand2 className="w-4 h-4" /> Make questions from my notes</>
                         )}
@@ -1073,7 +1074,7 @@ For each answer:
                                     className="h-11 bg-chart-4 hover:bg-chart-4/90 text-white font-medium rounded-xl gap-2"
                                 >
                                     {isGeneratingMarking ? (
-                                        <><Loader2 className="w-4 h-4 animate-spin" /> Analysing answers...</>
+                                        <><AceShuffle size="sm" /> Analysing answers...</>
                                     ) : (
                                         <><Zap className="w-4 h-4" /> Mark My Answers</>
                                     )}

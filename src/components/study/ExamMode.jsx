@@ -14,7 +14,7 @@ import AceShuffle from "@/components/ace/AceShuffle";
 import { deckCards } from "@/lib/mistakeBank";
 import {
   GraduationCap, Clock, AlertCircle, BarChart3, Check, X,
-  ChevronLeft, ChevronRight, Play, Trophy, Loader2, RefreshCw,
+  ChevronLeft, ChevronRight, Play, Trophy, RefreshCw,
   Target, Flag, Brain, BookOpen, Layers, Award, Star, FileText,
   Sparkles } from
 "lucide-react";
@@ -1041,7 +1041,7 @@ Return exactly ${openQs.length} results, in order.`,
                             {examQuestions.some((q) => q.type === "open" && (answers[q.id]?.typed || "").trim()) &&
               <Button onClick={handleAIMark} disabled={isAIMarking} size="sm"
                 className="rounded-xl bg-chart-4 hover:bg-chart-4/90 text-white font-bold gap-1.5 text-xs">
-                                    {isAIMarking ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5" />}
+                                    {isAIMarking ? <AceShuffle size="sm" /> : <Sparkles className="w-3.5 h-3.5" />}
                                     {isAIMarking ? "Marking…" : "AI examiner marking"}
                                 </Button>
               }

@@ -2472,6 +2472,44 @@ is the textbook, and only as something to generate MORE from.
   way into the session. It carries the choice in a ref, not state: the pick
   arrives in the same tick that sets the subject, so reading state would build
   the session for whatever subject was selected BEFORE they picked.
+- **ONE LOADER, AND A STUDENT MUST NEVER SEE TWO IN A ROW.** `AceShuffle`
+  shipped and the generic spinners were left where they were, so the commonest
+  wait in the app played BOTH: a green ring while the page's chunk arrived,
+  then the riffling deck while its data did. One navigation, two different
+  loaders, in sequence — which reads as the app having started over rather than
+  as one wait continuing.
+  `App.jsx`'s `PageFallback` was the worst of them by exposure, because all 24
+  pages are code-split so it fires on EVERY navigation. Its own comment said
+  the ring "matches the auth one below it — same size, same tokens — so the two
+  never look like different states of the same wait": the right instinct
+  pointed at the wrong pair. The one it had to match was the one that comes
+  NEXT, a tenth of a second later, on the same screen.
+  Nothing spins a ring now, and 68 `<Loader2>` across 44 files are gone.
+  `aceLoading.test.mjs` scans for both idioms, because each renders perfectly,
+  passes lint and the build, and is simply a DIFFERENT loader from the one
+  either side of it — the same invisible class `quizScore.test.mjs` and
+  `fnResult.test.mjs` exist for.
+  Three sizes and they are the three places a wait appears: `sm` in a control
+  or beside a line of text, `md` beside a heading, `lg` alone in a panel —
+  which is what `AceLoading` wraps, with the sentence under it.
+  **A REFRESH GLYPH THAT TURNS IS NOT A LOADER** and the scan leaves it alone:
+  `RefreshCw` spinning is the control saying it is working, in the control's
+  own place. Shimmer skeletons (`AISkeleton`) are not loaders either — a
+  skeleton is the shape of the content, which is the better answer wherever one
+  can be built, and is why `AceDeal` deals cards onto the real grid.
+  **THE INK IS A NAMED PRESET, NOT LOOSE PROPS.** `ink="floor"` exists because
+  the Compete floor renders in literal ink in both themes, so a token card is
+  cream on the felt in light mode and invisible in dark. It is a preset after
+  the loose version shipped a bug: the card was given the floor's ground and
+  THE FACE WAS NOT, so the spade stayed `fill-foreground` — near-black on a
+  near-black card — and rendered as two floating eyes and no spade. A card's
+  ground and the ink printed on it are one decision; splitting them across two
+  props is how half of it gets made.
+- **A STATUS DISC HOLDS A GLYPH, and a deck of cards is not one.**
+  PaymentSuccess put the loader in the same 64px coloured circle its error
+  state uses for `AlertCircle`; a card stack inside a coloured pill reads as a
+  rendering fault. The waiting case loses the circle rather than being squeezed
+  into it, and the failed case keeps its badge, because a warning IS an icon.
 - **No mascot yet** (maybe later). **Dark mode EXISTS** — `index.css` has a
   complete `.dark` token block and `src/lib/theme.js` offers four preferences
   (system / light / dark / auto by the clock). This line used to say there was
@@ -2520,6 +2558,10 @@ is the textbook, and only as something to generate MORE from.
   `EquityCurve.jsx` — the second tab on the floor
 - `src/pages/Market.jsx` + `Reactions.jsx` + `Room.jsx` — one question in full,
   the glyphs, and the floor's shared ground; `getMarket` in `server.mjs`
+- `src/components/ace/AceShuffle.jsx` + `src/lib/aceLoading.test.mjs` — THE
+  loader, its three sizes and its two rooms; the scan that stops a generic
+  spinner reappearing beside it. `scripts/_floorProbe.jsx?v=loaders` draws
+  every size, both inks and the in-control case in one screen
 - `src/components/market/AceDeal.jsx` — the floor's arrival: Ace dealing the
   board onto the grid the real cards fill, which is the skeleton rather than a
   curtain in front of one. HE is what moves; the switches that turn his own

@@ -3,10 +3,11 @@ import { useLocation } from "react-router-dom";
 import { motion } from "framer-motion";
 import { Card, CardContent } from "@/components/ui/card";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { Coins, Infinity, Loader2, Crown, Calendar } from "lucide-react";
+import { Coins, Infinity, Crown, Calendar } from "lucide-react";
 import { base44 } from "@/api/base44Client";
 import { differenceInDays, differenceInHours, differenceInMinutes } from "date-fns";
 import { fmtDate } from "@/lib/safeDate";
+import AceShuffle from "@/components/ace/AceShuffle";
 
 export default function CreditsDisplay() {
     const location = useLocation();
@@ -83,7 +84,7 @@ export default function CreditsDisplay() {
     if (isLoading) {
         return (
             <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-surface/90 backdrop-blur-sm border border-border shadow-lg">
-                <Loader2 className="w-4 h-4 animate-spin text-muted-foreground/60" />
+                <AceShuffle size="sm" />
             </div>
         );
     }

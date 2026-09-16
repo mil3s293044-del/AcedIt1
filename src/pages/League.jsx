@@ -22,7 +22,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import {
-    Trophy, Loader2, Eye, EyeOff, ChevronLeft, TrendingUp, TrendingDown, Info,
+    Trophy, Eye, EyeOff, ChevronLeft, TrendingUp, TrendingDown, Info,
 } from "lucide-react";
 import { base44 } from "@/api/base44Client";
 import { createPageUrl } from "@/utils";
@@ -32,6 +32,7 @@ import { Countdown } from "@/components/competition/arenaHelpers";
 import WeeklyBoard from "@/components/league/WeeklyBoard";
 import Reveal from "@/components/shared/Reveal";
 import LiveNumber from "@/components/shared/LiveNumber";
+import AceShuffle, { AceLoading } from "@/components/ace/AceShuffle";
 import {
     msUntilReset, untilLabel, isClosing, leagueLead, historySummary, ordinal, SCORE_MAX,
 } from "@/lib/league";
@@ -95,8 +96,8 @@ export default function League() {
 
     if (loading) {
         return (
-            <div className="min-h-screen flex items-center justify-center text-muted-foreground gap-2">
-                <Loader2 className="w-4 h-4 animate-spin" /> Loading this week's board…
+            <div className="min-h-screen flex items-center justify-center">
+                <AceLoading>Loading this week&apos;s board…</AceLoading>
             </div>
         );
     }
@@ -216,7 +217,7 @@ export default function League() {
                                 className="inline-flex items-center gap-1.5 text-xs font-bold text-muted-foreground
                                     hover:text-foreground transition-colors disabled:opacity-50">
                                 {savingAnon
-                                    ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                    ? <AceShuffle size="sm" />
                                     : me.is_anonymous ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
                                 {me.is_anonymous ? "Hidden" : "Visible"}
                             </button>
