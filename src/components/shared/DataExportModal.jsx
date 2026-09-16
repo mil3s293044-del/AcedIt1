@@ -4,8 +4,9 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Button } from "@/components/ui/button";
 import { base44 } from "@/api/base44Client";
 import { useToast } from "@/components/ui/use-toast";
-import { Download, FileText, Table, Loader2, BookOpen, Zap, Target, Brain, Calendar } from "lucide-react";
+import { Download, FileText, Table, BookOpen, Zap, Target, Brain, Calendar } from "lucide-react";
 import jsPDF from "jspdf";
+import AceShuffle from "@/components/ace/AceShuffle";
 
 const EXPORTS = [
     { id: "study_sessions", label: "Study Sessions", icon: BookOpen, color: "bg-blue-100 text-blue-700", desc: "All recorded study technique sessions" },
@@ -243,13 +244,13 @@ export default function DataExportModal({ open, onClose }) {
                                 {id !== "full_report" && (
                                     <Button size="sm" variant="outline" disabled={!!loading[id]} onClick={() => exportData(id, "csv")}
                                         className="h-8 text-xs gap-1 border-border">
-                                        {loading[id] === "csv" ? <Loader2 className="w-3 h-3 animate-spin" /> : <Table className="w-3 h-3" />}
+                                        {loading[id] === "csv" ? <AceShuffle size="sm" /> : <Table className="w-3 h-3" />}
                                         CSV
                                     </Button>
                                 )}
                                 <Button size="sm" variant="outline" disabled={!!loading[id]} onClick={() => exportData(id, "pdf")}
                                     className="h-8 text-xs gap-1 border-indigo-200 text-indigo-700 hover:bg-indigo-50">
-                                    {loading[id] === "pdf" ? <Loader2 className="w-3 h-3 animate-spin" /> : <FileText className="w-3 h-3" />}
+                                    {loading[id] === "pdf" ? <AceShuffle size="sm" /> : <FileText className="w-3 h-3" />}
                                     PDF
                                 </Button>
                             </div>

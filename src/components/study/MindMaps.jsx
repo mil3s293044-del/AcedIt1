@@ -34,7 +34,7 @@ import { Input } from "@/components/ui/input";
 import { base44 } from "@/api/base44Client";
 import { useToast } from "@/components/ui/use-toast";
 import {
-    Network, Plus, Loader2, EyeOff, Sparkles, ArrowLeft, Trash2, Check, AlertTriangle,
+    Network, Plus, EyeOff, Sparkles, ArrowLeft, Trash2, Check, AlertTriangle,
     Lightbulb, ListTree, Layers, TrendingUp, ChevronRight, Link2, X, Zap, Target,
     ListOrdered, BookMarked, Quote, FlaskConical, HelpCircle, Send, Wand2, MousePointer2,
     Maximize2, Minimize2, Circle, CornerDownRight,
@@ -204,7 +204,7 @@ function SaveState({ state, onRetry }) {
     return (
         <span data-save-state={state}
             className="text-[11px] font-bold text-muted-foreground inline-flex items-center gap-1">
-            {state === "saving" ? <Loader2 className="w-3 h-3 animate-spin" />
+            {state === "saving" ? <AceShuffle size="sm" />
                 : state === "saved" ? <Check className="w-3 h-3 text-primary" />
                     : <Circle className="w-2 h-2 fill-xp text-xp" />}
             {label}
@@ -1147,7 +1147,7 @@ export default function MindMaps({ user, subjects = [] }) {
                     <div className="flex flex-wrap items-center gap-2">
                         <Button size="sm" onClick={check} disabled={busy}
                             className="gap-1.5 bg-map hover:bg-map/90 text-white rounded-xl">
-                            {busy ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5" />}
+                            {busy ? <AceShuffle size="sm" /> : <Sparkles className="w-3.5 h-3.5" />}
                             Check what I missed
                         </Button>
                         <Button size="sm" variant="outline" onClick={retidy} className="border-2 rounded-xl gap-1.5">

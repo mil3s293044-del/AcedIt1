@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
-import { Check, Loader2, GraduationCap } from "lucide-react";
+import { Check, GraduationCap } from "lucide-react";
 import { base44 } from "@/api/base44Client";
 import { stripeCheckout } from "@/api/functionsShim";
 import { TOOL_COUNT } from "@/components/ai_tools/chatTools";
+import AceShuffle from "@/components/ace/AceShuffle";
 
 const FEATURES = [
     "Unlimited AI practice questions generated from your own notes",
@@ -96,7 +97,7 @@ export default function Paywall() {
                     className="w-full h-12 text-base font-semibold"
                     style={{ backgroundColor: "#534AB7" }}
                 >
-                    {loading ? <><Loader2 className="w-4 h-4 animate-spin mr-2" />Redirecting...</> : "Start my free 7-day trial →"}
+                    {loading ? <><AceShuffle size="sm" className="mr-2" />Redirecting...</> : "Start my free 7-day trial →"}
                 </Button>
             </div>
 

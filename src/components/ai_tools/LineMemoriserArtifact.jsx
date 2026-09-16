@@ -23,7 +23,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/components/ui/use-toast";
 import { base44 } from "@/api/base44Client";
 import { recordStudyAndGetStreak } from "@/components/shared/streakHelpers";
-import { Eye, EyeOff, Check, Loader2, Trophy, RotateCcw, Flame } from "lucide-react";
+import { Eye, EyeOff, Check, Trophy, RotateCcw, Flame } from "lucide-react";
+import AceShuffle from "@/components/ace/AceShuffle";
 
 const CHUNK_SIZE = 4;
 
@@ -220,7 +221,7 @@ export default function LineMemoriserArtifact({ lines, title = "" }) {
                 <div className="flex items-center gap-2">
                     <Button size="sm" onClick={submit} disabled={!input.trim() || checking}
                         className="rounded-xl gap-1.5 text-xs font-semibold">
-                        {checking ? <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Checking…</> : <><Check className="w-3.5 h-3.5" /> Check</>}
+                        {checking ? <><AceShuffle size="sm" /> Checking…</> : <><Check className="w-3.5 h-3.5" /> Check</>}
                     </Button>
                     <span className="text-[11px] text-muted-foreground">⌘/Ctrl + Enter</span>
                 </div>

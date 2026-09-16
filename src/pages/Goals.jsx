@@ -16,7 +16,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { DragDropContext, Droppable, Draggable } from "@hello-pangea/dnd";
 import {
     CalendarDays, Plus, Check, X, Sparkles,
-    Loader2, ArrowRight, Edit2, Flag, BookOpen, Trash2, ChevronLeft,
+    ArrowRight, Edit2, Flag, BookOpen, Trash2, ChevronLeft,
     ChevronRight, Repeat, Scale,
     Brain, Circle, Clock, FileQuestion, Layers, Lightbulb, NotebookPen, PenTool, Timer,
 } from "lucide-react";
@@ -38,6 +38,7 @@ import { fmtDate } from "@/lib/safeDate";
 import { takeFn } from "@/lib/fnResult";
 import { markPercent } from "@/lib/market";
 import MarkEntry from "@/components/planner/MarkEntry";
+import AceShuffle from "@/components/ace/AceShuffle";
 
 const TYPE_OPTIONS = [
     { value: "sac", label: "SAC" },
@@ -1123,7 +1124,7 @@ export default function Planner() {
                                         placeholder="Write your own…" maxLength={80} className="h-9 text-sm" />
                                     <Button size="sm" onClick={() => saveIntention(intentionDraft)}
                                         disabled={savingIntention || !intentionDraft.trim()} className="h-9 gap-1 flex-shrink-0">
-                                        {savingIntention ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />} Set
+                                        {savingIntention ? <AceShuffle size="sm" /> : <Check className="w-3.5 h-3.5" />} Set
                                     </Button>
                                 </div>
                             </div>
@@ -1156,7 +1157,7 @@ export default function Planner() {
                             </div>
                             <Input type="date" value={sacDate} min={todayStr} onChange={e => setSacDate(e.target.value)} className="w-auto" />
                             <Button onClick={handleAddSac} disabled={savingSac} className="gap-1.5">
-                                {savingSac ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />} Track it
+                                {savingSac ? <AceShuffle size="sm" /> : <Plus className="w-4 h-4" />} Track it
                             </Button>
                         </div>
                     </div>
@@ -1285,7 +1286,7 @@ export default function Planner() {
                             </div>
                             <div className="flex gap-2 flex-shrink-0">
                                 <Button size="sm" onClick={rescueMissed} disabled={rescuing} className="gap-1.5">
-                                    {rescuing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <CalendarDays className="w-3.5 h-3.5" />}
+                                    {rescuing ? <AceShuffle size="sm" /> : <CalendarDays className="w-3.5 h-3.5" />}
                                     Move them forward
                                 </Button>
                                 <Button size="sm" variant="ghost" onClick={() => deletePlans(missed)} disabled={rescuing}
@@ -1584,7 +1585,7 @@ export default function Planner() {
                             )}
 
                             <Button onClick={editingPlan ? savePlanEdits : addPlan} disabled={savingPlan || !planTitle.trim()} className="w-full gap-1.5">
-                                {savingPlan ? <Loader2 className="w-4 h-4 animate-spin" /> : editingPlan ? <Check className="w-4 h-4" /> : <Plus className="w-4 h-4" />}
+                                {savingPlan ? <AceShuffle size="sm" /> : editingPlan ? <Check className="w-4 h-4" /> : <Plus className="w-4 h-4" />}
                                 {editingPlan ? "Save changes" : repeatWeekly ? `Add ${repeatWeeks} weekly sessions` : "Add to plan"}
                             </Button>
                         </div>

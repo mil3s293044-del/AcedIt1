@@ -15,8 +15,9 @@ import React, { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/components/ui/use-toast";
 import { base44 } from "@/api/base44Client";
-import { ChevronDown, ChevronRight, Check, Loader2, BookmarkPlus } from "lucide-react";
+import { ChevronDown, ChevronRight, Check, BookmarkPlus } from "lucide-react";
 import MarkdownMath from "@/components/shared/MarkdownMath";
+import AceShuffle from "@/components/ace/AceShuffle";
 
 export default function ExamQuestionsArtifact({ questions, subject = "", title = "" }) {
     const [expanded, setExpanded] = useState(null);
@@ -81,7 +82,7 @@ export default function ExamQuestionsArtifact({ questions, subject = "", title =
                 </div>
                 <Button size="sm" variant={saved ? "outline" : "default"} onClick={saveAsQuiz} disabled={saving || saved}
                     className="rounded-xl gap-1.5 text-xs font-semibold">
-                    {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    {saving ? <AceShuffle size="sm" />
                         : saved ? <Check className="w-3.5 h-3.5" />
                         : <BookmarkPlus className="w-3.5 h-3.5" />}
                     {saved ? "Saved" : "Save as quiz"}

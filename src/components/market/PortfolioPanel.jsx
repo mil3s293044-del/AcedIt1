@@ -24,13 +24,14 @@
  * sell button that does not exist.
  */
 import React, { useCallback, useEffect, useMemo, useState } from "react";
-import { Loader2 } from "lucide-react";
+import {  } from "lucide-react";
 import { base44 } from "@/api/base44Client";
 import { takeFn } from "@/lib/fnResult";
 import { bookOf, equityCurve, calibration, outcomeOf } from "@/lib/holdings";
 import { priceLabel, sideOf, YES, KINDS } from "@/lib/market";
 import CalibrationCurve from "./CalibrationCurve";
 import EquityCurve from "./EquityCurve";
+import AceShuffle from "@/components/ace/AceShuffle";
 
 const INK = { dim: "#4E6484", mid: "#8FA3BF", bright: "#E8F0FB",
     up: "#58CC02", down: "#FF5A5F", gold: "#FFC800" };
@@ -83,7 +84,7 @@ export default function PortfolioPanel({ onOpenMarket }) {
     if (state.loading) {
         return (
             <div className="flex items-center justify-center py-16">
-                <Loader2 className="w-5 h-5 animate-spin text-[#4E6484]" />
+                <AceShuffle size="lg" label="Loading your book" ink="floor" />
             </div>
         );
     }

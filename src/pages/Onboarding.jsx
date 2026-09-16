@@ -50,8 +50,7 @@ import {
     ChevronLeft, ArrowRight, Check, X, Search, Plus,
     BookOpen, MapPin, Crown, Info,
     Mail,
-    Loader2,
-} from "lucide-react";
+    } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { VCE_SUBJECTS } from "@/data/vceSubjects";
@@ -65,6 +64,7 @@ import TheBrain from "@/components/onboarding/wizard/TheBrain";
 import ScalingReport from "@/components/onboarding/wizard/ScalingReport";
 import Payout, { weeksUntilExams } from "@/components/onboarding/wizard/Payout";
 import { atarBandOf } from "@/lib/atarBands";
+import AceShuffle from "@/components/ace/AceShuffle";
 
 const TOTAL_STEPS = 6;
 const STORAGE_KEY = "acedit_onboarding_v1";
@@ -240,7 +240,7 @@ export default function Onboarding({ existingUser = false }) {
     if (isPrefilling) {
         return (
             <div className="min-h-screen bg-background flex items-center justify-center">
-                <div className="w-8 h-8 border-4 border-border border-t-primary rounded-full animate-spin" />
+                <AceShuffle size="lg" label="Loading your details" />
             </div>
         );
     }
@@ -1056,7 +1056,7 @@ function Step6Signin({ answers, update }) {
                             onClick={handleResend}
                             className="w-full border-2 border-border rounded-xl gap-2"
                         >
-                            {resending ? <><Loader2 className="w-4 h-4 animate-spin" /> Sending…</>
+                            {resending ? <><AceShuffle size="sm" /> Sending…</>
                                 : resent ? <><Check className="w-4 h-4 text-primary" /> Sent — check again</>
                                 : <><Mail className="w-4 h-4" /> Send it again</>}
                         </Button>

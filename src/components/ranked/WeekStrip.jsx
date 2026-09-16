@@ -19,12 +19,13 @@
  */
 import React, { useCallback, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { ChevronRight, Trophy, Loader2 } from "lucide-react";
+import { ChevronRight, Trophy } from "lucide-react";
 import { base44 } from "@/api/base44Client";
 import { createPageUrl } from "@/utils";
 import { useLiveTick } from "@/lib/LiveContext";
 import { unwrapFn } from "@/lib/fnResult";
 import { msUntilReset, untilLabel, isClosing, ordinal } from "@/lib/league";
+import AceShuffle from "@/components/ace/AceShuffle";
 
 export default function WeekStrip() {
     const [state, setState] = useState(null);
@@ -47,7 +48,7 @@ export default function WeekStrip() {
     if (loading) {
         return (
             <div className="card-soft px-4 py-3 flex items-center gap-2 text-muted-foreground text-sm">
-                <Loader2 className="w-3.5 h-3.5 animate-spin" /> This week…
+                <AceShuffle size="sm" /> This week…
             </div>
         );
     }

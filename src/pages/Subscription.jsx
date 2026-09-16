@@ -2,7 +2,7 @@ import React, { useState, useEffect } from "react";
 import { base44 } from "@/api/base44Client";
 import { motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
-import { Crown, Check, CreditCard, Loader2, Gift, Sparkles, X } from "lucide-react";
+import { Crown, Check, CreditCard, Gift, Sparkles, X } from "lucide-react";
 import { useToast } from "@/components/ui/use-toast";
 import { useNavigate } from "react-router-dom";
 import { createPageUrl } from "@/utils";
@@ -163,7 +163,7 @@ export default function Subscription() {
                                 </div>
                             </div>
                             <Button onClick={handleManageSubscription} disabled={isProcessing} variant="outline" className="rounded-xl">
-                                {isProcessing ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <CreditCard className="w-4 h-4 mr-2" />}
+                                {isProcessing ? <AceShuffle size="sm" className="mr-2" /> : <CreditCard className="w-4 h-4 mr-2" />}
                                 Manage subscription
                             </Button>
                         </div>

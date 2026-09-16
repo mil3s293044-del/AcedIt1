@@ -7,7 +7,6 @@ import { Button } from "@/components/ui/button";
 import {
     Crown,
     Check,
-    Loader2,
     ArrowLeft,
     Shield,
     Lock,
@@ -15,6 +14,7 @@ import {
 } from "lucide-react";
 import { useToast } from "@/components/ui/use-toast";
 import { createPageUrl } from "@/utils";
+import AceShuffle from "@/components/ace/AceShuffle";
 
 const premiumFeatures = [
     "Unlimited AI Credits",
@@ -183,7 +183,7 @@ export default function Checkout() {
                                 >
                                     {isProcessing ? (
                                         <>
-                                            <Loader2 className="w-5 h-5 mr-2 animate-spin" />
+                                            <AceShuffle size="sm" className="mr-2" />
                                             Redirecting to Stripe...
                                         </>
                                     ) : (

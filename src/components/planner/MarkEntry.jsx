@@ -37,11 +37,12 @@
  * it open rather than settling it as a fail.
  */
 import React, { useState } from "react";
-import { Loader2, Trophy } from "lucide-react";
+import { Trophy } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { markPercent } from "@/lib/market";
+import AceShuffle from "@/components/ace/AceShuffle";
 
 export default function MarkEntry({ assessment, busy, onSave, onSkip, onClose }) {
     const [score, setScore] = useState("");
@@ -97,7 +98,7 @@ export default function MarkEntry({ assessment, busy, onSave, onSkip, onClose })
                     </Button>
                     <Button onClick={() => onSave(Number(score), Number(outOf))}
                         disabled={!ready || busy} className="flex-1 gap-2">
-                        {busy && <Loader2 className="w-4 h-4 animate-spin" />} Save the mark
+                        {busy && <AceShuffle size="sm" />} Save the mark
                     </Button>
                 </div>
             </DialogContent>

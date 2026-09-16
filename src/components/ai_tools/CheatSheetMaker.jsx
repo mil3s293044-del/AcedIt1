@@ -7,7 +7,7 @@ import { useToast } from "@/components/ui/use-toast";
 import { base44 } from "@/api/base44Client";
 import { acceptFiles, STUDY_ACCEPT, STUDY_ACCEPT_LABEL } from "@/lib/pickFiles";
 import {
-    Upload, X, FileText, Loader2, Wand2, Printer, Plus, RotateCcw,
+    Upload, X, FileText, Wand2, Printer, Plus, RotateCcw,
     Sigma, BookOpen, Check, Lightbulb, ChevronDown, Download, Eye
 } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -15,6 +15,7 @@ import { recordStudyAndGetStreak } from "@/components/shared/streakHelpers";
 import LoadingQuiz from "@/components/shared/LoadingQuiz";
 import MarkdownMath from "@/components/shared/MarkdownMath";
 import { getExaminerPrompt } from "@/lib/subjectExaminerPrompts";
+import AceShuffle from "@/components/ace/AceShuffle";
 
 // A tight A4 two-column cheat sheet holds ~22 short lines per page. The page
 // selector multiplies this to set how many items fill the sheet; the AI is
@@ -349,7 +350,7 @@ ${sourceText ? `\nEXTRACTED CONTENT:${sourceText}` : ""}`;
                     </div>
 
                     <Button onClick={handleGenerate} disabled={!subject || !uploadedFiles.length || isGenerating} size="lg" className="w-full">
-                        {isGenerating ? <><Loader2 className="w-4 h-4 animate-spin" /> Building your cheat sheet… (~20–40s)</> : <><Wand2 className="w-4 h-4" /> Generate cheat sheet</>}
+                        {isGenerating ? <><AceShuffle size="sm" /> Building your cheat sheet… (~20–40s)</> : <><Wand2 className="w-4 h-4" /> Generate cheat sheet</>}
                     </Button>
                 </div>
             )}

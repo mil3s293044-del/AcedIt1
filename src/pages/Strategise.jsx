@@ -21,7 +21,7 @@ import { useToast } from "@/components/ui/use-toast";
 import { createPageUrl } from "@/utils";
 import { format, parseISO, differenceInDays } from "date-fns";
 import {
-    Sparkles, ArrowRight, ArrowLeft, Loader2, Check, Target, Flag, Info, BookOpen, Brain, Zap, Coffee, GraduationCap,
+    Sparkles, ArrowRight, ArrowLeft, Check, Target, Flag, Info, BookOpen, Brain, Zap, Coffee, GraduationCap,
 } from "lucide-react";
 import { TECHNIQUES, TECHNIQUE_IDS, PRINCIPLES, runUpDays, applyRules, planSummary } from "@/lib/strategise";
 import { fmtDate } from "@/lib/safeDate";
@@ -421,7 +421,7 @@ Rules:
                                 <div className="flex gap-2 flex-shrink-0">
                                     <Button variant="ghost" onClick={() => setStage("setup")} className="rounded-xl">Back</Button>
                                     <Button onClick={generate} disabled={busy || chosen.length === 0} className="flex-1 sm:flex-none gap-1.5">
-                                        {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />} Build my plan
+                                        {busy ? <AceShuffle size="sm" /> : <Sparkles className="w-4 h-4" />} Build my plan
                                     </Button>
                                 </div>
                             </div>
@@ -493,7 +493,7 @@ Rules:
                             <div className="sticky bottom-4 card-soft p-4 border-2 border-chart-4/30 flex flex-wrap gap-2">
                                 <Button variant="ghost" onClick={() => setStage("days")} className="rounded-xl">Change the days</Button>
                                 <Button onClick={save} disabled={busy} className="ml-auto gap-1.5">
-                                    {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />} Add to my planner
+                                    {busy ? <AceShuffle size="sm" /> : <Check className="w-4 h-4" />} Add to my planner
                                 </Button>
                             </div>
                         </motion.div>

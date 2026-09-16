@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { motion } from "framer-motion";
 import { Card, CardContent } from "@/components/ui/card";
-import { CheckCircle, Sparkles, Loader2 , AlertCircle} from "lucide-react";
+import { CheckCircle, Sparkles , AlertCircle} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { base44 } from "@/api/base44Client";
 import { trackPurchase } from "@/lib/analytics";
@@ -102,12 +102,21 @@ export default function PaymentSuccess() {
                 paid ? "from-amber-50 via-yellow-50 to-orange-50" : "from-red-50 via-orange-50 to-yellow-50"}`}>
                 <Card className="max-w-md w-full">
                     <CardContent className="p-8 text-center">
-                        <div className={`w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4 ${
-                            paid ? "bg-xp/15" : "bg-streak/15"}`}>
-                            {paid
-                                ? <Loader2 className="w-8 h-8 text-xp animate-spin" />
-                                : <AlertCircle className="w-8 h-8 text-streak" />}
-                        </div>
+                        {/* A STATUS DISC HOLDS A GLYPH, and the deck is not one.
+                            The failed case keeps its badge — a warning IS an icon —
+                            and the waiting case loses the circle rather than being
+                            squeezed into it, because a stack of cards inside a
+                            coloured pill reads as a rendering fault. */}
+                        {paid ? (
+                            <div className="flex justify-center mb-4">
+                                <AceShuffle size="lg" label="Activating your subscription" />
+                            </div>
+                        ) : (
+                            <div className="w-16 h-16 rounded-full flex items-center justify-center
+                                mx-auto mb-4 bg-streak/15">
+                                <AlertCircle className="w-8 h-8 text-streak" />
+                            </div>
+                        )}
                         <h2 className={`text-xl font-bold mb-2 ${paid ? "text-amber-900" : "text-red-900"}`}>
                             {paid ? "Payment received — activating" : "Payment Verification Failed"}
                         </h2>
@@ -164,7 +173,7 @@ export default function PaymentSuccess() {
                             <h3 className="text-lg font-bold text-foreground mb-1">You now have full premium access!</h3>
                             <p className="text-muted-foreground text-sm">Redirecting you to your subscription page...</p>
                         </div>
-                        <Loader2 className="w-5 h-5 animate-spin text-muted-foreground/60 mx-auto" />
+                        <AceShuffle size="md" label="Redirecting" className="mx-auto" />
                     </CardContent>
                 </Card>
             </motion.div>

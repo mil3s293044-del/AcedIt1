@@ -29,12 +29,13 @@
  */
 import React, { useState } from "react";
 import { motion } from "framer-motion";
-import { Check, X, Loader2, AlertTriangle } from "lucide-react";
+import { Check, X, AlertTriangle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { base44 } from "@/api/base44Client";
 import MarkdownMath from "@/components/shared/MarkdownMath";
 import { getExaminerPrompt } from "@/lib/subjectExaminerPrompts";
+import AceShuffle from "@/components/ace/AceShuffle";
 
 const VERDICT = {
     got:     { label: "That would score", cls: "text-primary",  icon: Check, rating: 4 },
@@ -147,7 +148,7 @@ Rules, and breaking any of them makes this worse than no feedback:
             {!mark && !failed && (
                 <Button onClick={submit} disabled={!text.trim() || busy}
                     className="btn-3d w-full bg-primary hover:bg-primary text-primary-foreground rounded-xl">
-                    {busy ? <><Loader2 className="w-4 h-4 animate-spin" /> Marking against the criterion…</>
+                    {busy ? <><AceShuffle size="sm" /> Marking against the criterion…</>
                           : "Mark my answer"}
                 </Button>
             )}

@@ -5,8 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import {
-    ArrowLeft, Clock, Wand2, Loader2,
-    X, Check, ChevronLeft, ChevronRight, Flag, Layers, TrendingUp, Brain,
+    ArrowLeft, Clock, Wand2, X, Check, ChevronLeft, ChevronRight, Flag, Layers, TrendingUp, Brain,
     Trophy, Star, BookOpen, Bookmark, BookmarkCheck
 } from "lucide-react";
 import AdaptiveReview from "./AdaptiveReview";
@@ -40,6 +39,7 @@ import { fireXPFeedback } from "../ranked/XPFeedback";
 import QuizTable from "@/components/cards/QuizTable";
 import ChoiceCard from "@/components/cards/ChoiceCard";
 import { suitFor } from "@/components/cards/cardIdentity";
+import AceShuffle, { AceLoading } from "@/components/ace/AceShuffle";
 
 // ─── Static class lookup tables (no dynamic Tailwind interpolation) ──────────
 const CHOICE_STATE = {
@@ -1243,7 +1243,7 @@ invent a theme from a single question.`,
                         <div className="flex items-center gap-2">
                             {isGeneratingFeedback && (
                                 <div className="flex items-center gap-1.5 text-xs text-chart-4 bg-chart-4/10 px-3 py-1.5 rounded-full font-medium">
-                                    <Loader2 className="w-3.5 h-3.5 animate-spin" /> Marking...
+                                    <AceShuffle size="sm" /> Marking...
                                 </div>
                             )}
                             <div className={`px-3 py-1.5 rounded-xl font-black text-sm ${tier.badge}`}>
@@ -1368,9 +1368,12 @@ invent a theme from a single question.`,
                                         </div>
 
                                         {isGeneratingFeedback && (
-                                            <div className="card-soft p-6 flex items-center justify-center gap-2 text-muted-foreground">
-                                                <Loader2 className="w-4 h-4 animate-spin" />
-                                                <span className="text-sm">Marking, and looking for what these have in common&hellip;</span>
+                                            <div className="card-soft p-6">
+                                                {/* Marking is the app reasoning about THEIR work,
+                                                    which is what `think` is for — see AceShuffle. */}
+                                                <AceLoading variant="think">
+                                                    Marking, and looking for what these have in common&hellip;
+                                                </AceLoading>
                                             </div>
                                         )}
 
@@ -1417,7 +1420,7 @@ invent a theme from a single question.`,
                                                         <Button data-make-cards onClick={makeCardsFromMisses} disabled={makingCards}
                                                             className="btn-3d gap-2 bg-primary hover:bg-primary/90 text-white rounded-xl w-full sm:w-auto">
                                                             {makingCards
-                                                                ? <><Loader2 className="w-4 h-4 animate-spin" /> Adding&hellip;</>
+                                                                ? <><AceShuffle size="sm" /> Adding&hellip;</>
                                                                 : <><Layers className="w-4 h-4" /> Add {missedIndexes.length} to my {shuffledQuiz.subject || "flashcard"} deck</>}
                                                         </Button>
                                                     </>
@@ -1653,7 +1656,7 @@ invent a theme from a single question.`,
                                                                     className="inline-flex items-center gap-1.5 text-xs font-bold text-muted-foreground
                                                                         hover:text-foreground underline underline-offset-4 disabled:opacity-60">
                                                                     {askingWhy[currentFeedbackIndex]
-                                                                        ? <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Asking&hellip;</>
+                                                                        ? <><AceShuffle size="sm" /> Asking&hellip;</>
                                                                         : <><Wand2 className="w-3.5 h-3.5" /> Guessed it? Ask why it&rsquo;s right</>}
                                                                 </button>
                                                             </div>
@@ -1662,8 +1665,8 @@ invent a theme from a single question.`,
                                                 </div>
                                             ) : isGeneratingFeedback ? (
                                                 <div className="flex items-center gap-2 py-4 justify-center text-muted-foreground/60">
-                                                    <Loader2 className="w-4 h-4 animate-spin" />
-                                                    <span className="text-sm">AI is marking this question...</span>
+                                                    <AceShuffle size="sm" label="Marking" />
+                                                    <span className="text-sm">Marking this question&hellip;</span>
                                                 </div>
                                             ) : null}
                                         </div>

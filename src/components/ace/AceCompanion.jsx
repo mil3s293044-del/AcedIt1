@@ -24,7 +24,7 @@
 import React, { useState, useRef, useEffect, useCallback, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
-import { X, Send, Loader2, ArrowRight, Lock, Sparkles, RefreshCw } from "lucide-react";
+import { X, Send, ArrowRight, Lock, Sparkles, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import MarkdownMath from "@/components/shared/MarkdownMath";
 import SpadeMark, { AceCard } from "@/components/ace/SpadeMark";
@@ -39,6 +39,7 @@ import { readsAsDismissal, readsAsRecall, DISMISS, pick } from "@/lib/aceVoice";
 import { turnOff, turnOn } from "@/lib/aceBuddy";
 import { deck, deckBySection, STATE } from "@/lib/aceDeck";
 import { SECTIONS, BY_ID, PAGES, featuresForPage, readiness } from "@/lib/aceKnowledge";
+import AceShuffle from "@/components/ace/AceShuffle";
 
 // Static class strings — Tailwind never sees a class built from a variable.
 const TONE = {
@@ -360,7 +361,7 @@ export default function AceCompanion({ userProfile }) {
                                     {streaming ? (
                                         <Button size="icon" variant="ghost" onClick={stop}
                                             className="rounded-xl flex-shrink-0" aria-label="Stop">
-                                            <Loader2 className="w-5 h-5 animate-spin text-primary" />
+                                            <AceShuffle size="sm" />
                                         </Button>
                                     ) : (
                                         <Button size="icon" onClick={() => ask()} disabled={!input.trim()}

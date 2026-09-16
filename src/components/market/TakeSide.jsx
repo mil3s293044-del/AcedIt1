@@ -73,8 +73,9 @@
  */
 import React, { useMemo, useState } from "react";
 import { useMotionValue, useSpring, useReducedMotion } from "framer-motion";
-import { Loader2 } from "lucide-react";
+import {  } from "lucide-react";
 import PriceChart from "./PriceChart";
+import AceShuffle from "@/components/ace/AceShuffle";
 import {
     YES, NO, probFor, payoutFor, clampStake, priceLabel,
     returnMultiple, bestReturn, multiplierLabel,
@@ -312,7 +313,7 @@ export default function TakeSide({
                     className="flex-1 py-2.5 rounded-xl bg-[#E8F0FB] text-[#0A121F]
                         font-display font-black text-sm disabled:opacity-40
                         hover:bg-white transition-colors inline-flex items-center justify-center gap-2">
-                    {busy && <Loader2 className="w-4 h-4 animate-spin" />}
+                    {busy && <AceShuffle size="sm" />}
                     {tooMuch ? "Not enough cred" : `Put ${stake} on ${side === YES ? "Yes" : "No"}`}
                 </button>
             </div>

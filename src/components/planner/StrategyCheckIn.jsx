@@ -17,12 +17,13 @@ import { motion, AnimatePresence } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { base44 } from "@/api/base44Client";
 import { useToast } from "@/components/ui/use-toast";
-import { Loader2, Check, X, Minus, ChevronRight, RotateCcw } from "lucide-react";
+import { Check, X, Minus, ChevronRight, RotateCcw } from "lucide-react";
 import AceBody from "@/components/ace/AceBody";
 import { TECHNIQUES, TECHNIQUE_IDS, applyRules } from "@/lib/strategise";
 import { describeOutcomes, describeRemaining, strategyStanding, dayKey } from "@/lib/strategyState";
 import { durationOf } from "@/lib/planTags";
 import { fmtDate } from "@/lib/safeDate";
+import AceShuffle from "@/components/ace/AceShuffle";
 
 // What a student can say about a day that has passed. Deliberately three
 // options — "did you do it" is a yes/no that most real days fail, and a plan
@@ -295,7 +296,7 @@ Rules:
                                     </p>
                                     <div className="flex gap-2 flex-wrap">
                                         <Button size="sm" onClick={revise} disabled={busy} className="gap-1.5">
-                                            {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : <RotateCcw className="w-4 h-4" />}
+                                            {busy ? <AceShuffle size="sm" /> : <RotateCcw className="w-4 h-4" />}
                                             Go on then
                                         </Button>
                                         <Button size="sm" variant="ghost" disabled={busy}

@@ -2,12 +2,13 @@ import React, { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { ArrowLeft, Lightbulb, ChevronRight, Check, X, Loader2, Sparkles, Target, Brain } from "lucide-react";
+import { ArrowLeft, Lightbulb, ChevronRight, Check, X, Sparkles, Target, Brain } from "lucide-react";
 import { base44 } from "@/api/base44Client";
 import MathText from "@/components/shared/LatexRenderer";
 import MarkdownMath from "@/components/shared/MarkdownMath";
 import { getLatexRules } from "@/lib/subjectExaminerPrompts";
 import { normaliseQuestion } from "@/lib/quizSchema";
+import AceShuffle from "@/components/ace/AceShuffle";
 
 // Static lookup for MCQ option styling — keeps Tailwind JIT happy.
 const OPTION_STYLES = {
@@ -272,7 +273,7 @@ Give ONE short, directed hint (2-3 sentences max) that steers them toward the ri
                 <Button variant="outline" onClick={() => loadHint(currentIdx)}
                     disabled={!!hints[currentIdx] || !!loadingHint[currentIdx]}
                     className="gap-2 rounded-xl border-2 border-xp/30 text-xp hover:bg-xp/10 font-semibold disabled:opacity-50">
-                    {loadingHint[currentIdx] ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Lightbulb className="w-3.5 h-3.5" />}
+                    {loadingHint[currentIdx] ? <AceShuffle size="sm" /> : <Lightbulb className="w-3.5 h-3.5" />}
                     {hints[currentIdx] ? 'Hint shown' : loadingHint[currentIdx] ? 'Loading...' : 'Get a Hint'}
                 </Button>
 

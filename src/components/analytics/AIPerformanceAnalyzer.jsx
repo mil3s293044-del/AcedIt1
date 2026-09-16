@@ -11,7 +11,6 @@ import {
     TrendingUp,
     CheckCircle2,
     AlertTriangle,
-    Loader2,
     BookOpen,
     Calendar,
     BarChart3,
@@ -21,6 +20,7 @@ import {
     ChevronUp
 } from "lucide-react";
 import { base44 } from "@/api/base44Client";
+import AceShuffle from "@/components/ace/AceShuffle";
 
 // Static token lookup tables (avoid Tailwind JIT dynamic interpolation gotchas).
 const gradeStyles = {
@@ -368,7 +368,7 @@ Provide analysis in the following format - be specific and mention actual number
                             >
                                 {isAnalyzing ? (
                                     <>
-                                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                                        <AceShuffle size="sm" className="mr-2" />
                                         Analyzing...
                                     </>
                                 ) : (

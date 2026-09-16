@@ -5,7 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Send, Loader2, MessageSquare } from "lucide-react";
+import { Send, MessageSquare } from "lucide-react";
 import { GroupMessage } from "@/entities/all";
 import { useToast } from "@/components/ui/use-toast";
 import { moderationPresets } from "@/components/shared/contentModeration";
@@ -169,7 +169,7 @@ export default function GroupChat({ group, user }) {
                             className="bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700"
                         >
                             {isSending ? (
-                                <Loader2 className="w-4 h-4 animate-spin" />
+                                <AceShuffle size="sm" />
                             ) : (
                                 <Send className="w-4 h-4" />
                             )}
