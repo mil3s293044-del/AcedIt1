@@ -18,7 +18,7 @@ import path from "node:path";
 import {
     FREE_STORAGE_BYTES, MEGA_BUCKET_BYTES, MEGA_STOPS_AT, PERSIST_STOPS_AT,
     SWEEP_HARDER_AT, UPLOAD_TTL_HOURS, UPLOAD_TTL_HOURS_TIGHT,
-    storageVerdict, megaRefusal, pctOf, expiredKeys,
+    storageVerdict, megaRefusal, pctOf, expiredKeys, evictionPlan,
 } from "@/lib/storageBudget";
 import { MEGA_FILE_CAP, MEGA_ACTIVE_MAX, MEGA_TTL_HOURS } from "@/lib/megaUpload";
 
@@ -110,10 +110,28 @@ check("a book that fits is not refused", () => {
 
 // ─── The arithmetic that set the caps ───────────────────────────────────────
 
-check("a full books bucket holds a useful number of students", () => {
-    const concurrent = Math.floor(MEGA_BUCKET_BYTES / (MEGA_FILE_CAP * MEGA_ACTIVE_MAX));
-    assert.ok(concurrent >= 5,
-        `only ${concurrent} students could hold a book at once — the caps do not fit the share`);
+check("the share holds a useful resident set at a REAL book size", () => {
+    // A VCE textbook PDF is commonly 25-40 MB; the cap is the ceiling, not the
+    // average. Measuring against the ceiling (every student holding two
+    // maximum-size books at once) is the case EVICTION exists to resolve, so
+    // it is not the number that decides whether the caps fit.
+    const typical = 30 * 1024 * 1024;
+    const resident = Math.floor(MEGA_BUCKET_BYTES / typical);
+    assert.ok(resident >= 10,
+        `only ${resident} typical books fit the share — the caps do not fit`);
+    // And one book must always be storable, or the feature cannot start.
+    assert.ok(MEGA_FILE_CAP <= MEGA_BUCKET_BYTES);
+});
+
+check("A FULL BUCKET EVICTS, it does not simply refuse", () => {
+    // This is what lets MEGA_TTL_HOURS be generous and the file cap be high:
+    // the bound is enforced by reclaiming the least recently read book, so a
+    // student meets the refusal only when every book is being actively read.
+    const src = fs.readFileSync(path.resolve("server.mjs"), "utf8");
+    assert.match(src, /async function sweepMegaGlobal\(/, "a global sweep must exist");
+    assert.match(src, /recentlyRead\(/, "eviction must protect a book being read");
+    assert.match(src, /sweepMegaGlobal\(\{ need: file\.size \}\)/,
+        "an upload must make room for ITSELF before it is refused");
 });
 
 check("the caps as a whole stay inside the plan", () => {
@@ -124,12 +142,27 @@ check("the caps as a whole stay inside the plan", () => {
         "a single book must be storable at all");
 });
 
-check("A BOOK IS KEPT FOR A SITTING, NOT A TERM", () => {
-    // The free tier only fits "students with a book open today". A week-long
-    // TTL turns that into "students who have ever uploaded one", which is the
-    // number that does not fit.
-    assert.ok(MEGA_TTL_HOURS <= 48, `${MEGA_TTL_HOURS}h is too long for a 1 GB plan`);
+check("the TTLs bound DEAD WEIGHT, and neither is a term", () => {
+    // MEGA_TTL_HOURS stopped being a storage control when eviction arrived —
+    // the bucket is bounded whatever it says — so it is free to be as long as
+    // is useful. It still has to bound books nobody will ever open again.
+    assert.ok(MEGA_TTL_HOURS <= 7 * 24, `${MEGA_TTL_HOURS}h keeps dead weight for a week`);
+    assert.ok(MEGA_TTL_HOURS >= 48, "a book should survive a weekend");
+    // The uploads TTL IS still a storage control: nothing evicts there,
+    // because an ordinary upload is read once, seconds after it is written.
     assert.ok(UPLOAD_TTL_HOURS <= 48);
+});
+
+check("EVERY STUDENT'S BOOKS ARE SWEPT, not just the one who is uploading", () => {
+    // The per-student sweep can never run again for somebody who uploaded once
+    // and left, so their book was immortal — and at the file cap that is the
+    // whole share held by accounts nobody is waiting on.
+    const src = fs.readFileSync(path.resolve("server.mjs"), "utf8");
+    assert.match(src, /async function megaInventory\(/, "the sweep must walk every prefix");
+    // And a sweep must be reachable from the paths students actually take,
+    // not only from an upload — the rarest thing the app does.
+    const fired = (src.match(/maybeSweep\(\)/g) || []).length;
+    assert.ok(fired >= 3, `only ${fired} call sites fire a sweep — a quiet week reclaims nothing`);
 });
 
 check("pctOf reads as a percentage of the plan", () => {
@@ -211,6 +244,103 @@ check("a zero or missing TTL does not become a delete-everything", () => {
     assert.deepEqual(expiredKeys(fresh, { ttlHours: 24, now: NOW }).keys, []);
     assert.deepEqual(expiredKeys(fresh, { ttlHours: undefined, now: NOW }).keys.sort(),
         ["a", "b"], "an explicit 0/absent TTL is a full sweep — callers pass one");
+});
+
+// ─── EVICTION. This deletes OTHER PEOPLE'S files. ──────────────────────────
+
+const MBb = 1024 * 1024;
+const book = (key, owner, hoursAgo, size = 30 * MBb) =>
+    ({ key, owner, at: hoursAgo === null ? null : NOW - hoursAgo * H, size });
+
+const plan = (rows, opts = {}) => evictionPlan(rows, {
+    budget: 100 * MBb, ttlHours: 72, keepNewest: 2, now: NOW, ...opts,
+});
+
+check("nothing is evicted while the bucket fits", () => {
+    const rows = [book("a", "u1", 1, 20 * MBb), book("b", "u2", 2, 20 * MBb)];
+    assert.deepEqual(plan(rows).keys, []);
+});
+
+check("the LEAST RECENTLY written goes first, and it STOPS once it fits", () => {
+    // Evicting past the budget is destroying an upload to buy space nobody
+    // asked for.
+    const rows = [book("new", "u1", 1), book("mid", "u2", 5), book("old", "u3", 9)];
+    const r = plan(rows, { budget: 70 * MBb });
+    assert.deepEqual(r.keys, ["old"], "one eviction is enough for 90 of 70");
+    assert.equal(r.held, 60 * MBb);
+});
+
+check("an upload makes room for ITSELF rather than being refused", () => {
+    const rows = [book("a", "u1", 1), book("b", "u2", 2), book("c", "u3", 3)];
+    // 90 MB held, 100 MB budget, a 30 MB book arriving: one must go.
+    const r = plan(rows, { need: 30 * MBb });
+    assert.equal(r.keys.length, 1);
+    assert.ok(r.held + 30 * MBb <= 100 * MBb, "and the newcomer then fits");
+});
+
+check("A BOOK BEING READ IS NEVER EVICTED", () => {
+    // Storage records writes and never reads, so the oldest book by timestamp
+    // may be the one a student is three chapters into. Without `protect` a
+    // sweep takes it out of their hands mid-sitting.
+    const rows = [book("reading", "u1", 9), book("idle", "u2", 5), book("newer", "u3", 1)];
+    const r = plan(rows, { budget: 70 * MBb, protect: new Set(["reading"]) });
+    assert.ok(!r.keys.includes("reading"), "the one in use survives");
+    assert.deepEqual(r.keys, ["idle"], "the next oldest goes instead");
+});
+
+check("protecting everything means nothing is evicted, not a wrong choice", () => {
+    // The state where a refusal is the correct answer — every book in use.
+    const rows = [book("a", "u1", 9), book("b", "u2", 8)];
+    const r = plan(rows, { budget: 10 * MBb, protect: new Set(["a", "b"]) });
+    assert.deepEqual(r.keys, []);
+    assert.ok(r.held > 10 * MBb, "and the caller can see it did not fit");
+});
+
+check("each owner keeps their newest through the AGE pass", () => {
+    // Ageing alone must not take somebody's only book.
+    const rows = [book("u1-only", "u1", 200), book("u2-only", "u2", 300)];
+    const r = evictionPlan(rows, { budget: 999 * MBb, ttlHours: 72, keepNewest: 1, now: NOW });
+    assert.deepEqual(r.keys, [], "both are ancient and both are their owner's only book");
+});
+
+check("but a THIRD book goes whatever its age, at keepNewest 2", () => {
+    const rows = [book("n1", "u1", 1), book("n2", "u1", 2), book("n3", "u1", 3)];
+    const r = plan(rows, { budget: 999 * MBb });
+    assert.deepEqual(r.keys, ["n3"], "the oldest of the three");
+});
+
+check("one owner's oldest cannot protect another owner's", () => {
+    // The age pass is PER OWNER, so a quiet account does not shelter behind a
+    // busy one's timestamps.
+    const rows = [book("stale", "quiet", 500), book("a", "busy", 1), book("b", "busy", 2)];
+    const r = evictionPlan(rows, { budget: 999 * MBb, ttlHours: 72, keepNewest: 1, now: NOW });
+    assert.deepEqual(r.keys, ["b"], "busy's second goes on count; quiet's only book stays");
+});
+
+check("THE ORDER IS DETERMINISTIC when two books share a timestamp", () => {
+    // `(b.at ?? Infinity) - (a.at ?? Infinity)` is NaN when BOTH are unknown,
+    // and a comparator returning NaN orders arbitrarily — for a function that
+    // decides what to delete, the answer would change between engines.
+    const rows = [book("z", "u1", null), book("a", "u2", null), book("m", "u3", null)];
+    const first = evictionPlan(rows, { budget: 10 * MBb, ttlHours: 72, keepNewest: 0, now: NOW });
+    const again = evictionPlan([...rows].reverse(), { budget: 10 * MBb, ttlHours: 72, keepNewest: 0, now: NOW });
+    assert.deepEqual(first.keys.sort(), again.keys.sort(), "same input, same answer");
+});
+
+check("eviction survives the shapes a listing can actually return", () => {
+    for (const bad of [[], null, undefined, [null], [{}], [{ key: "" }], [{ key: "x" }]]) {
+        assert.doesNotThrow(() => plan(bad), JSON.stringify(bad));
+        const r = plan(bad);
+        assert.ok(Array.isArray(r.keys));
+        assert.ok(Number.isFinite(r.freed));
+    }
+});
+
+check("freed is what actually goes, never what survives", () => {
+    const rows = [book("a", "u1", 9, 40 * MBb), book("b", "u2", 1, 40 * MBb)];
+    const r = plan(rows, { budget: 50 * MBb });
+    assert.deepEqual(r.keys, ["a"]);
+    assert.equal(r.freed, 40 * MBb);
 });
 
 // ─── The scan: the sweep exists, and both buckets are counted ──────────────

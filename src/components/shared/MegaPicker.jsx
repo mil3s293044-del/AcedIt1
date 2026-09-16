@@ -30,7 +30,7 @@ import { BookOpen, Loader2, Upload, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { listMega, megaUrl, uploadMega } from "@/api/megaUploads";
 import {
-    MEGA_FILE_CAP, MEGA_MODEL_LABEL, MEGA_TTL_HOURS, RANGE_PAGE_CAP,
+    MEGA_ACTIVE_MAX, MEGA_FILE_CAP, MEGA_MODEL_LABEL, MEGA_TTL_HOURS, RANGE_PAGE_CAP,
     defaultRange, megaPrice, normaliseRange, parseRange,
 } from "@/lib/megaUpload";
 
@@ -163,6 +163,16 @@ export default function MegaPicker({ featurePrice = 0, onChange, toast }) {
                         <p className="text-xs text-muted-foreground">
                             Upload a textbook once and pick the chapter each time. PDFs up to {mb(MEGA_FILE_CAP)},
                             kept for {Math.round(MEGA_TTL_HOURS / 24)} days.
+                        </p>
+                    )}
+                    {/* SAID BEFORE IT HAPPENS. A button labelled "add another
+                        book" is a promise of addition, and at the limit the
+                        next upload replaces the oldest — so a student at the
+                        limit hears it now rather than discovering it. */}
+                    {books.length >= MEGA_ACTIVE_MAX && (
+                        <p className="text-xs text-muted-foreground">
+                            {MEGA_ACTIVE_MAX} book{MEGA_ACTIVE_MAX === 1 ? "" : "s"} at a time — adding another
+                            replaces the one you have not opened in longest.
                         </p>
                     )}
                 </div>

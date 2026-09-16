@@ -263,13 +263,15 @@ export function formatRemaining(profile, feature) {
 //
 //   const access = await checkLiveTier(FEATURES.GOAL_AI_GEN);
 //   if (!access.allowed) { toast({ ... }); return; }
-export async function checkLiveTier(feature) {
+export async function checkLiveTier(feature, extraChips = 0) {
   if (TIER_BYPASS) return { allowed: true };
   try {
     const { base44 } = await import('@/api/base44Client');
     const me = await base44.auth.me();
     const rows = await base44.entities.UserProfile.filter({ created_by: me.email });
-    return canUseFeature(rows?.[0] ?? null, feature);
+    // `extraChips` is the pages of a book being read — the one price in the app
+    // that is not published in advance. See megaUpload.js.
+    return canUseFeature(rows?.[0] ?? null, feature, extraChips);
   } catch {
     // Couldn't fetch — let it proceed; the server still enforces.
     return { allowed: true };

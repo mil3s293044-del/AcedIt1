@@ -2085,12 +2085,20 @@ lazy) and slicing 40 pages costs another 7 MB. So one slice of a 100 MB book is
 ~115 MB transient and two at once is not something a 512 MB instance should be
 asked to survive — this file has OOM'd that box once already.
 
-**STORAGE IS THE CONSTRAINT, NOT COST**, and it is sized by the plan rather
-than by PDFs: 40 MB a book, ONE active book, a 24-hour TTL and a 250 MB share
-of the bucket. See the storage section below for why those numbers and not
-others. A book is cached on local disk for an hour after it is fetched, so a
-student working four chapters in one sitting costs one download of egress
-rather than four.
+**STORAGE IS THE CONSTRAINT, NOT COST**: 60 MB a book, two active books, a
+72-hour TTL and a 450 MB share of the bucket, all bounded by EVICTION rather
+than by a clock — see the storage section below. A book is cached on local
+disk for an hour after it is fetched, so a student working four chapters in
+one sitting costs one download of egress rather than four.
+
+**It is wired into Flashcards, Quizzes and Active Recall**, one `<MegaPicker>`
+each, and each one prices the pages against that feature's own chip price. A
+chapter is SOURCE MATERIAL, so every one of them starts a generate on its own —
+requiring an upload beside it would make the picker a control that cannot be
+used, which is the "feature gated behind an optional-looking step" shape this
+file already records. Active Recall shares ONE pick across both of its generate
+paths: it is one setup screen with one source list, and a second picker would
+be two answers to "what am I working from".
 
 `pdf-lib` is the one new dependency and it is load-bearing — nothing else in
 the tree can count a PDF's pages or cut a range out of one.
@@ -2117,12 +2125,16 @@ it rather than trusting the comments:
 1. **Sweep.** An ordinary upload is read ONCE, by the generate seconds later.
    Keeping it for a week bought nothing, so a day's TTL reclaims essentially
    the whole bucket, tightening to four hours at `SWEEP_HARDER_AT`.
-2. **Books refuse**, at `MEGA_STOPS_AT` or once they fill their own 250 MB
-   share — whichever comes first, because one enthusiastic student can fill
-   the share while total usage is still low. The picker asks the server whether
-   a book would be taken and disables the button with the reason, so nobody
-   pushes 40 MB up school wifi to be refused at the far end. **Books already
-   stored keep working**; only new ones stand down.
+2. **Books EVICT, and only then refuse.** Reclaiming beats refusing every
+   time, and there is almost always something to reclaim: somebody's book from
+   two days ago that nobody has opened. `sweepMegaGlobal` drops what has aged
+   out across every student, then evicts least-recently-read until the bucket
+   fits — including making room for the upload arriving, so a book is never
+   refused by a bucket that was one file over. A student meets the refusal
+   only when every book on the shelf is being actively read, which is the one
+   case where refusing is correct. The picker asks the server first, so nobody
+   pushes 60 MB up school wifi to be told no at the far end, and **books
+   already stored keep working**.
 3. **Ordinary uploads stop being PERSISTED and keep working.** `storeFile`
    already had this path for a deploy with no service key, and it serves a
    generate perfectly — upload and generate are seconds apart and the bytes are
@@ -2135,7 +2147,26 @@ on every upload would be the slowest thing in the path. Seeded from one
 listing, moved by every write and delete, re-seeded on a timer — eventually
 consistent, which is why every threshold sits well short of the cliff.
 
-**`expiredKeys` is a pure function because it DELETES.** Same reasoning as
+**EVICTION IS WHAT LETS THE CAPS BE GENEROUS.** Once the bucket is bounded by
+reclaiming rather than by a TTL, the TTL stops being a storage control at all
+and becomes a UX one — so it is as long as is useful (a book survives a
+weekend) rather than as short as is safe. The same reasoning raised the file
+cap: 60 MB rather than 40 because THAT is the limit a student actually
+collides with, and collides with hardest — a real VCE textbook PDF is commonly
+30–60 MB and "yours is 55 and the limit is 40" is a flat refusal with nothing
+to do about it. Shared pressure is absorbed invisibly; a per-file ceiling is
+not, so the ceiling goes as high as the share allows.
+
+**AND THE SWEEP WALKS EVERY STUDENT.** `sweepMegaFiles` only ever touched the
+prefix of whoever was uploading, so a student who stored a book and never came
+back kept it forever — their own sweep can never run again, by construction.
+`megaInventory` walks the whole bucket, and `maybeSweep` is fired from every
+path that touches storage (both uploads, the book list, and any generate
+carrying a file) rather than from uploads alone, which is the RAREST thing the
+app does. Firing only there meant a quiet week reclaimed nothing.
+
+**`expiredKeys` and `evictionPlan` are pure functions because they DELETE** —
+`evictionPlan` deletes OTHER PEOPLE'S files, which is a higher bar again. Same reasoning as
 `pageIndices`: a deletion decision inside a loop in a handler cannot be checked
 until it has already removed the wrong thing. Two rules, both asserted:
 **a file with no timestamp is NEVER swept** — and watch `Number(null) === 0`,
@@ -2144,13 +2175,32 @@ protects, the identical trap `criterionIndexFor` records, caught here by one
 fixture row with a null date; and **`keepNewest` protects the book a sitting is
 using**, so a sweep firing mid-session cannot pull it out from under them.
 
-**Do we need the paid plan?** Not for this. With the sweep and the caps above,
-ordinary uploads hold about a day's worth (~370 MB at 230 accounts uploading
-normally) and books are hard-bounded at 250 MB. What a paid plan buys is
-concurrency in the book feature — roughly six students holding a book at once
-at these caps — and `MEGA_FILE_CAP`, `MEGA_ACTIVE_MAX`, `MEGA_TTL_HOURS` and
-`MEGA_BUCKET_BYTES` are in one place precisely so raising them is one line each
-once it is worth paying for.
+Eviction adds three of its own, each asserted: **a book being READ is never
+evicted** (storage records writes and never reads, so the oldest by timestamp
+may be the one somebody is three chapters into — `megaTouched` is the missing
+half, kept in process); **each owner keeps their newest through the age pass**,
+so ageing alone cannot take somebody's only book; and **it stops the moment the
+budget is met**, because evicting past that destroys an upload to buy space
+nobody asked for. The comparator is explicit about ties: `(b.at ?? Infinity) -
+(a.at ?? Infinity)` is NaN when BOTH are unknown, and a comparator returning
+NaN orders arbitrarily — for a function deciding what to delete, the answer
+would change between engines.
+
+**Do we need the paid plan?** Not for this. Ordinary uploads hold about a
+day's worth (~370 MB at 230 accounts uploading normally, against 450 budgeted),
+headroom takes 120, and books are hard-bounded at 450 MB by eviction — roughly
+fifteen typical 30 MB textbooks resident, fewer if everybody uploads at the
+ceiling, and the shortfall is absorbed by evicting rather than refusing. What a
+paid plan buys is a bigger resident set and a higher per-file cap;
+`MEGA_FILE_CAP`, `MEGA_ACTIVE_MAX`, `MEGA_TTL_HOURS` and `MEGA_BUCKET_BYTES`
+are in one place precisely so raising them is one line each.
+
+One thing NOT solved: a Quiz row stores its `source_file_url` as a
+`local-file://` handle and re-reads it at marking time, weeks later, by which
+point the sweep has long since taken it. It degrades to the `[ATTACHMENT
+PROBLEM]` block rather than failing, and the marking still runs — but it is an
+ephemeral reference on a permanent row, and the honest fix is to stop storing
+it rather than to lengthen a TTL for it.
 
 ## Voice / UX guardrails (from prior decisions)
 

@@ -51,7 +51,7 @@ import { PDFDocument } from "pdf-lib";
 // The free tier is a CLIFF: going over 1 GB of storage 402s EVERY service, not
 // just uploads. This is the order things stand down in so nothing reaches it.
 import {
-  storageVerdict, megaRefusal, pctOf, expiredKeys, MEGA_BUCKET_BYTES,
+  storageVerdict, megaRefusal, pctOf, expiredKeys, evictionPlan, MEGA_BUCKET_BYTES,
 } from "./src/lib/storageBudget.js";
 import Stripe from "stripe";
 import { Resend } from "resend";
@@ -1620,6 +1620,125 @@ async function sweepMegaFiles(email) {
   return { removed: doomed.length, freed };
 }
 
+/**
+ * EVERY BOOK ON THE BUCKET, not just this student's.
+ *
+ * `sweepMegaFiles` only ever walked the prefix of whoever was uploading, so a
+ * student who stored a book and never came back kept it forever — and at 40 MB
+ * each that is the whole share held by accounts nobody is waiting on. Their own
+ * sweep can never run again, by construction.
+ *
+ * Bounded: one listing per level, capped prefixes, and rate-limited by
+ * `maybeSweep`. It is the same lazy design as everything else here — somebody
+ * has to open the app — but ANY student's visit now sweeps EVERY student's
+ * books, which is what makes lazy sufficient.
+ */
+async function megaInventory() {
+  if (!(await ensureMegaBucket())) return [];
+  const { data: users } = await supabaseAdmin.storage.from(MEGA_BUCKET)
+    .list("u", { limit: 1000 });
+  const rows = [];
+  for (const owner of users || []) {
+    if (owner.id) continue;                       // a file at this level is not ours
+    const prefix = `u/${owner.name}`;
+    const { data: ids } = await supabaseAdmin.storage.from(MEGA_BUCKET)
+      .list(prefix, { limit: 100 });
+    for (const idDir of ids || []) {
+      const { data: pageDirs } = await supabaseAdmin.storage.from(MEGA_BUCKET)
+        .list(`${prefix}/${idDir.name}`, { limit: 5 });
+      for (const pageDir of pageDirs || []) {
+        const { data: files } = await supabaseAdmin.storage.from(MEGA_BUCKET)
+          .list(`${prefix}/${idDir.name}/${pageDir.name}`, { limit: 5 });
+        for (const f of files || []) {
+          rows.push({
+            key: `${prefix}/${idDir.name}/${pageDir.name}/${f.name}`,
+            owner: owner.name,
+            at: f.created_at || f.updated_at ? Date.parse(f.created_at || f.updated_at) : null,
+            size: Number(f.metadata?.size) || 0,
+          });
+        }
+      }
+    }
+  }
+  return rows;
+}
+
+/**
+ * A book READ recently is not a book to evict.
+ *
+ * Storage records when an object was written and never when it was read, so a
+ * student three chapters into a textbook looks identical to one who uploaded
+ * and walked away. This is the missing half, kept in process: cheap, lost on a
+ * restart, and losing it only means a book becomes evictable slightly early —
+ * never that one is deleted mid-sitting, because `MEGA_ACTIVE_MAX` newest are
+ * protected by `expiredKeys` regardless.
+ */
+const megaTouched = new Map();
+const MEGA_PROTECT_MS = 2 * 60 * 60 * 1000;
+const touchMega = (key) => { megaTouched.set(key, Date.now()); };
+const recentlyRead = (key) =>
+  Date.now() - (megaTouched.get(key) || 0) < MEGA_PROTECT_MS;
+
+/**
+ * EVICTION BEFORE REFUSAL, which is what keeps the limit invisible.
+ *
+ * A hard "book storage is full" is the honest answer only once there is
+ * genuinely nothing to reclaim. Almost always there is: somebody's book from
+ * two days ago that nobody has opened. So the sweep drops what is expired,
+ * then evicts OLDEST-FIRST until the bucket is under budget — and a student
+ * only ever meets the refusal when every book on the shelf is being actively
+ * read, which is the one case where refusing is correct.
+ *
+ * `need` is bytes a caller is about to write, so an upload makes room for
+ * itself rather than being refused by a bucket that was one file over.
+ */
+async function sweepMegaGlobal({ need = 0 } = {}) {
+  const rows = await megaInventory();
+  if (rows.length === 0) return { removed: 0, freed: 0 };
+
+  // The decision is a tested pure function, because it deletes OTHER PEOPLE'S
+  // files. Same reasoning as `expiredKeys` and `pageIndices`.
+  const { keys, freed } = evictionPlan(rows, {
+    budget: MEGA_BUCKET_BYTES,
+    need,
+    ttlHours: MEGA_TTL_HOURS,
+    keepNewest: MEGA_ACTIVE_MAX,
+    // A book being read right now is indistinguishable from an abandoned one
+    // by timestamp — storage records writes, never reads.
+    protect: new Set(rows.filter((r) => recentlyRead(r.key)).map((r) => r.key)),
+  });
+  if (keys.length === 0) return { removed: 0, freed: 0 };
+  const { error } = await supabaseAdmin.storage.from(MEGA_BUCKET).remove(keys);
+  if (error) { console.warn("[local-ai] mega sweep failed:", error.message); return { removed: 0, freed: 0 }; }
+  keys.forEach((k) => megaTouched.delete(k));
+  noteUsage(-freed, { mega: true });
+  console.log(`[local-ai] mega sweep: ${keys.length} books, `
+    + `${(freed / 1048576).toFixed(0)} MB freed, now ${pctOf(usage.total)}`);
+  return { removed: keys.length, freed };
+}
+
+/**
+ * The one entry point every path calls, rate-limited so it is free to call.
+ *
+ * Sweeps only ran when somebody UPLOADED, which is the rarest thing the app
+ * does — so a quiet week reclaimed nothing while books aged past their TTL.
+ * Every path that touches storage calls this now (both uploads, the book list,
+ * and any generate carrying a file), and it does nothing most of the time.
+ */
+let lastAnySweep = 0;
+const ANY_SWEEP_EVERY_MS = 5 * 60 * 1000;
+
+function maybeSweep() {
+  if (!supabaseAdmin) return;
+  if (Date.now() - lastAnySweep < ANY_SWEEP_EVERY_MS) return;
+  lastAnySweep = Date.now();
+  (async () => {
+    const state = await storageState();
+    await sweepUploads(state.ttlHours);
+    await sweepMegaGlobal();
+  })().catch((err) => console.warn("[local-ai] sweep:", err?.message || err));
+}
+
 /** The stored key for one handle, or null when it is not this student's. */
 async function findMegaKey(email, id) {
   const files = await listMegaFiles(email);
@@ -1871,6 +1990,10 @@ const megaPageCount = (fileUrls) =>
 //   4. https://...               — pass through as image URL source
 async function buildFileContentBlocks(fileUrls, ctx = {}) {
   if (!Array.isArray(fileUrls) || fileUrls.length === 0) return [];
+  // Generating is the commonest thing the app does and uploading the rarest,
+  // so firing only on upload meant a quiet week reclaimed nothing. Free: it is
+  // rate-limited inside and returns immediately most of the time.
+  maybeSweep();
   const blocks = await Promise.all(
     fileUrls
       .filter((u) => typeof u === "string" && u.length > 0)
@@ -1890,6 +2013,10 @@ async function buildFileContentBlocks(fileUrls, ctx = {}) {
                 text: `[ATTACHMENT PROBLEM: a book the user attached is no longer stored (books are kept for ${Math.round(MEGA_TTL_HOURS / 24)} days). Tell the user to upload it again.]`,
               };
             }
+            // Storage records writes, never reads — so without this a student
+            // three chapters into a textbook looks exactly like one who
+            // uploaded and walked away, and evicts the same.
+            touchMega(found.key);
             const slice = await withMegaGate(() => sliceMegaPages(found.key, want.from, want.to));
             console.log(`[local-ai] mega slice: ${found.name} pp${slice.from}-${slice.to} (${slice.pages}pp, ${slice.bytes.length} bytes)`);
             return {
@@ -3227,6 +3354,7 @@ const receiveUpload = (req, res, next) => upload.any()(req, res, (err) => {
 
 app.post("/local-ai/uploadFile", receiveUpload, async (req, res) => {
   try {
+    maybeSweep();
     const file = req.files?.[0];
     if (!file) {
       return res.status(400).json({ message: "No file uploaded" });
@@ -3316,11 +3444,13 @@ app.post("/local-ai/uploadMega", receiveMega, async (req, res) => {
       return res.status(503).json({ message: "Book storage isn't set up on this server yet." });
     }
 
-    // ─── BOOKS YIELD FIRST ──────────────────────────────────────────────
-    // They are the largest objects and the rarest feature, so they are what
-    // stands down when the plan gets tight — one student cannot store a
-    // textbook today, and nobody loses the app. Checked BEFORE the file is
-    // parsed, so a refusal costs nothing.
+    // ─── MAKE ROOM, THEN DECIDE ─────────────────────────────────────────
+    // Reclaiming beats refusing every time: this drops expired books across
+    // EVERY student and then evicts the least recently read until there is
+    // room for this one. A student meets the refusal only when the whole shelf
+    // is books being actively read, which is the one case where it is the
+    // right answer. Books still yield before ordinary uploads do.
+    await sweepMegaGlobal({ need: file.size }).catch(() => {});
     const budget = await storageState();
     const refusal = megaRefusal(budget, file.size);
     if (refusal) {
@@ -3391,6 +3521,7 @@ app.get("/local-ai/megaFiles", async (req, res) => {
   try {
     const user = await authenticateRequest(req);
     if (!user) return res.status(401).json({ message: "Sign in to see your books." });
+    maybeSweep();
     const files = await listMegaFiles(user.email);
     // Whether a NEW book would be taken, so the picker can say so before a
     // student spends five minutes pushing 40 MB up school wifi to be refused

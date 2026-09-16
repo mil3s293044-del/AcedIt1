@@ -62,10 +62,16 @@ import { PDF_RAW_CAP } from "./uploadPrep.js";
  * It was 100 MB, at which TEN students storing two books each is 1.95 GB. See
  * storageBudget.js for the arithmetic and the order things stand down in.
  *
- * Raising this is exactly what a paid plan buys, and it is a one-line change
- * here and in `MEGA_BUCKET_BYTES`.
+ * 60 rather than 40 because THIS is the cap a student actually collides with,
+ * and collides with hardest: a real VCE textbook PDF is commonly 30–60 MB, and
+ * being told "yours is 55 MB and the limit is 40" is a flat refusal with
+ * nothing to do about it. Bucket pressure, by contrast, is absorbed by
+ * eviction and is usually invisible. So the ceiling a student meets is set as
+ * high as the share allows and the shared pressure is handled elsewhere.
+ *
+ * Raising it further is what a paid plan buys, alongside `MEGA_BUCKET_BYTES`.
  */
-export const MEGA_FILE_CAP = 40 * 1024 * 1024;
+export const MEGA_FILE_CAP = 60 * 1024 * 1024;
 
 /**
  * The API's page ceiling, which applies to a REQUEST and not to the file.
@@ -102,19 +108,23 @@ export const RANGE_PAGE_CAP = 120;
  * day holding two. A constant that looks like a rule and enforces nothing is
  * the "collect nothing you don't use" trap in its most confusing form.
  */
-export const MEGA_ACTIVE_MAX = 1;
+export const MEGA_ACTIVE_MAX = 2;
 
 /**
  * How long a stored book lives.
  *
- * A DAY, not a week. The unit of use here is a sitting — pick a chapter, make
- * cards, maybe do the next chapter — and holding a 40 MB object for six more
- * days against a 1 GB plan buys nothing but risk. What makes this acceptable
- * rather than mean is that concurrency becomes "students with a book open
- * today" instead of "students who have ever uploaded one", which is the only
- * version of this that fits the free tier at all.
+ * THREE DAYS, and the number is no longer a storage control at all — that is
+ * the whole point of `sweepMegaGlobal`'s eviction. The bucket is hard-bounded
+ * by `MEGA_BUCKET_BYTES` whatever the TTL is, because when it fills the least
+ * recently read book is evicted rather than the newest refused.
+ *
+ * So the TTL only decides how long DEAD WEIGHT lingers, and the lifetime a
+ * student experiences is set by demand instead of by a clock. It was a day,
+ * when a day was the thing keeping the bucket inside the plan; that job now
+ * belongs to eviction, so this is as long as is useful — a book survives a
+ * weekend, which is when a student actually works through a chapter.
  */
-export const MEGA_TTL_HOURS = 24;
+export const MEGA_TTL_HOURS = 72;
 
 /**
  * Tokens one page costs to read, all in.

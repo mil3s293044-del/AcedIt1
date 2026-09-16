@@ -69,8 +69,15 @@ export const SWEEP_HARDER_AT = 0.70;    // the TTL tightens before either
  * Separate from `MEGA_STOPS_AT` and both apply: this one stops books crowding
  * out ordinary uploads even when total usage is low, which is the state a
  * single enthusiastic student can create on their own.
+ *
+ * It is a HARD BOUND rather than a hope, because `sweepMegaGlobal` evicts the
+ * least recently read book when the bucket reaches it. That is what lets this
+ * be sized generously: ordinary uploads need ~450 MB at 230 accounts with a
+ * day's TTL, headroom takes 120, and books get the rest — roughly seven
+ * students' textbooks resident at the file cap, more in practice because most
+ * books are well under it.
  */
-export const MEGA_BUCKET_BYTES = 250 * MB;
+export const MEGA_BUCKET_BYTES = 450 * MB;
 
 /**
  * How long an ORDINARY upload is kept.
@@ -142,22 +149,102 @@ export const pctOf = (used) => `${Math.round(frac(used) * 100)}%`;
  *     active book is not deleted out from under the sitting that is using it.
  *     Age is applied first, then the count, both on the same ordering.
  */
-export function expiredKeys(entries = [], { ttlHours, keepNewest = 0, now = Date.now() } = {}) {
-    const cutoff = now - Math.max(0, Number(ttlHours) || 0) * 3600_000;
-    const rows = (Array.isArray(entries) ? entries : [])
+/**
+ * Newest first, with an unknown age treated as newest.
+ *
+ * One comparator, because the naive `(b.at ?? Infinity) - (a.at ?? Infinity)`
+ * returns NaN when BOTH are unknown — and a comparator that returns NaN gives
+ * an implementation-defined order, which for a function that decides what to
+ * DELETE means the answer changes between engines.
+ */
+const newestFirst = (a, b) => {
+    const x = a.at === null ? Infinity : a.at;
+    const y = b.at === null ? Infinity : b.at;
+    if (x === y) return String(a.key).localeCompare(String(b.key));
+    return y - x;
+};
+
+/** `{ key, at, size }` with `at` coerced safely. Shared by both decisions. */
+function normaliseEntries(entries) {
+    return (Array.isArray(entries) ? entries : [])
         .filter((e) => e && typeof e.key === "string" && e.key)
-        // Newest first, and an unknown age sorts as newest so it is inside any
-        // `keepNewest` window rather than at the front of the queue to go.
         // `Number(null)` is 0, NOT NaN — so coercing first turns "no timestamp"
-        // into 1970 and sweeps the one file the rule above says never to touch.
-        // The identical trap `criterionIndexFor` records; caught here by a
-        // fixture row with a null date, which is the only way it is visible.
+        // into 1970 and sweeps the one file the rules below never touch.
         .map((e) => {
             const raw = e.at;
             const n = raw === null || raw === undefined || raw === "" ? NaN : Number(raw);
             return { ...e, at: Number.isFinite(n) ? n : null };
-        })
-        .sort((a, b) => (b.at ?? Infinity) - (a.at ?? Infinity));
+        });
+}
+
+/**
+ * WHAT TO EVICT so a bucket fits its budget. This deletes OTHER PEOPLE'S files.
+ *
+ * Refusing a student is the honest answer only once there is nothing to
+ * reclaim, and there almost always is: somebody's book from two days ago that
+ * nobody has opened. So this drops what has aged out, then evicts
+ * LEAST-RECENTLY-READ first until the bucket fits what is about to be written.
+ *
+ * Three protections, each of which has to survive a rewrite:
+ *
+ *   - **`protect` is never evicted.** A book being read right now looks
+ *     identical to an abandoned one by timestamp, because storage records
+ *     writes and never reads. Without this a sweep can delete the book out of
+ *     a student's hands mid-sitting.
+ *   - **Each owner keeps their newest `keepNewest`** through the age pass, so
+ *     ageing alone cannot take somebody's only book.
+ *   - **It stops as soon as the budget is met.** Evicting past that is
+ *     destroying a student's upload to buy space nobody asked for.
+ *
+ * Returns the keys to remove and the bytes they free.
+ */
+export function evictionPlan(entries = [], {
+    budget, need = 0, ttlHours, keepNewest = 0, protect = new Set(), now = Date.now(),
+} = {}) {
+    const rows = normaliseEntries(entries);
+    const doomed = new Set();
+
+    // 1. Aged out, per owner, so one student's oldest cannot protect another's.
+    const byOwner = new Map();
+    for (const r of rows) {
+        const k = r.owner ?? "";
+        if (!byOwner.has(k)) byOwner.set(k, []);
+        byOwner.get(k).push(r);
+    }
+    for (const own of byOwner.values()) {
+        for (const key of expiredKeys(own, { ttlHours, keepNewest, now }).keys) doomed.add(key);
+        // And anything past the per-owner limit, whatever its age.
+        own.slice().sort(newestFirst).slice(keepNewest).forEach((r) => doomed.add(r.key));
+    }
+
+    // 2. Then least-recently-written first, across everybody, until it fits.
+    const target = Math.max(0, budget - Math.max(0, need));
+    let held = rows.filter((r) => !doomed.has(r.key)).reduce((sum, r) => sum + (r.size || 0), 0);
+    if (held > target) {
+        const evictable = rows
+            .filter((r) => !doomed.has(r.key) && !protect.has(r.key))
+            .sort((a, b) => -newestFirst(a, b));      // oldest first
+        for (const r of evictable) {
+            if (held <= target) break;
+            doomed.add(r.key);
+            held -= r.size || 0;
+        }
+    }
+
+    const keys = [...doomed];
+    return {
+        keys,
+        freed: rows.filter((r) => doomed.has(r.key)).reduce((sum, r) => sum + (r.size || 0), 0),
+        // What is still held afterwards, so a caller can say whether it worked.
+        held,
+    };
+}
+
+export function expiredKeys(entries = [], { ttlHours, keepNewest = 0, now = Date.now() } = {}) {
+    const cutoff = now - Math.max(0, Number(ttlHours) || 0) * 3600_000;
+    // Newest first, and an unknown age sorts as newest so it is inside any
+    // `keepNewest` window rather than at the front of the queue to go.
+    const rows = normaliseEntries(entries).sort(newestFirst);
 
     const doomed = [];
     rows.forEach((row, i) => {

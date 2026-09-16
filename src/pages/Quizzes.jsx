@@ -2,6 +2,8 @@ import React, { useState, useEffect, useMemo } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { base44 } from "@/api/base44Client";
 import { acceptFiles, STUDY_ACCEPT, STUDY_ACCEPT_LABEL } from "@/lib/pickFiles";
+import MegaPicker from "@/components/shared/MegaPicker";
+import { PRICE } from "@/lib/chips";
 import { createPageUrl } from "@/utils";
 import { BANK_TOPIC, bankSummary } from "@/lib/mistakeBank";
 import { isDue, isNew } from "@/lib/due";
@@ -106,6 +108,10 @@ export default function Quizzes() {
     const [showAIDialog, setShowAIDialog] = useState(false);
     const [isManualCreate, setIsManualCreate] = useState(false);
     const [uploadedFiles, setUploadedFiles] = useState([]);
+    // A chapter of a stored book — kept apart from `uploadedFiles` because it
+    // is not a file the student is holding: the book is already on the server
+    // and this is a page range. See megaUpload.js.
+    const [megaPick, setMegaPick] = useState(null);
     const [searchTerm, setSearchTerm] = useState("");
     const [filterCategory, setFilterCategory] = useState("all");
 
@@ -276,13 +282,21 @@ export default function Quizzes() {
 
 
 
+    /** The files a generate sends: what they uploaded, plus the chapter. */
+    const quizFileUrls = (direct) => {
+        const urls = [...direct, ...(megaPick ? [megaPick.url] : [])];
+        return urls.length ? urls : undefined;
+    };
+
     const handleGenerateQuiz = async () => {
         const effectiveSubject = aiSettings.customSubject || aiSettings.subject;
 
-        if (!uploadedFiles.length || !effectiveSubject) {
+        // A chapter counts as material. Requiring an UPLOAD would make the book
+        // picker a control that cannot be used on its own.
+        if ((!uploadedFiles.length && !megaPick) || !effectiveSubject) {
             toast({
                 title: "Missing Information",
-                description: "Please upload a file and select/enter a subject.",
+                description: "Pick a subject, then upload a file or choose a chapter from a book.",
                 variant: "destructive"
             });
             return;
@@ -292,7 +306,9 @@ export default function Quizzes() {
 
         // Tier gate — block immediately if the user has hit the cap, so we don't
         // burn the upload + spin a loader for a request that's about to 429.
-        const access = canUseFeature(userProfile, FEATURES.QUIZ_AI_GEN);
+        // The pages are priced into the gate, so the button cannot say yes to
+        // something the server is about to refuse.
+        const access = canUseFeature(userProfile, FEATURES.QUIZ_AI_GEN, megaPick?.read || 0);
         if (!access.allowed) {
             toast({
                 title: access.upgradeRequired ? "Premium feature" : "Daily limit reached",
@@ -427,7 +443,7 @@ ${aiSettings.include_explanations ? '- Include a brief explanation of why the an
 - Model answer should be detailed enough to mark against
 
 Base ALL questions on the provided material. If files are attached, read ALL content including images, charts, tables, and figures carefully.`,
-                file_urls: geminiCompatibleUrls.length ? geminiCompatibleUrls : undefined,
+                file_urls: quizFileUrls(geminiCompatibleUrls),
                 response_json_schema: {
                     type: "object",
                     properties: {
@@ -1745,6 +1761,13 @@ Return valid JSON only.`,
                                                )}
                                            </label>
                                     </div>
+                                    {/* Or a chapter of a textbook already stored.
+                                        The ordinary picker caps well below one —
+                                        see megaUpload.js for why. */}
+                                    <div className="rounded-2xl border-2 border-border bg-secondary/30 p-4">
+                                        <MegaPicker featurePrice={PRICE.quiz_ai_gen}
+                                            onChange={setMegaPick} toast={toast} />
+                                    </div>
                                 </div>
 
                                 {/* Quiz Configuration */}
@@ -1954,12 +1977,14 @@ Return valid JSON only.`,
 
                         <DialogFooter className="flex-shrink-0 border-t border-border p-6 bg-secondary/50">
                             {(() => {
-                                const access = canUseFeature(userProfile, FEATURES.QUIZ_AI_GEN);
+                                // Priced WITH the pages, so the footer button and
+                                // the gate behind it agree about affordability.
+                                const access = canUseFeature(userProfile, FEATURES.QUIZ_AI_GEN, megaPick?.read || 0);
                                 const blocked = !access.allowed;
                                 return (
                                     <Button
                                         onClick={handleGenerateQuiz}
-                                        disabled={!uploadedFiles.length || !aiSettings.customSubject || isGenerating || blocked}
+                                        disabled={(!uploadedFiles.length && !megaPick) || !aiSettings.customSubject || isGenerating || blocked}
                                         title={blocked ? access.reason : undefined}
                                         className="bg-chart-4 hover:bg-chart-4/90 text-white disabled:opacity-50"
                                     >
