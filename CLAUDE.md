@@ -2195,12 +2195,38 @@ paid plan buys is a bigger resident set and a higher per-file cap;
 `MEGA_FILE_CAP`, `MEGA_ACTIVE_MAX`, `MEGA_TTL_HOURS` and `MEGA_BUCKET_BYTES`
 are in one place precisely so raising them is one line each.
 
-One thing NOT solved: a Quiz row stores its `source_file_url` as a
-`local-file://` handle and re-reads it at marking time, weeks later, by which
-point the sweep has long since taken it. It degrades to the `[ATTACHMENT
-PROBLEM]` block rather than failing, and the marking still runs — but it is an
-ephemeral reference on a permanent row, and the honest fix is to stop storing
-it rather than to lengthen a TTL for it.
+**AN EPHEMERAL REFERENCE ON A PERMANENT ROW IS A LIE ON A TIMER**, and
+`source_file_url` was one. A Quiz row kept a `local-file://` handle and two
+things re-read it long after the sweep had taken the file:
+
+- **Reshuffle** sent it and told the model to "base ALL questions on the
+  uploaded document content". With the file gone the server answers with an
+  `[ATTACHMENT PROBLEM]` block and the generate RUNS ANYWAY — so the student
+  got a quiz titled "(Reshuffled)" that was not from their material at all,
+  silently. Not a degradation: a wrong answer wearing the right label.
+- **Marking** attached it too, which is worse, because the block tells the
+  model to tell the student their file could not be read — inside a MARKING
+  prompt, weeks after they made the quiz.
+
+Both now work from THE QUIZ ITSELF, which is permanent and is the better
+source anyway: it holds the subject, the difficulty, the shape and every
+question with its model answer, which is a fuller account of what was covered
+than the PDF was. It also makes reshuffle's core instruction satisfiable for
+the first time — "generate DIFFERENT questions from what was asked before" was
+being given to a model that could not see what was asked before — and it means
+reshuffle works on EVERY quiz now, including hand-written ones and ones built
+from a chapter of a book. Marking loses nothing: every question and model
+answer was already in that prompt.
+
+Nothing reads the column, so nothing writes it (collect nothing you don't use);
+old rows keep theirs harmlessly.
+
+**A DECK IS A ROW AND IS NOT A FILE**, which is the distinction every TTL here
+depends on. Cards, quizzes, mistakes and attempts are database rows and are
+permanent — the sweep only ever touches the uploaded SOURCE in Storage, which
+exists for the seconds between an upload and the generate that reads it. A
+student who makes a deck from a textbook keeps that deck forever; what expires
+is the textbook, and only as something to generate MORE from.
 
 ## Voice / UX guardrails (from prior decisions)
 

@@ -900,24 +900,25 @@ In two or three sentences, explain what makes that the right answer and what the
             const hasShortWithPrevious = questionsForAnalysis.some(q => q.type === 'short' && q.previous_answer);
             const comparisonInstructions = hasShortWithPrevious ? `\nFor short answers with a "Previous Answer", compare current vs previous attempt specifically.` : '';
 
-            let sourceFileUrl = shuffledQuiz.source_file_url;
-            let sourceFileContent = '';
-            if (sourceFileUrl) {
-                const ext = sourceFileUrl.split('.').pop()?.toLowerCase().split('?')[0];
-                if (ext === 'docx' || ext === 'pptx') {
-                    try {
-                        const textResult = await base44.functions.invoke('extractDocumentText', { file_url: sourceFileUrl });
-                        sourceFileContent = `\n\nSource Document Content:\n${textResult.data?.text || ''}\n\n`;
-                        sourceFileUrl = undefined;
-                    } catch {}
-                }
-            }
+            // ─── THE SOURCE FILE IS NOT SENT TO THE MARKER ────────────────
+            // It used to be: `source_file_url` is a `local-file://` handle
+            // saved on the quiz row, re-read here whenever the quiz is sat.
+            // A row is permanent and the file is not — it is swept within the
+            // day — so weeks later this attached a handle to nothing, and the
+            // server answered with an `[ATTACHMENT PROBLEM]` block telling the
+            // model to tell the student their file could not be read. In a
+            // MARKING prompt. That is worse than no context at all.
+            //
+            // And it was redundant even when it worked: every question and its
+            // model answer are already in the prompt below, which is what the
+            // marking is actually against. An ephemeral reference on a
+            // permanent row buys nothing and eventually lies.
 
             const response = await base44.integrations.Core.InvokeLLM({
                 feature: "quiz_ai_mark",
                 prompt: `${getLatexRules()}
 
-Mark this ${shuffledQuiz.subject} quiz. Provide feedback for ALL ${questionsForAnalysis.length} questions.${sourceFileContent}${comparisonInstructions}
+Mark this ${shuffledQuiz.subject} quiz. Provide feedback for ALL ${questionsForAnalysis.length} questions.${comparisonInstructions}
 
 MARKING: MCQ = 0 or 1 mark only. Short answer = 0 to allocation marks. Be lenient on phrasing.
 
@@ -1004,7 +1005,6 @@ three were the same mistake" has one thing to fix instead of three.
   - "detail" is ONE sentence saying what to do differently.
 If no two lost questions share a cause, return an empty themes array. Never
 invent a theme from a single question.`,
-                file_urls: sourceFileUrl ? [sourceFileUrl] : undefined,
                 response_json_schema: {
                     type: "object",
                     properties: {

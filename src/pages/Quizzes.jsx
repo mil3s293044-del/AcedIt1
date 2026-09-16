@@ -327,11 +327,13 @@ export default function Quizzes() {
             // Upload all files (per-file error isolation — one failure doesn't kill all)
             const uploadResults = await Promise.allSettled(uploadedFiles.map(f => base44.integrations.Core.UploadFile({ file: f }).then(r => ({ file_url: r.file_url, name: f.name, ext: f.name.split('.').pop()?.toLowerCase() }))));
             const uploadedUrls = uploadResults.filter(r => r.status === 'fulfilled').map(r => r.value);
-            if (uploadedUrls.length === 0) {
+            // Only a failure when there was something to upload. A generate
+            // from a book chapter alone has no files by design, and this used
+            // to throw "All file uploads failed" at it.
+            if (uploadedFiles.length > 0 && uploadedUrls.length === 0) {
                 const errMsg = uploadResults.map(r => r.reason?.message || 'Upload failed').join('; ');
                 throw new Error(`All file uploads failed: ${errMsg}`);
             }
-            const file_url = uploadedUrls[0].file_url; // primary file for source_file_url
 
             // Determine question type mix — strict counts
             let questionTypeInstruction = "";
@@ -540,7 +542,10 @@ Base ALL questions on the provided material. If files are attached, read ALL con
                 questions: formattedQuestions,
                 difficulty: aiSettings.difficulty,
                 category: "subject_content",
-                source_file_url: file_url
+                // `source_file_url` is no longer written. It was a
+                // `local-file://` handle on a permanent row pointing at a file
+                // swept within the day, and nothing reads it any more —
+                // reshuffle and marking both work from the quiz itself.
             });
 
             // Only create subject if it doesn't already exist
@@ -620,9 +625,29 @@ Base ALL questions on the provided material. If files are attached, read ALL con
         }
     };
 
+    /**
+     * RESHUFFLE READS THE QUIZ, NOT THE FILE IT CAME FROM.
+     *
+     * It used to send `source_file_url` — a `local-file://` handle saved on the
+     * quiz row. A row is permanent; the file is swept within the day. So a week
+     * later this attached a handle to nothing, the server answered with an
+     * `[ATTACHMENT PROBLEM]` block, and the prompt still said "base ALL
+     * questions on the uploaded document content". The student got a quiz
+     * titled "(Reshuffled)" that was not from their material at all, silently.
+     *
+     * The quiz itself is the better source anyway, and permanent: it holds the
+     * subject, the difficulty, the shape and every question WITH its model
+     * answer. That is a fuller description of what was covered than a page
+     * range of a PDF — and it finally makes the core instruction satisfiable,
+     * because "generate DIFFERENT questions from what was asked before" was
+     * being given to a model that could not see what was asked before.
+     *
+     * It also means reshuffle works on EVERY quiz now, including ones typed by
+     * hand and ones built from a chapter of a book.
+     */
     const handleReshuffleQuiz = async (quiz) => {
-        if (!quiz.source_file_url) {
-            toast({ title: "No source file", description: "This quiz was not generated from a file.", variant: "destructive" });
+        if (!quiz.questions?.length) {
+            toast({ title: "Nothing to reshuffle", description: "This quiz has no questions to work from.", variant: "destructive" });
             return;
         }
 
@@ -664,16 +689,45 @@ Each is a STEM followed by two to four PARTS:
 
 QUESTION ORDER: All MCQ questions MUST come before any short answer questions.`;
 
+            // What the material covered, as the questions that were asked of
+            // it. Model answers included: they carry the actual content, which
+            // a bare question list does not.
+            const answerOf = (pt) => {
+                // An MCQ's content is WHICH option was right; a short answer's
+                // is the model answer. Without either, the list says what was
+                // asked and not what the material actually held.
+                if (pt.type === "mcq") {
+                    const right = pt.options?.[pt.correct_answer];
+                    return right ? ` — answer: ${right}` : "";
+                }
+                return pt.model_answer ? ` — answer: ${pt.model_answer}` : "";
+            };
+            const covered = normaliseQuestions(quiz).map((q, i) => {
+                // A legacy question IS its single part, so printing the stem
+                // and then the part repeats the question verbatim — half the
+                // list would be duplication in a prompt whose whole job is to
+                // say what has already been asked.
+                if (!q.multipart) return `${i + 1}. ${q.stem}${answerOf(q.parts[0] || {})}`;
+                const parts = q.parts
+                    .map((pt) => `    (${pt.label}) ${pt.prompt}${answerOf(pt)}`)
+                    .join("\n");
+                return `${i + 1}. ${q.stem}\n${parts}`;
+            }).join("\n\n").slice(0, 24000);
+
             const response = await base44.integrations.Core.InvokeLLM({
                 feature: "quiz_ai_gen",
-                prompt: `You are a VCE quiz generator. Create a COMPLETELY NEW and DIFFERENT quiz for: ${quiz.subject}. Read ALL content in the document including text, images, diagrams, tables, and figures.
+                prompt: `You are a VCE quiz generator. Create a COMPLETELY NEW and DIFFERENT quiz for: ${quiz.subject}.
 
-            IMPORTANT: Generate DIFFERENT questions from what might have been asked before. Focus on different aspects of the content. NEVER generate two questions that test the same concept or fact.
+            THE MATERIAL is described by the questions already written about it, with their answers, below. Cover the SAME material — the same topics, the same depth, the same course content — and ask about it DIFFERENTLY.
+
+            NEVER repeat a question below, and never ask one that tests the same concept or fact as one below. Go at the parts of the material those questions only touched on.
+
+            ALREADY ASKED (do not repeat any of these):
+            ${covered}
 
             ${shapeInstruction}
 
             Difficulty: ${quiz.difficulty || 'Medium'}
-            Base ALL questions on the uploaded document content, including any images, charts, or figures.
 
 MATH FORMATTING RULES (CRITICAL):
 - ALWAYS use LaTeX for every mathematical expression — the app renders LaTeX as proper math via KaTeX.
@@ -700,7 +754,6 @@ SHORT ANSWER:
 - All math in answers must use LaTeX as above
 
 Return valid JSON only.`,
-                file_urls: [quiz.source_file_url],
                 response_json_schema: {
                     type: "object",
                     properties: {
@@ -796,7 +849,6 @@ Return valid JSON only.`,
                 questions: formattedQuestions,
                 difficulty: quiz.difficulty,
                 category: quiz.category || "subject_content",
-                source_file_url: quiz.source_file_url
             });
 
             toast({
@@ -1403,7 +1455,7 @@ Return valid JSON only.`,
                                                             bestScore={stats.bestScore}
                                                             attempts={stats.attempts}
                                                             toFix={stats.wrongIdx.length}
-                                                            canReshuffle={!!quiz.source_file_url}
+                                                            canReshuffle={!!quiz.questions?.length}
                                                             onSelect={() => setPendingQuiz(quiz)}
                                                             onRetryWrong={() => {
                                                                 setQuizMode('standard');
