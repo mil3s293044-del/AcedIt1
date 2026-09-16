@@ -1060,6 +1060,75 @@ position was taken against the old one.
 defaulting it to NO would pay everyone who happened to be on the second-named
 side for a question that was never settled.
 
+**THE BOOK HAD EVERYTHING EXCEPT A HIERARCHY.** The content was right from the
+start — value, calibration, equity, open and settled — and it still read as a
+form rather than as a trading screen, because NOTHING LED. Four identically
+sized tiles sat in a row with no first number among them; the equity curve,
+which is the whole story of somebody's week, was in a 190px box in the second
+column; and the positions were plain text lines where the one figure that
+matters was a 14px column on the right.
+
+Every broker app opens the same way and it is not decoration: ONE value, large,
+with what you made under it, and the chart of that number filling the width
+beneath. That ordering IS the argument — this is what you have, this is what
+you did to get it, here is the path — and everything else is detail drawn as
+detail.
+
+**THE HERO IS A BALANCE AND THE DELTA IS THE PART YOU EARNED**, which is what
+finally answers the complaint this section opens with. Value is `cred + at
+stake`: what is in hand plus what is escrowed, both real cred. Under it,
+`realised` — what the student's own calls have paid, which is exactly what the
+curve draws. The big number is allowed to include the Monday grant because it
+is a BALANCE; the number attributed to them is the one they earned. **Expected
+is NOT in it**: there is no way to close a position early here, so folding the
+open book's EV into a headline balance is the same overreach as calling it
+unrealised P/L.
+
+**A DRIFT BAR HAS TO BE ON ONE SCALE, or it is not a comparison.** A position
+row's question is "has the room come toward me", and the obvious drawing — a
+track spanning THIS row's entry and current price — is worse than the text it
+replaces: every row gets its own scale, so a 2-point drift and a 30-point drift
+render identically and the column becomes actively misleading. It is a signed
+bar from a shared centre on a fixed ±`DRIFT_FULL`, with the number still
+printed beside it for anything past the end.
+
+**EXPOSURE IS CAPPED AT FOUR NAMED SLICES BECAUSE THE FLOOR HAS FOUR HUES.**
+Seven kinds mint on this board, and an uncapped bar needs seven distinguishable
+colours; past four it is reaching for greys that read as the same slice twice,
+and a legend nobody can map back to the bar has stopped being a legend.
+`exposureOf` folds the tail rather than the legend doing it — but never folds a
+SINGLE slice, which would just rename it and lose the name. Grouped by `kind`
+because that is what a student can act on; grouping by yes/no would only say
+which way they lean, which the hit rate already covers.
+
+**THE STANDING IS A BAND, NEVER A POSITION.** "4th of 31" is a leaderboard and
+Compete already has one; a second on the page that exists to answer "how am I
+doing" turns a private screen public. `standingOf` reports "ahead of 68% of
+traders" — the same information about THEM with nobody else identifiable — and
+the server sends bare figures with no addresses attached, so there is nothing
+in the payload to put a name to. A TIE COUNTS AS HALF, or everybody on a flat
+book reads as ahead of everybody else on a flat book. It refuses under
+`RANK_MIN_CALLS`, the same floor as the calibration curve and for the same
+reason. That constant is restated in `server.mjs` — `holdings.js` resolves
+`@/lib/...`, which only the bundler and the test alias loader understand — and
+`holdings.test.mjs` asserts the two copies agree.
+
+**`Number(null) === 0` GOT IN AGAIN**, in the peer list: coercing first turned
+every missing figure into a trader sitting flat, which drags the band toward
+the middle and puts anybody with a positive book ahead of people who do not
+exist. Caught by its own test, fixed the way `expiredKeys` and `markPercent`
+already do it. That is three separate modules this trap has reached.
+
+**`best` was computed and rendered nowhere**, which this codebase treats as a
+bug rather than as spare capacity — and a book that names only your best call
+is a highlight reel, so `worst` joins it and they are drawn as a pair. A void
+is neither: it tested nothing.
+
+**This week is Monday-anchored off `studyLog`'s own `weekStart`** rather than a
+second copy of the Monday maths, and it is NULL rather than a row of zeroes
+when nothing has settled — "0 calls, +0 cred" printed every Monday morning is a
+strip that says nothing three days out of seven.
+
 **THE BOOK IS THE SECOND TAB, and calibration is the centre of it.** The floor
 answers "what can I take a side on" and has no way to answer "how am I doing" —
 which is the question that brings somebody back midweek. The cred figure in the
@@ -2600,7 +2669,10 @@ is the textbook, and only as something to generate MORE from.
 - `src/lib/holdings.js` + `holdings.test.mjs` — the book: equity, calibration,
   the four-outcome record. `getPortfolio` in `server.mjs` is its only read
 - `src/components/market/PortfolioPanel.jsx`, `CalibrationCurve.jsx`,
-  `EquityCurve.jsx` — the second tab on the floor
+  `EquityCurve.jsx` — the second tab on the floor, led by one value with the
+  curve of it underneath. `scripts/_floorProbe.jsx?v=book` renders the whole
+  book against a term of fixture calls, which is the only way to judge a
+  hierarchy
 - `src/pages/Market.jsx` + `Reactions.jsx` + `Room.jsx` — one question in full,
   the glyphs, and the floor's shared ground; `getMarket` in `server.mjs`.
   `Room` is where the `floor` class goes, which is what scopes the palette

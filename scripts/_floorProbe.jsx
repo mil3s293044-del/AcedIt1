@@ -13,6 +13,7 @@ import Room from "@/components/market/Room";
 import MarkEntry from "@/components/planner/MarkEntry";
 import { LineDialog } from "@/pages/Competitions";
 import CalibrationCurve from "@/components/market/CalibrationCurve";
+import PortfolioPanel from "@/components/market/PortfolioPanel";
 import { readMarket } from "@/lib/market";
 import AceShuffle, { AceLoading } from "@/components/ace/AceShuffle";
 import { Button } from "@/components/ui/button";
@@ -58,6 +59,7 @@ const views = {
             </div>
         </Room>
     ),
+    book: () => <Room><div className="max-w-5xl mx-auto"><PortfolioPanel /></div></Room>,
     equity: () => (
         <Room>
             <div className="max-w-md mx-auto rounded-2xl border-2 border-[var(--floor-edge)]
