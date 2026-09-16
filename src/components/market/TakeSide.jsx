@@ -8,6 +8,27 @@
  * anybody can walk — `probFor` collapses the two back into the one value the
  * scoring rule needs.
  *
+ * ─── THE TRACK STARTS AT THE ROOM'S PRICE, AND THAT DELETED A PARAGRAPH ─────
+ * Two controls over one number could disagree, and did. Picking YES at 55%
+ * into a market already pricing yes at 80¢ puts you FURTHER from yes than the
+ * price is, so the rule pays you when NO lands — correct arithmetic that
+ * printed as a contradiction, under the side the student had just chosen. The
+ * panel answered it with a warning: a paragraph naming the side you were
+ * really on, the line, and what to drag to fix it.
+ *
+ * A warning that explains a control is a control that wants replacing. The
+ * range was the wrong thing: conviction ran from the coin flip whatever the
+ * price was, so half the track was, for that side, a position on the other
+ * one. `convictionRange` anchors the floor at what the room already pays for
+ * the side you picked, and the inversion is not warned about — IT CANNOT BE
+ * EXPRESSED. `market.test.mjs` walks every price and every reachable
+ * conviction to hold that, because the warning it replaced is gone and
+ * nothing on screen would say so if it came back.
+ *
+ * What is left is the reading that was buried in the sentence: HOW FAR PAST
+ * THE ROOM YOU HAVE DRAGGED is the gap you are paid on, and it is now a
+ * distance rather than a subtraction of two numbers printed in a paragraph.
+ *
  * ─── YOUR CONVICTION IS YOUR PRICE, so the panel prints both ────────────────
  * Saying 85 into a market trading at 62 is exactly "I think yes is cheap at
  * 62". That is a limit order in everything but name, and putting the two
@@ -39,11 +60,11 @@
  * colour.
  *
  * A side is not a position here; a DISTANCE FROM THE PRICE is. So the tiles
- * name the two outcomes, the colour follows the sign of the money rather than
- * the side of the bet, and when the two disagree the panel says out loud that
- * you are backing the other side of the room's price and where the line is.
- * Discovering that at settlement instead would be the worst possible way to
- * learn how the scoring works.
+ * name the two outcomes and the colour follows the sign of the money rather
+ * than the side of the bet. They stay named that way even though the track
+ * can no longer produce the contradiction: the labels are what make the two
+ * numbers checkable against the reveal, and "if you're right" was never a
+ * thing a scoring rule could promise.
  *
  * ─── AND IT SHOWS THE LOSS AS LOUDLY AS THE WIN ─────────────────────────────
  * A proper scoring rule is symmetric: confidence costs exactly what it pays.
@@ -57,7 +78,8 @@ import PriceChart from "./PriceChart";
 import {
     YES, NO, probFor, payoutFor, clampStake, priceLabel,
     returnMultiple, bestReturn, multiplierLabel,
-    STAKE_MIN, STAKE_MAX, CONVICTION_MIN, CONVICTION_MAX,
+    convictionRange, startingConviction,
+    STAKE_MIN, STAKE_MAX,
 } from "@/lib/market";
 
 /** A number that rolls rather than swaps. */
@@ -84,9 +106,32 @@ const pct = (v) => Math.round(v * 100);
 export default function TakeSide({
     price, balance = 0, busy = false, onTake, onCancel, history = null, myEntry = null,
 }) {
-    const [side, setSide] = useState(YES);
-    const [conviction, setConviction] = useState(0.7);
+    // Open on a side that can actually be backed. A market the room has run
+    // past on one side still has a call on the other, and starting on the
+    // dead one greets a student with a disabled button and no reason.
+    const [side, setSide] = useState(
+        () => (convictionRange(YES, price).tradeable ? YES : NO));
+    const [held, setConviction] = useState(() => startingConviction(side, price));
     const [stake, setStake] = useState(50);
+
+    // Where this side's track runs. The floor is the room's line for it — see
+    // the header: everything to the right of the floor is a genuine position
+    // on the side that is selected, and there is nowhere else to stand.
+    const range = convictionRange(side, price);
+
+    // CLAMPED ON READ, not only where it is set. The price is a prop and it
+    // moves — somebody else takes a side while this sheet is open and the
+    // floor slides out from under a handle that has not been touched. Held in
+    // state and used raw, that is the inversion arriving without anybody
+    // dragging anything.
+    const conviction = Math.min(range.ceiling, Math.max(range.floor, held));
+
+    // Switching sides moves the floor, so the handle moves with it rather
+    // than carrying a conviction that is meaningless under the new one.
+    const pickSide = (v) => {
+        setSide(v);
+        setConviction(startingConviction(v, price, conviction));
+    };
 
     const p = probFor(side, conviction);
     const ifYes = useMemo(() => payoutFor(stake, p, price, true), [stake, p, price]);
@@ -98,17 +143,14 @@ export default function TakeSide({
     const backIfYes = returnMultiple(p, price, true);
     const backIfNo = returnMultiple(p, price, false);
     // Your price against the room's, both in ¢, which is what they are.
-    const myCents = Math.round(p * 100);
-    const roomCents = Math.round(price * 100);
-    const gap = Math.abs(myCents - roomCents);
+    // How far past the room the handle has travelled, in points. On a price
+    // under even money the floor is the coin flip instead, so this measures
+    // from the FLOOR — the thing the track actually starts at.
+    const gap = Math.max(0, Math.round((conviction - range.floor) * 100));
 
-    // The conviction at which you exactly restate the price. Below it, your
-    // "side" is really a position on the other one.
-    const breakeven = side === YES ? price : 1 - price;
-    const level = Math.abs(p - price) < 0.005;
-    const inverted = !level && (side === YES ? ifYes < 0 : ifNo < 0);
-    const tickAt = (breakeven - CONVICTION_MIN) / (CONVICTION_MAX - CONVICTION_MIN);
-    const tickVisible = tickAt > 0.01 && tickAt < 0.99;
+    // Sitting on the floor is restating the price, which pays exactly nothing.
+    // It is the one end of the track rather than a hazard anywhere along it.
+    const level = conviction <= range.floor + 0.005;
 
     return (
         <div className="space-y-3 pt-3 border-t border-[#233247]">
@@ -121,18 +163,25 @@ export default function TakeSide({
             <div className="grid grid-cols-2 gap-2">
                 {[[YES, "Yes"], [NO, "No"]].map(([v, label]) => {
                     const on = side === v;
+                    // A side the room has already priced past the ceiling has
+                    // no call left on it. Disabled with the reason underneath
+                    // rather than offered and then paying nothing.
+                    const open = convictionRange(v, price).tradeable;
                     const tone = v === YES
                         ? (on ? "bg-[#58CC02] text-[#0A121F] border-[#58CC02]"
                               : "border-[#2C3E57] text-[#8FA3BF] hover:border-[#58CC02]/50")
                         : (on ? "bg-[#FF5A5F] text-white border-[#FF5A5F]"
                               : "border-[#2C3E57] text-[#8FA3BF] hover:border-[#FF5A5F]/50");
                     return (
-                        <button key={v} type="button" onClick={() => setSide(v)}
+                        <button key={v} type="button" onClick={() => pickSide(v)}
+                            disabled={!open}
                             className={`rounded-xl border-2 py-2.5 font-display font-black text-sm
-                                transition-colors ${tone}`}>
+                                transition-colors disabled:opacity-35 disabled:cursor-not-allowed
+                                ${tone}`}>
                             {label}
                             <span className="block text-[10px] font-bold opacity-70 tabular-nums">
-                                up to {multiplierLabel(bestReturn(price, v).win)}
+                                {open ? `up to ${multiplierLabel(bestReturn(price, v).win)}`
+                                    : "already priced in"}
                             </span>
                         </button>
                     );
@@ -140,6 +189,8 @@ export default function TakeSide({
             </div>
 
             {/* ── How sure ─────────────────────────────────────────── */}
+            {/* The track BEGINS where the room already is, so every position
+                on it is a position on the side above. See the header. */}
             <div>
                 <div className="flex items-baseline justify-between mb-1.5">
                     <span className="text-[11px] font-bold uppercase tracking-wide text-[#6F86A8]">
@@ -149,36 +200,48 @@ export default function TakeSide({
                         {pct(conviction)}%
                     </span>
                 </div>
-                {/* The room's line, drawn on your own scale. A slider with a
-                    mark on it is a limit price; a slider without one is a dial
-                    with no reference, which is what this was. */}
-                <div className="relative">
-                    {tickVisible && (
-                        <span aria-hidden="true"
-                            className="absolute -top-1 w-px h-2 bg-[#8FA3BF]"
-                            style={{ left: `${tickAt * 100}%` }} />
-                    )}
-                    <input
-                        type="range" min={CONVICTION_MIN * 100} max={CONVICTION_MAX * 100}
-                        value={pct(conviction)}
-                        onChange={(e) => setConviction(Number(e.target.value) / 100)}
-                        className="w-full accent-[#1CB0F6] cursor-pointer"
-                        aria-label="How sure are you"
-                    />
-                </div>
+                <input
+                    type="range" min={pct(range.floor)} max={pct(range.ceiling)}
+                    value={pct(conviction)}
+                    onChange={(e) => setConviction(Number(e.target.value) / 100)}
+                    className="w-full accent-[#1CB0F6] cursor-pointer"
+                    aria-label="How sure are you"
+                />
+                {/* The ends of the track say what they ARE. The left one is the
+                    room's own line when there is one and the coin flip when the
+                    price is on the other side of even — the label has to name
+                    the thing the handle is actually anchored to. */}
                 <div className="flex justify-between text-[10px] font-bold text-[#4E6484]">
-                    <span>coin flip</span>
-                    {tickVisible && <span className="text-[#8FA3BF]">the room</span>}
+                    <span>{range.atRoom
+                        ? `the room · ${priceLabel(range.room)}`
+                        : "coin flip"}</span>
                     <span>near certain</span>
                 </div>
+                {/* ONE line, and it is the distance the handle has travelled —
+                    which is the quantity the payout is made of. */}
                 <p className="text-[11px] text-[#8FA3BF] mt-1.5 leading-snug">
-                    The room says <span className="font-bold tabular-nums text-[#E8F0FB]">
-                        {priceLabel(price)}</span>
-                    {" · you're calling it "}
-                    <span className="font-bold tabular-nums text-[#E8F0FB]">
-                        {priceLabel(p)}</span>
-                    {!level && !inverted && (
-                        <span> — that {gap}-point gap is the whole thing you get paid on.</span>
+                    {level ? (
+                        range.atRoom
+                            ? "That's exactly where the room already has it — it'd pay nothing "
+                              + "either way. You earn by going past the price and being right."
+                            : "A coin flip pays nothing. Drag right to make a call."
+                    ) : (
+                        <>
+                            You&apos;re calling it{" "}
+                            <span className="font-bold tabular-nums text-[#E8F0FB]">
+                                {priceLabel(p)}</span>
+                            {" — "}
+                            <span className="font-bold tabular-nums text-[#E8F0FB]">
+                                {gap}</span>
+                            {gap === 1 ? " point" : " points"} past{" "}
+                            {/* The track is anchored at the room's line OR at
+                                the coin flip, and the sentence has to name the
+                                same one the label under the handle does. At a
+                                price under even money they are different, and
+                                "past the room" there is simply false. */}
+                            {range.atRoom ? "the room" : "a coin flip"}, and that gap is
+                            the whole thing you get paid on.
+                        </>
                     )}
                 </p>
             </div>
@@ -236,28 +299,6 @@ export default function TakeSide({
                     </p>
                 </div>
             </div>
-
-            {/* You picked a side but priced it below where the room already has
-                it, which makes this a position on the OTHER outcome. Said here,
-                with the line, rather than discovered at settlement. */}
-            {inverted && (
-                <p className="text-[11px] text-[#FFC800] leading-snug">
-                    The room already has {side === YES ? "yes" : "no"} at {priceLabel(
-                        side === YES ? price : 1 - price)}. At {pct(conviction)}% you&apos;re calling
-                    it less likely than that, so this pays if it lands{" "}
-                    {side === YES ? "no" : "yes"}. Go past {pct(breakeven)}% to back{" "}
-                    {side === YES ? "yes" : "no"}.
-                </p>
-            )}
-
-            {/* Agreeing with the price pays nothing, and the panel says so
-                rather than letting a student discover a zero at settlement. */}
-            {level && (
-                <p className="text-[11px] text-[#6F86A8] leading-snug">
-                    That&apos;s exactly where the market already sits — it&apos;d pay nothing either
-                    way. You only earn by disagreeing with the price and being right.
-                </p>
-            )}
 
             <div className="flex gap-2">
                 <button type="button" onClick={onCancel}

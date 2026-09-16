@@ -5,7 +5,7 @@
  * expanded day view for inspecting and rearranging a single day at a time.
  * SAC plans themselves are built on the Strategise page.
  */
-import React, { useState, useEffect, useCallback, useMemo } from "react";
+import React, { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { createPortal } from "react-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { Link, useNavigate } from "react-router-dom";
@@ -35,6 +35,9 @@ import { sacMood } from "@/lib/aceVoice";
 import SacHero from "@/components/planner/SacHero";
 import WeekPlanDialog from "@/components/planner/WeekPlanDialog";
 import { fmtDate } from "@/lib/safeDate";
+import { takeFn } from "@/lib/fnResult";
+import { markPercent } from "@/lib/market";
+import MarkEntry from "@/components/planner/MarkEntry";
 
 const TYPE_OPTIONS = [
     { value: "sac", label: "SAC" },
@@ -317,6 +320,9 @@ export default function Planner() {
     const [sacType, setSacType] = useState("sac");
     const [sacDate, setSacDate] = useState("");
     const [savingSac, setSavingSac] = useState(false);
+    // Which assessment is having its mark entered. See MarkEntry.
+    const [marking, setMarking] = useState(null);
+    const [savingMark, setSavingMark] = useState(false);
 
     // Add/edit-session dialog (type + details + recurrence). `editingPlan`
     // switches the same dialog from create to update.
@@ -440,6 +446,33 @@ export default function Planner() {
             .filter(a => !a.is_completed && a.due_date && a.due_date >= todayStr)
             .sort((a, b) => a.due_date.localeCompare(b.due_date)),
         [assessments, todayStr]);
+    // ── ?mark=<assessment> ───────────────────────────────────────────────────
+    // Compete's "report your mark" button lands here rather than opening a box
+    // of its own: one place types a mark, and it is the place the mark belongs.
+    // Fires once — a ref rather than state, because the assessments arrive in
+    // the same tick that would re-run this and a second open is a dialog the
+    // student already closed reappearing.
+    const deepLinked = useRef(false);
+    useEffect(() => {
+        if (deepLinked.current || !assessments.length) return;
+        const id = new URLSearchParams(window.location.search).get("mark");
+        if (!id) return;
+        const hit = assessments.find(a => a.id === id && !a.is_completed);
+        deepLinked.current = true;
+        if (hit) setMarking(hit);
+    }, [assessments]);
+
+    // ── WHAT YOU ACTUALLY GOT ────────────────────────────────────────────────
+    // `score` and `out_of` have an input now (MarkEntry), so they need a place
+    // to be READ, or this repeats the exact "collect nothing you don't use"
+    // failure it was built to close — a student typing a mark that vanishes.
+    const marks = useMemo(() =>
+        assessments
+            .filter(a => a.is_completed && markPercent(a.score, a.out_of) !== null)
+            .sort((a, b) => String(b.due_date || "").localeCompare(String(a.due_date || "")))
+            .slice(0, 6),
+        [assessments]);
+
     const nextSac = upcoming[0] || null;
     const nextSacDays = nextSac ? differenceInDays(parseISO(nextSac.due_date), parseISO(todayStr)) : null;
     // His read on the number, not just the number.
@@ -569,11 +602,62 @@ export default function Planner() {
         setSavingSac(false);
     };
 
+    // ── TICKING A SAC OFF ASKS WHAT YOU GOT ──────────────────────────────────
+    // `score` and `out_of` have been on this row since migration 0002 and
+    // nothing has ever written them, while Compete asked the same student for
+    // the same mark through a `window.prompt`. One entry now, here, where the
+    // SAC lives — see MarkEntry. Un-ticking is not a question, so it goes
+    // straight through.
     const toggleSacDone = async (a) => {
+        if (!a.is_completed) { setMarking(a); return; }
         try {
-            await base44.entities.SubjectAssessment.update(a.id, { is_completed: !a.is_completed });
+            await base44.entities.SubjectAssessment.update(a.id, { is_completed: false });
             loadData(user.email);
         } catch { toast({ title: "Couldn't update", variant: "destructive" }); }
+    };
+
+    /**
+     * Save the mark, then let the board settle off the ROW.
+     *
+     * `reportMark` re-reads the score from `subject_assessments` rather than
+     * taking a number from this call — the rule every settlement here keeps —
+     * so the write has to land first. And it is best-effort: a student who
+     * never opened a line on this SAC (most of them) must not have a planner
+     * action fail because a market table answered oddly.
+     */
+    const saveMark = async (score, outOf) => {
+        const a = marking;
+        setSavingMark(true);
+        try {
+            await base44.entities.SubjectAssessment.update(a.id, {
+                score, out_of: outOf, is_completed: true,
+            });
+            let settled = null;
+            try {
+                settled = takeFn(await base44.functions.invoke("reportMark", { assessment_id: a.id }));
+            } catch { /* no line on it, or the board is not up — neither is this action's problem */ }
+            setMarking(null);
+            loadData(user.email);
+            toast(settled?.market
+                ? { title: "Mark saved — and your line just settled",
+                    description: "Compete has the result and everyone who traded it has been paid." }
+                : { title: "Mark saved", description: `${a.subject_name} — ${a.title}.` });
+        } catch (e) {
+            toast({ title: "Couldn't save that", description: e.message, variant: "destructive" });
+        }
+        setSavingMark(false);
+    };
+
+    /** Closed without a mark. An unmarked assessment must never store a zero. */
+    const skipMark = async () => {
+        const a = marking;
+        setSavingMark(true);
+        try {
+            await base44.entities.SubjectAssessment.update(a.id, { is_completed: true });
+            setMarking(null);
+            loadData(user.email);
+        } catch { toast({ title: "Couldn't update", variant: "destructive" }); }
+        setSavingMark(false);
     };
 
     const deleteSac = async (a) => {
@@ -1100,6 +1184,36 @@ export default function Planner() {
                                     );
                                 })}
                             </AnimatePresence>
+                        </div>
+                    )}
+
+                    {/* ── Marks so far ─────────────────────────────────── */}
+                    {/* Derived from the rows already loaded, so it cannot go
+                        stale or disagree with what was entered. Six, because
+                        this is a glance at how the term is going and not a
+                        transcript — Analytics is where a full record belongs. */}
+                    {marks.length > 0 && (
+                        <div className="mt-5">
+                            <p className="stat-label text-muted-foreground mb-2">Marks so far</p>
+                            <div className="space-y-1.5">
+                                {marks.map(a => {
+                                    const pct = markPercent(a.score, a.out_of);
+                                    return (
+                                        <div key={a.id} className="flex items-baseline gap-3">
+                                            <span className="text-sm text-foreground truncate min-w-0 flex-1">
+                                                {a.subject_name} — {a.title}
+                                            </span>
+                                            <span className="text-xs text-muted-foreground tabular-nums flex-shrink-0">
+                                                {a.score}/{a.out_of}
+                                            </span>
+                                            <span className="font-display font-black text-sm text-foreground
+                                                tabular-nums flex-shrink-0 w-11 text-right">
+                                                {pct}%
+                                            </span>
+                                        </div>
+                                    );
+                                })}
+                            </div>
                         </div>
                     )}
                 </motion.section>
@@ -1800,6 +1914,12 @@ export default function Planner() {
                     onSave={saveWeekPlan}
                     saving={weekPlanSaving}
                 />
+
+                {/* The mark, entered once, where the SAC lives. */}
+                {marking && (
+                    <MarkEntry assessment={marking} busy={savingMark}
+                        onSave={saveMark} onSkip={skipMark} onClose={() => setMarking(null)} />
+                )}
             </div>
         </div>
     );

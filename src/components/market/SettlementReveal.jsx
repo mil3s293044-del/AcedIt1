@@ -47,14 +47,31 @@ const RITE = {
     lost:  { confetti: 0,  hold: 0, ink: "#FF5A5F", label: "The room had it" },
     level: { confetti: 0,  hold: 0, ink: "#8FA3BF", label: "You agreed with the room" },
     void:  { confetti: 0,  hold: 0, ink: "#8FA3BF", label: "Nothing was tested" },
+    // ── The SUBJECT's result. No cred in either branch ───────────────────
+    // The one result the person a market is about ever gets, because they may
+    // not hold a position on it. `missed` is CAUTION and never the loss red:
+    // the number on that card is a real SAC mark, and an app that prints a
+    // sixteen-year-old's school result in the colour it uses for a lost bet
+    // has started editorialising about their schooling.
+    beat:   { confetti: 90, hold: 0, ink: "#58CC02", label: "You beat your own call" },
+    missed: { confetti: 0,  hold: 0, ink: "#FFC800", label: "You called it high" },
 };
 
 const VERDICT = {
     won: Check, lost: X, level: Minus, void: RotateCcw,
+    beat: Check, missed: Minus,
 };
 
-/** Cred that counts up, because a number that appears has not been won. */
-function CountUp({ value, className = "" }) {
+/**
+ * A number that counts up, because a figure that simply appears has not been
+ * won.
+ *
+ * `signed` is NOT decoration. Cred is a DELTA and has to carry its sign; a SAC
+ * mark is a QUANTITY and must not — "+91%" on somebody's Chemistry result
+ * reads as a gain of 91 points on a score they had before, which is not a
+ * thing that happened.
+ */
+function CountUp({ value, className = "", signed = true }) {
     const reduce = useReducedMotion();
     const mv = useMotionValue(reduce ? value : 0);
     const spring = useSpring(mv, { stiffness: 60, damping: 18 });
@@ -66,7 +83,7 @@ function CountUp({ value, className = "" }) {
     }, [value, mv, spring, reduce]);
     return (
         <span className={`tabular-nums ${className}`}>
-            {shown > 0 ? "+" : ""}{shown.toLocaleString()}
+            {signed && shown > 0 ? "+" : ""}{shown.toLocaleString()}
         </span>
     );
 }
@@ -76,7 +93,10 @@ function Card({ item, remaining, onNext }) {
     const rite = RITE[item.kind] || RITE.level;
     const Verdict = VERDICT[item.kind] || Minus;
     const fired = useRef(false);
-    const won = item.kind === "won";
+    const won = item.kind === "won" || item.kind === "beat";
+    // The subject's own line. Different body entirely: there is no stake, no
+    // payout and no side — the result is three numbers and how the room split.
+    const called = item.kind === "beat" || item.kind === "missed";
     // ── A LOSS DOES NOT PERFORM ──────────────────────────────────────────
     // The read stays on a loss — it is INFORMATION, and the one thing that
     // helps somebody call the next one better, so hiding it would be less kind
@@ -136,7 +156,77 @@ function Card({ item, remaining, onNext }) {
                     {item.title}
                 </h2>
 
-                {item.kind === "void" ? (
+                {called ? (
+                    <>
+                        {/* ── THE THREE NUMBERS ─────────────────────────────── */}
+                        {/* Their call, what the room made of it, and the mark
+                            that settled it. The third is what gives the first
+                            two meaning, so it is the one drawn large. */}
+                        <motion.div
+                            initial={{ opacity: 0, y: reduce || !won ? 0 : 8 }} animate={{ opacity: 1, y: 0 }}
+                            transition={{ delay: step(0.24) }}
+                            className="flex items-stretch gap-2 mt-4"
+                        >
+                            <div className="flex-1 rounded-xl bg-[#0E1929] py-2.5">
+                                <p className="text-[10px] font-bold uppercase tracking-wide text-[#4E6484]">
+                                    You called
+                                </p>
+                                <p className="font-display font-black text-xl text-[#8FA3BF] tabular-nums">
+                                    {item.called}<span className="text-xs ml-0.5">%</span>
+                                </p>
+                            </div>
+                            <div className="flex-1 rounded-xl bg-[#0E1929] py-2.5">
+                                <p className="text-[10px] font-bold uppercase tracking-wide text-[#4E6484]">
+                                    The room
+                                </p>
+                                <p className="font-display font-black text-xl text-[#8FA3BF] tabular-nums">
+                                    {item.room}<span className="text-xs ml-0.5">¢</span>
+                                </p>
+                            </div>
+                        </motion.div>
+
+                        {/* The mark itself. The caption goes ABOVE it, the way
+                            the two tiles above label their own figures — a
+                            label trailing a 4xl number reads as a unit and
+                            "91% you got" is not a unit. */}
+                        <motion.div
+                            initial={{ opacity: 0, scale: reduce || !won ? 1 : 0.8 }}
+                            animate={{ opacity: 1, scale: 1 }}
+                            transition={{ delay: step(0.44), type: "spring", stiffness: 300, damping: 18 }}
+                            className="mt-5"
+                        >
+                            <p className="text-[10px] font-bold uppercase tracking-wide text-[#4E6484]">
+                                You got
+                            </p>
+                            <p className="font-display font-black text-4xl" style={{ color: rite.ink }}>
+                                {won ? <CountUp value={item.actual} signed={false} /> : (
+                                    <span className="tabular-nums">{item.actual}</span>
+                                )}
+                                <span className="text-2xl ml-0.5">%</span>
+                            </p>
+                        </motion.div>
+
+                        {/* How the room split on them, which IS the payoff here
+                            — being read by twelve people is the thing they were
+                            offered in place of a stake. */}
+                        <motion.p
+                            initial={{ opacity: 0 }} animate={{ opacity: 1 }}
+                            transition={{ delay: step(0.52) }}
+                            className="text-[12px] text-[#8FA3BF] mt-2.5 leading-snug">
+                            {item.traders === 0
+                                ? "Nobody took a side on this one."
+                                : <>
+                                    <span className="font-bold text-[#58CC02] tabular-nums">
+                                        {item.backed}</span> backed you,{" "}
+                                    <span className="font-bold text-[#FF5A5F] tabular-nums">
+                                        {item.faded}</span> faded you —{" "}
+                                    {item.backed > item.faded === !!item.outcome
+                                        ? "and the room had it."
+                                        : "and the room got it wrong."}
+                                </>}
+                        </motion.p>
+                    </>
+                ) : item.kind === "void" ? (
                     <p className="text-[13px] text-[#8FA3BF] mt-3 leading-snug">
                         The question was never asked, so nobody was right.
                         Your {item.stake.toLocaleString()} cred is back.

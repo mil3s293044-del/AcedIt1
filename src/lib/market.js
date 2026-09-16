@@ -137,6 +137,76 @@ export function probFor(side, conviction) {
     return side === NO ? 1 - c : c;
 }
 
+/**
+ * WHERE THE SLIDER STARTS, AND WHY IT STARTS THERE.
+ *
+ * ─── The gesture used to be able to contradict itself ───────────────────────
+ * A side and a strength are two controls over one number, so the two could
+ * disagree: pick YES at 55% into a market already pricing yes at 80¢ and you
+ * are FURTHER from yes than the price is — the rule pays you when NO lands.
+ * That is correct arithmetic and it printed as a contradiction, so the panel
+ * grew a paragraph explaining that the side you had just chosen was not the
+ * side you were on, and where the line was, and what to do about it.
+ *
+ * A warning that explains a control is a control that needs replacing. The
+ * range is what was wrong: conviction ran from the coin flip whatever the
+ * price was, so half the track was, for that side, a position on the other
+ * one.
+ *
+ * ─── So the track BEGINS at the room's price ────────────────────────────────
+ * Pick a side and the slider's floor is what the room already pays for it.
+ * Everything to the right of that floor is a genuine position on the side you
+ * picked, and there is nowhere left to stand that is not. The inversion is not
+ * warned about — IT CANNOT BE EXPRESSED. And the travel becomes the reading a
+ * student actually needs: how far past the room you have dragged IS the gap
+ * you get paid on, drawn as distance rather than printed as a subtraction.
+ *
+ * `floor` is the room's line or the coin flip, whichever is HIGHER. Under a
+ * price of 50¢ a side is already better than even money, so the coin flip is
+ * the real floor there and `atRoom` says which of the two it is — the label
+ * under the track has to name the thing it is actually anchored to.
+ *
+ * `headroom` is what is left to win. A side the room has already priced past
+ * `CONVICTION_MAX` has none: there is no call left to place on it, which is a
+ * fact about the market and not an error, so it is REPORTED rather than
+ * clamped into a one-pixel track that pays nothing.
+ */
+export function convictionRange(side, price) {
+    const room = side === NO ? 1 - clampP(price) : clampP(price);
+    const floor = Math.max(CONVICTION_MIN, Math.min(CONVICTION_MAX, room));
+    return {
+        floor,
+        ceiling: CONVICTION_MAX,
+        // Whether that floor IS the room's line, or merely the coin flip.
+        atRoom: room > CONVICTION_MIN,
+        room,
+        headroom: Math.max(0, CONVICTION_MAX - floor),
+        // Under about a point of travel there is no call to place: dragging
+        // the whole track would move the price by less than it rounds to.
+        tradeable: CONVICTION_MAX - floor >= 0.01,
+    };
+}
+
+/**
+ * Where the handle should sit when a side is picked, and where it must move to
+ * when the side CHANGES.
+ *
+ * Switching sides moves the floor, so a conviction carried across unchanged
+ * can land underneath the new one — which is the inversion coming back in
+ * through the other door. Everything that sets conviction goes through here.
+ *
+ * The opening position is a third of the way up rather than at the floor: the
+ * floor pays exactly nothing, and a panel that opens on a call worth zero has
+ * to be dragged before it means anything at all.
+ */
+export function startingConviction(side, price, previous = null) {
+    const { floor, ceiling, headroom } = convictionRange(side, price);
+    if (previous !== null && Number.isFinite(previous) && previous > floor) {
+        return Math.min(ceiling, previous);
+    }
+    return Math.min(ceiling, floor + headroom * 0.34);
+}
+
 /** The inverse, for drawing a position somebody already holds. */
 export function sideOf(p) {
     return clampP(p) >= 0.5 ? YES : NO;
@@ -838,6 +908,158 @@ export function settlementOf(market, email) {
     };
 }
 
+// ─── A MARK, AND THE LINE SOMEBODY CALLS ON IT ──────────────────────────────
+//
+// Imported by the server, never mirrored, for the reason the rest of this file
+// is: the prior a line opens at decides what every trader is scored against,
+// and a second copy of that arithmetic is a board that pays differently
+// depending which half of the app computed it.
+
+/**
+ * A raw mark as a percentage, or null.
+ *
+ * SACs are out of 60, or 40, or 25 — the denominator is a fact about the
+ * assessment and it is on the row. The market asks its question in PERCENT
+ * because that is the only scale on which "will they clear 80" means the same
+ * thing across two subjects, and because the room has to be able to read it.
+ *
+ * Null rather than zero when either half is missing. `Number(null) === 0` is
+ * the trap this codebase keeps meeting, and here it would settle a market
+ * against a mark nobody has entered — reporting a fail for a student who has
+ * simply not typed their result in yet.
+ */
+export function markPercent(score, outOf) {
+    const s = score === null || score === undefined || score === "" ? NaN : Number(score);
+    const o = outOf === null || outOf === undefined || outOf === "" ? NaN : Number(outOf);
+    if (!Number.isFinite(s) || !Number.isFinite(o) || o <= 0 || s < 0) return null;
+    return Math.max(0, Math.min(100, Math.round((s / o) * 100)));
+}
+
+/**
+ * How many past marks it takes before this board will price a line off them.
+ *
+ * The same refusal as `MARKET_MIN_OBS`, `TREND_MIN`, `CALIBRATION_MIN` and
+ * `MIN_BASELINE_WEEKS`, each added after the same mistake: a prior computed
+ * from two results is a coin flip wearing a number, and here it would be a
+ * coin flip that every trader on the market is scored against.
+ */
+export const MARK_MIN_OBS = 3;
+
+/**
+ * WHERE A MARK LINE OPENS, GIVEN WHAT THE STUDENT HAS ACTUALLY SCORED.
+ *
+ * Every SAC line used to open at 0.5 whatever it said, which is the same hole
+ * the activity gate closed on the weekly lines: "Will they score 95+?" from a
+ * student averaging 58 opened at even money and paid whoever took no, on a
+ * fact anybody with a calendar could see. A prior is not a formality — it is
+ * the market's opening statement, and an obviously wrong one is free cred.
+ *
+ * Laplace-smoothed rather than the raw share, so four-from-four does not open
+ * at 100¢ and leave nothing to trade, and so the number moves toward the
+ * evidence at a rate the evidence can support. Clamped either side for the
+ * same reason `PRIOR_WEIGHT` exists: an opening price nobody can profitably
+ * disagree with is not a market.
+ *
+ * Under `MARK_MIN_OBS` marks it REFUSES and opens even, flagged `thin` so the
+ * card can say the room is pricing this from nothing.
+ */
+export function priorForLine(pastPercents = [], line) {
+    const target = Number(line);
+    const seen = (Array.isArray(pastPercents) ? pastPercents : [])
+        .map((v) => (v === null || v === undefined || v === "" ? NaN : Number(v)))
+        .filter((v) => Number.isFinite(v));
+    const average = seen.length
+        ? Math.round(seen.reduce((a, b) => a + b, 0) / seen.length) : null;
+
+    if (!Number.isFinite(target) || seen.length < MARK_MIN_OBS) {
+        return { prior: 0.5, thin: true, seen: seen.length, average };
+    }
+    const hits = seen.filter((v) => v >= target).length;
+    const smoothed = (hits + 1) / (seen.length + 2);
+    return {
+        prior: Math.max(0.12, Math.min(0.88, smoothed)),
+        thin: false, seen: seen.length, average,
+    };
+}
+
+/**
+ * WHAT THE PERSON WHOSE MARK IT IS GETS OUT OF IT.
+ *
+ * They cannot hold a position — they report the result, which is the rule that
+ * makes this safe to pay on at all — so the payoff has to be something other
+ * than cred, and it already exists in the positions: the room read them, and
+ * the tape says which way. "Six people backed you, nine faded you, you were
+ * right" is a stronger sentence than any payout, and nothing about it is
+ * farmable because no cred moves toward the subject in any branch.
+ *
+ * `called` is their own line, `room` is where the crowd left it, and `actual`
+ * is the mark. The third number is the one that makes the other two mean
+ * something, so a market with no mark reported yet returns `actual: null`
+ * rather than a zero — see `markPercent`.
+ */
+export function selfLine(market) {
+    if (!market || market.kind !== "sac") return null;
+    const meta = market.meta || {};
+    const target = Number(meta.target);
+    if (!Number.isFinite(target)) return null;
+
+    const positions = market.positions || [];
+    const backed = positions.filter((x) => sideOf(x.p) === YES).length;
+    const faded = positions.length - backed;
+    const reported = meta.reported === null || meta.reported === undefined
+        ? null : Number(meta.reported);
+    const actual = Number.isFinite(reported) ? reported : null;
+
+    return {
+        id: market.id,
+        title: market.title,
+        subject: meta.subject || market.subject_name || null,
+        called: Math.round(target),
+        room: Math.round(priceOf(market, positions) * 100),
+        actual,
+        cleared: actual === null ? null : actual >= target,
+        backed, faded,
+        traders: positions.length,
+        thin: !!meta.thin,
+        status: market.status,
+        // Whether the room agreed with them, which is the read they were
+        // being given. Only meaningful once somebody has taken a side.
+        roomBacked: positions.length ? backed > faded : null,
+    };
+}
+
+/**
+ * How well a student calls their OWN marks, over every line they have closed.
+ *
+ * The mirror of the calibration curve the book draws for their calls on other
+ * people, and it refuses on the same grounds: a hit rate off two SACs is a
+ * personality judgement made on a coin flip. Under `MARK_MIN_OBS` closed lines
+ * it reports the count and nothing else.
+ */
+export function selfRecord(markets = [], email = null) {
+    const me = String(email || "").toLowerCase();
+    const lines = (Array.isArray(markets) ? markets : [])
+        .filter((m) => m && m.kind === "sac" && m.status !== "open"
+            && (m.subject_is_me || String(m.subject_email || "").toLowerCase() === me))
+        .map(selfLine)
+        .filter((l) => l && l.actual !== null);
+
+    const cleared = lines.filter((l) => l.cleared).length;
+    // How far out they were, in points, signed: positive means they beat their
+    // own call. The average of that is the useful number — a student who
+    // clears every line is not well calibrated, they are sandbagging.
+    const misses = lines.map((l) => l.actual - l.called);
+    const drift = misses.length
+        ? Math.round(misses.reduce((a, b) => a + b, 0) / misses.length) : null;
+
+    return {
+        lines, closed: lines.length, cleared,
+        enough: lines.length >= MARK_MIN_OBS,
+        rate: lines.length ? cleared / lines.length : null,
+        drift,
+    };
+}
+
 const SETTLED_SEEN_KEY = "acedit.markets.settled.seen";
 
 function seenSettlements() {
@@ -874,7 +1096,51 @@ export function unseenSettlements(markets = [], email = null) {
     const seen = seenSettlements();
     if (seen === null) return [];
     return markets
-        .map((m) => settlementOf(m, email))
+        // TWO KINDS OF RESULT, one seen-set. A position that paid out, and a
+        // line of your own that the room has now been proved right or wrong
+        // about — which is the only result the SUBJECT of a market ever gets,
+        // because they may not hold a position on it. Without this the person
+        // whose SAC the whole board was trading is the one person the floor
+        // never tells anything.
+        .map((m) => settlementOf(m, email) || calledOf(m, email))
         .filter((s) => s && !seen.has(s.id))
-        .sort((a, b) => Math.abs(a.payout) - Math.abs(b.payout));
+        .sort((a, b) => Math.abs(a.payout || 0) - Math.abs(b.payout || 0));
+}
+
+/**
+ * YOUR OWN LINE, RESOLVED. The subject's half of a settlement.
+ *
+ * No cred in any branch and none is possible: the subject cannot hold a
+ * position, which is the rule that makes a self-reported mark safe to pay
+ * others on. What they get instead is the read — their call, the price the
+ * room reached, the mark, and how the room split on them.
+ *
+ * `missed` is drawn in the CAUTION ink rather than the loss red wherever this
+ * renders. The number on it is a real school result, and an app that prints a
+ * sixteen-year-old's SAC mark in the same colour it uses for a lost bet has
+ * started editorialising about their schooling.
+ */
+export function calledOf(market, email) {
+    const line = selfLine(market);
+    if (!line || market.status === "open" || line.actual === null) return null;
+    const me = String(email || "").toLowerCase();
+    const mine = market.subject_is_me
+        || String(market.subject_email || "").toLowerCase() === me;
+    if (!mine) return null;
+
+    return {
+        // Namespaced, so a subject result and a position result on one market
+        // can never share a seen-key and silently swallow each other.
+        id: `called:${market.id}`,
+        kind: line.cleared ? "beat" : "missed",
+        title: market.title,
+        called: line.called,
+        actual: line.actual,
+        room: line.room,
+        backed: line.backed,
+        faded: line.faded,
+        traders: line.traders,
+        outcome: line.cleared,
+        payout: 0,
+    };
 }

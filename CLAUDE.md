@@ -701,6 +701,39 @@ pari-mutuel needs two sides this board will not have: four people all on YES
 with YES landing is an empty loser pool and a market that pays nothing when you
 were right.
 
+**THE CONVICTION TRACK BEGINS AT THE ROOM'S PRICE, AND THAT DELETED A
+PARAGRAPH.** A side and a strength are two controls over one number, so the two
+could disagree and did: pick YES at 55% into a market already pricing yes at
+80¢ and you are FURTHER from yes than the price is, so the rule pays you when
+NO lands. Correct arithmetic, printed as a contradiction, under the side the
+student had just chosen — and the panel answered it with a warning naming the
+side they were really on, the line, and what to drag.
+
+A warning that explains a control is a control that wants replacing. The RANGE
+was the wrong thing: conviction ran from the coin flip whatever the price was,
+so half the track was, for that side, a position on the other one.
+`convictionRange` anchors the floor at what the room already pays for the side
+picked, and the inversion is not warned about — IT CANNOT BE EXPRESSED.
+`market.test.mjs` walks every price and every reachable conviction to hold
+that, because the warning it replaced is gone and nothing on screen would say
+so if it came back.
+
+What is left is the reading that was buried in the sentence: HOW FAR PAST THE
+ROOM YOU HAVE DRAGGED is the gap you are paid on, as a distance rather than a
+subtraction of two printed numbers. Three things fall out of it:
+
+- **The floor is the room's line OR the coin flip, whichever is HIGHER**, and
+  the label says which. Under 50¢ a side already beats even money, so the coin
+  flip is the real anchor there and "past the room" would simply be false.
+- **A side the room has run past `CONVICTION_MAX` has no call left on it.**
+  That is a fact about the market rather than an error, so it is REPORTED — the
+  button is disabled and says "already priced in" — and the panel opens on the
+  side that can still be backed rather than greeting somebody with a dead one.
+- **Conviction is CLAMPED ON READ, not only where it is set.** The price is a
+  prop and it moves: somebody else takes a side while the sheet is open and the
+  floor slides out from under a handle nobody touched. That is the inversion
+  arriving without anybody dragging anything.
+
 **"If you're right" was a lie under a scoring rule, and it printed one.** A side
 is not a position here; a DISTANCE FROM THE PRICE is. Take NO at 55% into a
 market already pricing NO at 80¢ and you are further from NO than the price is,
@@ -755,6 +788,28 @@ lesson: `streak` red on a podium read as a warning.
 ARRIVAL — a dark room a student has not seen, and the thing they are waiting
 for is a table with cards on it — so the wait IS the deal rather than the grey
 spinner this was the last screen in the app still showing.
+
+**AND THE MASCOT HAS TO BE THE THING THAT MOVES.** The first version was six
+cards springing in past a STILL DRAWING of him: `pose="toss"` set once,
+`idle={false}`, `eyes={false}` — three switches that each turn his own motion
+off, so the only animation was the cards and the character was a picture beside
+them. A mascot who does not move while six cards fly past him is not dealing
+them, he is watching.
+
+He deals A ROW AT A TIME, which is what dealing onto a two-column table looks
+like and is also what makes the flick legible: three beats with a real pause
+rather than six at a speed where the arm never finishes travelling. Each beat
+is toss → recover, and the recovery is `stand` because it is the biggest ARM
+delta from `toss` in the pose table — `offer` was the first choice and its
+hands sit almost where the toss leaves them, so at 56px the throw disappeared.
+The cards fly from HIS corner, further for each row and column, so the six fan
+out of one point instead of sliding in from the same offset six times.
+
+Then `proud`, so the deal has a finish rather than a stop — and then he is
+simply standing with `idle` ON and his own fidget system takes over. A SLOW
+LOAD IS THE ONE CASE A LOADER CANNOT DESIGN FOR, and the answer is the
+character's own behaviour rather than a loop that gets more annoying the longer
+it runs.
 
 **IT IS THE SKELETON, NOT A CURTAIN IN FRONT OF ONE.** The dealt cards are on
 the same grid at the same size in the same places, so the content fills in
@@ -820,6 +875,66 @@ subject); `longshot` is deliberately unlikely, with the threshold ESCALATING
 until the base rate is actually long, because a longshot the room clears most
 weeks is a question with a bad name; `prep` comes off an assessment already on
 somebody's planner.
+
+**A SAC LINE IS OPENED ON AN ASSESSMENT, NOT TYPED.** `openMarkMarket` took a
+free-text subject, a slider and a date, none of which the app checked against
+anything it already knew — so "Chem" and "Chemistry" were two subjects to every
+screen that groups by one, a line could close on a day no SAC was happening,
+and nothing connected the market to the SAC. Which made reporting the mark a
+SECOND act of typing: `window.prompt`, into a market, out of 100, while
+`subject_assessments.score` and `out_of` — columns shipped since migration 0002
+— stayed null on every row in the database. An input with no column and a
+column with no input, for the same number, on two screens.
+
+It reads the planner now. Everything but the line comes off the row, and THE
+ROW IS WHAT SETTLES IT: the mark is entered once on the planner (`MarkEntry`),
+and `reportMark` reads it back off `subject_assessments` rather than accepting
+a number from the request body — the rule every other settlement here keeps,
+reached on the one endpoint that had been ignoring it. The two screens cannot
+disagree about one mark because there is only one mark. `markPercent` is the
+one conversion, shared with the server, so the percentage under the box is the
+percentage the market settles on; a missing half returns NULL and never a zero,
+which would resolve a market as a fail for a student who has not typed it in.
+The dedupe index does the rest: `ref` is `sac:<assessment id>`, so one line per
+SAC, and the dialog hides the ones already called rather than offering a row
+that produces a 409.
+
+**AND A LINE IS PRICED AGAINST THEIR OWN RECORD.** Every SAC market opened at
+0.5 whatever it said, which is the same hole the activity gate closed on the
+weekly lines: "Will they score 95+?" from a student averaging 58 opened at even
+money and paid whoever took no, on a fact anybody with a calendar could see.
+`priorForLine` is Laplace-smoothed rather than the raw share, so four-from-four
+does not open at 100¢ and leave nothing to trade, and clamped either side for
+the reason `PRIOR_WEIGHT` exists — an opening price nobody can profitably
+disagree with is not a market. Under `MARK_MIN_OBS` past marks IN THAT SUBJECT
+it refuses, opens even, and the card says so; a Methods mark tells you nothing
+about a Chemistry SAC, so nothing is borrowed across subjects. The dialog
+states what the prior will be built from BEFORE the line is set — "off your
+last 4 Chemistry marks, averaging 75%" — because the room is about to be handed
+their average and that is the most useful thing this screen can tell them.
+
+**THE SUBJECT GETS THE ROOM'S READ, AND NO CRED IN ANY BRANCH.** They cannot
+hold a position — they report the result — so the floor used to tell the one
+person the whole board was trading absolutely nothing. `selfLine` is what they
+get instead: how many people are reading them, which way, and where the price
+landed. On settlement `calledOf` puts it in the same `SettlementReveal` as
+everybody else's payout, sharing one seen-set, keyed `called:<id>` so a subject
+result and a position result on one market cannot swallow each other. `missed`
+is drawn in the CAUTION ink and never the loss red — the number on that card is
+a real school result, and an app that prints a sixteen-year-old's SAC mark in
+the colour it uses for a lost bet has started editorialising about their
+schooling. `selfRecord` keeps the running version and REFUSES under
+`MARK_MIN_OBS` closed lines, the same floor as the calibration curve; its
+`drift` is signed, because a student who clears every line is not
+well-calibrated, they are sandbagging.
+
+Nothing in any of it is farmable, because no branch moves cred toward the
+subject — which is what lets the mark stay self-reported.
+
+**A mark needs somewhere to be READ, or the input repeats the failure it
+closed.** The planner prints "Marks so far" under the upcoming list, derived
+from the rows already loaded. Six of them: this is a glance at how the term is
+going, not a transcript — a full record belongs on Analytics.
 
 **The planner mints PREP and not a mark market, and that is a deliberate
 deviation.** A SAC mark line is the best content this board has and
@@ -2407,7 +2522,12 @@ is the textbook, and only as something to generate MORE from.
   the glyphs, and the floor's shared ground; `getMarket` in `server.mjs`
 - `src/components/market/AceDeal.jsx` — the floor's arrival: Ace dealing the
   board onto the grid the real cards fill, which is the skeleton rather than a
-  curtain in front of one
+  curtain in front of one. HE is what moves; the switches that turn his own
+  motion off are the bug this had
+- `src/components/planner/MarkEntry.jsx` — what you actually got, typed once,
+  on the planner. It fills `score`/`out_of` and `reportMark` reads them back to
+  settle; `scripts/_floorProbe.jsx` renders it and the floor's other new
+  surfaces against fixtures, since both pages are auth-gated
 - `src/lib/megaUpload.js` + `megaUpload.test.mjs`, `src/api/megaUploads.js`,
   `src/components/shared/MegaPicker.jsx` — a textbook stored whole and read a
   chapter at a time: the caps, the 1-based ranges and the per-page chip price.

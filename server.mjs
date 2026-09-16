@@ -23,6 +23,7 @@ import {
   payoutFor as marketPayout, priceOf as marketPrice, probFor as marketProb,
   clampStake as marketStake, blockReason as marketBlockReason,
   pickBoard, BOARD_TARGET,
+  markPercent, priorForLine,
   YES as MKT_YES, NO as MKT_NO, CRED_WEEKLY_GRANT, CRED_BALANCE_CAP,
 } from "./src/lib/market.js";
 import { ACHIEVEMENTS, ACHIEVEMENT_BY_CODE, evaluate as evaluateAchievement }
@@ -10923,21 +10924,86 @@ app.post("/local-ai/fn/takePosition", async (req, res) => {
 // it, because you are the one who reports the result — which is the entire
 // reason this is safe to pay out on, and a better game besides: being read by
 // twelve people is more motivating than being paid for a number you typed.
+//
+// ─── IT COMES OFF THE PLANNER, AND THAT IS NOT A CONVENIENCE ────────────────
+// The first version took a typed subject, a slider and a date, none of which
+// the app checked against anything. Three things were wrong with it and all
+// three are the same thing:
+//
+//   · The SUBJECT was free text, so "Chem", "Chemistry" and "chemistry" were
+//     three subjects to every screen that groups by one.
+//   · The DATE was whatever they typed, so a line could close on a day no SAC
+//     was happening — and the assessment they were actually thinking about was
+//     already on their planner, with its real date on it.
+//   · Nothing connected the market to the SAC, so reporting the mark was a
+//     second, separate act of typing: `window.prompt`, into a market, while
+//     `subject_assessments.score` and `out_of` — columns this app has shipped
+//     for months — stayed empty on every row in the database.
+//
+// So the line is opened ON an assessment. Everything except the number is read
+// off the row, and the row is what settles it. That is the same move the prep
+// lines already make (mintPrepLines, above) arriving at the other end: the
+// planner is where a student says what is coming, so it is where the board
+// finds out.
+async function markHistory(email, subject) {
+  // Their own past marks in THIS subject. A mark in Methods says very little
+  // about a Chemistry SAC, so nothing is borrowed across subjects — under
+  // MARK_MIN_OBS the line simply opens even and says it is pricing off nothing.
+  const { data, error } = await supabaseAdmin.from("subject_assessments")
+    .select("score, out_of")
+    .eq("created_by", email).eq("subject_name", subject)
+    .not("score", "is", null)
+    .order("due_date", { ascending: false }).limit(40);
+  if (error) {
+    console.warn("[markets] mark history unavailable:", error.message);
+    return [];
+  }
+  return (data || []).map((a) => markPercent(a.score, a.out_of)).filter((v) => v !== null);
+}
+
 app.post("/local-ai/fn/openMarkMarket", async (req, res) => {
   const user = await authenticateRequest(req);
   if (!user) return res.status(401).json({ error: "Unauthorized" });
   if (!supabaseAdmin) return res.status(500).json({ error: "Supabase admin not configured" });
 
   try {
-    const { subject, target, closes_at } = req.body || {};
+    const { assessment_id, target } = req.body || {};
     const line = Math.round(Number(target) || 0);
-    if (!subject || !line || line < 1 || line > 100) {
-      return res.status(400).json({ error: "A subject and a mark out of 100 are required." });
+    if (!assessment_id) {
+      return res.status(400).json({ error: "Pick the SAC from your planner." });
     }
-    const when = closes_at ? new Date(closes_at) : null;
-    if (!when || !Number.isFinite(when.getTime()) || when <= new Date()) {
-      return res.status(400).json({ error: "Pick a date in the future for the SAC." });
+    if (!line || line < 1 || line > 100) {
+      return res.status(400).json({ error: "The line is a percentage between 1 and 100." });
     }
+
+    const { data: sac, error: readErr } = await supabaseAdmin.from("subject_assessments")
+      .select("id, created_by, subject_name, title, assessment_type, due_date, is_completed, out_of")
+      .eq("id", assessment_id).maybeSingle();
+    if (readErr) {
+      console.error("[openMarkMarket] lookup failed:", readErr.code, readErr.message);
+      return res.status(500).json({ error: "Couldn't read that assessment." });
+    }
+    if (!sac) return res.status(404).json({ error: "That assessment is no longer on your planner." });
+    // THE OWNER, CHECKED SERVER-SIDE. An assessment id is the only thing the
+    // client sends, and it must not be able to open a line on somebody else's
+    // SAC — which would publish their subject, their date and their mark.
+    if (String(sac.created_by || "").toLowerCase() !== String(user.email).toLowerCase()) {
+      return res.status(403).json({ error: "You can only call your own SACs." });
+    }
+    if (sac.is_completed) {
+      return res.status(400).json({ error: "That one is already done — there is nothing left to call." });
+    }
+    const when = new Date(`${sac.due_date}T23:59:00`);
+    if (!Number.isFinite(when.getTime()) || when <= new Date()) {
+      return res.status(400).json({ error: "That SAC has already been and gone." });
+    }
+
+    const subject = sac.subject_name || "their next";
+    const past = await markHistory(user.email, sac.subject_name);
+    // The opening price is their OWN record against this line, not a flat
+    // 0.5 — see priorForLine. A 95 line from a student averaging 58 used to
+    // open at even money and pay whoever took no, risk-free.
+    const { prior, thin, seen, average } = priorForLine(past, line);
 
     const profile = await loadUserProfile(user.email);
     const who = firstNameOf(profile?.username || profile?.full_name, user.email);
@@ -10945,16 +11011,26 @@ app.post("/local-ai/fn/openMarkMarket", async (req, res) => {
       kind: "sac", subject_email: user.email,
       subject_name: profile?.username || profile?.full_name || null,
       created_by: user.email,
-      title: `Will ${who} score ${line}+ on their ${subject} SAC?`,
-      resolves_note: `On the mark ${who} reports. They can't back it — you can.`,
-      prior: 0.5,
+      title: `Will ${who} score ${line}%+ on ${subject} ${sac.title}?`,
+      resolves_note: `On the mark ${who} enters on their planner. They can't back it — you can.`,
+      prior,
+      // The SAC's own date is the close, so the window the market asks about
+      // is exactly the run-up and the answer exists the moment it shuts.
       closes_at: when.toISOString(),
-      meta: { ref: `sac:${subject}:${line}`, period: marketWeekKey(when),
-        target: line, subject, thin: true },
+      meta: {
+        ref: `sac:${sac.id}`, period: marketWeekKey(when),
+        target: line, subject, thin,
+        // What settles it, and the denominator the mark will be entered
+        // against. Both live on the assessment; these are the pointer.
+        assessment_id: sac.id, out_of: sac.out_of ?? null,
+        // What the prior was built from, so the card can say "pricing off
+        // four past marks" rather than presenting a number from nowhere.
+        seen, average,
+      },
     }).select().single();
     if (error) {
       if (/duplicate key/i.test(error.message || "")) {
-        return res.status(409).json({ error: "You already have that line open." });
+        return res.status(409).json({ error: "You already have a line open on that SAC." });
       }
       throw error;
     }
@@ -10965,38 +11041,66 @@ app.post("/local-ai/fn/openMarkMarket", async (req, res) => {
   }
 });
 
-// Report the mark. Only the subject may, which is what makes them ineligible
-// to hold a position on it, and the settle sweep pays everybody else out.
+// ─── Settling it off the mark on the planner ────────────────────────────────
+//
+// THE OUTCOME IS READ FROM THE ASSESSMENT ROW AND NEVER FROM THE REQUEST BODY.
+// That is the rule every other settlement here keeps, and it took a rewrite to
+// reach on this one: the old endpoint accepted `{ market_id, score }` and wrote
+// whatever number arrived. The student is the only person who can know their
+// mark, so accepting it from them is not the hole — the hole is that the number
+// then existed ONLY inside a market's `meta`, while the column built to hold it
+// stayed null, so the app could never show a student their own SAC results, and
+// two places would have had to agree about one mark forever.
+//
+// They enter it once, on the planner, where the SAC already lives. This reads
+// it back off that row and settles.
 app.post("/local-ai/fn/reportMark", async (req, res) => {
   const user = await authenticateRequest(req);
   if (!user) return res.status(401).json({ error: "Unauthorized" });
   if (!supabaseAdmin) return res.status(500).json({ error: "Supabase admin not configured" });
 
   try {
-    const { market_id, score } = req.body || {};
-    const mark = Math.round(Number(score));
-    if (!market_id || !Number.isFinite(mark) || mark < 0 || mark > 100) {
-      return res.status(400).json({ error: "A market and a mark out of 100 are required." });
+    const { assessment_id } = req.body || {};
+    if (!assessment_id) {
+      return res.status(400).json({ error: "Which assessment?" });
     }
-    const { data: market, error } = await supabaseAdmin
-      .from("markets").select("*").eq("id", market_id).maybeSingle();
+
+    const { data: sac, error } = await supabaseAdmin.from("subject_assessments")
+      .select("id, created_by, score, out_of").eq("id", assessment_id).maybeSingle();
     if (error) {
       console.error("[reportMark] lookup failed:", error.code, error.message);
-      return res.status(500).json({ error: "Couldn't read that market." });
+      return res.status(500).json({ error: "Couldn't read that assessment." });
     }
-    if (!market) return res.status(404).json({ error: "That market no longer exists." });
-    if (market.kind !== "sac") return res.status(400).json({ error: "That isn't a mark market." });
-    if (market.subject_email !== user.email) {
+    if (!sac) return res.status(404).json({ error: "That assessment no longer exists." });
+    if (String(sac.created_by || "").toLowerCase() !== String(user.email).toLowerCase()) {
       return res.status(403).json({ error: "Only the person it's about can report the mark." });
     }
-    if (market.status !== "open") return res.json({ already: true });
+
+    const reported = markPercent(sac.score, sac.out_of);
+    if (reported === null) {
+      // A mark that is not on the row yet is NOT a zero. Settling on one would
+      // resolve the market as a fail for somebody who has not typed it in.
+      return res.status(400).json({ error: "Enter the mark on your planner first." });
+    }
+
+    // Their own open lines. Filtered here rather than with a `meta->>` filter
+    // because a student has at most a handful, and one predicate the database
+    // has to parse out of JSON is one more thing to get subtly wrong.
+    const { data: open } = await supabaseAdmin.from("markets")
+      .select("id, meta, status").eq("kind", "sac")
+      .eq("subject_email", user.email).eq("status", "open");
+    const market = (open || []).find((m) => m.meta?.assessment_id === assessment_id);
+    // No line on this SAC is the ORDINARY case — most marks are entered by
+    // students who never opened one — so it answers plainly rather than 404ing
+    // a planner action over a market that was never meant to exist.
+    if (!market) return res.json({ reported, market: null, settled: 0 });
 
     await supabaseAdmin.from("markets")
-      .update({ meta: { ...(market.meta || {}), reported: mark },
+      .update({ meta: { ...(market.meta || {}), reported },
         closes_at: new Date().toISOString() })
-      .eq("id", market_id);
+      .eq("id", market.id);
     const swept = await settleDueMarkets();
-    return res.json({ reported: mark, settled: swept.settled });
+    return res.json({ reported, market: market.id, settled: swept.settled });
   } catch (err) {
     console.error("reportMark error:", err);
     return res.status(500).json({ error: err.message });
