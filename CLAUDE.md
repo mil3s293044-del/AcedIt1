@@ -521,6 +521,50 @@ and visible; mislinked blames the wrong mark, which is what the join exists to
 prevent. Watch `Number(null) === 0`: coercing the index attached every unlinked
 annotation to the first criterion on the page, silently and plausibly.
 
+**ONE MARK PER QUESTION, AND `quizScore.js` IS IT.** A student photographed a
+header pill reading **3/5** sitting eight inches above a red **0/5** on the same
+card, over an answer box that said "No answer written". Eight readers worked the
+mark out for themselves and disagreed about both halves of the fraction:
+
+- **The reconciliation existed and nothing read it.** `normaliseMark` has always
+  recomputed the total from the criteria when the model's stated figure
+  contradicts them — that is the rule the whole panel rests on — but the
+  reconciled number lives on `fb.mark.marks` and every other reader took
+  `fb.marks`, the raw claim. So the small panel was right and the big number,
+  the score, the saved attempt **and the XP payout** were all wrong.
+- **The denominator was hand-rolled** as `q.type === "mcq" ? 1 : (q.marks || 5)`
+  in four more places, which reads 5 for a multipart question worth nine. It is
+  the same expression this file already records being fixed three times.
+  `quizScore.test.mjs` scans the tree for it now, and for `fb.marks` inside
+  QuizPlayer, because both render perfectly and are simply a different number
+  from the one beside them.
+- **A BLANK ANSWER SCORES ZERO, whatever the marker says.** That 3/5 was awarded
+  to text that does not exist, and no amount of reconciliation catches it when
+  the criteria come back equally invented. The only legitimate way a blank
+  answer scores is the student's own "I answered this on paper" box.
+  `blank` is false for anything answered by SELECTION — a legacy MCQ, and a
+  multipart question whose parts are all MCQs, whose joined answer is correctly
+  the empty string however well it went.
+
+`questionMark` returns BOTH `auto` (what pays XP and what is persisted) and
+`awarded` (`auto` + self-marked, what the student sees). Anything printing a
+number reads `markFor(i)`; anything paying out reads `.auto`.
+
+**And where the fraction legitimately differs from the list under it, the panel
+SAYS SO** — one sentence, because said separately "nothing scored" appeared
+directly under a 4/5 on a question marked from paper.
+
+**The review card is part-aware too, and was not.** `userAnswers[index]` is
+empty for a multipart question (its parts are keyed "3a", "3b") and
+`q.model_answer` is undefined (the model answers live on the parts), so every
+multipart question reviewed after marking printed "No answer written" above "No
+model answer provided" and offered the self-mark box for a question that had
+been answered in full. The answer comes through `answerTextFor`, the model
+answer through `modelAnswerFor`, and the self-mark box is gated on
+`currentMark.blank` — the SAME test the zero it explains was computed from. A
+model answer that genuinely does not exist renders no panel at all rather than a
+box headed "Model Answer" containing "No model answer provided".
+
 **The ink pad holds one line.** Write a step, it is recognised, it lifts off
 the pad into the typeset stack above, the pad clears. That is the whole
 anti-crowding design: nothing accumulates on the writing surface. Recognition
@@ -1750,6 +1794,10 @@ through all of them.
 ## Known issues / paper-cuts
 
 - Console 400s on `/study_plans` and `/flashcards` — missing-column patches. Non-blocking.
+- Supabase is on the FREE plan and the app now self-limits to stay inside it
+  (see the storage section). If you raise any upload cap, re-read the
+  arithmetic there first — the failure mode is the whole project 402ing, not a
+  failed upload.
 - Lint is at ~46 warnings, down from 190. What's left is mostly unread state; the
   genuinely dead things have been removed. Worth reading a warning before deleting
   it — twice now an "unused" symbol turned out to mark a half-wired feature, not
@@ -1972,6 +2020,214 @@ numbers print to one decimal: rounding the cap told a student with a 7.8 MB
 photo that "the limit is 8 MB" and then refused it, which makes the app look
 broken rather than the file.
 
+## Mega uploads: a textbook, stored whole, read a chapter at a time
+
+**A BIG UPLOAD IS NOT JUST A BIGGER UPLOAD.** The ordinary path caps a PDF at
+16 MB because a request may be 32 MB. Raising that is the easy half and it is
+not the problem. The problem is that **a document costs input tokens for every
+page, every time it is read**, and the docs are explicit: 1,500–3,000 tokens of
+text per page PLUS the image tokens, because each page is rendered and read as
+a picture as well. About 4,600 tokens a page all in.
+
+So 600 pages is ~2.8M input tokens — **about $8.30 on Sonnet, against a $1.95
+weekly budget for the entire student**. One press of "make flashcards from my
+textbook" would cost four weeks of everything else they do. Anything that
+sends a whole book is unshippable at any price the chip stack can express.
+
+**UPLOAD WHOLE, GENERATE FROM A RANGE.** The book is stored once; each generate
+names its pages and only those are sent and only those are charged. Three
+things fall out and all three are improvements: a 40-page chapter is a normal
+action (95 chips of reading); "make cards from chapter 7" is a better ask than
+"from these 600 pages", which returns mush; and a textbook never sits in the
+512 MB box, because only the slice is ever encoded.
+
+`src/lib/megaUpload.js` is the model — caps, ranges and the price — and the
+server IMPORTS it rather than mirroring it, so the number under the range
+picker is the number on the bill. `megaUpload.test.mjs` scans the tree to keep
+it that way; a second copy of the page price is the one thing this must never
+grow.
+
+**THE PRICE IS ON SCREEN BEFORE IT IS SPENT.** This is the only action in the
+app whose price is not fixed — every other button costs what `chips.js`
+published, and a mega read costs its PAGES. The surcharge threads through
+`canAfford` → `canUseFeature` on the client and `checkTierAccess` →
+`recordTierUsage` on the server, so the button cannot say yes to something the
+server is about to refuse.
+
+**IT READS ON HAIKU AND THE PANEL SAYS SO.** Input tokens are the whole cost
+here and Haiku is 3× cheaper on them — the same chapter is 95 chips rather than
+283 — and pulling facts out of a textbook is bulk comprehension rather than the
+judgement marking needs. `megaPages > 0` forces the model past the student's
+own tier. An app that quietly downgrades the model and lets a student conclude
+it is just bad has spent their trust to save its own money.
+
+**A MISSING RANGE MEANS ONE PAGE, NEVER THE WHOLE BOOK.** Every clamp points
+the same way, because the failure modes are wildly asymmetric: reading too few
+pages wastes one press, reading 600 spends a term's chips. The picker opens on
+30 pages — a typical chapter — rather than on `RANGE_PAGE_CAP`, which would
+greet somebody with a third of their weekly stack and a slider already pinned
+to the right.
+
+**PAGE NUMBERS ARE 1-BASED EVERYWHERE, and `pageIndices` is the one
+conversion.** An off-by-one here is invisible: page 214 looks exactly like page
+215 unless something checks the number printed on it. The round-trip is
+asserted against a book whose every page carries its own number.
+
+**A HANDLE IS SCOPED TO ITS OWNER.** `local-file://` ids are unguessable UUIDs
+and that is all that protects them; a stored textbook is far larger and more
+personal, so the owner is hashed INTO the bucket key and checked on every read.
+The client only ever holds `mega-file://<uuid>` — `megaFiles` strips the
+storage key before answering, and a test asserts it does.
+
+**ONE SLICE AT A TIME, server-wide** (`megaGate`). MEASURED, not assumed: a
+74.8 MB book loads in 93 ms for ~7 MB above the buffer (pdf-lib's `load` is
+lazy) and slicing 40 pages costs another 7 MB. So one slice of a 100 MB book is
+~115 MB transient and two at once is not something a 512 MB instance should be
+asked to survive — this file has OOM'd that box once already.
+
+**STORAGE IS THE CONSTRAINT, NOT COST**: 60 MB a book, two active books, a
+72-hour TTL and a 450 MB share of the bucket, all bounded by EVICTION rather
+than by a clock — see the storage section below. A book is cached on local
+disk for an hour after it is fetched, so a student working four chapters in
+one sitting costs one download of egress rather than four.
+
+**It is wired into Flashcards, Quizzes and Active Recall**, one `<MegaPicker>`
+each, and each one prices the pages against that feature's own chip price. A
+chapter is SOURCE MATERIAL, so every one of them starts a generate on its own —
+requiring an upload beside it would make the picker a control that cannot be
+used, which is the "feature gated behind an optional-looking step" shape this
+file already records. Active Recall shares ONE pick across both of its generate
+paths: it is one setup screen with one source list, and a second picker would
+be two answers to "what am I working from".
+
+`pdf-lib` is the one new dependency and it is load-bearing — nothing else in
+the tree can count a PDF's pages or cut a range out of one.
+
+## The free tier is a CLIFF, and a full bucket breaks the whole app
+
+`src/lib/storageBudget.js`. Supabase's free plan is 1 GB of file storage and
+5 GB of egress a month, and exceeding it does NOT degrade storage and leave the
+rest running: the organisation gets a grace period, and after it **every
+service returns 402** — database, auth, the lot. A second grace period is not
+granted. So a bucket quietly filling up does not break uploads, it breaks the
+app for every student including the ones who never uploaded anything.
+
+**`ai-uploads` had NO SWEEP. Ever.** Every file any student had uploaded was
+kept forever. At 230 accounts (130 live plus a 100-student trial) three files
+each at 3 MB is 2.0 GB; five at 4 MB is 4.5 GB. There is no plausible usage
+pattern where that bucket stays under 1 GB, and it was already on that path
+before mega uploads existed and whether or not anybody ever used one. That —
+not books — was the thing about to take the site down.
+
+**THE ORDER OF YIELDING IS THE DESIGN**, and `storageBudget.test.mjs` asserts
+it rather than trusting the comments:
+
+1. **Sweep.** An ordinary upload is read ONCE, by the generate seconds later.
+   Keeping it for a week bought nothing, so a day's TTL reclaims essentially
+   the whole bucket, tightening to four hours at `SWEEP_HARDER_AT`.
+2. **Books EVICT, and only then refuse.** Reclaiming beats refusing every
+   time, and there is almost always something to reclaim: somebody's book from
+   two days ago that nobody has opened. `sweepMegaGlobal` drops what has aged
+   out across every student, then evicts least-recently-read until the bucket
+   fits — including making room for the upload arriving, so a book is never
+   refused by a bucket that was one file over. A student meets the refusal
+   only when every book on the shelf is being actively read, which is the one
+   case where refusing is correct. The picker asks the server first, so nobody
+   pushes 60 MB up school wifi to be told no at the far end, and **books
+   already stored keep working**.
+3. **Ordinary uploads stop being PERSISTED and keep working.** `storeFile`
+   already had this path for a deploy with no service key, and it serves a
+   generate perfectly — upload and generate are seconds apart and the bytes are
+   in the memory cache. What is given up is surviving a restart, which is
+   strictly better than a 402 across the whole project.
+4. There is no step four. **A GENERATE NEVER FAILS BECAUSE OF STORAGE.**
+
+Usage is TRACKED, not measured per call: listing a bucket to answer "how full"
+on every upload would be the slowest thing in the path. Seeded from one
+listing, moved by every write and delete, re-seeded on a timer — eventually
+consistent, which is why every threshold sits well short of the cliff.
+
+**EVICTION IS WHAT LETS THE CAPS BE GENEROUS.** Once the bucket is bounded by
+reclaiming rather than by a TTL, the TTL stops being a storage control at all
+and becomes a UX one — so it is as long as is useful (a book survives a
+weekend) rather than as short as is safe. The same reasoning raised the file
+cap: 60 MB rather than 40 because THAT is the limit a student actually
+collides with, and collides with hardest — a real VCE textbook PDF is commonly
+30–60 MB and "yours is 55 and the limit is 40" is a flat refusal with nothing
+to do about it. Shared pressure is absorbed invisibly; a per-file ceiling is
+not, so the ceiling goes as high as the share allows.
+
+**AND THE SWEEP WALKS EVERY STUDENT.** `sweepMegaFiles` only ever touched the
+prefix of whoever was uploading, so a student who stored a book and never came
+back kept it forever — their own sweep can never run again, by construction.
+`megaInventory` walks the whole bucket, and `maybeSweep` is fired from every
+path that touches storage (both uploads, the book list, and any generate
+carrying a file) rather than from uploads alone, which is the RAREST thing the
+app does. Firing only there meant a quiet week reclaimed nothing.
+
+**`expiredKeys` and `evictionPlan` are pure functions because they DELETE** —
+`evictionPlan` deletes OTHER PEOPLE'S files, which is a higher bar again. Same reasoning as
+`pageIndices`: a deletion decision inside a loop in a handler cannot be checked
+until it has already removed the wrong thing. Two rules, both asserted:
+**a file with no timestamp is NEVER swept** — and watch `Number(null) === 0`,
+which turns "no timestamp" into 1970 and deletes exactly the file the rule
+protects, the identical trap `criterionIndexFor` records, caught here by one
+fixture row with a null date; and **`keepNewest` protects the book a sitting is
+using**, so a sweep firing mid-session cannot pull it out from under them.
+
+Eviction adds three of its own, each asserted: **a book being READ is never
+evicted** (storage records writes and never reads, so the oldest by timestamp
+may be the one somebody is three chapters into — `megaTouched` is the missing
+half, kept in process); **each owner keeps their newest through the age pass**,
+so ageing alone cannot take somebody's only book; and **it stops the moment the
+budget is met**, because evicting past that destroys an upload to buy space
+nobody asked for. The comparator is explicit about ties: `(b.at ?? Infinity) -
+(a.at ?? Infinity)` is NaN when BOTH are unknown, and a comparator returning
+NaN orders arbitrarily — for a function deciding what to delete, the answer
+would change between engines.
+
+**Do we need the paid plan?** Not for this. Ordinary uploads hold about a
+day's worth (~370 MB at 230 accounts uploading normally, against 450 budgeted),
+headroom takes 120, and books are hard-bounded at 450 MB by eviction — roughly
+fifteen typical 30 MB textbooks resident, fewer if everybody uploads at the
+ceiling, and the shortfall is absorbed by evicting rather than refusing. What a
+paid plan buys is a bigger resident set and a higher per-file cap;
+`MEGA_FILE_CAP`, `MEGA_ACTIVE_MAX`, `MEGA_TTL_HOURS` and `MEGA_BUCKET_BYTES`
+are in one place precisely so raising them is one line each.
+
+**AN EPHEMERAL REFERENCE ON A PERMANENT ROW IS A LIE ON A TIMER**, and
+`source_file_url` was one. A Quiz row kept a `local-file://` handle and two
+things re-read it long after the sweep had taken the file:
+
+- **Reshuffle** sent it and told the model to "base ALL questions on the
+  uploaded document content". With the file gone the server answers with an
+  `[ATTACHMENT PROBLEM]` block and the generate RUNS ANYWAY — so the student
+  got a quiz titled "(Reshuffled)" that was not from their material at all,
+  silently. Not a degradation: a wrong answer wearing the right label.
+- **Marking** attached it too, which is worse, because the block tells the
+  model to tell the student their file could not be read — inside a MARKING
+  prompt, weeks after they made the quiz.
+
+Both now work from THE QUIZ ITSELF, which is permanent and is the better
+source anyway: it holds the subject, the difficulty, the shape and every
+question with its model answer, which is a fuller account of what was covered
+than the PDF was. It also makes reshuffle's core instruction satisfiable for
+the first time — "generate DIFFERENT questions from what was asked before" was
+being given to a model that could not see what was asked before — and it means
+reshuffle works on EVERY quiz now, including hand-written ones and ones built
+from a chapter of a book. Marking loses nothing: every question and model
+answer was already in that prompt.
+
+Nothing reads the column, so nothing writes it (collect nothing you don't use);
+old rows keep theirs harmlessly.
+
+**A DECK IS A ROW AND IS NOT A FILE**, which is the distinction every TTL here
+depends on. Cards, quizzes, mistakes and attempts are database rows and are
+permanent — the sweep only ever touches the uploaded SOURCE in Storage, which
+exists for the seconds between an upload and the generate that reads it. A
+student who makes a deck from a textbook keeps that deck forever; what expires
+is the textbook, and only as something to generate MORE from.
+
 ## Voice / UX guardrails (from prior decisions)
 
 - **Tone**: chill motivational coach. Never cocky.
@@ -2088,6 +2344,18 @@ broken rather than the file.
   `EquityCurve.jsx` — the second tab on the floor
 - `src/pages/Market.jsx` + `Reactions.jsx` + `Room.jsx` — one question in full,
   the glyphs, and the floor's shared ground; `getMarket` in `server.mjs`
+- `src/lib/megaUpload.js` + `megaUpload.test.mjs`, `src/api/megaUploads.js`,
+  `src/components/shared/MegaPicker.jsx` — a textbook stored whole and read a
+  chapter at a time: the caps, the 1-based ranges and the per-page chip price.
+  `uploadMega` / `megaFiles` / `sliceMegaPages` in `server.mjs` are the other
+  half and IMPORT this module; the test scans so a second price cannot appear
+- `src/lib/storageBudget.js` + `storageBudget.test.mjs` — the free tier's
+  cliff, the order things stand down in so a generate never fails for want of
+  storage, and `expiredKeys`, the tested decision both sweeps delete through.
+  `storageState` / `sweepUploads` / `noteUsage` in `server.mjs` are its half
+- `src/lib/quizScore.js` + `quizScore.test.mjs` — ONE mark per question, read
+  by every surface that prints one; the test scans for the hand-rolled
+  allocation and the unreconciled claim, both of which render perfectly
 - `src/lib/fnResult.js` — the one unwrap for `functions.invoke`; reading its
   `{ data, error }` envelope as the payload is silent and has shipped twice
 - `src/lib/wagerStatus.js` — the one vocabulary `score_wagers.status` may

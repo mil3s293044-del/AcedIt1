@@ -7,6 +7,7 @@ import { base44 } from "@/api/base44Client";
 import MathText from "@/components/shared/LatexRenderer";
 import MarkdownMath from "@/components/shared/MarkdownMath";
 import { getLatexRules } from "@/lib/subjectExaminerPrompts";
+import { normaliseQuestion } from "@/lib/quizSchema";
 
 // Static lookup for MCQ option styling — keeps Tailwind JIT happy.
 const OPTION_STYLES = {
@@ -163,7 +164,12 @@ Give ONE short, directed hint (2-3 sentences max) that steers them toward the ri
                         <div className="flex items-center justify-between gap-3">
                             <div className="flex items-center gap-2 flex-wrap">
                                 <span className="pill bg-chart-4/15 text-chart-4">
-                                    {current.question.type === 'mcq' ? 'Multiple Choice' : `Short Answer · ${current.question.marks || 5} marks`}
+                                    {/* Through the adapter: `q.marks` is undefined on a
+                                        multipart question, so the hand-rolled fallback
+                                        printed "5 marks" on a question worth nine. */}
+                                    {current.question.type === 'mcq'
+                                        ? 'Multiple Choice'
+                                        : `Short Answer · ${normaliseQuestion(current.question, current.originalIndex).marks} marks`}
                                 </span>
                                 <span className="pill bg-streak/15 text-streak">Previously Wrong</span>
                             </div>

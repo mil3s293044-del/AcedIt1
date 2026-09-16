@@ -2,6 +2,8 @@ import React, { useState, useEffect, useMemo } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { base44 } from "@/api/base44Client";
 import { acceptFiles, STUDY_ACCEPT, STUDY_ACCEPT_LABEL } from "@/lib/pickFiles";
+import MegaPicker from "@/components/shared/MegaPicker";
+import { PRICE } from "@/lib/chips";
 import { createPageUrl } from "@/utils";
 import { BANK_TOPIC, bankSummary } from "@/lib/mistakeBank";
 import { isDue, isNew } from "@/lib/due";
@@ -47,7 +49,7 @@ import { FEATURES, canUseFeature } from "@/lib/tierAccess";
 
 import QuizDeck from "@/components/cards/QuizDeck";
 import { quizDeckStats, quizzingSummary, effectiveScore, RECENT_WINDOW } from "@/lib/quizDeck";
-import { normaliseQuestions, formatGeneratedParts } from "@/lib/quizSchema";
+import { normaliseQuestions, formatGeneratedParts, DEFAULT_SHORT_MARKS } from "@/lib/quizSchema";
 import QuizPlayer from "../components/quizzes/QuizPlayer";
 import MarkdownMath from "@/components/shared/MarkdownMath";
 import QuizModePicker from "../components/quizzes/QuizModePicker";
@@ -106,6 +108,10 @@ export default function Quizzes() {
     const [showAIDialog, setShowAIDialog] = useState(false);
     const [isManualCreate, setIsManualCreate] = useState(false);
     const [uploadedFiles, setUploadedFiles] = useState([]);
+    // A chapter of a stored book — kept apart from `uploadedFiles` because it
+    // is not a file the student is holding: the book is already on the server
+    // and this is a page range. See megaUpload.js.
+    const [megaPick, setMegaPick] = useState(null);
     const [searchTerm, setSearchTerm] = useState("");
     const [filterCategory, setFilterCategory] = useState("all");
 
@@ -276,13 +282,21 @@ export default function Quizzes() {
 
 
 
+    /** The files a generate sends: what they uploaded, plus the chapter. */
+    const quizFileUrls = (direct) => {
+        const urls = [...direct, ...(megaPick ? [megaPick.url] : [])];
+        return urls.length ? urls : undefined;
+    };
+
     const handleGenerateQuiz = async () => {
         const effectiveSubject = aiSettings.customSubject || aiSettings.subject;
 
-        if (!uploadedFiles.length || !effectiveSubject) {
+        // A chapter counts as material. Requiring an UPLOAD would make the book
+        // picker a control that cannot be used on its own.
+        if ((!uploadedFiles.length && !megaPick) || !effectiveSubject) {
             toast({
                 title: "Missing Information",
-                description: "Please upload a file and select/enter a subject.",
+                description: "Pick a subject, then upload a file or choose a chapter from a book.",
                 variant: "destructive"
             });
             return;
@@ -292,7 +306,9 @@ export default function Quizzes() {
 
         // Tier gate — block immediately if the user has hit the cap, so we don't
         // burn the upload + spin a loader for a request that's about to 429.
-        const access = canUseFeature(userProfile, FEATURES.QUIZ_AI_GEN);
+        // The pages are priced into the gate, so the button cannot say yes to
+        // something the server is about to refuse.
+        const access = canUseFeature(userProfile, FEATURES.QUIZ_AI_GEN, megaPick?.read || 0);
         if (!access.allowed) {
             toast({
                 title: access.upgradeRequired ? "Premium feature" : "Daily limit reached",
@@ -311,11 +327,13 @@ export default function Quizzes() {
             // Upload all files (per-file error isolation — one failure doesn't kill all)
             const uploadResults = await Promise.allSettled(uploadedFiles.map(f => base44.integrations.Core.UploadFile({ file: f }).then(r => ({ file_url: r.file_url, name: f.name, ext: f.name.split('.').pop()?.toLowerCase() }))));
             const uploadedUrls = uploadResults.filter(r => r.status === 'fulfilled').map(r => r.value);
-            if (uploadedUrls.length === 0) {
+            // Only a failure when there was something to upload. A generate
+            // from a book chapter alone has no files by design, and this used
+            // to throw "All file uploads failed" at it.
+            if (uploadedFiles.length > 0 && uploadedUrls.length === 0) {
                 const errMsg = uploadResults.map(r => r.reason?.message || 'Upload failed').join('; ');
                 throw new Error(`All file uploads failed: ${errMsg}`);
             }
-            const file_url = uploadedUrls[0].file_url; // primary file for source_file_url
 
             // Determine question type mix — strict counts
             let questionTypeInstruction = "";
@@ -427,7 +445,7 @@ ${aiSettings.include_explanations ? '- Include a brief explanation of why the an
 - Model answer should be detailed enough to mark against
 
 Base ALL questions on the provided material. If files are attached, read ALL content including images, charts, tables, and figures carefully.`,
-                file_urls: geminiCompatibleUrls.length ? geminiCompatibleUrls : undefined,
+                file_urls: quizFileUrls(geminiCompatibleUrls),
                 response_json_schema: {
                     type: "object",
                     properties: {
@@ -524,7 +542,10 @@ Base ALL questions on the provided material. If files are attached, read ALL con
                 questions: formattedQuestions,
                 difficulty: aiSettings.difficulty,
                 category: "subject_content",
-                source_file_url: file_url
+                // `source_file_url` is no longer written. It was a
+                // `local-file://` handle on a permanent row pointing at a file
+                // swept within the day, and nothing reads it any more —
+                // reshuffle and marking both work from the quiz itself.
             });
 
             // Only create subject if it doesn't already exist
@@ -604,9 +625,29 @@ Base ALL questions on the provided material. If files are attached, read ALL con
         }
     };
 
+    /**
+     * RESHUFFLE READS THE QUIZ, NOT THE FILE IT CAME FROM.
+     *
+     * It used to send `source_file_url` — a `local-file://` handle saved on the
+     * quiz row. A row is permanent; the file is swept within the day. So a week
+     * later this attached a handle to nothing, the server answered with an
+     * `[ATTACHMENT PROBLEM]` block, and the prompt still said "base ALL
+     * questions on the uploaded document content". The student got a quiz
+     * titled "(Reshuffled)" that was not from their material at all, silently.
+     *
+     * The quiz itself is the better source anyway, and permanent: it holds the
+     * subject, the difficulty, the shape and every question WITH its model
+     * answer. That is a fuller description of what was covered than a page
+     * range of a PDF — and it finally makes the core instruction satisfiable,
+     * because "generate DIFFERENT questions from what was asked before" was
+     * being given to a model that could not see what was asked before.
+     *
+     * It also means reshuffle works on EVERY quiz now, including ones typed by
+     * hand and ones built from a chapter of a book.
+     */
     const handleReshuffleQuiz = async (quiz) => {
-        if (!quiz.source_file_url) {
-            toast({ title: "No source file", description: "This quiz was not generated from a file.", variant: "destructive" });
+        if (!quiz.questions?.length) {
+            toast({ title: "Nothing to reshuffle", description: "This quiz has no questions to work from.", variant: "destructive" });
             return;
         }
 
@@ -648,16 +689,45 @@ Each is a STEM followed by two to four PARTS:
 
 QUESTION ORDER: All MCQ questions MUST come before any short answer questions.`;
 
+            // What the material covered, as the questions that were asked of
+            // it. Model answers included: they carry the actual content, which
+            // a bare question list does not.
+            const answerOf = (pt) => {
+                // An MCQ's content is WHICH option was right; a short answer's
+                // is the model answer. Without either, the list says what was
+                // asked and not what the material actually held.
+                if (pt.type === "mcq") {
+                    const right = pt.options?.[pt.correct_answer];
+                    return right ? ` — answer: ${right}` : "";
+                }
+                return pt.model_answer ? ` — answer: ${pt.model_answer}` : "";
+            };
+            const covered = normaliseQuestions(quiz).map((q, i) => {
+                // A legacy question IS its single part, so printing the stem
+                // and then the part repeats the question verbatim — half the
+                // list would be duplication in a prompt whose whole job is to
+                // say what has already been asked.
+                if (!q.multipart) return `${i + 1}. ${q.stem}${answerOf(q.parts[0] || {})}`;
+                const parts = q.parts
+                    .map((pt) => `    (${pt.label}) ${pt.prompt}${answerOf(pt)}`)
+                    .join("\n");
+                return `${i + 1}. ${q.stem}\n${parts}`;
+            }).join("\n\n").slice(0, 24000);
+
             const response = await base44.integrations.Core.InvokeLLM({
                 feature: "quiz_ai_gen",
-                prompt: `You are a VCE quiz generator. Create a COMPLETELY NEW and DIFFERENT quiz for: ${quiz.subject}. Read ALL content in the document including text, images, diagrams, tables, and figures.
+                prompt: `You are a VCE quiz generator. Create a COMPLETELY NEW and DIFFERENT quiz for: ${quiz.subject}.
 
-            IMPORTANT: Generate DIFFERENT questions from what might have been asked before. Focus on different aspects of the content. NEVER generate two questions that test the same concept or fact.
+            THE MATERIAL is described by the questions already written about it, with their answers, below. Cover the SAME material — the same topics, the same depth, the same course content — and ask about it DIFFERENTLY.
+
+            NEVER repeat a question below, and never ask one that tests the same concept or fact as one below. Go at the parts of the material those questions only touched on.
+
+            ALREADY ASKED (do not repeat any of these):
+            ${covered}
 
             ${shapeInstruction}
 
             Difficulty: ${quiz.difficulty || 'Medium'}
-            Base ALL questions on the uploaded document content, including any images, charts, or figures.
 
 MATH FORMATTING RULES (CRITICAL):
 - ALWAYS use LaTeX for every mathematical expression — the app renders LaTeX as proper math via KaTeX.
@@ -684,7 +754,6 @@ SHORT ANSWER:
 - All math in answers must use LaTeX as above
 
 Return valid JSON only.`,
-                file_urls: [quiz.source_file_url],
                 response_json_schema: {
                     type: "object",
                     properties: {
@@ -765,7 +834,7 @@ Return valid JSON only.`,
                     options: q.type === 'mcq' || q.type !== 'short_answer' ? q.options : undefined,
                     correct_answer: q.type === 'mcq' || q.type !== 'short_answer' ? (q.correct_answer ?? 0) : undefined,
                     model_answer: q.type === 'short_answer' ? (q.model_answer || "") : undefined,
-                    marks: q.type === 'short_answer' ? (q.marks || 5) : undefined,
+                    marks: q.type === 'short_answer' ? (q.marks || DEFAULT_SHORT_MARKS) : undefined,
                     explanation: q.explanation || ""
                 }))
                 .filter(q => q.type !== 'multipart' || q.parts.length > 0);
@@ -780,7 +849,6 @@ Return valid JSON only.`,
                 questions: formattedQuestions,
                 difficulty: quiz.difficulty,
                 category: quiz.category || "subject_content",
-                source_file_url: quiz.source_file_url
             });
 
             toast({
@@ -1387,7 +1455,7 @@ Return valid JSON only.`,
                                                             bestScore={stats.bestScore}
                                                             attempts={stats.attempts}
                                                             toFix={stats.wrongIdx.length}
-                                                            canReshuffle={!!quiz.source_file_url}
+                                                            canReshuffle={!!quiz.questions?.length}
                                                             onSelect={() => setPendingQuiz(quiz)}
                                                             onRetryWrong={() => {
                                                                 setQuizMode('standard');
@@ -1745,6 +1813,13 @@ Return valid JSON only.`,
                                                )}
                                            </label>
                                     </div>
+                                    {/* Or a chapter of a textbook already stored.
+                                        The ordinary picker caps well below one —
+                                        see megaUpload.js for why. */}
+                                    <div className="rounded-2xl border-2 border-border bg-secondary/30 p-4">
+                                        <MegaPicker featurePrice={PRICE.quiz_ai_gen}
+                                            onChange={setMegaPick} toast={toast} />
+                                    </div>
                                 </div>
 
                                 {/* Quiz Configuration */}
@@ -1954,12 +2029,14 @@ Return valid JSON only.`,
 
                         <DialogFooter className="flex-shrink-0 border-t border-border p-6 bg-secondary/50">
                             {(() => {
-                                const access = canUseFeature(userProfile, FEATURES.QUIZ_AI_GEN);
+                                // Priced WITH the pages, so the footer button and
+                                // the gate behind it agree about affordability.
+                                const access = canUseFeature(userProfile, FEATURES.QUIZ_AI_GEN, megaPick?.read || 0);
                                 const blocked = !access.allowed;
                                 return (
                                     <Button
                                         onClick={handleGenerateQuiz}
-                                        disabled={!uploadedFiles.length || !aiSettings.customSubject || isGenerating || blocked}
+                                        disabled={(!uploadedFiles.length && !megaPick) || !aiSettings.customSubject || isGenerating || blocked}
                                         title={blocked ? access.reason : undefined}
                                         className="bg-chart-4 hover:bg-chart-4/90 text-white disabled:opacity-50"
                                     >

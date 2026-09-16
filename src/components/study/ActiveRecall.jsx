@@ -12,6 +12,8 @@ import ReactMarkdown from 'react-markdown';
 import { useToast } from "@/components/ui/use-toast";
 import { base44 } from "@/api/base44Client";
 import { acceptFiles, uploadAll, STUDY_ACCEPT, STUDY_ACCEPT_LABEL } from "@/lib/pickFiles";
+import MegaPicker from "@/components/shared/MegaPicker";
+import { PRICE } from "@/lib/chips";
 import { aceDone } from "@/components/ace/AceReacts";
 import { FEATURES, checkLiveTier } from "@/lib/tierAccess";
 import { getExaminerPrompt } from "@/lib/subjectExaminerPrompts";
@@ -254,6 +256,10 @@ export default function ActiveRecall({ onSessionComplete, userSubjects: initialU
     const [timeLeft, setTimeLeft] = useState(0);
     const [markingResults, setMarkingResults] = useState([]);
     const [sourceFiles, setSourceFiles] = useState([]);
+    // A chapter of a stored book, shared by both generate paths: it is one
+    // setup screen with one source list, so a second picker would be two
+    // answers to "what am I working from". See megaUpload.js.
+    const [megaPick, setMegaPick] = useState(null);
     const [isGeneratingQuestions, setIsGeneratingQuestions] = useState(false);
     const [isGeneratingMarking, setIsGeneratingMarking] = useState(false);
     const [isFocusMode, setIsFocusMode] = useState(false);
@@ -350,13 +356,24 @@ export default function ActiveRecall({ onSessionComplete, userSubjects: initialU
         }
     };
 
+    /** Anything to read from — an upload OR a chapter of a stored book. */
+    const hasSource = sourceFiles.length > 0 || !!megaPick;
+
+    /** The files a generate sends: what they uploaded, plus the chapter. */
+    const megaFileUrls = (direct) => {
+        const urls = [...direct.map((f) => f.url), ...(megaPick ? [megaPick.url] : [])];
+        return urls.length ? urls : undefined;
+    };
+
     const handleGenerateQuestions = async () => {
-        if (!sourceFiles.length || !selectedSubject) {
-            toast({ title: "Missing info", description: "Select a subject and upload notes first.", variant: "destructive" });
+        // A chapter is source material too — requiring an UPLOAD would make the
+        // book picker a control that cannot be used on its own.
+        if ((!sourceFiles.length && !megaPick) || !selectedSubject) {
+            toast({ title: "Missing info", description: "Select a subject, then upload notes or pick a chapter.", variant: "destructive" });
             return;
         }
 
-        const access = await checkLiveTier(FEATURES.ACTIVE_RECALL);
+        const access = await checkLiveTier(FEATURES.ACTIVE_RECALL, megaPick?.read || 0);
         if (!access.allowed) {
             toast({
                 title: access.upgradeRequired ? "Premium feature" : "Daily limit reached",
@@ -407,7 +424,7 @@ Questions should:
 - Use VCE-appropriate metalanguage
 - Be specific to the document content
 - Help identify gaps in Study Design requirements`,
-                file_urls: directFiles.length ? directFiles.map(f => f.url) : undefined,
+                file_urls: megaFileUrls(directFiles),
                 response_json_schema: {
                     type: "object",
                     properties: {
@@ -556,12 +573,12 @@ Questions should:
     };
 
     const handleGenerateMarking = async () => {
-        if (!sourceFiles.length) {
-            toast({ title: "No source material", description: "Upload notes to get AI feedback.", variant: "destructive" });
+        if (!sourceFiles.length && !megaPick) {
+            toast({ title: "No source material", description: "Upload notes or pick a chapter to get AI feedback.", variant: "destructive" });
             return;
         }
 
-        const access = await checkLiveTier(FEATURES.ACTIVE_RECALL);
+        const access = await checkLiveTier(FEATURES.ACTIVE_RECALL, megaPick?.read || 0);
         if (!access.allowed) {
             toast({
                 title: access.upgradeRequired ? "Premium feature" : "Daily limit reached",
@@ -610,7 +627,7 @@ For each answer:
 2. Feedback: Did the student match the command term requirement?
 3. What would gain/lose marks in a real VCAA exam?
 4. Model Answer showing the expected depth per command term used`,
-                file_urls: directFiles.length ? directFiles.map(f => f.url) : undefined,
+                file_urls: megaFileUrls(directFiles),
                 response_json_schema: {
                     type: "object",
                     properties: {
@@ -838,9 +855,16 @@ For each answer:
                         )}
                     </div>
 
+                    {/* Or a chapter of a textbook already stored. The ordinary
+                        picker tops out well below one — see megaUpload.js. */}
+                    <div className="rounded-2xl border-2 border-border bg-secondary/30 p-4">
+                        <MegaPicker featurePrice={PRICE.active_recall}
+                            onChange={setMegaPick} toast={toast} />
+                    </div>
+
                     <Button
                         onClick={handleGenerateQuestions}
-                        disabled={isGeneratingQuestions || !sourceFiles.length || !selectedSubject}
+                        disabled={isGeneratingQuestions || !hasSource || !selectedSubject}
                         className="w-full h-11 bg-chart-4 hover:bg-chart-4/90 text-white rounded-xl font-medium gap-2"
                     >
                         {isGeneratingQuestions ? (
@@ -853,12 +877,12 @@ For each answer:
                         most confusing control in an app. This one needs BOTH a
                         subject and a file and used to sit greyed out with
                         neither stated. */}
-                    {!isGeneratingQuestions && (!sourceFiles.length || !selectedSubject) && (
+                    {!isGeneratingQuestions && (!hasSource || !selectedSubject) && (
                         <p className="text-xs text-center text-muted-foreground -mt-2">
-                            {!selectedSubject && !sourceFiles.length
-                                ? "Pick a subject and upload your notes first."
+                            {!selectedSubject && !hasSource
+                                ? "Pick a subject, then upload notes or choose a chapter."
                                 : !selectedSubject ? "Pick a subject first."
-                                    : "Upload your notes first."}
+                                    : "Upload your notes, or pick a chapter from a book."}
                         </p>
                     )}
 
@@ -1028,9 +1052,9 @@ For each answer:
                         <div className="flex-1">
                             <h3 className="font-semibold text-foreground mb-1">Mark my answers</h3>
                             <p className="text-sm text-muted-foreground mb-4">
-                                {sourceFiles.length ? "AI will mark each answer against your notes using VCAA criteria." : "Upload your notes to unlock AI marking."}
+                                {hasSource ? "AI will mark each answer against your material using VCAA criteria." : "Upload your notes, or pick a chapter, to unlock AI marking."}
                             </p>
-                            {!sourceFiles.length ? (
+                            {!hasSource ? (
                                 <label className="flex items-center gap-2 cursor-pointer">
                                     <div className="flex-1 flex items-center gap-3 p-3 bg-secondary/50 border-2 border-dashed border-border hover:border-chart-4/40 rounded-xl transition-all">
                                         <Upload className="w-4 h-4 text-muted-foreground/60" />

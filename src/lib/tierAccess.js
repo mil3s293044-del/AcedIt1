@@ -181,7 +181,7 @@ function checkFreeTier(profile, feature) {
 //
 // This mirror MUST track server.mjs. When it drifted before, students were
 // shown headroom the server had already refused.
-function checkPremiumTier(profile, feature) {
+function checkPremiumTier(profile, feature, extraChips = 0) {
   // The money backstop stays first, same as the server. Chip prices are
   // rounded up so a full stack costs less than this, but if a price is ever
   // set wrong the dollars still stop.
@@ -195,7 +195,7 @@ function checkPremiumTier(profile, feature) {
   }
 
   const tier = profile?.ai_model_preference === 'saver' ? 'saver' : 'standard';
-  const verdict = canAfford(profile, feature, tier);
+  const verdict = canAfford(profile, feature, tier, extraChips);
   const stack = stackOf(profile);
 
   if (!verdict.ok) {
@@ -241,9 +241,9 @@ export function isUnlimitedAccount(profile) {
 }
 
 // ─── Public entry point ────────────────────────────────────────────────────
-export function canUseFeature(profile, feature) {
+export function canUseFeature(profile, feature, extraChips = 0) {
   if (TIER_BYPASS || isUnlimitedAccount(profile)) return { allowed: true };
-  if (isPremium(profile)) return checkPremiumTier(profile, feature);
+  if (isPremium(profile)) return checkPremiumTier(profile, feature, extraChips);
   return checkFreeTier(profile, feature);
 }
 
@@ -263,13 +263,15 @@ export function formatRemaining(profile, feature) {
 //
 //   const access = await checkLiveTier(FEATURES.GOAL_AI_GEN);
 //   if (!access.allowed) { toast({ ... }); return; }
-export async function checkLiveTier(feature) {
+export async function checkLiveTier(feature, extraChips = 0) {
   if (TIER_BYPASS) return { allowed: true };
   try {
     const { base44 } = await import('@/api/base44Client');
     const me = await base44.auth.me();
     const rows = await base44.entities.UserProfile.filter({ created_by: me.email });
-    return canUseFeature(rows?.[0] ?? null, feature);
+    // `extraChips` is the pages of a book being read — the one price in the app
+    // that is not published in advance. See megaUpload.js.
+    return canUseFeature(rows?.[0] ?? null, feature, extraChips);
   } catch {
     // Couldn't fetch — let it proceed; the server still enforces.
     return { allowed: true };
