@@ -23,6 +23,7 @@ import {
     edgePoints, settlementOf, unseenSettlements, markSettlementsSeen,
     returnMultiple, RETURN_CEILING, bestReturn, returns, multiplierLabel,
     priceHistory, featuredOf,
+    ROOMS, inRoom, roomsFor, pickBoard, BOARD_TARGET,
 } from "@/lib/market";
 
 let passed = 0;
@@ -682,6 +683,143 @@ check("FRIENDS SORT, THEY DO NOT FILTER", () => {
     assert.deepEqual(got, ["mine", "pal", "hot"]);
     assert.equal(sortBoard(rows, "me@x.com").length, 3,
         "a friends-only board would give each question five possible traders and kill the price");
+});
+
+
+// ─── ROOMS: a view of one floor, never a floor of its own ──────────────────
+
+const mk = (over = {}) => ({ kind: "versus", prior: 0.5, subject_email: "a@x.com", ...over });
+
+check("a room NARROWS a view and never splits a price", () => {
+    // The whole point: every room shows markets from the same pool, so a
+    // question in the friends room is the same row, at the same price, that
+    // everybody else is trading in `all`.
+    const board = [mk({ subject_is_friend: true }), mk({ kind: "cohort" }), mk({})];
+    const all = board.filter((m) => inRoom(m, "all"));
+    assert.equal(all.length, board.length, "`all` takes everything");
+    for (const room of ["friends", "cohort"]) {
+        for (const m of board.filter((x) => inRoom(x, room))) {
+            assert.ok(board.includes(m), "a room may only ever show rows from the one floor");
+        }
+    }
+});
+
+check("the friends room holds friends AND yourself", () => {
+    // The most motivating market on the board is the one about you, so it
+    // belongs in the room called "people I have a reason to care about".
+    const me = "me@x.com";
+    assert.equal(inRoom(mk({ subject_is_friend: true }), "friends", me), true);
+    assert.equal(inRoom(mk({ subject_email: me }), "friends", me), true);
+    assert.equal(inRoom(mk({ subject_is_me: true }), "friends", me), true);
+    assert.equal(inRoom(mk({}), "friends", me), false, "a stranger is not");
+});
+
+check("the cohort room is about NOBODY in particular", () => {
+    assert.equal(inRoom(mk({ kind: "cohort" }), "cohort"), true);
+    assert.equal(inRoom(mk({ kind: "longshot" }), "cohort"), true);
+    // A named student's question is not a cohort question however popular.
+    assert.equal(inRoom(mk({ kind: "versus", subject_is_friend: true }), "cohort"), false);
+    assert.equal(inRoom(mk({ kind: "hours" }), "cohort"), false);
+});
+
+check("A ROOM WITH NOTHING IN IT IS NOT OFFERED", () => {
+    // A tab that is always empty teaches that the feature is broken, and a
+    // student with no friends yet would meet one on their first visit.
+    const strangers = [mk({}), mk({ kind: "hours" })];
+    const { rooms } = roomsFor(strangers, "me@x.com");
+    assert.deepEqual(rooms.map((r) => r.id), ["all"], "only the floor");
+
+    const withFriend = [...strangers, mk({ subject_is_friend: true })];
+    assert.ok(roomsFor(withFriend, "me@x.com").rooms.some((r) => r.id === "friends"));
+});
+
+check("`all` is offered even when the board is empty", () => {
+    assert.deepEqual(roomsFor([], null).rooms.map((r) => r.id), ["all"]);
+});
+
+// ─── THE CAP: who makes the board when too many were minted ────────────────
+
+const person = (email, prior) => ({ kind: "versus", subject_email: email, prior });
+
+check("THE TARGET IS TRADERS, so it does not move when the roster does", () => {
+    const small = Array.from({ length: 18 }, (_, i) => person(`s${i}@x.com`, 0.5));
+    const huge = Array.from({ length: 68 }, (_, i) => person(`h${i}@x.com`, 0.5));
+    assert.equal(pickBoard(small, { weekKey: "2026-W01" }).length, 18, "under target, all of it");
+    assert.equal(pickBoard(huge, { weekKey: "2026-W01" }).length, BOARD_TARGET,
+        "130 actives mints ~68 and the board still carries 20");
+});
+
+check("the special lines always make it", () => {
+    // One market the whole room can hold a view on is the best value per row;
+    // capping it to make space for a head-to-head is backwards.
+    const crowd = Array.from({ length: 60 }, (_, i) => person(`p${i}@x.com`, 0.5));
+    const picked = pickBoard([...crowd,
+        { kind: "cohort", prior: 0.4 }, { kind: "longshot", prior: 0.08 },
+        { kind: "prep", prior: 0.7, subject_email: "z@x.com" }], { weekKey: "W" });
+    assert.equal(picked.filter((m) => m.kind === "cohort").length, 1);
+    assert.equal(picked.filter((m) => m.kind === "longshot").length, 1);
+    assert.equal(picked.filter((m) => m.kind === "prep").length, 1);
+    assert.equal(picked.length, BOARD_TARGET);
+});
+
+check("an EVEN question beats a lopsided one", () => {
+    // A market priced at 95c pays nobody and teaches that the board is
+    // decoration — the same reason pairUpRoom matches on the base rate.
+    const picked = pickBoard([
+        person("even@x.com", 0.5), person("tilted@x.com", 0.95), person("near@x.com", 0.55),
+    ], { target: 2, weekKey: "W" });
+    assert.equal(picked.length, 2);
+    assert.ok(!picked.some((m) => m.subject_email === "tilted@x.com"), "the 95c one waits");
+});
+
+check("A LOPSIDED QUESTION IS KEPT RATHER THAN THE BOARD LEFT SHORT", () => {
+    // Evenness ranks; it does not exclude. A quiet week must still fill.
+    const picked = pickBoard([person("a@x.com", 0.97), person("b@x.com", 0.99)],
+        { target: 5, weekKey: "W" });
+    assert.equal(picked.length, 2);
+});
+
+check("THE BOARD ROTATES, or the same students own it every week", () => {
+    // Ranking on evenness alone means a student whose prior sits at 0.85 never
+    // once sees a question about themselves, which is the single most
+    // motivating thing this board does.
+    const crowd = Array.from({ length: 40 }, (_, i) => person(`p${i}@x.com`, 0.5));
+    const seen = new Set();
+    for (const wk of ["2026-W01", "2026-W02", "2026-W03", "2026-W04", "2026-W05"]) {
+        pickBoard(crowd, { target: 10, weekKey: wk }).forEach((m) => seen.add(m.subject_email));
+    }
+    assert.ok(seen.size > 10,
+        `only ${seen.size} students ever appeared across five weeks — the board does not rotate`);
+});
+
+check("but ONE week always picks the same board", () => {
+    // A floor that reshuffles between two page loads is one nobody can come
+    // back to. The rotation is a stable hash of the week, not a random.
+    const crowd = Array.from({ length: 40 }, (_, i) => person(`p${i}@x.com`, 0.5));
+    const a = pickBoard(crowd, { target: 10, weekKey: "2026-W07" }).map((m) => m.subject_email);
+    const b = pickBoard(crowd, { target: 10, weekKey: "2026-W07" }).map((m) => m.subject_email);
+    assert.deepEqual(a, b);
+});
+
+check("what is ALREADY open counts against the target", () => {
+    // The cap is on the BOARD, not on one minting run — otherwise a second
+    // visit in the same week mints another twenty.
+    const crowd = Array.from({ length: 40 }, (_, i) => person(`p${i}@x.com`, 0.5));
+    assert.equal(pickBoard(crowd, { weekKey: "W", existing: 18 }).length, 2);
+    assert.equal(pickBoard(crowd, { weekKey: "W", existing: BOARD_TARGET }).length, 0,
+        "a full board mints nothing");
+    assert.equal(pickBoard(crowd, { weekKey: "W", existing: 999 }).length, 0, "never negative");
+});
+
+check("nothing to pick is not an error", () => {
+    for (const bad of [[], null, undefined, [null, undefined]]) {
+        assert.deepEqual(pickBoard(bad, { weekKey: "W" }), [], JSON.stringify(bad));
+    }
+});
+
+check("a market with no prior is treated as even rather than dropped", () => {
+    const picked = pickBoard([{ kind: "versus", subject_email: "a@x.com" }], { target: 5, weekKey: "W" });
+    assert.equal(picked.length, 1);
 });
 
 console.log(`\n${passed} passed`);

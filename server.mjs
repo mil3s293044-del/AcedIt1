@@ -22,6 +22,7 @@ import { WAGER } from "./src/lib/wagerStatus.js";
 import {
   payoutFor as marketPayout, priceOf as marketPrice, probFor as marketProb,
   clampStake as marketStake, blockReason as marketBlockReason,
+  pickBoard, BOARD_TARGET,
   YES as MKT_YES, NO as MKT_NO, CRED_WEEKLY_GRANT, CRED_BALANCE_CAP,
 } from "./src/lib/market.js";
 import { ACHIEVEMENTS, ACHIEVEMENT_BY_CODE, evaluate as evaluateAchievement }
@@ -9897,6 +9898,10 @@ function pairUpRoom(live, per, weekKey) {
 /** Longshots escalate until the price is actually long. */
 const LONGSHOT_TARGETS = [900, 1200, 1500];   // countable minutes in one week
 const LONGSHOT_MAX_PRIOR = 0.35;
+/**
+ * The outer valve on ONE insert. Not the board's size — `pickBoard` is that.
+ * This only stops a runaway from writing hundreds of rows in a single call.
+ */
 const MARKET_MINT_CAP = 60;
 
 /**
@@ -10087,15 +10092,29 @@ async function mintWeeklyMarkets(members, now = new Date()) {
 
   rows.push(...await mintPrepLines(live, per, week, now, wanted));
 
-  if (!rows.length) return 0;
+  // ─── THE BOARD HAS A SIZE, AND IT IS ABOUT TRADERS ────────────────────
+  // Minting makes one question per active student, so the board grew with the
+  // room: ~18 markets at 30 actives, which is the target, and ~68 at 130,
+  // which is nearly four times it. That is the "supply scales with the roster"
+  // failure this board was rebuilt to fix, arriving a second time through
+  // GROWTH. `pickBoard` keeps the special lines, prefers even questions, and
+  // ROTATES the rest weekly so every student still gets a turn on the floor.
+  // See src/lib/market.js — it is pure and tested because it decides who
+  // appears on a social board.
+  const picked = pickBoard(rows, { weekKey: week, existing: (existing || []).length });
+  if (!picked.length) return 0;
   // Conflict on the dedupe index is the expected outcome of a race, not an
   // error worth failing a board load over.
-  const { error } = await supabaseAdmin.from("markets").insert(rows.slice(0, MARKET_MINT_CAP));
+  const { error } = await supabaseAdmin.from("markets").insert(picked.slice(0, MARKET_MINT_CAP));
   if (error && !/duplicate key/i.test(error.message || "")) {
     console.warn("[markets] mint failed:", error.message);
     return 0;
   }
-  return rows.length;
+  if (picked.length < rows.length) {
+    console.log(`[markets] minted ${picked.length} of ${rows.length} candidates `
+      + `(${(existing || []).length} already open, target ${BOARD_TARGET})`);
+  }
+  return picked.length;
 }
 
 /**
