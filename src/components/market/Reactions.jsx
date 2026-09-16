@@ -73,13 +73,13 @@ export default function Reactions({
                         aria-label={`React ${g}${n ? `, ${n} so far` : ""}`}
                         className={`inline-flex items-center gap-1 rounded-lg border transition-colors
                             ${small ? "px-1.5 py-0.5 text-[12px]" : "px-2 py-1 text-[15px]"}
-                            ${on ? "border-[#FFC800] bg-[#FFC800]/10"
-                                : "border-[#233247] hover:border-[#33486A]"}`}>
+                            ${on ? "border-[var(--floor-warn-ink)] bg-[rgb(var(--floor-warn-rgb)/0.1)]"
+                                : "border-[var(--floor-edge)] hover:border-[var(--floor-edge-hover)]"}`}>
                         <span>{g}</span>
                         {n > 0 && (
                             <span className={`font-bold tabular-nums
                                 ${small ? "text-[10px]" : "text-[11px]"}
-                                ${on ? "text-[#FFC800]" : "text-[#6F86A8]"}`}>{n}</span>
+                                ${on ? "text-[var(--floor-warn-ink)]" : "text-[var(--floor-muted-2)]"}`}>{n}</span>
                         )}
                     </button>
                 );

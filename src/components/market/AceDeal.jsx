@@ -67,10 +67,10 @@ import AceBody from "@/components/ace/AceBody";
  * cannot see a class built from a template literal, which is the recurring
  * gotcha this codebase records.
  */
-const FELT_CARD = "#121C2E";        // MarketCard's own ground
-const FELT_EDGE = "#233247";        // and its own border
-const FELT_BONE = "#1B2840";        // the placeholder bars, a step up from the ground
-const FELT_TEXT = "#6F86A8";
+const FELT_CARD = "var(--floor-card)";        // MarketCard's own ground
+const FELT_EDGE = "var(--floor-edge)";        // and its own border
+const FELT_BONE = "var(--floor-bone)";        // the placeholder bars, against the card
+const FELT_TEXT = "var(--floor-muted-2)";
 
 /** As many as the grid shows before a student scrolls. More is a longer wait. */
 const DEALT = 6;
@@ -196,9 +196,9 @@ export default function AceDeal({ label = "Opening the floor…" }) {
                 <AceBody
                     className="w-14 flex-shrink-0"
                     pose={pose}
-                    tone="fill-[#E8F0FB]"
-                    card="fill-[#121C2E]"
-                    cardStroke="stroke-[#233247]"
+                    tone="fill-[var(--floor-ink)]"
+                    card="fill-[var(--floor-card)]"
+                    cardStroke="stroke-[var(--floor-edge)]"
                     // ON, both of them. These were the switches that made the
                     // first version a still drawing: without idles he freezes
                     // the moment the deal ends, and without eyes he does not

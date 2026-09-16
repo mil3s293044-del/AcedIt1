@@ -23,8 +23,8 @@
 import React from "react";
 
 const INK = {
-    up: "#58CC02", down: "#FF5A5F", flat: "#6F86A8",
-    zero: "#33445E", dim: "#4E6484", mid: "#8FA3BF", bright: "#E8F0FB",
+    up: "var(--floor-yes-ink)", down: "var(--floor-no-ink)", flat: "var(--floor-muted-2)",
+    zero: "var(--floor-dimmest)", dim: "var(--floor-dim)", mid: "var(--floor-muted)", bright: "var(--floor-ink)",
 };
 
 export default function EquityCurve({ curve, height = 120 }) {
@@ -54,7 +54,7 @@ export default function EquityCurve({ curve, height = 120 }) {
     return (
         <div>
             <div className="relative w-full rounded-xl overflow-hidden"
-                style={{ height, background: "#0E1929" }}>
+                style={{ height, background: "var(--floor-well)" }}>
                 <svg className="absolute inset-0 w-full h-full" viewBox="0 0 100 100"
                     preserveAspectRatio="none">
                     <line x1="0" x2="100" y1={y(0)} y2={y(0)}
@@ -71,7 +71,7 @@ export default function EquityCurve({ curve, height = 120 }) {
                         background: ink, transform: "translate(-100%, -50%)",
                     }} />
                 <span className="absolute text-[9px] font-bold px-1 rounded tabular-nums"
-                    style={{ color: INK.dim, background: "#0E1929", left: 4, top: `calc(${y(0)}% - 7px)` }}>
+                    style={{ color: INK.dim, background: "var(--floor-well)", left: 4, top: `calc(${y(0)}% - 7px)` }}>
                     0
                 </span>
             </div>

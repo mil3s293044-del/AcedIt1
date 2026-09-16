@@ -40,9 +40,9 @@ import React, { useState } from "react";
 import { CALIBRATION_MIN } from "@/lib/holdings";
 
 const INK = {
-    you: "#1CB0F6", ref: "#4E6484", grid: "#233247",
-    dim: "#4E6484", mid: "#8FA3BF", bright: "#E8F0FB",
-    over: "#FFC800", under: "#58CC02",
+    you: "var(--floor-accent-ink)", ref: "var(--floor-dim)", grid: "var(--floor-edge)",
+    dim: "var(--floor-dim)", mid: "var(--floor-muted)", bright: "var(--floor-ink)",
+    over: "var(--floor-warn-ink)", under: "var(--floor-yes-ink)",
 };
 
 /* x: stated confidence 50–100. y: what actually happened, 0–100. The reference
@@ -62,11 +62,11 @@ export default function CalibrationCurve({ data, height = 190 }) {
 
     if (!data.ready) {
         return (
-            <div className="rounded-xl bg-[#0E1929] p-5 text-center">
-                <p className="font-display font-black text-2xl text-[#E8F0FB] tabular-nums">
+            <div className="rounded-xl bg-[var(--floor-well)] p-5 text-center">
+                <p className="font-display font-black text-2xl text-[var(--floor-ink)] tabular-nums">
                     {data.graded}
                 </p>
-                <p className="text-[11px] text-[#8FA3BF] mt-1 leading-snug">
+                <p className="text-[11px] text-[var(--floor-muted)] mt-1 leading-snug">
                     calls settled so far. {data.needs > 0
                         ? `${data.needs} more and this starts showing whether your confidence matches your hit rate.`
                         : "A band needs a few calls in it before it can say anything."}
@@ -81,7 +81,7 @@ export default function CalibrationCurve({ data, height = 190 }) {
     return (
         <div>
             <div className="relative w-full rounded-xl overflow-hidden"
-                style={{ height, background: "#0E1929" }}>
+                style={{ height, background: "var(--floor-well)" }}>
                 <svg className="absolute inset-0 w-full h-full" viewBox="0 0 100 100"
                     preserveAspectRatio="none">
                     {[0.25, 0.5, 0.75].map((g) => (
@@ -94,7 +94,7 @@ export default function CalibrationCurve({ data, height = 190 }) {
                 </svg>
 
                 <span className="absolute text-[9px] font-bold px-1 rounded"
-                    style={{ color: INK.ref, background: "#0E1929", right: 4, top: 2 }}>
+                    style={{ color: INK.ref, background: "var(--floor-well)", right: 4, top: 2 }}>
                     perfect
                 </span>
                 <span className="absolute left-1.5 top-1 text-[9px] font-bold"
@@ -117,9 +117,9 @@ export default function CalibrationCurve({ data, height = 190 }) {
                                 width: size, height: size,
                                 // A 2px ring in the surface colour, so two bands
                                 // that land close together stay two marks.
-                                background: on ? INK.you : "#0E1929",
+                                background: on ? INK.you : "var(--floor-well)",
                                 borderColor: INK.you,
-                                boxShadow: "0 0 0 2px #0E1929",
+                                boxShadow: "0 0 0 2px var(--floor-well)",
                                 transform: "translate(-50%, -50%)",
                             }} />
                     );

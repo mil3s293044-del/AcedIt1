@@ -43,18 +43,18 @@ import { YES } from "@/lib/market";
 
 /** How loudly each outcome lands. A loss is deliberately the quiet one. */
 const RITE = {
-    won:   { confetti: 90, hold: 0, ink: "#58CC02", label: "You read it right" },
-    lost:  { confetti: 0,  hold: 0, ink: "#FF5A5F", label: "The room had it" },
-    level: { confetti: 0,  hold: 0, ink: "#8FA3BF", label: "You agreed with the room" },
-    void:  { confetti: 0,  hold: 0, ink: "#8FA3BF", label: "Nothing was tested" },
+    won:   { confetti: 90, hold: 0, ink: "var(--floor-yes-ink)", label: "You read it right" },
+    lost:  { confetti: 0,  hold: 0, ink: "var(--floor-no-ink)", label: "The room had it" },
+    level: { confetti: 0,  hold: 0, ink: "var(--floor-muted)", label: "You agreed with the room" },
+    void:  { confetti: 0,  hold: 0, ink: "var(--floor-muted)", label: "Nothing was tested" },
     // ── The SUBJECT's result. No cred in either branch ───────────────────
     // The one result the person a market is about ever gets, because they may
     // not hold a position on it. `missed` is CAUTION and never the loss red:
     // the number on that card is a real SAC mark, and an app that prints a
     // sixteen-year-old's school result in the colour it uses for a lost bet
     // has started editorialising about their schooling.
-    beat:   { confetti: 90, hold: 0, ink: "#58CC02", label: "You beat your own call" },
-    missed: { confetti: 0,  hold: 0, ink: "#FFC800", label: "You called it high" },
+    beat:   { confetti: 90, hold: 0, ink: "var(--floor-yes-ink)", label: "You beat your own call" },
+    missed: { confetti: 0,  hold: 0, ink: "var(--floor-warn-ink)", label: "You called it high" },
 };
 
 const VERDICT = {
@@ -113,7 +113,7 @@ function Card({ item, remaining, onNext }) {
             confetti({
                 particleCount: rite.confetti, spread: 70, startVelocity: 40,
                 origin: { y: 0.6 },
-                colors: ["#58CC02", "#1CB0F6", "#FFC800", "#E8F0FB"],
+                colors: ["var(--floor-yes-ink)", "var(--floor-accent-ink)", "var(--floor-warn-ink)", "var(--floor-ink)"],
                 disableForReducedMotion: true,
             });
         }
@@ -123,7 +123,7 @@ function Card({ item, remaining, onNext }) {
         <motion.div
             initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
             className="fixed inset-0 z-[120] flex items-center justify-center p-4"
-            style={{ background: "rgba(4, 8, 15, 0.86)" }}
+            style={{ background: "var(--floor-scrim)" }}
             onClick={onNext}
         >
             <motion.div
@@ -132,7 +132,7 @@ function Card({ item, remaining, onNext }) {
                 animate={{ scale: 1, y: 0, opacity: 1 }}
                 exit={{ scale: 0.96, opacity: 0 }}
                 transition={{ type: "spring", stiffness: 260, damping: 24 }}
-                className="w-full max-w-sm rounded-3xl border-2 bg-[#121C2E] p-7 text-center"
+                className="w-full max-w-sm rounded-3xl border-2 bg-[var(--floor-card)] p-7 text-center"
                 style={{ borderColor: `${rite.ink}66` }}
             >
                 {/* The verdict stamps: overshoots and settles, the way a seal
@@ -152,7 +152,7 @@ function Card({ item, remaining, onNext }) {
                     {rite.label}
                 </p>
 
-                <h2 className="font-display font-extrabold text-[#E8F0FB] text-base leading-snug mt-1.5">
+                <h2 className="font-display font-extrabold text-[var(--floor-ink)] text-base leading-snug mt-1.5">
                     {item.title}
                 </h2>
 
@@ -167,19 +167,19 @@ function Card({ item, remaining, onNext }) {
                             transition={{ delay: step(0.24) }}
                             className="flex items-stretch gap-2 mt-4"
                         >
-                            <div className="flex-1 rounded-xl bg-[#0E1929] py-2.5">
-                                <p className="text-[10px] font-bold uppercase tracking-wide text-[#4E6484]">
+                            <div className="flex-1 rounded-xl bg-[var(--floor-well)] py-2.5">
+                                <p className="text-[10px] font-bold uppercase tracking-wide text-[var(--floor-dim)]">
                                     You called
                                 </p>
-                                <p className="font-display font-black text-xl text-[#8FA3BF] tabular-nums">
+                                <p className="font-display font-black text-xl text-[var(--floor-muted)] tabular-nums">
                                     {item.called}<span className="text-xs ml-0.5">%</span>
                                 </p>
                             </div>
-                            <div className="flex-1 rounded-xl bg-[#0E1929] py-2.5">
-                                <p className="text-[10px] font-bold uppercase tracking-wide text-[#4E6484]">
+                            <div className="flex-1 rounded-xl bg-[var(--floor-well)] py-2.5">
+                                <p className="text-[10px] font-bold uppercase tracking-wide text-[var(--floor-dim)]">
                                     The room
                                 </p>
-                                <p className="font-display font-black text-xl text-[#8FA3BF] tabular-nums">
+                                <p className="font-display font-black text-xl text-[var(--floor-muted)] tabular-nums">
                                     {item.room}<span className="text-xs ml-0.5">¢</span>
                                 </p>
                             </div>
@@ -195,7 +195,7 @@ function Card({ item, remaining, onNext }) {
                             transition={{ delay: step(0.44), type: "spring", stiffness: 300, damping: 18 }}
                             className="mt-5"
                         >
-                            <p className="text-[10px] font-bold uppercase tracking-wide text-[#4E6484]">
+                            <p className="text-[10px] font-bold uppercase tracking-wide text-[var(--floor-dim)]">
                                 You got
                             </p>
                             <p className="font-display font-black text-4xl" style={{ color: rite.ink }}>
@@ -212,13 +212,13 @@ function Card({ item, remaining, onNext }) {
                         <motion.p
                             initial={{ opacity: 0 }} animate={{ opacity: 1 }}
                             transition={{ delay: step(0.52) }}
-                            className="text-[12px] text-[#8FA3BF] mt-2.5 leading-snug">
+                            className="text-[12px] text-[var(--floor-muted)] mt-2.5 leading-snug">
                             {item.traders === 0
                                 ? "Nobody took a side on this one."
                                 : <>
-                                    <span className="font-bold text-[#58CC02] tabular-nums">
+                                    <span className="font-bold text-[var(--floor-yes-ink)] tabular-nums">
                                         {item.backed}</span> backed you,{" "}
-                                    <span className="font-bold text-[#FF5A5F] tabular-nums">
+                                    <span className="font-bold text-[var(--floor-no-ink)] tabular-nums">
                                         {item.faded}</span> faded you —{" "}
                                     {item.backed > item.faded === !!item.outcome
                                         ? "and the room had it."
@@ -227,13 +227,13 @@ function Card({ item, remaining, onNext }) {
                         </motion.p>
                     </>
                 ) : item.kind === "void" ? (
-                    <p className="text-[13px] text-[#8FA3BF] mt-3 leading-snug">
+                    <p className="text-[13px] text-[var(--floor-muted)] mt-3 leading-snug">
                         The question was never asked, so nobody was right.
                         Your {item.stake.toLocaleString()} cred is back.
                     </p>
                 ) : (
                     <>
-                        <p className="text-[11px] font-bold uppercase tracking-wide text-[#4E6484] mt-3">
+                        <p className="text-[11px] font-bold uppercase tracking-wide text-[var(--floor-dim)] mt-3">
                             It resolved {item.outcome ? "YES" : "NO"}
                         </p>
 
@@ -243,8 +243,8 @@ function Card({ item, remaining, onNext }) {
                             transition={{ delay: step(0.24) }}
                             className="flex items-stretch gap-2 mt-4"
                         >
-                            <div className="flex-1 rounded-xl bg-[#0E1929] py-2.5">
-                                <p className="text-[10px] font-bold uppercase tracking-wide text-[#4E6484]">
+                            <div className="flex-1 rounded-xl bg-[var(--floor-well)] py-2.5">
+                                <p className="text-[10px] font-bold uppercase tracking-wide text-[var(--floor-dim)]">
                                     You said
                                 </p>
                                 <p className="font-display font-black text-2xl tabular-nums"
@@ -255,11 +255,11 @@ function Card({ item, remaining, onNext }) {
                                     </span>
                                 </p>
                             </div>
-                            <div className="flex-1 rounded-xl bg-[#0E1929] py-2.5">
-                                <p className="text-[10px] font-bold uppercase tracking-wide text-[#4E6484]">
+                            <div className="flex-1 rounded-xl bg-[var(--floor-well)] py-2.5">
+                                <p className="text-[10px] font-bold uppercase tracking-wide text-[var(--floor-dim)]">
                                     The room
                                 </p>
-                                <p className="font-display font-black text-2xl text-[#8FA3BF] tabular-nums">
+                                <p className="font-display font-black text-2xl text-[var(--floor-muted)] tabular-nums">
                                     {item.room}<span className="text-xs ml-0.5">¢</span>
                                 </p>
                             </div>
@@ -271,7 +271,7 @@ function Card({ item, remaining, onNext }) {
                         <motion.p
                             initial={{ opacity: 0 }} animate={{ opacity: 1 }}
                             transition={{ delay: step(0.34) }}
-                            className="text-[12px] text-[#8FA3BF] mt-2.5 leading-snug"
+                            className="text-[12px] text-[var(--floor-muted)] mt-2.5 leading-snug"
                         >
                             {item.kind === "level"
                                 ? "Restating the price pays nothing either way — that's what keeps the board honest."
@@ -286,14 +286,14 @@ function Card({ item, remaining, onNext }) {
                             animate={{ opacity: 1, scale: 1 }}
                             transition={{ delay: step(0.44), type: "spring", stiffness: 300, damping: 18 }}
                             className="font-display font-black text-4xl mt-5"
-                            style={{ color: item.payout > 0 ? "#58CC02" : item.payout < 0 ? "#FF5A5F" : "#8FA3BF" }}
+                            style={{ color: item.payout > 0 ? "var(--floor-yes-ink)" : item.payout < 0 ? "var(--floor-no-ink)" : "var(--floor-muted)" }}
                         >
                             {won ? <CountUp value={item.payout} /> : (
                                 <span className="tabular-nums">
                                     {item.payout > 0 ? "+" : ""}{item.payout.toLocaleString()}
                                 </span>
                             )}
-                            <span className="text-base font-bold text-[#4E6484] ml-1.5">cred</span>
+                            <span className="text-base font-bold text-[var(--floor-dim)] ml-1.5">cred</span>
                         </motion.p>
 
                         {/* Staged with the figure it annotates, or the footnote
@@ -303,14 +303,14 @@ function Card({ item, remaining, onNext }) {
                         <motion.p
                             initial={{ opacity: 0 }} animate={{ opacity: 1 }}
                             transition={{ delay: step(0.52) }}
-                            className="text-[11px] text-[#4E6484] mt-1 tabular-nums">
+                            className="text-[11px] text-[var(--floor-dim)] mt-1 tabular-nums">
                             {item.returned.toLocaleString()} back from a {item.stake.toLocaleString()} stake
                         </motion.p>
                     </>
                 )}
 
                 <button type="button" onClick={onNext}
-                    className="w-full mt-6 py-3 rounded-2xl bg-[#E8F0FB] text-[#0A121F]
+                    className="w-full mt-6 py-3 rounded-2xl bg-[var(--floor-solid)] text-[var(--floor-on-solid)]
                         font-display font-black text-sm hover:bg-white transition-colors">
                     {remaining > 0 ? `Next (${remaining} more)` : "Done"}
                 </button>

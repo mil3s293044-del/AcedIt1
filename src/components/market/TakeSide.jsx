@@ -154,7 +154,7 @@ export default function TakeSide({
     const level = conviction <= range.floor + 0.005;
 
     return (
-        <div className="space-y-3 pt-3 border-t border-[#233247]">
+        <div className="space-y-3 pt-3 border-t border-[var(--floor-edge)]">
             {/* ── What the price has done. The case for disagreeing. ── */}
             {history && history.points?.length > 1 && (
                 <PriceChart history={history} myEntry={myEntry} height={150} header={false} />
@@ -169,10 +169,10 @@ export default function TakeSide({
                     // rather than offered and then paying nothing.
                     const open = convictionRange(v, price).tradeable;
                     const tone = v === YES
-                        ? (on ? "bg-[#58CC02] text-[#0A121F] border-[#58CC02]"
-                              : "border-[#2C3E57] text-[#8FA3BF] hover:border-[#58CC02]/50")
-                        : (on ? "bg-[#FF5A5F] text-white border-[#FF5A5F]"
-                              : "border-[#2C3E57] text-[#8FA3BF] hover:border-[#FF5A5F]/50");
+                        ? (on ? "bg-[var(--floor-yes)] text-[var(--floor-on-bright)] border-[var(--floor-yes-ink)]"
+                              : "border-[var(--floor-edge-strong)] text-[var(--floor-muted)] hover:border-[rgb(var(--floor-yes-rgb)/0.5)]")
+                        : (on ? "bg-[var(--floor-no)] text-white border-[var(--floor-no-ink)]"
+                              : "border-[var(--floor-edge-strong)] text-[var(--floor-muted)] hover:border-[rgb(var(--floor-no-rgb)/0.5)]");
                     return (
                         <button key={v} type="button" onClick={() => pickSide(v)}
                             disabled={!open}
@@ -194,10 +194,10 @@ export default function TakeSide({
                 on it is a position on the side above. See the header. */}
             <div>
                 <div className="flex items-baseline justify-between mb-1.5">
-                    <span className="text-[11px] font-bold uppercase tracking-wide text-[#6F86A8]">
+                    <span className="text-[11px] font-bold uppercase tracking-wide text-[var(--floor-muted-2)]">
                         How sure
                     </span>
-                    <span className="font-display font-black text-sm text-[#E8F0FB] tabular-nums">
+                    <span className="font-display font-black text-sm text-[var(--floor-ink)] tabular-nums">
                         {pct(conviction)}%
                     </span>
                 </div>
@@ -205,14 +205,19 @@ export default function TakeSide({
                     type="range" min={pct(range.floor)} max={pct(range.ceiling)}
                     value={pct(conviction)}
                     onChange={(e) => setConviction(Number(e.target.value) / 100)}
-                    className="w-full accent-[#1CB0F6] cursor-pointer"
+                    className="floor-range"
+                    // The fill position, which the track's gradient reads. The
+                    // browser paints the unfilled half from `color-scheme`
+                    // otherwise, which is not a thing this room controls.
+                    style={{ "--range-fill": `${((conviction - range.floor)
+                        / Math.max(0.0001, range.ceiling - range.floor)) * 100}%` }}
                     aria-label="How sure are you"
                 />
                 {/* The ends of the track say what they ARE. The left one is the
                     room's own line when there is one and the coin flip when the
                     price is on the other side of even — the label has to name
                     the thing the handle is actually anchored to. */}
-                <div className="flex justify-between text-[10px] font-bold text-[#4E6484]">
+                <div className="flex justify-between text-[10px] font-bold text-[var(--floor-dim)]">
                     <span>{range.atRoom
                         ? `the room · ${priceLabel(range.room)}`
                         : "coin flip"}</span>
@@ -220,7 +225,7 @@ export default function TakeSide({
                 </div>
                 {/* ONE line, and it is the distance the handle has travelled —
                     which is the quantity the payout is made of. */}
-                <p className="text-[11px] text-[#8FA3BF] mt-1.5 leading-snug">
+                <p className="text-[11px] text-[var(--floor-muted)] mt-1.5 leading-snug">
                     {level ? (
                         range.atRoom
                             ? "That's exactly where the room already has it — it'd pay nothing "
@@ -229,10 +234,10 @@ export default function TakeSide({
                     ) : (
                         <>
                             You&apos;re calling it{" "}
-                            <span className="font-bold tabular-nums text-[#E8F0FB]">
+                            <span className="font-bold tabular-nums text-[var(--floor-ink)]">
                                 {priceLabel(p)}</span>
                             {" — "}
-                            <span className="font-bold tabular-nums text-[#E8F0FB]">
+                            <span className="font-bold tabular-nums text-[var(--floor-ink)]">
                                 {gap}</span>
                             {gap === 1 ? " point" : " points"} past{" "}
                             {/* The track is anchored at the room's line OR at
@@ -250,10 +255,10 @@ export default function TakeSide({
             {/* ── Stake ────────────────────────────────────────────── */}
             <div>
                 <div className="flex items-baseline justify-between mb-1.5">
-                    <span className="text-[11px] font-bold uppercase tracking-wide text-[#6F86A8]">
+                    <span className="text-[11px] font-bold uppercase tracking-wide text-[var(--floor-muted-2)]">
                         Stake
                     </span>
-                    <span className="text-[11px] font-bold text-[#6F86A8] tabular-nums">
+                    <span className="text-[11px] font-bold text-[var(--floor-muted-2)] tabular-nums">
                         {balance.toLocaleString()} cred
                     </span>
                 </div>
@@ -264,8 +269,8 @@ export default function TakeSide({
                             disabled={n > balance}
                             className={`rounded-lg border-2 py-1.5 font-display font-black text-xs
                                 tabular-nums transition-colors disabled:opacity-30
-                                ${stake === n ? "bg-[#1CB0F6] border-[#1CB0F6] text-[#0A121F]"
-                                    : "border-[#2C3E57] text-[#8FA3BF] hover:border-[#1CB0F6]/50"}`}>
+                                ${stake === n ? "bg-[var(--floor-accent)] border-[var(--floor-accent-ink)] text-[var(--floor-on-bright)]"
+                                    : "border-[var(--floor-edge-strong)] text-[var(--floor-muted)] hover:border-[rgb(var(--floor-accent-rgb)/0.5)]"}`}>
                             {n}
                         </button>
                     ))}
@@ -275,27 +280,27 @@ export default function TakeSide({
             {/* ── What each outcome pays ───────────────────────────── */}
             {/* Labelled by OUTCOME and coloured by SIGN, so the two can never
                 contradict each other the way "if you're right: −16" did. */}
-            <div className="flex items-center justify-between rounded-xl bg-[#0E1929] px-3 py-2.5">
+            <div className="flex items-center justify-between rounded-xl bg-[var(--floor-well)] px-3 py-2.5">
                 <div>
-                    <p className="text-[10px] font-bold uppercase tracking-wide text-[#4E6484]">
+                    <p className="text-[10px] font-bold uppercase tracking-wide text-[var(--floor-dim)]">
                         If it lands yes
                     </p>
                     <Roll value={ifYes} className={`font-display font-black text-lg
-                        ${ifYes > 0 ? "text-[#58CC02]" : ifYes < 0 ? "text-[#FF5A5F]" : "text-[#8FA3BF]"}`} />
+                        ${ifYes > 0 ? "text-[var(--floor-yes-ink)]" : ifYes < 0 ? "text-[var(--floor-no-ink)]" : "text-[var(--floor-muted)]"}`} />
                     {/* The multiple, beside the cred it is a multiple OF. This
                         is the only place both appear together, which is what
                         makes the × on the board checkable rather than a claim. */}
-                    <p className="text-[10px] font-bold tabular-nums text-[#4E6484]">
+                    <p className="text-[10px] font-bold tabular-nums text-[var(--floor-dim)]">
                         {multiplierLabel(backIfYes)} back
                     </p>
                 </div>
                 <div className="text-right">
-                    <p className="text-[10px] font-bold uppercase tracking-wide text-[#4E6484]">
+                    <p className="text-[10px] font-bold uppercase tracking-wide text-[var(--floor-dim)]">
                         If it lands no
                     </p>
                     <Roll value={ifNo} className={`font-display font-black text-lg
-                        ${ifNo > 0 ? "text-[#58CC02]" : ifNo < 0 ? "text-[#FF5A5F]" : "text-[#8FA3BF]"}`} />
-                    <p className="text-[10px] font-bold tabular-nums text-[#4E6484]">
+                        ${ifNo > 0 ? "text-[var(--floor-yes-ink)]" : ifNo < 0 ? "text-[var(--floor-no-ink)]" : "text-[var(--floor-muted)]"}`} />
+                    <p className="text-[10px] font-bold tabular-nums text-[var(--floor-dim)]">
                         {multiplierLabel(backIfNo)} back
                     </p>
                 </div>
@@ -303,14 +308,14 @@ export default function TakeSide({
 
             <div className="flex gap-2">
                 <button type="button" onClick={onCancel}
-                    className="px-3 py-2.5 rounded-xl border-2 border-[#2C3E57] text-[#8FA3BF]
-                        font-bold text-sm hover:text-[#E8F0FB] transition-colors">
+                    className="px-3 py-2.5 rounded-xl border-2 border-[var(--floor-edge-strong)] text-[var(--floor-muted)]
+                        font-bold text-sm hover:text-[var(--floor-ink)] transition-colors">
                     Cancel
                 </button>
                 <button type="button"
                     disabled={busy || tooMuch}
                     onClick={() => onTake?.({ side, conviction, stake: clampStake(stake) })}
-                    className="flex-1 py-2.5 rounded-xl bg-[#E8F0FB] text-[#0A121F]
+                    className="flex-1 py-2.5 rounded-xl bg-[var(--floor-solid)] text-[var(--floor-on-solid)]
                         font-display font-black text-sm disabled:opacity-40
                         hover:bg-white transition-colors inline-flex items-center justify-center gap-2">
                     {busy && <AceShuffle size="sm" />}

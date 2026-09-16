@@ -12,6 +12,7 @@ import SettlementReveal from "@/components/market/SettlementReveal";
 import Room from "@/components/market/Room";
 import MarkEntry from "@/components/planner/MarkEntry";
 import { LineDialog } from "@/pages/Competitions";
+import CalibrationCurve from "@/components/market/CalibrationCurve";
 import { readMarket } from "@/lib/market";
 import AceShuffle, { AceLoading } from "@/components/ace/AceShuffle";
 import { Button } from "@/components/ui/button";
@@ -57,6 +58,23 @@ const views = {
             </div>
         </Room>
     ),
+    equity: () => (
+        <Room>
+            <div className="max-w-md mx-auto rounded-2xl border-2 border-[var(--floor-edge)]
+                bg-[var(--floor-card)] p-4 space-y-4">
+                <CalibrationCurve data={{
+                    ready: true, graded: 24, needs: 0,
+                    bands: [
+                        { label: "50–60%", stated: 0.55, actual: 0.52, n: 6, enough: true },
+                        { label: "60–70%", stated: 0.65, actual: 0.71, n: 5, enough: true },
+                        { label: "70–80%", stated: 0.75, actual: 0.62, n: 8, enough: true },
+                        { label: "80–90%", stated: 0.85, actual: 0.9, n: 5, enough: true },
+                        { label: "90–100%", stated: 0.95, actual: 0.5, n: 2, enough: false },
+                    ],
+                }} />
+            </div>
+        </Room>
+    ),
     reveal: () => (
         <Room>
             <SettlementReveal onSeen={() => {}} items={[{
@@ -65,6 +83,44 @@ const views = {
                 called: 85, actual: 91, room: 41, backed: 1, faded: 2, traders: 3,
                 outcome: true, payout: 0,
             }]} />
+        </Room>
+    ),
+    // The whole floor in one screen: board card, take-side, the dialog and the
+    // portfolio's two charts, so the palette can be judged as a room.
+    floor: () => (
+        <Room>
+            <div className="max-w-5xl mx-auto grid lg:grid-cols-2 gap-4">
+                <div className="space-y-3">
+                    <h2 className="text-[10px] font-black uppercase tracking-widest
+                        text-[var(--floor-dim)]">The board</h2>
+                    <MarketCard market={sac} balance={1000} onTake={() => {}} onReport={() => {}} />
+                    <MarketCard market={{ ...sac, id: "b", kind: "streak", subject_is_me: false,
+                        title: "Will Ava study 5+ days this week?",
+                        meta: { target: 5 } }} balance={1000} onTake={() => {}} />
+                    <div className="rounded-2xl border-2 border-[var(--floor-edge)]
+                        bg-[var(--floor-card)] p-4">
+                        <h2 className="text-[10px] font-black uppercase tracking-widest
+                            text-[var(--floor-dim)] mb-2.5">The tape</h2>
+                        <p className="text-[12px] text-[var(--floor-muted)]">
+                            Ava took <span className="font-black text-[var(--floor-yes-ink)]">yes</span> at
+                            71¢ with 300 cred
+                        </p>
+                        <p className="text-[12px] text-[var(--floor-muted)]">
+                            Ben took <span className="font-black text-[var(--floor-no-ink)]">no</span> at
+                            29¢ with 150 cred
+                        </p>
+                        <p className="text-[11px] text-[var(--floor-dimmest)] mt-2">
+                            Cred is not XP — losing a call can&apos;t touch your level.
+                        </p>
+                    </div>
+                </div>
+                <div className="rounded-2xl border-2 border-[var(--floor-edge)]
+                    bg-[var(--floor-card)] p-4">
+                    <h2 className="text-[10px] font-black uppercase tracking-widest
+                        text-[var(--floor-dim)] mb-2">Take a side</h2>
+                    <TakeSide price={0.38} balance={1000} onTake={() => {}} onCancel={() => {}} />
+                </div>
+            </div>
         </Room>
     ),
     line: () => (

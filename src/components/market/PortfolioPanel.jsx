@@ -33,13 +33,13 @@ import CalibrationCurve from "./CalibrationCurve";
 import EquityCurve from "./EquityCurve";
 import AceShuffle from "@/components/ace/AceShuffle";
 
-const INK = { dim: "#4E6484", mid: "#8FA3BF", bright: "#E8F0FB",
-    up: "#58CC02", down: "#FF5A5F", gold: "#FFC800" };
+const INK = { dim: "var(--floor-dim)", mid: "var(--floor-muted)", bright: "var(--floor-ink)",
+    up: "var(--floor-yes-ink)", down: "var(--floor-no-ink)", gold: "var(--floor-warn-ink)" };
 
 function Tile({ label, value, tone, note }) {
     return (
-        <div className="rounded-xl bg-[#121C2E] border-2 border-[#233247] px-3 py-2.5">
-            <p className="text-[9px] font-black uppercase tracking-widest text-[#4E6484]">
+        <div className="rounded-xl bg-[var(--floor-card)] border-2 border-[var(--floor-edge)] px-3 py-2.5">
+            <p className="text-[9px] font-black uppercase tracking-widest text-[var(--floor-dim)]">
                 {label}
             </p>
             <p className="font-display font-black text-xl leading-none tabular-nums mt-1"
@@ -52,11 +52,11 @@ function Tile({ label, value, tone, note }) {
 function Heading({ label, note }) {
     return (
         <div className="flex items-center gap-3 mb-2.5">
-            <h2 className="text-[11px] font-black uppercase tracking-widest text-[#8FA3BF]">
+            <h2 className="text-[11px] font-black uppercase tracking-widest text-[var(--floor-muted)]">
                 {label}
             </h2>
-            {note && <span className="text-[11px] font-bold text-[#4E6484]">{note}</span>}
-            <span className="flex-1 h-px bg-[#233247]" aria-hidden="true" />
+            {note && <span className="text-[11px] font-bold text-[var(--floor-dim)]">{note}</span>}
+            <span className="flex-1 h-px bg-[var(--floor-edge)]" aria-hidden="true" />
         </div>
     );
 }
@@ -90,8 +90,8 @@ export default function PortfolioPanel({ onOpenMarket }) {
     }
     if (state.error || state.data?.available === false) {
         return (
-            <div className="rounded-2xl border-2 border-[#233247] bg-[#121C2E] p-8 text-center">
-                <p className="text-sm text-[#8FA3BF]">
+            <div className="rounded-2xl border-2 border-[var(--floor-edge)] bg-[var(--floor-card)] p-8 text-center">
+                <p className="text-sm text-[var(--floor-muted)]">
                     {state.data?.reason || "Couldn't load your book just now."}
                 </p>
             </div>
@@ -99,11 +99,11 @@ export default function PortfolioPanel({ onOpenMarket }) {
     }
     if (!holdings.length) {
         return (
-            <div className="rounded-2xl border-2 border-[#233247] bg-[#121C2E] p-8 text-center">
-                <p className="font-display font-black text-[#E8F0FB] text-base">
+            <div className="rounded-2xl border-2 border-[var(--floor-edge)] bg-[var(--floor-card)] p-8 text-center">
+                <p className="font-display font-black text-[var(--floor-ink)] text-base">
                     You haven&apos;t taken a side yet.
                 </p>
-                <p className="text-[13px] text-[#8FA3BF] mt-1.5 leading-snug max-w-sm mx-auto">
+                <p className="text-[13px] text-[var(--floor-muted)] mt-1.5 leading-snug max-w-sm mx-auto">
                     Once you do, this is where the results land — what you&apos;re holding, how
                     it&apos;s going, and whether your confidence matches your hit rate.
                 </p>
@@ -176,7 +176,7 @@ export default function PortfolioPanel({ onOpenMarket }) {
             {book.open.length > 0 && (
                 <section>
                     <Heading label="Open" note={`${book.open.length}`} />
-                    <div className="rounded-xl border-2 border-[#233247] overflow-hidden">
+                    <div className="rounded-xl border-2 border-[var(--floor-edge)] overflow-hidden">
                         {book.open.map((h, i) => {
                             const side = sideOf(h.p) === YES;
                             const now = h.market?.price;
@@ -188,15 +188,15 @@ export default function PortfolioPanel({ onOpenMarket }) {
                                 <button key={h.id} type="button"
                                     onClick={() => onOpenMarket?.(h.market_id)}
                                     className={`w-full text-left flex items-center gap-3 px-3 py-2.5
-                                        hover:bg-[#182335] transition-colors
-                                        ${i ? "border-t border-[#233247]" : ""}`}>
+                                        hover:bg-[var(--floor-inset)] transition-colors
+                                        ${i ? "border-t border-[var(--floor-edge)]" : ""}`}>
                                     <span className="text-[10px] font-black uppercase tracking-wide
                                         w-8 flex-shrink-0"
                                         style={{ color: side ? INK.up : INK.down }}>
                                         {side ? "Yes" : "No"}
                                     </span>
                                     <span className="flex-1 min-w-0 truncate text-[12px] font-bold
-                                        text-[#E8F0FB]">
+                                        text-[var(--floor-ink)]">
                                         {h.market?.title || "—"}
                                     </span>
                                     <span className="text-[11px] tabular-nums flex-shrink-0"
@@ -222,7 +222,7 @@ export default function PortfolioPanel({ onOpenMarket }) {
             {book.closed.length > 0 && (
                 <section>
                     <Heading label="Settled" note={`${book.closed.length}`} />
-                    <div className="rounded-xl border-2 border-[#233247] overflow-hidden">
+                    <div className="rounded-xl border-2 border-[var(--floor-edge)] overflow-hidden">
                         {[...book.closed].reverse().slice(0, 12).map((h, i) => {
                             const o = outcomeOf(h);
                             const payout = Math.round(Number(h.payout) || 0);
@@ -231,14 +231,14 @@ export default function PortfolioPanel({ onOpenMarket }) {
                                 <button key={h.id} type="button"
                                     onClick={() => onOpenMarket?.(h.market_id)}
                                     className={`w-full text-left flex items-center gap-3 px-3 py-2.5
-                                        hover:bg-[#182335] transition-colors
-                                        ${i ? "border-t border-[#233247]" : ""}`}>
+                                        hover:bg-[var(--floor-inset)] transition-colors
+                                        ${i ? "border-t border-[var(--floor-edge)]" : ""}`}>
                                     <span className="text-[9px] font-black uppercase tracking-widest
                                         w-10 flex-shrink-0" style={{ color: tone }}>
                                         {o === "void" ? "void" : o}
                                     </span>
                                     <span className="flex-1 min-w-0 truncate text-[12px] font-bold
-                                        text-[#E8F0FB]">
+                                        text-[var(--floor-ink)]">
                                         {h.market?.title || "—"}
                                     </span>
                                     <span className="text-[10px] flex-shrink-0 hidden sm:inline"

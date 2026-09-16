@@ -87,20 +87,20 @@ export default function MarketCard({ market, balance, busy, onTake, onReport }) 
             // by a different ground: tinting the panel came out a muddy olive
             // that read as a rendering fault rather than as emphasis, and the
             // room only works while every panel sits on the same ink.
-            className={`rounded-2xl border-2 p-4 transition-colors bg-[#121C2E]
+            className={`rounded-2xl border-2 p-4 transition-colors bg-[var(--floor-card)]
                 ${market.subject_is_me
-                    ? "border-[#FFC800]/60"
-                    : "border-[#233247] hover:border-[#33486A]"}`}
+                    ? "border-[rgb(var(--floor-warn-rgb)/0.6)]"
+                    : "border-[var(--floor-edge)] hover:border-[var(--floor-edge-hover)]"}`}
         >
             {/* ── Kicker: what kind, and the clock ──────────────────── */}
             <div className="flex items-center justify-between gap-3 mb-2">
                 <span className="inline-flex items-center gap-1.5 text-[10px] font-black
-                    uppercase tracking-widest text-[#6F86A8]">
+                    uppercase tracking-widest text-[var(--floor-muted-2)]">
                     <KindIcon className="w-3.5 h-3.5" /> {kind.label}
                 </span>
                 {left && (
                     <span className={`inline-flex items-center gap-1 text-[11px] font-bold tabular-nums
-                        ${closing ? "text-[#FFC800]" : "text-[#6F86A8]"}`}>
+                        ${closing ? "text-[var(--floor-warn-ink)]" : "text-[var(--floor-muted-2)]"}`}>
                         <Clock className="w-3 h-3" /> {left}
                     </span>
                 )}
@@ -114,7 +114,7 @@ export default function MarketCard({ market, balance, busy, onTake, onReport }) 
                 target rather than the first. */}
             <h3 className="font-display font-extrabold text-base leading-snug mb-3">
                 <a href={`${createPageUrl("Market")}?id=${encodeURIComponent(market.id)}`}
-                    className="text-[#E8F0FB] hover:text-[#1CB0F6] transition-colors">
+                    className="text-[var(--floor-ink)] hover:text-[var(--floor-accent-ink)] transition-colors">
                     {market.title}
                 </a>
             </h3>
@@ -126,7 +126,7 @@ export default function MarketCard({ market, balance, busy, onTake, onReport }) 
                 traded is a mark, and the sentence naming it is the whole
                 payoff the subject gets in place of a stake. */}
             {market.subject_is_me && market.traders > 0 && (
-                <p className="text-[13px] font-bold text-[#FFC800] mb-3 leading-snug">
+                <p className="text-[13px] font-bold text-[var(--floor-warn-ink)] mb-3 leading-snug">
                     {market.traders === 1
                         ? `Someone has taken a position on your ${market.kind === "sac" ? "mark" : "week"}.`
                         : `${market.traders} people are trading your `
@@ -136,30 +136,30 @@ export default function MarketCard({ market, balance, busy, onTake, onReport }) 
 
             {/* ── The odds, then the line ──────────────────────────── */}
             <div className="flex items-stretch gap-2">
-                <div className="flex-1 rounded-xl bg-[#0E1929] px-2.5 py-1.5">
-                    <p className="text-[9px] font-black uppercase tracking-widest text-[#4E6484]">
+                <div className="flex-1 rounded-xl bg-[var(--floor-well)] px-2.5 py-1.5">
+                    <p className="text-[9px] font-black uppercase tracking-widest text-[var(--floor-dim)]">
                         Yes pays
                     </p>
                     <p className="font-display font-black text-xl leading-none tabular-nums
-                        text-[#58CC02]">{pays.yesLabel}</p>
+                        text-[var(--floor-yes-ink)]">{pays.yesLabel}</p>
                 </div>
-                <div className="flex-1 rounded-xl bg-[#0E1929] px-2.5 py-1.5">
-                    <p className="text-[9px] font-black uppercase tracking-widest text-[#4E6484]">
+                <div className="flex-1 rounded-xl bg-[var(--floor-well)] px-2.5 py-1.5">
+                    <p className="text-[9px] font-black uppercase tracking-widest text-[var(--floor-dim)]">
                         No pays
                     </p>
                     <p className="font-display font-black text-xl leading-none tabular-nums
-                        text-[#FF5A5F]">{pays.noLabel}</p>
+                        text-[var(--floor-no-ink)]">{pays.noLabel}</p>
                 </div>
                 <div className="flex flex-col justify-center items-end pl-1 min-w-[62px]">
                     <span className="font-display font-black text-base leading-none tabular-nums
-                        text-[#E8F0FB]">{priceLabel(market.price)}</span>
+                        text-[var(--floor-ink)]">{priceLabel(market.price)}</span>
                     {/* A market nobody has traded has not moved, and "0 from
                         open" is a measurement of nothing dressed as one. The
                         flat line and the thin note below already say it. */}
                     {history.trades > 0 && (
                         <span className={`text-[10px] font-bold tabular-nums mt-1
-                            ${history.change > 0 ? "text-[#58CC02]"
-                                : history.change < 0 ? "text-[#FF5A5F]" : "text-[#6F86A8]"}`}>
+                            ${history.change > 0 ? "text-[var(--floor-yes-ink)]"
+                                : history.change < 0 ? "text-[var(--floor-no-ink)]" : "text-[var(--floor-muted-2)]"}`}>
                             {history.change > 0 ? "▲" : history.change < 0 ? "▼" : "■"}
                             {" "}{Math.abs(history.change)}
                         </span>
@@ -176,7 +176,7 @@ export default function MarketCard({ market, balance, busy, onTake, onReport }) 
                 panel already refuses, and the line above is flat for the same
                 reason rather than because the market is quiet. */}
             {market.meta?.thin && (
-                <p className="text-[10px] text-[#6F86A8] mt-1">
+                <p className="text-[10px] text-[var(--floor-muted-2)] mt-1">
                     No base rate yet — this one opened at even.
                 </p>
             )}
@@ -187,22 +187,22 @@ export default function MarketCard({ market, balance, busy, onTake, onReport }) 
                 pushes "1,150 in" onto a line of its own, splitting a figure
                 from its own unit. */}
             <div className="flex items-center justify-between gap-3 mt-2.5 text-[11px]">
-                <span className="text-[#6F86A8] font-bold min-w-0 truncate">
+                <span className="text-[var(--floor-muted-2)] font-bold min-w-0 truncate">
                     {market.traders === 0 ? (
-                        <span className="text-[#4E6484]">No one has taken a side yet</span>
+                        <span className="text-[var(--floor-dim)]">No one has taken a side yet</span>
                     ) : (
                         <>
-                            <span className="text-[#58CC02]">{market.yesCount} yes</span>
-                            <span className="text-[#33445E] mx-1.5">·</span>
-                            <span className="text-[#FF5A5F]">{market.noCount} no</span>
+                            <span className="text-[var(--floor-yes-ink)]">{market.yesCount} yes</span>
+                            <span className="text-[var(--floor-dimmest)] mx-1.5">·</span>
+                            <span className="text-[var(--floor-no-ink)]">{market.noCount} no</span>
                             {names.length > 0 && (
-                                <span className="text-[#4E6484]"> — {names.join(", ")}
+                                <span className="text-[var(--floor-dim)]"> — {names.join(", ")}
                                     {market.yesCount > names.length ? " +more" : ""}</span>
                             )}
                         </>
                     )}
                 </span>
-                <span className="text-[#4E6484] font-bold tabular-nums flex-shrink-0
+                <span className="text-[var(--floor-dim)] font-bold tabular-nums flex-shrink-0
                     whitespace-nowrap">
                     {market.volume.toLocaleString()} in
                 </span>
@@ -211,14 +211,14 @@ export default function MarketCard({ market, balance, busy, onTake, onReport }) 
             {/* ── Your side ────────────────────────────────────────── */}
             {mine && (
                 <div className="flex items-center justify-between gap-3 mt-3 rounded-xl
-                    bg-[#0E1929] px-3 py-2">
-                    <span className="text-[11px] font-bold text-[#8FA3BF]">
-                        You: <span className={sideOf(mine.p) === YES ? "text-[#58CC02]" : "text-[#FF5A5F]"}>
+                    bg-[var(--floor-well)] px-3 py-2">
+                    <span className="text-[11px] font-bold text-[var(--floor-muted)]">
+                        You: <span className={sideOf(mine.p) === YES ? "text-[var(--floor-yes-ink)]" : "text-[var(--floor-no-ink)]"}>
                             {sideOf(mine.p) === YES ? "YES" : "NO"}
                         </span>
-                        <span className="text-[#4E6484]"> · {mine.stake} @ {priceLabel(mine.price_at_entry)}</span>
+                        <span className="text-[var(--floor-dim)]"> · {mine.stake} @ {priceLabel(mine.price_at_entry)}</span>
                     </span>
-                    <span className="text-[11px] font-black tabular-nums text-[#58CC02]">
+                    <span className="text-[11px] font-black tabular-nums text-[var(--floor-yes-ink)]">
                         {(() => {
                             const w = payoutFor(mine.stake, mine.p, mine.price_at_entry, sideOf(mine.p) === YES);
                             return `${w > 0 ? "+" : ""}${w} if right`;
@@ -239,14 +239,14 @@ export default function MarketCard({ market, balance, busy, onTake, onReport }) 
                 // A refusal SAYS WHY. A greyed-out button with no reason is the
                 // "disabled button that says nothing" paper-cut this project
                 // already fixed once on the Study page.
-                <p className="flex items-start gap-1.5 mt-3 text-[11px] text-[#6F86A8] leading-snug">
+                <p className="flex items-start gap-1.5 mt-3 text-[11px] text-[var(--floor-muted-2)] leading-snug">
                     <Lock className="w-3 h-3 flex-shrink-0 mt-0.5" /> {market.blocked}
                 </p>
             ) : (
                 <button type="button" onClick={() => setOpen(true)}
-                    className="w-full mt-3 py-2.5 rounded-xl border-2 border-[#2C3E57]
-                        text-[#E8F0FB] font-display font-black text-sm
-                        hover:border-[#1CB0F6] hover:bg-[#1CB0F6]/10 transition-colors">
+                    className="w-full mt-3 py-2.5 rounded-xl border-2 border-[var(--floor-edge-strong)]
+                        text-[var(--floor-ink)] font-display font-black text-sm
+                        hover:border-[var(--floor-accent-ink)] hover:bg-[rgb(var(--floor-accent-rgb)/0.1)] transition-colors">
                     Take a side
                 </button>
             )}
@@ -259,13 +259,13 @@ export default function MarketCard({ market, balance, busy, onTake, onReport }) 
                 row. One mark, one place. */}
             {market.kind === "sac" && market.subject_is_me && onReport && (
                 <button type="button" onClick={() => onReport(market)}
-                    className="w-full mt-2 py-2 rounded-xl bg-[#FFC800] text-[#0A121F]
-                        font-display font-black text-sm hover:bg-[#ffd433] transition-colors">
+                    className="w-full mt-2 py-2 rounded-xl bg-[var(--floor-warn)] text-[var(--floor-on-bright)]
+                        font-display font-black text-sm hover:bg-[var(--floor-warn-hover)] transition-colors">
                     Enter your mark on the planner
                 </button>
             )}
 
-            <p className="text-[10px] text-[#4E6484] mt-2.5 leading-snug">
+            <p className="text-[10px] text-[var(--floor-dim)] mt-2.5 leading-snug">
                 {market.resolves_note || kind.resolves}
             </p>
         </motion.article>
