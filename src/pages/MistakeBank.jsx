@@ -37,7 +37,7 @@ import { useToast } from "@/components/ui/use-toast";
 import { ToastAction } from "@/components/ui/toast";
 import MarkdownMath from "@/components/shared/MarkdownMath";
 import AceBody from "@/components/ace/AceBody";
-import { isDue, isNew } from "@/lib/due";
+import { isReady } from "@/lib/due";
 import { calculateNextReview, reviewPatch, formatIntervalShort, RATINGS } from "@/lib/sm2";
 import {
     BANK_TOPIC, bankSummary, fixState, mistakeMeta, casesFor,
@@ -425,17 +425,18 @@ export default function MistakeBank() {
 
     useEffect(() => { load(); }, [load]);
 
-    // Due OR never reviewed. A mistake banked an hour ago has not "come due"
-    // by the scheduler's reckoning, but the student got it wrong this morning
-    // and making them wait a day is the dead end this screen exists to avoid.
-    // See bankSummary's note on ready vs due.
-    const isReady = useCallback((c) => isDue(c) || isNew(c), []);
+    // `isReady` is due OR never reviewed, and it is now the app's ONE answer to
+    // "what can I sit right now" (see due.js). This screen used to roll its own
+    // — a mistake banked an hour ago has not "come due" by the scheduler's
+    // reckoning, but the student got it wrong this morning and making them wait
+    // a day is the dead end this screen exists to avoid. Every deck surface
+    // counts the same way now, so the local copy is gone.
     // ATTEMPTS ARE PASSED EVERYWHERE A STATE IS READ. Without them fixState
     // reports the ladder alone, which is what this whole change exists to stop
     // being called "fixed" — and two screens disagreeing about one card is
     // worse than either answer.
     const summary = useMemo(
-        () => bankSummary(cards, isReady, attempts), [cards, isReady, attempts]);
+        () => bankSummary(cards, isReady, attempts), [cards, attempts]);
 
     const cases = useMemo(
         () => casesFor(cards, attempts, quizzes), [cards, attempts, quizzes]);
@@ -459,7 +460,7 @@ export default function MistakeBank() {
 
     // Subject → topic, for the shelf and its per-group review buttons.
     const groups = useMemo(
-        () => groupBank(cards, { isReady, attempts }), [cards, isReady, attempts]);
+        () => groupBank(cards, { isReady, attempts }), [cards, attempts]);
 
     /** The cards a scope covers: the whole bank, one subject, or one topic. */
     const inScope = useCallback((c) => {

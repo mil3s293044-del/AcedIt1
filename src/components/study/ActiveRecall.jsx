@@ -17,6 +17,7 @@ import { PRICE } from "@/lib/chips";
 import { aceDone } from "@/components/ace/AceReacts";
 import { FEATURES, checkLiveTier } from "@/lib/tierAccess";
 import { getExaminerPrompt } from "@/lib/subjectExaminerPrompts";
+import { STIMULUS_RULE_INLINE } from "@/lib/quizSchema";
 import { recordStudyAndGetStreak } from "@/components/shared/streakHelpers";
 import { fmtDate } from "@/lib/safeDate";
 import { CONFIDENCE } from "@/lib/calibration";
@@ -424,7 +425,9 @@ Questions should:
 - Test understanding at different VCAA cognitive levels
 - Use VCE-appropriate metalanguage
 - Be specific to the document content
-- Help identify gaps in Study Design requirements`,
+- Help identify gaps in Study Design requirements
+
+${STIMULUS_RULE_INLINE}`,
                 file_urls: megaFileUrls(directFiles),
                 response_json_schema: {
                     type: "object",

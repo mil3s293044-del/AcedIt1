@@ -23,9 +23,10 @@ import MathKeyboard from "../shared/MathKeyboard";
 import MathInput from "../shared/MathInput";
 import InkPad from "@/components/quizzes/InkPad";
 import MultipartQuestion from "@/components/quizzes/MultipartQuestion";
+import SourcePanel from "@/components/quizzes/SourcePanel";
 import MarkPanel from "@/components/quizzes/marking/MarkPanel";
 import { normaliseMark } from "@/lib/quizMarking";
-import { normaliseQuestion } from "@/lib/quizSchema";
+import { normaliseQuestion, stimulusText } from "@/lib/quizSchema";
 // Aliased: this component already has an `isCorrect` STATE variable for the
 // live MCQ verdict, which would shadow the import and turn every call into
 // "isCorrect is not a function" at runtime.
@@ -865,6 +866,12 @@ In two or three sentences, explain what makes that the right answer and what the
                 const userAnswer = userAnswers[index];
                 const prevAnswer = previousAnswers[index];
                 const shape = normaliseQuestion(question, index);
+                // THE MARKER GETS THE SOURCE TOO. Without it an examiner is
+                // being asked to judge an answer to a question they cannot
+                // read — so the student loses marks twice for one missing
+                // artefact, and the second time in writing. Empty string for
+                // every question that has none, which is most of them.
+                const source = stimulusText(question);
                 if (shape.multipart) {
                     // One entry per QUESTION even though it has several parts,
                     // because the score, the feedback array and the attempt row
@@ -875,6 +882,7 @@ In two or three sentences, explain what makes that the right answer and what the
                         q_num: index + 1,
                         type: 'short',
                         question: shape.stem,
+                        ...(source ? { source_material: source } : {}),
                         marks_allocation: shape.marks,
                         parts: shape.parts.map((p) => ({
                             label: p.label,
@@ -891,9 +899,9 @@ In two or three sentences, explain what makes that the right answer and what the
                 if (question.type === 'mcq') {
                     const selectedOption = userAnswer !== undefined ? question.options[parseInt(userAnswer)] : "No answer provided";
                     const correctOption = question.options[question.correct_answer];
-                    return { q_num: index + 1, type: 'mcq', question: question.question, student_answer: selectedOption, correct_answer: correctOption, is_correct: parseInt(userAnswer) === question.correct_answer };
+                    return { q_num: index + 1, type: 'mcq', question: question.question, ...(source ? { source_material: source } : {}), student_answer: selectedOption, correct_answer: correctOption, is_correct: parseInt(userAnswer) === question.correct_answer };
                 } else {
-                    return { q_num: index + 1, type: 'short', question: question.question, student_answer: userAnswer || "No answer provided", previous_answer: prevAnswer || null, model_answer: question.model_answer || "Not provided", marks_allocation: normaliseQuestion(question, index).marks };
+                    return { q_num: index + 1, type: 'short', question: question.question, ...(source ? { source_material: source } : {}), student_answer: userAnswer || "No answer provided", previous_answer: prevAnswer || null, model_answer: question.model_answer || "Not provided", marks_allocation: shape.marks };
                 }
             });
 
@@ -923,14 +931,19 @@ Mark this ${shuffledQuiz.subject} quiz. Provide feedback for ALL ${questionsForA
 MARKING: MCQ = 0 or 1 mark only. Short answer = 0 to allocation marks. Be lenient on phrasing.
 
 ${questionsForAnalysis.map(q => q.parts ? `Q${q.q_num} [MULTIPART] - ${q.marks_allocation} marks in total:
-Question: ${q.question}
+${q.source_material ? `${q.source_material}\n\n` : ''}Question: ${q.question}
 ${q.parts.map(p => `  (${p.label}) [${p.marks} marks] ${p.prompt}
   Student Answer: ${p.student_answer}
   Model Answer: ${p.model_answer}`).join('\n')}
 Mark the parts separately and add them up. Name the part in each criterion — "(b) ..." — so the student can see which one lost the mark.` : `Q${q.q_num} [${q.type.toUpperCase()}]${q.type === 'short' ? ` - ${q.marks_allocation} marks` : ''}:
-Question: ${q.question}
+${q.source_material ? `${q.source_material}\n\n` : ''}Question: ${q.question}
 Student Answer: ${q.student_answer}${q.type === 'short' && q.previous_answer ? `\nPrevious Answer: ${q.previous_answer}` : ''}
 ${q.type === 'mcq' ? `Correct Answer: ${q.correct_answer}` : `Model Answer: ${q.model_answer}`}`).join('\n---\n')}
+
+A question carrying source material was answered WITH THAT SOURCE IN FRONT OF
+THE STUDENT — it is printed above the question here exactly as they saw it.
+Mark against it: credit what the source supports, and treat a point the source
+does not carry as unsupported rather than as an error of recall.
 
 For EACH question return: marks, criteria, annotations, what_wrong, improve${hasShortWithPrevious ? ', comparison' : ''}.
 For a question that scored full marks, leave what_wrong and improve as empty strings — do not write praise.
@@ -1504,6 +1517,12 @@ invent a theme from a single question.`,
                                             </div>
                                         </div>
                                         <div className="p-6 space-y-5">
+                                            {/* The source is on the review card too. A
+                                                student reading "you did not cite the
+                                                1962 figure" has to be able to look at
+                                                the thing they were reading from — the
+                                                feedback is not checkable without it. */}
+                                            <SourcePanel stimulus={normaliseQuestion(currentQ, currentFeedbackIndex).stimulus} />
                                             <div className="text-lg font-semibold text-foreground leading-relaxed">
                                                 <MarkdownMath>{currentQ.question || ""}</MarkdownMath>
                                             </div>
@@ -1823,6 +1842,11 @@ invent a theme from a single question.`,
                                         ? 'Multiple Choice'
                                         : `Short Answer · ${currentShape.marks} marks`}
                             </span>
+                            {/* THE SOURCE COMES FIRST, above the stem and above
+                                the parts, the way a paper sets it — and above
+                                BOTH shapes, because a multipart question is
+                                exactly where a case study lands. */}
+                            <SourcePanel stimulus={currentShape.stimulus} />
                             {/* A multipart question prints its stem inside the
                                 parts view, above the parts it belongs to —
                                 printing it here as well would put the same

@@ -32,7 +32,7 @@ import MindMaps from "../components/study/MindMaps";
 import HelpButton from "@/components/shared/HelpButton";
 import NeuroPanel from "../components/study/NeuroPanel";
 import { todaysIntent } from "@/lib/studyIntent";
-import { isDue } from "@/lib/due";
+import { isReady } from "@/lib/due";
 import { deckCards } from "@/lib/mistakeBank";
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -180,7 +180,7 @@ export default function Study() {
             setStudySessions(studySessionsData || []);
             // Genuinely due, which is not the same as "has a date in the past".
             // A card nobody has opened yet is new material; see lib/due.js.
-            setFlashcards((flashcardData || []).filter(c => isDue(c, today)));
+            setFlashcards((flashcardData || []).filter(c => isReady(c, today)));
             setAssessments(assessmentData || []);
         } catch (error) {
             console.error("Error loading data:", error);
@@ -549,7 +549,7 @@ export default function Study() {
     const suggestionSub = (id) => {
         switch (id) {
             case "pomodoro":          return todayMins === 0 ? "Easiest way to start today." : "Stack another focused block.";
-            case "spaced_repetition": return dueFlashcardCount > 0 ? `${dueFlashcardCount} cards due now.` : "Keep your flashcards fresh.";
+            case "spaced_repetition": return dueFlashcardCount > 0 ? `${dueFlashcardCount} cards ready now.` : "Keep your flashcards fresh.";
             case "active_recall":     return "Quiz yourself — beats re-reading.";
             case "blurting":          return "Brain-dump a topic, spot the gaps.";
             case "exam":              return nextDeadline && nextDeadline.days <= 14 ? `Exam in ${nextDeadline.days}d — run a timed mock.` : "Practice under exam conditions.";

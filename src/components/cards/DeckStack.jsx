@@ -19,8 +19,16 @@
  *
  * WHAT'S DELIBERATELY NOT ON IT. Total, weak and mastered used to each get a
  * tile. On a card the size of a card there is room for one big number, and the
- * only one that answers "what do I do now" is how many are due. The rest is on
- * the deck's own screen, one tap away, where there's room to say it properly.
+ * only one that answers "what do I do now" is how many are READY. The rest is
+ * on the deck's own screen, one tap away, where there's room to say it properly.
+ *
+ * READY, NOT DUE — the count was `isDue` alone, which excludes a card that has
+ * never been opened. So a deck of fifty cards a student had just generated said
+ * "All caught up", and a deck with ten lapsed and forty untouched said TEN. The
+ * split between due and new is real and belongs on the card list inside the
+ * deck, where each row has room to say which it is; on the face there is one
+ * number and it has to be the whole pile you could sit right now. due.js
+ * carries the reasoning.
  *
  * The pack itself — the backs, the fan, the deal — is CardPack, shared with
  * the quiz shelf. Everything below is what gets printed on this deck's face.
@@ -32,7 +40,7 @@ import CardPack, { PackAction } from "@/components/cards/CardPack";
 import { rankFor, suitFor } from "@/components/cards/cardIdentity";
 
 export default function DeckStack({
-    topic, unit, subject, total = 0, due = 0, weak = 0, mastery = 0, tone,
+    topic, unit, subject, total = 0, ready = 0, weak = 0, mastery = 0, tone,
     onSelect, onStats, onDelete,
     /** Position in the list — staggers the deal. */
     index = 0,
@@ -41,7 +49,7 @@ export default function DeckStack({
         <CardPack
             index={index}
             label={topic}
-            ariaLabel={`${topic}${unit && unit !== "General" ? `, ${unit}` : ""} — ${total} card${total === 1 ? "" : "s"}, ${due} due`}
+            ariaLabel={`${topic}${unit && unit !== "General" ? `, ${unit}` : ""} — ${total} card${total === 1 ? "" : "s"}, ${ready} ready`}
             total={total}
             tone={tone}
             rank={rankFor(mastery)}
@@ -74,11 +82,11 @@ export default function DeckStack({
                 left the middle of the card blank, which is the one place on a
                 playing card that is never empty. */}
             <span className="flex-1 grid place-items-center">
-                {due > 0 ? (
+                {ready > 0 ? (
                     <span className="flex flex-col items-center font-display leading-none">
-                        <span className="text-[30px] font-black tabular-nums text-foreground">{due}</span>
+                        <span className="text-[30px] font-black tabular-nums text-foreground">{ready}</span>
                         <span className="text-[10px] font-bold uppercase tracking-widest
-                            text-muted-foreground mt-1">due</span>
+                            text-muted-foreground mt-1">ready</span>
                     </span>
                 ) : (
                     <span className="text-[11px] font-bold text-muted-foreground text-center">

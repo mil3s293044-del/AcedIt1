@@ -36,6 +36,7 @@ import ReviewTable from "@/components/cards/ReviewTable";
 import DeckStack from "@/components/cards/DeckStack";
 import { rankFor, suitFor, subjectColor } from "@/components/cards/cardIdentity";
 import { cardMastery, isCardDue } from "@/lib/mastery";
+import { isNew, isReady, tally } from "@/lib/due";
 import { deckCards } from "@/lib/mistakeBank";
 import { calculateNextReview as sm2Next, formatIntervalShort as sm2Interval, reviewPatch, RATINGS } from "@/lib/sm2";
 
@@ -134,7 +135,11 @@ function DeckCard({ deck, subjectColor, onSelect, onDelete, onStats, index }) {
             subject={deck.subject_name}
             tone={subjectColor}
             total={total}
-            due={deck.cards.filter(isDue).length}
+            // READY, not due. `isDue` alone excludes a card that has never been
+            // opened, so a deck of fifty freshly generated cards printed "All
+            // caught up" and a deck with ten lapsed and forty untouched printed
+            // ten. See due.js — this is the one count now.
+            ready={deck.cards.filter(isReady).length}
             weak={deck.cards.filter(c => c.is_weak_spot).length}
             mastery={total > 0
                 ? Math.round(deck.cards.reduce((s, c) => s + computeMasteryScore(c), 0) / total)
@@ -625,7 +630,10 @@ The documents provided may be PowerPoint slides, Word documents, PDFs or text fi
     };
 
     const handleStartReview = (deck, filter = 'all') => {
-        let cards = filter === 'due' ? deck.cards.filter(isDue) :
+        // 'ready' plays everything that can be sat now — lapsed AND never
+        // opened. Filtering on `isDue` alone made this button refuse to start
+        // on a deck whose every card was waiting to be started.
+        let cards = filter === 'ready' ? deck.cards.filter(isReady) :
             filter === 'weak' ? deck.cards.filter(c => c.is_weak_spot) : deck.cards;
         if (!cards.length) { toast({ title: "No cards available", description: "No cards match that filter." }); return; }
         setReviewCards(cards); setCurrentCardIndex(0); setShowAnswer(false);
@@ -944,7 +952,11 @@ The documents provided may be PowerPoint slides, Word documents, PDFs or text fi
 
     // ─── DECK DETAIL VIEW ────────────────────────────────────────────────────
     if (selectedDeck) {
-        const stats = { total: selectedDeck.cards.length, due: selectedDeck.cards.filter(isDue).length, weak: selectedDeck.cards.filter(c => c.is_weak_spot).length };
+        // `ready` is what the face prints and what the button plays. `due` and
+        // `fresh` are kept apart only for the sentence under the tile, which is
+        // the one place on this screen with room to say which is which.
+        const counts = tally(selectedDeck.cards);
+        const stats = { total: counts.total, ready: counts.ready, due: counts.active, fresh: counts.new, weak: selectedDeck.cards.filter(c => c.is_weak_spot).length };
         const deckColor = subjectColor(
             userSubjects.find(s => s.subject_name === selectedDeck.subject_name),
             selectedDeck.subject_name);
@@ -984,8 +996,8 @@ The documents provided may be PowerPoint slides, Word documents, PDFs or text fi
                                     <p className="text-xs text-muted-foreground">Total</p>
                                 </div>
                                 <div className="text-center px-4 py-2 bg-chart-3/10 rounded-2xl">
-                                    <p className="text-xl font-bold text-chart-3">{stats.due}</p>
-                                    <p className="text-xs text-chart-3 inline-flex items-center gap-1">Due <AceTip term="due" /></p>
+                                    <p className="text-xl font-bold text-chart-3">{stats.ready}</p>
+                                    <p className="text-xs text-chart-3 inline-flex items-center gap-1">Ready <AceTip term="due" /></p>
                                 </div>
                                 <div className="text-center px-4 py-2 bg-streak/10 rounded-2xl">
                                     <p className="text-xl font-bold text-streak">{stats.weak}</p>
@@ -997,8 +1009,8 @@ The documents provided may be PowerPoint slides, Word documents, PDFs or text fi
                             <Button onClick={() => handleStartReview(selectedDeck, 'all')} className="btn-3d flex-1 bg-chart-3 hover:bg-chart-3 text-white rounded-xl gap-2">
                                 <Play className="w-4 h-4" /> Review All
                             </Button>
-                            <Button onClick={() => handleStartReview(selectedDeck, 'due')} variant="outline" className="flex-1 border-2 border-chart-3/30 text-chart-3 hover:bg-chart-3/10 rounded-xl gap-2">
-                                <Clock className="w-4 h-4" /> Due Only ({stats.due})
+                            <Button onClick={() => handleStartReview(selectedDeck, 'ready')} variant="outline" className="flex-1 border-2 border-chart-3/30 text-chart-3 hover:bg-chart-3/10 rounded-xl gap-2">
+                                <Clock className="w-4 h-4" /> Ready ({stats.ready})
                             </Button>
                             {stats.weak > 0 && (
                                 <Button onClick={() => handleStartReview(selectedDeck, 'weak')} variant="outline" className="flex-1 border-2 border-streak/30 text-streak hover:bg-streak/10 rounded-xl gap-2">
@@ -1006,6 +1018,21 @@ The documents provided may be PowerPoint slides, Word documents, PDFs or text fi
                                 </Button>
                             )}
                         </div>
+
+                        {/* The SPLIT, said once, where there is room for a
+                            sentence. The tile above prints one number because a
+                            number has to be the whole pile; this says what is in
+                            it, so "ready" never has to mean "behind". */}
+                        {stats.ready > 0 && stats.due > 0 && stats.fresh > 0 && (
+                            <p className="text-xs text-muted-foreground mt-3">
+                                {stats.due} came up for review · {stats.fresh} you have never opened.
+                            </p>
+                        )}
+                        {stats.ready > 0 && stats.due === 0 && (
+                            <p className="text-xs text-muted-foreground mt-3">
+                                All {stats.fresh} are new — nothing here has lapsed.
+                            </p>
+                        )}
                     </div>
                 </div>
 
@@ -1032,7 +1059,10 @@ The documents provided may be PowerPoint slides, Word documents, PDFs or text fi
                                         <div className="flex gap-1.5 mt-2 flex-wrap">
                                             <span className="pill bg-secondary text-muted-foreground">{card.total_reviews || 0} reviews</span>
                                             {card.is_weak_spot && <span className="pill bg-streak/15 text-streak">Weak Spot</span>}
+                                            {/* A CARD has room to say which it is, where a count does
+                                                not. This is the one surface that still draws the line. */}
                                             {isDue(card) && <span className="pill bg-chart-3/15 text-chart-3">Due</span>}
+                                            {isNew(card) && <span className="pill bg-secondary text-muted-foreground">New</span>}
                                         </div>
                                     </div>
                                     <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0">
@@ -1106,7 +1136,7 @@ The documents provided may be PowerPoint slides, Word documents, PDFs or text fi
                     Object.entries(decksBySubject).map(([subjectName, subjectDecks]) => {
                         const groupColor = subjectColor(
                             userSubjects.find(s => s.subject_name === subjectName), subjectName);
-                        const totalDue = subjectDecks.reduce((sum, d) => sum + d.cards.filter(isDue).length, 0);
+                        const totalDue = subjectDecks.reduce((sum, d) => sum + d.cards.filter(isReady).length, 0);
                         return (
                             <div key={subjectName} className="space-y-3">
                                 <div className="flex items-center gap-3">
@@ -1466,7 +1496,7 @@ The documents provided may be PowerPoint slides, Word documents, PDFs or text fi
                                 <div className="grid grid-cols-4 gap-3">
                                     {[
                                         { label: "Total", val: viewingStats.cards.length, color: "text-foreground", bg: "bg-secondary/50" },
-                                        { label: "Due", val: viewingStats.cards.filter(isDue).length, color: "text-chart-3", bg: "bg-chart-3/10" },
+                                        { label: "Ready", val: viewingStats.cards.filter(isReady).length, color: "text-chart-3", bg: "bg-chart-3/10" },
                                         { label: "Weak", val: viewingStats.cards.filter(c => c.is_weak_spot).length, color: "text-streak", bg: "bg-streak/10" },
                                         { label: "Mastered", val: viewingStats.cards.filter(c => computeMasteryScore(c) >= 80 && !c.is_weak_spot).length, color: "text-primary", bg: "bg-primary/10" },
                                     ].map(s => (

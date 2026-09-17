@@ -33,7 +33,7 @@
  * next to a graphic goes when the graphic does.
  */
 import { liftFor, ATAR_WEIGHTS } from "@/lib/atarLift";
-import { isDue } from "@/lib/due";
+import { isReady } from "@/lib/due";
 import { retentionOutlook } from "@/lib/retention";
 
 /** How much of a component one solid session is worth assuming. */
@@ -124,7 +124,7 @@ export function previewFor({ move, flashcards = [], deadline, today }) {
     // order the review queue itself uses.
     if (move.technique === "spaced_repetition") {
         const due = flashcards
-            .filter((c) => c.question && isDue(c, today))
+            .filter((c) => c.question && isReady(c, today))
             .sort((a, b) => String(a.next_review_date || "").localeCompare(String(b.next_review_date || "")));
         const card = due[0];
         if (!card) return null;

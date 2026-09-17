@@ -8,9 +8,13 @@
  * legacy-compatibility rules get the most coverage here, not the new format.
  */
 import assert from "node:assert/strict";
+import fs from "node:fs";
+import path from "node:path";
 import {
     normaliseQuestion, normaliseQuestions, allParts, quizMarks,
     scoreFromMarks, mcqCorrect, partKey, autoLabel, partTitle, formatGeneratedParts,
+    normaliseStimulus, stimulusText, referencesMissingSource,
+    STIMULUS_RULE, STIMULUS_RULE_INLINE, STIMULUS_SCHEMA,
 } from "@/lib/quizSchema";
 
 let passed = 0;
@@ -176,6 +180,152 @@ check("an mcq part with no real options degrades to a short answer", () => {
     const [p] = formatGeneratedParts({ parts: [{ type: "mcq", prompt: "Pick", options: ["only"] }] }, 4);
     assert.equal(p.type, "short");
     assert.equal(p.marks, 4);
+});
+
+/* ── SOURCE MATERIAL ──────────────────────────────────────────────────────
+ *
+ * "If a question ever cites an external example from the source material, make
+ * sure the example is also extracted and given to the student so they can
+ * actually answer the question." A question that says "Using Source B" with no
+ * Source B is unanswerable, renders perfectly, and is then MARKED — so the
+ * student loses marks for a gap the app created.
+ */
+
+check("a stimulus rides on the question and survives normalising", () => {
+    const q = normaliseQuestion({
+        question: "Using Source A, explain two causes of the crisis.",
+        stimulus: { label: "Source A", content: "In October 1962..." },
+        marks: 6,
+    }, 3);
+    assert.deepEqual(q.stimulus, { label: "Source A", content: "In October 1962..." });
+    assert.equal(q.marks, 6);
+    // THE ANSWER KEY IS UNTOUCHED. A single-part question keeps the bare index
+    // or every attempt ever saved reads back as unanswered.
+    assert.equal(q.parts[0].key, "3");
+});
+
+check("it belongs to the QUESTION, and every part is asked about it", () => {
+    const q = normaliseQuestion({
+        question: "Refer to the table below.",
+        stimulus: { label: "Table 2", content: "| Year | Yield |\n|---|---|\n| 2020 | 4.2 |" },
+        parts: [
+            { prompt: "State the 2020 yield.", marks: 1 },
+            { prompt: "Account for the trend.", marks: 4 },
+        ],
+    }, 0);
+    assert.ok(q.multipart);
+    assert.equal(q.stimulus.label, "Table 2");
+    assert.equal(q.marks, 5);
+    assert.deepEqual(q.parts.map((p) => p.key), ["0a", "0b"]);
+});
+
+check("a quiz written before this existed has no stimulus and does not break", () => {
+    assert.equal(normaliseQuestion({ question: "What is osmosis?" }, 0).stimulus, null);
+    assert.equal(normaliseQuestion({}, 0).stimulus, null);
+    assert.equal(normaliseQuestion(null, 0).stimulus, null);
+});
+
+check("a bare string is a source with no caption, not a dropped source", () => {
+    // A generator will sometimes return one. Losing the material because the
+    // label is missing is the exact failure this whole change is about.
+    assert.deepEqual(normaliseStimulus("In October 1962..."), { label: "", content: "In October 1962..." });
+    assert.deepEqual(normaliseStimulus({ text: "body" }), { label: "", content: "body" });
+    assert.equal(normaliseStimulus({ label: "Source A", content: "   " }), null, "a label with no body is nothing");
+    assert.equal(normaliseStimulus(""), null);
+    assert.equal(normaliseStimulus(null), null);
+    assert.equal(normaliseStimulus(42), null);
+});
+
+check("the marker is handed the source, captioned", () => {
+    const withSource = stimulusText({ stimulus: { label: "Source A", content: "In 1962..." } });
+    assert.match(withSource, /Source A/);
+    assert.match(withSource, /In 1962/);
+    assert.match(stimulusText({ stimulus: "bare" }), /Source material/);
+    assert.equal(stimulusText({ question: "no source here" }), "", "nothing to add to the prompt");
+});
+
+check("a dangling reference is detected, and a carried one is not", () => {
+    const dangling = [
+        { question: "Refer to the case study and explain two impacts." },
+        { question: "According to the extract, what changed?" },
+        { question: "Using Source B, justify the decision." },
+        { question: "Interpret the data in Figure 3." },
+        { question: "See page 214 and summarise the argument." },
+        { question: "Explain the result.", parts: [{ prompt: "Using the passage, name the technique.", marks: 2 }] },
+    ];
+    for (const q of dangling) {
+        assert.equal(referencesMissingSource(q), true, `missed: ${q.question}`);
+    }
+    // Carried — the question may say whatever it likes.
+    assert.equal(referencesMissingSource({ question: "Using Source B, justify the decision.", stimulus: "Source B text" }), false);
+});
+
+check("it refuses to flag a question that is simply self-contained", () => {
+    // Guessing wide throws away good questions, which is the worse error:
+    // "the following", "below" and "above" refer to the question's own text,
+    // and a question may describe a graph in words without citing one.
+    const fine = [
+        { question: "Explain osmosis in your own words." },
+        { question: "Which of the following is a noble gas?" },
+        { question: "Sketch the graph of $y = x^2$ and state its range." },
+        { question: "Consider the reaction below. Balance it." },
+        { question: "A student measures the pH as 3.2. Account for this." },
+        {},
+        null,
+    ];
+    for (const q of fine) {
+        assert.equal(referencesMissingSource(q), false, `false positive: ${JSON.stringify(q)}`);
+    }
+});
+
+/* ── The scan: one rule, four generators, never mirrored ──────────────────
+ *
+ * The rule is a long prompt string. Pasted into four files it is the copy that
+ * rots — three get a fix and the fourth quietly keeps shipping unanswerable
+ * questions. Same guard megaUpload.test.mjs keeps over the page price.
+ */
+const ROOT = process.cwd();
+const GENERATORS = [
+    "src/pages/Quizzes.jsx",                     // make a quiz from notes, and reshuffle
+    "src/components/study/ActiveRecall.jsx",     // make questions from my notes
+];
+/** Assembles questions from quizzes the student already has rather than writing them. */
+const CARRIERS = ["src/components/study/ExamMode.jsx"];
+
+check("every question generator imports the rule rather than restating it", () => {
+    for (const f of GENERATORS) {
+        const src = fs.readFileSync(path.join(ROOT, f), "utf8");
+        assert.match(src, /STIMULUS_RULE(_INLINE)?/,
+            `${f} generates questions and never states the source-material rule`);
+        assert.match(src, /from "@\/lib\/quizSchema"/, `${f} must import it, not restate it`);
+        assert.ok(!src.includes("A QUESTION MAY ONLY REFER TO MATERIAL IT CARRIES"),
+            `${f} has its own copy of the rule — import STIMULUS_RULE instead`);
+    }
+});
+
+check("a surface that replays saved questions carries the source with them", () => {
+    for (const f of CARRIERS) {
+        const src = fs.readFileSync(path.join(ROOT, f), "utf8");
+        assert.match(src, /normaliseStimulus/, `${f} rebuilds questions and would drop the source`);
+        assert.match(src, /SourcePanel/, `${f} must draw the source it carries`);
+    }
+});
+
+check("the schema the generators declare is the one shape normalise reads", () => {
+    const keys = Object.keys(STIMULUS_SCHEMA.properties).sort();
+    assert.deepEqual(keys, ["content", "label"]);
+    // Round-trip: what the schema permits is exactly what normalise keeps.
+    const fromModel = { label: "Source A", content: "body" };
+    assert.deepEqual(normaliseStimulus(fromModel), fromModel);
+});
+
+check("both rules say the one thing they exist to say", () => {
+    for (const rule of [STIMULUS_RULE, STIMULUS_RULE_INLINE]) {
+        assert.match(rule, /MAY ONLY REFER TO MATERIAL IT CARRIES/);
+        assert.match(rule, /VERBATIM/);
+        // Or a generator invents a source for every question it writes.
+        assert.match(rule, /do not invent one|Do not invent one/i);
+    }
 });
 
 console.log(`\n${passed} passed`);

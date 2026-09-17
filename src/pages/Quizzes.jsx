@@ -6,7 +6,7 @@ import MegaPicker from "@/components/shared/MegaPicker";
 import { PRICE } from "@/lib/chips";
 import { createPageUrl } from "@/utils";
 import { BANK_TOPIC, bankSummary } from "@/lib/mistakeBank";
-import { isDue, isNew } from "@/lib/due";
+import { isReady } from "@/lib/due";
 import { deleteResult } from "@/lib/saveResult";
 import { motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
@@ -48,7 +48,8 @@ import { FEATURES, canUseFeature } from "@/lib/tierAccess";
 
 import QuizDeck from "@/components/cards/QuizDeck";
 import { quizDeckStats, quizzingSummary, effectiveScore, RECENT_WINDOW } from "@/lib/quizDeck";
-import { normaliseQuestions, formatGeneratedParts, DEFAULT_SHORT_MARKS } from "@/lib/quizSchema";
+import { normaliseQuestions, formatGeneratedParts, referencesMissingSource, normaliseStimulus,
+    STIMULUS_RULE, STIMULUS_SCHEMA, DEFAULT_SHORT_MARKS } from "@/lib/quizSchema";
 import QuizPlayer from "../components/quizzes/QuizPlayer";
 import MarkdownMath from "@/components/shared/MarkdownMath";
 import QuizModePicker from "../components/quizzes/QuizModePicker";
@@ -444,6 +445,8 @@ ${aiSettings.include_explanations ? '- Include a brief explanation of why the an
 - Provide a model answer with ${marksValue} key points/dot points
 - Model answer should be detailed enough to mark against
 
+${STIMULUS_RULE}
+
 Base ALL questions on the provided material. If files are attached, read ALL content including images, charts, tables, and figures carefully.`,
                 file_urls: quizFileUrls(geminiCompatibleUrls),
                 response_json_schema: {
@@ -456,6 +459,7 @@ Base ALL questions on the provided material. If files are attached, read ALL con
                                 properties: {
                                     type: { type: "string" },
                                     question: { type: "string" },
+                                    stimulus: STIMULUS_SCHEMA,
                                     options: { type: "array", items: { type: "string" } },
                                     correct_answer: { type: "number" },
                                     model_answer: { type: "string" },
@@ -512,14 +516,20 @@ Base ALL questions on the provided material. If files are attached, read ALL con
                     }
                     return true;
                 })
+                // `stimulus` has to be carried explicitly: both formatting
+                // steps rebuild a WHITELIST of fields, which is precisely where
+                // a newly added one gets silently dropped — the question would
+                // still say "Using Source A" and the source would be gone.
                 .map(q => q.type === "multipart" ? {
                     type: "multipart",
                     question: q.question,
+                    ...(normaliseStimulus(q.stimulus) ? { stimulus: normaliseStimulus(q.stimulus) } : {}),
                     parts: formatGeneratedParts(q, marksValue),
                     explanation: aiSettings.include_explanations ? (q.explanation || "") : "",
                 } : ({
                     type: q.type,
                     question: q.question,
+                    ...(normaliseStimulus(q.stimulus) ? { stimulus: normaliseStimulus(q.stimulus) } : {}),
                     options: q.type === "mcq" ? (q.options?.slice(0, 4).concat(Array(Math.max(0, 4 - (q.options?.length || 0))).fill("")).slice(0, 4)) : undefined,
                     correct_answer: q.type === "mcq" ? (q.correct_answer ?? 0) : undefined,
                     model_answer: q.type === "short_answer" ? (q.model_answer || "") : undefined,
@@ -565,9 +575,17 @@ Base ALL questions on the provided material. If files are attached, read ALL con
                 });
             }
 
+            // If the model referenced material it did not carry, SAY SO. The
+            // question is kept — a paper two questions short is worse than one
+            // odd question — but a student staring at "Refer to the case study"
+            // with no case study needs to know it is the app and not them, and
+            // they are the only one who can press generate again.
+            const unanswerable = formattedQuestions.filter(referencesMissingSource).length;
             toast({
                 title: "Quiz created!",
-                description: `${formattedQuestions.length} questions generated successfully`
+                description: unanswerable > 0
+                    ? `${formattedQuestions.length} questions. ${unanswerable} of them point at source material that didn't come through — regenerate if those ones don't make sense.`
+                    : `${formattedQuestions.length} questions generated successfully`
             });
 
             // Reset form
@@ -753,6 +771,9 @@ SHORT ANSWER:
 - 3 marks = 3 key points, 5 marks = 5 points, 8 marks = 8 points
 - All math in answers must use LaTeX as above
 
+${STIMULUS_RULE}
+A reshuffle works from the QUESTIONS above and not from the original file, so you cannot point back at it. Any source a new question needs has to be written out here in full.
+
 Return valid JSON only.`,
                 response_json_schema: {
                     type: "object",
@@ -764,6 +785,7 @@ Return valid JSON only.`,
                                 properties: {
                                     type: { type: "string" },
                                     question: { type: "string" },
+                                    stimulus: STIMULUS_SCHEMA,
                                     options: { type: "array", items: { type: "string" } },
                                     correct_answer: { type: "number" },
                                     model_answer: { type: "string" },
@@ -826,11 +848,13 @@ Return valid JSON only.`,
                 .map(q => (Array.isArray(q.parts) && q.parts.length > 0) ? {
                     type: 'multipart',
                     question: q.question,
+                    ...(normaliseStimulus(q.stimulus) ? { stimulus: normaliseStimulus(q.stimulus) } : {}),
                     parts: formatGeneratedParts(q, 5),
                     explanation: q.explanation || "",
                 } : ({
                     type: q.type === 'short_answer' ? 'short_answer' : 'mcq',
                     question: q.question,
+                    ...(normaliseStimulus(q.stimulus) ? { stimulus: normaliseStimulus(q.stimulus) } : {}),
                     options: q.type === 'mcq' || q.type !== 'short_answer' ? q.options : undefined,
                     correct_answer: q.type === 'mcq' || q.type !== 'short_answer' ? (q.correct_answer ?? 0) : undefined,
                     model_answer: q.type === 'short_answer' ? (q.model_answer || "") : undefined,
@@ -896,7 +920,7 @@ Return valid JSON only.`,
     // Ready is due OR never reviewed — a mistake banked an hour ago is not
     // unopened material. Same rule the bank page uses; see bankSummary.
     const bank = useMemo(
-        () => bankSummary(bankCards, (c) => isDue(c) || isNew(c)),
+        () => bankSummary(bankCards, (c) => isReady(c)),
         [bankCards],
     );
 

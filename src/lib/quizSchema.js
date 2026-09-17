@@ -79,6 +79,36 @@ function normalisePart(raw, i, total, qIndex) {
 }
 
 /**
+ * A QUESTION MAY ONLY REFER TO MATERIAL IT CARRIES.
+ *
+ * VCAA examines from stimulus — an extract, a data table, a case study, a
+ * graph — and the generator, reading a textbook, would cheerfully write "Using
+ * Source B, explain…" or "Refer to the case study on p.14". Nothing in the
+ * saved quiz held Source B. So the question was unanswerable, the student wrote
+ * what they could, and THE MARKER THEN MARKED THEM DOWN FOR IT — the app asking
+ * about something it never showed them and then docking marks for the gap.
+ *
+ * `stimulus` is that material, reproduced in full on the question. It belongs
+ * to the QUESTION and not to a part, which is what a real paper does: one
+ * source, parts (a), (b), (c) about it.
+ *
+ * A bare string is accepted because a generator will sometimes return one, and
+ * a source with no label is still a source — far better than dropping it.
+ * Content is what matters; the label is a caption.
+ */
+export function normaliseStimulus(raw) {
+    if (!raw) return null;
+    if (typeof raw === "string") {
+        const content = raw.trim();
+        return content ? { label: "", content } : null;
+    }
+    if (typeof raw !== "object") return null;
+    const content = String(raw.content ?? raw.text ?? raw.source ?? "").trim();
+    if (!content) return null;
+    return { label: String(raw.label ?? raw.title ?? "").trim(), content };
+}
+
+/**
  * One question, in the shape everything downstream uses.
  *
  * `stem` is the shared setup. On a legacy question the stem IS the prompt and
@@ -88,27 +118,42 @@ function normalisePart(raw, i, total, qIndex) {
 export function normaliseQuestion(raw, qIndex = 0) {
     const q = raw && typeof raw === "object" ? raw : {};
     const rawParts = Array.isArray(q.parts) ? q.parts.filter(isPart) : [];
+    const stimulus = normaliseStimulus(q.stimulus);
 
     if (rawParts.length > 0) {
         const parts = rawParts.map((p, i) => normalisePart(p, i, rawParts.length, qIndex));
         return {
             index: qIndex,
             stem: q.question || q.stem || "",
+            stimulus,
             multipart: true,
             parts,
             marks: parts.reduce((sum, p) => sum + p.marks, 0),
         };
     }
 
-    // Legacy: the question IS the part.
+    // Legacy: the question IS the part. A quiz generated before this existed
+    // has no stimulus and gets null, which every renderer draws as nothing.
     const only = normalisePart(q, 0, 1, qIndex);
     return {
         index: qIndex,
         stem: q.question || "",
+        stimulus,
         multipart: false,
         parts: [{ ...only, prompt: only.prompt || q.question || "" }],
         marks: only.marks,
     };
+}
+
+/**
+ * The stimulus as the MODEL should see it — inside a generate or a marking
+ * prompt. Marking without it is the same failure from the other side: an
+ * examiner asked to judge an answer to a question they cannot read.
+ */
+export function stimulusText(question) {
+    const st = normaliseStimulus(question?.stimulus);
+    if (!st) return "";
+    return `[${st.label || "Source material"}]\n${st.content}`;
 }
 
 /** Every question in a quiz, normalised. Returns [] for anything unreadable. */
@@ -181,6 +226,86 @@ export function formatGeneratedParts(raw, marksValue = DEFAULT_SHORT_MARKS) {
     // it — the caller drops it rather than rendering an empty shell.
     return parts;
 }
+
+/**
+ * Does this question's text refer to material it does not carry?
+ *
+ * A REFERENCE WITHOUT A SOURCE IS AN UNANSWERABLE QUESTION, and the failure is
+ * silent: it renders perfectly and the student simply cannot do it. Every
+ * generator runs this over what came back so the problem is caught where it was
+ * produced rather than in front of somebody sitting the paper.
+ *
+ * Deliberately narrow. It matches the phrasings that POINT AT A NAMED ARTEFACT
+ * the model was reading and did not reproduce — a source, an extract, a figure,
+ * a page. It does NOT match "the following", "below" or "above", which refer to
+ * the question's own text, or a bare "the graph" with no locator, because a
+ * question can legitimately describe one in words. Guessing wide here would
+ * throw away good questions, which is the worse error of the two.
+ */
+const DANGLING = [
+    /\b(?:refer(?:ring)? to|according to|using|from|in|see)\s+(?:the\s+)?(?:source|extract|passage|stimulus|case\s*study|document|text)\b/i,
+    /\bsource\s+[A-Z0-9]\b/,
+    /\b(?:figure|fig\.?|table|diagram|graph|image|exhibit|appendix)\s*\d/i,
+    /\b(?:on|from|see)\s+page\s*\d/i,
+    /\bthe\s+(?:above|attached|provided|accompanying)\s+(?:source|extract|passage|text|document|case\s*study)\b/i,
+];
+
+export function referencesMissingSource(raw) {
+    if (normaliseStimulus(raw?.stimulus)) return false;
+    const text = [
+        raw?.question, raw?.stem,
+        ...(Array.isArray(raw?.parts) ? raw.parts.map((p) => p?.prompt || p?.question) : []),
+    ].filter(Boolean).join("\n");
+    if (!text) return false;
+    return DANGLING.some((re) => re.test(text));
+}
+
+/**
+ * THE RULE, WRITTEN ONCE. Four generators produce questions — the main quiz
+ * builder, reshuffle, the exam simulator and Active Recall — and a prompt rule
+ * pasted into four files is the copy that rots: three of them get a fix and the
+ * fourth quietly keeps shipping unanswerable questions. Imported, never
+ * mirrored, the same way `market.js` and `megaUpload.js` are.
+ */
+export const STIMULUS_RULE = `=== SOURCE MATERIAL (CRITICAL) ===
+A QUESTION MAY ONLY REFER TO MATERIAL IT CARRIES. If a question mentions a source, extract, passage, case study, data table, figure, graph or page — anything the student has to READ in order to answer it — you MUST reproduce that material IN FULL in that question's "stimulus" field.
+- "stimulus" is { "label": "Source A" / "Table 2" / "Case study: Bhopal", "content": "the material itself" }.
+- It belongs to the QUESTION, not to a part: one source, then parts (a), (b), (c) about it, the way a real paper sets it.
+- Reproduce text VERBATIM. A paraphrase changes what the question is testing.
+- For a table or a figure, write it out as a markdown table, or state every value and label in it. The student cannot see the original file — only what you put here.
+- Refer to it by the SAME label you gave it. Write "Using Source A" only when the stimulus label is "Source A".
+- NEVER write "refer to the case study on page 14", "see Figure 2", "according to the passage above" or "using the data provided" unless that exact material is in "stimulus". A student cannot answer it, and it will be marked as though they failed to.
+- Most questions need no source. Omit "stimulus" entirely for those — do not invent one.`;
+
+/**
+ * The same rule for a generator that stores a question as a PLAIN STRING.
+ *
+ * Active Recall keeps `session.questions` as a string array and the exam
+ * simulator reads it back that way, so there is no field to put a source in.
+ * Inlining it is the correct answer there rather than a compromise: the
+ * question renders as one block of text, so a quoted preamble reads exactly
+ * like a paper. The rule itself is unchanged — a question may only refer to
+ * material it carries.
+ */
+export const STIMULUS_RULE_INLINE = `=== SOURCE MATERIAL (CRITICAL) ===
+A QUESTION MAY ONLY REFER TO MATERIAL IT CARRIES. If a question needs a source, extract, passage, case study, data table or figure to be answerable, write that material INTO the question text itself, as a quoted preamble before the task:
+
+  Source A: "<the material, verbatim>"
+  Using Source A, explain ...
+
+- Reproduce text VERBATIM; a paraphrase changes what is being tested.
+- Write a table out as a markdown table, or state every value and label in it. The student cannot see the original file — only what you put in the question.
+- NEVER write "refer to the case study on page 14", "see Figure 2" or "using the data provided" without the material being right there in the question. A student cannot answer it, and it will be marked as though they failed to.
+- Most questions need no source. Do not invent one.`;
+
+/** The `stimulus` property, for a generator's response_json_schema. */
+export const STIMULUS_SCHEMA = {
+    type: "object",
+    properties: {
+        label: { type: "string" },
+        content: { type: "string" },
+    },
+};
 
 /** A human label for a part: "3" or "3b". Used in feedback and headings. */
 export const partTitle = (q, p) =>

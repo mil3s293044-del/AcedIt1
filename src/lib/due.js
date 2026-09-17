@@ -70,6 +70,23 @@ const ACTIVE = new Set(["due", "overdue"]);
 
 export const todayISO = () => new Date().toISOString().split("T")[0];
 
+/**
+ * `.filter(isDue)` PASSES THE ARRAY INDEX AS `today`, and it renders perfectly.
+ *
+ * Array.prototype.filter calls back with (element, index, array), so
+ * `cards.filter(isDue)` is `isDue(card, 0)`, `isDue(card, 1)`, … — and a number
+ * where an ISO date belongs does not throw. `from > today` compares a string
+ * against a number and is false, so nothing is ever SCHEDULED; `daysBetween`
+ * parses NaN and returns 0, so nothing is ever OVERDUE. Every learned card in
+ * the deck comes back "due", including ones scheduled next week.
+ *
+ * That shipped on the deck face for as long as it has existed, and the point-free
+ * form is the one anybody writes. So rather than banning it, every entry point
+ * runs its `today` through this: an ISO day is used, anything else is now.
+ */
+const dayOf = (today) =>
+    (typeof today === "string" && /^\d{4}-\d{2}-\d{2}/.test(today)) ? today : todayISO();
+
 const num = (v) => (Number.isFinite(Number(v)) ? Number(v) : 0);
 
 /** Whole days between two ISO dates. Positive means `a` is later than `b`. */
@@ -94,10 +111,11 @@ export function isLearned(card) {
  * The one state function. Everything else in this file is built on it, and
  * every due count in the app should come through it.
  */
-export function cardState(card, today = todayISO()) {
+export function cardState(card, today) {
+    const day = dayOf(today);
     if (!card) return "scheduled";
     if (card.retired_at) return "known";
-    if (card.snoozed_until && card.snoozed_until > today) return "snoozed";
+    if (card.snoozed_until && card.snoozed_until > day) return "snoozed";
 
     // Never reviewed is new, whatever date is sitting on the row. Cards are
     // created with next_review_date = today, so without this the state would
@@ -106,9 +124,9 @@ export function cardState(card, today = todayISO()) {
 
     const from = dueFrom(card);
     if (!from) return "due";
-    if (from > today) return "scheduled";
+    if (from > day) return "scheduled";
 
-    const late = daysBetween(today, from);
+    const late = daysBetween(day, from);
     return late > OVERDUE_AFTER_DAYS ? "overdue" : "due";
 }
 
@@ -130,24 +148,50 @@ export function dueFrom(card) {
 }
 
 /** Is this card genuinely asking to be reviewed today? */
-export function isDue(card, today = todayISO()) {
-    return ACTIVE.has(cardState(card, today));
+export function isDue(card, today) {
+    return ACTIVE.has(cardState(card, dayOf(today)));
 }
 
 /** Never reviewed, and not put away. Material waiting to be started. */
-export function isNew(card, today = todayISO()) {
-    return cardState(card, today) === "new";
+export function isNew(card, today) {
+    return cardState(card, dayOf(today)) === "new";
 }
 
-/** Counts by state, plus the two rollups every caller wants. */
-export function tally(cards = [], today = todayISO()) {
+/**
+ * READY IS WHAT A COUNT ON A DECK MEANS, and `isDue` alone was the wrong
+ * number everywhere it was used as one.
+ *
+ * Separating new from due was right and stays right: they are different
+ * things, and a fresh deck is not a backlog. But `new` is not NOTHING, and
+ * printing a pile as `isDue` alone quietly deletes it. A student with a
+ * 50-card deck, 10 reviewed and 40 never opened, was shown **10** — and a deck
+ * nobody had opened yet said **"All caught up"**, over fifty cards they had
+ * just generated and could sit immediately.
+ *
+ * So the distinction lives where it is USEFUL — the audit screen, which exists
+ * to take a pile apart, and a per-card label, which has room to say which one
+ * it is — and every COUNT of "what can I sit right now" is ready.
+ *
+ * The word matters as much as the sum. "50 due" would be the phantom pile this
+ * file was written to kill; "50 ready" claims nothing about being behind.
+ */
+export function isReady(card, today) {
+    const s = cardState(card, dayOf(today));
+    return ACTIVE.has(s) || s === "new";
+}
+
+/** Counts by state, plus the rollups every caller wants. */
+export function tally(cards = [], today) {
+    const day = dayOf(today);
     const out = { known: 0, snoozed: 0, new: 0, overdue: 0, due: 0, scheduled: 0 };
-    for (const c of cards) out[cardState(c, today)] += 1;
+    for (const c of cards) out[cardState(c, day)] += 1;
     return {
         ...out,
         total: cards.length,
-        /** What the dashboard should print. Not the backlog, not the new pile. */
+        /** Genuinely lapsed. The audit screen's "asking for you". */
         active: out.due + out.overdue,
+        /** Everything that can be sat right now. What a deck face prints. */
+        ready: out.due + out.overdue + out.new,
     };
 }
 
@@ -174,7 +218,8 @@ function priority(card, today) {
  * 272 behind" rather than either number on its own. Showing only the cap hides
  * a real backlog; showing only the backlog is the wallpaper problem above.
  */
-export function dueQueue(cards = [], { cap = DAILY_CAP, newCap = NEW_PER_DAY, today = todayISO() } = {}) {
+export function dueQueue(cards = [], { cap = DAILY_CAP, newCap = NEW_PER_DAY, today } = {}) {
+    today = dayOf(today);
     const due = [];
     const fresh = [];
     for (const c of cards) {
@@ -230,7 +275,8 @@ export function reasonFor(pile) {
  * deliberately — the point of an audit is to see what the app is doing with
  * your cards, including the ones it has stopped asking about.
  */
-export function auditPiles(cards = [], today = todayISO()) {
+export function auditPiles(cards = [], today) {
+    today = dayOf(today);
     const bySubject = new Map();
 
     for (const card of cards) {
@@ -302,8 +348,8 @@ export function markUnknown() {
 }
 
 /** Push a card out by n days without claiming to know it. */
-export function snoozeFor(days, today = todayISO()) {
-    const d = new Date(`${today}T00:00:00Z`);
+export function snoozeFor(days, today) {
+    const d = new Date(`${dayOf(today)}T00:00:00Z`);
     d.setUTCDate(d.getUTCDate() + Math.max(1, Math.round(days)));
     return { snoozed_until: d.toISOString().split("T")[0] };
 }
