@@ -33,9 +33,29 @@
  * column names and embedded PostgREST selects are skipped rather than guessed
  * at — a checker that cries wolf gets deleted, and the narrow version already
  * catches the bug that shipped.
+ *
+ * ─── AND IT ONLY EVER COVERED HALF THE APP ──────────────────────────────────
+ * The exact bug above then shipped again, on the other side. `Settings.jsx`
+ * read a student's received shares as
+ *
+ *     base44.entities.SharedFlashcard.filter({ recipient_email: userEmail })
+ *
+ * and `shared_flashcards` HAS NO `recipient_email` — only `friendships` does;
+ * these tables name the receiver `shared_with_email`, which the line directly
+ * above it gets right for quizzes. PostgREST rejected it, the bare
+ * `Promise.all` it sat in rejected with it, and **"delete my account" failed
+ * for every student on the site**, every time, with "Please try again."
+ *
+ * This file could not see it, because the client does not write
+ * `.from("table")` — it goes through the entity shim as
+ * `base44.entities.Entity.filter({ … })`, and the entity→table map lives in
+ * `supabaseClient.js`. So the guard reads that map and scans the client too.
+ * One idiom per side, one schema, one rule: a column named anywhere has to
+ * exist on the table it is named on.
  */
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { readFileSync, readdirSync } from "node:fs";
+import { join } from "node:path";
 
 let passed = 0;
 const check = (name, fn) => {
@@ -149,6 +169,213 @@ check("every table server.mjs queries actually exists", () => {
         .filter((t) => !schema[t]);
     assert.deepEqual(unknown, [],
         `\n      server.mjs queries tables with no migration: ${unknown.join(", ")}\n`);
+});
+
+// ─── THE CLIENT HALF ────────────────────────────────────────────────────────
+
+/** `Entity: 'table_name'` out of supabaseClient.js — the shim's own map. */
+function entityTables() {
+    const src = readFileSync("src/api/supabaseClient.js", "utf8");
+    const out = {};
+    for (const m of src.matchAll(/^\s*(\w+):\s*'([a-z_]+)',/gm)) out[m[1]] = m[2];
+    return out;
+}
+
+/** Every `.jsx`/`.js` under src, so nothing opts out by living somewhere new. */
+function clientFiles() {
+    const walk = (dir) => readdirSync(dir, { withFileTypes: true }).flatMap((e) => {
+        const full = join(dir, e.name);
+        if (e.isDirectory()) return walk(full);
+        return /\.jsx?$/.test(e.name) ? [full] : [];
+    });
+    return walk("src");
+}
+
+/**
+ * `Entity.filter({ column: … })` / `.create({ … })` / `.update(id, { … })`,
+ * wherever they are written — `base44.entities.X.` or a bare imported `X.`.
+ *
+ * ─── TOP-LEVEL KEYS ONLY, and that is the whole difficulty ──────────────────
+ * The first version read every key inside the argument and reported thirteen
+ * false positives immediately, because a payload nests:
+ *
+ *     SharedFlashcard.create({
+ *       flashcard_data: deck.cards.map(c => ({ question: c.question, … })),
+ *     })
+ *
+ * `question` is a key on a CARD, not a column on `shared_flashcards`, and a
+ * checker that flags it is one nobody will keep. So the argument is walked
+ * with a brace/paren depth counter rather than matched with a regex — which
+ * also fixes the capture itself, since `[^)]*` ends at the first `)` and a
+ * payload built with `.map(…)` has several.
+ *
+ * A spread, a computed key or a variable is SKIPPED rather than guessed at,
+ * for the reason the server half already gives.
+ */
+function entityRefs(src, file, map) {
+    const refs = [];
+    const names = Object.keys(map).join("|");
+    if (!names) return refs;
+    const call = new RegExp(
+        `(?:base44\\.entities\\.)?\\b(${names})\\.(filter|create|update)\\(`, "g");
+
+    for (const m of src.matchAll(call)) {
+        const entity = m[1];
+        const kind = m[2];
+        const open = m.index + m[0].length;          // just past the "("
+
+        // Walk to the matching ")", tracking every nesting a payload can use.
+        let depth = 1;
+        let i = open;
+        for (; i < src.length && depth > 0; i += 1) {
+            const c = src[i];
+            if (c === "(" || c === "{" || c === "[") depth += 1;
+            else if (c === ")" || c === "}" || c === "]") depth -= 1;
+        }
+        const args = src.slice(open, i - 1);
+
+        // The FIRST object literal at the top level of the argument list is the
+        // one holding columns — `update(id, { … })` puts it second.
+        let d = 0;
+        let start = -1;
+        for (let j = 0; j < args.length; j += 1) {
+            const c = args[j];
+            if (c === "{") { if (d === 0) start = j; d += 1; }
+            else if (c === "}") { d -= 1; if (d === 0) break; }
+            else if (c === "(" || c === "[") d += 1;
+            else if (c === ")" || c === "]") d -= 1;
+        }
+        if (start === -1) continue;
+
+        // Keys at depth 1 of that literal, and nothing deeper.
+        const line = src.slice(0, m.index).split("\n").length;
+        let k = start + 1;
+        let level = 1;
+        let atKey = true;
+        while (k < args.length && level > 0) {
+            const c = args[k];
+            if (c === "{" || c === "(" || c === "[") { level += 1; atKey = false; }
+            else if (c === "}" || c === ")" || c === "]") { level -= 1; }
+            else if (c === "," && level === 1) atKey = true;
+            else if (level === 1 && atKey && /[\w"']/.test(c)) {
+                const rest = args.slice(k);
+                const key = rest.match(/^(?:(\w+)|["'](\w+)["'])\s*:/);
+                // A spread or anything that is not a plain key ends this
+                // literal's usefulness — it could carry any column at all.
+                if (!key) {
+                    if (/^\.\.\./.test(rest)) { atKey = false; k += 1; continue; }
+                    atKey = false;
+                    k += 1;
+                    continue;
+                }
+                refs.push({ file, line, entity, kind, table: map[entity], column: key[1] || key[2] });
+                atKey = false;
+                k += key[0].length;
+                continue;
+            }
+            k += 1;
+        }
+    }
+    return refs;
+}
+
+check("the entity map is readable and covers the shared tables", () => {
+    const map = entityTables();
+    assert.ok(Object.keys(map).length > 20, `only ${Object.keys(map).length} entities parsed`);
+    assert.equal(map.SharedFlashcard, "shared_flashcards");
+    assert.equal(map.Friendship, "friendships");
+});
+
+/**
+ * The ONE file this scan does not read, and the reason is structural.
+ *
+ * `AdminIPPanel.jsx` writes `is_permanent`, `blocked_at`, `block_reason` and
+ * `is_blocked_ip` to `blocked_ips`, none of which exist. Correcting them would
+ * change nothing: migration 0003 enables RLS on that table with NO POLICIES —
+ * "intentionally no policies — service_role only" in its own words — so a
+ * client page holding the anon key can never read or write it whatever it
+ * names. The panel is unreachable by design, and the three admin functions it
+ * belongs with are the ones CLAUDE.md lists as deferred post-cutover.
+ *
+ * The exemption is guarded by the check below rather than taken on trust: if
+ * that table ever gets a policy, this list stops being true and the suite says
+ * so. And if the panel is ported to `server.mjs` where it belongs, the SERVER
+ * half of this file picks it up with no exemption at all.
+ */
+const SERVICE_ROLE_ONLY = new Set(["src/pages/AdminIPPanel.jsx"]);
+
+check("the exempted file is genuinely unreachable, not just inconvenient", () => {
+    const sql = readFileSync("supabase/migrations/0003_remaining_tables.sql", "utf8");
+    const block = sql.slice(sql.indexOf("create table public.blocked_ips"));
+    assert.match(block.slice(0, 900), /service_role only/,
+        "blocked_ips is no longer service-role only — AdminIPPanel's columns now matter");
+});
+
+check("EVERY COLUMN THE CLIENT NAMES EXISTS ON THE TABLE IT NAMES IT ON", () => {
+    const map = entityTables();
+    const problems = [];
+    for (const file of clientFiles()) {
+        if (file.endsWith("dbColumns.test.mjs")) continue;
+        if (SERVICE_ROLE_ONLY.has(file.split(/[\\/]/).join("/"))) continue;
+        for (const ref of entityRefs(readFileSync(file, "utf8"), file, map)) {
+            const cols = schema[ref.table];
+            if (!cols) continue;
+            if (!cols.includes(ref.column)) {
+                problems.push(
+                    `${ref.file}:${ref.line} — ${ref.entity}.${ref.kind}({ ${ref.column} }) on `
+                    + `"${ref.table}", which has no such column. Did you mean: `
+                    + `${cols.filter((c) => c.includes(ref.column.slice(0, 5))
+                        || ref.column.includes(c.slice(0, 5))).slice(0, 3).join(", ") || "—"}?`);
+            }
+        }
+    }
+    assert.deepEqual(problems, [], `\n      ${problems.join("\n      ")}\n`);
+});
+
+check("the client scanner recognises the shape it is looking for", () => {
+    // Verified by putting the real bug back, the way fnResult.test.mjs was.
+    const map = { SharedFlashcard: "shared_flashcards" };
+    const bug = entityRefs(
+        'base44.entities.SharedFlashcard.filter({ recipient_email: userEmail })', "x.jsx", map);
+    assert.equal(bug.length, 1);
+    assert.equal(bug[0].column, "recipient_email");
+    assert.equal(schema.shared_flashcards.includes("recipient_email"), false,
+        "the column this bug named still must not exist");
+
+    // A bare imported entity is the same call and must be caught too.
+    assert.equal(entityRefs('SharedFlashcard.filter({ status: "pending" })', "x.jsx", map)[0].column,
+        "status");
+    // Several keys in one literal are several references.
+    assert.equal(entityRefs(
+        'SharedFlashcard.filter({ shared_with_email: a, status: "pending" })', "x.jsx", map).length, 2);
+
+    // AND A NESTED PAYLOAD IS NOT COLUMNS. This is what thirteen false
+    // positives looked like before the walker replaced the regex.
+    const nested = entityRefs(
+        'SharedFlashcard.create({ deck_id: d.id, flashcard_data: cards.map(c => ({ question: c.q,'
+        + ' answer: c.a })), status: "pending" })', "x.jsx", map);
+    assert.deepEqual(nested.map((r) => r.column), ["deck_id", "flashcard_data", "status"]);
+});
+
+check("a spread hides its own keys and NOT the ones beside it", () => {
+    const map = { SharedFlashcard: "shared_flashcards" };
+    // The spread's contents are unknowable, so they are skipped — but the keys
+    // written out next to it are named right there and are checkable. Skipping
+    // the whole literal would leave `Flashcard.create({ ...c, deck_id, … })`,
+    // which is how a shared deck is actually imported, entirely unguarded.
+    const mixed = entityRefs('SharedFlashcard.create({ ...card, status: "x" })', "x.jsx", map);
+    assert.deepEqual(mixed.map((r) => r.column), ["status"]);
+});
+
+check("and it refuses the shapes it genuinely cannot read", () => {
+    const map = { SharedFlashcard: "shared_flashcards" };
+    // A computed key is unknowable at rest, so nothing is claimed about it.
+    assert.deepEqual(entityRefs('SharedFlashcard.filter({ [key]: v })', "x.jsx", map), []);
+    // An id-first update still finds its patch, which is the second argument.
+    assert.equal(entityRefs('SharedFlashcard.update(sf.id, { status: "accepted" })', "x.jsx", map)[0]
+        .column, "status");
+    // A call with no literal at all has nothing to say.
+    assert.deepEqual(entityRefs("SharedFlashcard.filter(query)", "x.jsx", map), []);
 });
 
 console.log(`\n${passed} passed`);

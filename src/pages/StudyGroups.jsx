@@ -79,7 +79,11 @@ export default function StudyGroups() {
 
     const loadGroups = async (userEmail) => {
         try {
-            const allGroups = await base44.entities.StudyGroup.filter({ is_active: true });
+            // NO `is_active` ON `study_groups`. There never has been — the
+            // column is imagined, so PostgREST rejected the filter and this
+            // page loaded NOTHING for anybody, on every visit. Membership is
+            // what decides which groups are yours and it is applied just below.
+            const allGroups = await base44.entities.StudyGroup.filter({});
             
             const userGroups = allGroups.filter(g => 
                 g.owner_email === userEmail || g.member_emails?.includes(userEmail)
@@ -155,7 +159,7 @@ export default function StudyGroups() {
         }
 
         try {
-            const queriedGroups = await base44.entities.StudyGroup.filter({ join_code: joinCode.toUpperCase(), is_active: true });
+            const queriedGroups = await base44.entities.StudyGroup.filter({ join_code: joinCode.toUpperCase() });
             if (queriedGroups.length === 0) {
                 toast({ title: "Invalid code", description: "No group found with this code.", variant: "destructive" });
                 return;
@@ -296,7 +300,12 @@ export default function StudyGroups() {
         if (!confirm("Are you sure you want to delete this group? This action cannot be undone.")) return;
 
         try {
-            await base44.entities.StudyGroup.update(groupId, { is_active: false });
+            // A REAL delete, because the soft one was written against a column
+            // that does not exist. Every child table — messages, shared
+            // resources, decks — is `on delete cascade` (migration 0003), so
+            // nothing is orphaned, and the confirm above already promises this
+            // cannot be undone.
+            await base44.entities.StudyGroup.delete(groupId);
             toast({ title: "Group deleted", description: "The study group has been removed." });
             setSelectedGroup(null);
             await loadGroups(user.email);

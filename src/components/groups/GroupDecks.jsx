@@ -62,17 +62,21 @@ export default function GroupDecks({ group, user }) {
         }
 
         try {
+            // The column is `name`, the creator is `created_by` (stamped by the
+            // shim), and `contributors` has no column at all — it rides in
+            // `extra`, the way every other per-row detail in this app does.
+            // Written the old way the insert 400'd, so a group deck has never
+            // once been created.
             await GroupFlashcardDeck.create({
-                ...newDeck,
+                name: newDeck.deck_name,
+                subject_name: newDeck.subject_name,
+                topic: newDeck.topic,
                 group_id: group.id,
-                created_by_email: user.email,
-                created_by_name: user.full_name,
                 cards: [],
-                contributors: [{
-                    email: user.email,
-                    name: user.full_name,
-                    cards_added: 0
-                }]
+                extra: {
+                    created_by_name: user.full_name,
+                    contributors: [{ email: user.email, name: user.full_name, cards_added: 0 }],
+                },
             });
 
             // Send notification to group
@@ -113,7 +117,7 @@ export default function GroupDecks({ group, user }) {
             ];
 
             // Update contributors
-            const contributors = selectedDeck.contributors || [];
+            const contributors = selectedDeck.extra?.contributors || [];
             const existingContributor = contributors.find(c => c.email === user.email);
             
             const updatedContributors = existingContributor
@@ -126,13 +130,13 @@ export default function GroupDecks({ group, user }) {
 
             await GroupFlashcardDeck.update(selectedDeck.id, {
                 cards: updatedCards,
-                contributors: updatedContributors
+                extra: { ...(selectedDeck.extra || {}), contributors: updatedContributors },
             });
 
             toast({ title: "Card added!" });
             setIsAddingCard(false);
             setNewCard({ question: "", answer: "" });
-            setSelectedDeck({ ...selectedDeck, cards: updatedCards, contributors: updatedContributors });
+            setSelectedDeck({ ...selectedDeck, cards: updatedCards, extra: { ...(selectedDeck.extra || {}), contributors: updatedContributors } });
             await loadDecks();
         } catch (error) {
             console.error("Error adding card:", error);
@@ -198,7 +202,7 @@ export default function GroupDecks({ group, user }) {
 
     // Deck Detail View
     if (selectedDeck) {
-        const isCreator = selectedDeck.created_by_email === user.email;
+        const isCreator = selectedDeck.created_by === user.email;
         const canEdit = !selectedDeck.is_locked || isCreator;
 
         return (
@@ -215,7 +219,7 @@ export default function GroupDecks({ group, user }) {
                         <div className="flex items-start justify-between">
                             <div className="flex-1">
                                 <CardTitle className="text-2xl mb-2 flex items-center gap-2">
-                                    {selectedDeck.deck_name}
+                                    {selectedDeck.name}
                                     {isCreator && <Crown className="w-5 h-5 text-yellow-500" />}
                                     {selectedDeck.is_locked ? (
                                         <Lock className="w-4 h-4 text-muted-foreground/60" />
@@ -230,7 +234,7 @@ export default function GroupDecks({ group, user }) {
                                     </Badge>
                                     <Badge variant="outline">
                                         <Users className="w-3 h-3 mr-1" />
-                                        {selectedDeck.contributors?.length || 0} contributors
+                                        {selectedDeck.extra?.contributors?.length || 0} contributors
                                     </Badge>
                                 </div>
                             </div>
@@ -399,8 +403,8 @@ export default function GroupDecks({ group, user }) {
                             >
                                 <CardHeader>
                                     <CardTitle className="flex items-center gap-2">
-                                        {deck.deck_name}
-                                        {deck.created_by_email === user.email && (
+                                        {deck.name}
+                                        {deck.created_by === user.email && (
                                             <Crown className="w-4 h-4 text-yellow-500" />
                                         )}
                                     </CardTitle>
@@ -418,7 +422,7 @@ export default function GroupDecks({ group, user }) {
                                             <span className="text-muted-foreground">Contributors</span>
                                             <Badge variant="outline">
                                                 <Users className="w-3 h-3 mr-1" />
-                                                {deck.contributors?.length || 0}
+                                                {deck.extra?.contributors?.length || 0}
                                             </Badge>
                                         </div>
                                         <div className="pt-2">

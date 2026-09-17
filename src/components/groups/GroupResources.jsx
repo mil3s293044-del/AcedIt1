@@ -18,8 +18,8 @@ import {
 } from "lucide-react";
 import { GroupSharedResource, Flashcard, Quiz, AISavedResult, GroupMessage } from "@/entities/all";
 import { saveResult } from '@/lib/saveResult';
+import { importedDeck } from "@/lib/sharedDeck";
 import { useToast } from "@/components/ui/use-toast";
-import { format, addDays } from "date-fns";
 import { fmtDate } from "@/lib/safeDate";
 import AceShuffle from "@/components/ace/AceShuffle";
 import { deckCards } from "@/lib/mistakeBank";
@@ -160,7 +160,11 @@ export default function GroupResources({ group, user }) {
                 resource_data: resourceData,
                 subject_name: subject,
                 topic: topic || "",
-                imported_by_emails: [] // Added imported_by_emails field
+                // `imported_by_emails` and `imports_count` have no columns —
+                // they ride in `extra`. Named at the top level the insert and
+                // the update both 400'd, so sharing to a group failed outright
+                // and "already imported" could never be true.
+                extra: { imported_by_emails: [] },
             });
 
             // Send notification to group
@@ -185,7 +189,7 @@ export default function GroupResources({ group, user }) {
 
     const handleImportResource = async (resource) => {
         // Check if user has already imported this resource
-        if (resource.imported_by_emails?.includes(user.email)) {
+        if (resource.extra?.imported_by_emails?.includes(user.email)) {
             toast({ 
                 title: "Already imported", 
                 description: "You've already added this resource to your library.",
@@ -210,23 +214,19 @@ export default function GroupResources({ group, user }) {
                     return;
                 }
 
-                for (const card of cards) {
-                    await Flashcard.create({
-                        subject_name: card.subject_name,
-                        topic: card.topic,
-                        deck_id: deckId,
-                        question: card.question,
-                        answer: card.answer,
-                        interval_days: 1,
-                        repetitions: 0,
-                        easiness_factor: 2.5,
-                        next_review_date: format(addDays(new Date(), 1), 'yyyy-MM-dd'),
-                        total_reviews: 0,
-                        is_active: true, // Added is_active for new flashcards
-                        created_by: user.email // Ensure user's email is set for new flashcards
-                    });
+                // `importedDeck`, in ONE round trip. This loop wrote its own
+                // answer to what an imported card looks like and got two things
+                // wrong: it dropped `unit`, which the review shelf keys decks
+                // on, so an imported deck split off under a blank unit; and it
+                // dated every card to tomorrow, hiding a deck for a day on the
+                // screen the student just imported it to use.
+                const rows = importedDeck(cards, deckId);
+                if (!rows.length) {
+                    toast({ title: "No cards to import", description: "This deck appears to be empty.", variant: "destructive" });
+                    return;
                 }
-                toast({ title: "Flashcards imported!", description: `Added ${cards.length} cards to your collection` });
+                await Flashcard.bulkCreate(rows);
+                toast({ title: "Flashcards imported!", description: `Added ${rows.length} cards to your collection` });
             } else if (resource.resource_type === "quiz") {
                 await Quiz.create({
                     title: resource.resource_data.title,
@@ -249,11 +249,14 @@ export default function GroupResources({ group, user }) {
                 toast({ title: "AI result saved!", description: "Added to your saved results" });
             }
 
-            // Update import count and add user to imported_by_emails
-            const updatedImportedBy = [...(resource.imported_by_emails || []), user.email];
+            // Import count and importers live in `extra` — see the share above.
+            const prev = resource.extra || {};
             await GroupSharedResource.update(resource.id, {
-                imports_count: (resource.imports_count || 0) + 1,
-                imported_by_emails: updatedImportedBy
+                extra: {
+                    ...prev,
+                    imports_count: (prev.imports_count || 0) + 1,
+                    imported_by_emails: [...(prev.imported_by_emails || []), user.email],
+                },
             });
 
             await loadResources();
@@ -354,7 +357,7 @@ export default function GroupResources({ group, user }) {
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                     {filteredResources.map((resource, index) => {
                         const Icon = getResourceIcon(resource.resource_type);
-                        const hasImported = resource.imported_by_emails?.includes(user.email);
+                        const hasImported = resource.extra?.imported_by_emails?.includes(user.email);
                         
                         return (
                             <motion.div
@@ -398,7 +401,7 @@ export default function GroupResources({ group, user }) {
                                                 </span>
                                                 <span className="flex items-center gap-1">
                                                     <Download className="w-3 h-3" />
-                                                    {resource.imports_count || 0}
+                                                    {resource.extra?.imports_count || 0}
                                                 </span>
                                             </div>
                                             <Button

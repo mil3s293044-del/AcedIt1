@@ -21,6 +21,7 @@ import {
     Users, UserPlus, ChevronLeft, FileText, ListChecks
 } from "lucide-react";
 import { base44 } from "@/api/base44Client";
+import { outgoingDeck } from "@/lib/sharedDeck";
 import { acceptFiles, uploadAll, STUDY_ACCEPT, STUDY_ACCEPT_LABEL } from "@/lib/pickFiles";
 import MegaPicker from "@/components/shared/MegaPicker";
 import { PRICE } from "@/lib/chips";
@@ -306,8 +307,17 @@ export default function SpacedRepetition() {
 
     const loadGroups = async () => {
         try {
-            const groupsData = await base44.entities.StudyGroup.filter({ member_emails: user.email, is_active: true });
-            setGroups(groupsData || []);
+            // Two things were wrong and each one alone emptied this list.
+            // `study_groups` has no `is_active` column — a group is deleted
+            // outright rather than flagged — so the filter 400'd. And
+            // `member_emails` is a `text[]`: the shim turns a scalar into an
+            // `eq`, which compares the whole array against one address and
+            // matches nothing. Membership is applied here, the same way
+            // StudyGroups.jsx does it.
+            const allGroups = await base44.entities.StudyGroup.filter({});
+            setGroups((allGroups || []).filter(
+                g => g.owner_email === user.email || g.member_emails?.includes(user.email)
+            ));
         } catch (error) { console.error(error); }
     };
 
@@ -577,7 +587,11 @@ The documents provided may be PowerPoint slides, Word documents, PDFs or text fi
     const handleShareDeck = async () => {
         if (!selectedFriends.length && !selectedGroups.length) { toast({ title: "No recipients", variant: "destructive" }); return; }
         try {
-            const deckData = sharingDeck.cards.map(card => ({ subject_name: sharingDeck.subject_name, subject_code: sharingDeck.subject_code, unit: sharingDeck.unit, topic: sharingDeck.topic, question: card.question, answer: card.answer }));
+            // One answer to "what does a shared deck carry", shared with
+            // Friends.jsx and with the group importer. `subject_code` used to
+            // ride along here — seventy lines under this file's own comment
+            // saying flashcards has no such column — and 400'd every accept.
+            const deckData = outgoingDeck(sharingDeck);
             const promises = [];
             if (selectedFriends.length > 0) promises.push(...selectedFriends.map(friendEmail => base44.entities.SharedFlashcard.create({ deck_id: sharingDeck.id, deck_name: `${sharingDeck.subject_name} - ${sharingDeck.topic}`, shared_by_email: user.email, shared_by_name: user.full_name, shared_with_email: friendEmail, shared_with_name: friends.find(f => f.email === friendEmail)?.full_name || "", flashcard_data: deckData, status: 'pending' })));
             if (selectedGroups.length > 0) promises.push(...selectedGroups.map(groupId => base44.entities.GroupSharedResource.create({ group_id: groupId, resource_type: "flashcard_deck", title: `${sharingDeck.subject_name} - ${sharingDeck.topic}`, description: `Flashcard deck with ${deckData.length} cards`, shared_by_email: user.email, shared_by_name: user.full_name, resource_data: { flashcards: deckData }, subject_name: sharingDeck.subject_name, topic: sharingDeck.topic, tags: [sharingDeck.subject_name, sharingDeck.unit] })));
