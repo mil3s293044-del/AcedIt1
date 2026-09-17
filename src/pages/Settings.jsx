@@ -40,6 +40,44 @@ const TIER_META = {
     premium: { label: "Premium", icon: Crown,    accent: "chart-4",          bg: "bg-chart-4/10",       text: "text-chart-4" },
 };
 
+/**
+ * Every table this account owns, each one NAMED, because a deletion that
+ * half-worked has to be able to say which part is still on file.
+ *
+ * The pair (read, remove) stays together deliberately: a table read under one
+ * column and deleted through a different entity is the shape the
+ * `recipient_email` bug already took here, and splitting the two lists apart
+ * is what let the reads and the deletes drift in the first place.
+ */
+const accountTables = (email) => [
+    { label: "Profile",            read: () => base44.entities.UserProfile.filter({ created_by: email }),           remove: (r) => base44.entities.UserProfile.delete(r.id) },
+    { label: "Study sessions",     read: () => base44.entities.StudySession.filter({ created_by: email }),          remove: (r) => base44.entities.StudySession.delete(r.id) },
+    { label: "Study techniques",   read: () => base44.entities.StudyTechnique.filter({ created_by: email }),        remove: (r) => base44.entities.StudyTechnique.delete(r.id) },
+    { label: "Streaks",            read: () => base44.entities.StudyStreak.filter({ created_by: email }),           remove: (r) => base44.entities.StudyStreak.delete(r.id) },
+    { label: "Flashcards",         read: () => base44.entities.Flashcard.filter({ created_by: email }),             remove: (r) => base44.entities.Flashcard.delete(r.id) },
+    { label: "Quizzes",            read: () => base44.entities.Quiz.filter({ created_by: email }),                  remove: (r) => base44.entities.Quiz.delete(r.id) },
+    { label: "Quiz attempts",      read: () => base44.entities.QuizAttempt.filter({ created_by: email }),           remove: (r) => base44.entities.QuizAttempt.delete(r.id) },
+    { label: "Goals",              read: () => base44.entities.Goal.filter({ created_by: email }),                  remove: (r) => base44.entities.Goal.delete(r.id) },
+    { label: "Assessments",        read: () => base44.entities.SubjectAssessment.filter({ created_by: email }),     remove: (r) => base44.entities.SubjectAssessment.delete(r.id) },
+    { label: "Subjects",           read: () => base44.entities.UserSubject.filter({ created_by: email }),           remove: (r) => base44.entities.UserSubject.delete(r.id) },
+    { label: "Study plans",        read: () => base44.entities.StudyPlan.filter({ created_by: email }),             remove: (r) => base44.entities.StudyPlan.delete(r.id) },
+    { label: "Saved AI results",   read: () => base44.entities.AISavedResult.filter({ created_by: email }),         remove: (r) => deleteResult("ai_saved_results", r.id) },
+    { label: "Friends",            read: () => base44.entities.Friendship.filter({ requester_email: email }),       remove: (r) => base44.entities.Friendship.delete(r.id) },
+    { label: "Friends",            read: () => base44.entities.Friendship.filter({ recipient_email: email }),       remove: (r) => base44.entities.Friendship.delete(r.id) },
+    // `shared_with_email`, NOT `recipient_email`. Only `friendships` has a
+    // `recipient_email` — these three tables name the receiver the way
+    // `shared_quizzes` does, and the mismatch 400'd PostgREST, rejected the
+    // whole read phase, and made "delete my account" fail for everybody.
+    { label: "Shared quizzes",     read: () => base44.entities.SharedQuiz.filter({ shared_with_email: email }),     remove: (r) => base44.entities.SharedQuiz.delete(r.id) },
+    { label: "Shared decks",       read: () => base44.entities.SharedFlashcard.filter({ shared_with_email: email }), remove: (r) => base44.entities.SharedFlashcard.delete(r.id) },
+    { label: "Shared AI results",  read: () => base44.entities.SharedAIResult.filter({ shared_with_email: email }), remove: (r) => base44.entities.SharedAIResult.delete(r.id) },
+    { label: "Active recall",      read: () => base44.entities.ActiveRecallSession.filter({ created_by: email }),   remove: (r) => base44.entities.ActiveRecallSession.delete(r.id) },
+    { label: "Blurting sessions",  read: () => base44.entities.BlurtingSession.filter({ created_by: email }),       remove: (r) => base44.entities.BlurtingSession.delete(r.id) },
+    { label: "Past paper attempts",read: () => base44.entities.PastPaperAttempt.filter({ created_by: email }),      remove: (r) => base44.entities.PastPaperAttempt.delete(r.id) },
+    { label: "Timetables",         read: () => base44.entities.DailyTimetable.filter({ created_by: email }),        remove: (r) => base44.entities.DailyTimetable.delete(r.id) },
+    { label: "Leaderboard entries",read: () => base44.entities.Leaderboard.filter({ user_email: email }),           remove: (r) => base44.entities.Leaderboard.delete(r.id) },
+];
+
 export default function Settings() {
     const { logout } = useAuth();
     const [user, setUser] = useState(null);
@@ -239,82 +277,46 @@ export default function Settings() {
         if (!doubleConfirm) return;
 
         try {
-            const userEmail = user.email;
+            const tables = accountTables(user.email);
 
-            const [
-                userProfiles,
-                studySessions,
-                studyTechniques,
-                studyStreaks,
-                flashcards,
-                quizzes,
-                quizAttempts,
-                goals,
-                assessments,
-                userSubjects,
-                studyPlans,
-                aiResults,
-                friendshipsReq,
-                friendshipsRec,
-                sharedQuizzes,
-                sharedFlashcards,
-                sharedAIResults,
-                activeRecallSessions,
-                blurtingSessions,
-                pastPaperAttempts,
-                dailyTimetables,
-                leaderboardEntries
-            ] = await Promise.all([
-                base44.entities.UserProfile.filter({ created_by: userEmail }),
-                base44.entities.StudySession.filter({ created_by: userEmail }),
-                base44.entities.StudyTechnique.filter({ created_by: userEmail }),
-                base44.entities.StudyStreak.filter({ created_by: userEmail }),
-                base44.entities.Flashcard.filter({ created_by: userEmail }),
-                base44.entities.Quiz.filter({ created_by: userEmail }),
-                base44.entities.QuizAttempt.filter({ created_by: userEmail }),
-                base44.entities.Goal.filter({ created_by: userEmail }),
-                base44.entities.SubjectAssessment.filter({ created_by: userEmail }),
-                base44.entities.UserSubject.filter({ created_by: userEmail }),
-                base44.entities.StudyPlan.filter({ created_by: userEmail }),
-                base44.entities.AISavedResult.filter({ created_by: userEmail }),
-                base44.entities.Friendship.filter({ requester_email: userEmail }),
-                base44.entities.Friendship.filter({ recipient_email: userEmail }),
-                base44.entities.SharedQuiz.filter({ shared_with_email: userEmail }),
-                base44.entities.SharedFlashcard.filter({ recipient_email: userEmail }),
-                base44.entities.SharedAIResult.filter({ recipient_email: userEmail }),
-                base44.entities.ActiveRecallSession.filter({ created_by: userEmail }),
-                base44.entities.BlurtingSession.filter({ created_by: userEmail }),
-                base44.entities.PastPaperAttempt.filter({ created_by: userEmail }),
-                base44.entities.DailyTimetable.filter({ created_by: userEmail }),
-                base44.entities.Leaderboard.filter({ user_email: userEmail })
-            ]);
+            // `allSettled` on BOTH phases. One unreadable table used to discard
+            // the other twenty-one reads, and one rejected delete discarded
+            // every delete that had already landed — so a student saw "Could
+            // not delete account. Please try again." over an account that was
+            // already half gone, forever. What can be removed is removed; what
+            // cannot is NAMED. Same rule `uploadAll` keeps.
+            const reads = await Promise.allSettled(tables.map(t => t.read()));
 
-            const deletePromises = [
-                ...userProfiles.map(r => base44.entities.UserProfile.delete(r.id)),
-                ...studySessions.map(r => base44.entities.StudySession.delete(r.id)),
-                ...studyTechniques.map(r => base44.entities.StudyTechnique.delete(r.id)),
-                ...studyStreaks.map(r => base44.entities.StudyStreak.delete(r.id)),
-                ...flashcards.map(r => base44.entities.Flashcard.delete(r.id)),
-                ...quizzes.map(r => base44.entities.Quiz.delete(r.id)),
-                ...quizAttempts.map(r => base44.entities.QuizAttempt.delete(r.id)),
-                ...goals.map(r => base44.entities.Goal.delete(r.id)),
-                ...assessments.map(r => base44.entities.SubjectAssessment.delete(r.id)),
-                ...userSubjects.map(r => base44.entities.UserSubject.delete(r.id)),
-                ...studyPlans.map(r => base44.entities.StudyPlan.delete(r.id)),
-                ...aiResults.map(r => deleteResult('ai_saved_results', r.id)),
-                ...friendshipsReq.map(r => base44.entities.Friendship.delete(r.id)),
-                ...friendshipsRec.map(r => base44.entities.Friendship.delete(r.id)),
-                ...sharedQuizzes.map(r => base44.entities.SharedQuiz.delete(r.id)),
-                ...sharedFlashcards.map(r => base44.entities.SharedFlashcard.delete(r.id)),
-                ...sharedAIResults.map(r => base44.entities.SharedAIResult.delete(r.id)),
-                ...activeRecallSessions.map(r => base44.entities.ActiveRecallSession.delete(r.id)),
-                ...blurtingSessions.map(r => base44.entities.BlurtingSession.delete(r.id)),
-                ...pastPaperAttempts.map(r => base44.entities.PastPaperAttempt.delete(r.id)),
-                ...dailyTimetables.map(r => base44.entities.DailyTimetable.delete(r.id)),
-                ...leaderboardEntries.map(r => base44.entities.Leaderboard.delete(r.id))
-            ];
+            const stuck = new Set();
+            const removals = [];
+            reads.forEach((res, i) => {
+                const { label, remove } = tables[i];
+                if (res.status !== "fulfilled") {
+                    console.error(`Could not read ${label} while deleting account:`, res.reason);
+                    stuck.add(label);
+                    return;
+                }
+                for (const row of res.value || []) removals.push({ label, run: () => remove(row) });
+            });
 
-            await Promise.all(deletePromises);
+            const removed = await Promise.allSettled(removals.map(d => d.run()));
+            removed.forEach((res, i) => {
+                if (res.status === "fulfilled") return;
+                console.error(`Could not delete ${removals[i].label} while deleting account:`, res.reason);
+                stuck.add(removals[i].label);
+            });
+
+            if (stuck.size > 0) {
+                // The account is NOT logged out here. Signing somebody out of a
+                // half-deleted account leaves them with no way back in to see
+                // what is still on file or to ask us to finish it.
+                toast({
+                    title: "Some of your data is still on file",
+                    description: `Everything else has been deleted. Still there: ${[...stuck].join(", ")}. Try again, or contact support and we will clear the rest.`,
+                    variant: "destructive"
+                });
+                return;
+            }
 
             toast({
                 title: "Account Deleted",

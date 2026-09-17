@@ -13,6 +13,7 @@ import {
     Heart, Trophy
 } from "lucide-react";
 import { base44 } from "@/api/base44Client";
+import { outgoingDeck, importedDeck, importDeckId } from "@/lib/sharedDeck";
 import { useToast } from "@/components/ui/use-toast";
 import HelpButton from "@/components/shared/HelpButton";
 import FriendsLeaderboard from "@/components/friends/FriendsLeaderboard";
@@ -290,7 +291,7 @@ export default function Friends() {
                         deck_id: deck.id, deck_name: `${deck.subject_name} - ${deck.topic}`,
                         shared_by_email: user.email, shared_by_name: user.full_name,
                         shared_with_email: sharingToFriend.email, shared_with_name: sharingToFriend.full_name,
-                        flashcard_data: deck.cards.map(c => ({ subject_name: c.subject_name, subject_code: c.subject_code, unit: c.unit, topic: c.topic, question: c.question, answer: c.answer })),
+                        flashcard_data: outgoingDeck(deck),
                         message: shareMessage, status: "pending"
                     });
                 }),
@@ -334,12 +335,20 @@ export default function Friends() {
     };
 
     const handleAcceptFlashcards = async (sf) => {
-        const newDeckId = `deck_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
-        await Promise.all(sf.flashcard_data.map(c =>
-            base44.entities.Flashcard.create({ ...c, deck_id: newDeckId, is_active: true, session_skip_count: 0, review_count_again: 0, review_count_hard: 0, review_count_good: 0, review_count_easy: 0, consecutive_good: 0, consecutive_easy: 0, is_weak_spot: false })
-        ));
+        // `importedDeck`, never a spread of `flashcard_data`. The blob is
+        // another student's row: spread, it carried `subject_code` — which
+        // flashcards has no column for, so the insert 400'd and accepting a
+        // shared deck failed every time — and would carry their SM-2 state
+        // and `retired_at` with it. See src/lib/sharedDeck.js.
+        const newDeckId = importDeckId();
+        const rows = importedDeck(sf.flashcard_data, newDeckId);
+        if (!rows.length) {
+            toast({ title: "That deck came through empty", variant: "destructive" });
+            return;
+        }
+        await base44.entities.Flashcard.bulkCreate(rows);
         await base44.entities.SharedFlashcard.update(sf.id, { status: 'accepted' });
-        toast({ title: `${sf.flashcard_data.length} flashcards imported!` });
+        toast({ title: `${rows.length} flashcards imported!` });
         await loadData(user);
     };
 

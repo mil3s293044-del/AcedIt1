@@ -77,16 +77,18 @@ export default function AIToolsHistory() {
             const currentUser = await base44.auth.me();
             setUser(currentUser);
 
-            const [results, subjects, friendships] = await Promise.all([
+            // `$or` is a Base44 / Mongo-ism with no equivalent here: the shim
+            // turns every key into an `eq`, so it asked PostgREST for a column
+            // called "or" and 400'd — nobody using this page could see a single
+            // friend to share with. Two filters, merged, the way Friends.jsx
+            // has always done it.
+            const [results, subjects, sent, received] = await Promise.all([
                 base44.entities.AISavedResult.filter({ created_by: currentUser.email }, '-created_date'),
                 base44.entities.UserSubject.filter({ created_by: currentUser.email, is_active: true }),
-                base44.entities.Friendship.filter({
-                    $or: [
-                        { requester_email: currentUser.email, status: 'accepted' },
-                        { recipient_email: currentUser.email, status: 'accepted' }
-                    ]
-                })
+                base44.entities.Friendship.filter({ requester_email: currentUser.email, status: 'accepted' }).catch(() => []),
+                base44.entities.Friendship.filter({ recipient_email: currentUser.email, status: 'accepted' }).catch(() => []),
             ]);
+            const friendships = [...(sent || []), ...(received || [])];
 
             const friendsList = friendships.map(f => {
                 const isSender = f.requester_email === currentUser.email;
@@ -123,17 +125,27 @@ export default function AIToolsHistory() {
         if (!sharingResult) return;
         
         try {
+            // THE COLUMN NAMES ARE THE ONES ITS TWO SIBLINGS USE. This wrote
+            // sender_*/recipient_*/result_id/topic/subject_name, and
+            // `shared_ai_results` has none of them — it names the two sides
+            // `shared_by_*` and `shared_with_*` exactly as `shared_quizzes`
+            // and `shared_flashcards` do. PostgREST rejected every insert, so
+            // "share with a friend" on this page has never once worked.
             await base44.entities.SharedAIResult.create({
-                sender_email: user.email,
-                sender_name: user.full_name,
-                recipient_email: friendEmail,
-                recipient_name: friendName,
-                result_id: sharingResult.id,
+                shared_by_email: user.email,
+                shared_by_name: user.full_name,
+                shared_with_email: friendEmail,
+                shared_with_name: friendName,
+                ai_result_id: sharingResult.id,
                 tool_type: sharingResult.tool_type,
                 title: sharingResult.title || sharingResult.topic,
-                topic: sharingResult.topic,
                 content: sharingResult.content,
-                subject_name: sharingResult.subject_name,
+                // No column for either, and they are worth keeping — `extra` is
+                // the jsonb every table here carries for exactly this.
+                extra: {
+                    topic: sharingResult.topic || null,
+                    subject_name: sharingResult.subject_name || null,
+                },
                 status: 'pending'
             });
             

@@ -578,6 +578,87 @@ for the transcriber's mistake would be invisible to us and infuriating to them.
 The transcript is what gets marked; the strokes are session-only, because the
 saved answer is a plain string like every other answer.
 
+## Sharing: a column name nobody checked broke six features silently
+
+**"Can you make sure flashcards can be shared between friends."** They could be
+sent. They could not be ACCEPTED, and had never once been — and the audit that
+established it turned up five more features failing the same way, all of them
+invisible for the same reason.
+
+**THE WHOLE CLASS IS ONE MISTAKE: a column the app names and the database does
+not have.** PostgREST answers 400, the promise rejects, the `catch` prints a
+generic toast or nothing at all, and lint, the build and every test pass —
+because nothing in any of them touches a database. There is no runtime signal, so
+these sit for months. `dbColumns.test.mjs` reads `supabase/schema.json` and now
+scans the CLIENT half too (`entityTables()` + a brace-depth walker over the first
+object literal of every `.filter` / `.create` / `.update`), which is what
+surfaced all six at once:
+
+- **`subject_code` is not a flashcards column.** Both share writers put it in
+  the payload and `handleAcceptFlashcards` SPREAD that payload into
+  `Flashcard.create` — so every accept 400'd. The knowledge was already in the
+  repo: SpacedRepetition.jsx carries the comment *"schema has no subject_code
+  column on flashcards — keeping the field would 400 the insert"* seventy lines
+  above the share path that keeps it.
+- **`shared_flashcards` / `shared_ai_results` name the receiver
+  `shared_with_email`**, not `recipient_email` — only `friendships` has that.
+  Account deletion read both with the wrong name, which rejected the whole
+  `Promise.all`, so **"delete my account" failed for every student, always.**
+- **`study_groups` has no `is_active`**, and `member_emails` is a `text[]` that
+  a scalar `eq` can never match. Two separate reasons the group list came back
+  empty on /StudyGroups and in the share dialog.
+- **`group_flashcard_decks` has no `deck_name`, `created_by_email` or
+  `contributors`** (they are `name`, `created_by` and `extra`), so a group deck
+  has never been created.
+- **`group_shared_resources` has no `imports_count` or `imported_by_emails`** —
+  also `extra` — so sharing to a group failed and "already imported" could
+  never be true.
+- **`$or` is a Base44 / Mongo-ism.** `applyWhere` turns every key into an `eq`,
+  so AIToolsHistory asked PostgREST for a column called "or": nobody on that
+  page could see a friend to share with.
+
+**A DECK CROSSES A BOUNDARY TWICE, and each crossing had its own answer.** Out
+of the sharer's rows into a JSON blob, and out of that blob into the
+recipient's rows. Three call sites, three different answers.
+`src/lib/sharedDeck.js` is the one crossing now and it is two pure functions:
+`outgoingCard` is what may LEAVE, `importedCard` is what may ARRIVE. Nothing is
+spread in either direction.
+
+- **A spread carries whatever the blob holds.** Today's writers whitelist six
+  fields so nothing leaks; an older row, or the next writer somebody adds,
+  carries the SHARER'S SM-2 state — and `retired_at` above all, which takes a
+  card out of every queue in the app (`due.js` reports `known` before it checks
+  anything else). Carried across, a friend would accept sixty cards and open an
+  empty deck. The test asserts against the sharer's FULL row rather than the
+  whitelisted blob, because that is the shape the leak actually arrives in.
+- **`unit` survives.** The group importer dropped it, and the review shelf keys
+  decks on subject|topic|unit — so an imported deck split away from its subject
+  under a blank unit. The same constant-`unit` lesson the mistake bank records.
+- **An imported card is NEW, not scheduled.** The group importer dated every
+  card to tomorrow; `due.js` counts a never-reviewed card as new, which is the
+  honest reading, and dating it hid a deck for a day on the screen the student
+  imported it to use.
+- **A card with no question or answer is DROPPED.** Both columns are `not null`,
+  so one empty card would reject the insert and lose the other fifty-nine.
+
+The test reads the flashcards column list out of `schema.json` rather than
+restating it — a column list written down twice is what went wrong — and scans
+the tree for the two shapes that render perfectly and are simply wrong: a
+card-shaped literal naming `subject_code`, and a shared card spread into
+`create()`. The scan matches on the literal's SHAPE (it carries `question` and
+`answer`) rather than on what is near it: the window-based first draft missed
+SpacedRepetition.jsx, where the literal and the `flashcard_data:` consuming it
+are three hundred characters apart.
+
+**`Promise.all` IS THE WRONG PRIMITIVE FOR A LIST OF INDEPENDENT WRITES**, and
+account deletion was the worst case of it in the app. One unreadable table
+discarded the other twenty-one reads; one rejected delete discarded every delete
+that had already landed. Both phases are `allSettled` now, the tables are a
+NAMED list (`accountTables`), and a partial failure says which part is still on
+file — and **does not log the student out**, because signing somebody out of a
+half-deleted account leaves them no way back in to see what is left or to ask us
+to finish it. Same rule `uploadAll` already keeps.
+
 ## A blank page is a missing error boundary
 
 **"I click a page and it's just a blank screen; refreshing loads it."** That is
@@ -2088,7 +2169,7 @@ through all of them.
   (see the storage section). If you raise any upload cap, re-read the
   arithmetic there first — the failure mode is the whole project 402ing, not a
   failed upload.
-- Lint is at ~46 warnings, down from 190. What's left is mostly unread state; the
+- Lint is at 3 warnings, down from 190. What's left is unread state; the
   genuinely dead things have been removed. Worth reading a warning before deleting
   it — twice now an "unused" symbol turned out to mark a half-wired feature, not
   dead code (the shared-quiz handlers, Layout's unreachable UpgradeModal).
@@ -2706,6 +2787,13 @@ is the textbook, and only as something to generate MORE from.
   allocation and the unreconciled claim, both of which render perfectly
 - `src/lib/fnResult.js` — the one unwrap for `functions.invoke`; reading its
   `{ data, error }` envelope as the payload is silent and has shipped twice
+- `src/lib/sharedDeck.js` + `sharedDeck.test.mjs` — the one crossing a deck
+  makes between two students: what may LEAVE the sharer and what may ARRIVE,
+  neither of them a spread. Read by Friends.jsx, SpacedRepetition.jsx and
+  GroupResources.jsx; the test reads the column list out of `schema.json`
+- `src/lib/dbColumns.test.mjs` — the guard on the whole silent class: every
+  column the CLIENT and the server name, checked against the real schema. Six
+  features were failing on imagined column names when the client half was added
 - `src/lib/wagerStatus.js` — the one vocabulary `score_wagers.status` may
   speak, imported by client AND server; `dbEnums.test.mjs` holds it
 - `src/lib/league.js`, `src/pages/League.jsx`,
