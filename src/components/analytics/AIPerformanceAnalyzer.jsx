@@ -20,6 +20,7 @@ import {
     ChevronUp
 } from "lucide-react";
 import { base44 } from "@/api/base44Client";
+import { averageScore } from "@/lib/quizDeck";
 import AceShuffle from "@/components/ace/AceShuffle";
 
 // Static token lookup tables (avoid Tailwind JIT dynamic interpolation gotchas).
@@ -121,9 +122,12 @@ export default function AIPerformanceAnalyzer({ data }) {
         const quizzes = (data.quizzes || []).filter(q =>
             q.quiz_title?.toLowerCase().includes(subjectName.toLowerCase())
         );
-        const avgQuizScore = quizzes.length > 0
-            ? Math.round(quizzes.reduce((sum, q) => sum + (q.score || 0), 0) / quizzes.length)
-            : null;
+        // `averageScore` — the one quiz average. This read the RAW score rather
+        // than the adjusted one, counted an unscored attempt as nought out of a
+        // hundred, and averaged in "wrong only" retries, which are made of the
+        // student's hardest questions by construction. All three drag it down,
+        // and this number is fed to the model as the basis for its advice.
+        const avgQuizScore = averageScore(quizzes);
 
         return {
             subject,

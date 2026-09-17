@@ -37,6 +37,57 @@ export const effectiveScore = (attempt) =>
 const isNum = (v) => typeof v === "number" && Number.isFinite(v);
 
 /**
+ * THE THREE CORRECTIONS, IN ONE PLACE — because seven surfaces printed a quiz
+ * average and four of them printed a different number.
+ *
+ * `quizzingSummary` and `quizDeckStats` below have applied all three since
+ * they were written. Analytics, the AI performance analyser and the student's
+ * own DATA EXPORT each rolled their own and got a different subset:
+ *
+ *   THE ADJUSTED SCORE. Written work the student marked themselves lands in
+ *   `adjusted_score`, and that is the figure the results page showed them.
+ *   Reading the raw `score` says 60% about a quiz whose results screen said 78.
+ *
+ *   AN UNSCORED ATTEMPT IS NOT A ZERO. Marking that never came back leaves
+ *   `score` null. `sum + (a.score || 0)` divides by it anyway and drags the
+ *   average down by a mark nobody dropped — and the data export did not even
+ *   coerce, so `sum + a.score` made the whole average **NaN** and printed
+ *   "Average Score: NaN%" in a file the student downloads.
+ *
+ *   A RETRY IS NOT A SIT. "Wrong only" is made of your hardest questions by
+ *   construction, so its score is on a different scale. It counts as activity
+ *   and never as a measurement — the split every other reader of this data
+ *   makes.
+ *
+ * Returns the numbers, most recent first, so a caller can take a window, a
+ * best or a mean without re-deriving any of it.
+ */
+export function sitScores(attempts = []) {
+    const list = Array.isArray(attempts) ? attempts : [];
+    const at = (a) => new Date(a?.created_date || a?.date || 0).getTime() || 0;
+    return list
+        .filter((a) => !isRetryAttempt(a))
+        .sort((a, b) => at(b) - at(a))
+        .map(effectiveScore)
+        .filter(isNum);
+}
+
+/**
+ * The mean of those, or NULL when there is nothing to average.
+ *
+ * Null rather than 0, for the reason `bestScore` is null below: a student who
+ * has never sat a quiz has not scored nothing, and a screen printing "0%" at
+ * them is making a claim about their work rather than about its own data.
+ * `window` takes only the most recent n, for a surface that means "lately".
+ */
+export function averageScore(attempts = [], window = 0) {
+    const all = sitScores(attempts);
+    const xs = window > 0 ? all.slice(0, window) : all;
+    if (!xs.length) return null;
+    return Math.round(xs.reduce((sum, s) => sum + s, 0) / xs.length);
+}
+
+/**
  * Everything the deck face and its actions need, from one pass over the
  * attempts. Returns zeroes and nulls rather than throwing on a shape we did
  * not expect — a quiz list that cannot count is still a quiz list.

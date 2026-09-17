@@ -694,6 +694,106 @@ questions, which is the worse error. Nothing is stripped — a paper two
 questions short is worse than one odd question — but the generate toast SAYS
 how many, because the student is the only one who can press generate again.
 
+## Where numbers disagreed, and the five places they still did
+
+**"Can you check the whole site for other places where numbers disagree."** The
+answer was five, all visible to a student, plus two mirrors with nothing
+guarding them. The shape is always the same and it is worth naming once: **two
+surfaces answer one question, each is internally consistent, and nothing on
+screen says which is right.** It never throws, lint and the build pass, and the
+student is left to decide which of the app's own numbers to believe.
+
+**THE QUIZ AVERAGE HAD FOUR DIFFERENT ANSWERS ACROSS SEVEN SURFACES.** Three
+corrections, each invisible on its own, and every reader had applied a
+different subset:
+
+| | adjusted score | unscored dropped | retries excluded |
+|---|---|---|---|
+| Quizzes hero, deck faces, SubjectHub | yes | yes | yes |
+| Analytics — headline, per-subject, AND the improvement delta | inline copy | **no** | no |
+| AI performance analyser | no, raw `.score` | no, `\|\| 0` | no |
+| The student's own DATA EXPORT, twice | no, raw `.score` | **no, and no coercion** | no |
+
+That last row is the worst of them: `sum + r.score` over an attempt whose
+marking never came back is NaN, so the export printed **"Average Score: NaN%"**
+in a file the student downloads. `sitScores` / `averageScore` (quizDeck.js) are
+the one answer now, and `quizDeck.test.mjs` scans for a reduce over `.score`
+that is then divided — **which is how the fourth Analytics average was found at
+all.** `quizDelta` was not in the manual sweep; the scan caught it, along with
+the fact that it sorted on `date`, a DAY, so sits in one afternoon fell into
+whichever half the rows happened to come back in.
+
+**"THIS WEEK" MEANT TWO DIFFERENT WEEKS.** `date-fns` defaults `startOfWeek` to
+SUNDAY. Nine surfaces passed `{ weekStartsOn: 1 }` or used `studyLog`'s own
+`weekStart`; five took the default — Study (twice), Analytics (twice) and
+StudyGoalsProgress. **On a Sunday those two groups are a FULL WEEK apart**, so
+the dashboard and the Study page reported different totals for "this week" and
+neither was wrong about its own arithmetic. Monday everywhere now, and
+`studyLog.test.mjs` scans for the bare call — reading to the matching paren, so
+a multi-argument call is judged on its own arguments rather than on the rest of
+the line. It diverges one day in seven, which is exactly why a comment would
+not have held.
+
+**THE EXAM SIMULATOR PRINTED THREE SCORES FOR ONE PAPER.** A written answer the
+student has not self-marked is PENDING — neither right nor wrong. The headline
+divided by `total - pending`; the By Subject bars and the weak-topic list
+divided by `total`, counting every unmarked answer as a miss. So one screen
+showed 80% at the top and 40% underneath, and **told a student Chemistry was a
+weak topic when all that had happened was they had not marked it.** `markedPct`
+(quizScore.js) is the one denominator, `bySubject` tracks `pending` so it CAN
+be applied, and it returns NULL rather than 0 when nothing is marked — grading
+a submitted paper at the bottom band for work nobody has read is the same
+mistake in a different direction.
+
+**ANALYTICS' SUBJECT ROWS NEVER SUMMED TO ITS OWN HEADLINE.** The headline was
+techniques + recall + blurting + QUIZZES; each subject row was the first three.
+A student who mostly sits quizzes watched most of their term go missing from
+the breakdown directly below the total that included it.
+
+**AND THE TWO-TABLE TRAP HAPPENED A THIRD AND FOURTH TIME.** The study-log
+section above says anything asking "did they study" goes through `studyEvents`
+"or it will happen a third time". `StudyGoalsProgress` and the data export both
+read `study_techniques` alone, so a week spent on quizzes and the activity
+tracker was worth nothing on the dashboard's goal bar and missing from the
+export's "Total Study Time".
+
+**THE MIRRORS WERE FINE AND NOTHING WAS CHECKING THEM**, which is a different
+risk and not a smaller one. `uploadPrep`, `megaUpload`, `storageBudget` and
+`holdings` all pin their client/server copies. Two did not:
+
+- **The level curve.** `xpSystem.jsx` opens with "Mirrors functions/awardXP.js
+  — keep in sync" and nothing ever did. The server writes `current_level` off
+  ITS copy while every screen draws the ring off the CLIENT's, so a changed
+  exponent would put the stored level and the drawn one on different curves,
+  permanently.
+- **The ATAR bands.** Eight thresholds written out THREE times — `atarBands.js`
+  (whose header says "KEEP THE THRESHOLDS IN SYNC"), `ranked.js`'s own `BANDS`
+  with a tone on each row, and `atarBand()` in server.mjs. `ranked.js` derives
+  from `atarBands.js` now and writes down only the TONE, which is the part it
+  actually owns.
+
+`mirrors.test.mjs` pins both. It parses BOTH sides as text and runs them —
+server.mjs boots Express on load and `xpSystem.jsx` is a .jsx the test loader
+will not resolve — which compares BEHAVIOUR rather than source, so a reformat
+passes and a changed exponent fails. Verified by breaking each side in turn.
+
+Two smaller ones fixed alongside: the data export read the STORED
+`current_level` while every other screen derives it from `total_xp`, so it was
+the one place able to print a stale level; and `bestScore` there was
+`Math.max(...quizzes.map(q => q.score))`, which is NaN the moment one attempt
+is unscored.
+
+**Not fixed, recorded:** the server's week is **UTC** Monday
+(`currentWeekStartUTC`) and the client's is **local** Monday, so the weekly AI
+budget resets about ten hours late for a Melbourne student. Closing it needs a
+timezone per account, which the server does not have, and it is a fixed offset
+rather than two screens disagreeing. And four components are mounted NOWHERE —
+`QuizStats`, `StudyStats`, `StudyAnalytics`, `WeeklyProgress`. Each carries its
+own copy of a number computed elsewhere (QuizStats has its own inline
+`effectiveScore`), so they are four future disagreements; they are left alone
+under this file's own rule that twice an "unused" symbol here marked a
+half-wired feature rather than dead code. Do not re-audit them — decide.
+
 ## Sharing: a column name nobody checked broke six features silently
 
 **"Can you make sure flashcards can be shared between friends."** They could be
@@ -2903,6 +3003,15 @@ is the textbook, and only as something to generate MORE from.
   allocation and the unreconciled claim, both of which render perfectly
 - `src/lib/fnResult.js` — the one unwrap for `functions.invoke`; reading its
   `{ data, error }` envelope as the payload is silent and has shipped twice
+- `src/lib/mirrors.test.mjs` — the client/server copies nothing was checking:
+  the level curve (`xpSystem.jsx` vs server.mjs) and the ATAR bands. Both sides
+  are parsed as text and RUN, so it compares behaviour rather than source
+- `src/lib/quizDeck.js` — `sitScores` / `averageScore`: the ONE quiz average,
+  with the three corrections that were each applied by a different subset of
+  seven surfaces. The test scans for a fourth hand-rolled mean
+- `src/lib/studyLog.test.mjs` — the Monday scan. `date-fns` defaults
+  `startOfWeek` to Sunday, which put five surfaces a full week out of step with
+  the other nine, one day in seven
 - `src/lib/due.js` + `due.test.mjs` — the six card states, and `isReady`: the
   ONE count of what can be sat now. `dayOf` is why `.filter(isDue)` is safe;
   the scan is why nothing counts a pile with `isDue` alone. Draw the deck faces

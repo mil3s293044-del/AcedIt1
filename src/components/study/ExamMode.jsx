@@ -13,6 +13,12 @@ import { useBusy, BUSY } from "@/lib/LiveContext";
 import AceShuffle from "@/components/ace/AceShuffle";
 import { deckCards } from "@/lib/mistakeBank";
 import { normaliseStimulus } from "@/lib/quizSchema";
+// ONE DENOMINATOR FOR THE WHOLE RESULTS SCREEN. An unmarked written answer is
+// PENDING — neither right nor wrong — and the headline has always divided by
+// `total - pending` while the By Subject bars and the weak-topic list divided
+// by `total`. Three numbers for one paper, and a topic called weak because it
+// had not been marked. See quizScore.js.
+import { markedPct } from "@/lib/quizScore";
 import SourcePanel from "@/components/quizzes/SourcePanel";
 import {
   GraduationCap, Clock, AlertCircle, BarChart3, Check, X,
@@ -446,14 +452,16 @@ Return exactly ${openQs.length} results, in order.`,
       total++;
       if (isCorrect) correct++;
       if (isPending) pending++;
-      if (!bySubject[q.subject]) bySubject[q.subject] = { correct: 0, total: 0, topics: {} };
+      if (!bySubject[q.subject]) bySubject[q.subject] = { correct: 0, total: 0, pending: 0, topics: {} };
       bySubject[q.subject].total++;
       if (isCorrect) bySubject[q.subject].correct++;
-      if (!bySubject[q.subject].topics[q.topic]) bySubject[q.subject].topics[q.topic] = { correct: 0, total: 0 };
+      if (isPending) bySubject[q.subject].pending++;
+      if (!bySubject[q.subject].topics[q.topic]) bySubject[q.subject].topics[q.topic] = { correct: 0, total: 0, pending: 0 };
       bySubject[q.subject].topics[q.topic].total++;
       if (isCorrect) bySubject[q.subject].topics[q.topic].correct++;
+      if (isPending) bySubject[q.subject].topics[q.topic].pending++;
     });
-    return { correct, total, pending, score: total - pending > 0 ? Math.round(correct / (total - pending) * 100) : 0, bySubject };
+    return { correct, total, pending, score: markedPct(correct, total, pending), bySubject };
   };
 
   // ─── SETUP ────────────────────────────────────────────────────────────────
@@ -936,14 +944,21 @@ Return exactly ${openQs.length} results, in order.`,
     const weakTopics = [];
     Object.entries(results.bySubject).forEach(([subject, data]) => {
       Object.entries(data.topics).forEach(([topic, td]) => {
-        if (td.total >= 2) {
-          const pct = Math.round(td.correct / td.total * 100);
-          if (pct < 60) weakTopics.push({ subject, topic, pct, total: td.total });
+        // Marked questions only, both in the threshold and the percentage —
+        // a topic is not weak because it is unmarked.
+        const marked = td.total - (td.pending || 0);
+        if (marked >= 2) {
+          const pct = markedPct(td.correct, td.total, td.pending);
+          if (pct !== null && pct < 60) weakTopics.push({ subject, topic, pct, total: marked });
         }
       });
     });
     weakTopics.sort((a, b) => a.pct - b.pct);
 
+    // `score` is null when nothing has been marked yet — see markedPct. Grading a
+    // paper with no marked answers would pick the bottom band and tell a
+    // student they did badly on work nobody has looked at.
+    const scored = results.score !== null;
     const grade = results.score >= 85 ? { label: "Outstanding", key: "outstanding" } :
     results.score >= 70 ? { label: "Great Work", key: "great" } :
     results.score >= 55 ? { label: "Good Effort", key: "good" } :
@@ -960,7 +975,7 @@ Return exactly ${openQs.length} results, in order.`,
                         <div className={`w-16 h-16 rounded-2xl bg-surface/80 flex items-center justify-center mx-auto mb-3 ${gradeCls.text}`}>
                             <GradeIcon className="w-8 h-8" />
                         </div>
-                        <p className={`stat-num ${gradeCls.text} mb-1`}>{results.pending > 0 ? `~${results.score}%` : `${results.score}%`}</p>
+                        <p className={`stat-num ${gradeCls.text} mb-1`}>{!scored ? "—" : results.pending > 0 ? `~${results.score}%` : `${results.score}%`}</p>
                         <p className="text-foreground/80 font-semibold text-lg">{grade.label}</p>
                         {results.pending > 0 &&
             <p className="text-muted-foreground text-xs mt-2 bg-surface/70 rounded-full px-3 py-1 inline-block">
@@ -992,7 +1007,8 @@ Return exactly ${openQs.length} results, in order.`,
                         </h3>
                         <div className="space-y-4">
                             {Object.entries(results.bySubject).map(([subject, data]) => {
-              const pct = data.total > 0 ? Math.round(data.correct / data.total * 100) : 0;
+              const marked = data.total - (data.pending || 0);
+              const pct = markedPct(data.correct, data.total, data.pending);
               const barColor = pct >= 70 ? "bg-primary" : pct >= 50 ? "bg-xp" : "bg-streak";
               const pctText = pct >= 70 ? "text-primary" : pct >= 50 ? "text-xp" : "text-streak";
               return (
@@ -1000,12 +1016,14 @@ Return exactly ${openQs.length} results, in order.`,
                                         <div className="flex justify-between items-center mb-2">
                                             <span className="text-sm font-bold text-foreground">{subject}</span>
                                             <div className="flex items-center gap-2">
-                                                <span className="text-xs text-muted-foreground">{data.correct}/{data.total}</span>
-                                                <span className={`text-sm font-black ${pctText}`}>{pct}%</span>
+                                                <span className="text-xs text-muted-foreground">{data.correct}/{marked}</span>
+                                                <span className={`text-sm font-black ${pct === null ? "text-muted-foreground" : pctText}`}>
+                                                    {pct === null ? "—" : `${pct}%`}
+                                                </span>
                                             </div>
                                         </div>
                                         <div className="h-2 bg-secondary rounded-full overflow-hidden">
-                                            <motion.div initial={{ width: 0 }} animate={{ width: `${pct}%` }} transition={{ duration: 0.8, ease: "easeOut" }}
+                                            <motion.div initial={{ width: 0 }} animate={{ width: `${pct ?? 0}%` }} transition={{ duration: 0.8, ease: "easeOut" }}
                     className={`h-full rounded-full ${barColor}`} />
                                         </div>
                                     </div>);

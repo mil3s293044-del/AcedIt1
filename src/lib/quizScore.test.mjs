@@ -16,7 +16,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
 import {
-    hasAnswer, questionMark, attemptScore, isCorrect, needsDrill,
+    hasAnswer, questionMark, attemptScore, isCorrect, needsDrill, markedPct,
     CORRECT_AT, DRILL_UNDER,
 } from "@/lib/quizScore";
 
@@ -262,6 +262,52 @@ check("the quiz player reads the shared model rather than the raw claim", () => 
         .filter(([, line]) => /\bfb\.marks\b|\bfeedback\[\w+\]\.marks\b/.test(line))
         .filter(([, line]) => !line.trim().startsWith("*") && !line.trim().startsWith("//"));
     assert.deepEqual(raw, [], "read markFor(i) instead");
+});
+
+/* ── ONE DENOMINATOR, for a paper that is half self-marked ───────────────── */
+
+check("an unmarked answer is neither right nor wrong", () => {
+    // 10 questions, 6 right, 2 not yet self-marked: the student got 6 of the
+    // 8 that have been judged. Dividing by 10 calls the unmarked ones wrong.
+    assert.equal(markedPct(6, 10, 2), 75);
+    assert.equal(markedPct(6, 10, 0), 60, "with nothing pending it is the plain percentage");
+});
+
+check("the headline, the subject bar and the weak list now agree", () => {
+    // The three call sites on the exam results screen. Before this they were
+    // correct/(total-pending), correct/total and correct/total — so one paper
+    // printed three scores, and a topic read as weak because it was unmarked.
+    const paper = { correct: 6, total: 10, pending: 2 };
+    const headline = markedPct(paper.correct, paper.total, paper.pending);
+    const subject  = markedPct(paper.correct, paper.total, paper.pending);
+    const topic    = markedPct(paper.correct, paper.total, paper.pending);
+    assert.equal(headline, subject);
+    assert.equal(subject, topic);
+    // And the old subject/topic arithmetic really did differ, or this test
+    // would be asserting nothing.
+    assert.notEqual(Math.round((paper.correct / paper.total) * 100), headline);
+});
+
+check("nothing marked yet is NULL, never 0%", () => {
+    // A student who has submitted and not started self-marking has no score.
+    // Printing 0 would grade them at the bottom band for work nobody has read.
+    assert.equal(markedPct(0, 5, 5), null);
+    assert.equal(markedPct(0, 0, 0), null);
+    assert.equal(markedPct(3, undefined, 0), null);
+    assert.equal(markedPct(3, 10, 99), null, "more pending than questions is not a score");
+});
+
+check("a fully marked paper is unaffected", () => {
+    assert.equal(markedPct(10, 10), 100);
+    assert.equal(markedPct(0, 10), 0, "genuinely nothing right IS zero");
+});
+
+check("ExamMode reads it rather than rolling its own", () => {
+    const src = fs.readFileSync(path.join(process.cwd(), "src/components/study/ExamMode.jsx"), "utf8");
+    assert.match(src, /markedPct/, "ExamMode must import the shared denominator");
+    const code = src.split("\n").filter((l) => !l.trim().startsWith("//")).join("\n");
+    assert.ok(!/correct\s*\/\s*(?:td|data)\.total/.test(code),
+        "a bar is still dividing by total, counting unmarked answers as wrong");
 });
 
 console.log(`\n${passed} checks passed`);

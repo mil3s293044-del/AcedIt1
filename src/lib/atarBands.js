@@ -1,10 +1,20 @@
 /**
- * AcedIt ATAR bands — CLIENT MIRROR of atarBand() in server.mjs.
+ * AcedIt ATAR bands — THE ONE CLIENT COPY, mirroring atarBand() in server.mjs.
  *
  * The server is the source of truth: it computes the score and getRankedBoards
  * returns the band alongside it. This exists for surfaces that read
  * user_profiles.acedit_atar directly (the Dashboard) and so have the number but
- * not the label. KEEP THE THRESHOLDS IN SYNC.
+ * not the label.
+ *
+ * IT USED TO BE THREE COPIES. This file said "KEEP THE THRESHOLDS IN SYNC" and
+ * `ranked.js` had its own `BANDS` list with a tone on each row, written by
+ * somebody who had not seen this one — so the same eight numbers were written
+ * out three times across two files and the server, and nothing checked any of
+ * them against each other. `ranked.js` imports this now and adds only the tone,
+ * which is the part it actually owns; `atarBands.test.mjs` pins all of it
+ * against `server.mjs`.
+ *
+ * Ordered HIGHEST FIRST, because `atarBandOf` takes the first match.
  */
 export const ATAR_BANDS = [
     { min: 99, name: "The 99 Club" },

@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Target, Calendar, Award, Zap, Edit } from "lucide-react";
-import { StudyTechnique, SubjectAssessment } from "@/entities/all";
+import { StudyTechnique, SubjectAssessment, StudySession } from "@/entities/all";
 import { format, startOfWeek, endOfWeek, differenceInDays } from "date-fns";
 import { base44 } from "@/api/base44Client";
 import { useToast } from "@/components/ui/use-toast";
@@ -35,13 +35,22 @@ export default function StudyGoalsProgress({ user, userProfile }) {
         setHasError(false);
         
         try {
-            const weekStart = startOfWeek(new Date());
-            const weekEnd = endOfWeek(new Date());
+            // THE WEEK STARTS ON MONDAY. `date-fns` defaults `startOfWeek` to SUNDAY, so
+            // these read a different week from `studyLog`'s `weekStart` — which WeekPace,
+            // subjectHub, holdings, the league and the dashboard panels all use — and on a
+            // Sunday the two were a FULL WEEK apart. See due.js's neighbours in CLAUDE.md.
+            const weekStart = startOfWeek(new Date(), { weekStartsOn: 1 });
+            const weekEnd = endOfWeek(new Date(), { weekStartsOn: 1 });
 
-            const sessionsPromise = StudyTechnique.filter({ 
-                created_by: user.email,
-                date: { $gte: format(weekStart, 'yyyy-MM-dd'), $lte: format(weekEnd, 'yyyy-MM-dd') }
-            }).catch(() => []);
+            // BOTH LOG TABLES. `study_techniques` holds pomodoro, active recall,
+            // blurting and spaced repetition; `study_sessions` holds quizzes and
+            // the activity tracker, with its minutes in `duration_minutes`.
+            // Neither is a superset, and reading one told a student who spent
+            // the week on the Study page that their quizzes were the whole of
+            // it — the exact trap the dashboard's week panel already fell into.
+            const range = { $gte: format(weekStart, 'yyyy-MM-dd'), $lte: format(weekEnd, 'yyyy-MM-dd') };
+            const sessionsPromise = StudyTechnique.filter({ created_by: user.email, date: range }).catch(() => []);
+            const loggedPromise = StudySession.filter({ created_by: user.email, date: range }).catch(() => []);
 
             const today = format(new Date(), 'yyyy-MM-dd');
             const assessmentsPromise = SubjectAssessment.filter({
@@ -54,12 +63,13 @@ export default function StudyGoalsProgress({ user, userProfile }) {
                 setTimeout(() => reject(new Error('Timeout')), 8000)
             );
 
-            const [sessions, assessments] = await Promise.race([
-                Promise.all([sessionsPromise, assessmentsPromise]),
+            const [sessions, logged, assessments] = await Promise.race([
+                Promise.all([sessionsPromise, loggedPromise, assessmentsPromise]),
                 timeoutPromise
             ]);
 
-            const weeklyMinutes = sessions.reduce((sum, s) => sum + (s.session_duration || 0), 0);
+            const weeklyMinutes = sessions.reduce((sum, s) => sum + (s.session_duration || 0), 0)
+                + (logged || []).reduce((sum, s) => sum + (s.duration_minutes || 0), 0);
             const weeklyGoalHours = userProfile?.weekly_study_goal_hours || 20;
 
             setWeeklyProgress({

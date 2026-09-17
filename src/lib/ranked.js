@@ -13,17 +13,31 @@
  * everyone gets a title, nobody has one.
  */
 
-/** The bands, with the floor each one starts at. Mirrors atarBand() on the server. */
-export const BANDS = [
-    { name: "Foundation",      min: 0,  tone: "muted" },
-    { name: "Building",        min: 50, tone: "xp" },
-    { name: "On Track",        min: 60, tone: "chart-3" },
-    { name: "Solid",           min: 70, tone: "chart-3" },
-    { name: "Strong",          min: 80, tone: "primary" },
-    { name: "Elite",           min: 90, tone: "primary" },
-    { name: "State Contender", min: 95, tone: "chart-4" },
-    { name: "The 99 Club",     min: 99, tone: "chart-4" },
-];
+import { ATAR_BANDS } from "@/lib/atarBands";
+
+/**
+ * The bands, lowest first, with the tone each one is drawn in.
+ *
+ * THE THRESHOLDS COME FROM `atarBands.js` — they are not restated here. This
+ * file used to carry its own copy of all eight numbers, which made three
+ * copies of one list (here, atarBands.js and `atarBand()` in server.mjs) with
+ * nothing checking any of them against each other. The TONE is the only part
+ * this file owns, so it is the only part written down.
+ */
+const TONE = {
+    "Foundation": "muted",
+    "Building": "xp",
+    "On Track": "chart-3",
+    "Solid": "chart-3",
+    "Strong": "primary",
+    "Elite": "primary",
+    "State Contender": "chart-4",
+    "The 99 Club": "chart-4",
+};
+
+export const BANDS = [...ATAR_BANDS]
+    .sort((a, b) => a.min - b.min)
+    .map((b) => ({ name: b.name, min: b.min, tone: TONE[b.name] || "muted" }));
 
 export const BAND_TONE = Object.fromEntries(BANDS.map(b => [b.name, b.tone]));
 

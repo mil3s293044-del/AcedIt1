@@ -7,7 +7,19 @@
  * and a "retry what you got wrong" that hands back questions they got right.
  */
 import assert from "node:assert/strict";
-import { quizDeckStats, effectiveScore, quizzingSummary } from "@/lib/quizDeck";
+import fs from "node:fs";
+import path from "node:path";
+import { quizDeckStats, effectiveScore, quizzingSummary, sitScores, averageScore } from "@/lib/quizDeck";
+
+/** Every source file, for the scan at the foot of this file. */
+const walkSrc = (dir, out = []) => {
+    for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
+        const p = path.join(dir, e.name);
+        if (e.isDirectory()) walkSrc(p, out);
+        else if (/\.jsx?$/.test(e.name) && !p.includes(".test.")) out.push(p);
+    }
+    return out;
+};
 
 let passed = 0;
 const check = (name, fn) => {
@@ -204,6 +216,90 @@ check("nothing sat reports nothing rather than zero", () => {
     assert.equal(hero.avgScore, null, "a quiz nobody sat is not a nought");
     assert.equal(hero.bestScore, null);
     assert.equal(hero.lastAttempt, null);
+});
+
+/* ── ONE QUIZ AVERAGE ─────────────────────────────────────────────────────
+ *
+ * Seven surfaces printed one and four printed a different number. The three
+ * corrections are each invisible on their own — every version rendered
+ * perfectly — so this pins them, and the scan below stops a fifth hand-rolled
+ * mean appearing beside them.
+ */
+
+const sit = (score, over = {}) => ({ score, created_date: "2026-01-01T09:00:00Z", ...over });
+
+check("the adjusted score wins, because it is what the student was shown", () => {
+    assert.deepEqual(sitScores([sit(60, { adjusted_score: 78 })]), [78]);
+    assert.equal(averageScore([sit(60, { adjusted_score: 78 }), sit(80)]), 79);
+});
+
+check("an unscored attempt is dropped, never counted as nought", () => {
+    // `sum + (a.score || 0)` drags the average down by a mark nobody dropped.
+    // `sum + a.score` — what the data export did — makes the whole thing NaN.
+    const attempts = [sit(80), sit(null), sit(90), sit(undefined)];
+    assert.deepEqual(sitScores(attempts).sort(), [80, 90]);
+    assert.equal(averageScore(attempts), 85);
+    assert.ok(Number.isFinite(averageScore(attempts)), "an unscored row must not make it NaN");
+});
+
+check("a retry counts as activity and never as a measurement", () => {
+    const attempts = [sit(90), sit(0, { extra: { is_retry: true } }), sit(10, { quiz_title: "Methods — wrong only" })];
+    assert.deepEqual(sitScores(attempts), [90]);
+    assert.equal(averageScore(attempts), 90);
+});
+
+check("nothing to average is NULL, not 0%", () => {
+    // 0% is a claim about the student's work; null is a statement about the
+    // app's data. A screen printing 0 at somebody who has never sat a quiz is
+    // making the first when it means the second.
+    assert.equal(averageScore([]), null);
+    assert.equal(averageScore([sit(null)]), null);
+    assert.equal(averageScore(null), null);
+    assert.equal(averageScore(undefined), null);
+});
+
+check("most recent first, so a window means the LAST n", () => {
+    const attempts = [
+        sit(10, { created_date: "2026-01-01T09:00:00Z" }),
+        sit(90, { created_date: "2026-01-05T09:00:00Z" }),
+        sit(50, { created_date: "2026-01-03T09:00:00Z" }),
+    ];
+    assert.deepEqual(sitScores(attempts), [90, 50, 10]);
+    assert.equal(averageScore(attempts, 2), 70);
+    assert.equal(averageScore(attempts), 50);
+});
+
+check("sits in one afternoon are ordered on the timestamp, not the day", () => {
+    // `date` is written as a DAY, so every sit on one afternoon ties and the
+    // winner is whatever order PostgREST returned.
+    const attempts = [
+        { score: 30, date: "2026-02-01", created_date: "2026-02-01T09:00:00Z" },
+        { score: 70, date: "2026-02-01", created_date: "2026-02-01T15:00:00Z" },
+    ];
+    assert.deepEqual(sitScores(attempts), [70, 30]);
+});
+
+check("the same attempts give the same number as quizzingSummary", () => {
+    // The hero and the deck faces are the two surfaces that were already
+    // right; anything that disagrees with them is the thing being fixed.
+    const attempts = [sit(80), sit(60, { adjusted_score: 78 }), sit(null), sit(0, { extra: { is_retry: true } })];
+    assert.equal(averageScore(attempts, 5), quizzingSummary([], attempts).avgScore);
+});
+
+check("no surface hand-rolls a quiz average beside this one", () => {
+    const bad = [];
+    for (const abs of walkSrc(path.join(process.cwd(), "src"))) {
+        const file = path.relative(process.cwd(), abs);
+        if (file === "src/lib/quizDeck.js") continue;
+        const src = fs.readFileSync(abs, "utf8");
+        // A reduce over `.score` or `.adjusted_score` that is then divided is
+        // somebody computing this again. The point-free `averageScore` call
+        // has no reduce, so it never matches.
+        for (const m of src.matchAll(/reduce\([^;]*?\b(?:adjusted_score|\.score)\b[^;]*?\)\s*\/\s*/g)) {
+            bad.push(`${file}:${src.slice(0, m.index).split("\n").length}`);
+        }
+    }
+    assert.deepEqual(bad, [], `a second quiz average, which will disagree with this one:\n  ${bad.join("\n  ")}`);
 });
 
 console.log(`\n${passed} passed`);

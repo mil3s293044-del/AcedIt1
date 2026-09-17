@@ -125,6 +125,27 @@ export function attemptScore(questions = [], feedback = [], selfMarks = {}, answ
  * 80% of the allocation, which is the threshold this has always used — stated
  * once here so the three places that had it written out cannot drift.
  */
+/**
+ * A percentage over the answers that have actually been MARKED.
+ *
+ * The exam simulator's results screen printed three different scores for one
+ * paper. A written answer the student has not self-marked yet is PENDING —
+ * neither right nor wrong — and the headline had always divided by
+ * `total - pending`, while the By Subject bars and the weak-topic list divided
+ * by `total` and counted every unmarked answer as a miss. So the app told a
+ * student Chemistry was a weak topic when all that had happened was they had
+ * not marked it yet.
+ *
+ * NULL when nothing has been marked. 0% is a claim about their work; null is a
+ * statement about the app's data, and the screen draws a dash for it. Same
+ * rule `averageScore` and `bestScore` keep.
+ */
+export function markedPct(correct, total, pending = 0) {
+    const marked = Number(total) - Number(pending || 0);
+    if (!Number.isFinite(marked) || marked <= 0) return null;
+    return Math.round((Number(correct) / marked) * 100);
+}
+
 export const CORRECT_AT = 0.8;
 export function isCorrect(question, mark) {
     if (!mark || mark.outOf <= 0) return false;
