@@ -20,7 +20,7 @@
  * own data, which is exactly what a subject page should be adding.
  */
 
-import { isDue, isNew } from "@/lib/due";
+import { isReady } from "@/lib/due";
 import { cardMastery } from "@/lib/mastery";
 import { effectiveScore } from "@/lib/quizDeck";
 import { isRetryAttempt } from "@/lib/quizInsight";
@@ -151,7 +151,7 @@ export function subjectStats(subjectName, {
 
     // ── Cards ──────────────────────────────────────────────────────────────
     const cards = flashcards.filter((c) => sameSubject(c?.subject_name));
-    const due = cards.filter((c) => isDue(c, now) || isNew(c)).length;
+    const due = cards.filter((c) => isReady(c, now)).length;
     const decks = new Set(cards.map((c) => c?.topic).filter(Boolean));
     const mastery = cards.length
         ? Math.round(cards.reduce((sum, c) => sum + cardMastery(c), 0) / cards.length)

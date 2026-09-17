@@ -26,7 +26,7 @@ import { bestLever } from "@/lib/atarLift";
 import { atarBandOf } from "@/lib/atarBands";
 import { todaysIntent } from "@/lib/studyIntent";
 import { needsSetup, outstandingTasks, setupCopy } from "@/lib/onboardingTasks";
-import { isDue } from "@/lib/due";
+import { isReady } from "@/lib/due";
 import { studyEvents } from "@/lib/studyLog";
 import { deckCards } from "@/lib/mistakeBank";
 import AceTip from "@/components/ace/AceTip";
@@ -530,7 +530,7 @@ export default function Dashboard() {
             // once a card went past its date it stayed counted forever. Both
             // are fixed in lib/due.js, along with the two states — marked known
             // and put off — that let a student answer back. See /Review.
-            const dueCards = (flashcardData || []).filter(c => isDue(c, today));
+            const dueCards = (flashcardData || []).filter(c => isReady(c, today));
             const deckMap = {};
             dueCards.forEach(card => {
                 const key = card.deck_id || `${card.subject_name}_${card.topic}`;
@@ -684,7 +684,7 @@ export default function Dashboard() {
         for (const d of Object.values(bySubject)) {
             const detail = d.topics.length
                 ? `${d.count} cards · ${d.topics.slice(0, 2).join(", ")}${d.topics.length > 2 ? ` +${d.topics.length - 2}` : ""}`
-                : `${d.count} cards due`;
+                : `${d.count} cards ready`;
             items.push({ key: `fc-${d.subject}`, icon: Layers, days: 0, rank: 2,
                 title: d.subject, subtitle: detail, to: "Study", badge: "Now",
                 subject: d.subject, kind: "deck", count: d.count });

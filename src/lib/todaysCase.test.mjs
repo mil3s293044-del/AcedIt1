@@ -144,16 +144,27 @@ check("one card due says nothing about others", () => {
 
 check("an empty deck turns over to nothing rather than a placeholder", () => {
     assert.equal(previewFor({ move: { technique: "spaced_repetition" }, flashcards: [] }), null);
-    // A never-reviewed card is NEW, not due — same rule as everywhere else.
-    assert.equal(previewFor({
-        move: { technique: "spaced_repetition" },
-        flashcards: [{ question: "q", next_review_date: yday, total_reviews: 0, repetitions: 0 }],
-    }), null);
     // A due card with no question text is not a face.
     assert.equal(previewFor({
         move: { technique: "spaced_repetition" },
         flashcards: [{ next_review_date: yday, total_reviews: 2, repetitions: 1 }],
     }), null);
+});
+
+check("THE FACE MATCHES WHAT THE SESSION WOULD ACTUALLY OPEN WITH", () => {
+    // This used to assert that a never-reviewed card produced NO face, on the
+    // reasoning that it is new rather than due. That was right about the state
+    // and wrong about the promise: the card turns over saying "here is the
+    // first one", and Study plays `isReady` — due AND new — so on a deck of
+    // fresh cards the panel showed nothing while the session behind it had
+    // sixty questions ready. The preview reads the same predicate as the
+    // session or it is lying about the one interaction it asks for.
+    const face = previewFor({
+        move: { technique: "spaced_repetition" },
+        flashcards: [{ question: "q", next_review_date: yday, total_reviews: 0, repetitions: 0 }],
+    });
+    assert.equal(face?.body, "q");
+    assert.equal(face?.label, "First up");
 });
 
 check("a deadline shows the deadline, by name", () => {

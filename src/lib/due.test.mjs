@@ -6,8 +6,10 @@
  * was large and wrong about what the number meant.
  */
 import assert from "node:assert/strict";
+import fs from "node:fs";
+import path from "node:path";
 import {
-    cardState, isDue, isNew, tally, dueQueue, auditPiles, reasonFor,
+    cardState, isDue, isNew, isReady, tally, dueQueue, auditPiles, reasonFor,
     markKnown, markUnknown, snoozeFor, daysBetween,
     DAILY_CAP, OVERDUE_AFTER_DAYS,
 } from "@/lib/due";
@@ -216,6 +218,151 @@ check("malformed cards do not throw or count as due", () => {
     assert.equal(cardState({ next_review_date: "not-a-date", total_reviews: 2 }, TODAY), "scheduled");
     assert.deepEqual(auditPiles([], TODAY), []);
     assert.equal(dueQueue([], { today: TODAY }).totalDue, 0);
+});
+
+/* ── READY: the count a deck face prints ──────────────────────────────────
+ *
+ * The complaint that produced this: "50 flashcards, 10 have been done, it says
+ * 10 are due, even though it would be 40." `isDue` alone is the right
+ * predicate for "has this lapsed" and the WRONG one for "what can I sit", and
+ * every deck surface in the app was using it as the second.
+ */
+
+const reviewed = (late = 0) => ({
+    repetitions: 3, total_reviews: 3,
+    next_review_date: late > 0 ? shift(TODAY, -late) : TODAY,
+});
+const untouched = () => ({ repetitions: 0, total_reviews: 0, next_review_date: TODAY });
+
+function shift(iso, days) {
+    const d = new Date(`${iso}T00:00:00Z`);
+    d.setUTCDate(d.getUTCDate() + days);
+    return d.toISOString().split("T")[0];
+}
+
+check("the student's own deck: 50 cards, 10 reviewed, reads 50 ready", () => {
+    const deck = [
+        ...Array.from({ length: 10 }, () => reviewed(1)),
+        ...Array.from({ length: 40 }, () => untouched()),
+    ];
+    const t = tally(deck, TODAY);
+    assert.equal(t.ready, 50, "the whole pile can be sat right now");
+    assert.equal(t.active, 10, "and only ten of them have actually lapsed");
+    assert.equal(t.new, 40);
+    assert.equal(deck.filter((c) => isReady(c, TODAY)).length, 50);
+    assert.equal(deck.filter((c) => isDue(c, TODAY)).length, 10, "the old number");
+});
+
+check("a deck nobody has opened is NOT 'all caught up'", () => {
+    const fresh = Array.from({ length: 50 }, () => untouched());
+    assert.equal(tally(fresh, TODAY).ready, 50);
+    assert.equal(tally(fresh, TODAY).active, 0, "nothing has lapsed, and that is still true");
+});
+
+check("ready never counts a card the student has put away or snoozed", () => {
+    // The whole point of retired_at and snoozed_until is leaving the queue.
+    // Folding new into the count must not quietly undo either.
+    assert.equal(isReady({ ...untouched(), retired_at: "2026-01-01T00:00:00Z" }, TODAY), false);
+    assert.equal(isReady({ ...untouched(), snoozed_until: shift(TODAY, 3) }, TODAY), false);
+    assert.equal(isReady({ ...reviewed(0), next_review_date: shift(TODAY, 5) }, TODAY), false,
+        "scheduled for next week is not ready");
+});
+
+check("ready is exactly due + overdue + new, on any mix", () => {
+    const mix = [
+        reviewed(0), reviewed(1), reviewed(30), untouched(), untouched(),
+        { ...untouched(), retired_at: "2026-01-01T00:00:00Z" },
+        { ...untouched(), snoozed_until: shift(TODAY, 2) },
+        { ...reviewed(0), next_review_date: shift(TODAY, 9) },
+        null, {},
+    ];
+    const t = tally(mix, TODAY);
+    assert.equal(t.ready, t.due + t.overdue + t.new);
+    assert.equal(t.ready, mix.filter((c) => isReady(c, TODAY)).length);
+});
+
+check("malformed input is handled the same way isDue handles it", () => {
+    assert.equal(isReady(null, TODAY), false, "there is no card to sit");
+    assert.equal(isReady({}, TODAY), true, "an empty object is new, and new is ready");
+});
+
+check("`.filter(isDue)` does not hand the ARRAY INDEX in as today", () => {
+    // filter calls back with (element, index, array). A number where an ISO
+    // date belongs does not throw: `from > today` is false against a number so
+    // nothing is scheduled, and daysBetween parses NaN to 0 so nothing is
+    // overdue. Every learned card came back "due", INCLUDING ones scheduled
+    // next week — which is what the deck face had always been printing.
+    // Dated off the REAL today, not the fixture's: the point-free form has no
+    // way to be told a date, so falling back to now is the whole behaviour
+    // being asserted here.
+    const ahead = new Date(Date.now() + 6 * 86400000).toISOString().slice(0, 10);
+    const scheduled = { repetitions: 3, total_reviews: 3, next_review_date: ahead };
+    const deck = Array.from({ length: 12 }, () => scheduled);
+
+    assert.equal(deck.filter(isDue).length, 0, "nothing here is due");
+    assert.equal(deck.filter(isReady).length, 0, "nothing here can be sat");
+    assert.equal(deck.filter(isNew).length, 0);
+    // And the point-free form must agree with the explicit one, always.
+    assert.equal(deck.filter(isReady).length, deck.filter((c) => isReady(c)).length);
+});
+
+check("a garbage `today` falls back to now rather than mangling the answer", () => {
+    const overdue = { repetitions: 2, total_reviews: 2, next_review_date: "2020-01-01" };
+    for (const bad of [0, 7, null, undefined, NaN, {}, "nonsense"]) {
+        assert.equal(cardState(overdue, bad), "overdue", `today=${String(bad)}`);
+    }
+    // A real ISO day is still honoured.
+    assert.equal(cardState(overdue, "2019-01-01"), "scheduled");
+});
+
+/* ── The scan: a pile counted with isDue alone ────────────────────────────
+ *
+ * This renders perfectly, passes lint and the build, and is simply a smaller
+ * number than the one beside it — the invisible class quizScore.test.mjs and
+ * fnResult.test.mjs exist for. The audit screen is exempt BY NAME: taking a
+ * pile apart into its six states is the whole reason that screen exists.
+ */
+const ROOT = process.cwd();
+const AUDIT_SURFACES = new Set([
+    "src/pages/Review.jsx",
+    "src/components/study/AuditPile.jsx",
+    // due.js documents the broken pattern in its own header, the same way
+    // fnResult.js does. Scanning the file that defines the rule is noise.
+    "src/lib/due.js",
+]);
+
+const walk = (dir, out = []) => {
+    for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
+        const p = path.join(dir, e.name);
+        if (e.isDirectory()) walk(p, out);
+        else if (/\.jsx?$/.test(e.name) && !p.includes(".test.")) out.push(p);
+    }
+    return out;
+};
+
+check("nothing counts a pile with isDue alone", () => {
+    const bad = [];
+    for (const abs of walk(path.join(ROOT, "src"))) {
+        const file = path.relative(ROOT, abs);
+        if (AUDIT_SURFACES.has(file)) continue;
+        const src = fs.readFileSync(abs, "utf8");
+        // `.filter(isDue)` / `.filter(c => isDue(c))` feeding a `.length`, a
+        // `reduce` sum or an assignment — i.e. used as a COUNT rather than as a
+        // per-card label.
+        const re = /\.filter\(\s*(?:isDue\b|\(?\s*\w+\s*\)?\s*=>[^)]*\bisDue\()/g;
+        for (const m of src.matchAll(re)) {
+            bad.push(`${file}:${src.slice(0, m.index).split("\n").length}`);
+        }
+    }
+    assert.deepEqual(bad, [], `a pile counted with isDue alone drops every never-opened card:\n  ${bad.join("\n  ")}`);
+});
+
+check("the audit surfaces named above still exist", () => {
+    // An exemption pointing at a file that has moved is an exemption that
+    // silently covers nothing, and the scan would pass either way.
+    for (const f of AUDIT_SURFACES) {
+        assert.ok(fs.existsSync(path.join(ROOT, f)), `exempted ${f} no longer exists`);
+    }
 });
 
 console.log(`\n${passed} passed${process.exitCode ? " (with failures)" : ""}\n`);

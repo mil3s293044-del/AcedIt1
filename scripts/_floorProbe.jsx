@@ -11,6 +11,10 @@ import MarketCard from "@/components/market/MarketCard";
 import SettlementReveal from "@/components/market/SettlementReveal";
 import Room from "@/components/market/Room";
 import MarkEntry from "@/components/planner/MarkEntry";
+import DeckStack from "@/components/cards/DeckStack";
+import SourcePanel from "@/components/quizzes/SourcePanel";
+import { isReady } from "@/lib/due";
+import { normaliseQuestion } from "@/lib/quizSchema";
 import { LineDialog } from "@/pages/Competitions";
 import CalibrationCurve from "@/components/market/CalibrationCurve";
 import PortfolioPanel from "@/components/market/PortfolioPanel";
@@ -170,6 +174,76 @@ const views = {
                 busy={false} onSave={() => {}} onSkip={() => {}} onClose={() => {}} />
         </div>
     ),
+
+    /* The complaint that produced this: a 50-card deck with 10 reviewed said
+       "10 due", and a deck nobody had opened said "All caught up". Both faces
+       are drawn here against real card rows so the number can be read off a
+       screenshot rather than off a test. */
+    decks: () => {
+        const yday = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
+        const card = (learned) => learned
+            ? { question: "q", answer: "a", total_reviews: 3, repetitions: 3, next_review_date: yday }
+            : { question: "q", answer: "a", total_reviews: 0, repetitions: 0, next_review_date: yday };
+        const n = (count, learned) => Array.from({ length: count }, () => card(learned));
+        const decks = [
+            { topic: "Redox reactions", unit: "Unit 3", cards: [...n(10, true), ...n(40, false)] },
+            { topic: "Never opened", unit: "Unit 4", cards: n(50, false) },
+            { topic: "Genuinely clear", unit: "Unit 3", cards: n(12, true).map(
+                (c) => ({ ...c, next_review_date: new Date(Date.now() + 6 * 86400000).toISOString().slice(0, 10) })) },
+        ];
+        return (
+            <div className="min-h-screen bg-background p-8 space-y-4">
+                <p className="text-sm text-muted-foreground">
+                    Left: 10 reviewed + 40 never opened. Middle: nothing opened. Right: all scheduled ahead.
+                </p>
+                <div className="flex flex-wrap gap-5">
+                    {decks.map((d, i) => (
+                        <DeckStack key={d.topic} index={i} topic={d.topic} unit={d.unit}
+                            subject="Chemistry" tone="#1CB0F6" total={d.cards.length}
+                            ready={d.cards.filter(isReady).length}
+                            weak={0} mastery={40}
+                            onSelect={() => {}} onStats={() => {}} onDelete={() => {}} />
+                    ))}
+                </div>
+            </div>
+        );
+    },
+
+    /* A stimulus question, as a student meets it. The source has to read as a
+       document rather than as another of the app's panels — half the skill
+       being tested is reading it. */
+    source: () => {
+        const q = normaliseQuestion({
+            question: "Refer to Source A.",
+            stimulus: {
+                label: "Source A",
+                content: "In October 1962, United States reconnaissance aircraft photographed Soviet medium-range ballistic missile sites under construction in western Cuba. President Kennedy convened an executive committee, which considered an air strike, an invasion and a naval quarantine.\n\nThe quarantine was announced on 22 October. Soviet vessels turned back two days later.",
+            },
+            parts: [
+                { prompt: "State the date on which the quarantine was announced.", marks: 1 },
+                { prompt: "Using Source A, explain TWO reasons the executive committee preferred a quarantine to an air strike.", marks: 6 },
+            ],
+        }, 3);
+        return (
+            <div className="min-h-screen bg-background p-8">
+                <div className="max-w-2xl card-soft p-6">
+                    <span className="pill mb-3 bg-chart-3/15 text-chart-3">
+                        {q.parts.length} parts · {q.marks} marks
+                    </span>
+                    <SourcePanel stimulus={q.stimulus} />
+                    <p className="text-lg font-semibold text-foreground mb-4">{q.stem}</p>
+                    {q.parts.map((pt) => (
+                        <div key={pt.key} className="mb-4">
+                            <p className="text-sm font-semibold text-foreground">
+                                ({pt.label}) {pt.prompt}
+                                <span className="float-right text-muted-foreground">{pt.marks} marks</span>
+                            </p>
+                        </div>
+                    ))}
+                </div>
+            </div>
+        );
+    },
 };
 
 ReactDOM.createRoot(document.getElementById("root")).render(

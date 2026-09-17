@@ -12,6 +12,8 @@ import { motion, AnimatePresence } from "framer-motion";
 import { useBusy, BUSY } from "@/lib/LiveContext";
 import AceShuffle from "@/components/ace/AceShuffle";
 import { deckCards } from "@/lib/mistakeBank";
+import { normaliseStimulus } from "@/lib/quizSchema";
+import SourcePanel from "@/components/quizzes/SourcePanel";
 import {
   GraduationCap, Clock, AlertCircle, BarChart3, Check, X,
   ChevronLeft, ChevronRight, Play, Trophy, RefreshCw,
@@ -179,10 +181,15 @@ export default function ExamMode({ userSubjects }) {
       (quizzes || []).forEach((quiz) => {
         (quiz.questions || []).forEach((q, i) => {
           if (!q.question) return;
+          // The SOURCE comes with the question. This screen pulls questions out
+          // of quizzes the student already has, so a stimulus question would
+          // arrive here stripped of its extract — still saying "Using Source A"
+          // with no Source A anywhere on the paper.
+          const stimulus = normaliseStimulus(q.stimulus);
           if (q.type === "mcq" && q.options?.length > 0) {
-            questions.push({ id: `qz_${quiz.id}_${i}`, type: "mcq", question: q.question, options: q.options, correctIndex: q.correct_answer, modelAnswer: q.explanation || q.options?.[q.correct_answer] || "", subject: quiz.subject || "General", topic: quiz.title || "General", source: "Quizzes" });
+            questions.push({ id: `qz_${quiz.id}_${i}`, type: "mcq", question: q.question, stimulus, options: q.options, correctIndex: q.correct_answer, modelAnswer: q.explanation || q.options?.[q.correct_answer] || "", subject: quiz.subject || "General", topic: quiz.title || "General", source: "Quizzes" });
           } else {
-            questions.push({ id: `qz_${quiz.id}_${i}`, type: "open", question: q.question, modelAnswer: q.model_answer || "", subject: quiz.subject || "General", topic: quiz.title || "General", source: "Quizzes" });
+            questions.push({ id: `qz_${quiz.id}_${i}`, type: "open", question: q.question, stimulus, modelAnswer: q.model_answer || "", subject: quiz.subject || "General", topic: quiz.title || "General", source: "Quizzes" });
           }
         });
       });
@@ -346,7 +353,7 @@ export default function ExamMode({ userSubjects }) {
 Mark these VCE mock-exam short answers against their model answers, using VCAA marking conventions. Be strict but fair: "correct" only if the response would earn full marks, "partial" if it would earn some marks, "incorrect" otherwise. Give one or two sentences of feedback each — name exactly what earns or loses the marks.
 
 ${openQs.map((q, i) => `Q${i + 1} [${q.subject}]:
-Question: ${q.question}
+${q.stimulus?.content ? `[${q.stimulus.label || "Source material"}]\n${q.stimulus.content}\n\n` : ""}Question: ${q.question}
 Model Answer: ${q.modelAnswer || "Not provided — judge on accuracy and command-term depth"}
 Student Answer: ${answers[q.id].typed}`).join("\n---\n")}
 
@@ -775,6 +782,7 @@ Return exactly ${openQs.length} results, in order.`,
                         </div>
 
                         <div className="p-6 sm:p-8 space-y-6">
+                            <SourcePanel stimulus={q?.stimulus} />
                             <p className="text-xl sm:text-2xl font-semibold text-foreground leading-relaxed">{q?.question}</p>
 
                             {q?.type === "mcq" &&
@@ -1071,6 +1079,7 @@ Return exactly ${openQs.length} results, in order.`,
                                                 {eq.weak && <span className="pill bg-streak/10 text-streak text-[10px] px-1.5 py-0">weak spot</span>}
                                                 <span className="text-muted-foreground/50">· {eq.topic}</span>
                                             </div>
+                                            <SourcePanel stimulus={eq.stimulus} />
                                             <p className="font-semibold text-foreground text-sm mb-3 leading-relaxed">{eq.question}</p>
 
                                             {isMCQ &&

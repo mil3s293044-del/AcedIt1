@@ -578,6 +578,122 @@ for the transcriber's mistake would be invisible to us and infuriating to them.
 The transcript is what gets marked; the strokes are session-only, because the
 saved answer is a plain string like every other answer.
 
+## READY is the count. `isDue` alone was the wrong number everywhere.
+
+**"50 flashcards, 10 have been done, it says 10 are due, even though it would
+be 40."** Two separate bugs on one number, and the second had been on the deck
+face for as long as the face has existed.
+
+**NEW IS NOT NOTHING.** Splitting `new` off from `due` was right and stays
+right — a freshly generated sixty-card deck is not a backlog, which is the
+whole of `due.js` above. But `isDue` alone as a COUNT quietly deletes the new
+pile: a deck of fifty cards a student had just made printed **"All caught
+up"**, and their example printed **10**. `isReady` is due + overdue + new, and
+every count of "what can I sit right now" reads it. The distinction survives
+where it is USEFUL — /Review and AuditPile, which exist to take a pile apart,
+and the per-card pill inside a deck, which has room to say which one it is.
+
+**The word moves with the number.** "50 due" would be the phantom pile this
+file was written to kill; "50 ready" claims nothing about being behind. Every
+label went with the sum — the deck face, the deck screen's tile and button,
+Dashboard, Study, Analytics, FlashcardPerformance. Under the button the deck
+screen says the split once ("10 came up for review · 40 you have never
+opened"), because a number has to be the whole pile and a sentence has room to
+say what is in it.
+
+**`.filter(isDue)` PASSES THE ARRAY INDEX IN AS `today`**, and it renders
+perfectly. `Array.prototype.filter` calls back with `(element, index, array)`,
+so `cards.filter(isDue)` is `isDue(card, 0)`, `isDue(card, 1)` … and a number
+where an ISO date belongs does not throw: `from > today` compares a string
+against a number and is false, so nothing is ever SCHEDULED, and `daysBetween`
+parses NaN to 0, so nothing is ever OVERDUE. Every learned card came back
+"due", **including cards scheduled next week.** That is the point-free form
+anybody writes, so it is not banned — every entry point runs its `today`
+through `dayOf`, which takes an ISO day and otherwise falls back to now.
+
+Only a SCREENSHOT caught it. The sweep passed its own tests, and the fixture
+deck of cards scheduled a week out rendered "12 READY" in the probe. A test
+that calls `isReady(c, today)` explicitly can never see this — which is why
+`scripts/_floorProbe.jsx?v=decks` draws the three deck states against real card
+rows, and why `due.test.mjs` now asserts the POINT-FREE form specifically.
+
+The other guard is a scan for `.filter(isDue)` used as a count, exempting the
+audit surfaces BY NAME — and asserting those files still exist, because an
+exemption pointing at a moved file silently covers nothing and the scan passes
+either way.
+
+`previewFor` moved with them, and the reason is worth keeping: the dashboard
+card turns over on a promise ("here is the first one"), and Study plays
+`isReady`, so on a deck of fresh cards the panel showed nothing while the
+session behind it had sixty questions waiting. **A preview reads the same
+predicate as the session it is previewing** or it is lying about the one
+interaction the panel asks for.
+
+## A question may only refer to material it carries
+
+VCAA examines from stimulus — an extract, a data table, a case study — and the
+generator, reading a textbook, writes like VCAA: *"Using Source B, explain…"*,
+*"Refer to the case study on p.14"*. **Nothing in the saved quiz held Source
+B.** So the question was unanswerable, the student wrote what they could, and
+THE MARKER THEN MARKED THEM DOWN FOR IT — the app asking about something it
+never showed them and then docking marks for the gap. Twice for one missing
+artefact, the second time in writing.
+
+`stimulus` is that material, reproduced in full on the question
+(`normaliseStimulus`). It belongs to the QUESTION and never to a part, which is
+what a real paper does: one source, then (a), (b), (c) about it. A bare string
+is accepted — a generator will sometimes return one, and a source with no
+caption is still a source; losing the material over a missing label is the
+exact failure this exists to stop. A quiz generated before this has `null` and
+every renderer draws nothing.
+
+**It goes to THREE places and the third is the one that gets forgotten.**
+`SourcePanel` draws it above the stem in the player and on the review card
+after marking — feedback that says "you did not cite the 1962 figure" is not
+checkable without the thing they were reading from — and `stimulusText` puts it
+in the MARKING prompt, because an examiner asked to judge an answer to a
+question they cannot read will mark it as recall failure.
+
+It is drawn as a DOCUMENT and not as another of the app's panels: an inset
+well, a rule down the left the way a block quote is set, the label as a caption
+above. Half the skill being tested is reading the source, so a student has to
+be able to tell at a glance which words are the examiner's. Selectable, and it
+scrolls at a height rather than clamping behind a "show more" — a source you
+cannot read all of is the same failure as no source.
+
+**ONE RULE, FOUR GENERATORS, IMPORTED NEVER MIRRORED.** `STIMULUS_RULE` is a
+long prompt string and pasting it into four files is the copy that rots: three
+get a fix and the fourth quietly keeps shipping unanswerable questions.
+`quizSchema.test.mjs` scans for it, the same guard `megaUpload.test.mjs` keeps
+over the page price.
+
+- The **main quiz generator** and **reshuffle** take `STIMULUS_RULE` and
+  `STIMULUS_SCHEMA`. Reshuffle gets one extra line: it works from the QUESTIONS
+  rather than the original file, so it cannot point back at anything.
+- **Active Recall** takes `STIMULUS_RULE_INLINE`, because `session.questions`
+  is a string array and there is no field to put a source in. Inlining it as a
+  quoted preamble is correct there rather than a compromise — the question
+  renders as one block of text, so it reads exactly like a paper.
+- **ExamMode generates nothing.** It assembles questions out of quizzes the
+  student already has, so its fix is to CARRY the source through
+  (`normaliseStimulus` at the point of assembly) and draw it. Without that, a
+  stimulus question arrives on the mock exam stripped of its extract, still
+  saying "Using Source A".
+
+**BOTH FORMATTERS REBUILD A FIELD WHITELIST**, which is exactly where a newly
+added field is silently dropped — the question would still say "Using Source A"
+and the source would be gone. Carried explicitly in both, and the test
+round-trips it.
+
+`referencesMissingSource` catches a dangling reference and is **deliberately
+narrow**: it matches phrasings that point at a NAMED ARTEFACT the model was
+reading and did not reproduce, never "the following", "below" or "above", which
+refer to the question's own text, and never a bare "the graph", because a
+question can legitimately describe one in words. Guessing wide throws away good
+questions, which is the worse error. Nothing is stripped — a paper two
+questions short is worse than one odd question — but the generate toast SAYS
+how many, because the student is the only one who can press generate again.
+
 ## Sharing: a column name nobody checked broke six features silently
 
 **"Can you make sure flashcards can be shared between friends."** They could be
@@ -2787,6 +2903,15 @@ is the textbook, and only as something to generate MORE from.
   allocation and the unreconciled claim, both of which render perfectly
 - `src/lib/fnResult.js` — the one unwrap for `functions.invoke`; reading its
   `{ data, error }` envelope as the payload is silent and has shipped twice
+- `src/lib/due.js` + `due.test.mjs` — the six card states, and `isReady`: the
+  ONE count of what can be sat now. `dayOf` is why `.filter(isDue)` is safe;
+  the scan is why nothing counts a pile with `isDue` alone. Draw the deck faces
+  with `scripts/_floorProbe.jsx?v=decks` — only a screenshot caught the arity bug
+- `src/lib/quizSchema.js` + `quizSchema.test.mjs`,
+  `src/components/quizzes/SourcePanel.jsx` — a question may only refer to
+  material it carries: the `stimulus` field, the one rule all four generators
+  import, and the panel that draws it in the player, on the review card and in
+  the marking prompt. `scripts/_floorProbe.jsx?v=source` renders one
 - `src/lib/sharedDeck.js` + `sharedDeck.test.mjs` — the one crossing a deck
   makes between two students: what may LEAVE the sharer and what may ARRIVE,
   neither of them a spread. Read by Friends.jsx, SpacedRepetition.jsx and
