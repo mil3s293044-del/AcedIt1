@@ -3,6 +3,8 @@ import { motion } from "framer-motion";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { base44 } from "@/api/base44Client";
+import { averageScore, sitScores } from "@/lib/quizDeck";
+import { levelFromXP } from "@/components/shared/xpSystem";
 import { useToast } from "@/components/ui/use-toast";
 import { Download, FileText, Table, BookOpen, Zap, Target, Brain, Calendar } from "lucide-react";
 import jsPDF from "jspdf";
@@ -116,9 +118,14 @@ export default function DataExportModal({ open, onClose }) {
                     );
                     downloadCSV("quiz_attempts.csv", csv);
                 } else {
-                    const avg = data.length ? Math.round(data.reduce((s, r) => s + r.score, 0) / data.length) : 0;
+                    // `averageScore`, not a hand-rolled mean. `sum + r.score`
+                    // over an attempt whose marking never came back is NaN, so
+                    // this line printed "Average Score: NaN%" in a file the
+                    // student downloads. It also read the raw score rather than
+                    // the adjusted one, and counted "wrong only" retries.
+                    const avg = averageScore(data);
                     downloadPDF("quiz_attempts.pdf", "Quiz Attempts Report", [
-                        { heading: "Summary", lines: [`Total Quizzes: ${data.length}`, `Average Score: ${avg}%`, `Total XP Earned: ${data.reduce((s, r) => s + (r.xp_earned || 0), 0)}`] },
+                        { heading: "Summary", lines: [`Total Quizzes: ${data.length}`, `Average Score: ${avg == null ? "—" : `${avg}%`}`, `Total XP Earned: ${data.reduce((s, r) => s + (r.xp_earned || 0), 0)}`] },
                         { heading: "All Attempts", lines: data.slice(0, 100).map(r => `${r.date} | ${r.quiz_title} | ${r.score}% (${r.questions_correct}/${r.questions_total}) | XP: ${r.xp_earned || 0}`) }
                     ]);
                 }
@@ -173,28 +180,43 @@ export default function DataExportModal({ open, onClose }) {
             }
 
             else if (id === "full_report") {
-                const [sessions, quizzes, flashcards, goals, profile] = await Promise.all([
+                // BOTH LOG TABLES. `study_techniques` holds pomodoro, active
+                // recall, blurting and spaced repetition; `study_sessions`
+                // holds quizzes and the activity tracker. Neither is a superset,
+                // so a report built on one told a student who spends their week
+                // on the Study page that their quizzes were the whole of it.
+                const [sessions, logged, quizzes, flashcards, goals, profile] = await Promise.all([
                     base44.entities.StudyTechnique.filter({ created_by: user.email }),
+                    base44.entities.StudySession.filter({ created_by: user.email }).catch(() => []),
                     base44.entities.QuizAttempt.filter({ created_by: user.email }),
                     base44.entities.Flashcard.filter({ created_by: user.email }),
                     base44.entities.Goal.filter({ created_by: user.email }),
                     base44.entities.UserProfile.filter({ created_by: user.email }).then(d => d[0] || {}),
                 ]);
-                const totalStudyHrs = Math.round(sessions.reduce((s, r) => s + (r.session_duration || 0), 0) / 60);
-                const avgScore = quizzes.length ? Math.round(quizzes.reduce((s, r) => s + r.score, 0) / quizzes.length) : 0;
+                const totalStudyMins = sessions.reduce((s, r) => s + (r.session_duration || 0), 0)
+                    + (logged || []).reduce((s, r) => s + (r.duration_minutes || 0), 0);
+                const totalStudyHrs = Math.round(totalStudyMins / 60);
+                const totalSessions = sessions.length + (logged?.length || 0);
+                const avgScore = averageScore(quizzes);
+                const bestScore = Math.max(...sitScores(quizzes), -Infinity);
                 downloadPDF("full_report.pdf", `StudyMate Full Report — ${user.full_name}`, [
                     { heading: "Profile Overview", lines: [
                         `Name: ${user.full_name}`, `Email: ${user.email}`,
-                        `Level: ${profile.current_level || 1}`, `Total XP: ${(profile.total_xp || 0).toLocaleString()}`,
+                        // DERIVED, not the stored column. `current_level` is
+                        // written by the server and can sit stale behind an
+                        // XP award that has not reconciled — and every other
+                        // screen in the app computes it from total_xp, so the
+                        // export was the one place printing a different level.
+                        `Level: ${levelFromXP(profile.total_xp || 0)}`, `Total XP: ${(profile.total_xp || 0).toLocaleString()}`,
                         `Study Streak: ${profile.streak_days || 0} days`, `School: ${profile.school_name || "Not set"}`,
                     ]},
                     { heading: "Study Sessions", lines: [
-                        `Total Sessions: ${sessions.length}`, `Total Study Time: ${totalStudyHrs} hours`,
+                        `Total Sessions: ${totalSessions}`, `Total Study Time: ${totalStudyHrs} hours`,
                         `Most Used Technique: ${sessions.length ? sessions.sort((a, b) => sessions.filter(s => s.technique_name === b.technique_name).length - sessions.filter(s => s.technique_name === a.technique_name).length)[0].technique_name : "N/A"}`,
                     ]},
                     { heading: "Quiz Performance", lines: [
-                        `Quizzes Taken: ${quizzes.length}`, `Average Score: ${avgScore}%`,
-                        `Best Score: ${quizzes.length ? Math.max(...quizzes.map(q => q.score)) : 0}%`,
+                        `Quizzes Taken: ${quizzes.length}`, `Average Score: ${avgScore == null ? "—" : `${avgScore}%`}`,
+                        `Best Score: ${Number.isFinite(bestScore) ? `${bestScore}%` : "—"}`,
                         `Total XP from Quizzes: ${quizzes.reduce((s, q) => s + (q.xp_earned || 0), 0).toLocaleString()}`,
                     ]},
                     { heading: "Flashcards", lines: [

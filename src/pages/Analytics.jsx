@@ -34,6 +34,7 @@ import AttentionPanel from "../components/analytics/AttentionPanel";
 import HelpButton from "@/components/shared/HelpButton";
 import { subjectColor } from "@/components/cards/cardIdentity";
 import { isReady } from "@/lib/due";
+import { averageScore, sitScores } from "@/lib/quizDeck";
 
 const fmt = (mins) => {
     if (!mins) return "0m";
@@ -239,7 +240,8 @@ export default function Analytics() {
     const getDateRange = (range) => {
         const today = new Date();
         switch (range) {
-            case "week":   return { start: format(startOfWeek(today), 'yyyy-MM-dd'), end: format(endOfWeek(today), 'yyyy-MM-dd') };
+            // Monday — see the note on the week below. `date-fns` defaults to Sunday.
+            case "week":   return { start: format(startOfWeek(today, { weekStartsOn: 1 }), 'yyyy-MM-dd'), end: format(endOfWeek(today, { weekStartsOn: 1 }), 'yyyy-MM-dd') };
             case "month":  return { start: format(startOfMonth(today), 'yyyy-MM-dd'), end: format(endOfMonth(today), 'yyyy-MM-dd') };
             case "3months":return { start: format(subDays(today, 90), 'yyyy-MM-dd'), end: format(today, 'yyyy-MM-dd') };
             case "year":   return { start: format(subDays(today, 365), 'yyyy-MM-dd'), end: format(today, 'yyyy-MM-dd') };
@@ -278,7 +280,11 @@ export default function Analytics() {
         const quizMins    = Math.round(data.quizzes.reduce((s, q) => s + ((q.time_taken||0)/60), 0));
         const totalMins   = techMins + arMins + blurtMins + quizMins;
         const totalSess   = data.techniques.length + data.activeRecall.length + data.blurting.length + data.quizzes.length;
-        const quizAvg     = data.quizzes.length > 0 ? Math.round(data.quizzes.reduce((s,q)=>s+(q.adjusted_score ?? q.score),0)/data.quizzes.length) : 0;
+        // `averageScore` applies all three corrections. The inline version
+        // here read `?? q.score` — which is undefined on an unscored attempt,
+        // so one piece of marking that never came back turned the headline
+        // average into NaN — and counted "wrong only" retries as sits.
+        const quizAvg     = averageScore(data.quizzes) ?? 0;
         const fcMastery   = data.flashcards.length > 0 ? Math.round((data.flashcards.filter(f=>((f.review_count_good||0)+(f.review_count_easy||0))>2).length/data.flashcards.length)*100) : 0;
         const uniqueDays  = new Set([
             ...data.techniques.map(t=>t.date),
@@ -333,12 +339,18 @@ export default function Analytics() {
             const techMins = data.techniques.filter(t=>t.subject===sub.subject_name).reduce((s,t)=>s+(t.session_duration||0),0);
             const arMins   = data.activeRecall.filter(t=>t.subject_name===sub.subject_name).reduce((s,t)=>s+(t.session_duration||0),0);
             const blMins   = data.blurting.filter(t=>t.subject_name===sub.subject_name).reduce((s,t)=>s+(t.session_duration||0),0);
-            const totalMins = techMins + arMins + blMins;
             const cards    = data.flashcards.filter(f=>f.subject_name===sub.subject_name);
             const mastered = cards.filter(f=>((f.review_count_good||0)+(f.review_count_easy||0))>=3).length;
             const weak     = cards.filter(f=>f.is_weak_spot).length;
             const quizzes  = data.quizzes.filter(q=>q.quiz_title?.toLowerCase().includes(sub.subject_name.toLowerCase()));
-            const quizAvg  = quizzes.length > 0 ? Math.round(quizzes.reduce((s,q)=>s+(q.adjusted_score ?? q.score),0)/quizzes.length) : null;
+            const quizAvg  = averageScore(quizzes);
+            // QUIZ TIME COUNTS HERE TOO. The headline total above is techniques
+            // + recall + blurting + QUIZZES; this row was the first three, so
+            // the subject rows never added up to the number at the top of the
+            // same page — and a student who mostly sits quizzes saw most of
+            // their term go missing from the breakdown.
+            const quizMins = Math.round(quizzes.reduce((s,q)=>s+((q.time_taken||0)/60),0));
+            const totalMins = techMins + arMins + blMins + quizMins;
             const uniqueDays = new Set([
                 ...data.techniques.filter(t=>t.subject===sub.subject_name).map(t=>t.date),
                 ...data.activeRecall.filter(t=>t.subject_name===sub.subject_name).map(t=>t.date),
@@ -386,7 +398,11 @@ export default function Analytics() {
     // ── Week-over-week derived stats (for hero + coach) ───────────────────────
     const weekStats = useMemo(() => {
         const today = new Date();
-        const weekStart = startOfWeek(today);
+        // THE WEEK STARTS ON MONDAY. `date-fns` defaults `startOfWeek` to SUNDAY, so
+        // these read a different week from `studyLog`'s `weekStart` — which WeekPace,
+        // subjectHub, holdings, the league and the dashboard panels all use — and on a
+        // Sunday the two were a FULL WEEK apart. See due.js's neighbours in CLAUDE.md.
+        const weekStart = startOfWeek(today, { weekStartsOn: 1 });
         const lastWeekStart = subDays(weekStart, 7);
         const lastWeekEnd = subDays(weekStart, 1);
 
@@ -425,14 +441,16 @@ export default function Analytics() {
 
     // ── Quiz delta (recent half vs older half) ────────────────────────────────
     const quizDelta = useMemo(() => {
-        if (data.quizzes.length < 4) return null;
-        const sorted = data.quizzes.slice().sort((a, b) => (a.date || '').localeCompare(b.date || ''));
-        const mid = Math.floor(sorted.length / 2);
-        const older = sorted.slice(0, mid);
-        const newer = sorted.slice(mid);
-        const olderAvg = Math.round(older.reduce((s, q) => s + (q.adjusted_score ?? q.score), 0) / older.length);
-        const newerAvg = Math.round(newer.reduce((s, q) => s + (q.adjusted_score ?? q.score), 0) / newer.length);
-        return newerAvg - olderAvg;
+        // `sitScores` applies the three corrections and orders on the
+        // TIMESTAMP. This sorted on `date`, which is written as a day, so every
+        // sit in one afternoon tied and which half they fell in was whatever
+        // order the rows came back in — and `?? q.score` is undefined on an
+        // attempt whose marking never came back, which made the whole delta NaN.
+        const scores = sitScores(data.quizzes).reverse();   // oldest first
+        if (scores.length < 4) return null;
+        const mid = Math.floor(scores.length / 2);
+        const mean = (xs) => Math.round(xs.reduce((s, v) => s + v, 0) / xs.length);
+        return mean(scores.slice(mid)) - mean(scores.slice(0, mid));
     }, [data.quizzes]);
 
     // ── Best subject (highest quiz avg with study time) ───────────────────────

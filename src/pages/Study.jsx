@@ -350,7 +350,11 @@ export default function Study() {
     }, [studySessions, recentSessions]);
 
     const weekMins = useMemo(() => {
-        const weekStart = startOfWeek(new Date());
+        // THE WEEK STARTS ON MONDAY. `date-fns` defaults `startOfWeek` to SUNDAY, so
+        // these read a different week from `studyLog`'s `weekStart` — which WeekPace,
+        // subjectHub, holdings, the league and the dashboard panels all use — and on a
+        // Sunday the two were a FULL WEEK apart. See due.js's neighbours in CLAUDE.md.
+        const weekStart = startOfWeek(new Date(), { weekStartsOn: 1 });
         const sumKey = (arr, key, dateField) => arr
             .filter(s => s[dateField] && new Date(s[dateField]) >= weekStart)
             .reduce((a, s) => a + (s[key] || 0), 0);
@@ -359,7 +363,7 @@ export default function Study() {
     }, [studySessions, recentSessions]);
 
     const sessionsThisWeek = useMemo(() => {
-        const weekStart = startOfWeek(new Date());
+        const weekStart = startOfWeek(new Date(), { weekStartsOn: 1 });
         const ss = studySessions.filter(s => s.date && new Date(s.date) >= weekStart).length;
         const ts = recentSessions.filter(s => s.created_date && new Date(s.created_date) >= weekStart).length;
         return ss + ts;
