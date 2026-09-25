@@ -35,8 +35,7 @@ export const FLUSH_SEEN = seen;
  * The event the curtain fires when it is actually gone, whether it ran to the
  * end or was skipped.
  *
- * This replaces a pair of duration constants that the old dealt-hand hero
- * used to predict
+ * This replaces a pair of duration constants that DealtHand used to predict
  * when the curtain would lift. Predicting it meant two files had to agree
  * about the length of an animation only one of them owned, and they drifted
  * the moment the storm was made longer: the hand dealt at 3.4s behind a
