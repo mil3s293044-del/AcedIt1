@@ -15,6 +15,7 @@ import DeckStack from "@/components/cards/DeckStack";
 import SourcePanel from "@/components/quizzes/SourcePanel";
 import { isReady } from "@/lib/due";
 import { normaliseQuestion } from "@/lib/quizSchema";
+import { PROBLEMS, GENERATE_PRICE, closingFacts } from "@/lib/firstWin";
 import { LineDialog } from "@/pages/Competitions";
 import CalibrationCurve from "@/components/market/CalibrationCurve";
 import PortfolioPanel from "@/components/market/PortfolioPanel";
@@ -204,6 +205,95 @@ const views = {
                             weak={0} mastery={40}
                             onSelect={() => {}} onStats={() => {}} onDelete={() => {}} />
                     ))}
+                </div>
+            </div>
+        );
+    },
+
+    /* The first run's four talking beats, side by side. It is auth-gated AND
+       only fires for an account a few hours old, so this is the only way to
+       judge the copy and the controls without making a new account. The bubble
+       is the real one; only the state around it is fixture. */
+    firstwin: () => {
+        const subjects = [
+            { name: "Chemistry", color: "#1CB0F6" },
+            { name: "Mathematical Methods", color: "#CE82FF" },
+            { name: "English", color: "#58CC02" },
+        ];
+        const Bubble = ({ title, eyebrow, children }) => (
+            <div className="w-[min(21rem,calc(100vw-8.5rem))] flex-none">
+                <div className="card-soft p-4">
+                    <p className="stat-label">{eyebrow}</p>
+                    <p className="font-display font-extrabold text-foreground leading-tight">{title}</p>
+                    {children}
+                </div>
+            </div>
+        );
+        const facts = closingFacts({ score: 67, xp: 24, dropped: 2 });
+        return (
+            <div className="min-h-screen bg-background p-8">
+                <p className="text-sm text-muted-foreground mb-5">
+                    First run — the four beats Ace speaks. Beat four is the real QuizPlayer.
+                </p>
+                <div className="flex flex-wrap gap-5 items-start">
+                    <Bubble eyebrow="Let's do one real thing" title="Which subject?">
+                        <p className="text-sm text-foreground leading-snug mt-2.5">
+                            I will build you three real exam questions and mark them. Pick the one
+                            you are most worried about.
+                        </p>
+                        <div className="flex flex-wrap gap-1.5 mt-3">
+                            {subjects.map((s) => (
+                                <span key={s.name} className="inline-flex items-center gap-1.5 rounded-xl
+                                    border-2 border-border px-2.5 py-1.5 text-xs font-bold text-foreground">
+                                    <span className="w-2 h-2 rounded-full" style={{ backgroundColor: s.color }} />
+                                    {s.name}
+                                </span>
+                            ))}
+                        </div>
+                    </Bubble>
+
+                    <Bubble eyebrow="Let's do one real thing" title="What is going wrong in Chemistry?">
+                        <div className="mt-2.5 space-y-1.5">
+                            {PROBLEMS.map((p) => (
+                                <span key={p.id} className="block w-full text-left rounded-xl border-2
+                                    border-border px-3 py-2 text-sm font-bold text-foreground">
+                                    {p.label}
+                                </span>
+                            ))}
+                        </div>
+                    </Bubble>
+
+                    <Bubble eyebrow="Let's do one real thing" title="Three questions, then">
+                        <p className="text-sm text-foreground leading-snug mt-2.5">{PROBLEMS[0].answer}</p>
+                        <p className="text-sm text-foreground leading-snug mt-2">
+                            <span className="font-bold">{PROBLEMS[0].techniqueLabel}</span> is on the Study
+                            page for that. First, let's see where you actually are.
+                        </p>
+                        <p className="text-[11px] text-muted-foreground leading-snug mt-2.5">
+                            Anything AI costs <span className="font-bold text-foreground">chips</span> from a
+                            weekly allowance — this one is {GENERATE_PRICE} of your 450.
+                        </p>
+                        <div className="flex items-center gap-3 mt-3">
+                            <span className="text-xs font-bold text-muted-foreground">Not now</span>
+                            <span className="ml-auto inline-flex items-center gap-1.5 rounded-xl bg-primary
+                                text-primary-foreground px-3 py-1.5 text-xs font-bold">
+                                Build them
+                            </span>
+                        </div>
+                    </Bubble>
+
+                    <Bubble eyebrow="That is a real result" title="You are up and running">
+                        <p className="text-sm text-foreground leading-snug mt-2.5">
+                            You scored <span className="font-bold">{facts.score}%</span> on that and earned
+                            {" "}{facts.xp} XP. That quiz and your answers are yours now — they are in your library.
+                        </p>
+                        <p className="text-sm text-foreground leading-snug mt-2">
+                            You dropped a mark or two. Every one you save from a marked answer goes to your
+                            {" "}<span className="font-bold">Mistake Bank</span>, which drills it until you can
+                            produce it — then asks you to prove it on the real question again.
+                        </p>
+                        <p className="text-[11px] text-muted-foreground leading-snug mt-2.5">{facts.atarLine}</p>
+                    </Bubble>
                 </div>
             </div>
         );

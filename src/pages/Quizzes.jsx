@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { base44 } from "@/api/base44Client";
 import { acceptFiles, STUDY_ACCEPT, STUDY_ACCEPT_LABEL } from "@/lib/pickFiles";
 import MegaPicker from "@/components/shared/MegaPicker";
@@ -152,6 +152,39 @@ export default function Quizzes() {
     useEffect(() => {
         loadData();
     }, []);
+
+    /**
+     * `?play=<quizId>` opens straight into the player.
+     *
+     * First Win hands a student in here to sit the three questions it just
+     * built for them, rather than carrying a second copy of QuizPlayer — the
+     * marking panel is where the criteria and the mistake-bank button already
+     * live, so the point is to land them on the REAL one.
+     *
+     * The param is CONSUMED once the quiz opens, or a back-navigation to this
+     * page would re-open the player over whatever they came back to look at.
+     * An id that matches nothing is dropped silently: a quiz they deleted is
+     * not an error worth a toast on arrival.
+     */
+    const [searchParams, setSearchParams] = useSearchParams();
+    useEffect(() => {
+        const id = searchParams.get("play");
+        if (!id || isPlaying || !quizzes.length) return;
+        const target = quizzes.find((q) => q.id === id);
+        setSearchParams((prev) => {
+            const next = new URLSearchParams(prev);
+            next.delete("play");
+            return next;
+        }, { replace: true });
+        if (!target) return;
+        setSelectedQuiz(target);
+        // "standard", never "sac". A first-timer must not be dropped into a
+        // countdown they did not choose — the mode picker exists precisely
+        // because that is a decision the student makes.
+        setQuizMode("standard");
+        setQuizTimeLimitMs(null);
+        setIsPlaying(true);
+    }, [searchParams, quizzes, isPlaying, setSearchParams]);
 
     const loadData = async () => {
         setIsLoading(true);

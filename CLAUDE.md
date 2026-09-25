@@ -2229,6 +2229,113 @@ it is the only surface where mission XP can be claimed, and removing a payout is
 a product call. It is mounted nowhere — read the note at the top of the file
 before rehoming it.
 
+## The first session DOES ONE REAL THING
+
+**"A starter tutorial... effective, educational but also engaging so the user
+doesn't get bored or tabs out."** A new account already met four surfaces — the
+six-step signup wizard, `AceTour`, the dashboard setup nudge and the Help
+manual — so the ask was not for more onboarding. It was that the onboarding
+there is PASSIVE.
+
+**A TOUR IS A NARRATED SLIDESHOW.** Ace walks to a page, says what it is for,
+you press Next. Six times. Nothing happens and nothing is yours at the end, so
+you read the first two leads and press Next through the rest. That is the
+SHAPE, not the copy, and no rewrite of the leads fixes it.
+
+**The apparatus was the problem, not the idea.** A richer version existed and
+was reverted (`be14756`): it gated each step on evidence and paid XP per step,
+across a client library, a component, a SERVER PAYOUT SOURCE and six
+`data-run-target` anchors scattered through the pages. Every one of those rots.
+So the constraint on this one was to earn its engagement without rebuilding
+any of it.
+
+**So the student PRODUCES something.** Pick a subject, say what is going wrong
+with it, and the app writes three real exam questions, marks the answers, and
+says what that did. The quiz row, the attempt and any banked mistake are REAL
+and they stay — which is the whole difference between a tutorial and a first
+win. `src/lib/firstWin.js` is the model; `FirstWin.jsx` conducts.
+
+**IT IS A CONDUCTOR, NOT A SECOND QUIZ PLAYER.** The sitting and the marking
+happen in the real `QuizPlayer`, reached by a real route (`/Quizzes?play=<id>`,
+added for this and useful on its own). That is the point rather than a
+shortcut: the marking panel already itemises criteria and already carries the
+save-to-your-mistake-bank button, so **the two least discoverable things in the
+app get taught by being USED.** A bespoke three-question player would have been
+a second copy of the surface `quizScore.js` has had to fix four times. The cost
+is that the run must survive a navigation, so the beat is written to the
+profile before leaving rather than held in memory.
+
+**THE GENERATE NEEDS NO UPLOAD.** The main quiz generator requires a file —
+reasonable on the Quizzes page, impossible on minute one. The questions come
+from the subject's VCAA examiner prompt instead, which is the same move
+blurting makes when it marks against the Study Design with no notes.
+
+**Four concepts, each taught AT THE MOMENT IT BECOMES TRUE** rather than
+delivered as a lesson:
+
+- **Which technique** — at the "what is going wrong" beat. The options are the
+  student's own words ("I read it, then it's gone"), never ours; the TECHNIQUE
+  is the answer, and putting it in the question would teach nothing. The test
+  reads Study.jsx's own `TECHNIQUES` list to check each one exists, because
+  recommending a technique and then opening somewhere else is the app arguing
+  with itself one screen later — studyIntent's rule.
+- **Chips** — at the moment one is spent, with the price on screen BEFORE the
+  button. That is megaUpload's rule, and it is why the first refusal a student
+  meets later reads as a budget rather than as the app being broken.
+- **The marking** — by being marked, in the real panel.
+- **The ATAR** — at the close, and see below.
+
+**THE CLOSE MAY NOT INVENT.** The tempting ending is "that's +0.4 ATAR". It
+would be fiction: the AcedIt ATAR is a trailing-28-day composite that is
+UNRANKED under three study days, so a brand-new account does not have one and
+nothing they just did produced that figure. Printing it teaches a student on
+their VERY FIRST SCREEN that the numbers here are decoration, after which the
+real ones do not land either — the same refusal the dashboard rail makes.
+`closingFacts` reports only what happened (their real score, the real XP,
+whether a mark was dropped) and explains the ATAR as a thing that starts from
+here. `firstWin.test.mjs` asserts the line quotes no figure, and scans the
+module for a hard-coded one.
+
+**A CLEAN SWEEP IS NEVER OFFERED A MISTAKE TO BANK.** `droppedFrom` counts off
+`extra.question_results`, the per-criterion verdicts the marking already
+produced. Without them the honest answer is that we cannot tell — except a
+score under 100, which is arithmetic rather than inference.
+
+**`Number(null) === 0` GOT IN AGAIN**, in `closingFacts`' own default argument,
+and this time it would have printed **0%** at a student about work nobody had
+marked, on their first screen. Caught by the test that was written for it. That
+is now five modules — `criterionIndexFor`, `expiredKeys`, `markPercent`,
+`standingOf` and this.
+
+**NO SUBJECTS, NO FIRST WIN.** Inventing a subject to demo on would make the
+quiz fake, and the whole premise is that what this produces is real. With an
+empty list it stands down and the tour takes it.
+
+**THE RUN LEADS, THE TOUR IS THE MAP BEHIND IT.** Both fire on a fresh account
+and both are Ace in the same corner; two of him talking over each other on
+somebody's first screen is worse than either alone. `tourShouldWait` holds the
+tour until the run is done or skipped. Eligibility for both is derived from the
+profile's own age, never a flag needing a backfill — an unknown age counts as
+OLD, because getting it wrong generously ambushes all ~130 existing accounts
+with a tutorial for an app they already use, and getting it wrong the other way
+costs one student a first run.
+
+**`onFinished` is not decoration.** FirstWin patches its OWN copy of the
+profile, so Layout's stays stale for the rest of the session — and Layout is
+what decides whether the tour may start. Without the callback, the close
+button's "Show me around" would hand over to nothing until the next reload.
+
+**Every failure stands down honestly.** Out of chips, a generate that does not
+come back, or a response with no usable questions: it says so and offers the
+tour. It never fabricates a question to keep the flow moving, and an empty
+shell is not a quiz — sending somebody into the player to look at a blank page
+is a worse first impression than admitting the build failed.
+
+`scripts/_floorProbe.jsx?v=firstwin` draws all four talking beats at the
+bubble's TRUE width, which is the only way to judge them: at full width the
+copy looked fine and at 21rem the third beat was 420px of theory on a phone,
+read before anything had happened. Both themes, and check the phone.
+
 ## The signup tour
 
 `AceTour` — six stops and a sign-off, fired once for accounts that are hours
@@ -2259,6 +2366,11 @@ Two rules it exists to keep:
 Layout stands AceIntro and AceBuddy down while it runs; they share the corner
 and the mascot. It goes quiet on the payment flow, because the wizard sends
 premium-intent signups straight to /Subscription.
+
+**IT NO LONGER LEADS.** The first run (above) goes first, because it is the one
+that produces something; `tourShouldWait` holds the tour until that is done or
+skipped. The tour then answers the other question — where everything lives —
+which is a real question and not one the first run tries to cover.
 
 ## The science rail folds away
 
@@ -3003,6 +3115,11 @@ is the textbook, and only as something to generate MORE from.
   allocation and the unreconciled claim, both of which render perfectly
 - `src/lib/fnResult.js` — the one unwrap for `functions.invoke`; reading its
   `{ data, error }` envelope as the payload is silent and has shipped twice
+- `src/lib/firstWin.js` + `firstWin.test.mjs`,
+  `src/components/ace/FirstWin.jsx` — the first session does ONE REAL THING:
+  a real quiz, built from their subject, sat in the REAL player and marked.
+  The close reports what happened and refuses to quote an ATAR. Draw the beats
+  with `scripts/_floorProbe.jsx?v=firstwin`, at the bubble's true width
 - `src/lib/mirrors.test.mjs` — the client/server copies nothing was checking:
   the level curve (`xpSystem.jsx` vs server.mjs) and the ATAR bands. Both sides
   are parsed as text and RUN, so it compares behaviour rather than source
