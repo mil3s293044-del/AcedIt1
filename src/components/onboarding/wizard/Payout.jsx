@@ -17,31 +17,15 @@ import React from "react";
 import { motion, AnimatePresence, useReducedMotion } from "framer-motion";
 
 /**
- * When the exams this student is working toward actually are.
+ * MOVED TO lib/reel, re-exported here so nothing that imported it moved.
  *
- * VCE written exams run from late October; Units 1 and 2 exams sit in
- * November; junior years finish out the school year in December. Computed
- * against the current date rather than hard-coded, so the number is right in
- * March and still right in September, and it rolls to next year once the date
- * has passed rather than counting backwards.
+ * The reel's first act pays this number out before the wizard has asked
+ * anything, so it now has two consumers on two surfaces — and a .jsx cannot be
+ * imported by the test loader, which is the constraint `mirrors.test.mjs` had
+ * to parse `xpSystem.jsx` as TEXT to work around. A number two screens print
+ * has to live in a .js or it cannot be pinned at all.
  */
-export function weeksUntilExams(yearLevel, now = new Date()) {
-    const senior = /Year 12/.test(yearLevel || "");
-    const eleven = /Year 11/.test(yearLevel || "");
-    // Month is 0-indexed: 9 = October, 10 = November, 11 = December.
-    const [month, day] = senior ? [9, 25] : eleven ? [10, 5] : [11, 12];
-
-    let target = new Date(now.getFullYear(), month, day);
-    if (target <= now) target = new Date(now.getFullYear() + 1, month, day);
-
-    const weeks = Math.round((target - now) / (7 * 86400000));
-    const label = senior
-        ? "until VCE written exams start"
-        : eleven
-            ? "until end-of-year exams"
-            : "until the end of the school year";
-    return { weeks, label };
-}
+export { weeksUntilExams } from "@/lib/reel";
 
 export default function Payout({ show, children, delay = 0.45 }) {
     const reduce = useReducedMotion();

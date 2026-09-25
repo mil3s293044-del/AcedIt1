@@ -558,3 +558,99 @@
 .scrollbar-none::-webkit-scrollbar {
   display: none;
 }
+
+/* ════════════════════════════════════════════════════════════════════════
+   THE REEL — the landing page and the onboarding wizard as one film.
+   See src/lib/reel.js for the model and src/components/reel/Reel.jsx for why
+   the snap mode is measured rather than chosen.
+   ════════════════════════════════════════════════════════════════════════ */
+
+/* A full viewport act.
+
+   `svh` is the SMALL viewport height — the height with the mobile browser's
+   URL bar showing. `vh` on a phone is the LARGE one, so an act sized in `vh`
+   is taller than the screen at the exact moment a student first sees it: the
+   bottom of every act sits under the address bar until they scroll, which is
+   precisely where a cue like "tap a phrase" lives. The `vh` line ahead of it
+   is the fallback for anything that has never heard of `svh`, where the old
+   behaviour is still better than no height at all. */
+.act-h {
+  min-height: 100vh;
+  min-height: 100svh;
+}
+
+/* The snap container. `--reel-snap` is written by the Reel shell after it has
+   MEASURED whether every act fits; it opens on `proximity`, which can never
+   trap a student below the fold of an act that is taller than their screen. */
+.reel-track {
+  --reel-snap: proximity;
+  scroll-snap-type: y var(--reel-snap);
+}
+
+/* Snap points are on the ACTS only. The credits tail underneath carries no
+   align, so scrolling out of the film is ordinary page scrolling and leaving
+   never feels like being detained. */
+.act-snap {
+  scroll-snap-align: start;
+  scroll-snap-stop: normal;
+}
+
+/* Under reduced motion the film still WORKS — it simply does not move. Snap is
+   dropped entirely rather than left on: a snap point is an animated scroll by
+   another name, and somebody who has asked the OS to stop moving things has
+   asked for this too. */
+@media (prefers-reduced-motion: reduce) {
+  .reel-track { scroll-snap-type: none; }
+  .act-snap { scroll-snap-align: none; }
+}
+
+/* The cue's pulse: what the act wants you to do.
+
+   TRANSFORM AND OPACITY ONLY, and on a promoted layer. This is the one thing
+   on the page that animates forever, so it is the one thing that must cost
+   nothing per frame — the hero that measured 11fps did so because an infinite
+   loop drove a 160px gaussian, and the rule learned there is that a permanent
+   animation may only ever touch the compositor. */
+@keyframes reel-cue {
+  0%, 100% { transform: translateY(0); opacity: 0.55; }
+  50%      { transform: translateY(5px); opacity: 1; }
+}
+.reel-cue {
+  animation: reel-cue 2.1s ease-in-out infinite;
+  will-change: transform, opacity;
+}
+@media (prefers-reduced-motion: reduce) {
+  .reel-cue { animation: none; opacity: 1; }
+}
+
+/* The reel's range control.
+
+   A DESIGNED ROOM DOES NOT LEAVE A CONTROL TO THE BROWSER. `accent-color`
+   paints the filled half and hands the rest to the user agent, which draws it
+   from `color-scheme` rather than from anything on the page — the same failure
+   the Compete floor's slider had, where the track came out as a grey bar
+   across a white card. The fill is a gradient on the INPUT's own background,
+   set inline from the value, because a pseudo-element cannot take one. */
+.reel-range::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 26px;
+  height: 26px;
+  border-radius: 9999px;
+  background: #fff;
+  border: 3px solid #58CC02;
+  box-shadow: 0 4px 14px -3px rgba(0, 0, 0, 0.5);
+  cursor: grab;
+}
+.reel-range::-webkit-slider-thumb:active { cursor: grabbing; }
+.reel-range::-moz-range-thumb {
+  width: 26px;
+  height: 26px;
+  border-radius: 9999px;
+  background: #fff;
+  border: 3px solid #58CC02;
+  box-shadow: 0 4px 14px -3px rgba(0, 0, 0, 0.5);
+  cursor: grab;
+}
+/* Firefox draws its own track under the background unless it is cleared. */
+.reel-range::-moz-range-track { background: transparent; }
