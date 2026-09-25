@@ -65,29 +65,9 @@ import ScalingReport from "@/components/onboarding/wizard/ScalingReport";
 import Payout, { weeksUntilExams } from "@/components/onboarding/wizard/Payout";
 import { atarBandOf } from "@/lib/atarBands";
 import AceShuffle from "@/components/ace/AceShuffle";
-// MOVED TO lib/onboardingAnswers so the landing reel — which is in the first
-// bundle — can read and write the same record without statically importing
-// this page and dragging it into the chunk every visitor parses first.
-// Re-exported, so nothing that imported them from here had to move.
-import { DEFAULT_ANSWERS, loadAnswers, saveAnswers } from "@/lib/onboardingAnswers";
-export { DEFAULT_ANSWERS, loadAnswers, saveAnswers } from "@/lib/onboardingAnswers";
 
-// THREE OF THESE STEPS ARE ALSO THE BACK HALF OF THE LANDING REEL, and they
-// are EXPORTED rather than copied. `src/components/reel/acts/` renders
-// Step2Subjects, Step4Target and Step6Signin directly — same components, same
-// answers shape, same STORAGE_KEY — so a student who starts in the reel and
-// reloads onto /onboarding resumes exactly where they were.
-//
-// This works without any refactor because StepShell already falls back to
-// rendering its footer IN PLACE when no ActionsSlot is provided. The reel
-// provides none, so the buttons land inline; the wizard provides one, so they
-// portal into the pinned bar. Neither step knows which is happening.
-//
-// Step6Signin especially must never be forked. Its error branches were each
-// written after something actually went wrong in production, and a second copy
-// is a second place for a sign-up bug to live — on the one screen in the app
-// where a bug costs real money.
 const TOTAL_STEPS = 6;
+const STORAGE_KEY = "acedit_onboarding_v1";
 
 /** The step that shows the hand spread out in the content itself. */
 const REVEAL_STEP = 5;
@@ -141,6 +121,35 @@ function useBarHeight(node) {
 }
 
 // ─── Wizard state ────────────────────────────────────────────────────────────
+const DEFAULT_ANSWERS = {
+    yearLevel:       null,
+    subjects:        [],         // [{ name, code, id }]
+    goalAtar:        null,
+    goalCourseName:  "",
+    goalUniversity:  "",
+    intent:          null,       // "premium" | "free" — set on the sign-in step
+    completedAt:     null,
+    email:           null,       // set on email+password path only — used as
+                                 // the AuthContext email-match guard so the
+                                 // 7-day storage window can't leak to a
+                                 // different user on a shared browser.
+};
+
+function loadAnswers() {
+    try {
+        const raw = localStorage.getItem(STORAGE_KEY);
+        if (!raw) return { ...DEFAULT_ANSWERS };
+        return { ...DEFAULT_ANSWERS, ...JSON.parse(raw) };
+    } catch {
+        return { ...DEFAULT_ANSWERS };
+    }
+}
+
+function saveAnswers(answers) {
+    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(answers)); }
+    catch { /* localStorage full or disabled — silent */ }
+}
+
 // ─── Page ────────────────────────────────────────────────────────────────────
 // `existingUser`: rendered for someone who already has an account, retaking
 // the wizard on purpose from Settings → Study setup. The pre-signup path
@@ -460,14 +469,7 @@ function Step1Year({ answers, update, onNext }) {
 }
 
 // ═══ STEP 2 — Subjects ══════════════════════════════════════════════════════
-/**
- * `eyebrow` is overridable because this step is rendered in TWO flows that
- * count differently: the wizard has six steps and the landing reel has three
- * questions. It printed "The deal · 2 of 4" underneath the reel's own
- * "Question 1 of 3" — two counters, one screen, disagreeing. Whichever surface
- * is doing the counting owns the label.
- */
-export function Step2Subjects({ answers, update, onNext, canContinue, eyebrow = "The deal \u00B7 2 of 4" }) {
+function Step2Subjects({ answers, update, onNext, canContinue }) {
     const [query, setQuery] = useState("");
     const [showCustomForm, setShowCustomForm] = useState(false);
     const [customName, setCustomName] = useState("");
@@ -514,7 +516,7 @@ export function Step2Subjects({ answers, update, onNext, canContinue, eyebrow = 
 
     return (
         <StepShell
-            eyebrow={eyebrow}
+            eyebrow="The deal · 2 of 4"
             title="What subjects are you taking?"
             subtitle="Each one becomes a card. The suit is the subject, and it keeps it forever."
             footer={
@@ -712,7 +714,7 @@ function Step3Brain({ onNext }) {
 // thinking, and splitting them meant a student who wanted to skip had to skip
 // twice. They are the same question — what are you aiming at — so they are one
 // screen with one skip.
-export function Step4Target({ answers, update, onNext, eyebrow = "The deal \u00B7 3 of 3" }) {
+function Step4Target({ answers, update, onNext }) {
     const value = answers.goalAtar ?? 85;
     const band = atarBandOf(value);
 
@@ -724,7 +726,7 @@ export function Step4Target({ answers, update, onNext, eyebrow = "The deal \u00B
 
     return (
         <StepShell
-            eyebrow={eyebrow}
+            eyebrow="The deal · 3 of 3"
             title="What are you playing for?"
             subtitle="Plant a flag. You can move it whenever you want."
             footer={
@@ -872,7 +874,7 @@ function Step6SaveExisting({ answers, onSaved }) {
 // moved here from the screen it used to own, because a price comparison is
 // worth most at the moment of the decision and nothing at all two screens
 // earlier.
-export function Step6Signin({ answers, update }) {
+function Step6Signin({ answers, update }) {
     const { signUpWithPassword } = useAuth();
     const [isStarting, setIsStarting] = useState(false);
 
