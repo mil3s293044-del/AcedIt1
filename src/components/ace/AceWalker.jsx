@@ -16,6 +16,18 @@
  * from the feet — and a two-frame walk is one you can actually keep in your
  * head when you change it later.
  *
+ * AND HE DOES NOT FREEZE WHEN HE ARRIVES. `pose` may be a SEQUENCE: he plays
+ * it in order once the stride has landed and holds the last one. That last
+ * entry is the one that matters — end on a resting pose (`stand`, `happy`,
+ * `peek`, `offer`) and AceBody's own fidget system takes over, so a beat the
+ * student reads for a minute has a character standing in it rather than a
+ * drawing. End on a gesture and he holds the gesture, which is occasionally
+ * what you want and never what a long beat wants.
+ *
+ * That is the AceDeal lesson stated the other way round: the switches that
+ * turn his own motion off are the bug. Holding `point` is one of them —
+ * RESTING does not contain it, so a held point is a still frame.
+ *
  * WHAT HE WILL NOT DO:
  *
  *   - Walk under reduced motion. He fades in standing still.
@@ -30,8 +42,16 @@ import AceBody from "@/components/ace/AceBody";
 /** How long the stride takes, and how fast the feet alternate inside it. */
 const WALK_MS = 900;
 const STEP_MS = 150;
+/**
+ * How long one gesture in a sequence holds before the next.
+ *
+ * Long enough to read as a movement rather than a flicker — AceDeal's own
+ * recovery beat is the same length, for the same reason.
+ */
+const GESTURE_MS = 1200;
 
 export default function AceWalker({
+    /** A pose, or a sequence played on arrival whose LAST entry is held. */
     pose = "stand",
     size = "w-24 sm:w-28",
     /** Bumping this replays the walk-in — pass the page key. */
@@ -44,7 +64,16 @@ export default function AceWalker({
     const reduce = useReducedMotion();
     const [walking, setWalking] = useState(!reduce);
     const [step, setStep] = useState(0);
+    const [phase, setPhase] = useState(0);
     const first = useRef(true);
+
+    // A string is a sequence of one, so every caller takes the same path.
+    const seq = Array.isArray(pose) ? pose.filter(Boolean) : [pose];
+    const last = Math.max(0, seq.length - 1);
+    // Keyed on the CONTENT, not the array: a literal prop is a new array on
+    // every render, and depending on its identity would restart the sequence
+    // forever.
+    const seqKey = seq.join("|");
 
     // Walk in on mount and on every change of `trip`.
     useEffect(() => {
@@ -56,6 +85,19 @@ export default function AceWalker({
         return () => clearTimeout(done);
     }, [trip, reduce]);
 
+    // A new beat, or new copy, restarts the sequence from its first gesture.
+    useEffect(() => { setPhase(0); }, [trip, seqKey]);
+
+    // Advance only once he has ARRIVED: the stride overrides the pose, so a
+    // gesture played during it is one nobody sees. Under reduced motion he
+    // goes straight to the pose he settles on.
+    useEffect(() => {
+        if (reduce) { setPhase(last); return; }
+        if (walking || phase >= last) return;
+        const t = setTimeout(() => setPhase((p) => p + 1), GESTURE_MS);
+        return () => clearTimeout(t);
+    }, [walking, phase, last, reduce]);
+
     // The two-frame cycle, running only while he's actually moving.
     useEffect(() => {
         if (!walking || reduce) { setStep(0); return; }
@@ -64,9 +106,11 @@ export default function AceWalker({
     }, [walking, reduce]);
 
     const Tag = onClick ? "button" : "div";
+    const held = seq[Math.min(phase, last)] || "stand";
 
     return (
-        <div className={`flex items-end gap-2 ${className}`} data-ace-walker={walking ? "walking" : "still"}>
+        <div className={`flex items-end gap-2 ${className}`}
+            data-ace-walker={walking ? "walking" : "still"} data-ace-pose={held}>
             {/* The bubble is on his LEFT so it grows into the page rather than
                 off the right edge, which is where he stands. */}
             {children}
@@ -94,7 +138,7 @@ export default function AceWalker({
                 >
                     <AceBody
                         className={size}
-                        pose={walking && !reduce ? "walk" : pose}
+                        pose={walking && !reduce ? "walk" : held}
                         step={step}
                         title={label}
                     />

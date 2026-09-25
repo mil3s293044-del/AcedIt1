@@ -160,6 +160,44 @@ export function firstWinStatus(profile, { now = Date.now() } = {}) {
 }
 
 /**
+ * How long a dashboard card offers the run back before the entry moves to Help.
+ *
+ * It is DOUBLE the window in which the run offers itself, which is the point:
+ * the card exists for the student who met Ace on minute one and closed him,
+ * and they will not come looking for it — it has to be in front of them on the
+ * screen they land on. After that it stops being news and becomes reference,
+ * and reference lives on Help with everything else this app can do.
+ */
+export const ENTRY_WINDOW_HOURS = 48;
+
+/**
+ * Whether the dashboard should offer the run back.
+ *
+ * Only when it is NOT about to open by itself — `firstWinStatus` is non-null
+ * exactly while a run is pending or part-way through, and a card telling
+ * somebody to start a thing that is already talking to them from the corner is
+ * the app asking twice. So this fires for the two cases where a manual entry
+ * is the ONLY way in: they finished or skipped it, or the 24-hour window shut
+ * before they ever got to it.
+ *
+ * An unknown profile age counts as old and gets no card, the same direction
+ * every other age check here errs in.
+ */
+export function showRunCard(profile, { now = Date.now() } = {}) {
+    if (!profile) return false;
+    if (firstWinStatus(profile, { now })) return false;
+    const age = profileAgeHours(profile, now);
+    return age != null && age <= ENTRY_WINDOW_HOURS;
+}
+
+/** A replay starts from scratch: the old subject and quiz are last time's. */
+export const replayPatch = () => ({
+    status: "active", beat: "subject",
+    subject: null, problem: null, quiz_id: null,
+    started_at: new Date().toISOString(), finished_at: null,
+});
+
+/**
  * THE TOUR WAITS FOR THIS. Both fire on a fresh account and both are Ace in
  * the corner; two of him talking over each other on somebody's first screen is
  * worse than either alone. The first run leads because it is the one that
@@ -215,8 +253,14 @@ export const canStart = (userSubjects) => subjectChoices(userSubjects).length > 
 export function droppedFrom(attempt) {
     const results = attempt?.extra?.question_results;
     if (Array.isArray(results) && results.length > 0) {
+        // `got`, which is what the player writes and what /MistakeBank's own
+        // redo gate reads. This asked for `met`, a field nothing has ever
+        // written — so the whole per-criterion branch was dead and every run
+        // fell through to the arithmetic below, reporting "a mark or two" off
+        // the score whatever the marking actually said. It rendered perfectly,
+        // because the fallback is right often enough to look right.
         const counted = results.filter((r) =>
-            Array.isArray(r?.criteria) && r.criteria.some((c) => c && c.met === false)).length;
+            Array.isArray(r?.criteria) && r.criteria.some((c) => c && c.got === false)).length;
         if (counted > 0) return counted;
     }
     const score = attempt?.score;

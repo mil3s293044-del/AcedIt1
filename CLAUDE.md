@@ -2311,6 +2311,46 @@ is now five modules — `criterionIndexFor`, `expiredKeys`, `markPercent`,
 quiz fake, and the whole premise is that what this produces is real. With an
 empty list it stands down and the tour takes it.
 
+**NEITHER OF THEM COULD BE STARTED, and both are one tap from being gone
+forever.** Both derive their own eligibility from the profile's age and open
+themselves in Ace's corner, and both write `skipped` the moment the X on his
+bubble is pressed — which is the single most likely thing to happen to a bubble
+that appears unasked-for. So a student who dismissed him on minute one had
+permanently lost the first run AND the tour, with no control anywhere in the
+app to get either back, and no way to find out there had been anything there.
+
+`aceReplay.js` is the channel and the line it draws is: **an automatic offer is
+DERIVED, a replay is a REQUEST.** Nothing in it touches `firstWinStatus` or
+`tourStatus`, which answer "should this open at somebody who did not ask" and
+must stay derived from the profile's age — a flag meaning "has not seen it"
+would ambush all ~130 existing accounts at once. A replay is not that question:
+somebody pressed a button, so it runs, at any age, as often as they like.
+
+**A REQUEST IS STICKY, because the listener may not have mounted.** The run
+hands to the tour at its close and Layout keeps AceTour unmounted for as long
+as the run is live, so the handover fires at a component that does not exist
+yet and a plain event is simply lost — the one button on the close doing
+nothing. The pending set makes the order irrelevant: a late listener claims it
+on mount, an already-mounted one hears the event, and `take` clears it either
+way so a surface that does both cannot start itself twice. The close requests
+the tour rather than relying on it being eligible, or a replay months later
+would hand over to a `tourStatus` that says no.
+
+**ONE CARD, TWO HOMES.** `StartHereCard` is on the dashboard for
+`ENTRY_WINDOW_HOURS` — double the run's own window, deliberately, because it
+exists for the student who just closed Ace and will not go looking — and then
+permanently on Help, where reference lives. `showRunCard` refuses while
+`firstWinStatus` is non-null, since a card telling somebody to start a thing
+that is already talking to them from the corner is the app asking twice. The
+dashboard copy SAYS where it goes, because a control that disappears without
+saying so is one the student assumes they imagined.
+
+**AND A PRESSED BUTTON NEVER DOES NOTHING.** The no-subjects branch used to
+write `skipped` and vanish, which is right for the automatic run — nobody asked
+— and is the worst thing on this page for a replay. `open({ replay })` is the
+only thing that flag changes: a request with nothing to build on says what is
+missing and points at Subjects.
+
 **THE RUN LEADS, THE TOUR IS THE MAP BEHIND IT.** Both fire on a fresh account
 and both are Ace in the same corner; two of him talking over each other on
 somebody's first screen is worse than either alone. `tourShouldWait` holds the
@@ -2335,6 +2375,43 @@ is a worse first impression than admitting the build failed.
 bubble's TRUE width, which is the only way to judge them: at full width the
 copy looked fine and at 21rem the third beat was 420px of theory on a phone,
 read before anything had happened. Both themes, and check the phone.
+
+**AND THE WHOLE RUN IS WALKED IN A REAL BROWSER** (`npm run e2e:serve`, then
+`npm run e2e:firstwin`). Everything interesting about a CONDUCTOR is an
+INTEGRATION — a navigation, a write that has to survive it, two components
+agreeing about whose turn it is to speak — and not one of those is reachable
+from an assertion file. `firstWin.test.mjs` covers the model and could not see
+any of it. The first walk found two real bugs on its first pass:
+
+- **He talked over himself on the most important screen of the run.**
+  `onLiveChange` was answering "is the bubble on screen", and Layout was asking
+  "is a run in progress". They differ in exactly one place: the quiz player,
+  where the bubble stands down and the run is still going. So the moment the
+  first quiz opened, Layout un-suppressed everything — the study-intent modal,
+  AceBuddy's bubble and a second Ace, all drawn over the three questions the
+  app had just built for them. `showing` and `running` are separate now.
+- **`droppedFrom` read `criteria[].met`, a field nothing has ever written.**
+  The player writes `got`, and so does the field /MistakeBank's redo gate
+  reads. So the per-criterion branch was DEAD and every close fell through to
+  "score < 100", reporting one dropped mark on a paper that dropped three.
+  **Its own test used `met` in the fixture too** — written from the same memory
+  as the code, which proves only that the two agree. The check that closes it
+  reads the field name out of the PLAYER's own mapper.
+
+`scripts/_fakeBase44.js` is the backend, swapped in at the module level by
+`E2E_FAKE=1`. It has to be a module alias: `base44` is a Proxy answering its
+five surfaces from closures, so assigning over them lands on the client
+underneath and changes nothing. **And it goes in `dualRunDispatch`, not in
+`resolve.alias`** — a pre-plugin resolves first, which is why the two entries
+in the alias array are duplicated there — matching on the MODULE and not the
+spelling, because by then `@/api/base44Client` has already become
+`/src/api/base44Client`. The store lives in `sessionStorage` because a real
+backend survives a reload, which is the whole reason the beat is written to the
+profile rather than held in state.
+
+What it does NOT cover, stated plainly: the API boundary itself. Whether those
+columns exist is `dbColumns.test.mjs`'s job against the real schema, and
+whether Claude returns usable questions is not something any harness asserts.
 
 ## The signup tour
 
@@ -2362,6 +2439,32 @@ Two rules it exists to keep:
   arrives the way he arrives everywhere else. The first version pointed him at
   each page's `<h1>` through AceRoam and he clipped under the nav — headings
   are near the top, that is what headings are.
+
+**A HELD POSE IS A STILL FRAME, and both onboarding surfaces were one.** Every
+tour stop passed `pose="point"` and every first-run beat did the same, which
+reads as a decision and is the AceDeal failure with a different switch:
+AceBody fires its idles ONLY from a resting pose (`stand`, `happy`, `peek`,
+`offer`), so `point` is not a mood he holds, it is his own motion turned off.
+He walked in, raised an arm, and froze there for as long as the student took
+to read — which on a tutorial beat is the longest he is ever on screen, and
+six stops that all pointed were also six identical stops.
+
+`pose` may be a SEQUENCE now. AceWalker plays it once the stride has landed
+and **holds the LAST entry**, so the last one is the load-bearing one: end on a
+resting pose and his fidget system takes over, end on a gesture and he holds
+the gesture. The gesture plays only after the walk, because the stride
+overrides the pose and one played during it is one nobody sees; under reduced
+motion he goes straight to the settle. `trip` stays the BEAT and never the
+busy flag — he is already standing there when a build starts, and bumping it
+would send him off the edge to walk in again.
+
+So he waves them in, thinks about what is going wrong, points at the button,
+and works (`think`, deliberately not a rest) while the questions are written.
+The tour gets a gesture per stop for the same reason it gets a lead per stop.
+`acePose.test.mjs` reads `POSES`/`RESTING` out of AceBody as TEXT — it is a
+.jsx and the loader will not resolve it, the same reason mirrors.test.mjs
+parses its two sides — and asserts every sequence settles. `?v=acepose` runs
+them all for real; `data-ace-pose` is what a still can show of an animation.
 
 Layout stands AceIntro and AceBuddy down while it runs; they share the corner
 and the mascot. It goes quiet on the payment flow, because the wizard sends
@@ -3120,6 +3223,17 @@ is the textbook, and only as something to generate MORE from.
   a real quiz, built from their subject, sat in the REAL player and marked.
   The close reports what happened and refuses to quote an ATAR. Draw the beats
   with `scripts/_floorProbe.jsx?v=firstwin`, at the bubble's true width
+- `scripts/firstWinE2E.mjs` + `scripts/_fakeBase44.js` — the whole first run
+  walked in a browser against an in-memory backend. The only thing that can see
+  a conductor's integrations; it found the two bugs above on its first pass
+- `src/lib/aceReplay.js` + `aceReplay.test.mjs`,
+  `src/components/ace/StartHereCard.jsx` — the only way back into the first run
+  or the tour once Ace has been dismissed. A sticky request, because the
+  handover fires at a component Layout has not mounted yet
+- `src/components/ace/AceWalker.jsx` + `src/lib/acePose.test.mjs` — the walk,
+  and the pose SEQUENCE whose last entry is held. A sequence ending on a
+  non-resting pose renders perfectly and is a character standing perfectly
+  still; the test is the only thing that says so
 - `src/lib/mirrors.test.mjs` — the client/server copies nothing was checking:
   the level curve (`xpSystem.jsx` vs server.mjs) and the ATAR bands. Both sides
   are parsed as text and RUN, so it compares behaviour rather than source

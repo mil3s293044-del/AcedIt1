@@ -26,6 +26,8 @@ import { bestLever } from "@/lib/atarLift";
 import { atarBandOf } from "@/lib/atarBands";
 import { todaysIntent } from "@/lib/studyIntent";
 import { needsSetup, outstandingTasks, setupCopy } from "@/lib/onboardingTasks";
+import StartHereCard from "@/components/ace/StartHereCard";
+import { showRunCard } from "@/lib/firstWin";
 import { isReady } from "@/lib/due";
 import { studyEvents } from "@/lib/studyLog";
 import { deckCards } from "@/lib/mistakeBank";
@@ -907,6 +909,16 @@ export default function Dashboard() {
     const setup = useMemo(() => setupCopy(userProfile), [userProfile]);
     const showOnboarding = needsSetup(userProfile) && !!setup;
 
+    /**
+     * The way back into the first run, for as long as it is still news.
+     *
+     * Only when it is NOT about to open by itself — a card telling somebody to
+     * start a thing that is already talking to them from the corner is the app
+     * asking twice. `showRunCard` owns that, and after the window the entry is
+     * on Help, which is where the card says it goes.
+     */
+    const showStartHere = useMemo(() => showRunCard(userProfile), [userProfile]);
+
     if (isLoading) {
         return (
             <div className="min-h-screen flex items-center justify-center bg-background">
@@ -1116,9 +1128,14 @@ export default function Dashboard() {
                     is still a click away on Ranked, where someone who wants a
                     leaderboard goes to look at one. */}
 
+                {/* ── START HERE ──────────────────────────────────────── */}
+                {showStartHere && (
+                    <Placed index={4}><StartHereCard home="dashboard" /></Placed>
+                )}
+
                 {/* ── ONBOARDING NUDGE ────────────────────────────────── */}
                 {showOnboarding && (
-                    <Placed index={4} className="rounded-2xl bg-primary/5 border border-primary/15 on-table p-5 lg:p-6">
+                    <Placed index={5} className="rounded-2xl bg-primary/5 border border-primary/15 on-table p-5 lg:p-6">
                         <div className="flex flex-col sm:flex-row sm:items-center gap-4">
                             <div className="flex items-center gap-3 flex-1 min-w-0">
                                 <div>

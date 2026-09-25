@@ -25,6 +25,15 @@
  * `getExaminerPrompt` is the shared source, so these questions are written to
  * the same standard as every other question in the app.
  *
+ * ─── He ACTS each beat out, and then he relaxes ─────────────────────────────
+ * `POSE` gives every beat its own arrival gesture and the resting pose he
+ * settles into afterwards. The settle is the load-bearing half: AceBody fires
+ * its idles only from resting poses, so the old single held `point` meant he
+ * froze mid-gesture for as long as the student took to read — which on the
+ * first beat is the longest he is ever on screen. He waves them in, thinks
+ * about the problem, points at the button, and between beats he is simply
+ * standing there being a character.
+ *
  * ─── He is drawn the way he is drawn everywhere else ────────────────────────
  * AceWalker + AceBubble, in AceBuddy's corner, never a modal with a backdrop.
  * AceTour's header argues this at length and it applies harder here: a modal
@@ -46,8 +55,9 @@ import { canAfford } from "@/lib/chips";
 import {
     PROBLEMS, QUESTION_COUNT, GENERATE_FEATURE, GENERATE_PRICE,
     problemById, firstWinState, firstWinStatus, withFirstWinPatch,
-    subjectChoices, closingFacts, droppedFrom,
+    subjectChoices, closingFacts, droppedFrom, replayPatch,
 } from "@/lib/firstWin";
+import { RUN, TOUR, requestAce, onAceRequest, takeAceRequest } from "@/lib/aceReplay";
 
 /**
  * Pages where he holds his tongue. Same list and same reason as AceTour: the
@@ -55,6 +65,24 @@ import {
  * this a brand-new premium account meets a tutorial on top of a checkout.
  * The run is only PAUSED here — it keeps its place.
  */
+/**
+ * Per beat: what he does on arrival, then what he settles into.
+ *
+ * The last entry is HELD, so it has to be one of AceBody's resting poses or
+ * his fidgets never fire. Reading a beat takes far longer than playing one.
+ */
+const POSE = {
+    subject: ["wave", "happy"],     // hello, and here is the offer
+    problem: ["think", "stand"],    // he is asking, so he is thinking
+    build:   ["point", "stand"],    // at the button that does it
+    quiz:    ["alert", "offer"],    // still going? — then holding it out
+    close:   ["cheer", "proud", "happy"],
+    /* Not a beat. He asked for a replay and there is nothing to build on. */
+    blocked: ["think", "offer"],
+};
+/** While the questions are being written. Not a rest: he is working. */
+const POSE_BUSY = "think";
+
 const QUIET_PAGES = new Set([
     "Onboarding", "Landing", "Login", "ForgotPassword", "ResetPassword", "Suspended",
     "Checkout", "PaymentSuccess", "PaymentCancel", "Paywall", "Premium", "Subscription",
@@ -72,6 +100,7 @@ export default function FirstWin({ page, userProfile, onLiveChange, onFinished }
     const [busy, setBusy] = useState(false);
     const [failed, setFailed] = useState(null);
     const [facts, setFacts] = useState(null);
+    const [blocked, setBlocked] = useState(false);
     const started = useRef(false);
 
     // Layout owns the profile fetch. This keeps its own copy because it writes
@@ -90,34 +119,102 @@ export default function FirstWin({ page, userProfile, onLiveChange, onFinished }
         catch { /* the run still works; the next login re-reads whatever stuck */ }
     }, [profile]);
 
+    /**
+     * Load their subjects and go live.
+     *
+     * `replay` is the difference between an offer and a request, and the only
+     * place it changes anything is the no-subjects branch — see below. It also
+     * starts from scratch, because the subject and the quiz on a finished run
+     * are last time's.
+     */
+    const open = useCallback(async ({ replay = false } = {}) => {
+        if (!profile) return;
+        const rows = await base44.entities.UserSubject
+            .filter({ created_by: profile.created_by }).catch(() => []);
+        const picks = subjectChoices(rows);
+
+        // NO SUBJECTS, NO FIRST WIN. Inventing one to demo on would make the
+        // quiz fake, and the entire premise is that what this produces is real
+        // and stays.
+        //
+        // How it stands down depends on WHO ASKED. Nobody asked for the
+        // automatic one, so it writes `skipped` and hands them to the tour
+        // without ever appearing. A replay was a button somebody pressed, and
+        // a button that does nothing visible is the worst thing on this list —
+        // so it says what is missing and points at the page that fixes it.
+        if (!picks.length) {
+            if (!replay) { await patch({ status: "skipped" }); onFinished?.("skipped"); return; }
+            setBlocked(true);
+            setLive(true);
+            return;
+        }
+
+        setBlocked(false);
+        setSubjects(picks);
+        if (replay) {
+            setFacts(null);
+            setFailed(null);
+            const fresh = replayPatch();
+            setState({ ...firstWinState(profile), ...fresh });
+            setLive(true);
+            await patch(fresh);
+            return;
+        }
+        setState(firstWinState(profile));
+        setLive(true);
+        if (firstWinStatus(profile) === "start") {
+            await patch({ status: "active", beat: "subject", started_at: new Date().toISOString() });
+        }
+    }, [profile, patch, onFinished]);
+
     // Open it, or pick it back up. Guarded by a ref rather than by state so a
     // re-render mid-write cannot start it twice.
     useEffect(() => {
         if (!profile || started.current) return;
         if (!firstWinStatus(profile)) return;
         started.current = true;
-        let cancelled = false;
-        (async () => {
-            const rows = await base44.entities.UserSubject
-                .filter({ created_by: profile.created_by }).catch(() => []);
-            if (cancelled) return;
-            const picks = subjectChoices(rows);
-            // NO SUBJECTS, NO FIRST WIN. Inventing one to demo on would make
-            // the quiz fake, and the entire premise is that what this produces
-            // is real and stays. The tour is still there for them.
-            if (!picks.length) { await patch({ status: "skipped" }); onFinished?.("skipped"); return; }
-            setSubjects(picks);
-            setState(firstWinState(profile));
-            setLive(true);
-            if (firstWinStatus(profile) === "start") {
-                await patch({ status: "active", beat: "subject", started_at: new Date().toISOString() });
-            }
-        })();
-        return () => { cancelled = true; };
-    }, [profile, patch]);
+        open();
+    }, [profile, open]);
 
+    /**
+     * Somebody pressed "start it" — on the dashboard card or on Help.
+     *
+     * The request is claimed on mount as well as listened for, because the
+     * button and this component are the same React tree and the event can
+     * arrive in either order. `started.current` is set so the automatic effect
+     * above cannot then fire a second opening over the top of this one.
+     */
+    useEffect(() => {
+        if (!profile) return undefined;
+        const go = () => { started.current = true; open({ replay: true }); };
+        if (takeAceRequest(RUN)) go();
+        return onAceRequest(RUN, go);
+    }, [profile, open]);
+
+    /**
+     * TWO DIFFERENT QUESTIONS, and answering Layout with the wrong one put
+     * three Aces on the screen at once.
+     *
+     * `showing` is whether the BUBBLE draws here. `running` is whether a run
+     * is in progress at all — which stays true while it is handed off to the
+     * quiz player, because the student is in the middle of it.
+     *
+     * Layout suppresses AceIntro and AceBuddy, and holds the tour, on what it
+     * is told here. Told `showing`, it un-suppressed both the moment the run
+     * handed over: so on the single most important screen of the first session
+     * — sitting the three questions it just built — the student got the
+     * study-intent modal AND AceBuddy's bubble AND a second Ace drawn in the
+     * corner, over the top of the quiz. That is the exact "two of him talking
+     * over each other" this run is sequenced to prevent, reached from the one
+     * direction nothing was watching.
+     *
+     * QUIET_PAGES stays out of `running`: the payment flow is where every one
+     * of these stands down on its own, and the run is paused rather than
+     * in progress there.
+     */
     const showing = live && !QUIET_PAGES.has(page) && !HANDED_OFF.has(page);
-    useEffect(() => { onLiveChange?.(showing); }, [showing, onLiveChange]);
+    const running = live && !QUIET_PAGES.has(page);
+    useEffect(() => { onLiveChange?.(running); }, [running, onLiveChange]);
 
     /**
      * `onFinished` is not decoration. This component patches its OWN copy of
@@ -126,10 +223,17 @@ export default function FirstWin({ page, userProfile, onLiveChange, onFinished }
      * telling it, the close button's "Show me around" would hand over to
      * nothing until the next reload.
      */
-    const finish = useCallback((status) => {
+    const finish = useCallback((status, { toTour = false } = {}) => {
         setLive(false);
+        setBlocked(false);
         patch({ status, finished_at: new Date().toISOString() });
         onFinished?.(status);
+        // "Show me around" REQUESTS the tour rather than relying on it being
+        // eligible. On a replay months later it is not — tourStatus reads the
+        // profile's age — so without this the one button on the close would
+        // hand over to nothing. The request is sticky, which is what makes it
+        // survive AceTour being unmounted for as long as this is live.
+        if (toTour) requestAce(TOUR);
     }, [patch, onFinished]);
 
     /**
@@ -244,9 +348,11 @@ ${STIMULUS_RULE}`,
     const afford = useMemo(
         () => (profile ? canAfford(profile, GENERATE_FEATURE) : null), [profile]);
 
-    if (!showing || !state) return null;
-    const beat = state.beat;
-    const problem = problemById(state.problem);
+    // `blocked` has no stored state behind it — it is a replay that found
+    // nothing to build on, which is a thing to SAY rather than a beat to save.
+    if (!showing || (!state && !blocked)) return null;
+    const beat = state?.beat;
+    const problem = problemById(state?.problem);
 
     return (
         <motion.aside
@@ -258,25 +364,32 @@ ${STIMULUS_RULE}`,
             className="fixed z-40 right-3 sm:right-6 max-w-[calc(100vw-1.5rem)]
                 bottom-[9.5rem] sm:bottom-[5.5rem] pointer-events-none"
         >
-            <AceWalker trip={beat} pose={beat === "close" ? "proud" : "point"}
+            {/* `trip` is the BEAT and not the busy flag: he is already standing
+                there when the build starts, and bumping it would send him back
+                off the edge to walk in again. Only the pose changes. */}
+            <AceWalker trip={blocked ? "blocked" : beat}
+                pose={blocked ? POSE.blocked : (busy ? POSE_BUSY : (POSE[beat] || "stand"))}
                 size="w-20 sm:w-24" className="justify-end">
                 <AceBubble className="pointer-events-auto w-[min(21rem,calc(100vw-8.5rem))]">
                     <AnimatePresence mode="wait">
-                        <motion.div key={beat}
+                        <motion.div key={blocked ? "blocked" : beat}
                             initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }}
                             exit={{ opacity: 0 }}>
 
                             <div className="flex items-start gap-2.5">
                                 <div className="min-w-0 flex-1">
                                     <p className="stat-label truncate">
-                                        {beat === "close" ? "That is a real result" : "Let's do one real thing"}
+                                        {blocked ? "One thing first"
+                                            : beat === "close" ? "That is a real result"
+                                            : "Let's do one real thing"}
                                     </p>
                                     <p className="font-display font-extrabold text-foreground leading-tight">
-                                        {beat === "subject" && "Which subject?"}
-                                        {beat === "problem" && `What is going wrong in ${state.subject}?`}
-                                        {beat === "build" && "Three questions, then"}
-                                        {beat === "quiz" && "Still going?"}
-                                        {beat === "close" && "You are up and running"}
+                                        {blocked && "Add a subject first"}
+                                        {!blocked && beat === "subject" && "Which subject?"}
+                                        {!blocked && beat === "problem" && `What is going wrong in ${state.subject}?`}
+                                        {!blocked && beat === "build" && "Three questions, then"}
+                                        {!blocked && beat === "quiz" && "Still going?"}
+                                        {!blocked && beat === "close" && "You are up and running"}
                                     </p>
                                 </div>
                                 <button onClick={() => finish("skipped")} aria-label="Close"
@@ -286,8 +399,34 @@ ${STIMULUS_RULE}`,
                                 </button>
                             </div>
 
+                            {/* ── A replay with nothing to build on. It SAYS so. ── */}
+                            {blocked && (
+                                <>
+                                    <p className="text-sm text-foreground leading-snug mt-2.5">
+                                        The questions come from a subject you actually study, so there is
+                                        nothing real for me to build yet. Put your subjects in and I will
+                                        be here.
+                                    </p>
+                                    <div className="flex items-center gap-3 mt-3">
+                                        <button onClick={() => finish("skipped")}
+                                            className="text-xs font-bold text-muted-foreground
+                                                hover:text-foreground transition-colors">
+                                            Later
+                                        </button>
+                                        <button
+                                            onClick={() => { setLive(false); setBlocked(false);
+                                                navigate(createPageUrl("Subjects")); }}
+                                            className="ml-auto inline-flex items-center gap-1 rounded-xl bg-primary
+                                                text-primary-foreground px-3 py-1.5 text-xs font-bold
+                                                hover:bg-primary/90 transition-colors">
+                                            Add subjects <ArrowRight className="w-3 h-3" />
+                                        </button>
+                                    </div>
+                                </>
+                            )}
+
                             {/* ── Pick a subject: their OWN, never a demo one ── */}
-                            {beat === "subject" && (
+                            {!blocked && beat === "subject" && (
                                 <>
                                     <p className="text-sm text-foreground leading-snug mt-2.5">
                                         I will build you three real exam questions and mark them. Pick the one
@@ -312,7 +451,7 @@ ${STIMULUS_RULE}`,
                             )}
 
                             {/* ── The problem, in their words. The technique is the ANSWER. ── */}
-                            {beat === "problem" && (
+                            {!blocked && beat === "problem" && (
                                 <div className="mt-2.5 space-y-1.5">
                                     {PROBLEMS.map((p) => (
                                         <button key={p.id}
@@ -327,7 +466,7 @@ ${STIMULUS_RULE}`,
                             )}
 
                             {/* ── The build. The price is on screen BEFORE the button. ── */}
-                            {beat === "build" && (
+                            {!blocked && beat === "build" && (
                                 <>
                                     {problem && (
                                         <p className="text-sm text-foreground leading-snug mt-2.5">
@@ -381,7 +520,7 @@ ${STIMULUS_RULE}`,
                             )}
 
                             {/* ── They wandered off mid-quiz. Wait; do not congratulate. ── */}
-                            {beat === "quiz" && (
+                            {!blocked && beat === "quiz" && (
                                 <>
                                     <p className="text-sm text-foreground leading-snug mt-2.5">
                                         Your {state.subject} questions are waiting — finish them and I will show
@@ -405,7 +544,7 @@ ${STIMULUS_RULE}`,
                             )}
 
                             {/* ── The close: only what actually happened. ── */}
-                            {beat === "close" && facts && (
+                            {!blocked && beat === "close" && facts && (
                                 <>
                                     <p className="text-sm text-foreground leading-snug mt-2.5">
                                         {facts.score !== null
@@ -429,7 +568,7 @@ ${STIMULUS_RULE}`,
                                     </p>
 
                                     <div className="flex items-center gap-3 mt-3">
-                                        <button onClick={() => finish("done")}
+                                        <button onClick={() => finish("done", { toTour: true })}
                                             className="ml-auto inline-flex items-center gap-1 rounded-xl bg-primary
                                                 text-primary-foreground px-3 py-1.5 text-xs font-bold
                                                 hover:bg-primary/90 transition-colors">

@@ -43,6 +43,7 @@ import {
     FEATURES, SECTIONS, BY_ID, searchFeatures, readiness, blockedBy,
 } from "@/lib/aceKnowledge";
 import { featureUsage, suggestNext, MEASURABLE } from "@/lib/exploreProgress";
+import StartHereCard from "@/components/ace/StartHereCard";
 
 /** Roughly the order a student needs them. Setup first: most of the app is dark without it. */
 const SECTION_ORDER = ["Setup", "Study", "Test", "Plan", "AI", "Progress", "Social"];
@@ -222,6 +223,13 @@ export default function Help() {
                 Everything AcedIt can do, what it's for, and when it's worth opening.
                 Search it, or read down the list.
             </p>
+
+            {/* ── Where the first run and the tour live permanently ──────── */}
+            {/* Both open themselves once, from the profile's age, and both are
+                gone for good the moment Ace's bubble is dismissed. This is the
+                only way back into either — the dashboard card that also offers
+                them is time-boxed and says it ends up here. */}
+            <StartHereCard home="help" className="mt-6" />
 
             {/* ── How much of it you've actually used ────────────────────── */}
             {/* Only over what can be proven. Reading Analytics leaves no row a
