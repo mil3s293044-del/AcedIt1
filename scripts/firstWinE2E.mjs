@@ -22,77 +22,35 @@
  * `scripts/_fakeBase44.js` is the backend, swapped in at the module level by
  * `E2E_FAKE=1`. Everything above the API boundary is the real thing.
  */
-import { chromium } from "playwright";
+import { launch, BASE } from "./_e2eHarness.mjs";
 
-const BASE = process.env.PROBE_BASE || "http://localhost:4479";
-const SHOT = process.env.SHOT_DIR || "/tmp/claude-0";
-const CHROME = process.env.CHROME_PATH || "/opt/pw-browsers/chromium";
-
-const b = await chromium.launch({ executablePath: CHROME });
-const ctx = await b.newContext({ viewport: { width: 1280, height: 900 } });
-// The dev server is the only real thing. AuthContext's public-settings probe is
-// the one outbound call the module swap cannot reach.
-await ctx.route("**", (r) => {
-    const u = r.request().url();
-    if (u.includes("/api/apps/public/")) return r.fulfill({ status: 200, contentType: "application/json", body: "{}" });
-    if (u.startsWith(BASE) || u.startsWith("data:") || u.startsWith("blob:")) return r.continue();
-    return r.abort();
-});
-// Base44 mode (what the swap covers) with a token, so AuthContext goes
-// straight down the `base44.auth.me()` path into the fake.
-await ctx.addInitScript(() => {
-    try {
-        localStorage.setItem("__acedit_force_supabase", "false");
-        localStorage.setItem("base44_access_token", "e2e");
-    } catch { /* private mode */ }
-});
-
-const pg = await ctx.newPage();
-const errs = [];
-pg.on("pageerror", (e) => errs.push("THROW: " + e.message));
-pg.on("console", (m) => {
-    if (m.type() === "error" && !/ERR_FAILED|Failed to load resource/.test(m.text())) {
-        errs.push("console: " + m.text().slice(0, 200));
-    }
-});
-
-let n = 0, bad = 0;
-async function check(name, fn) {
-    n += 1;
-    try { await fn(); console.log(`  ok  ${name}`); }
-    catch (e) { bad += 1; console.log(`FAIL  ${name}\n      ${e.message}`); }
-}
-const text = (sel) => pg.$eval(sel, (el) => el.innerText.replace(/\s+/g, " ").trim()).catch(() => "");
-const db = () => pg.evaluate(() => JSON.parse(JSON.stringify(window.__FAKE_DB__)));
+const h = await launch();
+const { pg, check, db, text, waitCopy, shot } = h;
 const firstWin = () => text("[data-first-win]");
-/** The attribute flips before the crossfade, so wait on the COPY. */
-const waitCopy = (re, ms = 20000) =>
-    pg.waitForFunction((src) => new RegExp(src).test(
-        document.querySelector("[data-first-win]")?.innerText || ""), re.source, { timeout: ms });
 
 console.log("\n─── FIRST WIN, END TO END ───\n");
 await pg.goto(`${BASE}/Dashboard?access_token=e2e`, { waitUntil: "networkidle" });
 
 await check("it opens itself on a fresh account, offering their OWN subjects", async () => {
-    await waitCopy(/Which subject/);
+    await waitCopy("[data-first-win]", /Which subject/);
     const t = await firstWin();
     if (!/Chemistry/.test(t)) throw new Error(`their subjects are not offered: ${t.slice(0, 140)}`);
 });
-await pg.screenshot({ path: `${SHOT}/e2e-1-subject.png` });
+await shot("e2e-1-subject");
 
 await check("the subject they picked is named back at them", async () => {
     await pg.click("[data-first-win] button:has-text('Chemistry')");
-    await waitCopy(/What is going wrong in Chemistry/);
+    await waitCopy("[data-first-win]", /What is going wrong in Chemistry/);
 });
 
 await check("the problem is answered with a TECHNIQUE, and the price is on screen BEFORE the button", async () => {
     await pg.click("[data-first-win] button:has-text(\"I read it, then it's gone\")");
-    await waitCopy(/Spaced repetition/);
+    await waitCopy("[data-first-win]", /Spaced repetition/);
     const t = await firstWin();
     if (!/chips/.test(t) || !/\b30\b/.test(t)) throw new Error(`no price before the button: ${t.slice(0, 260)}`);
     if (!/Build them/.test(t)) throw new Error("no way to start it");
 });
-await pg.screenshot({ path: `${SHOT}/e2e-2-build.png` });
+await shot("e2e-2-build");
 
 await check("Build them writes a REAL quiz and hands off to the REAL player", async () => {
     await pg.click("[data-first-win] button:has-text('Build them')");
@@ -124,7 +82,7 @@ await check("HE DOES NOT TALK OVER HIMSELF while they sit it", async () => {
         els.filter((e) => e.closest("[data-ace-walker]")).length);
     if (aces > 0) throw new Error(`${aces} Ace(s) in the corner while the player is up`);
 });
-await pg.screenshot({ path: `${SHOT}/e2e-3-player.png` });
+await shot("e2e-3-player");
 
 await check("the three questions can be answered and submitted", async () => {
     const answers = [
@@ -147,12 +105,11 @@ await check("the real marking panel runs and the attempt is SAVED", async () => 
     if (typeof a.score !== "number") throw new Error(`attempt saved with score ${a.score}`);
     if (!a.extra?.question_results) throw new Error("no per-criterion verdicts recorded — the close cannot tell what dropped");
 });
-await pg.waitForTimeout(1500);
-await pg.screenshot({ path: `${SHOT}/e2e-4-marked.png`, fullPage: true });
+await shot("e2e-4-marked");
 
 await check("coming back, the close reports what ACTUALLY happened", async () => {
     await pg.goto(`${BASE}/Dashboard`, { waitUntil: "networkidle" });
-    await waitCopy(/up and running/, 25000);
+    await waitCopy("[data-first-win]", /up and running/, 25000);
     const t = await firstWin();
     const a = (await db()).quiz_attempts[0];
     const m = t.match(/You scored (\d+)%/);
@@ -160,7 +117,7 @@ await check("coming back, the close reports what ACTUALLY happened", async () =>
     if (Number(m[1]) !== Math.round(a.score)) throw new Error(`close says ${m[1]}%, the attempt says ${a.score}%`);
     if (/ATAR is|\+0\.|\d+\.\d+ ATAR/.test(t)) throw new Error(`the close invented an ATAR figure: ${t.slice(0, 200)}`);
 });
-await pg.screenshot({ path: `${SHOT}/e2e-5-close.png` });
+await shot("e2e-5-close");
 
 await check("a dropped mark offers the mistake bank, counted off the REAL verdicts", async () => {
     // This is the check that found `droppedFrom` reading `criteria[].met`, a
@@ -182,7 +139,7 @@ await check("Show me around closes the run and hands to the tour", async () => {
     if (fw?.status !== "done") throw new Error(`run status is ${fw?.status}`);
     await pg.waitForSelector("[data-ace-tour]", { timeout: 15000 });
 });
-await pg.screenshot({ path: `${SHOT}/e2e-6-tour.png` });
+await shot("e2e-6-tour");
 
 /* ── The replay path: it is gone, and the card is the way back. ─────────── */
 await check("a finished run leaves the way back on the dashboard", async () => {
@@ -194,14 +151,11 @@ await check("a finished run leaves the way back on the dashboard", async () => {
 
 await check("Start it runs it AGAIN, months past the window", async () => {
     await pg.click("button:has-text('Start it')");
-    await waitCopy(/Which subject/, 20000);
+    await waitCopy("[data-first-win]", /Which subject/, 20000);
     const fw = (await db()).user_profiles[0].extra?.first_win;
     if (fw?.status !== "active") throw new Error(`replay left status ${fw?.status}`);
     if (fw.quiz_id) throw new Error("the replay resumed last time's quiz instead of starting over");
 });
-await pg.screenshot({ path: `${SHOT}/e2e-7-replay.png` });
+await shot("e2e-7-replay");
 
-console.log("\n  errors:", errs.length ? errs.slice(0, 6) : "none");
-console.log(`\n${n - bad}/${n} passed\n`);
-await ctx.close(); await b.close();
-process.exitCode = bad ? 1 : 0;
+await h.done("the first run, start to finish");

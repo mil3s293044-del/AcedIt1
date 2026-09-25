@@ -9,6 +9,7 @@
     "dev:api": "node server.mjs",
     "e2e:serve": "E2E_FAKE=1 vite --port 4479",
     "e2e:firstwin": "node scripts/firstWinE2E.mjs",
+    "e2e:tour": "node --import ./src/lib/_aliasLoader.mjs scripts/aceTourE2E.mjs",
     "build": "vite build",
     "start": "node server.mjs",
     "lint": "eslint . --quiet",

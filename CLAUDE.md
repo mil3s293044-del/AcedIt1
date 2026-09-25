@@ -2427,6 +2427,24 @@ all of that was a client library, a component, a server payout source and six
 anchor attributes scattered through the pages — reverted in `be14756`, and
 worth reading that commit before proposing it again.
 
+**AND IT IS WALKED TOO** (`npm run e2e:tour`), for the same reason the first
+run is: `aceTour.test.mjs` covers the copy and the eligibility arithmetic,
+which is most of what can go wrong in a MODULE, and everything else about this
+is a browser fact. It navigates six times, writes its place before each one,
+has to come back to the same stop after a refresh, has to go quiet on the
+payment flow and pick up afterwards, and shares one corner and one mascot with
+three other surfaces. Four walks: the tour start to finish, an OLD account
+meeting nothing at all, the run leading and the tour waiting behind it, and a
+replay asked for months later.
+
+Nothing in the tour was wrong. What the walk DID catch was a bug in the
+harness, and it is worth writing down because it read exactly like an app
+failure: `addInitScript` runs on every document load, so seeding the fake store
+unconditionally re-seeded it on every reload and every `goto` — and three
+assertions failed saying the tour could not remember its stop, which is a thing
+the tour does correctly. **A seed is a starting state, not a state to return
+to.** Both drivers share `scripts/_e2eHarness.mjs` so that fix is in one place.
+
 Two rules it exists to keep:
 
 - **It can only ever fire for genuinely new accounts.** Eligibility is derived
@@ -3223,9 +3241,12 @@ is the textbook, and only as something to generate MORE from.
   a real quiz, built from their subject, sat in the REAL player and marked.
   The close reports what happened and refuses to quote an ATAR. Draw the beats
   with `scripts/_floorProbe.jsx?v=firstwin`, at the bubble's true width
-- `scripts/firstWinE2E.mjs` + `scripts/_fakeBase44.js` — the whole first run
-  walked in a browser against an in-memory backend. The only thing that can see
-  a conductor's integrations; it found the two bugs above on its first pass
+- `scripts/firstWinE2E.mjs`, `scripts/aceTourE2E.mjs`,
+  `scripts/_e2eHarness.mjs` + `scripts/_fakeBase44.js` — both onboarding
+  surfaces walked in a browser against an in-memory backend. The only thing
+  that can see a conductor's integrations; the first run's walk found the two
+  bugs above on its first pass. The harness is shared because the two drivers
+  are the same setup twice
 - `src/lib/aceReplay.js` + `aceReplay.test.mjs`,
   `src/components/ace/StartHereCard.jsx` — the only way back into the first run
   or the tour once Ace has been dismissed. A sticky request, because the
