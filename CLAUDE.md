@@ -2376,6 +2376,43 @@ bubble's TRUE width, which is the only way to judge them: at full width the
 copy looked fine and at 21rem the third beat was 420px of theory on a phone,
 read before anything had happened. Both themes, and check the phone.
 
+**AND THE WHOLE RUN IS WALKED IN A REAL BROWSER** (`npm run e2e:serve`, then
+`npm run e2e:firstwin`). Everything interesting about a CONDUCTOR is an
+INTEGRATION — a navigation, a write that has to survive it, two components
+agreeing about whose turn it is to speak — and not one of those is reachable
+from an assertion file. `firstWin.test.mjs` covers the model and could not see
+any of it. The first walk found two real bugs on its first pass:
+
+- **He talked over himself on the most important screen of the run.**
+  `onLiveChange` was answering "is the bubble on screen", and Layout was asking
+  "is a run in progress". They differ in exactly one place: the quiz player,
+  where the bubble stands down and the run is still going. So the moment the
+  first quiz opened, Layout un-suppressed everything — the study-intent modal,
+  AceBuddy's bubble and a second Ace, all drawn over the three questions the
+  app had just built for them. `showing` and `running` are separate now.
+- **`droppedFrom` read `criteria[].met`, a field nothing has ever written.**
+  The player writes `got`, and so does the field /MistakeBank's redo gate
+  reads. So the per-criterion branch was DEAD and every close fell through to
+  "score < 100", reporting one dropped mark on a paper that dropped three.
+  **Its own test used `met` in the fixture too** — written from the same memory
+  as the code, which proves only that the two agree. The check that closes it
+  reads the field name out of the PLAYER's own mapper.
+
+`scripts/_fakeBase44.js` is the backend, swapped in at the module level by
+`E2E_FAKE=1`. It has to be a module alias: `base44` is a Proxy answering its
+five surfaces from closures, so assigning over them lands on the client
+underneath and changes nothing. **And it goes in `dualRunDispatch`, not in
+`resolve.alias`** — a pre-plugin resolves first, which is why the two entries
+in the alias array are duplicated there — matching on the MODULE and not the
+spelling, because by then `@/api/base44Client` has already become
+`/src/api/base44Client`. The store lives in `sessionStorage` because a real
+backend survives a reload, which is the whole reason the beat is written to the
+profile rather than held in state.
+
+What it does NOT cover, stated plainly: the API boundary itself. Whether those
+columns exist is `dbColumns.test.mjs`'s job against the real schema, and
+whether Claude returns usable questions is not something any harness asserts.
+
 ## The signup tour
 
 `AceTour` — six stops and a sign-off, fired once for accounts that are hours
@@ -3186,6 +3223,9 @@ is the textbook, and only as something to generate MORE from.
   a real quiz, built from their subject, sat in the REAL player and marked.
   The close reports what happened and refuses to quote an ATAR. Draw the beats
   with `scripts/_floorProbe.jsx?v=firstwin`, at the bubble's true width
+- `scripts/firstWinE2E.mjs` + `scripts/_fakeBase44.js` — the whole first run
+  walked in a browser against an in-memory backend. The only thing that can see
+  a conductor's integrations; it found the two bugs above on its first pass
 - `src/lib/aceReplay.js` + `aceReplay.test.mjs`,
   `src/components/ace/StartHereCard.jsx` — the only way back into the first run
   or the tour once Ace has been dismissed. A sticky request, because the

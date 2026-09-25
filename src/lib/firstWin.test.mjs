@@ -187,10 +187,15 @@ check("nothing real means nothing claimed", () => {
 });
 
 check("a dropped mark is counted off the marking, not inferred", () => {
+    // `got`, not `met`. This fixture used to say `met` — the same invented
+    // field the code read — so the test passed against a branch that could
+    // never fire on a real attempt. A fixture written from the same memory as
+    // the code under it proves only that the two agree. See the writer-pinned
+    // check at the bottom of this file, which is what closes that.
     const attempt = { score: 60, extra: { question_results: [
-        { criteria: [{ met: true }, { met: false }] },
-        { criteria: [{ met: true }] },
-        { criteria: [{ met: false }] },
+        { criteria: [{ got: true }, { got: false }] },
+        { criteria: [{ got: true }] },
+        { criteria: [{ got: false }] },
     ] } };
     assert.equal(droppedFrom(attempt), 2, "two questions lost a criterion");
 });
@@ -225,6 +230,37 @@ check("the model states no ATAR figure of its own", () => {
         .split("\n").filter((l) => !l.trim().startsWith("//")).join("\n");
     assert.ok(!/[+-]\s?\d+(\.\d+)?\s*ATAR/i.test(code),
         "a hard-coded ATAR gain has appeared in firstWin.js");
+});
+
+check("DROPPED MARKS ARE COUNTED OFF THE FIELD THE PLAYER ACTUALLY WRITES", () => {
+    // This asked for `criteria[].met`, which nothing in the tree has ever
+    // written — the player writes `got`, and that is the field /MistakeBank's
+    // redo gate reads too. So the per-criterion branch was DEAD and every
+    // close silently fell through to "score < 100", reporting one dropped
+    // mark on a paper that dropped three. Nothing threw, nothing rendered
+    // wrong, and the fallback is plausible often enough to look correct.
+    // Only walking the whole run against a real marking found it.
+    //
+    // Pinned against the WRITER rather than a remembered name: the mapper in
+    // QuizPlayer is the source of truth for this shape.
+    const player = fs.readFileSync("src/components/quizzes/QuizPlayer.jsx", "utf8");
+    const mapper = player.match(/const criteria = \(criteriaFor[\s\S]{0,240}/)?.[0] || "";
+    assert.ok(/got:/.test(mapper), "the player no longer writes `got` — this test's premise moved");
+    assert.ok(!/\bmet\b/.test(mapper), "the player writes `met` now; droppedFrom has to follow");
+
+    const src = fs.readFileSync("src/lib/firstWin.js", "utf8");
+    const body = src.slice(src.indexOf("export function droppedFrom"), src.indexOf("export function closingFacts"));
+    assert.ok(/c\.got === false/.test(body),
+        "droppedFrom reads a field the player does not write — the branch is dead and nothing says so");
+
+    const attempt = { score: 70, extra: { question_results: [
+        { q_index: 0, criteria: [{ text: "a", got: true }, { text: "b", got: true }] },
+        { q_index: 1, criteria: [{ text: "c", got: false }, { text: "d", got: true }] },
+        { q_index: 2, criteria: [{ text: "e", got: false }] },
+    ] } };
+    assert.equal(droppedFrom(attempt), 2, "two questions dropped a criterion");
+    assert.equal(droppedFrom({ score: 70 }), 1, "the arithmetic fallback still stands with no verdicts");
+    assert.equal(droppedFrom({ score: 100 }), 0);
 });
 
 console.log(`\nfirstWin: ${passed} checks passed`);

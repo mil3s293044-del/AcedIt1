@@ -33,6 +33,15 @@ const INTERCEPT_PATTERNS = [
 // Must run BEFORE the @base44/vite-plugin so our resolveId wins. Without this
 // override, base44 would resolve those paths to its compat shims and our flag
 // would never be consulted.
+// E2E_FAKE swaps the API client for an in-memory one so the first-run flow can
+// be driven in a real browser (scripts/_fakeBase44.js says why it has to be a
+// module alias). Development-only and opt-in: with the variable unset this
+// resolves to nothing and the array below is unchanged, so no build the app
+// actually ships can pick it up.
+const FAKE_BACKEND = process.env.E2E_FAKE === '1'
+  ? path.resolve(__dirname, 'scripts/_fakeBase44.js')
+  : null
+
 const ENTITIES_SHIM = path.resolve(__dirname, 'src/api/entitiesShim.js')
 const FUNCTIONS_SHIM = path.resolve(__dirname, 'src/api/functionsShim.js')
 
@@ -41,6 +50,16 @@ const dualRunDispatch = {
   enforce: 'pre',
   resolveId(source, importer) {
     if (!importer || importer.endsWith('.html')) return null
+    // The E2E swap has to happen HERE rather than in resolve.alias: this
+    // plugin is `enforce: 'pre'`, and a pre-plugin resolves before the alias
+    // array does, which is why the two entries below are duplicated in both
+    // places. Matched on the MODULE, not on how it was spelled: by the time a pre-plugin
+    // sees it the `@` alias has already been applied, so `@/api/base44Client`
+    // arrives as `/src/api/base44Client` — and api/ imports it relatively again
+    // as `./base44Client.js`. Only one module in the tree carries the name.
+    if (FAKE_BACKEND && /(^|\/)base44Client(\.js)?$/.test(source)) {
+      return FAKE_BACKEND
+    }
     // Match the same patterns @base44/vite-plugin matches, scoped to project src.
     if (source.endsWith('/entities/all') || source === '@/entities/all') {
       return ENTITIES_SHIM

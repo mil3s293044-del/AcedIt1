@@ -191,8 +191,30 @@ export default function FirstWin({ page, userProfile, onLiveChange, onFinished }
         return onAceRequest(RUN, go);
     }, [profile, open]);
 
+    /**
+     * TWO DIFFERENT QUESTIONS, and answering Layout with the wrong one put
+     * three Aces on the screen at once.
+     *
+     * `showing` is whether the BUBBLE draws here. `running` is whether a run
+     * is in progress at all — which stays true while it is handed off to the
+     * quiz player, because the student is in the middle of it.
+     *
+     * Layout suppresses AceIntro and AceBuddy, and holds the tour, on what it
+     * is told here. Told `showing`, it un-suppressed both the moment the run
+     * handed over: so on the single most important screen of the first session
+     * — sitting the three questions it just built — the student got the
+     * study-intent modal AND AceBuddy's bubble AND a second Ace drawn in the
+     * corner, over the top of the quiz. That is the exact "two of him talking
+     * over each other" this run is sequenced to prevent, reached from the one
+     * direction nothing was watching.
+     *
+     * QUIET_PAGES stays out of `running`: the payment flow is where every one
+     * of these stands down on its own, and the run is paused rather than
+     * in progress there.
+     */
     const showing = live && !QUIET_PAGES.has(page) && !HANDED_OFF.has(page);
-    useEffect(() => { onLiveChange?.(showing); }, [showing, onLiveChange]);
+    const running = live && !QUIET_PAGES.has(page);
+    useEffect(() => { onLiveChange?.(running); }, [running, onLiveChange]);
 
     /**
      * `onFinished` is not decoration. This component patches its OWN copy of
