@@ -76,12 +76,18 @@ check("every tour stop names real poses and SETTLES on a resting one", () => {
 });
 
 check("every first-win beat has a gesture, and settles", () => {
+    // Every BEAT needs an entry, and every ENTRY needs to be valid — the table
+    // also carries branches that are not beats (`blocked`, the replay that
+    // found nothing to build on), and those are read for just as long.
     for (const beat of BEATS) {
         assert.ok(POSE_TABLE[beat], `beat "${beat}" has no pose — add one deliberately`);
-        const list = seq(POSE_TABLE[beat]);
-        for (const p of list) assert.ok(POSES.has(p), `${beat}: "${p}" is not a pose`);
+    }
+    for (const [name, pose] of Object.entries(POSE_TABLE)) {
+        const list = seq(pose);
+        assert.ok(list.length > 0, `${name}: empty sequence`);
+        for (const p of list) assert.ok(POSES.has(p), `${name}: "${p}" is not a pose`);
         assert.ok(RESTING.has(list[list.length - 1]),
-            `${beat}: ends on "${list[list.length - 1]}", so he freezes while they read it`);
+            `${name}: ends on "${list[list.length - 1]}", so he freezes while they read it`);
     }
 });
 

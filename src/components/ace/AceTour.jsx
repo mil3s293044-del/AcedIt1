@@ -40,6 +40,7 @@ import AceWalker, { AceBubble } from "@/components/ace/AceWalker";
 import {
     STOPS, CONTENT_STOPS, stopAt, tourState, tourStatus, withTourPatch,
 } from "@/lib/aceTour";
+import { TOUR, onAceRequest, takeAceRequest } from "@/lib/aceReplay";
 
 /**
  * Pages where he holds his tongue rather than talks over something.
@@ -91,6 +92,30 @@ export default function AceTour({ page, userProfile, onLiveChange }) {
             patch({ status: "active", stop: 0, started_at: new Date().toISOString() });
         }
     }, [profile, patch]);
+
+    /**
+     * Asked for: by the first run's "Show me around", or from Help.
+     *
+     * A REQUEST is not an eligibility question — `tourStatus` reads the
+     * profile's age and says no to everybody past their first day, which is
+     * right for opening at somebody who did not ask and wrong for somebody who
+     * pressed a button. It is claimed on mount as well as listened for,
+     * because Layout keeps this unmounted for as long as the run is live, so
+     * the handover fires before there is anything here to hear it.
+     */
+    useEffect(() => {
+        if (!profile) return undefined;
+        const go = () => {
+            started.current = true;
+            setIndex(0);
+            setLive(true);
+            patch({ status: "active", stop: 0, started_at: new Date().toISOString() });
+            const first = stopAt(0);
+            if (first) navigate(first.route);
+        };
+        if (takeAceRequest(TOUR)) go();
+        return onAceRequest(TOUR, go);
+    }, [profile, patch, navigate]);
 
     const showing = live && !QUIET_PAGES.has(page);
     useEffect(() => { onLiveChange?.(showing); }, [showing, onLiveChange]);
