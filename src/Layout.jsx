@@ -23,6 +23,8 @@ import { recordVisit } from "@/lib/aceDeck";
 import AceBuddy from "@/components/ace/AceBuddy";
 import AceReacts from "@/components/ace/AceReacts";
 import AceTour from "@/components/ace/AceTour";
+import FirstWin from "@/components/ace/FirstWin";
+import { tourShouldWait } from "@/lib/firstWin";
 import PomodoroOrb from "@/components/study/PomodoroOrb";
 
 /**
@@ -163,6 +165,16 @@ export default function Layout({ children }) {
     // introducing a page over the top of Ace touring you through it is the app
     // arguing with itself, and it is the same corner besides.
     const [tourLive, setTourLive] = useState(false);
+    const [firstWinLive, setFirstWinLive] = useState(false);
+    /* FirstWin patches its own copy of the profile, so Layout's stays stale
+       for the rest of the session. Without this the tour would keep waiting
+       on a run that has already finished, and the close button's "Show me
+       around" would hand over to nothing until the next reload. */
+    const [firstWinDone, setFirstWinDone] = useState(false);
+    /* Ace has three surfaces that all stand in the same corner. Whenever the
+       first run or the tour is talking, the other two hold their tongue —
+       two of him on somebody's first screen is worse than either alone. */
+    const aceBusy = tourLive || firstWinLive;
     const pageKey = location.pathname.replace(/^\//, "").split("/")[0] || "Dashboard";
 
     // The deck's weaker half. Opening a page isn't using a feature, which is
@@ -532,15 +544,28 @@ export default function Layout({ children }) {
                 ten pages that carry a help button — the route already tells us
                 where we are, and this way a page added later is covered the
                 moment it gets a knowledge-map entry. */}
-            <AceIntro page={pageKey} suppressed={tourLive} />
+            <AceIntro page={pageKey} suppressed={aceBusy} />
             {/* He asks what the plan is once a day and then travels with you. */}
-            <AceBuddy page={pageKey} userProfile={userProfile} suppressed={tourLive} />
+            <AceBuddy page={pageKey} userProfile={userProfile} suppressed={aceBusy} />
 
-            {/* Six stops and a sign-off, once, for accounts that are hours old.
-                Renders nothing at all for anyone else — see aceTour's header
-                for why eligibility is derived from the profile's age rather
-                than from a flag we would have had to backfill. */}
-            <AceTour page={pageKey} userProfile={userProfile} onLiveChange={setTourLive} />
+            {/* THE FIRST RUN LEADS AND THE TOUR IS THE MAP BEHIND IT.
+
+                A new account owes both, and both are Ace in the same corner —
+                so `tourShouldWait` holds the tour until the first run is done
+                or skipped. The first run goes first because it is the one that
+                PRODUCES something: a real quiz, sat and marked, that stays in
+                their library. The tour then answers the other question, which
+                is where everything lives.
+
+                Eligibility for both is derived from the profile's age rather
+                than a flag we would have had to backfill — see firstWin's and
+                aceTour's headers. Neither renders anything at all for the ~130
+                accounts that already exist. */}
+            <FirstWin page={pageKey} userProfile={userProfile}
+                onLiveChange={setFirstWinLive} onFinished={() => setFirstWinDone(true)} />
+            {!firstWinLive && (firstWinDone || !tourShouldWait(userProfile)) && (
+                <AceTour page={pageKey} userProfile={userProfile} onLiveChange={setTourLive} />
+            )}
             {/* There is no second onboarding to suppress these for any more.
                 Signup runs the wizard at /Onboarding, which is its own route —
                 by the time Layout is on screen that conversation is over. The
