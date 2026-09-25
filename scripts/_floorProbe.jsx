@@ -21,6 +21,8 @@ import CalibrationCurve from "@/components/market/CalibrationCurve";
 import PortfolioPanel from "@/components/market/PortfolioPanel";
 import { readMarket } from "@/lib/market";
 import AceShuffle, { AceLoading } from "@/components/ace/AceShuffle";
+import AceWalker, { AceBubble } from "@/components/ace/AceWalker";
+import { STOPS } from "@/lib/aceTour";
 import { Button } from "@/components/ui/button";
 import { base44 } from "@/api/base44Client";
 
@@ -330,6 +332,48 @@ const views = {
                             </p>
                         </div>
                     ))}
+                </div>
+            </div>
+        );
+    },
+
+    /* Every pose sequence the onboarding asks Ace to play, running for real.
+       A still cannot show an animation, so what this is FOR is the thing a
+       still shows perfectly: `data-ace-pose` on each figure, which says what
+       he is holding right now. Shoot it at a second and again at five and the
+       first frame is mid-gesture while the second is a resting pose — or he
+       is frozen, which is the bug the whole change is about. */
+    acepose: () => {
+        const POSE = {
+            subject: ["wave", "happy"], problem: ["think", "stand"],
+            build: ["point", "stand"], quiz: ["alert", "offer"],
+            close: ["cheer", "proud", "happy"],
+        };
+        const Row = ({ name, pose }) => (
+            <div className="flex items-end gap-3 min-h-[7rem]">
+                <span className="stat-label w-28 flex-none">{name}</span>
+                <AceWalker trip={name} pose={pose} size="w-20">
+                    <AceBubble className="w-44">
+                        <p className="text-xs font-bold text-foreground">
+                            {(Array.isArray(pose) ? pose : [pose]).join(" → ")}
+                        </p>
+                    </AceBubble>
+                </AceWalker>
+            </div>
+        );
+        return (
+            <div className="min-h-screen bg-background p-8">
+                <p className="text-sm text-muted-foreground mb-5">
+                    First run, then the tour. The last pose in each row must be one he
+                    fidgets out of, or he freezes there for as long as the beat is read.
+                </p>
+                <div className="grid sm:grid-cols-2 gap-x-10">
+                    <div>
+                        {Object.entries(POSE).map(([k, v]) => <Row key={k} name={k} pose={v} />)}
+                    </div>
+                    <div>
+                        {STOPS.map((st) => <Row key={st.id} name={st.id} pose={st.pose} />)}
+                    </div>
                 </div>
             </div>
         );

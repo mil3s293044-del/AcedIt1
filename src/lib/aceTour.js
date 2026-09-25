@@ -36,40 +36,54 @@ export const TOUR_WINDOW_HOURS = 24;
  * the title and a one-line description used by Ace's other surfaces. The tour
  * adds `lead` — the reason to come back to this page — and takes everything
  * else from there, so the tour and the rest of Ace cannot drift apart.
+ *
+ * `pose` is what he DOES at that stop: a gesture on arrival, then the resting
+ * pose he settles into. AceWalker holds the last entry, and AceBody fires its
+ * idles only from a resting one — so ending on `point`, which every stop used
+ * to do, left him frozen mid-gesture for however long the lead took to read.
+ * Six stops that all pointed were also six identical stops; the gesture is the
+ * one thing that can make them read as six different rooms.
  */
 export const STOPS = [
     {
         id: "dashboard",
+        pose: ["wave", "happy"],
         page: "Dashboard",
         lead: "This is home. Every time you open AcedIt it works out what is worth doing today from what you have actually been doing, so it gets sharper the more you use it.",
     },
     {
         id: "subjects",
+        pose: ["point", "stand"],
         page: "Subjects",
         lead: "Put your subjects in first. Your SAC and exam dates live in here too, and nearly every other screen reads from them.",
     },
     {
         id: "study",
+        pose: ["think", "stand"],
         page: "Study",
         lead: "Six techniques doing six different jobs. Which one you want depends on what is going wrong — active recall for when you have read it twice and it still slips, blurting for finding the gaps while there is time to close them.",
     },
     {
         id: "quizzes",
+        pose: ["point", "offer"],
         page: "Quizzes",
         lead: "Exam-shaped questions rather than flashcard-shaped ones. Write your own, or hand it your notes and it builds one, then it marks you on them.",
     },
     {
         id: "planner",
+        pose: ["alert", "stand"],
         page: "Goals",
         lead: "Your week laid out around the dates you are actually working towards. A SAC countdown changes as it gets closer, so you can see the whole run-up instead of just the day.",
     },
     {
         id: "help",
+        pose: ["wink", "happy"],
         page: "Help",
         lead: "Every feature with a line on what it does and when it is worth opening. It lives under Account, so it is here whenever you have lost the thread.",
     },
     {
         id: "signoff",
+        pose: ["cheer", "proud", "happy"],
         page: "Dashboard",
         final: true,
         lead: "That is the tour. Pick one thing today rather than three — and I am in the corner whenever you want any of this again.",

@@ -2363,6 +2363,32 @@ Two rules it exists to keep:
   each page's `<h1>` through AceRoam and he clipped under the nav — headings
   are near the top, that is what headings are.
 
+**A HELD POSE IS A STILL FRAME, and both onboarding surfaces were one.** Every
+tour stop passed `pose="point"` and every first-run beat did the same, which
+reads as a decision and is the AceDeal failure with a different switch:
+AceBody fires its idles ONLY from a resting pose (`stand`, `happy`, `peek`,
+`offer`), so `point` is not a mood he holds, it is his own motion turned off.
+He walked in, raised an arm, and froze there for as long as the student took
+to read — which on a tutorial beat is the longest he is ever on screen, and
+six stops that all pointed were also six identical stops.
+
+`pose` may be a SEQUENCE now. AceWalker plays it once the stride has landed
+and **holds the LAST entry**, so the last one is the load-bearing one: end on a
+resting pose and his fidget system takes over, end on a gesture and he holds
+the gesture. The gesture plays only after the walk, because the stride
+overrides the pose and one played during it is one nobody sees; under reduced
+motion he goes straight to the settle. `trip` stays the BEAT and never the
+busy flag — he is already standing there when a build starts, and bumping it
+would send him off the edge to walk in again.
+
+So he waves them in, thinks about what is going wrong, points at the button,
+and works (`think`, deliberately not a rest) while the questions are written.
+The tour gets a gesture per stop for the same reason it gets a lead per stop.
+`acePose.test.mjs` reads `POSES`/`RESTING` out of AceBody as TEXT — it is a
+.jsx and the loader will not resolve it, the same reason mirrors.test.mjs
+parses its two sides — and asserts every sequence settles. `?v=acepose` runs
+them all for real; `data-ace-pose` is what a still can show of an animation.
+
 Layout stands AceIntro and AceBuddy down while it runs; they share the corner
 and the mascot. It goes quiet on the payment flow, because the wizard sends
 premium-intent signups straight to /Subscription.
@@ -3120,6 +3146,10 @@ is the textbook, and only as something to generate MORE from.
   a real quiz, built from their subject, sat in the REAL player and marked.
   The close reports what happened and refuses to quote an ATAR. Draw the beats
   with `scripts/_floorProbe.jsx?v=firstwin`, at the bubble's true width
+- `src/components/ace/AceWalker.jsx` + `src/lib/acePose.test.mjs` — the walk,
+  and the pose SEQUENCE whose last entry is held. A sequence ending on a
+  non-resting pose renders perfectly and is a character standing perfectly
+  still; the test is the only thing that says so
 - `src/lib/mirrors.test.mjs` — the client/server copies nothing was checking:
   the level curve (`xpSystem.jsx` vs server.mjs) and the ATAR bands. Both sides
   are parsed as text and RUN, so it compares behaviour rather than source

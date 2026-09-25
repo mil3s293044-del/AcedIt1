@@ -128,7 +128,7 @@ export default function AceTour({ page, userProfile, onLiveChange }) {
         >
             {/* `trip` replays the walk-in, so he strides in again at every
                 stop rather than teleporting between pages. */}
-            <AceWalker trip={stop.id} pose={stop.final ? "happy" : "point"}
+            <AceWalker trip={stop.id} pose={stop.pose || (stop.final ? "happy" : "stand")}
                 size="w-20 sm:w-24" className="justify-end">
                 <AceBubble className="pointer-events-auto w-[min(19rem,calc(100vw-8.5rem))]">
                     <AnimatePresence mode="wait">

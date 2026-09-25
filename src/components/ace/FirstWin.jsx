@@ -25,6 +25,15 @@
  * `getExaminerPrompt` is the shared source, so these questions are written to
  * the same standard as every other question in the app.
  *
+ * ─── He ACTS each beat out, and then he relaxes ─────────────────────────────
+ * `POSE` gives every beat its own arrival gesture and the resting pose he
+ * settles into afterwards. The settle is the load-bearing half: AceBody fires
+ * its idles only from resting poses, so the old single held `point` meant he
+ * froze mid-gesture for as long as the student took to read — which on the
+ * first beat is the longest he is ever on screen. He waves them in, thinks
+ * about the problem, points at the button, and between beats he is simply
+ * standing there being a character.
+ *
  * ─── He is drawn the way he is drawn everywhere else ────────────────────────
  * AceWalker + AceBubble, in AceBuddy's corner, never a modal with a backdrop.
  * AceTour's header argues this at length and it applies harder here: a modal
@@ -55,6 +64,22 @@ import {
  * this a brand-new premium account meets a tutorial on top of a checkout.
  * The run is only PAUSED here — it keeps its place.
  */
+/**
+ * Per beat: what he does on arrival, then what he settles into.
+ *
+ * The last entry is HELD, so it has to be one of AceBody's resting poses or
+ * his fidgets never fire. Reading a beat takes far longer than playing one.
+ */
+const POSE = {
+    subject: ["wave", "happy"],     // hello, and here is the offer
+    problem: ["think", "stand"],    // he is asking, so he is thinking
+    build:   ["point", "stand"],    // at the button that does it
+    quiz:    ["alert", "offer"],    // still going? — then holding it out
+    close:   ["cheer", "proud", "happy"],
+};
+/** While the questions are being written. Not a rest: he is working. */
+const POSE_BUSY = "think";
+
 const QUIET_PAGES = new Set([
     "Onboarding", "Landing", "Login", "ForgotPassword", "ResetPassword", "Suspended",
     "Checkout", "PaymentSuccess", "PaymentCancel", "Paywall", "Premium", "Subscription",
@@ -258,7 +283,10 @@ ${STIMULUS_RULE}`,
             className="fixed z-40 right-3 sm:right-6 max-w-[calc(100vw-1.5rem)]
                 bottom-[9.5rem] sm:bottom-[5.5rem] pointer-events-none"
         >
-            <AceWalker trip={beat} pose={beat === "close" ? "proud" : "point"}
+            {/* `trip` is the BEAT and not the busy flag: he is already standing
+                there when the build starts, and bumping it would send him back
+                off the edge to walk in again. Only the pose changes. */}
+            <AceWalker trip={beat} pose={busy ? POSE_BUSY : (POSE[beat] || "stand")}
                 size="w-20 sm:w-24" className="justify-end">
                 <AceBubble className="pointer-events-auto w-[min(21rem,calc(100vw-8.5rem))]">
                     <AnimatePresence mode="wait">
