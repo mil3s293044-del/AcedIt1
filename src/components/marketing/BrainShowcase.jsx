@@ -40,10 +40,24 @@ const LABEL = {
     pomodoro: "Focus blocks",
 };
 
-export default function BrainShowcase() {
+/**
+ * `onPick` lets the reel's science act pay out when a technique is chosen,
+ * WITHOUT forking this component. The picker is the interaction either way;
+ * the act just needs to know it happened. A copy of this with a callback
+ * bolted on would be the second copy of a model whose whole argument is that
+ * there is only one — the marketing claim here is "this is the product's own
+ * neuroscience", and it is checkable precisely because nothing is duplicated.
+ */
+export default function BrainShowcase({ onPick, height = 380 }) {
     const [key, setKey] = useState(ORDER[0]);
     const tech = TECHNIQUE_NEURO[key];
     if (!tech) return null;
+
+    const choose = (k) => {
+        setKey(k);
+        const t = TECHNIQUE_NEURO[k];
+        onPick?.({ key: k, label: LABEL[k], region: REGIONS[t?.regions?.[0]?.id]?.short || null });
+    };
 
     return (
         <div data-brain-showcase className="grid lg:grid-cols-[1fr_1.05fr] gap-10 lg:gap-14 items-center">
@@ -56,7 +70,7 @@ export default function BrainShowcase() {
                             key={k}
                             data-tech={k}
                             data-tech-on={k === key ? "1" : "0"}
-                            onClick={() => setKey(k)}
+                            onClick={() => choose(k)}
                             className={`px-3.5 py-2 rounded-xl text-sm font-bold border transition-all
                                 cursor-pointer ${
                                 k === key
@@ -104,7 +118,7 @@ export default function BrainShowcase() {
 
             {/* ── The brain ─────────────────────────────────────────────── */}
             <div>
-                <BrainModel regions={tech.regions} height={380} glow />
+                <BrainModel regions={tech.regions} height={height} glow />
                 <p className="text-[11px] text-white/35 leading-relaxed mt-4 max-w-md">
                     {REGION_NOTE}
                 </p>

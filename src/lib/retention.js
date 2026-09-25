@@ -29,6 +29,25 @@ const DAY = 86400000;
 const SCHEDULER_TARGET = 0.9;
 const K = -Math.log(SCHEDULER_TARGET);          // ≈ 0.10536
 
+/**
+ * The decay relation itself, exported because THREE surfaces draw it and two
+ * of them used to carry their own copy of K.
+ *
+ * The landing reel's forgetting act plots R(t) = e^(−t/S), and both it and the
+ * marketing chart it replaced had `const K = Math.log(10 / 9)` written out
+ * locally — the same constant this module derives, restated. That is the
+ * mirror class this codebase keeps getting bitten by: a changed exponent would
+ * put the chart and the product's own scheduler on different curves, silently,
+ * and the picture would still render perfectly.
+ *
+ * `stabilityFor` is the inverse of `stabilityDays` without a card row to read
+ * it off — an interval in days, out to the stability that interval implies.
+ */
+export const RETENTION_K = K;
+export const stabilityFor = (intervalDays) => Math.max(0, intervalDays) / K;
+export const recallAfter = (days, stability) =>
+    stability > 0 ? Math.exp(-Math.max(0, days) / stability) : 0;
+
 /** Below this, treat a card as no longer reliably retrievable. */
 export const RISK_FLOOR = 0.85;
 
