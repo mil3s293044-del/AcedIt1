@@ -607,6 +607,101 @@ for the transcriber's mistake would be invisible to us and infuriating to them.
 The transcript is what gets marked; the strokes are session-only, because the
 saved answer is a plain string like every other answer.
 
+## The marker was told to be an examiner and shown none of the rules
+
+**`subjectExaminerPrompts.js` carries 35 subjects of real study-design detail**
+— the mark allocation conventions (M/A/C, "exact form or the answer mark only",
+"show every step"), the key VCAA terminology, a per-subject list of how
+candidates actually lose marks, and the full command-term table. Six surfaces
+import it. **The one that MARKS did not.** QuizPlayer took `getLatexRules()`
+and nothing else, so the prompt instructed the model to "WRITE LIKE A VCAA
+EXAMINER'S REPORT" and to "use the command term" with the command-term table
+sitting unused two imports away. The app's own "collect nothing you don't use"
+rule, inverted, on the highest-stakes call it makes — the one whose errors come
+out of a student's marks.
+
+**And the prompt argued with itself.** It said *"Be lenient on phrasing"* above
+conventions stating that a decimal cannot earn a mark the question asked for
+exactly. Both instructions are defensible; together they are a coin toss the
+student pays for. The line is gone, and the leniency that was actually meant —
+spelling, notation written legibly another way, word order, none of which VCAA
+penalises either — is stated in the rubric, so removing it did not simply make
+the marker harsher.
+
+**`markingSystem(subject)` is the one composition**, and it is a SYSTEM BLOCK
+rather than more prompt. Everything in it is identical for every mark in a
+subject; only the questions and the student's answers change. Left inline it
+was re-billed at full rate on every marking call, which is why the profile
+"could not be afforded" without anyone ever deciding that. Hoisted, it bills at
+~0.1x after the first hit, and that is what pays for the worked marks too.
+
+**A BLOCK UNDER THE MODEL'S MINIMUM CACHEABLE PREFIX DOES NOT CACHE, and
+nothing says so** — it is sent in full, billed in full, and reports
+`cache_creation_input_tokens: 0`. The minimum is per-model and is NOT monotonic
+across generations, so `MIN_CACHEABLE_PREFIX` is a table: 512 tokens on current
+Sonnet and Opus, 1024 on Sonnet 4.6, 4096 on Haiku 4.5. A bare examiner profile
+is ~865–1170 tokens and would have been UNDER the floor on Sonnet 4.6; profile
+plus worked marks plus rubric is ~2000–3000 and clears every model marking runs
+on **except Haiku 4.5**. That exception is real: `SAVER_EXCLUDES` is empty on
+purpose, so a Saver student's marking runs on Haiku and this block is not cached
+for them. `cachesFor(subject, model)` answers that per model instead of
+pretending one number covers it, and an unrecognised id gets the STRICTEST
+floor, because guessing generously is the silent direction.
+
+**`getLatexRules()` IS the block the profile already appends for a math-heavy
+subject.** Sending both prints the delimiter rules twice, which is duplicated
+instruction and duplicated cached tokens, so they are added only when the
+profile did not carry them.
+
+**WORKED MARKS BEAT MORE ADJECTIVES.** The prompt already told the model to
+write like an examiner, at length and accurately. Instructions DESCRIBE a
+standard; they do not SET one. Where the line sits between 2 and 3 marks on a
+three-mark "explain" is a calibration, and a calibration transfers by showing a
+marked response. `examinerReports.js` holds them, each a complete mark in
+exactly the shape the marker must return — so the output schema is demonstrated
+rather than described.
+
+**`source` IS PART OF THE DATA.** "A VCAA assessor awarded this 1 of 3" and
+"these are the published conventions applied to a written answer" are different
+claims, and a model told the second is the first has been miscalibrated on
+purpose. Every exemplar declares which it is and the prompt PRINTS it.
+Everything shipped is `study-design`; `examiner-report` requires a `cite` and
+the test enforces it.
+
+**DISTRIBUTIONS SHIP EMPTY, DELIBERATELY.** VCAA publishes the percentage of the
+state at each mark per question — the most examiner-like datum there is, and
+the app has never had it. What exists is the CARRIER: the shape, the reader, the
+prompt section, and the absent case. No figures, because there is no honest way
+to produce "31% of students earned this mark" from anything in this repo, and an
+invented percentage attributed to VCAA is the failure `closingFacts` refuses on
+the first-run screen, one screen further in and much harder to catch. Paste real
+figures into `DISTRIBUTIONS` and every reader starts using them; the test
+exercises that path against a fixture so it cannot rot unused, and separately
+asserts the shipped store is empty.
+
+**`params.system` is how anything else gets a cached prefix.** The server's
+`splitSystemAndUser` used to recognise exactly ONE prompt — it sniffed for
+`VCE_EXPERT_SYSTEM_PROMPT` at position 0 — so any other stable preamble could
+not be expressed and rode in the user message, re-billed in full however
+unchanging it was. A caller declares one now; the old sniff stays as the
+fallback. The field is scanned by `detectThreat` along with the prompt, or it
+would be the one way past a check the single-field shape could not be got past.
+
+**Both model calls in QuizPlayer send the identical block.** `askWhyRight` is
+not marking, but it is the same subject and the same register, so sharing the
+block means it reads the cache entry the marking call warmed rather than paying
+for a preamble of its own — and "what the question was testing" is a command
+term and a key skill, which is what the profile knows. The test scans BOTH
+calls: a profile that reaches one and not its neighbour is the half-wired state
+this replaced.
+
+**There is no fine-tuning for Claude.** "Train it on examiner reports" cannot
+mean weights. It means the profile, the worked marks, the distributions, and an
+eval built from the sample responses the reports publish WITH their awarded
+marks — which is also the only way to know whether any of this helped, and the
+thing that would settle whether `SAVER_EXCLUDES` should finally gain
+`quiz_ai_mark`.
+
 ## READY is the count. `isDue` alone was the wrong number everywhere.
 
 **"50 flashcards, 10 have been done, it says 10 are due, even though it would
@@ -3206,6 +3301,11 @@ is the textbook, and only as something to generate MORE from.
   cliff, the order things stand down in so a generate never fails for want of
   storage, and `expiredKeys`, the tested decision both sweeps delete through.
   `storageState` / `sweepUploads` / `noteUsage` in `server.mjs` are its half
+- `src/lib/markingPrompt.js` + `markingPrompt.test.mjs`,
+  `src/lib/examinerReports.js` — the marking instructions as ONE cacheable
+  system block: the subject's examiner profile (which the marker never used),
+  the worked marks, and the rubric. The scan is what stops the profile
+  silently falling back out of the prompt again
 - `src/lib/quizScore.js` + `quizScore.test.mjs` — ONE mark per question, read
   by every surface that prints one; the test scans for the hand-rolled
   allocation and the unreconciled claim, both of which render perfectly
@@ -3255,8 +3355,8 @@ is the textbook, and only as something to generate MORE from.
   `verifiedStudyMinutes` and `boardQuizScores`; change one, change both
 - `src/lib/liveRefresh.js`, `src/lib/LiveContext.jsx`, `src/api/realtime.js` —
   when the app may refetch, who can hold it still, and the push path
-- `src/components/shared/LiveNumber.jsx`, `LiveDot.jsx` — rolling figures and
-  the "something is running" mark
+- `src/components/shared/LiveNumber.jsx` — rolling figures. `LiveDot.jsx` is
+  DELETED; see the note where `useLiveCount` stood in `useStakes.js`
 - `src/components/shared/Reveal.jsx` — the one page entrance, and the rule
   about what should not animate at all
 - `supabase/schema.json` + `scripts/dumpSchema.sh` — the real column list, and

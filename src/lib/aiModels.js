@@ -25,7 +25,14 @@ import { PRICES } from "./aiCost.js";
 export const TIERS = {
     standard: {
         id: "standard",
-        model: "claude-sonnet-4-6",
+        // MIRRORS server.mjs's MODEL default — keep in sync. The server passes
+        // its own MODEL in as `standardModel` on every call, so `modelFor` does
+        // not read this; `saverMultiplier` DOES, and prices Saver's advantage
+        // against it. Left on 4.6 after the standard model moved to 5.5, the
+        // screen would have advertised "3x further" computed from a model no
+        // student is served — the mirror-drift class `mirrors.test.mjs` exists
+        // for, on a number in the UI.
+        model: "claude-sonnet-5-5",
         label: "Standard",
         blurb: "Full-strength answers. The default.",
     },

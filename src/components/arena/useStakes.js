@@ -178,23 +178,27 @@ export function useStakes() {
 }
 
 /**
- * How much is racing right now, for the nav dot and the poll rate.
+ * `useLiveCount` stood here, and it is gone with the nav dot it fed.
  *
- * Read off the stakes payload the app ALREADY loads on every page rather than
- * a query of its own — six nav items asking the server whether anything is
- * live would be six round trips before the shell painted, and the answer is
- * sitting in a module-level cache two lines up.
+ * The dot was the one place in the app claiming "something is happening", and
+ * `LiveDot`'s own header set the bar it had to clear: "a permanent badge is
+ * wallpaper. This appears ONLY while a contest is actually running, so its
+ * presence is the information." It stopped clearing that bar the moment the
+ * count started including OPEN MARKET POSITIONS — a position stands from the
+ * day it is taken until the market settles, which on a weekly line is most of
+ * a week, so a student who took one side on Monday had a red bubble on Compete
+ * until Sunday. Not a clock running out; a receipt.
+ *
+ * The change that did it was defensible on its own terms — duels and battles
+ * have no UI to create them any more, so counting only those left the dot
+ * permanently dark on the feature the nav points at. But "the honest count is
+ * always zero" is the app telling you there is nothing to look at, which is
+ * what the dot was FOR. The answer was to stop drawing it, not to find
+ * something else to count.
+ *
+ * `stakes.positions` is still on the payload and StakesPill still reads the
+ * rest of it; nothing about the feed changed. If a real notification is wanted
+ * here later it needs an EVENT with a clock on it — a market of yours settling
+ * inside the hour, a call-out waiting on your answer — and not a tally of what
+ * you own.
  */
-export function useLiveCount() {
-    const { stakes } = useStakes();
-    const duels = (stakes?.duels || []).filter(d => d?.status === "active").length;
-    const callouts = (stakes?.callouts || [])
-        .filter(c => ["pending", "active"].includes(c?.status)).length;
-    // Open market positions count too, and are now the main thing this marks:
-    // Compete is markets, and duels and battles have no UI to create them any
-    // more, so counting only those would leave the dot permanently dark on the
-    // feature the nav is pointing at.
-    const positions = Math.max(0, Number(stakes?.positions) || 0);
-    const total = duels + callouts + positions;
-    return { duels, callouts, positions, total, live: total > 0 };
-}

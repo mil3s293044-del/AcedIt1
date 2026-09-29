@@ -23,6 +23,9 @@ import { readMarket } from "@/lib/market";
 import AceShuffle, { AceLoading } from "@/components/ace/AceShuffle";
 import { Button } from "@/components/ui/button";
 import { base44 } from "@/api/base44Client";
+import { MemoryRouter } from "react-router-dom";
+import SideRail from "@/components/layout/SideRail";
+import BottomNav from "@/components/layout/BottomNav";
 
 const which = new URLSearchParams(location.search).get("v") || "deal";
 
@@ -335,6 +338,28 @@ const views = {
         );
     },
 };
+
+// ?v=nav — the two nav surfaces, side by side, for the one thing a scan cannot
+// check: that nothing is DRAWN on the Compete item. A grep proves the component
+// is not imported; only a render proves no bubble is left behind it.
+views.nav = () => (
+    <div className="min-h-screen bg-background">
+        <MemoryRouter initialEntries={["/Dashboard"]}>
+            <div className="flex">
+                <SideRail />
+                <div className="flex-1 p-8 pl-24">
+                    <h1 className="text-2xl font-display font-black text-foreground mb-2">Nav check</h1>
+                    <p className="text-sm text-muted-foreground mb-6">
+                        Hover the rail to expand it. Compete must carry no bubble, expanded or collapsed.
+                    </p>
+                    <div className="relative h-24 border-2 border-dashed border-border rounded-2xl">
+                        <BottomNav />
+                    </div>
+                </div>
+            </div>
+        </MemoryRouter>
+    </div>
+);
 
 ReactDOM.createRoot(document.getElementById("root")).render(
     React.createElement(views[which] || views.deal));

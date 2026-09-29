@@ -63,7 +63,13 @@ import { config as dotenvConfig } from "dotenv";
 dotenvConfig({ path: ".env.local", override: true });
 
 const PORT = Number(process.env.LOCAL_AI_PORT || 3001);
-const MODEL = process.env.ANTHROPIC_MODEL || "claude-sonnet-4-6";
+// Current-generation Sonnet, and cheaper on input than the 4.6 it replaces
+// ($2/M against $3/M). Input is what dominates here — a marking call carries
+// every question, every model answer and the student's whole paper — so the
+// move is a price cut and a capability bump at once. Its row in `aiCost.js`
+// is load-bearing: the id EXTENDS "claude-sonnet-5", so without one it bills
+// at that model's rate with no warning. See the note over PRICES.
+const MODEL = process.env.ANTHROPIC_MODEL || "claude-sonnet-5-5";
 // Optional faster/cheaper model for latency-sensitive structured tools (e.g.
 // the cheat sheet maker), used when a request passes `fast: true`. Falls back
 // to the default model if not configured, so behaviour is unchanged until an
@@ -1183,15 +1189,37 @@ CRITICAL MATH FORMATTING RULES — ALWAYS FOLLOW:
   * Greek letters: \\( \\theta \\), \\( \\pi \\), \\( \\delta \\), \\( \\lambda \\)
   * Vectors/matrices: \\( \\vec{v} \\), \\( \\begin{pmatrix} a \\\\ b \\end{pmatrix} \\)`;
 
-// If the prompt is the VCE-expert prompt + "\n\n" + user content, split them
-// so we can cache the long system prompt across requests (~90% cheaper after first hit).
-function splitSystemAndUser(prompt) {
-  if (typeof prompt !== "string") return { system: null, user: String(prompt ?? "") };
+/**
+ * Which half of a call is the CACHEABLE prefix, and which half varies.
+ *
+ * A cached system block bills at ~0.1x after the first hit, so anything
+ * identical across calls belongs in it and anything per-request must stay out —
+ * a prefix that varies does not match and does not cache.
+ *
+ * This used to recognise exactly ONE prompt: it sniffed for
+ * `VCE_EXPERT_SYSTEM_PROMPT` at position 0 and hoisted that. Any other stable
+ * preamble — a per-subject examiner profile, a marking rubric — could not be
+ * expressed, so it rode in the user message and was re-billed in full on every
+ * single call however unchanging it was.
+ *
+ * So a caller may now say so outright with `params.system`, and the old sniff
+ * stays as the fallback so nothing that relied on it had to change. The
+ * explicit field wins when both are present.
+ *
+ * `system` is no more trusted than `prompt` — the whole prompt is already
+ * client-composed, so this grants no authority that was not already there — but
+ * it IS model-directed text, so the caller's threat scan has to cover it. That
+ * happens where `detectThreat` runs, on the concatenation.
+ */
+function splitSystemAndUser(prompt, explicitSystem) {
+  const user = typeof prompt === "string" ? prompt : String(prompt ?? "");
+  const declared = typeof explicitSystem === "string" ? explicitSystem.trim() : "";
+  if (declared) return { system: declared, user };
   const prefix = VCE_EXPERT_SYSTEM_PROMPT + "\n\n";
-  if (prompt.startsWith(prefix)) {
-    return { system: VCE_EXPERT_SYSTEM_PROMPT, user: prompt.slice(prefix.length) };
+  if (user.startsWith(prefix)) {
+    return { system: VCE_EXPERT_SYSTEM_PROMPT, user: user.slice(prefix.length) };
   }
-  return { system: null, user: prompt };
+  return { system: null, user };
 }
 
 /**
@@ -3593,7 +3621,10 @@ app.post("/local-ai/invokeAIStream", async (req, res) => {
     const promptText =
       typeof params.prompt === "string" ? params.prompt : JSON.stringify(params.prompt ?? "");
 
-    if (detectThreat(promptText)) {
+    // The scan covers `system` too. It is model-directed text from the same
+    // client as `prompt`, so leaving it out would make the new field the one
+    // way past a check the old single-field shape could not be got past.
+    if (detectThreat(`${params.system || ""}\n${promptText}`)) {
       sse("error", {
         message:
           "🚫 This request has been flagged as potentially malicious and cannot be processed.",
@@ -3623,7 +3654,7 @@ app.post("/local-ai/invokeAIStream", async (req, res) => {
       console.warn(`[local-ai] invokeAIStream called without auth — tier limits NOT enforced (legacy path).`);
     }
 
-    const { system, user } = splitSystemAndUser(promptText);
+    const { system, user } = splitSystemAndUser(promptText, params.system);
     const fileBlocks = await buildFileContentBlocks(params.file_urls, { email: tierUser?.email });
     const userContent = [...fileBlocks, { type: "text", text: user }];
 
@@ -3966,7 +3997,10 @@ app.post("/local-ai/invokeAI", async (req, res) => {
     const promptText =
       typeof params.prompt === "string" ? params.prompt : JSON.stringify(params.prompt ?? "");
 
-    if (detectThreat(promptText)) {
+    // The scan covers `system` too. It is model-directed text from the same
+    // client as `prompt`, so leaving it out would make the new field the one
+    // way past a check the old single-field shape could not be got past.
+    if (detectThreat(`${params.system || ""}\n${promptText}`)) {
       return res.status(403).json({
         message:
           "🚫 This request has been flagged as potentially malicious and cannot be processed. If you believe this is an error, please contact support.",
@@ -4001,7 +4035,7 @@ app.post("/local-ai/invokeAI", async (req, res) => {
       console.warn(`[local-ai] invokeAI called without auth — tier limits NOT enforced (legacy path).`);
     }
 
-    const { system, user } = splitSystemAndUser(promptText);
+    const { system, user } = splitSystemAndUser(promptText, params.system);
     const fileBlocks = await buildFileContentBlocks(params.file_urls, { email: tierUser?.email });
 
     // Compose the user message: any image/PDF blocks first, then the text.

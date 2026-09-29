@@ -34,7 +34,7 @@ import { questionMark, attemptScore, needsDrill, isCorrect as gradeOf } from "@/
 import { cardFromModule, bankKey } from "@/lib/mistakeBank";
 import MarkdownMath from "@/components/shared/MarkdownMath";
 import MathText from "@/components/shared/LatexRenderer";
-import { getLatexRules } from "@/lib/subjectExaminerPrompts";
+import { markingSystem } from "@/lib/markingPrompt";
 import { FEATURES, checkLiveTier } from "@/lib/tierAccess";
 import { fireXPFeedback } from "../ranked/XPFeedback";
 import QuizTable from "@/components/cards/QuizTable";
@@ -436,14 +436,21 @@ export default function QuizPlayer({ quiz, onExit, mode = "standard", timeLimitM
             const answer = q.type === 'mcq' ? q.options?.[q.correct_answer] : q.model_answer;
             const res = await base44.integrations.Core.InvokeLLM({
                 feature: "quiz_ai_mark",
-                prompt: `${getLatexRules()}
-
-A ${shuffledQuiz.subject} student answered this correctly but wants to know WHY it is right — they may have guessed.
+                // THE SAME BLOCK THE MARKING CALL SENDS, which is the point:
+                // identical bytes mean this rides the cache that call already
+                // warmed for the subject rather than paying for a preamble of
+                // its own. It also wants the profile on its own merits — "what
+                // the question was testing" is a command term and a key skill,
+                // which is exactly what the profile knows and a bare LaTeX rule
+                // set does not. The register rules ("no praise") come with it,
+                // so this prompt no longer restates them.
+                system: markingSystem(shuffledQuiz.subject),
+                prompt: `A ${shuffledQuiz.subject} student answered this correctly but wants to know WHY it is right — they may have guessed.
 
 Question: ${q.question}
 Correct answer: ${answer}
 
-In two or three sentences, explain what makes that the right answer and what the question was testing. No praise, no preamble.`,
+In two or three sentences, explain what makes that the right answer and what the question was testing. No preamble.`,
             });
             setWhyRight(p => ({ ...p, [idx]: typeof res === "string" ? res : (res?.text || String(res || "")) }));
         } catch (e) {
@@ -876,11 +883,23 @@ In two or three sentences, explain what makes that the right answer and what the
 
             const response = await base44.integrations.Core.InvokeLLM({
                 feature: "quiz_ai_mark",
-                prompt: `${getLatexRules()}
-
-Mark this ${shuffledQuiz.subject} quiz. Provide feedback for ALL ${questionsForAnalysis.length} questions.${comparisonInstructions}
-
-MARKING: MCQ = 0 or 1 mark only. Short answer = 0 to allocation marks. Be lenient on phrasing.
+                // THE STABLE HALF, AND IT IS WHERE THE EXAMINER PROFILE FINALLY
+                // ARRIVES. `markingSystem` is the subject's real VCAA mark
+                // conventions, its command terms, how candidates actually lose
+                // marks in it, the worked marks, and the rubric — identical for
+                // every mark in the subject, so it is hoisted into a cached
+                // system block rather than re-billed per attempt. Only the
+                // questions and the student's answers stay below.
+                //
+                // This prompt previously took `getLatexRules()` and nothing
+                // else: it asked for an examiner's report while the examiner
+                // profile six other surfaces import sat unused. It also said
+                // "Be lenient on phrasing", which contradicted every mark
+                // convention it was not sending — that line is gone, and the
+                // leniency that was actually meant (spelling, notation, word
+                // order) is stated in the rubric where it belongs.
+                system: markingSystem(shuffledQuiz.subject),
+                prompt: `Mark this ${shuffledQuiz.subject} quiz. Provide feedback for ALL ${questionsForAnalysis.length} questions.${comparisonInstructions}
 
 ${questionsForAnalysis.map(q => q.parts ? `Q${q.q_num} [MULTIPART] - ${q.marks_allocation} marks in total:
 ${q.source_material ? `${q.source_material}\n\n` : ''}Question: ${q.question}
@@ -892,84 +911,8 @@ ${q.source_material ? `${q.source_material}\n\n` : ''}Question: ${q.question}
 Student Answer: ${q.student_answer}${q.type === 'short' && q.previous_answer ? `\nPrevious Answer: ${q.previous_answer}` : ''}
 ${q.type === 'mcq' ? `Correct Answer: ${q.correct_answer}` : `Model Answer: ${q.model_answer}`}`).join('\n---\n')}
 
-A question carrying source material was answered WITH THAT SOURCE IN FRONT OF
-THE STUDENT — it is printed above the question here exactly as they saw it.
-Mark against it: credit what the source supports, and treat a point the source
-does not carry as unsupported rather than as an error of recall.
-
-For EACH question return: marks, criteria, annotations, what_wrong, improve${hasShortWithPrevious ? ', comparison' : ''}.
-For a question that scored full marks, leave what_wrong and improve as empty strings — do not write praise.
-
-CRITERIA are the marks themselves, itemised — one entry per mark the assessor
-is looking for, so their "worth" values must add up to the question's total
-allocation. Each says what was wanted, whether this answer did it, and for a
-missed one, what specifically was absent. This is the most useful thing you
-produce: "you dropped the mark for naming the electron transfer" is something a
-student can act on, and "2/4" is not. Write the criterion as the assessor would
-phrase it, not as a comment on the student.
-
-  - "note" on a MISSED criterion is where the student reads what to do, and it
-    is shown whether or not you managed to quote anything, so it must stand on
-    its own. Say what a full-mark response would have contained for THIS mark.
-    A missed criterion with an empty note is a mark the student cannot act on.
-
-ANNOTATIONS point at the exact words that cost the mark, so they can be
-underlined in the student's own answer. An annotation is EVIDENCE FOR A
-CRITERION, never a verdict of its own — the criteria decide what was lost, and
-an annotation only shows where it happened.
-
-  - "criterion_index" is the 0-based position of the criterion in the array
-    above that this annotation is evidence for. Always set it. An annotation
-    that names no criterion cannot be shown as having cost a mark, because
-    nothing connects it to one.
-  - Do not annotate a phrase to say it cost a mark when every criterion is met.
-    The criteria are the ledger; if they all say "got", nothing cost anything.
-
-  - "quote" MUST be copied from their answer CHARACTER FOR CHARACTER — same
-    case, same punctuation, same spacing. It is matched against their text
-    exactly, and anything that does not match is silently discarded, so a
-    paraphrase is the same as sending nothing.
-  - Quote the SHORTEST span that carries the problem. A whole sentence tells
-    the student to rewrite a sentence; four words tells them what to change.
-  - "issue" — what an assessor sees wrong with those words. One sentence.
-  - "wanted" — what the assessor was looking for there, in the language of the
-    study design or the command term. This is the half a student cannot work
-    out for themselves, and it is what makes the note worth reading.
-  - "fixes" — one or two wordings that would have scored. Two is better than
-    one where two genuinely different phrasings work, because it lets the
-    student pick the one that sounds like them instead of copying yours. Never
-    pad to two.
-  - "severity" is "lost" when it cost a mark, "risk" when it survived but is
-    imprecise. This is checked against the criterion you linked it to and
-    corrected if it disagrees, so linking it correctly matters more.
-  - Only annotate where the wording genuinely matters — never a stylistic
-    preference, and never on an answer that scored full marks. Zero
-    annotations is a normal and common answer.
-
-WRITE LIKE A VCAA EXAMINER'S REPORT, because that is what this is. That means:
-  - Address what the RESPONSE did, not what the student is. "This response
-    describes the change without naming the transfer", never "you didn't
-    understand" and never "great effort".
-  - Use the command term. If the question said EVALUATE and the answer
-    described, say so — misreading the command term is the single most common
-    way marks are lost, and naming it teaches something that transfers.
-  - No praise, no encouragement, no exclamation marks. A clean mark gets an
-    empty comment; the mark itself is the feedback.
-  - Say what a full-mark response would have contained. Examiners publish the
-    high-scoring answer; that is the useful part of the report.
-Return exactly ${questionsForAnalysis.length} items.
-
-THEN look ACROSS every question that lost marks and find the THEMES.
-A theme is one underlying reason that cost marks on TWO OR MORE questions —
-the same confusion, the same missing step, the same misread command term.
-This is the most useful thing you will produce: a student who is told "these
-three were the same mistake" has one thing to fix instead of three.
-  - "questions" must list the question numbers it covers, and there must be at
-    least two of them.
-  - "title" is at most eight words and names the mistake, not the topic.
-  - "detail" is ONE sentence saying what to do differently.
-If no two lost questions share a cause, return an empty themes array. Never
-invent a theme from a single question.`,
+Return exactly ${questionsForAnalysis.length} items.${hasShortWithPrevious ? `
+Include "comparison" on any short answer that carries a Previous Answer.` : ''}`,
                 response_json_schema: {
                     type: "object",
                     properties: {
