@@ -187,12 +187,44 @@ check("nothing real means nothing claimed", () => {
 });
 
 check("a dropped mark is counted off the marking, not inferred", () => {
+    // This fixture said `met` for as long as the code did, which proved only
+    // that the two agreed with each other — a fixture written from the same
+    // memory as the code it checks cannot see a wrong field name. The check
+    // below reads the name out of the WRITER instead.
     const attempt = { score: 60, extra: { question_results: [
-        { criteria: [{ met: true }, { met: false }] },
-        { criteria: [{ met: true }] },
-        { criteria: [{ met: false }] },
+        { criteria: [{ text: "a", got: true }, { text: "b", got: false }] },
+        { criteria: [{ text: "c", got: true }] },
+        { criteria: [{ text: "d", got: false }] },
     ] } };
     assert.equal(droppedFrom(attempt), 2, "two questions lost a criterion");
+});
+
+check("DROPPED MARKS ARE COUNTED OFF THE FIELD THE PLAYER ACTUALLY WRITES", () => {
+    // The one invisible failure here: `question_results` is written in one
+    // file and read in another, so a reader asking for a field the writer
+    // does not emit is a branch that can never fire. Nothing throws, the
+    // fallback answers plausibly, and the close reports "a mark or two"
+    // whatever the marking said. So the field name is PINNED to its writer
+    // rather than restated — the same guard `mirrors.test.mjs` keeps.
+    const player = fs.readFileSync(path.join(process.cwd(), "src/components/quizzes/QuizPlayer.jsx"), "utf8");
+    const mapper = player.match(/const criteria = \(criteriaFor[\s\S]{0,240}/)?.[0] || "";
+    assert.ok(/got:/.test(mapper), "the player no longer writes `got` — this test's premise moved");
+    assert.ok(!/\bmet\b/.test(mapper), "the player writes `met` now; droppedFrom has to follow");
+
+    const src = fs.readFileSync(path.join(process.cwd(), "src/lib/firstWin.js"), "utf8");
+    const body = src.slice(src.indexOf("export function droppedFrom"),
+        src.indexOf("export function closingFacts"));
+    assert.ok(/c\.got === false/.test(body),
+        "droppedFrom reads a field the player does not write — the branch is dead and nothing says so");
+
+    // And the counting itself: per QUESTION, not per criterion, because the
+    // close offers the bank per dropped question.
+    const attempt = { score: 70, extra: { question_results: [
+        { q_index: 0, criteria: [{ text: "a", got: true }, { text: "b", got: true }] },
+        { q_index: 1, criteria: [{ text: "c", got: false }, { text: "d", got: false }] },
+        { q_index: 2, criteria: [{ text: "e", got: false }] },
+    ] } };
+    assert.equal(droppedFrom(attempt), 2, "two questions dropped a criterion, not three marks");
 });
 
 check("with no per-criterion verdicts it falls back to arithmetic, not a guess", () => {
