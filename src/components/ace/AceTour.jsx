@@ -37,6 +37,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { X, ArrowRight } from "lucide-react";
 import { base44 } from "@/api/base44Client";
 import AceWalker, { AceBubble } from "@/components/ace/AceWalker";
+import { claimAce } from "@/components/ace/useAceYield";
 import {
     STOPS, CONTENT_STOPS, stopAt, tourState, tourStatus, withTourPatch,
 } from "@/lib/aceTour";
@@ -94,6 +95,11 @@ export default function AceTour({ page, userProfile, onLiveChange }) {
 
     const showing = live && !QUIET_PAGES.has(page);
     useEffect(() => { onLiveChange?.(showing); }, [showing, onLiveChange]);
+
+    // ONE ACE ON SCREEN — see ACE_ORDER. He walks a full body onto six pages
+    // and never told the registry, so the AceCompanion launcher stood under
+    // him at every stop.
+    useEffect(() => (showing ? claimAce("tour") : undefined), [showing]);
 
     const stop = live && !QUIET_PAGES.has(page) ? stopAt(index) : null;
 

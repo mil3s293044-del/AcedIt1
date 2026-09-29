@@ -127,6 +127,14 @@ export function cardFromModule(mod, { subject, questionTitle, source, topic } = 
                 // is the wording that would have earned it, and the two rungs
                 // that ask a student to produce something need the second.
                 wanted: firstFix(fixes, mod.wanted),
+                // THE QUESTION AS IT WAS SAT, whole. `question_title` beside
+                // it is a 60-character label for a pill and was the only copy
+                // kept, so the bank could never show a student the thing they
+                // actually got wrong — it showed a criterion fragment and a
+                // truncated title, and a maths question truncated mid-formula
+                // is not a question at all. Stored raw so it renders through
+                // the same MarkdownMath every other surface prints it with.
+                question: str(questionTitle),
                 question_title: where,
                 cost: Number(mod.cost) || 0,
                 lost,
@@ -350,6 +358,9 @@ export function mistakeMeta(card) {
         quote: str(m?.quote),
         wanted: str(m?.wanted),
         questionTitle: str(m?.question_title),
+        // The full one. Falls back to the clipped label for every card banked
+        // before it was stored, which is better than an empty panel.
+        question: str(m?.question) || str(m?.question_title),
         cost: Number(m?.cost) > 0 ? Number(m.cost) : 0,
         lost: m?.lost !== false,
         // Absent on every card banked before the redo gate existed. Those

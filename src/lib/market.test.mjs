@@ -13,7 +13,9 @@
  *   kinds, checked from both directions.
  */
 import assert from "node:assert/strict";
+import fs from "node:fs";
 import {
+    sideLabels, sideLabel,
     brier, skill, payoutFor, PAYOUT_K, clampP,
     priceOf, priceLabel, priceTone, PRIOR_WEIGHT,
     probFor, sideOf, convictionOf, YES, NO, CONVICTION_MAX,
@@ -1012,6 +1014,54 @@ check("an OPEN line is not part of the record", () => {
     const rec = selfRecord([sacMarket({ status: "open", meta: { target: 80 } })], "sam@x.com");
     assert.equal(rec.closed, 0);
     assert.equal(rec.rate, null);
+});
+
+check("A MARKET BETWEEN TWO PEOPLE HAS TWO PEOPLE AS ITS SIDES", () => {
+    // "Who logs more hours this week — Maya or Sam?" was answered with a Yes
+    // button and a No button. Yes to WHAT? The student had to work out that
+    // yes meant the first name in the title, and then put cred on it. That is
+    // the model's storage leaking onto the floor.
+    const vs = { kind: "versus", meta: { names: ["Maya", "Sam"] } };
+    assert.deepEqual(sideLabels(vs), { yes: "Maya", no: "Sam", named: true });
+    assert.equal(sideLabel(vs, true), "Maya");
+    assert.equal(sideLabel(vs, false), "Sam");
+
+    // ONLY THE LABEL MOVES. Every position ever taken, the settlement and
+    // `price_at_entry` are boolean, and yes is the FIRST name because that is
+    // the order the title and `meta.names` are minted in.
+    assert.equal(sideLabels(vs).yes, vs.meta.names[0]);
+});
+
+check("every other kind still reads as the yes/no question it is", () => {
+    for (const kind of ["streak", "hours", "sac", "cohort", "longshot", "prep", "callout"]) {
+        assert.deepEqual(sideLabels({ kind, meta: { names: ["A", "B"] } }),
+            { yes: "Yes", no: "No", named: false }, `${kind} was renamed`);
+    }
+});
+
+check("a half-formed pair falls back rather than printing one name against \"No\"", () => {
+    const bad = [
+        { kind: "versus", meta: {} },
+        { kind: "versus", meta: { names: ["Maya"] } },
+        { kind: "versus", meta: { names: ["Maya", ""] } },
+        { kind: "versus", meta: { names: ["Maya", "Maya"] } },
+        { kind: "versus", meta: { names: ["Maya", null] } },
+        null,
+    ];
+    for (const m of bad) assert.equal(sideLabels(m).named, false, JSON.stringify(m));
+});
+
+check("THE REVEAL IS HANDED THE LABELS, because it never sees the market", () => {
+    // settlementOf's item carries no market, so a lookup at the render site
+    // silently fell back to Yes/No — a head-to-head announcing it "resolved
+    // YES". The labels ride on the item instead.
+    const src = fs.readFileSync("src/lib/market.js", "utf8");
+    const body = src.slice(src.indexOf("export function settlementOf"));
+    assert.ok(/labels: sideLabels\(market\)/.test(body.slice(0, 2600)),
+        "a settled position no longer carries its side names");
+    const reveal = fs.readFileSync("src/components/market/SettlementReveal.jsx", "utf8");
+    assert.ok(!/resolved \{item\.outcome \? "YES"/.test(reveal),
+        "the reveal prints the boolean again");
 });
 
 console.log(`\n${passed} passed`);

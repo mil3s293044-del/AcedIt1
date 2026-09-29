@@ -66,6 +66,35 @@ export default function useAceYield() {
 const BUSY = "ace:busy";
 const holders = new Set();
 
+/**
+ * ONE ACE ON SCREEN, AND THIS LIST IS WHICH ONE.
+ *
+ * The registry started as "is anyone OTHER than me holding him", which answers
+ * the roamer's question and nothing else. Two problems came out of that.
+ *
+ * It is UNORDERED, so two surfaces that both claim both stand down, or neither
+ * does depending on which effect ran first — a coin toss deciding which Ace a
+ * student sees.
+ *
+ * And it only governs the surfaces that opted in. `FirstWin` and `AceTour`
+ * draw a full walker and never claimed at all, so the AceCompanion launcher
+ * stayed up underneath them: the first quiz of somebody's first session had
+ * one Ace talking and a second standing under him, which is what this list
+ * exists to make impossible.
+ *
+ * Highest priority first, ordered by how much the moment belongs to the
+ * student. NOBODY IS DELETED, only deferred — a surface that loses keeps its
+ * own state and returns when the stage clears, so the tour does not lose its
+ * stop nor the run its beat.
+ */
+export const ACE_ORDER = ["reacts", "first-win", "tour", "buddy", "intro", "roam", "launcher"];
+
+/** An id nobody registered loses to everything, rather than winning by accident. */
+const rank = (id) => {
+    const i = ACE_ORDER.indexOf(id);
+    return i === -1 ? ACE_ORDER.length : i;
+};
+
 function announce() {
     window.dispatchEvent(new CustomEvent(BUSY, { detail: { holders: [...holders] } }));
 }
@@ -84,8 +113,9 @@ export function claimAce(owner = "ace") {
 }
 
 /**
- * True while someone OTHER than `self` is drawing him. Pass the same owner id
- * you claim with, or nothing at all if you never claim.
+ * True while someone who OUTRANKS `self` is drawing him — so the answer is the
+ * same however the effects happened to interleave, and a surface never hides
+ * for something quieter than itself. Pass the same owner id you claim with.
  */
 export function useAceClaimed(self) {
     const [list, setList] = useState(() => [...holders]);
@@ -95,5 +125,6 @@ export function useAceClaimed(self) {
         setList([...holders]);
         return () => window.removeEventListener(BUSY, on);
     }, []);
-    return list.some((o) => o !== self);
+    const mine = rank(self);
+    return list.some((o) => o !== self && rank(o) < mine);
 }

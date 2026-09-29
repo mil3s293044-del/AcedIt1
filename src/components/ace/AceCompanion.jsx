@@ -57,7 +57,10 @@ export default function AceCompanion({ userProfile }) {
     // The XP popup stack sits at exactly these coordinates on a phone and wins
     // on z-index, so it covers him outright. He gets out of its way instead.
     const yielding = useAceYield();
-    const claimed = useAceClaimed();
+    // Named, so ACE_ORDER can place it deliberately last rather than having it
+    // lose by falling off the end of the list. It never claims: it is what is
+    // on screen when nothing is happening.
+    const claimed = useAceClaimed("launcher");
     const [messages, setMessages] = useState([]);
     const [input, setInput] = useState("");
     const [streaming, setStreaming] = useState(false);

@@ -24,17 +24,24 @@ import { X, ArrowRight } from "lucide-react";
 import SpadeMark from "@/components/ace/SpadeMark";
 import { PAGES, featuresForPage } from "@/lib/aceKnowledge";
 import { shouldIntroduce, markShown, markClosed } from "@/lib/aceFirstRun";
+import { useAceClaimed } from "@/components/ace/useAceYield";
 
 /** Long enough for the page to have finished laying itself out. */
 const SETTLE_MS = 1400;
 
 export default function AceIntro({ page, suppressed = false }) {
     const [show, setShow] = useState(false);
+    // NOT an Ace — it draws the mark rather than a body, so it never claims
+    // him and the launcher may stand beneath it, which is what the class list
+    // below is arranged for. What it must not do is share the lane: this card
+    // sits at `sm:bottom-[5.5rem]`, the exact coordinates of the walker's
+    // bubble, so while he is speaking there are two panels in one place.
+    const spoken = useAceClaimed("intro");
     const meta = PAGES[page];
 
     useEffect(() => {
         setShow(false);
-        if (!page || suppressed || !meta) return;
+        if (!page || suppressed || spoken || !meta) return;
         if (!shouldIntroduce(page)) return;
         const t = setTimeout(() => {
             // Re-checked on fire, not just on schedule: a student who clicks
@@ -45,7 +52,7 @@ export default function AceIntro({ page, suppressed = false }) {
             setShow(true);
         }, SETTLE_MS);
         return () => clearTimeout(t);
-    }, [page, suppressed, meta]);
+    }, [page, suppressed, spoken, meta]);
 
     const close = useCallback((engaged) => {
         markClosed(page, { engaged });

@@ -9973,7 +9973,7 @@ async function mintWeeklyMarkets(members, now = new Date()) {
       ...base, kind: "versus",
       subject_email: a.email, subject_name: a.name || null,
       title: `Who logs more hours this week — ${an} or ${bn}?`,
-      resolves_note: `YES if ${an} logs more countable minutes than ${bn}. A dead heat voids and everyone gets their cred back.`,
+      resolves_note: `Whoever logs more countable minutes, ${an} or ${bn}. A dead heat voids and everyone gets their cred back.`,
       // Matched on base rate, so even is the honest opening and not a shrug.
       prior: 0.5,
       meta: {

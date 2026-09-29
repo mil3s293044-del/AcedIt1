@@ -526,6 +526,24 @@ export default function PomodoroTimer({ onSessionComplete, userSubjects: initial
         return isRunning ? "Pause" : "Resume";
     };
 
+    /**
+     * CHANGING THE LENGTH OF A BLOCK RESETS THE BLOCK, and until now it reset
+     * nothing at all.
+     *
+     * `settings.workTime` moved and `timeLeft` did not, so the two disagreed
+     * about the same block — and elapsed here is not stored, it is DERIVED as
+     * `total - timeLeft`. Sliding the total up while the remainder stood still
+     * therefore INVENTED the difference: changing 25 to 50 on an untouched
+     * timer made the app believe twenty-five minutes had been studied, and a
+     * reset then saved them and paid XP for them. The other direction drew the
+     * orb past a full turn. Neither threw, and the arithmetic was correct about
+     * the wrong pair of numbers.
+     *
+     * So the block restarts, and whatever was genuinely studied up to that
+     * moment is banked FIRST — a student who has done ten real minutes and
+     * decides to stretch the block must not lose them, which would be the same
+     * error pointed the other way.
+     */
     const handleSettingsChange = (key, value) => {
         let numValue;
         if (value === '' || value === null || value === undefined) {
@@ -540,7 +558,39 @@ export default function PomodoroTimer({ onSessionComplete, userSubjects: initial
             ...prevSettings,
             [key]: numValue,
         }));
+
+        // Only the work block's own length changes what is on the clock. The
+        // break lengths are read when a break starts, and an empty input is a
+        // half-typed number rather than a duration.
+        if (key !== 'workTime' || numValue === '') return;
+        restartWorkBlock(numValue);
     };
+
+    /**
+     * Bank what was really studied, then start the new block clean.
+     *
+     * Carried in a ref for the reason `startFromSuggestion` records: the save
+     * reads figures that the same tick is about to replace, so a closure read
+     * would bank the block the student just left rather than the one they were
+     * in.
+     */
+    const restartWorkBlock = useCallback((minutes) => {
+        const total = (settings.workTime || 25) * 60;
+        const studied = (hasBeenStarted && !isBreak)
+            ? Math.floor((total - timeLeft) / 60)
+            : 0;
+
+        setIsRunning(false);
+        setHasBeenStarted(false);
+        if (!isBreak) setTimeLeft(minutes * 60);
+
+        // A part-block under a minute is not a saveable session anywhere else
+        // in this component either — `saveSession` refuses it — so it is
+        // dropped rather than rounded up into XP nobody earned.
+        if (studied >= 1 && !isBreak) {
+            saveSession(studied, { completed: false }).catch(() => { /* it toasts its own failure */ });
+        }
+    }, [settings.workTime, timeLeft, hasBeenStarted, isBreak, saveSession]);
 
     const handleInputBlur = (key) => {
         let currentValue = settings[key] || '';

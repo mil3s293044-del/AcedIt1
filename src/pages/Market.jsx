@@ -38,7 +38,7 @@ import TakeSide from "@/components/market/TakeSide";
 import Reactions from "@/components/market/Reactions";
 import AceShuffle from "@/components/ace/AceShuffle";
 import {
-    KINDS, readMarket, priceHistory, priceLabel, sideOf, YES,
+    KINDS, readMarket, priceHistory, priceLabel, sideOf, YES, sideLabels,
     payoutFor, markToMarket, blockReason, settlementOf,
 } from "@/lib/market";
 
@@ -162,6 +162,9 @@ export default function Market() {
         ? { t: new Date(mine.created_date).getTime(), price: Number(mine.price_at_entry) }
         : null;
     const mtm = mine ? markToMarket(mine, market.price) : null;
+    // Two people on a head-to-head are the two sides; every other kind is
+    // still a yes/no question and reads as one.
+    const labels = sideLabels(market);
     const reactions = state.data?.reactions || { market: {}, positions: {}, mine: {} };
 
     return (
@@ -194,7 +197,7 @@ export default function Market() {
 
                 {/* ── Where it stands ──────────────────────────────── */}
                 <div className="rounded-2xl border-2 border-[var(--floor-edge)] bg-[var(--floor-card)] p-4 mt-4">
-                    <PriceChart history={history} myEntry={myEntry} height={200} />
+                    <PriceChart labels={labels} history={history} myEntry={myEntry} height={200} />
                 </div>
 
                 {market.status !== "open" && (
@@ -264,7 +267,7 @@ export default function Market() {
                     // rectangle. Same paper-cut as the single-tab Tabs bar.
                     open ? (
                         <div className="rounded-2xl border-2 border-[var(--floor-edge)] bg-[var(--floor-card)] p-4 mt-3">
-                            <TakeSide price={market.price} balance={state.data?.me?.cred ?? 0}
+                            <TakeSide market={market} price={market.price} balance={state.data?.me?.cred ?? 0}
                                 busy={busy} history={history} myEntry={myEntry}
                                 onCancel={() => setOpen(false)} onTake={take} />
                         </div>
@@ -320,7 +323,7 @@ export default function Market() {
                                         <span className="text-[10px] font-black uppercase
                                             tracking-wide w-9 flex-shrink-0"
                                             style={{ color: yes ? INK.up : INK.down }}>
-                                            {yes ? "Yes" : "No"}
+                                            {yes ? labels.yes : labels.no}
                                         </span>
                                         <span className="flex-1 min-w-0 truncate text-[13px] font-bold"
                                             style={{ color: p.is_me ? INK.gold : INK.bright }}>

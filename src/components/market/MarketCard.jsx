@@ -42,7 +42,7 @@ import PriceChart from "./PriceChart";
 import TakeSide from "./TakeSide";
 import { createPageUrl } from "@/utils";
 import {
-    KINDS, sideOf, YES, priceLabel, payoutFor, returns, priceHistory,
+    KINDS, sideOf, YES, priceLabel, payoutFor, returns, priceHistory, sideLabels,
 } from "@/lib/market";
 
 function untilLabel(iso) {
@@ -63,6 +63,8 @@ const firstName = (n) => String(n || "").trim().split(/\s+/)[0] || "Someone";
 export default function MarketCard({ market, balance, busy, onTake, onReport }) {
     const [open, setOpen] = useState(false);
     const kind = KINDS[market.kind] || KINDS.streak;
+    // A head-to-head is between two people, so its sides are those two people.
+    const labels = sideLabels(market);
     const KindIcon = Icons[kind.icon] || Icons.CircleDot;
     const left = untilLabel(market.closes_at);
     const closing = left && /^\d+[mh]$/.test(left);
@@ -138,14 +140,14 @@ export default function MarketCard({ market, balance, busy, onTake, onReport }) 
             <div className="flex items-stretch gap-2">
                 <div className="flex-1 rounded-xl bg-[var(--floor-well)] px-2.5 py-1.5">
                     <p className="text-[9px] font-black uppercase tracking-widest text-[var(--floor-dim)]">
-                        Yes pays
+                        {labels.yes} pays
                     </p>
                     <p className="font-display font-black text-xl leading-none tabular-nums
                         text-[var(--floor-yes-ink)]">{pays.yesLabel}</p>
                 </div>
                 <div className="flex-1 rounded-xl bg-[var(--floor-well)] px-2.5 py-1.5">
                     <p className="text-[9px] font-black uppercase tracking-widest text-[var(--floor-dim)]">
-                        No pays
+                        {labels.no} pays
                     </p>
                     <p className="font-display font-black text-xl leading-none tabular-nums
                         text-[var(--floor-no-ink)]">{pays.noLabel}</p>
@@ -168,7 +170,7 @@ export default function MarketCard({ market, balance, busy, onTake, onReport }) 
             </div>
 
             <div className="mt-1.5">
-                <PriceChart history={history} compact myEntry={myEntry} />
+                <PriceChart labels={labels} history={history} compact myEntry={myEntry} />
             </div>
 
             {/* A market with no base rate SAYS SO. Printing a confident 50¢ off
@@ -230,6 +232,7 @@ export default function MarketCard({ market, balance, busy, onTake, onReport }) 
             {/* ── The way in ───────────────────────────────────────── */}
             {open ? (
                 <TakeSide
+                    market={market}
                     price={market.price} balance={balance} busy={busy}
                     history={history} myEntry={myEntry}
                     onCancel={() => setOpen(false)}

@@ -309,8 +309,6 @@ export default function QuizPlayer({ quiz, onExit, mode = "standard", timeLimitM
     const [whyRight, setWhyRight] = useState({});
     const [askingWhy, setAskingWhy] = useState({});
     /** Missed questions already written into a deck, so the button can't double up. */
-    const [cardsMade, setCardsMade] = useState(null);
-    const [makingCards, setMakingCards] = useState(false);
     const [showFeedback, setShowFeedback] = useState(false);
     /**
      * What the table shows: cards he's eaten, cards he wouldn't take, and the
@@ -422,52 +420,6 @@ export default function QuizPlayer({ quiz, onExit, mode = "standard", timeLimitM
         })
         .filter(i => i >= 0),
         [shuffledQuiz.questions, aiFeedback, userAnswers, selfMarkedMarks]);
-
-    /**
-     * The missed questions become real flashcards in the subject's deck.
-     *
-     * This is the whole point of the results screen. Reading feedback once is
-     * not remembering it; the spaced-repetition engine next door is the only
-     * thing in this app that actually produces retention, and until now the
-     * results screen was a dead end that fed it nothing. Straight in as weak
-     * spots due today, because a question you just got wrong demonstrably is
-     * one — same as the blurting gaps do.
-     */
-    const makeCardsFromMisses = async () => {
-        if (makingCards || cardsMade !== null || !missedIndexes.length) return;
-        setMakingCards(true);
-        const today = new Date().toISOString().split('T')[0];
-        let made = 0;
-        for (const i of missedIndexes) {
-            const q = shuffledQuiz.questions[i];
-            const answer = q.type === 'mcq'
-                ? q.options?.[q.correct_answer]
-                : q.model_answer;
-            // A card with no answer on the back is not a card. Skip rather
-            // than file something that will waste a review when it comes up.
-            if (!q.question || !answer) continue;
-            try {
-                await base44.entities.Flashcard.create({
-                    subject_name: shuffledQuiz.subject || null,
-                    // Quizzes carry a subject but rarely a topic, so the deck
-                    // is named after the quiz. Better a findable deck called
-                    // "Redox check" than everything in one called "General".
-                    topic: shuffledQuiz.title || "Quiz misses",
-                    question: q.question,
-                    answer,
-                    is_active: true,
-                    is_weak_spot: true,
-                    next_review_date: today,
-                });
-                made += 1;
-            } catch { /* one bad card shouldn't lose the rest */ }
-        }
-        setMakingCards(false);
-        setCardsMade(made);
-        toast(made > 0
-            ? { title: `${made} card${made === 1 ? "" : "s"} added`, description: `They're in your ${shuffledQuiz.subject || "flashcard"} decks under "${shuffledQuiz.title}", due today.` }
-            : { title: "Nothing to add", description: "These questions have no model answer to put on the back.", variant: "destructive" });
-    };
 
     /**
      * The explanation for a question you got RIGHT, fetched on request.
@@ -1417,32 +1369,45 @@ invent a theme from a single question.`,
                                             </motion.div>
                                         ))}
 
-                                        {/* THE ONE BUTTON. Reading feedback is not
-                                            remembering it; the only thing in this app that
-                                            produces retention is the review deck, and until
-                                            now this screen fed it nothing. */}
+                                        {/* ── A MISS GOES TO THE BANK, NEVER TO A DECK ──
+                                            This was a button that turned every missed
+                                            question into an ordinary flashcard in a deck
+                                            named after the quiz, and it was the whole of
+                                            "quiz mistakes end up in my flashcards": those
+                                            rows carried the QUIZ TITLE as their topic, which
+                                            is the field `deckCards` filters on, so nothing
+                                            could tell them from real cards. They sat on the
+                                            shelf, in the due counts, in the forgetting curve
+                                            and in the exam builder. The filter was never
+                                            wrong; this writer went around it.
+
+                                            Nothing is lost by deleting it, because both
+                                            halves are already done properly and neither
+                                            stores a thing:
+
+                                              - a DROPPED MARK is banked from its own mark
+                                                below, keyed to the criterion it cost, and
+                                                comes back through the drill ladder;
+                                              - a MISSED QUESTION is a SIT rather than a card,
+                                                and /MistakeBank's "Sit again" tab derives
+                                                those from the attempt history.
+
+                                            `autoBankRows` was deleted for exactly this
+                                            reason once already: a mistake and a question are
+                                            different sizes. */}
                                         {missedIndexes.length > 0 && !isGeneratingFeedback && (
                                             <div className="card-soft p-5">
-                                                {cardsMade === null ? (
-                                                    <>
-                                                        <p className="text-sm text-muted-foreground leading-relaxed mb-3">
-                                                            You lost marks on <span className="font-bold text-foreground">{missedIndexes.length}</span>
-                                                            {" "}question{missedIndexes.length === 1 ? "" : "s"}. Put them in your deck and they&rsquo;ll
-                                                            keep coming back until you know them.
-                                                        </p>
-                                                        <Button data-make-cards onClick={makeCardsFromMisses} disabled={makingCards}
-                                                            className="btn-3d gap-2 bg-primary hover:bg-primary/90 text-white rounded-xl w-full sm:w-auto">
-                                                            {makingCards
-                                                                ? <><AceShuffle size="sm" /> Adding&hellip;</>
-                                                                : <><Layers className="w-4 h-4" /> Add {missedIndexes.length} to my {shuffledQuiz.subject || "flashcard"} deck</>}
-                                                        </Button>
-                                                    </>
-                                                ) : (
-                                                    <p data-cards-made={cardsMade} className="text-sm font-bold text-primary inline-flex items-center gap-2">
-                                                        <Check className="w-4 h-4" />
-                                                        {cardsMade} card{cardsMade === 1 ? "" : "s"} added to &ldquo;{shuffledQuiz.title}&rdquo; &mdash; due today.
-                                                    </p>
-                                                )}
+                                                <p className="text-sm text-muted-foreground leading-relaxed mb-3">
+                                                    You lost marks on <span className="font-bold text-foreground">{missedIndexes.length}</span>
+                                                    {" "}question{missedIndexes.length === 1 ? "" : "s"}. Save the ones worth
+                                                    rehearsing from the marks below &mdash; your mistake bank drills each one
+                                                    until you can produce it, then asks you to prove it on the real question.
+                                                </p>
+                                                <Button data-open-bank
+                                                    onClick={() => navigate(createPageUrl("MistakeBank"))}
+                                                    className="btn-3d gap-2 bg-primary hover:bg-primary/90 text-white rounded-xl w-full sm:w-auto">
+                                                    <Layers className="w-4 h-4" /> Open my mistake bank
+                                                </Button>
                                             </div>
                                         )}
 

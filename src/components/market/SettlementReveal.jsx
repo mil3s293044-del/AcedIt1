@@ -234,7 +234,8 @@ function Card({ item, remaining, onNext }) {
                 ) : (
                     <>
                         <p className="text-[11px] font-bold uppercase tracking-wide text-[var(--floor-dim)] mt-3">
-                            It resolved {item.outcome ? "YES" : "NO"}
+                            It resolved {((item.outcome ? item.labels?.yes : item.labels?.no)
+                                || (item.outcome ? "YES" : "NO")).toUpperCase()}
                         </p>
 
                         {/* ── THE READ. The two numbers are the point ────────── */}

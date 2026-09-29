@@ -92,6 +92,9 @@ export default function PriceChart({
     // chart draws the plot alone — a second copy of a figure does not add
     // emphasis, it costs the first one its authority.
     header = true,
+    // What the two sides are CALLED. A head-to-head is between two people, so
+    // "Yes pays" names nobody; `sideLabels` is the one place that decides.
+    labels = { yes: "Yes", no: "No" },
 }) {
     const [picked, setPicked] = useState(null);
     const pts = history?.points || [];
@@ -165,13 +168,13 @@ export default function PriceChart({
                 <div className="flex items-end gap-3">
                     <div>
                         <p className="text-[10px] font-bold uppercase tracking-wide"
-                            style={{ color: INK.dim }}>Yes pays</p>
+                            style={{ color: INK.dim }}>{labels.yes} pays</p>
                         <p className="font-display font-black text-2xl leading-none tabular-nums"
                             style={{ color: INK.up }}>{pays.yesLabel}</p>
                     </div>
                     <div>
                         <p className="text-[10px] font-bold uppercase tracking-wide"
-                            style={{ color: INK.dim }}>No pays</p>
+                            style={{ color: INK.dim }}>{labels.no} pays</p>
                         <p className="font-display font-black text-2xl leading-none tabular-nums"
                             style={{ color: INK.down }}>{pays.noLabel}</p>
                     </div>
