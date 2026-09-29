@@ -77,7 +77,7 @@ import {  } from "lucide-react";
 import PriceChart from "./PriceChart";
 import AceShuffle from "@/components/ace/AceShuffle";
 import {
-    YES, NO, probFor, payoutFor, clampStake, priceLabel,
+    YES, NO, probFor, payoutFor, clampStake, priceLabel, sideLabels,
     returnMultiple, bestReturn, multiplierLabel,
     convictionRange, startingConviction,
     STAKE_MIN, STAKE_MAX,
@@ -106,7 +106,11 @@ const pct = (v) => Math.round(v * 100);
 
 export default function TakeSide({
     price, balance = 0, busy = false, onTake, onCancel, history = null, myEntry = null,
+    // The market itself, only so the two sides can be called what they are.
+    // A head-to-head asked "Maya or Sam?" and then offered Yes and No.
+    market = null,
 }) {
+    const labels = useMemo(() => sideLabels(market), [market]);
     // Open on a side that can actually be backed. A market the room has run
     // past on one side still has a call on the other, and starting on the
     // dead one greets a student with a disabled button and no reason.
@@ -157,12 +161,12 @@ export default function TakeSide({
         <div className="space-y-3 pt-3 border-t border-[var(--floor-edge)]">
             {/* ── What the price has done. The case for disagreeing. ── */}
             {history && history.points?.length > 1 && (
-                <PriceChart history={history} myEntry={myEntry} height={150} header={false} />
+                <PriceChart labels={labels} history={history} myEntry={myEntry} height={150} header={false} />
             )}
 
             {/* ── Side ─────────────────────────────────────────────── */}
             <div className="grid grid-cols-2 gap-2">
-                {[[YES, "Yes"], [NO, "No"]].map(([v, label]) => {
+                {[[YES, labels.yes], [NO, labels.no]].map(([v, label]) => {
                     const on = side === v;
                     // A side the room has already priced past the ceiling has
                     // no call left on it. Disabled with the reason underneath
@@ -283,7 +287,7 @@ export default function TakeSide({
             <div className="flex items-center justify-between rounded-xl bg-[var(--floor-well)] px-3 py-2.5">
                 <div>
                     <p className="text-[10px] font-bold uppercase tracking-wide text-[var(--floor-dim)]">
-                        If it lands yes
+                        {labels.named ? `If ${labels.yes} does` : "If it lands yes"}
                     </p>
                     <Roll value={ifYes} className={`font-display font-black text-lg
                         ${ifYes > 0 ? "text-[var(--floor-yes-ink)]" : ifYes < 0 ? "text-[var(--floor-no-ink)]" : "text-[var(--floor-muted)]"}`} />
@@ -296,7 +300,7 @@ export default function TakeSide({
                 </div>
                 <div className="text-right">
                     <p className="text-[10px] font-bold uppercase tracking-wide text-[var(--floor-dim)]">
-                        If it lands no
+                        {labels.named ? `If ${labels.no} does` : "If it lands no"}
                     </p>
                     <Roll value={ifNo} className={`font-display font-black text-lg
                         ${ifNo > 0 ? "text-[var(--floor-yes-ink)]" : ifNo < 0 ? "text-[var(--floor-no-ink)]" : "text-[var(--floor-muted)]"}`} />
@@ -319,7 +323,7 @@ export default function TakeSide({
                         font-display font-black text-sm disabled:opacity-40
                         hover:bg-white transition-colors inline-flex items-center justify-center gap-2">
                     {busy && <AceShuffle size="sm" />}
-                    {tooMuch ? "Not enough cred" : `Put ${stake} on ${side === YES ? "Yes" : "No"}`}
+                    {tooMuch ? "Not enough cred" : `Put ${stake} on ${side === YES ? labels.yes : labels.no}`}
                 </button>
             </div>
         </div>

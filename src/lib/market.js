@@ -120,6 +120,39 @@ export const YES = "yes";
 export const NO = "no";
 
 /**
+ * WHAT THE TWO SIDES ARE CALLED, which is not always yes and no.
+ *
+ * A head-to-head asks "who logs more hours this week — Maya or Sam?", and
+ * every screen answered that with a Yes button and a No button. Yes to WHAT?
+ * The student has to work out that yes means the first name in the title, and
+ * they are being asked to put cred on it. A market between two people has two
+ * people as its sides, and printing a boolean there is the model's storage
+ * leaking onto the floor.
+ *
+ * ONLY THE LABEL MOVES. The outcome stays boolean everywhere it matters —
+ * `payoutFor`, the settlement, `price_at_entry` and every position already
+ * taken are all yes/no, and renaming that would rewrite history. `meta.names`
+ * is minted with the pair in the same order the title reads and survives
+ * `publicMeta`, so the mapping is fixed: yes is the FIRST name.
+ *
+ * Anything with no pair falls back to Yes/No, which is every other kind. A
+ * pair that arrives half-formed falls back too rather than printing one name
+ * against "No" — half a rename is worse than none.
+ */
+export function sideLabels(market) {
+    const names = market?.meta?.names;
+    if (market?.kind === "versus" && Array.isArray(names) && names.length === 2) {
+        const [a, b] = names.map((n) => (typeof n === "string" ? n.trim() : ""));
+        if (a && b && a !== b) return { yes: a, no: b, named: true };
+    }
+    return { yes: "Yes", no: "No", named: false };
+}
+
+/** The one side, by its own name. */
+export const sideLabel = (market, isYes) =>
+    (isYes ? sideLabels(market).yes : sideLabels(market).no);
+
+/**
  * A side plus a conviction is just a probability.
  *
  * The UI asks for a side and a strength because "how sure are you that YES"
@@ -897,6 +930,11 @@ export function settlementOf(market, email) {
         kind: voided ? "void" : payout > 0 ? "won" : payout < 0 ? "lost" : "level",
         outcome: voided ? null : outcome,
         side: sideOf(mine.p),
+        // Carried rather than looked up: the reveal is handed the ITEM and
+        // never the market, so without this a head-to-head announced that it
+        // "resolved YES" — a boolean, about a question asking which of two
+        // people logged more.
+        labels: sideLabels(market),
         said: Math.round(clampP(mine.p) * 100),
         room: Math.round(clampP(mine.price_at_entry) * 100),
         edge: voided ? 0 : edgePoints(mine.p, mine.price_at_entry, outcome),

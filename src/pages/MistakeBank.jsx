@@ -285,6 +285,29 @@ function Runner({ queue, onGraded, onDone }) {
                     <p className="text-[11px] text-muted-foreground mt-1.5">{badge.blurb}</p>
                 </div>
 
+                {/* ── THE QUESTION, EXACTLY AS IT WAS SAT ──────────────────
+                    Every rung drills a fragment — a criterion, a phrase, a
+                    model wording — and until now the question those fragments
+                    came from was never on the screen at all. The only trace
+                    was `questionTitle`, a sixty-character clip in the label
+                    line above, which for a maths question is a formula cut off
+                    mid-expression and for a long stem is a sentence that stops.
+
+                    So it is reproduced whole, and through `MarkdownMath` like
+                    every other surface that prints a question, because a
+                    student cannot judge "what did the assessor want here"
+                    against `\frac{dy}{dx}` printed as its source. Drawn as a
+                    quieter inset than the exercise under it: it is the context
+                    for the drill and never the drill itself. */}
+                {meta.question && (
+                    <div className="rounded-xl bg-secondary/40 border-l-2 border-border pl-3 pr-3 py-2.5">
+                        <p className="stat-label text-muted-foreground mb-1">The question</p>
+                        <MarkdownMath className="text-sm text-foreground leading-snug">
+                            {meta.question}
+                        </MarkdownMath>
+                    </div>
+                )}
+
                 {drill.stage === "recognise" && (
                     <>
                         <div>

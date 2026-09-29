@@ -320,6 +320,35 @@ opt-out is the kind of magic that silently empties a screen a year later. Two
 reads are deliberately NOT filtered — the data export and account deletion,
 which are about everything the student owns rather than about decks.
 
+**A QUIZ MISS WENT TO THE FLASHCARD SHELF, and the filter was never wrong.**
+`makeCardsFromMisses` was a button on the results screen that wrote every
+missed question straight into `flashcards` with `topic: quiz.title` — the very
+field `deckCards` filters on — so those rows were INDISTINGUISHABLE from real
+cards. They sat on the shelf, in the due counts, in the forgetting curve and in
+the exam builder. Nineteen files read through the filter correctly; this writer
+simply went around it, which is why the reader-side audit above found nothing.
+
+It is deleted, and nothing is lost, because both halves already exist and
+neither stores anything: a dropped MARK banks from its own criterion through
+`cardFromModule`, and a missed QUESTION is a SIT, which /MistakeBank's "Sit
+again" tab derives from the attempt history. `autoBankRows` was deleted for
+exactly this reason once already — a mistake and a question are different
+sizes. The guard is on the WRITER rather than the reader now: the quiz surface
+may only ever create a flashcard that `cardFromModule` built.
+
+Rows already written cannot be told from real cards — that is what made them a
+leak — so nothing is retagged; they simply stop accumulating.
+
+**THE QUESTION IS KEPT WHOLE, AND RENDERED AS MATHS.** Every rung drills a
+FRAGMENT — a criterion, a phrase, a model wording — and the question those
+fragments came from was never stored. The only trace was `question_title`, a
+sixty-character clip for a pill, which on a maths question is a formula cut off
+mid-expression. `extra.mistake.question` holds it verbatim now and the drill
+screen prints it through `MarkdownMath` like every other surface that prints a
+question, as a quieter inset above the exercise: it is the CONTEXT for the
+drill and never the drill itself. A card banked before it existed falls back to
+its label rather than rendering an empty panel.
+
 **The mistake bank is flashcards with a marker** (`topic: "Mistake bank"`), so a
 banked mistake comes back through the SM-2 engine that already exists rather
 than sitting in a list nobody opens — same move blurting's `makeCardsFromMisses`
@@ -1353,6 +1382,20 @@ leak it. The roster is FROZEN at mint and never re-derived at settlement:
 recomputing who is "active" afterwards would change the denominator after every
 position was taken against the old one.
 
+**A MARKET BETWEEN TWO PEOPLE HAS TWO PEOPLE AS ITS SIDES.** "Who logs more
+hours this week — Maya or Sam?" was answered with a Yes button and a No button.
+Yes to WHAT? The student had to work out that yes meant the first name in the
+title, and then put cred on it — the model's storage leaking onto the floor.
+`sideLabels` is the one place that decides, and ONLY THE LABEL MOVES: the
+outcome stays boolean in `payoutFor`, the settlement, `price_at_entry` and
+every position already taken, and renaming that would rewrite history. Yes is
+the FIRST name, because that is the order `meta.names` and the title are minted
+in. A pair that arrives half-formed falls back to Yes/No rather than printing
+one name against "No" — half a rename is worse than none. The settled item
+CARRIES its labels, because the reveal is handed the item and never the market,
+so a lookup there fell back silently and announced that a head-to-head
+"resolved YES".
+
 **A dead heat VOIDS.** "Did A beat B" has no answer when they tied, and
 defaulting it to NO would pay everyone who happened to be on the second-named
 side for a question that was never settled.
@@ -2363,6 +2406,48 @@ Two rules it exists to keep:
   each page's `<h1>` through AceRoam and he clipped under the nav — headings
   are near the top, that is what headings are.
 
+**ONE ACE ON SCREEN, AND `ACE_ORDER` IS WHICH ONE.** Six surfaces draw him and
+they were only ever suppressed in pairs, by whoever remembered. On an ordinary
+page you got the AceCompanion launcher AND AceBuddy's walker; earn some XP and
+AceReacts made a third. During the first run two were suppressed and the
+launcher was not, so the student sat their first quiz with one Ace talking and
+a second standing under him.
+
+The registry in `useAceYield.js` already existed and had two holes. It was
+UNORDERED — "is anyone OTHER than me holding him" — so two surfaces that both
+claim both stand down, or neither does, depending on which effect ran first: a
+coin toss deciding which Ace a student sees. And `FirstWin` and `AceTour` walk
+a full body onto the page and never claimed at all. `ACE_ORDER` ranks them, by
+how much the moment belongs to the student — a celebration is never talked
+over, the run leads the tour, and the launcher always loses because it is what
+is there when nothing is happening. An unranked id loses rather than winning by
+accident. NOBODY IS DELETED, only deferred: the tour keeps its stop, the run
+keeps its beat.
+
+**AND `showing` IS NOT `running`.** FirstWin told Layout it was not live the
+moment it handed off to the quiz player — true of the BUBBLE and false of the
+RUN — so on the single most important screen of the first session Layout
+un-suppressed the study-intent modal and AceBuddy over the top of the three
+questions it had just built. The two are separate now; the claim above stays on
+`showing`, because while it is handed off it draws nobody and holding him there
+would leave the corner empty on the one screen being worked on.
+
+`AceIntro` draws the MARK rather than a body, so it never claims and the
+launcher may stand beneath it — which its class list is arranged for. What it
+must not do is share the lane: it sits at `sm:bottom-[5.5rem]`, the exact
+coordinates of the walker's bubble, so it now defers to anything speaking
+there.
+
+`aceStage.test.mjs` pins both halves — the ordering is arithmetic over the
+list, and a SCAN checks that every component drawing a body claims one, because
+a surface that forgets renders perfectly and is simply a second Ace. Verified
+by removing FirstWin's claim.
+
+**Two illustrations are not a third Ace.** The dashboard draws him inside the
+streak card's empty state, and there is another on a page card — those are
+CONTENT: they do not talk, do not follow you between pages and do not compete
+for the corner. The rule is about the floating one.
+
 Layout stands AceIntro and AceBuddy down while it runs; they share the corner
 and the mascot. It goes quiet on the payment flow, because the wizard sends
 premium-intent signups straight to /Subscription.
@@ -2963,6 +3048,17 @@ is the textbook, and only as something to generate MORE from.
   in the app is `font-display` + `tabular-nums`. It wears `card-soft on-table`
   now — the app's own panel and its own dark elevation — and the tone lives on
   the orb and the word, which is where it was already.
+- **CHANGING THE LENGTH OF A BLOCK RESETS THE BLOCK**, and it used to reset
+  nothing. `settings.workTime` moved and `timeLeft` did not, and elapsed here
+  is not stored — it is DERIVED as `total - timeLeft`. So sliding the total up
+  while the remainder stood still INVENTED the difference: 25 → 50 on an
+  untouched timer made the app believe twenty-five minutes had been studied,
+  and a reset then SAVED them and paid XP for them. The other direction drew
+  the orb past a full turn. Neither threw; the arithmetic was correct about the
+  wrong pair of numbers. The block restarts now, and whatever was genuinely
+  studied is banked FIRST — a student who has done ten real minutes and decides
+  to stretch the block must not lose them, which is the same error pointed the
+  other way.
 - **The running timer is a clock, not a glyph beside a number.**
   `PomodoroOrb` — a green (amber on break) face that glows, with an arc for how
   much of the block is left and a hand that steps 6° every second. The arc is
@@ -3120,6 +3216,9 @@ is the textbook, and only as something to generate MORE from.
   a real quiz, built from their subject, sat in the REAL player and marked.
   The close reports what happened and refuses to quote an ATAR. Draw the beats
   with `scripts/_floorProbe.jsx?v=firstwin`, at the bubble's true width
+- `src/components/ace/useAceYield.js` + `src/lib/aceStage.test.mjs` —
+  `ACE_ORDER`, the one list that decides which Ace is on screen. The scan is
+  what catches a surface that draws him and forgets to claim
 - `src/lib/mirrors.test.mjs` — the client/server copies nothing was checking:
   the level curve (`xpSystem.jsx` vs server.mjs) and the ATAR bands. Both sides
   are parsed as text and RUN, so it compares behaviour rather than source

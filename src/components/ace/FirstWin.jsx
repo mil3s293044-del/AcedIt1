@@ -39,6 +39,7 @@ import { X, ArrowRight, Sparkles } from "lucide-react";
 import { base44 } from "@/api/base44Client";
 import AceWalker, { AceBubble } from "@/components/ace/AceWalker";
 import AceShuffle from "@/components/ace/AceShuffle";
+import { claimAce } from "@/components/ace/useAceYield";
 import { createPageUrl } from "@/utils";
 import { getExaminerPrompt } from "@/lib/subjectExaminerPrompts";
 import { STIMULUS_RULE, STIMULUS_SCHEMA } from "@/lib/quizSchema";
@@ -116,8 +117,31 @@ export default function FirstWin({ page, userProfile, onLiveChange, onFinished }
         return () => { cancelled = true; };
     }, [profile, patch]);
 
+    /**
+     * TWO DIFFERENT QUESTIONS, and answering Layout with the wrong one put
+     * three Aces on the screen at once.
+     *
+     * `showing` is whether the BUBBLE draws here. `running` is whether a run
+     * is in progress at all — which stays true while it is handed off to the
+     * quiz player, because the student is in the middle of it.
+     *
+     * Layout suppresses AceIntro and AceBuddy on what it is told here. Told
+     * `showing`, it un-suppressed both the moment the run handed over: so on
+     * the single most important screen of the first session — sitting the
+     * three questions it just built — the student got the study-intent modal
+     * AND AceBuddy's bubble AND a second Ace, over the top of the quiz.
+     *
+     * QUIET_PAGES stays out of `running`: the payment flow is where every one
+     * of these stands down on its own.
+     */
     const showing = live && !QUIET_PAGES.has(page) && !HANDED_OFF.has(page);
-    useEffect(() => { onLiveChange?.(showing); }, [showing, onLiveChange]);
+    const running = live && !QUIET_PAGES.has(page);
+    useEffect(() => { onLiveChange?.(running); }, [running, onLiveChange]);
+
+    // ONE ACE ON SCREEN. Claimed on `showing` rather than `running`: while
+    // this is handed off to the player it draws nobody, so holding him there
+    // would leave the corner empty on the one screen being worked on.
+    useEffect(() => (showing ? claimAce("first-win") : undefined), [showing]);
 
     /**
      * `onFinished` is not decoration. This component patches its OWN copy of

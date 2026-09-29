@@ -9,6 +9,7 @@
  * the answer, were the ones with no button.
  */
 import assert from "node:assert/strict";
+import fs from "node:fs";
 import {
     cardFromModule, isBankCard, deckCards, bankKey, BANK_TOPIC,
     fixState, mistakeMeta, repeatOffenders, bankSummary,
@@ -514,6 +515,76 @@ check("a mistake with no topic of its own still lands somewhere", () => {
     assert.equal(groups.length, 1);
     assert.equal(groups[0].topics.length, 1);
     assert.ok(groups[0].topics[0].topic);
+});
+
+check("A QUIZ MISS NEVER BECOMES AN ORDINARY FLASHCARD", () => {
+    // The leak this closes: `makeCardsFromMisses` was a button on the results
+    // screen that wrote every missed question straight into `flashcards` with
+    // `topic: quiz.title`. That topic is the field `deckCards` filters on, so
+    // those rows were INDISTINGUISHABLE from real cards — on the shelf, in the
+    // due counts, in the forgetting curve, and answerable by the exam builder.
+    // It rendered perfectly and every test passed, because the filter was never
+    // wrong; the writer simply went around it.
+    //
+    // Both halves are already done properly and neither stores anything: a
+    // dropped MARK banks from its own criterion through `cardFromModule`, and a
+    // missed QUESTION is a sit, which /MistakeBank's "Sit again" tab derives
+    // from the attempt history. `autoBankRows` was deleted for the same reason.
+    //
+    // So the rule is about the WRITER and not the reader: the quiz surface may
+    // only ever create a flashcard that `cardFromModule` built.
+    const src = fs.readFileSync("src/components/quizzes/QuizPlayer.jsx", "utf8");
+    const creates = [...src.matchAll(/Flashcard\.(?:create|bulkCreate)\(\s*([^)]{0,80})/g)]
+        .map((m) => m[1].trim());
+    assert.ok(creates.length > 0, "no flashcard writer left in QuizPlayer — did the bank button move?");
+    for (const arg of creates) {
+        assert.ok(/^card\b/.test(arg),
+            `QuizPlayer writes a flashcard from \`${arg.slice(0, 40)}\` rather than from cardFromModule — `
+            + "that row lands on the flashcard shelf, which is the leak this test exists for");
+    }
+    assert.ok(!/makeCardsFromMisses/.test(src), "the deck writer is back");
+});
+
+check("THE QUESTION IS KEPT WHOLE, and rendered as maths where it is maths", () => {
+    // Every rung drills a FRAGMENT, and the question those fragments came from
+    // was never stored — only `question_title`, a 60-character clip for a pill.
+    // For a maths question that is a formula cut off mid-expression, which is
+    // not a question at all.
+    const stem = "Differentiate $y = \\frac{3x^2 + 1}{\\sqrt{x}}$ with respect to $x$, "
+        + "and hence find the gradient of the tangent at $x = 4$.";
+    const card = cardFromModule(
+        { status: "lost", text: "Applies the quotient rule correctly", cost: 1,
+          fixes: ["Rewrite as $3x^{3/2} + x^{-1/2}$ before differentiating"],
+          evidence: [{ quote: "I used the product rule" }] },
+        { subject: "Mathematical Methods", questionTitle: stem, topic: "Calculus check" });
+
+    assert.ok(card, "a lost mark must always make a card");
+    const meta = mistakeMeta(card);
+    assert.equal(meta.question, stem, "the question came back clipped or reworded");
+    assert.ok(meta.question.includes("\\frac"), "the LaTeX did not survive being stored");
+    assert.ok(!meta.question.includes("…"), "the question is still being truncated");
+
+    // The short label stays for the places that genuinely have one line.
+    assert.ok(meta.questionTitle.length <= 61, "the pill label is no longer clipped");
+    assert.ok(meta.question.length > meta.questionTitle.length,
+        "the whole question is no longer longer than its label — one of them is wrong");
+});
+
+check("a card banked before the question was stored still shows something", () => {
+    const old = { extra: { mistake: { criterion: "x", question_title: "An older question" } } };
+    assert.equal(mistakeMeta(old).question, "An older question",
+        "an older card renders an empty question panel rather than its label");
+});
+
+check("THE BANK RENDERS THE QUESTION AS MATHS", () => {
+    // Stored raw is only half of it: printed as source, `\\frac{dy}{dx}` is not
+    // something a student can judge an answer against.
+    const page = fs.readFileSync("src/pages/MistakeBank.jsx", "utf8");
+    assert.ok(/\{meta\.question\}/.test(page), "the drill screen does not print the question");
+    const at = page.indexOf("{meta.question}");
+    const around = page.slice(Math.max(0, at - 400), at);
+    assert.ok(/MarkdownMath/.test(around),
+        "the question is printed outside MarkdownMath, so a maths question renders as its source");
 });
 
 console.log(`\n${passed} passed`);

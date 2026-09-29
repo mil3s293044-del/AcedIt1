@@ -59,7 +59,7 @@ import { takeFn } from "@/lib/fnResult";
 import {
     bookOf, equityCurve, calibration, outcomeOf, exposureOf, standingOf,
 } from "@/lib/holdings";
-import { priceLabel, sideOf, YES, KINDS } from "@/lib/market";
+import { priceLabel, sideOf, YES, KINDS, sideLabel } from "@/lib/market";
 import CalibrationCurve from "./CalibrationCurve";
 import EquityCurve from "./EquityCurve";
 import AceShuffle from "@/components/ace/AceShuffle";
@@ -417,10 +417,11 @@ export default function PortfolioPanel({ onOpenMarket }) {
                                         hover:bg-[var(--floor-inset)] transition-colors
                                         ${i ? "border-t border-[var(--floor-edge)]" : ""}`}>
                                     <span className="text-[9px] font-black uppercase tracking-wide
-                                        px-1.5 py-0.5 rounded flex-shrink-0 w-9 text-center"
+                                        px-1.5 py-0.5 rounded flex-shrink-0 min-w-9 max-w-24
+                                        truncate text-center"
                                         style={{ background: side ? "var(--floor-yes)" : "var(--floor-no)",
                                             color: side ? "var(--floor-on-bright)" : "#fff" }}>
-                                        {side ? "Yes" : "No"}
+                                        {sideLabel(h.market, side)}
                                     </span>
                                     <span className="flex-1 min-w-0">
                                         <span className="block truncate text-[12px] font-bold
