@@ -2,6 +2,7 @@ import { Toaster } from "@/components/ui/toaster"
 import { QueryClientProvider } from '@tanstack/react-query'
 import { queryClientInstance } from '@/lib/query-client'
 import NavigationTracker from '@/lib/NavigationTracker'
+import ConsentBanner from '@/components/legal/ConsentBanner'
 import { pagesConfig } from './pages.config'
 import { BrowserRouter as Router, Route, Routes, useLocation, Navigate } from 'react-router-dom';
 import { MotionConfig } from 'framer-motion';
@@ -191,6 +192,10 @@ function App() {
         <MotionConfig reducedMotion="user">
           <Router>
             <NavigationTracker />
+            {/* Outside the auth gate: the decision has to be available to a
+                visitor who has not signed in, because that is exactly who the
+                pixels used to fire on. It renders nothing once answered. */}
+            <ConsentBanner />
             {/* ABOVE THE AUTH GATE ON PURPOSE.
                 Opening the site showed a white flash and then a bare spinner
                 for roughly two seconds while auth and public settings

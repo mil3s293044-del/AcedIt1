@@ -25,6 +25,8 @@ import { Button } from "@/components/ui/button";
 import { base44 } from "@/api/base44Client";
 import { MemoryRouter } from "react-router-dom";
 import SideRail from "@/components/layout/SideRail";
+import ConsentBanner from "@/components/legal/ConsentBanner";
+import AgeGate from "@/components/legal/AgeGate";
 import BottomNav from "@/components/layout/BottomNav";
 
 const which = new URLSearchParams(location.search).get("v") || "deal";
@@ -357,6 +359,20 @@ views.nav = () => (
                     </div>
                 </div>
             </div>
+        </MemoryRouter>
+    </div>
+);
+
+// ?v=legal — the two blocking surfaces, which are auth-gated in the real app.
+views.legal = () => (
+    <div className="min-h-screen bg-background p-8">
+        <MemoryRouter>
+            <h1 className="text-2xl font-display font-black text-foreground mb-2">Consent + age gate</h1>
+            <p className="text-sm text-muted-foreground mb-6">
+                The banner pins to the bottom. The gate covers the screen; type a birthday to see it change.
+            </p>
+            <ConsentBanner />
+            <AgeGate onSave={async (p) => { console.log("would save", p); }} />
         </MemoryRouter>
     </div>
 );

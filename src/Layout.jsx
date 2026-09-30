@@ -8,6 +8,9 @@ import { motion, AnimatePresence } from "framer-motion";
 import { Toaster } from "@/components/ui/toaster";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { base44 } from "@/api/base44Client";
+import { bandOfProfile, BAND } from "@/lib/compliance";
+import AgeGate from "@/components/legal/AgeGate";
+import { setTrackingBand } from "@/lib/analytics";
 import XPFeedback from "@/components/ranked/XPFeedback";
 import StreakCelebration from "@/components/ranked/StreakCelebration";
 import StakesPill from "@/components/arena/StakesPill";
@@ -233,6 +236,13 @@ export default function Layout({ children }) {
                 }
 
                 setUserProfile(profile);
+                // THE MOMENT A PROFILE LOADS, AN UNKNOWN AGE STOPS MEANING
+                // "a visitor" AND STARTS MEANING "they have not answered yet".
+                // Before this call the tracking layer is in its anonymous
+                // marketing posture, where consent alone governs; after it, a
+                // known minor can never be advertising-tracked and an unanswered
+                // birthday is a refusal. Sign-out resets it below.
+                setTrackingBand(bandOfProfile(profile));
 
                 // Best-effort ban check. RLS may block reads of other users'
                 // rate-limit rows; that's fine — server.mjs enforces bans on
@@ -484,6 +494,24 @@ export default function Layout({ children }) {
                 shuffle under somebody watching a clock. */}
             <TimerBusy running={showFloatingTimer} />
             <AchievementWatcher />
+
+            {/* ASKED OF EVERYBODY WHO HAS NOT ANSWERED, new account or old.
+                A wizard step would only ever catch new signups, and the ~130
+                existing accounts are exactly the ones the published policies
+                were already making promises about. It renders nothing once a
+                usable date of birth is on the profile. */}
+            {userProfile && bandOfProfile(userProfile) === BAND.UNKNOWN && (
+                <AgeGate onSave={async (patch) => {
+                    const updated = await base44.entities.UserProfile.update(userProfile.id, {
+                        extra: { ...(userProfile.extra || {}), ...patch },
+                    });
+                    setUserProfile(updated);
+                    // The band decides whether this student may be tracked at
+                    // all, so it is applied in the same tick the answer lands
+                    // rather than on the next page load.
+                    setTrackingBand(bandOfProfile(updated));
+                }} />
+            )}
             <SideRail />
             <TopNav />
 

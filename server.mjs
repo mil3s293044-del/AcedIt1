@@ -16,6 +16,10 @@ import { QUEST_BY_ID, questMultiplier } from "./src/lib/quests.js";
 // the client deliberately: the forecast layer and the column's CHECK
 // constraint drifting apart is what made placeForecast a guaranteed 500.
 import { WAGER } from "./src/lib/wagerStatus.js";
+// The one rule about who may be the SUBJECT of a market. Imported rather
+// than mirrored, for the reason market.js already is: two copies of a
+// consent rule is how one of them quietly stops being applied.
+import { mayBeMarketSubject } from "./src/lib/compliance.js";
 // The market model — the ONE object Compete is built on. Imported rather than
 // mirrored: forecast.js was mirrored deliberately and every session since has
 // had to remember "change one, change both". One module, both sides.
@@ -10511,12 +10515,18 @@ app.post("/local-ai/fn/getMarkets", async (req, res) => {
     // The room is the weekly league, which every student is already in — so
     // there is always a board, without anybody having to join anything. A
     // market scoped to a battle is additionally visible to that battle.
+    // `extra` is selected for ONE reason: it carries the date of birth and the
+    // opt-in, and a student who may not be the subject of a market must never
+    // reach the minting roster in the first place. Filtering later — at the
+    // card, or in the payload — would still have created the row, and a market
+    // that exists but is hidden has still published the question to the tape,
+    // the settlement and everyone who was already holding a position.
     const { data: roster } = await supabaseAdmin.from("user_profiles")
-      .select("created_by, username, full_name")
+      .select("created_by, username, full_name, extra")
       .not("created_by", "is", null).limit(200);
     const members = (roster || []).map((r) => ({
-      email: r.created_by, name: r.username || r.full_name || null,
-    })).filter((m) => m.email);
+      email: r.created_by, name: r.username || r.full_name || null, extra: r.extra || {},
+    })).filter((m) => m.email && mayBeMarketSubject(m));
 
     await mintWeeklyMarkets(members);
     const swept = await settleDueMarkets();

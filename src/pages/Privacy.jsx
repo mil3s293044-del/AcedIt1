@@ -33,7 +33,9 @@ export default function Privacy() {
           <li><strong>Study profile</strong> — your year level, the VCE subjects you select, study goals, and similar preferences you give us.</li>
           <li><strong>Study activity</strong> — quizzes, flashcards, notes, study sessions, streaks, XP, leaderboard standings and other content you create or generate while using the Service.</li>
           <li><strong>Payment information</strong> — if you subscribe, payments are processed by Stripe. We do not collect or store your full card details; we receive only limited confirmation and subscription status from Stripe.</li>
-          <li><strong>Usage and device data</strong> — pages visited, features used, approximate location, browser and device type, collected through cookies and analytics tools (see "Cookies and tracking" below).</li>
+          <li><strong>Assessment results</strong> — where you choose to enter them, the marks you record against SACs and assessments on your planner. These are used to show your own progress and, only if you open a line about one yourself, to settle it.</li>
+          <li><strong>Uploads</strong> — files and photos of notes you upload to generate study material. These are deleted automatically, usually within a day; see "How long we keep it" below.</li>
+          <li><strong>Usage and device data</strong> — pages visited, features used, IP address, browser and device type. Some of this is collected through analytics tools, which only run if you have agreed and are never used on an account belonging to someone under 18.</li>
         </ul>
       </LegalSection>
 
@@ -53,12 +55,23 @@ export default function Privacy() {
 
       <LegalSection heading="Cookies and tracking">
         <p>
-          We use cookies and similar technologies, including analytics and
-          advertising pixels from Meta (Facebook/Instagram), TikTok and Google
-          Analytics, to understand site traffic and measure our advertising.
-          These tools may set cookies and collect usage data through your
-          browser. You can control cookies through your browser settings and opt
-          out of personalised advertising through each platform's ad settings.
+          We use analytics and advertising pixels from Meta
+          (Facebook/Instagram), TikTok and Google Analytics to understand site
+          traffic and measure our advertising. <strong>None of them load until
+          you agree.</strong> When you first visit we ask, and nothing is sent
+          anywhere unless you choose to allow it &mdash; declining costs you no
+          part of the Service.
+        </p>
+        <p>
+          <strong>We never use advertising or analytics tools on the account of
+          anyone under 18</strong>, whatever has been agreed to, so a student
+          account is not tracked by them at all.
+        </p>
+        <p>
+          You can change your mind at any time from Settings. Because a script
+          already loaded in your browser cannot be recalled, withdrawing consent
+          stops anything further being sent; to clear cookies those tools have
+          already set, use your browser&rsquo;s settings.
         </p>
       </LegalSection>
 
@@ -83,11 +96,19 @@ export default function Privacy() {
 
       <LegalSection heading="Students and young people">
         <p>
-          The Service is designed for high-school students, many of whom are
-          under 18. We only knowingly collect information from a student where
-          they are capable of giving consent, or where a parent or guardian has
-          consented. If you are under 18, please make sure your parent or
-          guardian is aware of and agrees to your use of the Service.
+          The Service is designed for high-school students, most of whom are
+          under 18. We ask every account holder for their date of birth, and
+          what we do with your information depends on the answer:
+        </p>
+        <ul className="list-disc pl-6 space-y-1.5">
+          <li><strong>Under 13</strong> &mdash; you cannot hold an account. If you tell us you are under 13 we will not let the account continue, and you can contact us to have it removed.</li>
+          <li><strong>Under 16</strong> &mdash; the social parts of the Service (Compete, leaderboards, markets) are switched off for your account.</li>
+          <li><strong>Under 18</strong> &mdash; we ask you to confirm that a parent or guardian knows about and agrees to your use of the Service, and we do not use advertising or analytics tools on your account. Other students cannot open a question about your study on the Compete board unless you switch that on yourself.</li>
+        </ul>
+        <p>
+          We do not independently verify a date of birth or a parent&rsquo;s
+          agreement. If you are a parent or guardian and want to see, correct or
+          delete your child&rsquo;s information, contact us and we will help.
         </p>
         <p>
           If you believe we have collected information from a child without

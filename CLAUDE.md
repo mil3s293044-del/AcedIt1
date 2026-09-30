@@ -3107,6 +3107,97 @@ exists for the seconds between an upload and the generate that reads it. A
 student who makes a deck from a textbook keeps that deck forever; what expires
 is the textbook, and only as something to generate MORE from.
 
+## Age, consent, and the policies the product did not implement
+
+**The Privacy Policy and Terms have promised guardian consent for months.**
+`Privacy.jsx` said "We only knowingly collect information from a student where
+they are capable of giving consent, or where a parent or guardian has
+consented"; `Terms.jsx` said a user under 18 may use the Service "only with the
+knowledge and consent of a parent or guardian". **The app collected no age and
+asked for no consent** — there was no `date_of_birth` anywhere in the tree, so
+neither sentence could have been true of anybody.
+
+Whether the Privacy Act binds a sole trader under the $3M small-business
+threshold is arguable. Whether a published statement the product does not
+implement is a representation is not: that is misleading conduct under the
+Australian Consumer Law whatever the Privacy Act says. **The fix was never to
+soften the policy. It was to make the product do what the policy claimed.**
+
+**`initAnalytics()` RAN AT MODULE SCOPE IN `main.jsx`** — so the Meta and TikTok
+pixels fired on every page load, before React rendered, before login, before
+anything could have been agreed to, on an app whose users are mostly fifteen to
+eighteen. There was no consent banner anywhere in the tree. It is
+`applyConsent()` now, it loads nothing unless a stored choice is GRANTED, and
+`compliance.test.mjs` scans `main.jsx` for the module-scope call specifically.
+
+**THREE THRESHOLDS, AND THEY ARE NOT THE SAME NUMBER** (`src/lib/compliance.js`):
+
+- **13** `MIN_AGE` — below this the account is refused. VCE starts around 15, so
+  nobody legitimate is excluded. The refusal does NOT delete on the spot: a
+  birthday can be a typo, and destroying a child's data before anybody can check
+  is the wrong failure.
+- **16** `SOCIAL_MIN_AGE` — Australia's social media minimum age. AcedIt's
+  primary purpose is education, which the Rules exempt, so this gates the SOCIAL
+  surfaces rather than the account. A safety margin, and one line to move.
+- **18** `ADULT_AGE` — guardian consent, and where advertising tracking stops.
+  **Advertising stops at 18, not 16**, because the children's code means under
+  18 — a sixteen-year-old ticking a box is not the consent it asks for, so the
+  honest implementation is not to ask them.
+
+**UNKNOWN AGE IS TREATED AS A CHILD, which is the OPPOSITE of the tour's rule.**
+`aceTour.js` counts an unknown account age as OLD, because getting that wrong
+generously ambushes 130 accounts with a tutorial. Here the asymmetry runs the
+other way: wrong-generously means advertising to a fifteen-year-old and putting
+a named minor on a public board; wrong-strictly means an adult is asked their
+birthday. So UNKNOWN denies every permission.
+
+**THE GATE IS NOT A WIZARD STEP**, and that is the whole reason it works. A step
+in signup only ever catches NEW accounts, and the ~130 existing ones are exactly
+the people the policies were already making promises about. `AgeGate` renders
+whenever the loaded profile's band is UNKNOWN — new and old alike — and blocks,
+because the permissions hanging off the answer default to "no" and a dismissable
+question would leave a student silently restricted with no idea why.
+
+The guardian step is an **acknowledgement, not verification**. Nothing is
+emailed and nothing is checked, and the code says so rather than implying a
+rigour it does not have. Verifiable parental consent is a bigger build and a
+question for a lawyer; what this closes is the gap between a policy promising
+consent was sought and a product that never asked.
+
+**A NAMED MINOR IS NOT A MARKET SUBJECT BY DEFAULT.** Compete auto-minted "Will
+<name> study 5+ days this week?" about students who asked for nothing. The
+codebase already refused to auto-mint SAC MARK markets for exactly this reason
+and says so in its own words — consent nobody sought is not something a
+settlement can hand back — and the same argument applies to a study log; it was
+simply never applied. `mayBeMarketSubject` opts adults IN and anybody under 18
+OUT, because a default is a decision made on somebody's behalf and should only
+be made for people who can knowingly undo it. **It filters the ROSTER, before
+minting** — filtering at the card would still have created the row, and a market
+that exists but is hidden has published the question to the tape, the settlement
+and everyone already holding a position.
+
+Consequence worth knowing: the board mints nothing about anyone until they
+answer the gate. The gate blocks the app, so active students answer on their
+next login and it repopulates within days.
+
+**Consent is opt-in and silence is not consent.** Two buttons of equal weight,
+nothing pre-selected, a dismissal is a refusal, and blocked or absent storage is
+a refusal — the one direction this can fail is toward not tracking, which costs
+a marketing number and nothing else. Withdrawal stops anything further being
+sent; a script already in the page cannot be unloaded, and the policy says that
+plainly rather than implying otherwise.
+
+**Loading and sending are different acts, and only the second carries data.**
+`applyConsent()` does not check the band — at the moment of consent on the
+marketing site there is usually no account to have one. The per-event
+`allowed()` gate is what stops a known minor's behaviour ever being sent, and it
+reads storage on every call rather than caching, so a withdrawal takes effect
+immediately.
+
+`setTrackingBand(null)` on sign-out is not decoration: on a school library
+machine, leaving the last student's band behind applies their permissions to a
+stranger.
+
 ## Voice / UX guardrails (from prior decisions)
 
 - **Tone**: chill motivational coach. Never cocky.
