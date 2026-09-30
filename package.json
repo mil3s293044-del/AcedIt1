@@ -2,6 +2,9 @@
   "name": "base44-app",
   "private": true,
   "version": "0.0.0",
+  "engines": {
+    "node": ">=20.11"
+  },
   "type": "module",
   "scripts": {
     "dev": "concurrently -n web,api -c blue,green \"npm:dev:web\" \"npm:dev:api\"",

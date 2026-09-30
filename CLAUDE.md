@@ -1741,6 +1741,20 @@ back.
 **Anything `server.mjs` can reach is written with a relative path and an
 extension.** That is the rule; the test is what enforces it.
 
+**AND THE DEPLOY RUNS THE TESTS NOW.** `buildCommand` is
+`npm install && npm test && npm run build` — tests BEFORE the bundle, so a
+failure costs seconds instead of a full build. The suite is ~35s, needs no
+secrets, no network and no `dist`, and is stable across timezones (checked in
+both UTC and Melbourne, since `studyLog`'s Monday is the obvious fragility).
+That is what turns this class from a deploy that dies at the health check into
+a build that fails naming the file.
+
+**`render.yaml` ONLY BINDS IF THE SERVICE IS BLUEPRINT-MANAGED.** A service
+created by hand keeps its build command in the dashboard and the committed
+blueprint is inert — so a change here can look done and change nothing, which
+is this file's own "half-wired feature" shape pointed at the infrastructure.
+Check Settings → Build Command on the service and make the two agree.
+
 ## `invoke` returns AN ENVELOPE, and reading it as the payload is invisible
 
 `functionsApi._invoke` returns `{ data, error }` — deliberately, to match
