@@ -3192,19 +3192,34 @@ is untouched. The same move `sm2.js` and `mastery.js` already made.
 because the first draft priced things at 713, 951, 1427 and 2378 — arithmetic
 showing its working on a shelf. Nobody weighs 713 against 951.
 
-**THE CHIPS DOOR IS THE ONLY ONE THAT COSTS REAL MONEY**, so its ceiling is
-written in MICRO-DOLLARS and the chip count is DERIVED. A cap of "300 chips"
-silently doubles in cost the day chip pricing moves and the discovery happens on
-an invoice; `$0.60` cannot. And the maximum conversion must cost MORE than a
-top-tier week's grant — the first draft priced chips at 4 cred and put the whole
-allowance at 1228 against a top grant of 1800, so the best students could max the
-money door every Monday without trading at all. Seven cred a chip; the test
-holds it.
+**NOTHING ON THIS SHELF COSTS REAL MONEY, and that is now a PROPERTY rather
+than a ceiling.** There was one exception and it has been removed: a door
+converting cred into AI chips. `chips.js` prices a week's stack at $1.95 of
+actual Anthropic spend, so that row was a path from "won a market" to "the bill
+goes up" — and a market on your own study log is allowed DELIBERATELY, so there
+was a farm at the end of it. It was bounded, by the scoring rule (which pays
+~nothing for backing a near-certainty you control) and by a weekly micro-dollar
+ceiling, and bounded is not zero. It was the only thing here that could be wrong
+in DOLLARS rather than in pixels.
+
+What replaces the ceiling is an ABSENCE, which is a stronger guarantee and the
+same shape the refund rule takes: no catalogue entry is per-unit, and nothing in
+the module reaches toward `chips.js` in either direction. `credStore.test.mjs`
+asserts both, so the day somebody adds a door back is the day the suite says so
+rather than the day it turns up on an invoice. Verified by putting each back.
+
+Three things fell out with it, and each was load-bearing ONLY for that row:
+`priceOf` lost its `units` multiplier, the store lost its quantity slider, and
+the server's `buyWithCred` lost the "charged but not granted" branch — because
+every remaining effect is recorded by the patch itself, so the write that
+charges is the write that grants and the two cannot come apart. It leaves
+`extra.cred_chips_week` on any row that ever bought one; nothing reads it, and
+it is not cleaned up for the reason the leaked flashcard rows were not retagged.
 
 **NOTHING IS REFUNDABLE, and that is what closes the arbitrage.** With no
 sell-back there is no path from an owned object to a balance, so a cosmetic
-cannot be laundered into chips. Asserted as an ABSENCE — the day somebody adds a
-refund is the day this stops being true.
+cannot be laundered back into a balance. Asserted as an ABSENCE — the day
+somebody adds a refund is the day this stops being true.
 
 **A consumable cannot be stockpiled.** One streak freeze is insurance; five is
 an exemption, and a streak that can be bought out of stops measuring anything.
@@ -3213,15 +3228,16 @@ an exemption, and a streak that can be bought out of stops measuring anything.
 requests that both read 900 cred and both spend it, and PostgREST has no
 transaction across calls. The update matches on the balance the check was made
 against, so the second touches no rows. The effect is applied AFTER the charge
-lands: granting first and failing to charge is a free chip with no refund path
-to unwind it, and a charge that lands with a failed effect is the recoverable
-direction.
+lands: granting first and failing to charge is a free purchase with no refund
+path to unwind it, and a charge that lands with a failed effect is the
+recoverable direction. Since the money door went, every effect is recorded by
+the patch itself, so there is one write and nothing left to come apart.
 
-**`weekly_chips_bonus` IS NOT A COLUMN.** The first draft wrote one, which is
-the silent 400 class `dbColumns.test.mjs` exists for. The week's chip total
-already lives in `extra.cred_chips_week` and `creditedChipsMicros` reads the
-ceiling straight off it — a second column holding the same number is the mirror
-this codebase keeps deleting.
+**`weekly_chips_bonus` WAS NOT A COLUMN**, and the first draft wrote one —
+the silent 400 class `dbColumns.test.mjs` exists for. Moot now that the door is
+gone, and kept because the lesson is not: a second column holding a number that
+already lives in `extra` is the mirror this codebase keeps deleting, and naming
+a column the database does not have fails at runtime and nowhere else.
 
 **THE PRICE WAS THE SMALLEST FIGURE ON A CARD MADE OF PRICES.** The board card
 led with two payout ceilings at 20px and put 42¢ in a 62px gutter beside them.
