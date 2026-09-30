@@ -39,6 +39,7 @@ import { motion } from "framer-motion";
 import * as Icons from "lucide-react";
 import { Clock, Lock } from "lucide-react";
 import PriceChart from "./PriceChart";
+import PriceTick from "./PriceTick";
 import TakeSide from "./TakeSide";
 import { createPageUrl } from "@/utils";
 import {
@@ -153,8 +154,11 @@ export default function MarketCard({ market, balance, busy, onTake, onReport }) 
                         text-[var(--floor-no-ink)]">{pays.noLabel}</p>
                 </div>
                 <div className="flex flex-col justify-center items-end pl-1 min-w-[62px]">
-                    <span className="font-display font-black text-base leading-none tabular-nums
-                        text-[var(--floor-ink)]">{priceLabel(market.price)}</span>
+                    {/* The price, and the fact that it moved while you were
+                        looking. The floor already refetches on a live tick;
+                        before this it re-rendered silently, throwing away the
+                        one fact a market board exists to carry. */}
+                    <PriceTick price={market.price} label={priceLabel(market.price)} />
                     {/* A market nobody has traded has not moved, and "0 from
                         open" is a measurement of nothing dressed as one. The
                         flat line and the thin note below already say it. */}

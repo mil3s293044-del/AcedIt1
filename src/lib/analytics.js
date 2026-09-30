@@ -13,13 +13,65 @@
  * The semantic helpers (trackLead / trackPurchase / trackSignup) fan a single
  * call out to whichever pixels are live, so call sites never touch fbq/ttq/gtag
  * directly.
+ *
+ * ─── NOTHING LOADS UNTIL SOMEBODY SAYS YES ──────────────────────────────────
+ * `initAnalytics()` used to be called at the top level of `main.jsx`, so Meta
+ * and TikTok fired on every page load — before React rendered, before login,
+ * before anything could have been agreed to — on an app whose users are mostly
+ * fifteen to eighteen. It is now `applyConsent()`, it loads nothing until the
+ * stored choice is GRANTED, and a choice that cannot be read is a refusal.
+ *
+ * ─── AND CONSENT ALONE IS NOT ENOUGH ────────────────────────────────────────
+ * Every firing function asks `mayTrack`, which needs consent AND an adult band.
+ * A sixteen-year-old ticking a box is not the consent the children's code is
+ * asking for, so the honest implementation is not to ask them — see the note
+ * over `mayAdTrack` in compliance.js.
+ *
+ * `setTrackingBand` is how the app tells this module who is signed in. Until it
+ * is called the band is UNKNOWN, which tracks only where `allowAnonymous` is
+ * passed — the marketing pages, where there is no account and no age to know.
+ * The moment a profile loads, an unknown age stops meaning "a visitor" and
+ * starts meaning "they have not answered yet", which is a refusal.
  */
+
+import { BAND, CONSENT, readConsent, writeConsent, mayTrack } from "@/lib/compliance";
 
 const META_PIXEL_ID   = import.meta.env.VITE_META_PIXEL_ID;
 const TIKTOK_PIXEL_ID  = import.meta.env.VITE_TIKTOK_PIXEL_ID;
 const GA4_ID           = import.meta.env.VITE_GA4_ID;
 
 let initialised = false;
+
+/** Who is signed in, as far as tracking is concerned. UNKNOWN until told. */
+let currentBand = BAND.UNKNOWN;
+/** True only on the pages with no account behind them. */
+let anonymousContext = true;
+
+/**
+ * Tell the tracking layer which band the signed-in student falls in.
+ *
+ * Called with `null` on sign-out, which returns the module to the anonymous
+ * marketing posture rather than leaving the last student's band behind for
+ * whoever uses the browser next.
+ */
+export function setTrackingBand(band) {
+    if (band === null || band === undefined) {
+        currentBand = BAND.UNKNOWN;
+        anonymousContext = true;
+        return;
+    }
+    currentBand = band;
+    anonymousContext = false;
+}
+
+/** The one question every function below asks before it touches a pixel. */
+function allowed() {
+    return mayTrack({
+        consent: readConsent(),
+        band: currentBand,
+        allowAnonymous: anonymousContext,
+    });
+}
 
 function loadMetaPixel(id) {
    
@@ -81,19 +133,53 @@ function loadGA4(id) {
   window.gtag("config", id, { send_page_view: false });
 }
 
-/** Inject whichever pixels are configured. Safe to call once at app start. */
-export function initAnalytics() {
-  if (initialised || typeof window === "undefined") return;
+/**
+ * Load the configured pixels, IF and only if consent has been given.
+ *
+ * Safe to call as often as you like — `initialised` makes it idempotent, so
+ * the banner can call it on accept and the app can call it on every mount
+ * without stacking three copies of the Meta script.
+ *
+ * It does NOT check the band. A pixel is loaded once for the browser, and at
+ * the moment of consent on the marketing site there is usually no account to
+ * have a band; the per-event `allowed()` gate is what keeps a known minor's
+ * behaviour from ever being SENT. Loading and sending are different acts and
+ * only the second one carries data.
+ */
+export function applyConsent() {
+  if (initialised || typeof window === "undefined") return false;
+  if (readConsent() !== CONSENT.GRANTED) return false;
   initialised = true;
 
   try { if (META_PIXEL_ID)   loadMetaPixel(META_PIXEL_ID); }   catch (e) { /* never break the app on a pixel error */ }
   try { if (TIKTOK_PIXEL_ID) loadTikTokPixel(TIKTOK_PIXEL_ID); } catch (e) { /* */ }
   try { if (GA4_ID)          loadGA4(GA4_ID); }                catch (e) { /* */ }
+  return true;
+}
+
+/** Record a choice and act on it in one call. Returns the stored value. */
+export function setConsent(value) {
+  writeConsent(value);
+  if (value === CONSENT.GRANTED) applyConsent();
+  return readConsent();
+}
+
+/**
+ * Withdrawing consent stops every future event immediately.
+ *
+ * A script already in the page cannot be unloaded, and pretending otherwise
+ * would be the dishonest version of this: what CAN be guaranteed is that
+ * nothing further is sent, because `allowed()` is consulted on every call and
+ * reads storage each time rather than caching the answer. Clearing the cookies
+ * those scripts set is the browser's job and the banner says so.
+ */
+export function revokeConsent() {
+  return setConsent(CONSENT.DENIED);
 }
 
 /** Fire a virtual page view across all live pixels (for SPA route changes). */
 export function trackPageView(path) {
-  if (typeof window === "undefined") return;
+  if (typeof window === "undefined" || !allowed()) return;
   try {
     if (window.fbq) window.fbq("track", "PageView");
     if (window.ttq) window.ttq.page();
@@ -106,7 +192,7 @@ export function trackPageView(path) {
  * event names; `params` carries value/currency etc.
  */
 function track({ meta, tiktok, ga, params = {} }) {
-  if (typeof window === "undefined") return;
+  if (typeof window === "undefined" || !allowed()) return;
   try {
     if (meta && window.fbq) window.fbq("track", meta, params);
     if (tiktok && window.ttq) window.ttq.track(tiktok, params);

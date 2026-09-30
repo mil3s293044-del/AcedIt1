@@ -9,7 +9,7 @@ import { createAxiosClient } from '@base44/sdk/dist/utils/axios-client';
 // Supabase imports
 import { supabase } from '@/api/supabaseClient';
 import { getAttribution } from '@/lib/attribution';
-import { trackSignup } from '@/lib/analytics';
+import { trackSignup, setTrackingBand } from '@/lib/analytics';
 import { colorFor } from '@/components/cards/cardIdentity';
 
 // Native (Capacitor) OAuth deep-link helpers — no-ops on web.
@@ -506,6 +506,10 @@ export const AuthProvider = ({ children }) => {
 
   // ─── Logout / login (dispatch to whichever auth backend is active) ──────
   const logout = async (shouldRedirect = true) => {
+    // Clear the band, or the last student's age band stays behind for whoever
+    // uses this browser next — on a school library machine that is somebody
+    // else's permission being applied to a stranger.
+    try { setTrackingBand(null); } catch (_) {}
     if (useSupabase) {
       await supabase.auth.signOut();
       setUser(null);

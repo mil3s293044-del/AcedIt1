@@ -3107,6 +3107,178 @@ exists for the seconds between an upload and the generate that reads it. A
 student who makes a deck from a textbook keeps that deck forever; what expires
 is the textbook, and only as something to generate MORE from.
 
+## Cred had no sink, and XP must never be one
+
+**A currency with nowhere to go stops meaning anything.** The grant was a flat
+1000 a week, the cap 3000, and the only exit was a bet — so a student who trades
+well saturates in a fortnight and every Monday after that is a number going up
+because a clock ticked. That is the failure `PortfolioPanel`'s own header names
+about the cred figure: "it moves for two unrelated reasons… a number that goes
+up when you did nothing teaches that the number means nothing."
+
+**XP SETS THE RATE, NEVER THE BALANCE.** The obvious wiring is XP → cred and it
+breaks the property `market.js` is built on: "XP drives level, rank and the
+ATAR, so staking it makes the rational play 'never bet'." A conversion makes
+spending cred cost rank and cost the ATAR, so the rational play for anyone who
+cares about Ranked is never to convert — and it puts a sixteen-year-old's
+flagship study score up for spending on bets. So **rank moves the GRANT**
+(`grantForTier`, 700 at tier 1 to 1800 at tier 10). Nothing is deducted,
+abstaining stays never-optimal, and climbing Ranked visibly pays off on the
+floor. `credStore.test.mjs` scans the module for any reach toward XP.
+
+Tier 1 gets LESS than the old flat 1000 deliberately: a raise that costs nobody
+anything is inflation, and a floor equal to the ceiling cannot express a rank.
+
+**THE THRESHOLDS MOVED OUT OF A `.jsx`.** `XP_RANKS` lived in `xpSystem.jsx`,
+which `server.mjs` cannot import and the test loader cannot resolve — so the
+grant had two options, restate ten thresholds or go without. `src/lib/xpRanks.js`
+is the one copy now and `xpSystem.jsx` re-exports it, so every existing import
+is untouched. The same move `sm2.js` and `mastery.js` already made.
+
+**PRICES ARE MULTIPLES OF A MID-TIER GRANT, ROUNDED TO 50.** A multiple keeps
+"how long does this take to afford" readable when a grant moves; the rounding is
+because the first draft priced things at 713, 951, 1427 and 2378 — arithmetic
+showing its working on a shelf. Nobody weighs 713 against 951.
+
+**THE CHIPS DOOR IS THE ONLY ONE THAT COSTS REAL MONEY**, so its ceiling is
+written in MICRO-DOLLARS and the chip count is DERIVED. A cap of "300 chips"
+silently doubles in cost the day chip pricing moves and the discovery happens on
+an invoice; `$0.60` cannot. And the maximum conversion must cost MORE than a
+top-tier week's grant — the first draft priced chips at 4 cred and put the whole
+allowance at 1228 against a top grant of 1800, so the best students could max the
+money door every Monday without trading at all. Seven cred a chip; the test
+holds it.
+
+**NOTHING IS REFUNDABLE, and that is what closes the arbitrage.** With no
+sell-back there is no path from an owned object to a balance, so a cosmetic
+cannot be laundered into chips. Asserted as an ABSENCE — the day somebody adds a
+refund is the day this stops being true.
+
+**A consumable cannot be stockpiled.** One streak freeze is insurance; five is
+an exemption, and a streak that can be bought out of stops measuring anything.
+
+**THE PURCHASE IS A COMPARE-AND-SET.** Two taps on a slow connection are two
+requests that both read 900 cred and both spend it, and PostgREST has no
+transaction across calls. The update matches on the balance the check was made
+against, so the second touches no rows. The effect is applied AFTER the charge
+lands: granting first and failing to charge is a free chip with no refund path
+to unwind it, and a charge that lands with a failed effect is the recoverable
+direction.
+
+**`weekly_chips_bonus` IS NOT A COLUMN.** The first draft wrote one, which is
+the silent 400 class `dbColumns.test.mjs` exists for. The week's chip total
+already lives in `extra.cred_chips_week` and `creditedChipsMicros` reads the
+ceiling straight off it — a second column holding the same number is the mirror
+this codebase keeps deleting.
+
+**THE PRICE MOVES WHERE YOU CAN SEE IT** (`PriceTick`). `Competitions.jsx`
+already held a `useLiveTick`, so a card whose room has traded re-rendered at the
+new price on its own — SILENTLY. 71¢ became 68¢ between two paints and nothing
+said a person had done that, which is the single most important fact a market
+board carries, thrown away by a component that already had it. The number counts
+and the delta ghosts off above it.
+
+Two rules it keeps. **It never animates on arrival** — the first price a card
+shows has not moved, and counting on mount would announce every market as
+swinging on every page load. And **the printed figure is always the TRUE
+price**: only weight and colour move, so a student who taps mid-animation never
+stakes against a number the card was still travelling toward.
+
+The tape follows the same rule — new rows arrive with `layout` and read "just
+now", and the first paint flags nothing, or the whole week is breaking news on
+every load.
+
+## Age, consent, and the policies the product did not implement
+
+**The Privacy Policy and Terms have promised guardian consent for months.**
+`Privacy.jsx` said "We only knowingly collect information from a student where
+they are capable of giving consent, or where a parent or guardian has
+consented"; `Terms.jsx` said a user under 18 may use the Service "only with the
+knowledge and consent of a parent or guardian". **The app collected no age and
+asked for no consent** — there was no `date_of_birth` anywhere in the tree, so
+neither sentence could have been true of anybody.
+
+Whether the Privacy Act binds a sole trader under the $3M small-business
+threshold is arguable. Whether a published statement the product does not
+implement is a representation is not: that is misleading conduct under the
+Australian Consumer Law whatever the Privacy Act says. **The fix was never to
+soften the policy. It was to make the product do what the policy claimed.**
+
+**`initAnalytics()` RAN AT MODULE SCOPE IN `main.jsx`** — so the Meta and TikTok
+pixels fired on every page load, before React rendered, before login, before
+anything could have been agreed to, on an app whose users are mostly fifteen to
+eighteen. There was no consent banner anywhere in the tree. It is
+`applyConsent()` now, it loads nothing unless a stored choice is GRANTED, and
+`compliance.test.mjs` scans `main.jsx` for the module-scope call specifically.
+
+**THREE THRESHOLDS, AND THEY ARE NOT THE SAME NUMBER** (`src/lib/compliance.js`):
+
+- **13** `MIN_AGE` — below this the account is refused. VCE starts around 15, so
+  nobody legitimate is excluded. The refusal does NOT delete on the spot: a
+  birthday can be a typo, and destroying a child's data before anybody can check
+  is the wrong failure.
+- **16** `SOCIAL_MIN_AGE` — Australia's social media minimum age. AcedIt's
+  primary purpose is education, which the Rules exempt, so this gates the SOCIAL
+  surfaces rather than the account. A safety margin, and one line to move.
+- **18** `ADULT_AGE` — guardian consent, and where advertising tracking stops.
+  **Advertising stops at 18, not 16**, because the children's code means under
+  18 — a sixteen-year-old ticking a box is not the consent it asks for, so the
+  honest implementation is not to ask them.
+
+**UNKNOWN AGE IS TREATED AS A CHILD, which is the OPPOSITE of the tour's rule.**
+`aceTour.js` counts an unknown account age as OLD, because getting that wrong
+generously ambushes 130 accounts with a tutorial. Here the asymmetry runs the
+other way: wrong-generously means advertising to a fifteen-year-old and putting
+a named minor on a public board; wrong-strictly means an adult is asked their
+birthday. So UNKNOWN denies every permission.
+
+**THE GATE IS NOT A WIZARD STEP**, and that is the whole reason it works. A step
+in signup only ever catches NEW accounts, and the ~130 existing ones are exactly
+the people the policies were already making promises about. `AgeGate` renders
+whenever the loaded profile's band is UNKNOWN — new and old alike — and blocks,
+because the permissions hanging off the answer default to "no" and a dismissable
+question would leave a student silently restricted with no idea why.
+
+The guardian step is an **acknowledgement, not verification**. Nothing is
+emailed and nothing is checked, and the code says so rather than implying a
+rigour it does not have. Verifiable parental consent is a bigger build and a
+question for a lawyer; what this closes is the gap between a policy promising
+consent was sought and a product that never asked.
+
+**A NAMED MINOR IS NOT A MARKET SUBJECT BY DEFAULT.** Compete auto-minted "Will
+<name> study 5+ days this week?" about students who asked for nothing. The
+codebase already refused to auto-mint SAC MARK markets for exactly this reason
+and says so in its own words — consent nobody sought is not something a
+settlement can hand back — and the same argument applies to a study log; it was
+simply never applied. `mayBeMarketSubject` opts adults IN and anybody under 18
+OUT, because a default is a decision made on somebody's behalf and should only
+be made for people who can knowingly undo it. **It filters the ROSTER, before
+minting** — filtering at the card would still have created the row, and a market
+that exists but is hidden has published the question to the tape, the settlement
+and everyone already holding a position.
+
+Consequence worth knowing: the board mints nothing about anyone until they
+answer the gate. The gate blocks the app, so active students answer on their
+next login and it repopulates within days.
+
+**Consent is opt-in and silence is not consent.** Two buttons of equal weight,
+nothing pre-selected, a dismissal is a refusal, and blocked or absent storage is
+a refusal — the one direction this can fail is toward not tracking, which costs
+a marketing number and nothing else. Withdrawal stops anything further being
+sent; a script already in the page cannot be unloaded, and the policy says that
+plainly rather than implying otherwise.
+
+**Loading and sending are different acts, and only the second carries data.**
+`applyConsent()` does not check the band — at the moment of consent on the
+marketing site there is usually no account to have one. The per-event
+`allowed()` gate is what stops a known minor's behaviour ever being sent, and it
+reads storage on every call rather than caching, so a withdrawal takes effect
+immediately.
+
+`setTrackingBand(null)` on sign-out is not decoration: on a school library
+machine, leaving the last student's band behind applies their permissions to a
+stranger.
+
 ## Voice / UX guardrails (from prior decisions)
 
 - **Tone**: chill motivational coach. Never cocky.

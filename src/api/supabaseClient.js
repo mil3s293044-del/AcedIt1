@@ -442,6 +442,8 @@ const PORTED_FUNCTIONS = {
   // ...but getPortfolio and getMarket only READ, which is why they are also
   // in READ_ONLY_FUNCTIONS below.
   getPortfolio:             '/local-ai/fn/getPortfolio',
+  getCredStore:             '/local-ai/fn/getCredStore',
+  buyWithCred:              '/local-ai/fn/buyWithCred',
   getMarket:                '/local-ai/fn/getMarket',
   takePosition:             '/local-ai/fn/takePosition',
   openMarkMarket:           '/local-ai/fn/openMarkMarket',
@@ -490,7 +492,7 @@ const PORTED_FUNCTIONS = {
 // it, so a function whose behaviour you are unsure of does NOT go here.
 const READ_ONLY_FUNCTIONS = new Set([
   'getRankedBoards', 'getArenaState', 'getMyStakes', 'getCallouts', 'getReactions',
-  'getPortfolio', 'getMarket',
+  'getPortfolio', 'getMarket', 'getCredStore',
   'extractDocumentText', 'invokeAI', 'mindMapGaps',
 ]);
 

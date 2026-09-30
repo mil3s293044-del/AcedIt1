@@ -13,11 +13,46 @@ export default function Terms() {
 
       <LegalSection heading="Eligibility and student accounts">
         <p>
-          The Service is intended for high-school students studying the VCE. If
-          you are under 18, you may use the Service only with the knowledge and
-          consent of a parent or guardian, who agrees to these Terms on your
-          behalf. You are responsible for ensuring the information you give us is
-          accurate and kept up to date.
+          The Service is intended for high-school students studying the VCE. You
+          must be at least 13 to hold an account, and we ask every account holder
+          for their date of birth. If you are under 18, you may use the Service
+          only with the knowledge and consent of a parent or guardian, who agrees
+          to these Terms on your behalf, and we ask you to confirm that when you
+          tell us your age. You are responsible for ensuring the information you
+          give us is accurate and kept up to date.
+        </p>
+        <p>
+          Some features are limited by age. The Compete board and other social
+          features are not available to accounts belonging to anyone under 16,
+          and other students cannot open a question about your study unless you
+          are 16 or over and have switched that on in Settings.
+        </p>
+      </LegalSection>
+
+      <LegalSection heading="Material you upload">
+        <p>
+          AcedIt lets you upload notes, photographs and documents so it can
+          generate study material from them. Those uploads are processed and then
+          deleted automatically, usually within a day.
+        </p>
+        <p>
+          You must only upload material you own or are otherwise entitled to
+          upload. Do not upload textbooks, past papers or other copyright
+          material unless you hold the rights or your use is permitted &mdash; for
+          example, fair dealing for the purpose of your own research or study.
+          By uploading, you confirm you have the right to do so and that our
+          processing it on your behalf will not infringe anyone else&rsquo;s
+          rights.
+        </p>
+        <p>
+          <strong>If you believe material on AcedIt infringes your copyright</strong>,
+          email{" "}
+          <a href="mailto:support@acedit.au" className="text-primary underline">support@acedit.au</a>{" "}
+          with the words &ldquo;Copyright notice&rdquo; in the subject line, and tell us
+          what the material is, where it is, what right you hold and how to
+          contact you. We will remove or disable access to material we are
+          reasonably satisfied is infringing, and we may suspend accounts that
+          upload infringing material repeatedly.
         </p>
       </LegalSection>
 

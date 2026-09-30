@@ -26,8 +26,10 @@ import {
     LogOut,
     AlertTriangle,
     ExternalLink,
-    GraduationCap
+    GraduationCap,
+    Swords,
 } from "lucide-react";
+import { bandOfProfile, maySeeSocial, mayBeMarketSubject } from "@/lib/compliance";
 import DataExportModal from "@/components/shared/DataExportModal";
 import HelpButton from "@/components/shared/HelpButton";
 import { useToast } from "@/components/ui/use-toast";
@@ -175,6 +177,36 @@ export default function Settings() {
                 title: "Error saving username",
                 description: "Please try again later.",
                 variant: "destructive"
+            });
+        } finally {
+            setIsSaving(false);
+        }
+    };
+
+    /**
+     * Whether this student may be the subject of a market at all.
+     *
+     * The control is HIDDEN rather than disabled for anyone under 16, because
+     * a greyed-out switch invites "why can't I?" and the honest answer — the
+     * social surfaces are gated by age — is not something a toggle can say.
+     */
+    const marketBand = bandOfProfile(userProfile);
+    const marketEligible = maySeeSocial(marketBand);
+    const marketSubject = mayBeMarketSubject(userProfile);
+
+    const toggleMarketSubject = async (checked) => {
+        if (!userProfile) return;
+        setIsSaving(true);
+        try {
+            const updated = await base44.entities.UserProfile.update(userProfile.id, {
+                extra: { ...(userProfile.extra || {}), market_subject_opt_in: checked },
+            });
+            setUserProfile(updated);
+        } catch (e) {
+            toast({
+                title: "That didn't save",
+                description: e?.message || "Try again in a moment.",
+                variant: "destructive",
             });
         } finally {
             setIsSaving(false);
@@ -587,6 +619,37 @@ export default function Settings() {
                             disabled={isSaving}
                         />
                     </div>
+
+                    {/* ── BEING THE SUBJECT OF A MARKET ────────────────────
+                        Separate from the anonymity toggle above, because they
+                        answer different questions: that one is about your NAME
+                        on a board you chose to be on, this one is about other
+                        people opening a question about your week. Off by
+                        default for anyone under 18 — see mayBeMarketSubject. */}
+                    {marketEligible && (
+                        <div className="flex items-start justify-between gap-4 mt-4 pt-4 border-t border-border">
+                            <div className="flex items-start gap-3 min-w-0">
+                                <Swords className="w-5 h-5 text-chart-4 flex-shrink-0 mt-0.5" />
+                                <div className="min-w-0">
+                                    <Label htmlFor="market-subject" className="text-foreground font-bold text-sm block">
+                                        Let others trade on my week
+                                    </Label>
+                                    <p className="text-xs text-muted-foreground mt-0.5 leading-relaxed">
+                                        Compete can open questions about your study streak and hours
+                                        &mdash; &ldquo;will they study 5+ days this week?&rdquo; &mdash; for
+                                        others to take sides on. Your marks are never included.
+                                        Turning this off stops new ones; ones already open still settle.
+                                    </p>
+                                </div>
+                            </div>
+                            <Switch
+                                id="market-subject"
+                                checked={marketSubject}
+                                onCheckedChange={toggleMarketSubject}
+                                disabled={isSaving}
+                            />
+                        </div>
+                    )}
                 </motion.section>
 
                 {/* ── DATA EXPORT ──────────────────────────────────────── */}

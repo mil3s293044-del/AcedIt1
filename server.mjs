@@ -16,6 +16,17 @@ import { QUEST_BY_ID, questMultiplier } from "./src/lib/quests.js";
 // the client deliberately: the forecast layer and the column's CHECK
 // constraint drifting apart is what made placeForecast a guaranteed 500.
 import { WAGER } from "./src/lib/wagerStatus.js";
+// The one rule about who may be the SUBJECT of a market. Imported rather
+// than mirrored, for the reason market.js already is: two copies of a
+// consent rule is how one of them quietly stops being applied.
+import { mayBeMarketSubject } from "./src/lib/compliance.js";
+// The cred economy: what a rank is worth on Monday, and what cred buys.
+// Imported rather than mirrored, the rule market.js already keeps.
+import {
+  grantForTier, canBuy, purchasePatch, CATALOGUE,
+  CHIPS_WEEKLY_MAX, chipsConvertedThisWeek,
+} from "./src/lib/credStore.js";
+import { rankTierFromXP } from "./src/lib/xpRanks.js";
 // The market model — the ONE object Compete is built on. Imported rather than
 // mirrored: forecast.js was mirrored deliberately and every session since has
 // had to remember "change one, change both". One module, both sides.
@@ -908,6 +919,21 @@ function tierIsPremium(profile) {
   return false;
 }
 
+/**
+ * Chips this student BOUGHT with cred this week, as micro-dollars.
+ *
+ * Zero unless the stored week matches the current one, so last week's purchase
+ * cannot widen this week's ceiling — the same week-keyed idempotence the cred
+ * grant uses, and the reason the record is a week string rather than a counter.
+ */
+function creditedChipsMicros(profile) {
+  const rec = profile?.extra?.cred_chips_week;
+  if (!rec || rec.week !== marketWeekKey()) return 0;
+  const chips = Number(rec.chips);
+  if (!Number.isFinite(chips) || chips <= 0) return 0;
+  return Math.round(chips * (TIER_WEEKLY_CAP_MICROS / 1000));
+}
+
 async function loadUserProfile(userEmail) {
   if (!supabaseAdmin || !userEmail) return null;
   const res = await withDeadline(
@@ -993,7 +1019,13 @@ function checkTierAccess(profile, feature, extraChips = 0) {
     // are rounded up so a full stack always costs less than this ceiling.
     // This stays anyway: if a price in chips.js is ever set below its real
     // cost, or a model gets dearer between deploys, the dollars still stop.
-    if (weeklySpendMicros(profile) >= TIER_WEEKLY_CAP_MICROS) {
+    // A STUDENT WHO BOUGHT CHIPS WITH CRED HAS A BIGGER CEILING, and it is
+    // applied in micro-dollars because that is what this gate speaks. The
+    // bonus lives in `extra` rather than its own column: `user_profiles` has
+    // no `weekly_chips_bonus`, and naming a column the database does not have
+    // is the silent 400 class `dbColumns.test.mjs` exists for.
+    const boughtMicros = creditedChipsMicros(profile);
+    if (weeklySpendMicros(profile) >= TIER_WEEKLY_CAP_MICROS + boughtMicros) {
       return { allowed: false, status: 429, reason: "Weekly AI usage limit reached. Resets Monday." };
     }
 
@@ -9739,14 +9771,26 @@ function marketWeekClose(weekKey) {
  * Topped UP to the grant rather than added to it, so a student who ignored
  * Compete for a term arrives with one week's stack and not twelve. The cap
  * still leaves room to carry a good week forward.
+ *
+ * RANK SETS THE SIZE OF IT, and that is the whole XP↔cred wiring. The obvious
+ * version — converting XP into cred — breaks the property market.js is built
+ * on: XP drives level, rank and the ATAR, so staking it would make "never bet"
+ * the rational play, and it would put a sixteen-year-old's flagship score up
+ * for spending. Moving the RATE costs nobody any XP, keeps abstaining
+ * never-optimal, and still makes climbing Ranked pay off on the floor.
  */
 async function grantWeeklyCred(profile) {
   if (!supabaseAdmin || !profile) return profile;
   const week = marketWeekKey();
   if (profile.cred_granted_week === week) return profile;
 
+  // `total_xp` rather than the stored `current_level`: every other screen in
+  // the app derives from total_xp, and the data export was once the one place
+  // able to print a stale level off the column. The tier is a number, so a
+  // junk or missing XP total lands on tier 1 — the floor, never the ceiling.
+  const grant = grantForTier(rankTierFromXP(profile.total_xp));
   const held = Math.max(0, Number(profile.cred_balance) || 0);
-  const next = Math.min(CRED_BALANCE_CAP, Math.max(held, CRED_WEEKLY_GRANT));
+  const next = Math.min(CRED_BALANCE_CAP, Math.max(held, grant));
   const { error } = await supabaseAdmin.from("user_profiles")
     .update({ cred_balance: next, cred_granted_week: week })
     .eq("id", profile.id);
@@ -10511,12 +10555,18 @@ app.post("/local-ai/fn/getMarkets", async (req, res) => {
     // The room is the weekly league, which every student is already in — so
     // there is always a board, without anybody having to join anything. A
     // market scoped to a battle is additionally visible to that battle.
+    // `extra` is selected for ONE reason: it carries the date of birth and the
+    // opt-in, and a student who may not be the subject of a market must never
+    // reach the minting roster in the first place. Filtering later — at the
+    // card, or in the payload — would still have created the row, and a market
+    // that exists but is hidden has still published the question to the tape,
+    // the settlement and everyone who was already holding a position.
     const { data: roster } = await supabaseAdmin.from("user_profiles")
-      .select("created_by, username, full_name")
+      .select("created_by, username, full_name, extra")
       .not("created_by", "is", null).limit(200);
     const members = (roster || []).map((r) => ({
-      email: r.created_by, name: r.username || r.full_name || null,
-    })).filter((m) => m.email);
+      email: r.created_by, name: r.username || r.full_name || null, extra: r.extra || {},
+    })).filter((m) => m.email && mayBeMarketSubject(m));
 
     await mintWeeklyMarkets(members);
     const swept = await settleDueMarkets();
@@ -10656,6 +10706,129 @@ function creditSummary(profile) {
 // and `holdings.test.mjs` asserts the two copies agree. The same "change one,
 // change both" guard `uploadPrep.test.mjs` keeps over the upload caps.
 const RANK_MIN_CALLS = 5;
+
+/**
+ * The cred store. One endpoint, because a purchase is one decision.
+ *
+ * THE VERDICT AND THE PATCH BOTH COME FROM `credStore.js`, never from anything
+ * assembled here. A handler that re-derives affordability has become a second
+ * price list, and the first disagreement is a student charged for something
+ * they did not get — which no toast can undo, because nothing here refunds.
+ *
+ * The write is a COMPARE-AND-SET on the balance the check was made against.
+ * Two taps on a slow connection are two requests that both read 900 cred and
+ * both spend it, and PostgREST has no transaction across calls; matching on the
+ * old balance means the second write touches no rows and is refused. This is
+ * the same hazard `takePosition` guards with its one-position-per-market check.
+ */
+app.post("/local-ai/fn/buyWithCred", async (req, res) => {
+  const user = await authenticateRequest(req);
+  if (!user) return res.status(401).json({ error: "Not signed in." });
+  if (!supabaseAdmin) return res.status(503).json({ error: "Store unavailable." });
+
+  try {
+    const { item_id, units } = req.body || {};
+    const week = marketWeekKey();
+
+    let profile = await loadUserProfile(user.email);
+    if (!profile) return res.status(404).json({ error: "No profile found for this account." });
+    // Granted first, so somebody arriving on Monday can spend the stack they
+    // are owed rather than being told they are short of cred they already have.
+    profile = await grantWeeklyCred(profile);
+
+    const verdict = canBuy(profile, item_id, { units, week });
+    if (!verdict.ok) return res.status(400).json({ error: verdict.reason });
+
+    const patch = purchasePatch(profile, item_id, { units, week });
+    if (!patch) return res.status(400).json({ error: "That purchase is not available." });
+    const { _effect, ...columns } = patch;
+
+    const { data: written, error } = await supabaseAdmin.from("user_profiles")
+      .update(columns)
+      .eq("id", profile.id)
+      // The compare-and-set. A concurrent purchase moved the balance, so this
+      // matches nothing and the student is told to try again rather than being
+      // charged twice for one thing.
+      .eq("cred_balance", profile.cred_balance)
+      .select("id, cred_balance, extra")
+      .maybeSingle();
+    if (error) {
+      console.error("[buyWithCred] write failed:", error.code, error.message);
+      return res.status(500).json({ error: "Couldn't complete that. Nothing was charged." });
+    }
+    if (!written) {
+      return res.status(409).json({ error: "Your balance changed. Nothing was charged — try again." });
+    }
+
+    // ── The effect, AFTER the charge landed. Ordering matters: granting first
+    //    and failing to charge is a free chip, and there is no refund path to
+    //    unwind it with. A charge that lands and an effect that fails is the
+    //    recoverable direction, and it is logged loudly.
+    let granted = null;
+    if (_effect?.type === "grant_chips") {
+      // Nothing further to write: `purchasePatch` already recorded the week's
+      // chip total in `extra.cred_chips_week`, and `creditedChipsMicros` reads
+      // the ceiling straight off it. A second column holding the same number
+      // is the mirror this codebase keeps having to delete.
+      const cErr = written?.extra?.cred_chips_week?.chips === undefined
+        ? new Error("the purchase did not record its chips") : null;
+      if (cErr) {
+        console.error("[buyWithCred] CHARGED BUT CHIPS NOT GRANTED:", profile.id, _effect.chips, cErr.message);
+        return res.status(500).json({ error: "Charged, but the chips did not land. Contact support and quote your email." });
+      }
+      granted = { chips: _effect.chips };
+    }
+
+    return res.json({
+      success: true,
+      cred_balance: written.cred_balance,
+      extra: written.extra,
+      effect: _effect,
+      granted,
+    });
+  } catch (e) {
+    console.error("[buyWithCred]", e);
+    return res.status(500).json({ error: "Couldn't complete that." });
+  }
+});
+
+/** What the store has, and what this student can do with it right now. */
+app.post("/local-ai/fn/getCredStore", async (req, res) => {
+  const user = await authenticateRequest(req);
+  if (!user) return res.status(401).json({ error: "Not signed in." });
+  if (!supabaseAdmin) return res.status(503).json({ error: "Store unavailable." });
+  try {
+    const week = marketWeekKey();
+    let profile = await loadUserProfile(user.email);
+    if (!profile) return res.status(404).json({ error: "No profile found." });
+    profile = await grantWeeklyCred(profile);
+
+    const tier = rankTierFromXP(profile.total_xp);
+    return res.json({
+      success: true,
+      cred: Math.max(0, Number(profile.cred_balance) || 0),
+      tier,
+      weekly_grant: grantForTier(tier),
+      // The slider's ceiling, minus what has already gone this week — sent
+      // rather than derived on the client, so the control cannot offer a
+      // block the server is about to refuse.
+      chips_max: Math.max(0, CHIPS_WEEKLY_MAX - chipsConvertedThisWeek(profile, week)),
+      owned: Array.isArray(profile.extra?.cred_owned) ? profile.extra.cred_owned : [],
+      held: profile.extra?.cred_held || {},
+      equipped: profile.extra?.cred_equipped || {},
+      // The verdict per item is computed HERE rather than on the client, so the
+      // button cannot say yes to something the server is about to refuse — the
+      // rule megaUpload's price gate already keeps.
+      items: CATALOGUE.map((i) => ({
+        ...i,
+        verdict: canBuy(profile, i.id, { units: i.perUnit ? 1 : undefined, week }),
+      })),
+    });
+  } catch (e) {
+    console.error("[getCredStore]", e);
+    return res.status(500).json({ error: "Couldn't read the store." });
+  }
+});
 
 app.post("/local-ai/fn/getPortfolio", async (req, res) => {
   const user = await authenticateRequest(req);
