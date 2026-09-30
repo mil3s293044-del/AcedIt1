@@ -35,7 +35,17 @@ import { motion, AnimatePresence, useReducedMotion } from "framer-motion";
 /** How long the ghost hangs around. Long enough to read, short enough to miss. */
 const GHOST_MS = 1600;
 
-export default function PriceTick({ price, label, className = "" }) {
+/**
+ * Two sizes, because the price is the headline on a board card and a detail
+ * inside the take-side sheet, and a figure that changes weight between them is
+ * two different things saying one number.
+ */
+const SIZE = {
+    md: "text-base",
+    lg: "text-[26px]",
+};
+
+export default function PriceTick({ price, label, size = "md", className = "" }) {
     const reduce = useReducedMotion();
     const seen = useRef(null);
     const [move, setMove] = useState(null);
@@ -70,8 +80,8 @@ export default function PriceTick({ price, label, className = "" }) {
                     ? { scale: [1, 1.14, 1], color: [null, up ? "var(--floor-yes-ink)" : "var(--floor-no-ink)", null] }
                     : {}}
                 transition={{ duration: 0.5, times: [0, 0.3, 1], ease: "easeOut" }}
-                className="font-display font-black text-base leading-none tabular-nums
-                    text-[var(--floor-ink)]"
+                className={`font-display font-black leading-none tabular-nums
+                    text-[var(--floor-ink)] ${SIZE[size] || SIZE.md}`}
             >
                 {label}
             </motion.span>

@@ -34,18 +34,74 @@ import BottomNav from "@/components/layout/BottomNav";
 
 const which = new URLSearchParams(location.search).get("v") || "deal";
 
+// POSITIONS NEED TIMESTAMPS OR THE TAPE IS A VERTICAL BAR. `priceHistory`
+// sorts and plots on `created_date`; without one every step collapses onto
+// x=0 and the sparkline renders as a single stroke against the left edge,
+// which reads as a broken chart rather than as a quiet market. The fixture
+// has to carry the shape of real data — the same lesson the Quizzes shelf
+// learned when three-quizzes-per-subject hid a layout that fell apart on a
+// real account.
+const ago = (h) => new Date(Date.now() - h * 36e5).toISOString();
+
 const sac = readMarket({
     id: "m-sac", kind: "sac", status: "open", prior: 0.38,
     title: "Will Miles score 85%+ on Chemistry Unit 3 SAC 2?",
     resolves_note: "On the mark Miles enters on their planner. They can't back it — you can.",
+    created_date: ago(72),
     closes_at: new Date(Date.now() + 5 * 864e5).toISOString(),
     subject_is_me: true, subject_email: "me@x.com",
     meta: { target: 85, subject: "Chemistry", thin: false, seen: 4, average: 74 },
 }, [
-    { id: "a", p: 0.72, stake: 100, price_at_entry: 0.38, user_name: "Ava", user_email: "ava@x.com" },
-    { id: "b", p: 0.3, stake: 150, price_at_entry: 0.5, user_name: "Ben", user_email: "ben@x.com" },
-    { id: "c", p: 0.25, stake: 50, price_at_entry: 0.55, user_name: "Cat", user_email: "cat@x.com" },
+    { id: "a", p: 0.72, stake: 100, price_at_entry: 0.38, created_date: ago(58),
+        user_name: "Ava", user_email: "ava@x.com" },
+    { id: "b", p: 0.3, stake: 150, price_at_entry: 0.5, created_date: ago(31),
+        user_name: "Ben", user_email: "ben@x.com" },
+    { id: "c", p: 0.25, stake: 50, price_at_entry: 0.55, created_date: ago(6),
+        user_name: "Cat", user_email: "cat@x.com" },
 ], "me@x.com");
+
+/* A head-to-head: the sides are two people, so nothing on the card may say
+   "Yes". The longest labels the board can produce, which is what makes this
+   the case worth drawing. */
+const versus = readMarket({
+    id: "m-vs", kind: "versus", status: "open", prior: 0.52,
+    title: "Who logs more hours this week — Priyanka or Sam?",
+    created_date: ago(96),
+    closes_at: new Date(Date.now() + 26 * 36e5).toISOString(),
+    meta: { names: ["Priyanka", "Sam"] },
+}, [
+    { id: "d", p: 0.66, stake: 250, price_at_entry: 0.52, created_date: ago(70),
+        user_name: "Ben", user_email: "ben@x.com" },
+    { id: "e", p: 0.58, stake: 120, price_at_entry: 0.6, created_date: ago(20),
+        user_name: "Me", user_email: "me@x.com" },
+], "me@x.com");
+
+/* THE EXTREME. A longshot sitting at single digits is where a split bar is
+   most tempting to draw wrong: labels inside the segments have nowhere to go,
+   and an unclamped fill renders the long side as a hairline that reads as no
+   side at all. */
+const longshot = readMarket({
+    id: "m-ls", kind: "longshot", status: "open", prior: 0.08,
+    title: "Will anyone on the board log 7 days AND sit 5 quizzes this week?",
+    created_date: ago(120),
+    closes_at: new Date(Date.now() + 40 * 36e5).toISOString(),
+    meta: { target: 7 },
+}, [
+    { id: "f", p: 0.05, stake: 400, price_at_entry: 0.08, created_date: ago(90),
+        user_name: "Ravi", user_email: "r@x.com" },
+    { id: "g", p: 0.04, stake: 300, price_at_entry: 0.07, created_date: ago(40),
+        user_name: "Ines", user_email: "i@x.com" },
+], "me@x.com");
+
+/* Nobody has touched it. The quietest card the board can deal, and the one
+   that has to read as a question rather than as a chart that failed. */
+const quiet = readMarket({
+    id: "m-q", kind: "streak", status: "open", prior: 0.5,
+    title: "Will Ava study 5+ days this week?",
+    created_date: ago(12),
+    closes_at: new Date(Date.now() + 3 * 864e5).toISOString(),
+    meta: { target: 5, thin: true },
+}, [], "me@x.com");
 
 const views = {
     deal: () => <Room><AceDeal /></Room>,
@@ -63,12 +119,17 @@ const views = {
             </div>
         </Room>
     ),
+    // EVERY SHAPE THE BOARD CAN DEAL, one under the other: a market about you,
+    // a head-to-head whose sides are two names, one you already hold, and one
+    // nobody has touched. Judging a card on its happy case is how the Quizzes
+    // shelf shipped a layout that fell apart on a real account.
     card: () => (
         <Room>
             <div className="max-w-sm mx-auto grid gap-3">
                 <MarketCard market={sac} balance={1000} onTake={() => {}} onReport={() => {}} />
-                <MarketCard market={{ ...sac, id: "t", meta: { ...sac.meta, thin: true } }}
-                    balance={1000} onTake={() => {}} onReport={() => {}} />
+                <MarketCard market={versus} balance={1000} onTake={() => {}} />
+                <MarketCard market={longshot} balance={1000} onTake={() => {}} />
+                <MarketCard market={quiet} balance={1000} onTake={() => {}} />
             </div>
         </Room>
     ),
@@ -109,9 +170,8 @@ const views = {
                     <h2 className="text-[10px] font-black uppercase tracking-widest
                         text-[var(--floor-dim)]">The board</h2>
                     <MarketCard market={sac} balance={1000} onTake={() => {}} onReport={() => {}} />
-                    <MarketCard market={{ ...sac, id: "b", kind: "streak", subject_is_me: false,
-                        title: "Will Ava study 5+ days this week?",
-                        meta: { target: 5 } }} balance={1000} onTake={() => {}} />
+                    <MarketCard market={versus} balance={1000} onTake={() => {}} />
+                    <MarketCard market={quiet} balance={1000} onTake={() => {}} />
                     <div className="rounded-2xl border-2 border-[var(--floor-edge)]
                         bg-[var(--floor-card)] p-4">
                         <h2 className="text-[10px] font-black uppercase tracking-widest
