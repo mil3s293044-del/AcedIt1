@@ -3171,6 +3171,60 @@ already lives in `extra.cred_chips_week` and `creditedChipsMicros` reads the
 ceiling straight off it — a second column holding the same number is the mirror
 this codebase keeps deleting.
 
+**THE PRICE WAS THE SMALLEST FIGURE ON A CARD MADE OF PRICES.** The board card
+led with two payout ceilings at 20px and put 42¢ in a 62px gutter beside them.
+That is a CONDITIONAL — what the strongest call the slider allows returns if it
+lands, on a call nobody has made — outranking the market's actual state: the
+number every position was scored against, the one the tape moves, and the only
+thing on the card that changes while a student is reading it.
+
+`PriceBar` is one object where there were three. The figure leads, the split is
+drawn under it, and what each side pays sits under its own end of the bar. A
+split four-tenths along is "42¢" with nothing to convert, read peripherally down
+a column of cards, which is what a board is for — and POSITION is the second
+channel the floor's CVD rule asks for, so the bar survives greyscale. The labels
+go UNDER the bar, never inside: a longshot at 5¢ has a sliver with nowhere to put
+the word "Yes", and `MIN_SHARE` keeps that sliver visible, because a side the
+room has abandoned is still a side you can take.
+
+**A MARKET WITH NO TRADES HAS NO TAPE.** The compact chart drew a dashed rule
+edge to edge for one, which reads as a divider. The full chart carries a sentence
+saying what the dashes are and the card has no room for it, so the card draws
+nothing and lets the crowd row say it.
+
+**`sideLabels` EXISTED AND THE CARD READ IT IN TWO PLACES OUT OF FOUR.** A
+head-to-head printed "2 yes · 0 no" and "You: YES" — the model's boolean storage
+on the floor, on the one kind the function was written for, two lines below a
+call to it. Names are not shouted either: "YES" is a label and "PRIYANKA" is a
+fifteen-year-old in caps. And the names of who is holding trail the YES count
+they belong to rather than the end of both, or "1 yes · 2 no — Ava" reads as Ava
+being one of the two on no.
+
+**"+N if right" WAS THE SAME LIE TakeSide WAS REBUILT TO END**, on the board card
+that kept the hard-coded green. A side is not a position here; a distance from
+the price is. The row printed "−2 if right" — a negative number under a positive
+claim in the colour of money coming in. The colour follows the SIGN, and the
+label names the outcome rather than promising the student is right.
+
+**THREE GOLDS WERE TWO TOO MANY.** A market about you carried a gold ring, a gold
+sentence and a full-strength gold slab, and the slab was the loudest thing on a
+board whose primary gesture is taking a side — which the subject is the one
+person who may not do. It is an outline now. The sentence keeps its weight; it is
+the whole payoff they get in place of a stake.
+
+**A `kind`'s `resolves` is written as a CONTINUATION** ("from their study log,
+both tables") and the footer printed it bare, so it read as a lowercase fragment
+somebody had left behind. Prefixed "Settles" — but only on the fallback, since a
+`resolves_note` is already a whole sentence.
+
+**AND THE FIXTURE HAD TO CARRY THE SHAPE OF REAL DATA TO SHOW ANY OF IT.** The
+probe's positions had no `created_date`, so `priceHistory` collapsed every step
+onto x=0 and the sparkline rendered as one stroke against the left edge — which
+looks like a broken chart and hid the whole price block from judgement. The same
+lesson the Quizzes shelf learned when three-quizzes-per-subject hid a layout that
+fell apart on a real account. `?v=card` now deals all four shapes the board can
+produce: about you, a head-to-head, a longshot at 5¢, and one nobody has touched.
+
 **THE PRICE MOVES WHERE YOU CAN SEE IT** (`PriceTick`). `Competitions.jsx`
 already held a `useLiveTick`, so a card whose room has traded re-rendered at the
 new price on its own — SILENTLY. 71¢ became 68¢ between two paints and nothing
@@ -3435,6 +3489,9 @@ stranger.
   card, the price, the gesture and the payoff moment; `getMarkets` /
   `takePosition` / `openMarkMarket` / `reportMark` in `server.mjs` mint, escrow
   and settle
+- `src/components/market/PriceBar.jsx` — the price, drawn: the figure, the
+  split, and what each side pays under its own end. One object where the card
+  had an odds row, a price gutter and a change figure
 - `src/components/market/PriceChart.jsx` — the tape. Replayed from positions,
   plotted as a price and printed as a return; `header={false}` inside TakeSide,
   where the card above already prints it

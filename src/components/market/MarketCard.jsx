@@ -38,8 +38,8 @@ import React, { useMemo, useState } from "react";
 import { motion } from "framer-motion";
 import * as Icons from "lucide-react";
 import { Clock, Lock } from "lucide-react";
+import PriceBar from "./PriceBar";
 import PriceChart from "./PriceChart";
-import PriceTick from "./PriceTick";
 import TakeSide from "./TakeSide";
 import { createPageUrl } from "@/utils";
 import {
@@ -137,44 +137,27 @@ export default function MarketCard({ market, balance, busy, onTake, onReport }) 
                 </p>
             )}
 
-            {/* ── The odds, then the line ──────────────────────────── */}
-            <div className="flex items-stretch gap-2">
-                <div className="flex-1 rounded-xl bg-[var(--floor-well)] px-2.5 py-1.5">
-                    <p className="text-[9px] font-black uppercase tracking-widest text-[var(--floor-dim)]">
-                        {labels.yes} pays
-                    </p>
-                    <p className="font-display font-black text-xl leading-none tabular-nums
-                        text-[var(--floor-yes-ink)]">{pays.yesLabel}</p>
-                </div>
-                <div className="flex-1 rounded-xl bg-[var(--floor-well)] px-2.5 py-1.5">
-                    <p className="text-[9px] font-black uppercase tracking-widest text-[var(--floor-dim)]">
-                        {labels.no} pays
-                    </p>
-                    <p className="font-display font-black text-xl leading-none tabular-nums
-                        text-[var(--floor-no-ink)]">{pays.noLabel}</p>
-                </div>
-                <div className="flex flex-col justify-center items-end pl-1 min-w-[62px]">
-                    {/* The price, and the fact that it moved while you were
-                        looking. The floor already refetches on a live tick;
-                        before this it re-rendered silently, throwing away the
-                        one fact a market board exists to carry. */}
-                    <PriceTick price={market.price} label={priceLabel(market.price)} />
-                    {/* A market nobody has traded has not moved, and "0 from
-                        open" is a measurement of nothing dressed as one. The
-                        flat line and the thin note below already say it. */}
-                    {history.trades > 0 && (
-                        <span className={`text-[10px] font-bold tabular-nums mt-1
-                            ${history.change > 0 ? "text-[var(--floor-yes-ink)]"
-                                : history.change < 0 ? "text-[var(--floor-no-ink)]" : "text-[var(--floor-muted-2)]"}`}>
-                            {history.change > 0 ? "▲" : history.change < 0 ? "▼" : "■"}
-                            {" "}{Math.abs(history.change)}
-                        </span>
-                    )}
-                </div>
-            </div>
+            {/* ── The price, its split, and the tape under it ───────── */}
+            {/* THE PRICE LEADS. It used to be the smallest figure in this
+                block, in a 62px gutter beside two payout ceilings drawn at
+                20px — which is a conditional on a call nobody has made
+                outranking the market's actual state. PriceBar is the one
+                object now: the figure, the split drawn, and what each side
+                pays under its own end. */}
+            <div className="rounded-xl bg-[var(--floor-well)] px-3 py-2.5">
+                <PriceBar price={market.price} pays={pays} labels={labels}
+                    change={history.change} trades={history.trades} />
 
-            <div className="mt-1.5">
-                <PriceChart labels={labels} history={history} compact myEntry={myEntry} />
+                {/* A MARKET WITH NO TRADES HAS NO TAPE. The compact chart draws
+                    a dashed rule edge to edge for it, which reads as a divider
+                    rather than as a price — the full chart carries a sentence
+                    saying so and there is no room for one here. The crowd row
+                    below already says nobody has taken a side. */}
+                {history.trades > 0 && (
+                    <div className="mt-2">
+                        <PriceChart labels={labels} history={history} compact myEntry={myEntry} />
+                    </div>
+                )}
             </div>
 
             {/* A market with no base rate SAYS SO. Printing a confident 50¢ off
@@ -182,7 +165,7 @@ export default function MarketCard({ market, balance, busy, onTake, onReport }) 
                 panel already refuses, and the line above is flat for the same
                 reason rather than because the market is quiet. */}
             {market.meta?.thin && (
-                <p className="text-[10px] text-[var(--floor-muted-2)] mt-1">
+                <p className="text-[10px] text-[var(--floor-muted-2)] mt-1.5">
                     No base rate yet — this one opened at even.
                 </p>
             )}
@@ -198,13 +181,30 @@ export default function MarketCard({ market, balance, busy, onTake, onReport }) 
                         <span className="text-[var(--floor-dim)]">No one has taken a side yet</span>
                     ) : (
                         <>
-                            <span className="text-[var(--floor-yes-ink)]">{market.yesCount} yes</span>
-                            <span className="text-[var(--floor-dimmest)] mx-1.5">·</span>
-                            <span className="text-[var(--floor-no-ink)]">{market.noCount} no</span>
+                            {/* `sideLabels` EXISTS AND THIS ROW NEVER READ IT.
+                                A head-to-head between two students printed
+                                "2 yes · 0 no", which names neither of them and
+                                asks the student to work out that yes meant the
+                                first name in the title — the exact leak of the
+                                model's storage onto the floor that `sideLabels`
+                                was written to close, two lines below a call to
+                                it. Same for the position row underneath. */}
+                            <span className="text-[var(--floor-yes-ink)]">
+                                {market.yesCount} {labels.named ? labels.yes : "yes"}
+                            </span>
                             {names.length > 0 && (
-                                <span className="text-[var(--floor-dim)]"> — {names.join(", ")}
-                                    {market.yesCount > names.length ? " +more" : ""}</span>
+                                <span className="text-[var(--floor-dim)]"> ({names.join(", ")}
+                                    {market.yesCount > names.length ? ", +more" : ""})</span>
                             )}
+                            <span className="text-[var(--floor-dimmest)] mx-1.5">·</span>
+                            <span className="text-[var(--floor-no-ink)]">
+                                {market.noCount} {labels.named ? labels.no : "no"}
+                            </span>
+                            {/* THE NAMES BELONG TO THE SIDE THEY ARE ON, and
+                                trailing them off the end of both counts put
+                                "1 yes · 2 no — Ava" on screen, which reads as
+                                Ava being one of the two on no. They are yes
+                                holders; they sit against the yes count. */}
                         </>
                     )}
                 </span>
@@ -215,23 +215,41 @@ export default function MarketCard({ market, balance, busy, onTake, onReport }) 
             </div>
 
             {/* ── Your side ────────────────────────────────────────── */}
-            {mine && (
-                <div className="flex items-center justify-between gap-3 mt-3 rounded-xl
-                    bg-[var(--floor-well)] px-3 py-2">
-                    <span className="text-[11px] font-bold text-[var(--floor-muted)]">
-                        You: <span className={sideOf(mine.p) === YES ? "text-[var(--floor-yes-ink)]" : "text-[var(--floor-no-ink)]"}>
-                            {sideOf(mine.p) === YES ? "YES" : "NO"}
+            {mine && (() => {
+                const isYes = sideOf(mine.p) === YES;
+                // A SIDE IS NOT A POSITION HERE. Taking no at 55% into a market
+                // already pricing no at 80¢ puts you further from no than the
+                // price is, so the rule pays you when YES lands — and this row
+                // printed that as "−2 if right" in the WINNING green, a negative
+                // number under a positive claim in the colour of money coming
+                // in. TakeSide's tiles were rebuilt for exactly this; the board
+                // card kept the hard-coded ink. The colour follows the sign.
+                const w = payoutFor(mine.stake, mine.p, mine.price_at_entry, isYes);
+                return (
+                    <div className="flex items-center justify-between gap-3 mt-3 rounded-xl
+                        bg-[var(--floor-well)] px-3 py-2">
+                        <span className="text-[11px] font-bold text-[var(--floor-muted)]">
+                            You:{" "}
+                            <span className={isYes ? "text-[var(--floor-yes-ink)]" : "text-[var(--floor-no-ink)]"}>
+                                {/* A NAME IS NOT SHOUTED. "YES"/"NO" are the
+                                    model's two outcomes and read as labels in
+                                    caps; "PRIYANKA" is a fifteen-year-old's
+                                    name in caps. */}
+                                {labels.named ? (isYes ? labels.yes : labels.no)
+                                    : (isYes ? "YES" : "NO")}
+                            </span>
+                            <span className="text-[var(--floor-dim)]">
+                                {" "}· {mine.stake} @ {priceLabel(mine.price_at_entry)}
+                            </span>
                         </span>
-                        <span className="text-[var(--floor-dim)]"> · {mine.stake} @ {priceLabel(mine.price_at_entry)}</span>
-                    </span>
-                    <span className="text-[11px] font-black tabular-nums text-[var(--floor-yes-ink)]">
-                        {(() => {
-                            const w = payoutFor(mine.stake, mine.p, mine.price_at_entry, sideOf(mine.p) === YES);
-                            return `${w > 0 ? "+" : ""}${w} if right`;
-                        })()}
-                    </span>
-                </div>
-            )}
+                        <span className={`text-[11px] font-black tabular-nums
+                            ${w > 0 ? "text-[var(--floor-yes-ink)]"
+                                : w < 0 ? "text-[var(--floor-no-ink)]" : "text-[var(--floor-muted-2)]"}`}>
+                            {w > 0 ? "+" : ""}{w} if {isYes ? labels.yes : labels.no}
+                        </span>
+                    </div>
+                );
+            })()}
 
             {/* ── The way in ───────────────────────────────────────── */}
             {open ? (
@@ -259,6 +277,14 @@ export default function MarketCard({ market, balance, busy, onTake, onReport }) 
             )}
 
             {/* ── Your own mark ────────────────────────────────────── */}
+            {/* THREE GOLDS WERE TWO TOO MANY. The ring, the sentence and a
+                full-strength gold slab all landed on one card, and the slab was
+                the loudest thing on a board whose primary gesture is taking a
+                side — which this student is the one person who may not do. It
+                is an outline now: still the card's own action, no longer the
+                first thing the eye lands on. The sentence keeps its weight,
+                because it is the whole payoff the subject gets in place of a
+                stake. */}
             {/* This opened a `window.prompt` asking for a number out of 100 —
                 a SECOND place to type a mark, while the column built to hold
                 it stayed null on every row. It goes to the planner now, where
@@ -266,14 +292,20 @@ export default function MarketCard({ market, balance, busy, onTake, onReport }) 
                 row. One mark, one place. */}
             {market.kind === "sac" && market.subject_is_me && onReport && (
                 <button type="button" onClick={() => onReport(market)}
-                    className="w-full mt-2 py-2 rounded-xl bg-[var(--floor-warn)] text-[var(--floor-on-bright)]
-                        font-display font-black text-sm hover:bg-[var(--floor-warn-hover)] transition-colors">
+                    className="w-full mt-2.5 py-2.5 rounded-xl border-2 border-[rgb(var(--floor-warn-rgb)/0.5)]
+                        text-[var(--floor-warn-ink)] font-display font-black text-sm
+                        hover:bg-[rgb(var(--floor-warn-rgb)/0.12)] hover:border-[var(--floor-warn-ink)]
+                        transition-colors">
                     Enter your mark on the planner
                 </button>
             )}
 
-            <p className="text-[10px] text-[var(--floor-dim)] mt-2.5 leading-snug">
-                {market.resolves_note || kind.resolves}
+            {/* THE KIND'S OWN LINE IS WRITTEN AS A CONTINUATION — "from their
+                study log, both tables" — and the card printed it bare, so the
+                footer read as a lowercase fragment somebody had left behind. A
+                `resolves_note` is a whole sentence and is not prefixed. */}
+            <p className="text-[10px] text-[var(--floor-dim)] mt-3 leading-snug">
+                {market.resolves_note || `Settles ${kind.resolves}`}
             </p>
         </motion.article>
     );
