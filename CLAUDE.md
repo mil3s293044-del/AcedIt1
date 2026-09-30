@@ -1703,6 +1703,44 @@ blocked or absent storage counts as already-seen: `recent` re-reports resolved
 markets forever, so without the guard opening the floor would replay a
 student's whole history of losses at them every time.
 
+## `@/` IS NOT A PATH. It crashed the server and nothing could see it
+
+**Two deploys failed in a row and the build was fine both times.** `credStore.js`
+imported `@/lib/chips`; `server.mjs` imports `credStore.js`. Vite resolves the
+alias, the test loader resolves the alias, **node does not** — so the bundle
+built, lint was clean, all 946 checks passed, and the process threw
+`ERR_MODULE_NOT_FOUND` on boot. On Render the only symptom is a health check
+that never answers and a deploy marked Failed, and the commit that caused it was
+two merges back by the time anybody looked.
+
+There is no runtime signal short of starting the process, which is the same
+shape as the missing-column 400s `dbColumns.test.mjs` exists for: it renders
+perfectly, it passes everything, and it is simply wrong. `holdings.js` records
+the identical trap one file over — `RANK_MIN_CALLS` is restated in `server.mjs`
+precisely because `holdings.js` resolves `@/lib/...` — so the knowledge was in
+the repo and a comment was all that held it.
+
+`serverBoot.test.mjs` walks the graph now: start at `server.mjs`, follow every
+relative import, and assert each one resolves under node's ESM rules. Three ways
+to fail, all of them silent:
+
+- **`@/lib/x`** — the alias, vite and the loader only;
+- **`./x`** — extensionless, because node's ESM resolver does not guess `.js`;
+- **`./x.jsx`** — a file node has no loader for, which is why `XP_RANKS` had to
+  move out of `xpSystem.jsx` into `xpRanks.js` in the first place.
+
+It reads files as TEXT and imports nothing — `server.mjs` boots Express and
+binds a port on load, so importing it to test it is a side effect in a test run,
+the same reason `mirrors.test.mjs` parses both sides rather than loading them.
+It also asserts the walk REACHED the shared modules, because a walk that
+silently matched nothing passes forever; and that a comment naming an alias is
+not read as the defect, which is the false positive `fnResult.test.mjs` and
+`hookDeps.test.mjs` each had to learn about. Verified by putting the real bug
+back.
+
+**Anything `server.mjs` can reach is written with a relative path and an
+extension.** That is the rule; the test is what enforces it.
+
 ## `invoke` returns AN ENVELOPE, and reading it as the payload is invisible
 
 `functionsApi._invoke` returns `{ data, error }` — deliberately, to match
@@ -3548,6 +3586,9 @@ stranger.
 - `src/components/ace/useAceYield.js` + `src/lib/aceStage.test.mjs` —
   `ACE_ORDER`, the one list that decides which Ace is on screen. The scan is
   what catches a surface that draws him and forgets to claim
+- `src/lib/serverBoot.test.mjs` — every module `server.mjs` reaches, checked
+  against what NODE can resolve rather than what vite can. An `@/` alias in a
+  shared module builds, lints, tests green and crashes the deploy on boot
 - `src/lib/mirrors.test.mjs` — the client/server copies nothing was checking:
   the level curve (`xpSystem.jsx` vs server.mjs) and the ATAR bands. Both sides
   are parsed as text and RUN, so it compares behaviour rather than source
