@@ -11,7 +11,17 @@ services:
     plan: starter
     region: oregon
     branch: main
-    buildCommand: npm install && npm run build
+    # TESTS GATE THE DEPLOY, and they run BEFORE the build so a failure costs
+    # seconds rather than a full bundle. The suite is ~35s, needs no secrets,
+    # no network and no `dist` — it is plain node assertion files over the
+    # source tree.
+    #
+    # The one that makes this worth the minute: `serverBoot.test.mjs`. An `@/`
+    # alias in a module `server.mjs` imports builds perfectly and then throws
+    # ERR_MODULE_NOT_FOUND on boot, so the deploy dies at the health check with
+    # a green build behind it. That shipped, twice in a row. A build that runs
+    # the tests turns it into a failure that names the file.
+    buildCommand: npm install && npm test && npm run build
     startCommand: node server.mjs
     healthCheckPath: /
     autoDeploy: true
