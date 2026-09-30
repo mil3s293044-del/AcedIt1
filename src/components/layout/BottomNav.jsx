@@ -8,8 +8,6 @@ import {
     CreditCard, HelpCircle, LifeBuoy
 } from "lucide-react";
 import { createPageUrl } from "@/utils";
-import { useLiveCount } from "@/components/arena/useStakes";
-import LiveDot from "@/components/shared/LiveDot";
 
 const PRIMARY_TABS = [
     { label: "Home",   path: "Dashboard", icon: Home },
@@ -59,7 +57,6 @@ function pathMatches(currentPath, itemPath) {
 
 export default function BottomNav() {
     const location = useLocation();
-    const liveCount = useLiveCount();
     const [moreOpen, setMoreOpen] = useState(false);
 
     // Close sheet on route change
@@ -97,7 +94,6 @@ export default function BottomNav() {
                 <div className="flex items-stretch justify-around">
                     {PRIMARY_TABS.map(tab => {
                         const Icon = tab.icon;
-                        const liveHere = tab.path === "Competitions" ? liveCount : null;
                         const isActive = tab.path === "Dashboard"
                             ? isHome
                             : pathMatches(location.pathname, tab.path);
@@ -114,13 +110,6 @@ export default function BottomNav() {
                                     <Icon className={`w-5 h-5 transition-colors ${
                                         isActive ? "text-primary" : "text-muted-foreground"
                                     }`} />
-                                    {liveHere?.live && (
-                                        // Nudged in from the pill's edge — the
-                                        // tab's hit area is wider than its glyph,
-                                        // so the rail's -top-1 -right-1 would
-                                        // float the dot off on its own.
-                                        <LiveDot count={liveHere.total} className="!top-0 !right-2" />
-                                    )}
                                 </div>
                                 <span className={`text-[10px] font-bold tracking-wide leading-none transition-colors ${
                                     isActive ? "text-primary" : "text-muted-foreground"

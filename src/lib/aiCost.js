@@ -35,13 +35,33 @@
 /** One dollar. Every figure in this module is an integer count of these. */
 export const MICROS_PER_DOLLAR = 1_000_000;
 
-/** Published list rates, USD per million tokens. */
+/**
+ * Published list rates, USD per million tokens.
+ *
+ * ─── EVERY GENERATION NEEDS ITS OWN ROW, because the match is a PREFIX ──────
+ * `priceFor` resolves the longest prefix, which is what lets a dated snapshot
+ * find its family. The same rule means a model whose id EXTENDS another's
+ * resolves to that other one when its own row is missing — and, crucially,
+ * `isUnpricedModel` returns FALSE for it, so nothing warns.
+ *
+ * "claude-sonnet-5-5".startsWith("claude-sonnet-5") is true. Without the row
+ * below, the default marking model would have billed at Sonnet 5's rate
+ * against a weekly ceiling, silently and 50% high, and the startup check that
+ * exists to catch exactly this would have passed. Same trap for
+ * `claude-opus-5-5` under `claude-opus-5`.
+ *
+ * So: adding a model to ANTHROPIC_MODEL, ACE_MODEL, VISION_MODEL or MEGA_MODEL
+ * means adding its row here, and an id that merely extends an existing one is
+ * the case the warning cannot help with.
+ */
 export const PRICES = {
     "claude-haiku-4-5":  { in: 1.00, out: 5.00 },
     "claude-sonnet-4-6": { in: 3.00, out: 15.00 },
-    "claude-sonnet-5":   { in: 3.00, out: 15.00 },
+    "claude-sonnet-5":   { in: 2.00, out: 10.00 },
+    "claude-sonnet-5-5": { in: 2.00, out: 10.00 },
     "claude-opus-4-8":   { in: 5.00, out: 25.00 },
     "claude-opus-5":     { in: 5.00, out: 25.00 },
+    "claude-opus-5-5":   { in: 4.00, out: 20.00 },
 };
 
 const CACHE_READ_MULTIPLIER = 0.1;

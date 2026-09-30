@@ -31,3 +31,6 @@ dist-ssr
 # Python bytecode from the ui-ux-pro-max skill scripts
 __pycache__/
 *.pyc
+
+# The eval case review page, regenerated on demand — not a source file.
+eval-cases-review.html

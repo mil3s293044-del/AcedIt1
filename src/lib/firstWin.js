@@ -215,8 +215,17 @@ export const canStart = (userSubjects) => subjectChoices(userSubjects).length > 
 export function droppedFrom(attempt) {
     const results = attempt?.extra?.question_results;
     if (Array.isArray(results) && results.length > 0) {
+        // `got`, which is what the player writes and what /MistakeBank's own
+        // redo gate reads. This asked for `met`, a field nothing in the tree
+        // has ever written — so the whole per-criterion branch was DEAD and
+        // every run fell through to the arithmetic below, reporting one
+        // dropped mark on a paper that dropped three. It rendered perfectly,
+        // because the fallback is right often enough to look right.
+        // `=== false` is exact rather than loose: the player coerces with
+        // `!!c?.got`, so the field is always a real boolean and a criterion
+        // that arrives without one is "we cannot tell" rather than a miss.
         const counted = results.filter((r) =>
-            Array.isArray(r?.criteria) && r.criteria.some((c) => c && c.met === false)).length;
+            Array.isArray(r?.criteria) && r.criteria.some((c) => c && c.got === false)).length;
         if (counted > 0) return counted;
     }
     const score = attempt?.score;

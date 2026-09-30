@@ -1,0 +1,28 @@
+{
+  "flow": "quiz-marking",
+  "harness_paths": [
+    "eval/quizMarking/run-eval.mjs",
+    "eval/quizMarking/grade.mjs",
+    "eval/quizMarking/cases.json",
+    "src/lib/markingPrompt.js",
+    "src/lib/examinerReports.js",
+    "src/lib/subjectExaminerPrompts.js"
+  ],
+  "metrics": [
+    { "id": "mark_exact",   "label": "Mark exact",  "kind": "binary" },
+    { "id": "mark_mae",     "label": "Mark MAE",    "kind": "number", "lower_is_better": true },
+    { "id": "register",     "label": "Register",    "kind": "number" },
+    { "id": "crit_sum",     "label": "Worths sum",  "kind": "binary" },
+    { "id": "quote_ok",     "label": "Quotes exact","kind": "binary" },
+    { "id": "link_ok",      "label": "Anns linked", "kind": "binary" },
+    { "id": "clean_silent", "label": "Clean silent","kind": "binary" },
+    { "id": "note_ok",      "label": "Missed noted","kind": "binary" }
+  ],
+  "perf_fields": [
+    "latency_s",
+    "usage.input_tokens",
+    "usage.output_tokens",
+    "usage.cache_read_input_tokens",
+    "usage.cache_creation_input_tokens"
+  ]
+}

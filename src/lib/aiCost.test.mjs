@@ -112,6 +112,31 @@ check("longest prefix wins so opus-5 never resolves to opus-4-8", () => {
     assert.deepEqual(priceFor("claude-sonnet-5"), PRICES["claude-sonnet-5"]);
 });
 
+check("A MODEL WHOSE ID EXTENDS ANOTHER'S NEEDS ITS OWN ROW, and nothing warns", () => {
+    // The prefix match is what makes dated snapshots work and it is also the
+    // one way this table can be wrong without saying so: "claude-sonnet-5-5"
+    // starts with "claude-sonnet-5", so a missing row resolves to the SHORTER
+    // model's rate and `isUnpricedModel` answers false — no typo warning, no
+    // dearest-rate fallback, just a wrong number against the weekly ceiling.
+    for (const id of ["claude-sonnet-5-5", "claude-opus-5-5"]) {
+        assert.ok(PRICES[id], `${id} has no row, so it bills at its shorter namesake's rate`);
+        assert.equal(isUnpricedModel(id), false);
+        assert.deepEqual(priceFor(id), PRICES[id], `${id} resolved to another model's price`);
+    }
+    // And the point of the row: the extending model is genuinely cheaper, so
+    // inheriting the shorter one's rate over-bills rather than under-bills.
+    assert.ok(PRICES["claude-sonnet-5-5"].out < PRICES["claude-sonnet-4-6"].out);
+    assert.ok(PRICES["claude-opus-5-5"].out < PRICES["claude-opus-5"].out);
+});
+
+check("every model the server can be pointed at is priced", () => {
+    // The startup warning covers a typo; it cannot cover the prefix case
+    // above, so the defaults are asserted here by name.
+    for (const id of ["claude-sonnet-5-5", "claude-haiku-4-5", "claude-opus-5"]) {
+        assert.equal(isUnpricedModel(id), false, `${id} is a server default and is unpriced`);
+    }
+});
+
 check("missing usage and missing fields are zero, not NaN", () => {
     assert.equal(estimateCostMicros(null, "claude-haiku-4-5"), 0);
     assert.equal(estimateCostMicros(undefined, "claude-haiku-4-5"), 0);

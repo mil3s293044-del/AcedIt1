@@ -10,6 +10,7 @@ import {
     TIERS, DEFAULT_TIER, SAVER_EXCLUDES, NUDGE_AT,
     tierOf, modelFor, saverMultiplier, saverNudge,
 } from "@/lib/aiModels";
+import { PRICES } from "@/lib/aiCost";
 
 let passed = 0;
 const check = (name, fn) => {
@@ -76,8 +77,26 @@ check("the standard tier honours an explicitly configured fast model", () => {
 });
 
 check("the multiplier comes from the price table, not a hardcoded 3", () => {
-    // Sonnet $3/$15, Haiku $1/$5 — a clean 3x on both axes.
-    assert.equal(saverMultiplier(), 3);
+    // This check used to assert `=== 3`, which is the exact thing its own name
+    // says it is guarding against: the 3 came from Sonnet 4.6 at $3/$15 against
+    // Haiku at $1/$5, so moving the standard tier to Sonnet 5.5 ($2/$10) made
+    // the function right and the assertion wrong. Derived from the same table
+    // the function reads, so a rate change moves both together.
+    const std = PRICES[TIERS.standard.model];
+    const saver = PRICES[TIERS.saver.model];
+    assert.ok(std && saver, "a tier points at a model with no price row");
+    const expected = Math.round(((std.in + std.out * 3) / (saver.in + saver.out * 3)) * 10) / 10;
+    assert.equal(saverMultiplier(), expected);
+    assert.ok(saverMultiplier() > 1, "Saver has to be cheaper or the offer is empty");
+});
+
+check("BOTH TIER MODELS ARE PRICED, or the offer is computed off a guess", () => {
+    // `saverMultiplier` divides two price rows. An unpriced tier model resolves
+    // to the dearest known rate, which would quietly compute a multiplier of
+    // about 1 and put "switch to save" on screen next to no saving at all.
+    for (const tier of Object.values(TIERS)) {
+        assert.ok(PRICES[tier.model], `${tier.id} points at unpriced ${tier.model}`);
+    }
 });
 
 // ── The nudge, which is where the naive design goes wrong ────────────────────
@@ -91,8 +110,9 @@ check("nudge appears at the threshold, while it can still pay out", () => {
     const n = saverNudge({ preference: "standard", spentMicros: at(NUDGE_AT), capMicros: CAP });
     assert.ok(n, "should nudge at the threshold");
     assert.equal(n.usedPct, 70);
-    assert.equal(n.multiplier, 3);
-    assert.match(n.body, /3x more/);
+    // Derived, for the reason above — the nudge prints whatever the table says.
+    assert.equal(n.multiplier, saverMultiplier());
+    assert.match(n.body, new RegExp(`${saverMultiplier()}x more`));
 });
 
 check("NO nudge at the ceiling — the offer cannot pay out [THE POINT]", () => {
