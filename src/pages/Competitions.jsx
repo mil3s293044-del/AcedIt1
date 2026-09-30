@@ -27,13 +27,15 @@
  * YOUR BOOK — what you are holding and what it is worth.
  * THE TAPE  — what just happened, to whom.
  */
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
+import LiveNumber from "@/components/shared/LiveNumber";
+import CredStore from "@/components/market/CredStore";
 import { TrendingUp, Coins, Plus, X } from "lucide-react";
 import AceDeal from "@/components/market/AceDeal";
 import { base44 } from "@/api/base44Client";
 import { useLiveTick } from "@/lib/LiveContext";
-import { takeFn } from "@/lib/fnResult";
+import { takeFn, fnError } from "@/lib/fnResult";
 import { createPageUrl } from "@/utils";
 import MarketCard from "@/components/market/MarketCard";
 import PortfolioPanel from "@/components/market/PortfolioPanel";
@@ -104,6 +106,24 @@ function buildTape(markets = [], recent = []) {
 }
 
 function Tape({ rows }) {
+    // WHICH ROWS ARE NEW SINCE THE LAST TICK. The floor refetches on a live
+    // tick, so the tape gains lines while somebody is reading it — and before
+    // this they simply materialised, which is the same fact thrown away that
+    // PriceTick was written for. A ref rather than state: knowing what was on
+    // screen last paint must not cause a paint of its own.
+    const seen = useRef(null);
+    const ids = rows.map((r) => r.id).join("|");
+    const fresh = useMemo(() => {
+        const before = seen.current;
+        const now = new Set(rows.map((r) => r.id));
+        seen.current = now;
+        // FIRST PAINT IS NOT AN ARRIVAL. Flagging every row on mount would
+        // announce the whole week as breaking news on every page load — the
+        // same never-animate-on-arrival rule PriceTick keeps.
+        if (!before) return new Set();
+        return new Set([...now].filter((id) => !before.has(id)));
+    }, [ids]);
+
     if (!rows.length) {
         return (
             <p className="text-[13px] text-[var(--floor-dim)] px-1">
@@ -113,8 +133,14 @@ function Tape({ rows }) {
     }
     return (
         <div className="space-y-1">
+            <AnimatePresence initial={false}>
             {rows.map((r) => (
-                <div key={r.id}
+                <motion.div key={r.id}
+                    layout
+                    initial={fresh.has(r.id) ? { opacity: 0, y: -8 } : false}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0 }}
+                    transition={{ type: "spring", stiffness: 320, damping: 30 }}
                     className="flex items-baseline gap-2 py-1.5 border-b border-[var(--floor-edge)] last:border-0">
                     <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 translate-y-[-2px]
                         ${r.resolved
@@ -127,10 +153,11 @@ function Tape({ rows }) {
                         {r.stake ? <span className="text-[var(--floor-dim)]"> · {r.stake}</span> : null}
                     </p>
                     <span className="text-[10px] text-[var(--floor-dimmest)] flex-shrink-0 tabular-nums">
-                        {ago(r.at)}
+                        {fresh.has(r.id) ? "just now" : ago(r.at)}
                     </span>
-                </div>
+                </motion.div>
             ))}
+            </AnimatePresence>
         </div>
     );
 }
@@ -387,6 +414,7 @@ export default function Competitions() {
     // book is what you have done, which is the whole split. A third tab here
     // would be a second answer to one of those two questions.
     const [tab, setTab] = useState("floor");
+
     const [lineOpen, setLineOpen] = useState(false);
     const liveTick = useLiveTick();
 
@@ -409,6 +437,54 @@ export default function Competitions() {
     }, []);
 
     useEffect(() => { load(); }, [load, liveTick]);
+
+    // ── THE STORE ───────────────────────────────────────────────────────
+    // Loaded only when its tab is opened: it is a second round trip and most
+    // visits never touch it, so paying for it on every page load would be the
+    // "collect nothing you don't use" rule inverted. Errors go through
+    // `setError` like every other failure on this page rather than a toast —
+    // two error channels on one screen is how a student learns to ignore one.
+    const [store, setStore] = useState(null);
+    const [buying, setBuying] = useState(false);
+
+    const loadStore = useCallback(async () => {
+        try {
+            // fnError FIRST. `invoke` answers 200 with `{ error }` in the body
+            // for a refusal it wants printed, so a bare try/catch swallows it
+            // and the tab renders its empty state — the silent failure
+            // fnResult.js was written for, which has shipped twice.
+            const res = await base44.functions.invoke("getCredStore", {});
+            const err = fnError(res);
+            if (err) throw new Error(err);
+            setStore(takeFn(res));
+        } catch (e) {
+            setError(e?.message || "Couldn't open the store.");
+        }
+    }, []);
+
+    useEffect(() => { if (tab === "store" && !store) loadStore(); }, [tab, store, loadStore]);
+
+    const buy = useCallback(async (itemId, units) => {
+        if (buying) return;
+        setBuying(true);
+        setError(null);
+        try {
+            const res = await base44.functions.invoke("buyWithCred", { item_id: itemId, units });
+            // A refusal — not enough cred, weekly ceiling, a concurrent
+            // purchase — comes back in the envelope rather than as a throw.
+            // Without this the student sees nothing and assumes it worked.
+            const err = fnError(res);
+            if (err) throw new Error(err);
+            // REFETCH BOTH. The purchase moved the balance the header prints AND
+            // the per-item verdicts every other row is drawn from, so a store
+            // left stale is a button that will be refused.
+            await Promise.all([loadStore(), load()]);
+        } catch (e) {
+            setError(e?.message || "That didn't go through.");
+        } finally {
+            setBuying(false);
+        }
+    }, [buying, loadStore, load]);
 
     const me = data?.me || {};
     const board = useMemo(() => {
@@ -595,7 +671,13 @@ export default function Competitions() {
                             </p>
                             <p className="font-display font-black text-[var(--floor-warn-ink)] text-2xl tabular-nums
                                 inline-flex items-center gap-1.5">
-                                <Coins className="w-4 h-4" />{(me.cred ?? 0).toLocaleString()}
+                                <Coins className="w-4 h-4" />
+                                {/* It ROLLS. Cred moves for two reasons — the
+                                    Monday grant and your own calls — and a
+                                    figure that jumps between paints cannot tell
+                                    them apart. Counting makes the change the
+                                    thing you notice rather than the number. */}
+                                <LiveNumber value={me.cred ?? 0} showDelta={false} />
                             </p>
                         </div>
                         {atStake > 0 && (
@@ -624,7 +706,7 @@ export default function Competitions() {
 
                 {/* ── Floor or book ────────────────────────────────── */}
                 <div className="flex items-center gap-1.5 mb-4" role="tablist">
-                    {[["floor", "The floor"], ["book", "Your book"]].map(([id, label]) => (
+                    {[["floor", "The floor"], ["book", "Your book"], ["store", "Store"]].map(([id, label]) => (
                         <button key={id} type="button" role="tab" aria-selected={tab === id}
                             onClick={() => setTab(id)}
                             className={`px-3.5 py-2 rounded-xl text-[13px] font-display font-black
@@ -637,7 +719,9 @@ export default function Competitions() {
                     ))}
                 </div>
 
-                {tab === "book" ? (
+                {tab === "store" ? (
+                    <CredStore store={store} busy={buying} onBuy={buy} />
+                ) : tab === "book" ? (
                     <PortfolioPanel onOpenMarket={openMarket} />
                 ) : (
                 <div className="grid lg:grid-cols-[minmax(0,1fr)_300px] gap-6 items-start">

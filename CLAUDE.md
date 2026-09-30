@@ -3107,6 +3107,87 @@ exists for the seconds between an upload and the generate that reads it. A
 student who makes a deck from a textbook keeps that deck forever; what expires
 is the textbook, and only as something to generate MORE from.
 
+## Cred had no sink, and XP must never be one
+
+**A currency with nowhere to go stops meaning anything.** The grant was a flat
+1000 a week, the cap 3000, and the only exit was a bet — so a student who trades
+well saturates in a fortnight and every Monday after that is a number going up
+because a clock ticked. That is the failure `PortfolioPanel`'s own header names
+about the cred figure: "it moves for two unrelated reasons… a number that goes
+up when you did nothing teaches that the number means nothing."
+
+**XP SETS THE RATE, NEVER THE BALANCE.** The obvious wiring is XP → cred and it
+breaks the property `market.js` is built on: "XP drives level, rank and the
+ATAR, so staking it makes the rational play 'never bet'." A conversion makes
+spending cred cost rank and cost the ATAR, so the rational play for anyone who
+cares about Ranked is never to convert — and it puts a sixteen-year-old's
+flagship study score up for spending on bets. So **rank moves the GRANT**
+(`grantForTier`, 700 at tier 1 to 1800 at tier 10). Nothing is deducted,
+abstaining stays never-optimal, and climbing Ranked visibly pays off on the
+floor. `credStore.test.mjs` scans the module for any reach toward XP.
+
+Tier 1 gets LESS than the old flat 1000 deliberately: a raise that costs nobody
+anything is inflation, and a floor equal to the ceiling cannot express a rank.
+
+**THE THRESHOLDS MOVED OUT OF A `.jsx`.** `XP_RANKS` lived in `xpSystem.jsx`,
+which `server.mjs` cannot import and the test loader cannot resolve — so the
+grant had two options, restate ten thresholds or go without. `src/lib/xpRanks.js`
+is the one copy now and `xpSystem.jsx` re-exports it, so every existing import
+is untouched. The same move `sm2.js` and `mastery.js` already made.
+
+**PRICES ARE MULTIPLES OF A MID-TIER GRANT, ROUNDED TO 50.** A multiple keeps
+"how long does this take to afford" readable when a grant moves; the rounding is
+because the first draft priced things at 713, 951, 1427 and 2378 — arithmetic
+showing its working on a shelf. Nobody weighs 713 against 951.
+
+**THE CHIPS DOOR IS THE ONLY ONE THAT COSTS REAL MONEY**, so its ceiling is
+written in MICRO-DOLLARS and the chip count is DERIVED. A cap of "300 chips"
+silently doubles in cost the day chip pricing moves and the discovery happens on
+an invoice; `$0.60` cannot. And the maximum conversion must cost MORE than a
+top-tier week's grant — the first draft priced chips at 4 cred and put the whole
+allowance at 1228 against a top grant of 1800, so the best students could max the
+money door every Monday without trading at all. Seven cred a chip; the test
+holds it.
+
+**NOTHING IS REFUNDABLE, and that is what closes the arbitrage.** With no
+sell-back there is no path from an owned object to a balance, so a cosmetic
+cannot be laundered into chips. Asserted as an ABSENCE — the day somebody adds a
+refund is the day this stops being true.
+
+**A consumable cannot be stockpiled.** One streak freeze is insurance; five is
+an exemption, and a streak that can be bought out of stops measuring anything.
+
+**THE PURCHASE IS A COMPARE-AND-SET.** Two taps on a slow connection are two
+requests that both read 900 cred and both spend it, and PostgREST has no
+transaction across calls. The update matches on the balance the check was made
+against, so the second touches no rows. The effect is applied AFTER the charge
+lands: granting first and failing to charge is a free chip with no refund path
+to unwind it, and a charge that lands with a failed effect is the recoverable
+direction.
+
+**`weekly_chips_bonus` IS NOT A COLUMN.** The first draft wrote one, which is
+the silent 400 class `dbColumns.test.mjs` exists for. The week's chip total
+already lives in `extra.cred_chips_week` and `creditedChipsMicros` reads the
+ceiling straight off it — a second column holding the same number is the mirror
+this codebase keeps deleting.
+
+**THE PRICE MOVES WHERE YOU CAN SEE IT** (`PriceTick`). `Competitions.jsx`
+already held a `useLiveTick`, so a card whose room has traded re-rendered at the
+new price on its own — SILENTLY. 71¢ became 68¢ between two paints and nothing
+said a person had done that, which is the single most important fact a market
+board carries, thrown away by a component that already had it. The number counts
+and the delta ghosts off above it.
+
+Two rules it keeps. **It never animates on arrival** — the first price a card
+shows has not moved, and counting on mount would announce every market as
+swinging on every page load. And **the printed figure is always the TRUE
+price**: only weight and colour move, so a student who taps mid-animation never
+stakes against a number the card was still travelling toward.
+
+The tape follows the same rule — new rows arrive with `layout` and read "just
+now", and the first paint flags nothing, or the whole week is breaking news on
+every load.
+
 ## Age, consent, and the policies the product did not implement
 
 **The Privacy Policy and Terms have promised guardian consent for months.**

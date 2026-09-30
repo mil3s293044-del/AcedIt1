@@ -27,6 +27,9 @@ import { MemoryRouter } from "react-router-dom";
 import SideRail from "@/components/layout/SideRail";
 import ConsentBanner from "@/components/legal/ConsentBanner";
 import AgeGate from "@/components/legal/AgeGate";
+import CredStore from "@/components/market/CredStore";
+import PriceTick from "@/components/market/PriceTick";
+import { CATALOGUE, grantForTier, CHIPS_WEEKLY_MAX } from "@/lib/credStore";
 import BottomNav from "@/components/layout/BottomNav";
 
 const which = new URLSearchParams(location.search).get("v") || "deal";
@@ -375,6 +378,62 @@ views.legal = () => (
             <AgeGate onSave={async (p) => { console.log("would save", p); }} />
         </MemoryRouter>
     </div>
+);
+
+// ?v=store — the cred store against a fixture profile, plus the price tick
+// driven on a timer so the motion can actually be judged.
+function TickDemo() {
+    const [p, setP] = React.useState(0.62);
+    React.useEffect(() => {
+        const t = setInterval(() => setP((v) => {
+            const next = Math.min(0.95, Math.max(0.05, v + (Math.random() - 0.5) * 0.14));
+            return Math.round(next * 100) / 100;
+        }), 1800);
+        return () => clearInterval(t);
+    }, []);
+    return (
+        <div className="flex items-center gap-6 mb-8">
+            <div className="rounded-2xl bg-[var(--floor-well)] p-4 flex items-center gap-4">
+                <span className="text-[10px] font-black uppercase tracking-widest text-[var(--floor-dim)]">
+                    Price, ticking
+                </span>
+                <PriceTick price={p} label={`${Math.round(p * 100)}\u00a2`} />
+            </div>
+        </div>
+    );
+}
+
+views.store = () => (
+    <Room>
+        <div className="p-8 max-w-4xl mx-auto">
+            <h1 className="font-display font-black text-2xl text-[var(--floor-ink)] mb-1">Cred store</h1>
+            <p className="text-sm text-[var(--floor-muted-2)] mb-6">
+                Fixture profile: tier 6, 2,400 cred, owns the felt back.
+            </p>
+            <TickDemo />
+            <CredStore
+                busy={false}
+                onBuy={(id, u) => console.log("buy", id, u)}
+                store={{
+                    cred: 2400,
+                    tier: 6,
+                    weekly_grant: grantForTier(6),
+                    owned: ["back-felt"],
+                    held: {},
+                    equipped: {},
+                    chips_max: CHIPS_WEEKLY_MAX,
+                    items: CATALOGUE.map((i) => ({
+                        ...i,
+                        verdict: i.id === "back-gilt"
+                            ? { ok: false, reason: "You need 238 more cred." }
+                            : i.id === "back-felt"
+                            ? { ok: false, reason: "You already own this." }
+                            : { ok: true, reason: null },
+                    })),
+                }}
+            />
+        </div>
+    </Room>
 );
 
 ReactDOM.createRoot(document.getElementById("root")).render(
