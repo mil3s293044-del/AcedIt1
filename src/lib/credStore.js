@@ -43,7 +43,14 @@
  * day chip pricing changes, and a cap of "$0.60" cannot.
  */
 
-import { MICROS_PER_CHIP } from "@/lib/chips";
+// RELATIVE, NOT `@/lib/chips`. `server.mjs` imports this module, and node
+// resolves neither the alias nor the extensionless path — only vite and the
+// test loader do. So the alias built, passed lint, passed every test, and
+// crashed the server on boot in production, where the only symptom is a
+// health check that never answers. The same trap `holdings.js` records one
+// file over, arrived at from the other direction; `serverBoot.test.mjs` walks
+// the graph now rather than trusting a comment.
+import { MICROS_PER_CHIP } from "./chips.js";
 
 /* ── The grant ───────────────────────────────────────────────────────────── */
 
