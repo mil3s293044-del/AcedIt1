@@ -31,6 +31,16 @@ import CredStore from "@/components/market/CredStore";
 import PriceTick from "@/components/market/PriceTick";
 import { CATALOGUE, grantForTier } from "@/lib/credStore";
 import BottomNav from "@/components/layout/BottomNav";
+import { CardBack } from "@/components/cards/PlayingCard";
+import PrankOverlay from "@/components/pranks/PrankOverlay";
+import { PRANK_LIST } from "@/lib/pranks";
+import { BACK_SKINS } from "@/lib/cosmetics";
+import WeeklyBoard from "@/components/league/WeeklyBoard";
+import Podium from "@/components/league/Podium";
+import ScoreGuide from "@/components/league/ScoreGuide";
+import Crest from "@/components/shared/Crest";
+import { podiumGap, ordinal } from "@/lib/league";
+import { grantForLeague } from "@/lib/credStore";
 
 const which = new URLSearchParams(location.search).get("v") || "deal";
 
@@ -178,14 +188,14 @@ const views = {
                             text-[var(--floor-dim)] mb-2.5">The tape</h2>
                         <p className="text-[12px] text-[var(--floor-muted)]">
                             Ava took <span className="font-black text-[var(--floor-yes-ink)]">yes</span> at
-                            71¢ with 300 cred
+                            71% with 300 credits
                         </p>
                         <p className="text-[12px] text-[var(--floor-muted)]">
                             Ben took <span className="font-black text-[var(--floor-no-ink)]">no</span> at
-                            29¢ with 150 cred
+                            29% with 150 credits
                         </p>
                         <p className="text-[11px] text-[var(--floor-dimmest)] mt-2">
-                            Cred is not XP — losing a call can&apos;t touch your level.
+                            Credits are not XP — a call that goes against you can&apos;t touch your level.
                         </p>
                     </div>
                 </div>
@@ -466,7 +476,7 @@ function TickDemo() {
 views.store = () => (
     <Room>
         <div className="p-8 max-w-4xl mx-auto">
-            <h1 className="font-display font-black text-2xl text-[var(--floor-ink)] mb-1">Cred store</h1>
+            <h1 className="font-display font-black text-2xl text-[var(--floor-ink)] mb-1">Credits</h1>
             <p className="text-sm text-[var(--floor-muted-2)] mb-6">
                 Fixture profile: tier 6, 2,400 cred, owns the felt back.
             </p>
@@ -474,13 +484,19 @@ views.store = () => (
             <CredStore
                 busy={false}
                 onBuy={(id, u) => console.log("buy", id, u)}
+                onConvert={(xp) => console.log("convert", xp)}
+                onEquip={(id, slot) => console.log("equip", id, slot)}
                 store={{
                     cred: 2400,
                     tier: 6,
                     weekly_grant: grantForTier(6),
-                    owned: ["back-felt"],
+                    // What the shelf now has to draw: XP waiting to convert, and
+                    // a cosmetic that is owned AND worn, which is the state that
+                    // had nowhere to be shown before.
+                    xp: { convertible: 18400, per_credit: 4, week_room: 500, week_max: 500 },
+                    owned: ["back-felt", "crest-bolt"],
                     held: {},
-                    equipped: {},
+                    equipped: { back: "back-felt" },
                     items: CATALOGUE.map((i) => ({
                         ...i,
                         verdict: i.id === "back-gilt"
@@ -495,5 +511,189 @@ views.store = () => (
     </Room>
 );
 
+/* Every back a student can buy, beside the default, at the two sizes they are
+   actually dealt at. A skin that reads at 176px and smudges at 62px is a skin
+   that looks bought on the shelf and broken on the shelf it is worn to. */
+views.backs = () => (
+    <div className="p-8 bg-background min-h-screen">
+        <h1 className="font-display font-black text-2xl text-foreground mb-6">Card backs</h1>
+        {[176, 92, 62].map((w) => (
+            <div key={w} className="mb-8">
+                <p className="text-[11px] font-black uppercase tracking-widest text-muted-foreground mb-2">
+                    {w}px
+                </p>
+                <div className="flex items-end gap-4">
+                    <div>
+                        <CardBack tone="#58CC02" skin={null}
+                            style={{ width: w, height: w * 1.4 }} />
+                        <p className="text-[11px] text-muted-foreground mt-1.5">default</p>
+                    </div>
+                    {Object.values(BACK_SKINS).map((sk) => (
+                        <div key={sk.id}>
+                            <CardBack skin={sk} style={{ width: w, height: w * 1.4 }} />
+                            <p className="text-[11px] text-muted-foreground mt-1.5">{sk.label}</p>
+                        </div>
+                    ))}
+                </div>
+            </div>
+        ))}
+    </div>
+);
+
+/* Every prank, over a page that looks like a real one. The card is the part
+   that must always be legible — it is what names who did this — so it is drawn
+   over content rather than over an empty screen. */
+views.pranks = () => {
+    const [i, setI] = React.useState(0);
+    const k = PRANK_LIST[i];
+    return (
+        <div className="min-h-screen bg-background p-8">
+            <h1 className="font-display font-black text-2xl text-foreground mb-2">Pranks</h1>
+            <div className="flex gap-2 mb-6 flex-wrap">
+                {PRANK_LIST.map((p, n) => (
+                    <button key={p.id} onClick={() => setI(n)}
+                        className={`px-3 py-1.5 rounded-xl text-sm font-bold border
+                            ${n === i ? "bg-primary text-primary-foreground border-primary"
+                                      : "border-border text-muted-foreground"}`}>
+                        {p.label}
+                    </button>
+                ))}
+            </div>
+            <div className="max-w-md space-y-3">
+                <div className="rounded-2xl border border-border bg-surface p-4">
+                    <p className="font-display font-black text-foreground">A page underneath</p>
+                    <p className="text-sm text-muted-foreground mt-1">
+                        The prank plays over whatever the student was doing, so the card has to
+                        read against real content rather than an empty screen.
+                    </p>
+                </div>
+                <div className="rounded-2xl border border-border bg-surface p-4">
+                    <p className="text-sm text-muted-foreground">Another panel, for contrast.</p>
+                </div>
+            </div>
+            <PrankOverlay key={`${k.id}-${i}`} prank={{ id: i, kind: k.id, from: "Priyanka" }}
+                onDone={() => {}} />
+        </div>
+    );
+};
+
+/* ── ?v=league — the podium, the payline and the guide ──────────────────────
+ *
+ * The League page is auth-gated and the board needs a dozen scored members to
+ * be judged at all: a two-row fixture hides the payline, the gap scale and the
+ * 2-1-3 step entirely, which is the "check a layout against the shape of the
+ * data somebody actually has" lesson the Quizzes shelf learned. This deals a
+ * real board — a podium with a crest on it, the student fourth and 40 points
+ * off, and somebody wearing a bought crest.
+ */
+const LEAGUE_ROWS = [
+    { score: 812, name: "Priyanka", crest: "gold" },
+    { score: 744, name: "Marcus", crest: null, skin: "laurel" },
+    { score: 601, name: "Anon #4f21", crest: "silver" },
+    { score: 561, name: "Jordan", me: true, crest: "bronze" },
+    { score: 548, name: "Hana", crest: null },
+    { score: 410, name: "Dao", crest: null, skin: "bolt" },
+    { score: 377, name: "Oliver", crest: null },
+    { score: 212, name: "Sam", crest: null },
+    { score: 96, name: "Anon #a1c3", crest: null },
+].map((r, i) => ({
+    position: i + 1,
+    compete_score: r.score,
+    display_name: r.name,
+    is_me: !!r.me,
+    crest: r.crest,
+    crest_skin: r.skin || null,
+    streak_days: i % 3 === 0 ? 4 + i : 0,
+    score_breakdown: {
+        effort: Math.min(400, Math.round(r.score * 0.42)),
+        mastery: Math.min(400, Math.round(r.score * 0.4)),
+        consistency: Math.min(200, Math.round(r.score * 0.2)),
+    },
+}));
+
+const LEAGUE_ME = {
+    position: 4,
+    compete_score: 561,
+    weekly_xp: 1840,
+    board_sits: 2,
+    active_days: 4,
+    avg_accuracy: 71,
+    board_min_questions: 8,
+    is_anonymous: false,
+};
+
+views.league = () => {
+    const pod = podiumGap(LEAGUE_ROWS);
+    const mine = LEAGUE_ROWS.find((r) => r.is_me);
+    return (
+        <div className="min-h-screen bg-background p-4 sm:p-6">
+            <div className="max-w-4xl mx-auto space-y-5">
+                <section className="card-soft on-table p-5 sm:p-6">
+                    <p className="stat-label text-muted-foreground">This week · resets in 2d 6h</p>
+                    <h1 className="font-display font-black text-2xl sm:text-3xl leading-tight mt-1 text-chart-3">
+                        40 points off Anon #4f21
+                    </h1>
+                    <p className="text-sm text-muted-foreground mt-1.5">
+                        That is 20 more minutes of counted study, or one solid quiz.
+                    </p>
+                    <div className="flex flex-wrap items-end gap-x-6 gap-y-3 mt-5">
+                        {[["Compete score", "561", "/ 1000"], ["Position", "4th", "of 9"],
+                          ["XP this week", "1,840", null],
+                          ["Monday pays",
+                           grantForLeague({ position: 4, groupSize: LEAGUE_ROWS.length, tiered: false })
+                               .toLocaleString(),
+                           "credits"]].map(
+                            ([label, big, suffix]) => (
+                                <div key={label}>
+                                    <p className="stat-label text-muted-foreground">{label}</p>
+                                    <p className="font-display font-black text-3xl text-foreground tabular-nums">
+                                        {big}
+                                        {suffix && (
+                                            <span className="text-base font-bold text-muted-foreground ml-1">
+                                                {suffix}
+                                            </span>
+                                        )}
+                                    </p>
+                                </div>
+                            ))}
+                    </div>
+                    {pod && (
+                        <div className="flex items-start gap-2 mt-4 pt-4 border-t border-border">
+                            <Crest podium={pod.crest} className="mt-0.5" />
+                            <p className="text-sm text-foreground">
+                                <span className="font-bold">
+                                    {pod.in ? `On the podium in ${ordinal(pod.position)}`
+                                            : `${pod.gap} points off the podium`}
+                                </span>
+                                {" — "}
+                                <span className="text-muted-foreground">
+                                    {pod.in
+                                        ? `${pod.margin} points clear of ${pod.chaser}, who is first in line for it.`
+                                        : `${pod.holder} holds 3rd. Top three take a crest and the bigger Monday grant.`}
+                                </span>
+                            </p>
+                        </div>
+                    )}
+                </section>
+
+                <Podium rows={LEAGUE_ROWS} groupSize={LEAGUE_ROWS.length} tiered={false} />
+
+                <section className="space-y-2">
+                    <h2 className="font-display font-extrabold text-foreground text-base">Standings</h2>
+                    <WeeklyBoard rows={LEAGUE_ROWS} />
+                </section>
+
+                <section className="space-y-2">
+                    <h2 className="font-display font-extrabold text-foreground text-base">
+                        How the week is scored
+                    </h2>
+                    <ScoreGuide breakdown={mine.score_breakdown} me={LEAGUE_ME} />
+                </section>
+            </div>
+        </div>
+    );
+};
+
 ReactDOM.createRoot(document.getElementById("root")).render(
     React.createElement(views[which] || views.deal));
+

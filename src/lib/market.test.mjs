@@ -138,8 +138,12 @@ check("a missing prior is a coin flip, never a crash", () => {
 check("the price label and the tone cannot disagree", () => {
     // The bug ScalingMark exists to prevent: a glyph pointing one way while
     // the colour says the other. Both come off the same comparison.
-    assert.equal(priceLabel(0.71), "71¢");
-    assert.equal(priceLabel(0), "0¢");
+    // THE PRICE IS A PERCENTAGE, not a cent. It is a probability — the model
+    // asks for a belief and stores it in [0, 1] — so the cent was borrowing a
+    // betting shop's unit for a quantity forecasting already has a word for,
+    // and implying a share you could sell, which this board cannot do.
+    assert.equal(priceLabel(0.71), "71%");
+    assert.equal(priceLabel(0), "0%");
     assert.equal(priceTone(0.7, 0.5), "up");
     assert.equal(priceTone(0.3, 0.5), "down");
     assert.equal(priceTone(0.505, 0.5), "flat", "noise is not a move");
@@ -247,7 +251,7 @@ check("readMarket derives the whole card and finds your own side", () => {
     assert.equal(r.noCount, 1);
     assert.ok(r.mine, "an email differing only in case is still you");
     assert.equal(r.mine.stake, 200);
-    assert.match(r.priceLabel, /^\d+¢$/);
+    assert.match(r.priceLabel, /^\d+%$/);
     assert.equal(r.blocked, null);
 });
 

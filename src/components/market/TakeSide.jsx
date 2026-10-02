@@ -259,11 +259,16 @@ export default function TakeSide({
             {/* ── Stake ────────────────────────────────────────────── */}
             <div>
                 <div className="flex items-baseline justify-between mb-1.5">
+                    {/* "Commit", not "Stake". The word is the whole difference
+                        between a forecasting tool a school will buy and a
+                        betting app it will not — and it is also the more
+                        accurate one: a stake is wagered against a house, and
+                        this is scored against the room's own forecast. */}
                     <span className="text-[11px] font-bold uppercase tracking-wide text-[var(--floor-muted-2)]">
-                        Stake
+                        Commit
                     </span>
                     <span className="text-[11px] font-bold text-[var(--floor-muted-2)] tabular-nums">
-                        {balance.toLocaleString()} cred
+                        {balance.toLocaleString()} credits
                     </span>
                 </div>
                 <div className="grid grid-cols-4 gap-1.5">
@@ -323,7 +328,7 @@ export default function TakeSide({
                         font-display font-black text-sm disabled:opacity-40
                         hover:bg-white transition-colors inline-flex items-center justify-center gap-2">
                     {busy && <AceShuffle size="sm" />}
-                    {tooMuch ? "Not enough cred" : `Put ${stake} on ${side === YES ? labels.yes : labels.no}`}
+                    {tooMuch ? "Not enough credits" : `Commit ${stake} to ${side === YES ? labels.yes : labels.no}`}
                 </button>
             </div>
         </div>

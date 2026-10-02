@@ -464,6 +464,37 @@ export default function Competitions() {
 
     useEffect(() => { if (tab === "store" && !store) loadStore(); }, [tab, store, loadStore]);
 
+    /** XP → credits, and cosmetics on and off. Both take the SAME shape as
+     *  `buy`: invoke, unwrap the envelope (a refusal arrives as a 200 with an
+     *  `error` body — fnResult.js), then refetch BOTH the store and the board,
+     *  because each one moves a figure the other prints. */
+    const runStoreAction = useCallback(async (fn, body, fallback) => {
+        if (buying) return;
+        setBuying(true);
+        setError(null);
+        try {
+            const res = await base44.functions.invoke(fn, body);
+            const err = fnError(res);
+            if (err) throw new Error(err);
+            await Promise.all([loadStore(), load()]);
+        } catch (e) {
+            setError(e?.message || fallback);
+        } finally {
+            setBuying(false);
+        }
+    }, [buying, loadStore, load]);
+
+    const convert = useCallback((xp) =>
+        runStoreAction("convertXP", { xp }, "That didn't convert."), [runStoreAction]);
+
+    const prank = useCallback((kind, target) =>
+        runStoreAction("sendPrank", { kind, target_email: target }, "That didn't send."),
+    [runStoreAction]);
+
+    const equip = useCallback((itemId, slot) =>
+        runStoreAction("equipCosmetic", { item_id: itemId, slot }, "Couldn't change that."),
+    [runStoreAction]);
+
     const buy = useCallback(async (itemId, units) => {
         if (buying) return;
         setBuying(true);
@@ -720,7 +751,8 @@ export default function Competitions() {
                 </div>
 
                 {tab === "store" ? (
-                    <CredStore store={store} busy={buying} onBuy={buy} />
+                    <CredStore store={store} busy={buying} onBuy={buy}
+                        onConvert={convert} onEquip={equip} onPrank={prank} />
                 ) : tab === "book" ? (
                     <PortfolioPanel onOpenMarket={openMarket} />
                 ) : (
@@ -856,7 +888,7 @@ export default function Competitions() {
                                             <p className="text-[11px] text-[var(--floor-dim)] tabular-nums">
                                                 {l.traders === 0
                                                     ? "nobody's taken a side yet"
-                                                    : `${l.traders} trading · room ${l.room}¢ · `
+                                                    : `${l.traders} trading · room ${l.room}% · `
                                                         + `${l.backed} backing, ${l.faded} fading`}
                                                 {l.actual !== null && ` · you got ${l.actual}%`}
                                             </p>
@@ -898,7 +930,7 @@ export default function Competitions() {
                         )}
 
                         <p className="text-[11px] text-[var(--floor-dimmest)] leading-snug px-1">
-                            Cred is not XP — losing a call can't touch your level, rank or ATAR.
+                            Credits are not XP — a call that goes against you can't touch your level, rank or ATAR.
                             You get {(me.weekly_grant ?? 1000).toLocaleString()} a week.
                             Agreeing with the price pays nothing; you earn by disagreeing and being right.
                         </p>

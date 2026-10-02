@@ -272,7 +272,7 @@ export default function MarketCard({ market, balance, busy, onTake, onReport }) 
                     className="w-full mt-3 py-2.5 rounded-xl border-2 border-[var(--floor-edge-strong)]
                         text-[var(--floor-ink)] font-display font-black text-sm
                         hover:border-[var(--floor-accent-ink)] hover:bg-[rgb(var(--floor-accent-rgb)/0.1)] transition-colors">
-                    Take a side
+                    Take a position
                 </button>
             )}
 

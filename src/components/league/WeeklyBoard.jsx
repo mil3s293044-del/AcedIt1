@@ -13,6 +13,14 @@
  * the median the bar simply fills and the row is "far"; the number is printed
  * beside it either way.
  *
+ * ─── THE PAYLINE IS DRAWN, because it is the only edge on the board ────────
+ * Three places pay and the other twenty-seven do not, and in a plain ranked
+ * list that boundary is invisible — 3rd and 4th are two adjacent rows. A rule
+ * across the board with what is on the other side of it named is what turns
+ * "I'm 4th" into something worth one more session on a Thursday. It is drawn
+ * only when there is somebody below it: a line under the last row claims a
+ * cut-off that does not exist.
+ *
  * ─── Your row and its neighbours carry a rail ───────────────────────────────
  * Those three rows are the race you are in. Side-specific border utilities and
  * `border-t` rather than `divide-y`, because Tailwind's `divide-*` writes
@@ -23,7 +31,8 @@
 import React, { useMemo } from "react";
 import { motion } from "framer-motion";
 import { Flame, Minus } from "lucide-react";
-import { SLICES, SLICE_MAX } from "@/lib/league";
+import Crest from "@/components/shared/Crest";
+import { SLICES, SLICE_MAX, PODIUM } from "@/lib/league";
 
 const median = (xs) => {
     if (!xs.length) return 0;
@@ -100,9 +109,10 @@ export default function WeeklyBoard({ rows = [] }) {
             {rows.map((r, i) => {
                 const near = Math.abs(r.position - myPos) <= 1;
                 const gap = gaps[i];
+                const payline = r.position === PODIUM && rows.length > PODIUM;
                 return (
+                    <React.Fragment key={`${r.position}-${r.display_name}`}>
                     <div
-                        key={`${r.position}-${r.display_name}`}
                         className={`relative px-4 py-3 ${i > 0 ? "border-t border-border" : ""}
                             ${r.is_me ? "bg-primary/5" : ""}
                             ${near ? "border-l-4 border-l-primary" : "border-l-4 border-l-transparent"}`}
@@ -122,6 +132,15 @@ export default function WeeklyBoard({ rows = [] }) {
                                     </span>
                                     {r.is_me && (
                                         <span className="stat-label text-primary flex-shrink-0">you</span>
+                                    )}
+                                    {/* Last week's finish, worn for one week,
+                                        and otherwise whatever they bought. The
+                                        EARNED mark outranks the bought one: it
+                                        is the one with information in it, and
+                                        the only reward on this board other
+                                        students can see. */}
+                                    {(r.crest || r.crest_skin) && (
+                                        <Crest podium={r.crest} skin={r.crest ? null : r.crest_skin} />
                                     )}
                                     {r.streak_days > 0 && (
                                         <span className="inline-flex items-center gap-0.5 text-[11px] font-bold
@@ -162,6 +181,16 @@ export default function WeeklyBoard({ rows = [] }) {
                             split — what they need is the gap, which is above. */}
                         {r.is_me && <Breakdown breakdown={r.score_breakdown} />}
                     </div>
+                    {payline && (
+                        <div className="flex items-center gap-2 px-4 py-1.5 bg-xp/5 border-t border-xp/30">
+                            <span className="stat-label text-xp">Podium</span>
+                            <div className="flex-1 h-px bg-xp/30" />
+                            <span className="text-[11px] font-bold text-muted-foreground">
+                                Top 3 on Monday
+                            </span>
+                        </div>
+                    )}
+                    </React.Fragment>
                 );
             })}
         </div>

@@ -180,7 +180,7 @@ function Card({ item, remaining, onNext }) {
                                     The room
                                 </p>
                                 <p className="font-display font-black text-xl text-[var(--floor-muted)] tabular-nums">
-                                    {item.room}<span className="text-xs ml-0.5">¢</span>
+                                    {item.room}<span className="text-xs ml-0.5">%</span>
                                 </p>
                             </div>
                         </motion.div>
@@ -229,7 +229,7 @@ function Card({ item, remaining, onNext }) {
                 ) : item.kind === "void" ? (
                     <p className="text-[13px] text-[var(--floor-muted)] mt-3 leading-snug">
                         The question was never asked, so nobody was right.
-                        Your {item.stake.toLocaleString()} cred is back.
+                        Your {item.stake.toLocaleString()} credits are back.
                     </p>
                 ) : (
                     <>
@@ -252,7 +252,7 @@ function Card({ item, remaining, onNext }) {
                                     style={{ color: rite.ink }}>
                                     {item.side === YES ? item.said : 100 - item.said}
                                     <span className="text-xs ml-0.5">
-                                        {item.side === YES ? "¢ yes" : "¢ no"}
+                                        {item.side === YES ? "% yes" : "% no"}
                                     </span>
                                 </p>
                             </div>
@@ -261,7 +261,7 @@ function Card({ item, remaining, onNext }) {
                                     The room
                                 </p>
                                 <p className="font-display font-black text-2xl text-[var(--floor-muted)] tabular-nums">
-                                    {item.room}<span className="text-xs ml-0.5">¢</span>
+                                    {item.room}<span className="text-xs ml-0.5">%</span>
                                 </p>
                             </div>
                         </motion.div>
@@ -294,7 +294,7 @@ function Card({ item, remaining, onNext }) {
                                     {item.payout > 0 ? "+" : ""}{item.payout.toLocaleString()}
                                 </span>
                             )}
-                            <span className="text-base font-bold text-[var(--floor-dim)] ml-1.5">cred</span>
+                            <span className="text-base font-bold text-[var(--floor-dim)] ml-1.5">credits</span>
                         </motion.p>
 
                         {/* Staged with the figure it annotates, or the footnote

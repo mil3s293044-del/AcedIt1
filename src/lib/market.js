@@ -104,8 +104,22 @@ export function priceOf(market, positions = []) {
     return den > 0 ? clampP(num / den) : prior;
 }
 
-/** "71¢" — the price as a market prints it. */
-export const priceLabel = (p) => `${Math.round(clampP(p) * 100)}¢`;
+/**
+ * "71%" — the price, printed as what it actually is.
+ *
+ * IT WAS "71¢", AND THE CENT WAS BOTH THE GAMBLING WORD AND THE WRONG ONE.
+ * This number is a probability: the model asks for a BELIEF, scores it with a
+ * proper scoring rule, and stores it in [0, 1]. Printing it as a price in cents
+ * is the Polymarket idiom, and it borrows a betting shop's vocabulary to say
+ * something a forecaster already has a word for — while implying a share you
+ * could buy and sell, which this board has no way to do (`market.js` has no
+ * exit; `EXPECTED IS NOT UNREALISED` is the same point made elsewhere).
+ *
+ * "71%" is the Metaculus and Good Judgement reading, it is strictly more
+ * accurate about the quantity, and it is the one every student has already met
+ * in a maths class. One function, so the whole app moved at once.
+ */
+export const priceLabel = (p) => `${Math.round(clampP(p) * 100)}%`;
 
 /** Which way the crowd is leaning, for a glyph that must agree with its colour. */
 export function priceTone(price, prior) {
@@ -504,7 +518,7 @@ export const KINDS = {
         selfResolving: false, featured: true,
     },
     longshot: {
-        id: "longshot", label: "Longshot", icon: "Rocket",
+        id: "longshot", label: "Outside chance", icon: "Rocket",
         resolves: "from the board's study log",
         // The long price IS the draw, and it is safe to make one: the payout
         // is scored on your edge against the price, never on the odds, so a

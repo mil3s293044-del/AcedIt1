@@ -444,6 +444,13 @@ const PORTED_FUNCTIONS = {
   getPortfolio:             '/local-ai/fn/getPortfolio',
   getCredStore:             '/local-ai/fn/getCredStore',
   buyWithCred:              '/local-ai/fn/buyWithCred',
+  // Both WRITE, so neither goes in READ_ONLY_FUNCTIONS below: convertXP moves
+  // a balance and equipCosmetic moves `extra`, and a stale read of either is a
+  // student told they still own credits they have spent.
+  convertXP:                '/local-ai/fn/convertXP',
+  equipCosmetic:            '/local-ai/fn/equipCosmetic',
+  sendPrank:                '/local-ai/fn/sendPrank',
+  getPranks:                '/local-ai/fn/getPranks',
   getMarket:                '/local-ai/fn/getMarket',
   takePosition:             '/local-ai/fn/takePosition',
   openMarkMarket:           '/local-ai/fn/openMarkMarket',
@@ -493,6 +500,15 @@ const PORTED_FUNCTIONS = {
 const READ_ONLY_FUNCTIONS = new Set([
   'getRankedBoards', 'getArenaState', 'getMyStakes', 'getCallouts', 'getReactions',
   'getPortfolio', 'getMarket', 'getCredStore',
+  // `getPranks` DOES write — it stamps `seen_at` — and it belongs here anyway.
+  // The rule above is about cached READS going stale, and nothing reads the
+  // `pranks` table through the entity shim, so there is no cached value its
+  // write could invalidate. Left off the list it would flush the entire read
+  // cache on every page mount, since Layout fetches it once per account: a
+  // stampede bought for no freshness at all. This is the one place the "if you
+  // are not sure, leave it out" rule is answered with certainty about what it
+  // touches rather than caution about what it might.
+  'getPranks',
   'extractDocumentText', 'invokeAI', 'mindMapGaps',
 ]);
 

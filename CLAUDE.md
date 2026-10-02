@@ -3216,6 +3216,92 @@ charges is the write that grants and the two cannot come apart. It leaves
 `extra.cred_chips_week` on any row that ever bought one; nothing reads it, and
 it is not cleaned up for the reason the leaked flashcard rows were not retagged.
 
+**THE WHOLE SHELF WAS AN INVENTORY WITH NO CONSUMERS.** `cred_owned`,
+`cred_equipped` and `cred_held` were written by the store and read by NOTHING —
+a student could spend 2,400 credits, most of a fortnight's earning, on a gilt
+card back that rendered nowhere, and the only evidence it existed was the word
+"Owned" on the shelf they bought it from. That is "collect nothing you don't
+use" inverted for the fifth recorded time and the worst version of it: the
+others asked a student something and ignored the answer; this took their money.
+
+- **A back is drawn from CONTEXT, never threaded.** `CardBack` is on nineteen
+  surfaces, so passing an equipped skin to each is nineteen chances to forget,
+  and a half-worn cosmetic is worse than an unworn one — the gilt back on the
+  flashcard shelf and the default in the quiz player reads as a broken app.
+  `CosmeticsProvider` reads the profile once and `CardBack` consumes it;
+  `skin={null}` is how a surface opts out explicitly rather than by omission.
+- **A skin is LITERAL ink, like the floor.** A gilt back is gilt in both
+  themes: it is a physical object somebody paid for, not a semantic colour, and
+  a token that flipped would mean the thing they bought looks like a different
+  thing after dark. `SpadePip` grew a `fill` for the same reason —
+  `fill-foreground` is near-white on dark and near-black on light, so the
+  medallion pip vanished on whichever theme matched the skin.
+- **With nothing equipped NOTHING CHANGES**, so this cannot move a pixel for
+  the ~130 students who have bought nothing.
+- **OWNED IS NOT WORN**, and the shelf now has the control. Buying used to end
+  the interaction, because `cred_equipped` had no writer either.
+
+**THE STREAK FREEZE WAS A SECOND FREEZE BESIDE A WORKING ONE.**
+`user_profiles.streak_shields` has existed since migration 0020, `updateStreak`
+already spends one to cover a slipped day, and the Dashboard already draws how
+many you hold. The store wrote its own into `extra.cred_held`, where nothing
+would ever look. The item declares its `column` now and the purchase increments
+the real one — one mechanism, which is the rule everywhere else here.
+
+**THE LEAGUE PAYS THE GRANT.** It used to read the all-time rank tier, which
+made Monday's credits a STATUS — a number following from lifetime XP, moving a
+few times a year — while `settleLeagueGroup` computed a `final_position` every
+week and granted nothing with it. `grantForLeague` splits the range so FINISH
+OUTWEIGHS TIER: a bronze student who wins their group (1400) out-earns a master
+who came last (1100). If the tier dominated, the grant would still be a status,
+just a slower one, and the league would still not be worth playing on a week you
+were already safe. The two weights SUM to the range, so the floor and ceiling
+are `GRANT_BASE`/`GRANT_TOP` by construction rather than by a clamp — the first
+draft multiplied a band by a spread and paid 1983 against a ceiling of 1800.
+
+`tierIndex` is a NUMBER, not a tier name: `server.mjs` owns `LEAGUE_TIERS` and
+a second copy of that list is the mirror this codebase keeps deleting. An
+unplaced finish takes the FLOOR of its band, never the middle. A student the
+league has not placed falls back to the rank grant, because granting the floor
+on somebody's first week leaves them unable to take a side at all.
+
+**AND THE SENTENCE FOLLOWS THE NUMBER.** The panel said "Rank 6 of 10 sets
+that" for exactly as long as rank did set it. Copy explaining a reason that
+stopped being true is worse than no copy: a student checks it against their rank,
+finds it does not move, and stops believing the panel. `grant_from` says which
+of the two paid, and the panel reads the league's own `ordinal` rather than a
+second copy of it.
+
+**XP CONVERTS, AND `total_xp` IS NEVER WRITTEN.** The ATAR is computed from the
+`xp_events` LOG, not from the column, so a debit would not move it — but it
+WOULD move level and rank, which is the failure `market.js` refuses about
+staking XP, and server.mjs already guards the column in its own words
+("total_xp is STRICTLY ADDITIVE"). So conversion spends from a BUDGET:
+`extra.xp_converted` records what has gone and the remainder is what is left.
+Each point of XP converts once, ever. Nothing a student does on the floor can
+cost them a mark, a level or a place on the ladder — the property the whole
+board rests on, extended to the one place it had not reached.
+
+`credStore.test.mjs` used to assert the module never MENTIONED XP, which was
+right while nothing converted and is too blunt now: conversion legitimately
+reads `total_xp`. It asserts the narrower true thing — nothing here assigns it,
+and no patch carries the key.
+
+**THE WEEKLY CAP IS WHAT STOPS THIS EATING THE LEAGUE.** Without it a student
+with a term of XP banked arrives on Monday with more credits than winning a
+group could pay, and `grantForLeague` stops mattering the day it ships.
+`WEEKLY_CONVERT_MAX` is well under the league's own spread, and the test asserts
+that relationship rather than the number.
+
+**TWO CEILINGS, AND THE ANSWER IS THE TIGHTER ONE.** There is a weekly cap and
+a balance cap, and checking them in sequence reports whichever is tested first
+rather than whichever binds — a student with 10 credits of room was told "you
+can convert 500 more this week", dragged the slider to 500, and was refused by a
+limit nobody had mentioned. One ceiling, and the message NAMES the binding half,
+because "wait until Monday" and "spend something" are different fixes. An
+overflow REFUSES rather than clamping: a clamp spends XP out of a budget that
+only spends once and hands back credits the cap discarded.
+
 **NOTHING IS REFUNDABLE, and that is what closes the arbitrage.** With no
 sell-back there is no path from an owned object to a balance, so a cosmetic
 cannot be laundered back into a balance. Asserted as an ABSENCE — the day
@@ -3309,6 +3395,261 @@ stakes against a number the card was still travelling toward.
 The tape follows the same rule — new rows arrive with `layout` and read "just
 now", and the first paint flags nothing, or the whole week is breaking news on
 every load.
+
+## The weekly league: what it measures, and what it finally pays
+
+**The league has been computing a winner every week and paying them nothing.**
+`settleLeagueGroup` wrote `final_position`, the board ranked on a compete score,
+and the end of a week produced a number nobody saw and no consequence. A
+competition with no prize is a leaderboard with a clock on it.
+
+### THREE SLICES, AND TWO OF THEM MEASURED THE WRONG THING
+
+`computeCompeteScore` moved out of `server.mjs` into `league.js` and the server
+IMPORTS it — the mirror this codebase keeps deleting, on the ONE number a
+student is ranked on, which is a worse thing to keep two copies of than a page
+price. `league.test.mjs` asserts the import and asserts no second definition.
+
+- **Effort** (400) — a countable study minute is a point, through
+  `countableStudyMinutes`, so the integrity caps apply.
+- **Mastery** (400) — **AN AVERAGE ALONE PUNISHED DOING MORE WORK.** It was the
+  bare average of your first sit of each eligible quiz, so ONE easy quiz at 95%
+  scored 380 and TWELVE at 78% scored 312: the student who did twelve times the
+  work came second, every week, by construction, and the fastest way up the
+  board was to sit one quiz on your best topic and stop. The average still sets
+  the HEIGHT and the count sets how much of it you get, ramping to full at
+  `MASTERY_SITS_FULL` = four. Four because it is a real week of quizzing rather
+  than a grind — at twelve the ramp would reward volume over accuracy, the same
+  inversion pointed the other way. `BOARD_MIN_QUESTIONS`/`BOARD_MIN_MARKS`
+  already stop an eight-second quiz counting at all, so the ramp never has to be
+  the thing defending against that.
+- **Consistency** (200) — **EVERY SLICE MEASURES THIS WEEK, and one of them did
+  not.** It was `days/7 × 150 + streak/14 × 50`, and a streak is a LIFETIME
+  number sitting inside a weekly competition: a 60-day run banked 50 points
+  every Monday for nothing done that week, and a first-week student could not
+  close it however hard they worked. "Never score a student on a signal they
+  can't reach", on the one board whose whole promise is that it resets. Days
+  active takes the full 200 now; the streak still pays everywhere else it
+  always did.
+
+### THE PODIUM IS WHAT A WEEK IS FOR
+
+Three places pay, and three deliberately different KINDS of thing:
+
+- **credits**, the Monday grant, set by where you finished (`grantForLeague`);
+- **a crest**, worn beside your name for the week AFTER, on every board the app
+  draws — the only reward here other students can SEE, which is what makes a
+  league competitive rather than a private score;
+- **XP**, small, top three only (`LEAGUE_XP`).
+
+**THE XP IS SMALL ON PURPOSE.** XP feeds level, rank AND the ATAR. A payout big
+enough to move somebody's ATAR would mean a quiet week costs them twice — once
+on the board and once on the number the whole app is standardised around — and
+would make the flagship study score partly a measure of how competitive somebody
+is. These are worth about one good session: a nod, not a lever.
+
+**A PODIUM CREST IS EARNED AND IS NOT BOUGHT**, so it is stored apart from
+`cred_equipped` (`extra.league_award`, keyed on the week). One slot for both
+would mean winning the league silently took off a crest somebody paid 2,850
+credits for, or that buying one erased the proof they came first. Where both
+exist the EARNED one draws: it is the one with information in it.
+`podiumIsCurrent` is what makes it a claim about NOW — a permanent badge for one
+good week in March is a statement that stopped being true in March.
+
+**THE PODIUM IS PAID IN BOTH MODES.** Promotion and demotion are a TIERED idea
+and are skipped in global mode, where there is nowhere to go — but a finish is a
+finish, and the payout block sits deliberately ABOVE that `if (!tiered)
+continue`. `grantForLeague` grew a `tiered` flag for the same reason: scoring the
+grant on a tier that is a fixed placeholder handed every student the identical
+tier weight, so winning the only board there is could never pay the ceiling.
+A reward nobody can reach is the "signal they can't reach" rule pointed at the
+payout.
+
+### THE CREST RENDERER DID NOT EXIST
+
+`CRESTS` and `crestOf` shipped with the cred store, `useCosmetics` has exposed an
+equipped crest since Layout mounted the provider, and **nothing in the tree ever
+drew one** — so a student could buy a crest and the only evidence it existed was
+the word "Owned" on the shelf they bought it from. That is precisely the bug the
+store release was written to end, one file short of the finish.
+`components/shared/Crest.jsx` is the renderer, shared by both sources, and the
+board SENDS the bought one (`crest_skin`) because a cosmetic only its owner can
+see is not worn. `league.test.mjs` asserts the component is reached rather than
+merely present.
+
+**SHAPE CARRIES THE PLACE, NOT JUST COLOUR.** There is no bronze token and
+inventing one for a single mark is not worth a colour in the palette —
+WeeklyBoard's medal note already refused that. First is a filled medal in the XP
+amber, second filled in the muted ink, third the OUTLINE: three readings from two
+tokens, and it survives greyscale the way the floor's step dots have to.
+
+### PAYING ANOTHER STUDENT NEEDS A TOKEN, AND THE WRITE THAT RECORDS IT CAN LOCK IT OUT
+
+`awardXP` authenticates the requester, so a podium bonus needs `target_email`
+AND the caller's header — without it every finisher's XP lands on whoever
+happened to open the page, which is the bug `settleHoursCompetition` records in
+its own comment. `authHeader` is threaded through `checkAndGrantAchievements` →
+`addLeagueXP` → `ensureCurrentLeagueMembership` → `settleLeagueGroup`.
+
+**AND NEVER SETTLE WITHOUT A TOKEN TO PAY WITH.** A settlement writes
+`final_position` on every row and `league_award` on every podium profile, and
+BOTH are one-shot guards: the group returns early once any position exists, and
+the award is keyed on the week. So a settle that could not pay would write the
+crest and lock the bonus out FOREVER — worse than settling late. It defers
+instead, which costs a tiered student one week at their current tier, and the
+next read of the league page carries a token and settles it properly. The lazy
+pattern the whole feature already uses.
+
+### THE PAGE HAD THE RACE AND NOT THE REASON
+
+The board drew every gap to one scale and answered "where am I". It could not
+answer "what am I racing FOR", because in a ranked list the three paid places
+are the first three of thirty rows.
+
+- **`Podium`** is above the standings, and **the reward is printed on the step**
+  — a student deciding whether a quiet Thursday is worth one more session is
+  weighing exactly that, and a podium that draws three heights is decoration.
+  The credits come from `grantForLeague`, the same function the server grants
+  with. It is 2-1-3 at `sm` and a plain stacked list on a phone, because three
+  stepped columns at phone width are three unreadable slivers.
+- **The payline** is a rule across the board after third with what is on the
+  other side named. It is the only edge the board has, and it is drawn only when
+  somebody is below it — a line under the last row claims a cut-off that does
+  not exist.
+- **`podiumGap`** is the sentence. Out, it is the gap to THIRD, from wherever
+  you are. In, it is the margin over FOURTH rather than over the row below —
+  fourth is the only person who can take the crest, so for anyone in first or
+  second "8 ahead of 3rd" is a number about nothing at stake. It returns null on
+  a board of three or fewer: three paid places out of three students is
+  everybody, the same refusal `leagueLead` makes about "1st of 1". It also
+  carries `WeekStrip`, which is the entrance students actually land on.
+- **`ScoreGuide`** replaced one sentence naming the three slices in passing. A
+  student 40 points off third had no way to find out whether 40 points was forty
+  minutes, one quiz or a day — which is the difference between a board you can
+  play and a number that happens to you. Each slice states its rule and its
+  PRICE, and the price comes from `nextPoint`, which is the same arithmetic the
+  score is computed with rather than a second description of it. A FULL slice is
+  never priced; "study more" to somebody who has maxed effort is the app not
+  reading its own screen.
+
+**THE INPUTS TRAVEL WITH THE SCORE.** `nextPoint` cannot price a quiz from three
+slice totals — the mastery ramp needs the sit COUNT and the average behind it —
+so `leagueStandingRows` returns them and the payload carries `active_days` and
+`avg_accuracy` on the student's own row. Computing a number and throwing it away
+is this codebase's own recurring bug, pointed at its own board.
+
+Draw the whole page with `scripts/_floorProbe.jsx?v=league`, against a nine-row
+board with a crest on it: a two-row fixture hides the payline, the gap scale and
+the 2-1-3 step entirely, which is the lesson the Quizzes shelf learned about
+checking a layout against the shape of the data somebody actually has.
+
+## Pranks: student-to-student, and every bound is asserted
+
+**This is the only feature where one student does something TO another**, on a
+product whose users are mostly fifteen to eighteen and which is being sold to
+schools. Migration 0034 ruled out free text on Compete in its own words —
+"a text box on that is a moderation problem this app has no way to staff" — so
+this ships only because every one of those words can be made false about it.
+
+**FOUR BOUNDS, and the first two are what make it safe:**
+
+- **A FIXED VOCABULARY.** `KINDS` is the whole language. There is no free text
+  anywhere in a prank, in the table or on the screen, so nobody can say anything
+  to anybody: the most hostile thing that can arrive is a wobble.
+- **A RECEIVE CAP, which is the one that matters.** A send cap bounds each
+  sender and says nothing about a class of thirty deciding on one person — five
+  each is a hundred and fifty, which is a campaign. `WEEKLY_RECEIVE_MAX` makes
+  a pile-on structurally impossible, and is TIGHTER than the send cap: better to
+  hold one you cannot deliver than to receive one you did not want.
+- **FRIENDS ONLY**, mutual and accepted — the difference between a classmate you
+  know and a stranger on a public board picking a target.
+- **THE SENDER IS NAMED**, always, on the card itself. A row whose sender cannot
+  be resolved is DROPPED rather than delivered anonymously.
+
+**THE TWO RECIPIENT-SIDE REFUSALS ARE INDISTINGUISHABLE**, and the test asserts
+it. "They can't receive one right now" covers an opt-out AND a full week,
+because a refusal that said which would turn the shelf into a way of finding out
+who has opted out — and that person is exactly who a determined sender would
+then work around. Your OWN limit names itself, because a cap on your own
+behaviour is something you can act on, and it is checked first: a sender told
+"they can't receive one" when they had also run out would fix the wrong thing.
+The picker greys nobody out for the same reason.
+
+**NOTHING A PRANK DOES CAN REACH ANYTHING A STUDENT IS MEASURED ON** — not XP,
+a streak, the ATAR, a mark, a deck or a position. Asserted as an ABSENCE over
+the module, the shape the refund rule takes: the day somebody adds an effect
+that touches a mark is the day this stops being a prank and becomes a penalty
+that was bought. The two page-level kinds are pure transform and change no
+layout, so nothing moves out from under a finger mid-quiz.
+
+**A PRANK IS NOT IN THE CATALOGUE, and that was a real mistake caught mid-build.**
+Everything on the shelf is bought through `purchasePatch`, which charges and
+records ownership in ONE write — and a prank is not owned, it is SENT, so it
+needs a recipient before it means anything. Listed as a buyable item it would be
+charged, written into `cred_owned`, and delivered to nobody: precisely the bug
+the rest of this release exists to fix, reintroduced one file over. `sendPrank`
+is the only thing that may charge for one, and it refunds directly if the insert
+fails — the escrow rule `takePosition` already keeps.
+
+**IT IS NOT A MARKET COMPONENT.** `PrankOverlay` lives in `components/pranks/`
+because a prank is BOUGHT on the floor and PLAYS anywhere — over a quiz, the
+dashboard, the planner — so it follows the app's own tokens, not the floor's
+`--floor-*` palette, which is blank outside `.floor` and would have rendered an
+invisible prank on every screen except the one it was bought on.
+`floorInk.test.mjs` caught it sitting in `components/market/` with literal hex
+in it, which was two mistakes that looked like one.
+
+**REDUCED MOTION STILL DELIVERS.** The animation is suppressed and the CARD
+still plays, or a student with motion sensitivity silently receives nothing
+while their friend is charged for something that did not happen.
+
+**`getPranks` marks seen ON ARRIVAL**, the rule `SettlementReveal` keeps: a
+student who closes the tab has still had it put in front of them, and the
+alternative is a prank replaying on every load — the pile-on arriving by another
+route. It is in `READ_ONLY_FUNCTIONS` despite writing, because nothing reads
+`pranks` through the entity cache, so there is no cached value to invalidate;
+left off, it would flush the whole cache on every page mount.
+
+**Migration 0038 must be applied before any of this works.** Writes go through
+the service role only — every bound is checked in `sendPrank`, and a client that
+could insert directly would walk past all four.
+
+**AND `dbColumns.test.mjs` NOW HONOURS A COMMITTED MIGRATION.** Its message said
+"no migration" while only ever checking `schema.json`, which is a dump of what
+is DEPLOYED — so a table whose migration is written but not yet applied failed
+the check correctly and uselessly, and the suite would stay red through every
+release that adds one. A `create table` in `supabase/migrations/` now counts,
+with the columns it declares; the dump still WINS wherever both describe a
+table, because a migration can be superseded (0008's drop-and-recreate) and a
+parsed guess beating a measurement is the inversion that file's header warns
+about. Verified it still catches a genuinely imaginary table.
+
+## The floor speaks forecasting, not betting
+
+**"Because we are selling to schools."** The board was built on Polymarket's
+vocabulary and inherited a betting shop's words with it. Every one of them had
+a more accurate replacement, which is the useful thing: this was not a
+euphemism pass.
+
+**`71¢` BECAME `71%`, AND THE CENT WAS THE WRONG UNIT BEFORE IT WAS THE WRONG
+WORD.** The number is a PROBABILITY — the model asks for a belief, scores it
+with a proper scoring rule and stores it in [0, 1]. Printing it in cents
+borrowed a unit for a quantity forecasting already has a word for, and implied
+a share you could buy and sell, which this board cannot do: there is no exit
+here, which is the same point `EXPECTED IS NOT UNREALISED` makes elsewhere.
+`priceLabel` is one function, so the whole app moved at once; the tests pinned
+the old unit and were repointed rather than loosened.
+
+- **"Stake" → "Commit."** A stake is wagered against a house. This is scored
+  against the room's own forecast, so the new word is also the true one.
+- **"Take a side" → "Take a position"**, the exchange idiom.
+- **"Longshot" → "Outside chance."**
+- **"cred" → "credits"** everywhere it is PRINTED.
+
+**STORAGE NAMES DID NOT MOVE.** `price_at_entry`, `payoutFor`, `stake`,
+`cred_balance` and the payload keys stay exactly as they are — renaming those
+rewrites history, which is the rule `sideLabels` already keeps about yes and no:
+only the LABEL moves, and every position already taken still reads back.
 
 ## Age, consent, and the policies the product did not implement
 
@@ -3557,6 +3898,14 @@ stranger.
   card, the price, the gesture and the payoff moment; `getMarkets` /
   `takePosition` / `openMarkMarket` / `reportMark` in `server.mjs` mint, escrow
   and settle
+- `src/lib/pranks.js` + `pranks.test.mjs`,
+  `src/components/pranks/PrankOverlay.jsx`, `supabase/migrations/0038_pranks.sql`
+  — the four bounds, and the tests that assert them rather than describing them.
+  `sendPrank` / `getPranks` in `server.mjs`; draw them with
+  `scripts/_floorProbe.jsx?v=pranks`, over real content
+- `src/lib/cosmetics.js`, `src/lib/CosmeticsContext.jsx` — what a student
+  bought, actually drawn. The provider is mounted in Layout; `CardBack` and the
+  crest consume it rather than being handed a skin by nineteen call sites
 - `src/components/market/PriceBar.jsx` — the price, drawn: the figure, the
   split, and what each side pays under its own end. One object where the card
   had an odds row, a price gutter and a change figure
@@ -3646,10 +3995,16 @@ stranger.
   features were failing on imagined column names when the client half was added
 - `src/lib/wagerStatus.js` — the one vocabulary `score_wagers.status` may
   speak, imported by client AND server; `dbEnums.test.mjs` holds it
-- `src/lib/league.js`, `src/pages/League.jsx`,
-  `src/components/league/WeeklyBoard.jsx`, `src/components/ranked/WeekStrip.jsx`
-  — the weekly board; `leagueStandingRows` and `settleLeagueGroup` in
-  `server.mjs` are the one ranking and the settlement that writes it down
+- `src/lib/league.js` + `league.test.mjs`, `src/pages/League.jsx`,
+  `src/components/league/WeeklyBoard.jsx`, `Podium.jsx`, `ScoreGuide.jsx`,
+  `src/components/ranked/WeekStrip.jsx` — the weekly board: the compete score
+  (imported by `server.mjs`, never mirrored), what a finish pays, the payline
+  and what one more point costs. `leagueStandingRows` and `settleLeagueGroup`
+  in `server.mjs` are the one ranking and the settlement that finally writes a
+  payout down; draw the page with `scripts/_floorProbe.jsx?v=league`
+- `src/components/shared/Crest.jsx` — the mark beside a name, from either way
+  of getting one. The earned crest outranks the bought one; `CRESTS` was sold
+  for a release with no renderer at all
 - `src/lib/integrity.js` — the caps, the idle discount, the quiz floors and the
   verified/claimed split. Mirrored server-side by `countableStudyMinutes`,
   `verifiedStudyMinutes` and `boardQuizScores`; change one, change both

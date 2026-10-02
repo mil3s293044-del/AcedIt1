@@ -300,7 +300,7 @@ export default function PortfolioPanel({ onOpenMarket }) {
                             tabular-nums mt-1.5 text-[var(--floor-ink)]">
                             <LiveNumber value={value} showDelta={false} />
                             <span className="text-base font-bold ml-2" style={{ color: INK.dim }}>
-                                cred
+                                credits
                             </span>
                         </p>
                         {/* The part they earned, under the balance that includes
@@ -339,7 +339,7 @@ export default function PortfolioPanel({ onOpenMarket }) {
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mt-4 pt-4
                     border-t border-[var(--floor-edge)]">
                     <Stat label="In hand" value={(me.cred ?? 0).toLocaleString()} />
-                    <Stat label="At stake" value={book.atStake.toLocaleString()}
+                    <Stat label="Committed" value={book.atStake.toLocaleString()}
                         note={`${book.open.length} open`} />
                     <Stat label="Expected" value={signed(book.expected)}
                         tone={toneOf(book.expected)} note="at today's prices" />

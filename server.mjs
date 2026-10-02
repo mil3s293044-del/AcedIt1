@@ -16,6 +16,16 @@ import { QUEST_BY_ID, questMultiplier } from "./src/lib/quests.js";
 // the client deliberately: the forecast layer and the column's CHECK
 // constraint drifting apart is what made placeForecast a guaranteed 500.
 import { WAGER } from "./src/lib/wagerStatus.js";
+// The weekly score, imported rather than mirrored. See league.js's header.
+import {
+  computeCompeteScore, SCORE_MAX as COMPETE_SCORE_MAX,
+  leagueXPFor, podiumCrest, podiumIsCurrent, LEAGUE_XP,
+} from "./src/lib/league.js";
+// A BOUGHT CREST IS MEANT TO BE SEEN BY OTHER STUDENTS, which means the board
+// has to send it — a cosmetic only its owner can see is the "paid for a thing
+// that renders nowhere" bug the cred store was written to end. Imported, never
+// mirrored, with the extension node needs.
+import { crestOf } from "./src/lib/cosmetics.js";
 // The one rule about who may be the SUBJECT of a market. Imported rather
 // than mirrored, for the reason market.js already is: two copies of a
 // consent rule is how one of them quietly stops being applied.
@@ -23,8 +33,16 @@ import { mayBeMarketSubject } from "./src/lib/compliance.js";
 // The cred economy: what a rank is worth on Monday, and what cred buys.
 // Imported rather than mirrored, the rule market.js already keeps.
 import {
-  grantForTier, canBuy, purchasePatch, CATALOGUE,
+  grantForTier, grantForLeague, canBuy, purchasePatch, CATALOGUE,
+  convertQuote, convertPatch, convertibleXP, convertedThisWeek,
+  WEEKLY_CONVERT_MAX, XP_PER_CREDIT,
 } from "./src/lib/credStore.js";
+import { equipPatch, unequipPatch } from "./src/lib/cosmetics.js";
+import {
+  prankKind, canSend as canSendPrank, optedOut as prankOptedOut,
+  PRANK_LIST,
+  WEEKLY_SEND_MAX as PRANK_SEND_MAX, WEEKLY_RECEIVE_MAX as PRANK_RECEIVE_MAX,
+} from "./src/lib/pranks.js";
 import { rankTierFromXP } from "./src/lib/xpRanks.js";
 // The market model — the ONE object Compete is built on. Imported rather than
 // mirrored: forecast.js was mirrored deliberately and every session since has
@@ -414,7 +432,19 @@ function prevTier(t) { const i = LEAGUE_TIERS.indexOf(t); return LEAGUE_TIERS[Ma
  * ranking from the same finished week, so the second write is the first one
  * again.
  */
-async function settleLeagueGroup(groupId, meEmail, currentTierOfUser) {
+/**
+ * `authHeader` is the SETTLING student's token, and every payout rides on it
+ * with `target_email` — the pattern `settleHoursCompetition` already uses,
+ * because `awardXP` authenticates the requester and a settlement pays
+ * everybody else on the board.
+ *
+ * Settlement is lazy here as it is everywhere in this app: the first person to
+ * open the league settles and pays the whole board, and with nobody on the page
+ * nothing happens. That is the trade this codebase takes rather than introduce
+ * a scheduler, and it is why the payout is idempotent two ways — `event_key`
+ * on the XP and the week on `league_award`.
+ */
+async function settleLeagueGroup(groupId, meEmail, currentTierOfUser, authHeader) {
   const nothing = { tier: currentTierOfUser, settled: 0 };
   if (!supabaseAdmin || !groupId) return nothing;
 
@@ -448,6 +478,53 @@ async function settleLeagueGroup(groupId, meEmail, currentTierOfUser) {
       .from('league_memberships')
       .update({ final_position: finalPosition, promoted, demoted })
       .eq('id', m.id);
+
+    // ── THE PODIUM IS PAID IN BOTH MODES ──────────────────────────────────
+    // Promotion is a tiered idea and is skipped below, but a finish is a
+    // finish: in global mode the top three of one board is the ONLY thing the
+    // league can reward, and skipping it with the tier logic would leave the
+    // feature computing a winner every week and paying them nothing — which is
+    // the state this release exists to end.
+    const xp = leagueXPFor(finalPosition);
+    const crest = podiumCrest(finalPosition);
+    if (xp > 0 || crest) {
+      const { data: row } = await supabaseAdmin.from('user_profiles')
+        .select('id, extra').eq('created_by', m.user_email).maybeSingle();
+      if (row) {
+        // KEYED ON THE WEEK, so a re-settle cannot pay twice. `settleLeagueGroup`
+        // returns early when any row already carries a position, but that guard
+        // is about the group and this is about the person — a student who moved
+        // groups mid-week would otherwise be payable from both.
+        const prior = row.extra?.league_award;
+        if (prior?.week !== weekStart) {
+          await supabaseAdmin.from('user_profiles').update({
+            extra: { ...(row.extra || {}), league_award: { week: weekStart, position: finalPosition, crest } },
+          }).eq('id', row.id);
+          if (xp > 0 && authHeader) {
+            // Through `awardXP` rather than a direct write, so the daily caps,
+            // the velocity check and the xp_events row all apply — a payout
+            // that went around them would be the one source of XP the ATAR's
+            // own integrity rules never see. `target_email` is what sends it to
+            // the finisher rather than to whoever happened to open the page;
+            // without it every podium bonus lands on one student, which is the
+            // bug `settleHoursCompetition` records in its own comment.
+            try {
+              await callLocalFn('awardXP', {
+                source: 'league_finish',
+                event_key: `league_${weekStart}_${m.user_email}`,
+                flat_xp: xp,
+                target_email: m.user_email,
+              }, authHeader);
+            } catch (e) {
+              // The crest and the position are already written; XP that does
+              // not land is logged rather than rolled back, because taking the
+              // podium away to undo a payout is the worse failure.
+              console.error('[league] podium XP failed:', m.user_email, e?.message);
+            }
+          }
+        }
+      }
+    }
 
     if (!tiered) continue;
 
@@ -528,7 +605,7 @@ async function findOrCreateOpenGroup(tier, weekStart) {
 // Place user in the current week's league. Handles lazy settlement of
 // previous week if stale. Returns the user's current membership row
 // (with group + position info) or null on failure.
-async function ensureCurrentLeagueMembership(userEmail, userProfile) {
+async function ensureCurrentLeagueMembership(userEmail, userProfile, authHeader) {
   if (!supabaseAdmin || !userEmail) return null;
   const weekStart = currentWeekStartUTC();
 
@@ -555,10 +632,20 @@ async function ensureCurrentLeagueMembership(userEmail, userProfile) {
   // why `final_position` was never once written in the feature's lifetime —
   // see settleLeagueGroup. Promotion and demotion are still tier-only; a
   // final position is not, and it is what a standings page is made of.
+  //
+  // BUT NEVER SETTLE WITHOUT A TOKEN TO PAY WITH. A settlement writes
+  // `final_position` on every row and `league_award` on every podium profile,
+  // and BOTH are one-shot guards: the group returns early once any position
+  // exists, and the award is keyed on the week. So a settle that could not
+  // pay — no header, so no `target_email` to send the podium XP to — would
+  // write the crest and lock the bonus out forever, which is worse than
+  // settling late. Deferring costs a tiered student one week at their current
+  // tier; the next read of the league page carries a token and settles it
+  // properly, which is the lazy pattern this whole feature already uses.
   let justSettled = 0;
-  if (stale?.[0]) {
+  if (stale?.[0] && authHeader) {
     const outcome = await settleLeagueGroup(
-      stale[0].league_group_id, userEmail, nextStartTier);
+      stale[0].league_group_id, userEmail, nextStartTier, authHeader);
     nextStartTier = outcome.tier;
     justSettled = outcome.settled;
   }
@@ -604,10 +691,15 @@ async function ensureCurrentLeagueMembership(userEmail, userProfile) {
 
 // Add XP delta to the user's current-week membership. Best-effort, lazily
 // initialises the membership if it doesn't exist yet.
-async function addLeagueXP(userEmail, userProfile, deltaXp) {
+async function addLeagueXP(userEmail, userProfile, deltaXp, authHeader) {
   if (!supabaseAdmin || !userEmail || !deltaXp || deltaXp <= 0) return;
   try {
-    const mem = await ensureCurrentLeagueMembership(userEmail, userProfile);
+    // The header is what lets a settlement triggered from here pay the podium:
+    // `awardXP` authenticates the requester, so sending a bonus to somebody
+    // else needs `target_email` AND a token. Without one, the membership is
+    // still placed and the week's XP still counted — only the settlement is
+    // deferred, see ensureCurrentLeagueMembership.
+    const mem = await ensureCurrentLeagueMembership(userEmail, userProfile, authHeader);
     if (!mem) return;
     await supabaseAdmin
       .from('league_memberships')
@@ -821,7 +913,7 @@ async function buildAchievementStats(userEmail, profile) {
 
 // Detect newly-qualified achievements, insert unlocks, grant reward XP.
 // Returns array of newly-unlocked achievement codes.
-async function checkAndGrantAchievements(userEmail, profile) {
+async function checkAndGrantAchievements(userEmail, profile, authHeader = "") {
   if (!supabaseAdmin || !userEmail) return [];
   try {
     // Already-unlocked set.
@@ -899,7 +991,7 @@ async function checkAndGrantAchievements(userEmail, profile) {
       } catch {}
 
       // Mirror to league weekly XP.
-      addLeagueXP(userEmail, profile, totalReward).catch(() => {});
+      addLeagueXP(userEmail, profile, totalReward, authHeader).catch(() => {});
     }
 
     console.log(`[achievements] unlocked ${granted.length} for ${userEmail}: ${granted.map(a => a.code).join(', ')}`);
@@ -3086,7 +3178,7 @@ app.post("/local-ai/fn/awardXP", async (req, res) => {
 
     // Weekly Leagues — credit XP to the user's current-week league
     // membership. Fire-and-forget; failure doesn't block the awardXP response.
-    addLeagueXP(userEmail, profile, finalXP).catch((e) =>
+    addLeagueXP(userEmail, profile, finalXP, req.headers.authorization || "").catch((e) =>
       console.warn("[leagues] hook from awardXP failed:", e?.message || e),
     );
 
@@ -3095,7 +3187,7 @@ app.post("/local-ai/fn/awardXP", async (req, res) => {
     // We pass the UPDATED profile (with new total_xp) so streak/xp checks
     // see the latest values.
     const updatedProfile = { ...profile, total_xp: newTotalXP, season_xp: newSeasonXP };
-    checkAndGrantAchievements(userEmail, updatedProfile).catch((e) =>
+    checkAndGrantAchievements(userEmail, updatedProfile, req.headers.authorization || "").catch((e) =>
       console.warn("[achievements] hook from awardXP failed:", e?.message || e),
     );
 
@@ -3281,7 +3373,7 @@ app.post("/local-ai/fn/awardXPIncremental", async (req, res) => {
       .eq("id", profile.id);
 
     // Leagues: credit incremental XP to the user's current weekly membership.
-    addLeagueXP(userEmail, profile, finalXP).catch(() => {});
+    addLeagueXP(userEmail, profile, finalXP, req.headers.authorization || "").catch(() => {});
 
     return res.json({ success: true, xp_awarded: finalXP, total_xp: newTotalXP });
   } catch (err) {
@@ -5288,7 +5380,7 @@ app.post("/local-ai/fn/settleHoursCompetition", async (req, res) => {
     for (const p of participants) {
       try {
         const pProfile = await loadUserProfile(p.email);
-        await checkAndGrantAchievements(p.email, pProfile);
+        await checkAndGrantAchievements(p.email, pProfile, req.headers.authorization || "");
       } catch {}
     }
 
@@ -8659,7 +8751,7 @@ app.post("/local-ai/fn/getAchievements", async (req, res) => {
     let newlyUnlocked = [];
     try {
       const profile = await loadUserProfile(user.email);
-      newlyUnlocked = await checkAndGrantAchievements(user.email, profile);
+      newlyUnlocked = await checkAndGrantAchievements(user.email, profile, req.headers.authorization || "");
     } catch (e) {
       console.warn("[getAchievements] self-heal failed:", e?.message || e);
     }
@@ -8723,7 +8815,7 @@ app.post("/local-ai/fn/checkAchievements", async (req, res) => {
   if (!user) return res.status(401).json({ error: "Unauthorized" });
   try {
     const profile = await loadUserProfile(user.email);
-    const newCodes = await checkAndGrantAchievements(user.email, profile);
+    const newCodes = await checkAndGrantAchievements(user.email, profile, req.headers.authorization || "");
     return res.json({ success: true, newly_unlocked: newCodes });
   } catch (err) {
     console.error("[checkAchievements] error:", err);
@@ -8743,12 +8835,11 @@ app.post("/local-ai/fn/checkAchievements", async (req, res) => {
 //   Effort (0–400) = study minutes this week, capped at 400
 //   Mastery (0–400) = average quiz accuracy this week
 //   Consistency (0–200) = active days this week + current streak
-function computeCompeteScore({ minutes = 0, avgAccuracy = 0, activeDays = 0, streak = 0 }) {
-  const effort = Math.round(Math.min(minutes, 400));
-  const mastery = Math.round((avgAccuracy / 100) * 400);
-  const consistency = Math.round(Math.min(activeDays / 7, 1) * 150 + Math.min(streak / 14, 1) * 50);
-  return { effort, mastery, consistency, total: effort + mastery + consistency };
-}
+// `computeCompeteScore` MOVED TO `src/lib/league.js` and is imported above.
+// It was a server-side function with its ceilings restated in league.js as a
+// comment promising they matched — the mirror this codebase keeps deleting,
+// on the one number a student is actually ranked by.
+
 
 // Compute one user's Compete Score over a competition window [startIso, now].
 // Used to rank battles by "best study" instead of raw hours.
@@ -8838,7 +8929,9 @@ async function leagueStandingRows(members = [], weekStartStr, now = new Date()) 
 
   const [pRes, sessRes, techRes, quizRes] = await Promise.all([
     supabaseAdmin.from('user_profiles')
-      .select('created_by, username, full_name, streak_days, total_xp').in('created_by', emails),
+      // `extra` carries `league_award` — last week's finish, which is what a
+      // crest beside a name is. One select rather than a second query per row.
+      .select('created_by, username, full_name, streak_days, total_xp, extra').in('created_by', emails),
     supabaseAdmin.from('study_sessions')
       .select('created_by, duration_minutes, date, created_date, extra')
       .in('created_by', emails).gte('date', weekStartStr),
@@ -8891,13 +8984,19 @@ async function leagueStandingRows(members = [], weekStartStr, now = new Date()) 
     const p = byEmail[m.user_email] || {};
     const b = bucket[m.user_email] || { study: [], scores: new Map(), days: new Set() };
     const sits = [...b.scores.values()];
+    // THE INPUTS TRAVEL WITH THE SCORE, not just the three totals. `nextPoint`
+    // prices what one more quiz or one more day is worth and cannot do that
+    // from the slices alone — the mastery ramp needs the sit COUNT and the
+    // average behind it. Computing them and throwing them away is this
+    // codebase's own recurring bug pointed at its own board.
+    const avgAccuracy = sits.length ? sits.reduce((s, n) => s + n, 0) / sits.length : 0;
     const cs = computeCompeteScore({
       minutes: countableStudyMinutes(b.study, now),
-      avgAccuracy: sits.length ? sits.reduce((s, n) => s + n, 0) / sits.length : 0,
+      avgAccuracy,
       activeDays: b.days.size,
-      streak: p.streak_days || 0,
+      sits: sits.length,
     });
-    return { m, p, cs, sits: sits.length };
+    return { m, p, cs, sits: sits.length, activeDays: b.days.size, avgAccuracy };
   });
 
   scored.sort((x, y) =>
@@ -8949,7 +9048,7 @@ async function competitionCompeteScore(email, startIso) {
     ...quizzes.map((q) => q.created_date?.slice(0, 10)),
   ].filter(Boolean)).size;
   return {
-    ...computeCompeteScore({ minutes, avgAccuracy, activeDays: days, streak: profile?.streak_days || 0 }),
+    ...computeCompeteScore({ minutes, avgAccuracy, activeDays: days, sits: boardSitCount }),
     sits: boardSitCount,
   };
 }
@@ -8963,7 +9062,7 @@ app.post("/local-ai/fn/getLeagueStanding", async (req, res) => {
     const profile = await loadUserProfile(user.email);
     if (!profile) return res.status(404).json({ error: "Profile not found" });
 
-    const mem = await ensureCurrentLeagueMembership(user.email, profile);
+    const mem = await ensureCurrentLeagueMembership(user.email, profile, req.headers.authorization || "");
     if (!mem) return res.status(500).json({ error: "Could not place in league" });
 
     // A week just closed on this request, so any Podium or Top Dog it earned
@@ -8973,7 +9072,7 @@ app.post("/local-ai/fn/getLeagueStanding", async (req, res) => {
     // self-heals, so the worst case is the badge landing a session later.
     if (mem.just_settled > 0) {
       try {
-        await checkAndGrantAchievements(user.email, profile);
+        await checkAndGrantAchievements(user.email, profile, req.headers.authorization || "");
       } catch (e) {
         console.warn('[leagues] achievement check after settle failed:', e?.message || e);
       }
@@ -8992,7 +9091,7 @@ app.post("/local-ai/fn/getLeagueStanding", async (req, res) => {
     const weekStartStr = currentWeekStartUTC();
     const scored = await leagueStandingRows(groupMembers || [], weekStartStr);
 
-    const rows = scored.map(({ m, p, cs, sits }, i) => {
+    const rows = scored.map(({ m, p, cs, sits, activeDays, avgAccuracy }, i) => {
       const isMe = m.user_email === user.email;
       const displayName = m.is_anonymous && !isMe
         ? `Anon #${(m.id || '').slice(-4)}`
@@ -9014,6 +9113,18 @@ app.post("/local-ai/fn/getLeagueStanding", async (req, res) => {
         // A student who only sits short quizzes otherwise takes a silent zero
         // on the 400-point mastery slice and is never told what unlocks it.
         board_sits:      isMe ? sits : null,
+        active_days:     isMe ? activeDays : null,
+        avg_accuracy:    isMe ? Math.round(avgAccuracy) : null,
+        // LAST week's finish, worn for ONE week. `podiumIsCurrent` is what
+        // makes a crest a claim about now rather than a permanent badge for one
+        // good week in March — and it is the only reward on this board that
+        // other students can SEE, which is what makes a league competitive
+        // rather than a private score.
+        crest:           podiumIsCurrent(p.extra?.league_award, weekStartStr)
+          ? p.extra.league_award.crest : null,
+        // What they BOUGHT and chose to wear, drawn only where no podium crest
+        // outranks it — the earned mark is the one with information in it.
+        crest_skin:      crestOf(p)?.shape || null,
       };
     });
 
@@ -9060,6 +9171,10 @@ app.post("/local-ai/fn/getLeagueStanding", async (req, res) => {
         promote_count: LEAGUES_SCALE_MODE === "tiered" ? LEAGUE_PROMOTE_COUNT : 0,
         demote_count:  LEAGUES_SCALE_MODE === "tiered" ? LEAGUE_DEMOTE_COUNT  : 0,
         group_size:    LEAGUE_GROUP_SIZE,
+        // What finishing well actually pays, SENT rather than restated in the
+        // page — the mirror rule, on the number a student weighs a week of
+        // effort against.
+        podium_xp:     LEAGUE_XP,
       },
       me: {
         user_email:    user.email,
@@ -9067,6 +9182,9 @@ app.post("/local-ai/fn/getLeagueStanding", async (req, res) => {
         compete_score: rows.find(r => r.is_me)?.compete_score ?? 0,
         board_sits:    rows.find(r => r.is_me)?.board_sits ?? 0,
         board_min_questions: BOARD_MIN_QUESTIONS,
+        active_days:   rows.find(r => r.is_me)?.active_days ?? 0,
+        avg_accuracy:  rows.find(r => r.is_me)?.avg_accuracy ?? 0,
+        crest:         rows.find(r => r.is_me)?.crest ?? null,
         weekly_xp:     mem.weekly_xp ?? 0,
         tier:          mem.tier,
         is_anonymous: mem.is_anonymous,
@@ -9766,11 +9884,56 @@ async function grantWeeklyCred(profile) {
   const week = marketWeekKey();
   if (profile.cred_granted_week === week) return profile;
 
-  // `total_xp` rather than the stored `current_level`: every other screen in
-  // the app derives from total_xp, and the data export was once the one place
-  // able to print a stale level off the column. The tier is a number, so a
-  // junk or missing XP total lands on tier 1 — the floor, never the ceiling.
-  const grant = grantForTier(rankTierFromXP(profile.total_xp));
+  // ── THE LEAGUE PAYS THE GRANT ───────────────────────────────────────────
+  // The week's finish, not the all-time rank. `settleLeagueGroup` has been
+  // computing `final_position` every week and granting nothing with it, so the
+  // league decided a promotion and then had no consequence a student could
+  // spend. See `grantForLeague`.
+  //
+  // The FALLBACK is the old rank-tier grant, and it is not a formality: a new
+  // account, or anybody the league has not placed yet, would otherwise be
+  // granted the floor on their first week and arrive on the floor unable to
+  // take a side. `total_xp` rather than the stored `current_level`, because
+  // every other screen derives from it and the column can be stale.
+  let grant = grantForTier(rankTierFromXP(profile.total_xp));
+  let from = { source: "rank", tier: rankTierFromXP(profile.total_xp) };
+  try {
+    const { data: last } = await supabaseAdmin
+      .from("league_memberships")
+      .select("final_position, tier, week_start, league_group_id")
+      .eq("user_email", profile.created_by || profile.user_email)
+      .not("final_position", "is", null)
+      .order("week_start", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (last && Number.isFinite(Number(last.final_position))) {
+      // How many people that finish was against. A position means nothing
+      // without it: 20th is a good week in a group of 40 and the worst
+      // possible one in a group of 20.
+      const { count } = await supabaseAdmin.from("league_memberships")
+        .select("id", { count: "exact", head: true })
+        .eq("league_group_id", last.league_group_id);
+      last._group_size = count || LEAGUE_GROUP_SIZE;
+      // The tier is a NAME in the database and an INDEX in the model —
+      // `credStore.js` deliberately takes a number so `LEAGUE_TIERS` is not
+      // written down twice. An unrecognised name lands at index 0, the floor.
+      grant = grantForLeague({
+        tierIndex: Math.max(0, LEAGUE_TIERS.indexOf(last.tier)),
+        position: Number(last.final_position),
+        // In global mode the whole board is ONE group of unlimited size, so
+        // the fixed 30 would make 20th of 40 read as last. The group's real
+        // size is what the finish is a fraction of.
+        groupSize: LEAGUES_SCALE_MODE === "tiered"
+          ? LEAGUE_GROUP_SIZE : (last._group_size || LEAGUE_GROUP_SIZE),
+        tiered: LEAGUES_SCALE_MODE === "tiered",
+      });
+      from = { source: "league", tier: last.tier, position: Number(last.final_position) };
+    }
+  } catch (e) {
+    // A missing table or an unreadable row must not cost somebody their week:
+    // the rank-tier fallback above already holds a real figure.
+    console.warn("[markets] league grant lookup failed:", e?.message);
+  }
   const held = Math.max(0, Number(profile.cred_balance) || 0);
   const next = Math.min(CRED_BALANCE_CAP, Math.max(held, grant));
   const { error } = await supabaseAdmin.from("user_profiles")
@@ -9783,7 +9946,10 @@ async function grantWeeklyCred(profile) {
     console.warn("[markets] cred grant failed:", error.message);
     return profile;
   }
-  return { ...profile, cred_balance: next, cred_granted_week: week };
+  // Rides on the profile object rather than a column: it is a FACT ABOUT THIS
+  // GRANT, recomputed every time it is needed, so it cannot go stale the way a
+  // stored copy would — the rule `redoQueue` and `subjectHub` already keep.
+  return { ...profile, cred_balance: next, cred_granted_week: week, _grant_from: from };
 }
 
 // ─── Priors ─────────────────────────────────────────────────────────────────
@@ -10741,21 +10907,353 @@ app.post("/local-ai/fn/buyWithCred", async (req, res) => {
       return res.status(409).json({ error: "Your balance changed. Nothing was charged — try again." });
     }
 
-    // EVERY EFFECT ON THIS SHELF IS RECORDED BY THE PATCH ITSELF — a cosmetic
-    // in `cred_owned`, a consumable in `cred_held` — so the write that charged
-    // is the write that granted, and the two cannot come apart. That was not
-    // true while cred could buy chips: the effect was a second act after the
-    // charge, with no refund path to unwind it, which is why this handler used
-    // to carry a "charged but not granted" branch. It has nothing to do now.
+    // ── A CONSUMABLE GRANTS THE COLUMN THAT ALREADY EXISTS ────────────────
+    // The streak shield is the one item whose effect lives outside `extra`:
+    // `user_profiles.streak_shields` has existed since migration 0020 and
+    // `updateStreak` already spends one to cover a slipped day. Writing a
+    // second freeze into `extra.cred_held` built a mechanism beside a working
+    // one, which is how an app starts disagreeing with itself — so the item
+    // declares its `column` and this grants it.
+    //
+    // It is a SECOND write, which the chips door's removal was supposed to end,
+    // and the ordering rule still holds: the charge landed first, so a failure
+    // here is the recoverable direction and is logged loudly rather than
+    // silently swallowed.
+    const bought = CATALOGUE.find((i) => i.id === item_id);
+    let granted = null;
+    if (bought?.column === "streak_shields") {
+      const held = Math.max(0, Number(profile.streak_shields) || 0);
+      const { error: cErr } = await supabaseAdmin.from("user_profiles")
+        .update({ streak_shields: held + 1 })
+        .eq("id", profile.id);
+      if (cErr) {
+        console.error("[buyWithCred] CHARGED BUT SHIELD NOT GRANTED:", profile.id, cErr.message);
+        return res.status(500).json({
+          error: "Charged, but the shield did not land. Contact support and quote your email.",
+        });
+      }
+      granted = { streak_shields: held + 1 };
+    }
+
+    // EVERY OTHER EFFECT IS RECORDED BY THE PATCH ITSELF — a cosmetic in
+    // `cred_owned` — so the write that charged is the write that granted.
     return res.json({
       success: true,
       cred_balance: written.cred_balance,
       extra: written.extra,
       effect: _effect,
+      granted,
     });
   } catch (e) {
     console.error("[buyWithCred]", e);
     return res.status(500).json({ error: "Couldn't complete that." });
+  }
+});
+
+/**
+ * XP → credits. `total_xp` IS NEVER TOUCHED and that is the whole guarantee.
+ *
+ * The ATAR is computed from the `xp_events` log rather than from this column,
+ * so even a debit would not move it — but a debit WOULD move level and rank,
+ * which is the failure `market.js` refuses about staking XP, and server.mjs
+ * already guards the column as strictly additive. So conversion spends from a
+ * BUDGET instead: `extra.xp_converted` records what has been converted and the
+ * remainder is what is left. Each point of XP converts once, ever.
+ */
+app.post("/local-ai/fn/convertXP", async (req, res) => {
+  const user = await authenticateRequest(req);
+  if (!user) return res.status(401).json({ error: "Not signed in." });
+  if (!supabaseAdmin) return res.status(503).json({ error: "Unavailable." });
+
+  try {
+    const { xp } = req.body || {};
+    const week = marketWeekKey();
+    let profile = await loadUserProfile(user.email);
+    if (!profile) return res.status(404).json({ error: "No profile found." });
+    profile = await grantWeeklyCred(profile);
+
+    const quote = convertQuote(profile, xp, week);
+    if (!quote.ok) return res.status(400).json({ error: quote.reason });
+
+    const patch = convertPatch(profile, xp, week);
+    if (!patch) return res.status(400).json({ error: "That conversion is not available." });
+    const { _converted, ...columns } = patch;
+
+    // THE COMPARE-AND-SET, the same one `buyWithCred` keeps: two taps on a slow
+    // connection are two requests that both read the same balance, and
+    // PostgREST has no transaction across calls. The second matches no rows.
+    const { data: written, error } = await supabaseAdmin.from("user_profiles")
+      .update(columns)
+      .eq("id", profile.id)
+      .eq("cred_balance", profile.cred_balance)
+      .select("id, cred_balance, extra, total_xp")
+      .maybeSingle();
+    if (error) {
+      console.error("[convertXP] write failed:", error.code, error.message);
+      return res.status(500).json({ error: "Couldn't convert. Nothing was taken." });
+    }
+    if (!written) {
+      return res.status(409).json({ error: "Your balance changed. Nothing was taken — try again." });
+    }
+
+    return res.json({
+      success: true,
+      converted: _converted,
+      cred_balance: written.cred_balance,
+      // Echoed so the client can SEE it did not move, which is the one claim
+      // this endpoint makes that a student has to be able to check.
+      total_xp: written.total_xp,
+      convertible_xp: convertibleXP(written),
+      week_room: Math.max(0, WEEKLY_CONVERT_MAX - convertedThisWeek(written, week)),
+    });
+  } catch (e) {
+    console.error("[convertXP]", e);
+    return res.status(500).json({ error: "Couldn't convert." });
+  }
+});
+
+/** Wear something already owned, or take it off. The client decides what to
+ *  SHOW and the server decides what is TRUE — `equipPatch` refuses anything
+ *  `cred_owned` does not carry, so a crafted request cannot wear a gilt back
+ *  nobody paid for. */
+app.post("/local-ai/fn/equipCosmetic", async (req, res) => {
+  const user = await authenticateRequest(req);
+  if (!user) return res.status(401).json({ error: "Not signed in." });
+  if (!supabaseAdmin) return res.status(503).json({ error: "Unavailable." });
+
+  try {
+    const { item_id, slot } = req.body || {};
+    const profile = await loadUserProfile(user.email);
+    if (!profile) return res.status(404).json({ error: "No profile found." });
+
+    const patch = item_id ? equipPatch(profile, item_id) : unequipPatch(profile, slot);
+    if (!patch) return res.status(400).json({ error: "You do not own that." });
+
+    const { data: written, error } = await supabaseAdmin.from("user_profiles")
+      .update(patch)
+      .eq("id", profile.id)
+      .select("id, extra")
+      .maybeSingle();
+    if (error) {
+      console.error("[equipCosmetic] write failed:", error.code, error.message);
+      return res.status(500).json({ error: "Couldn't change that." });
+    }
+    return res.json({ success: true, extra: written?.extra || patch.extra });
+  } catch (e) {
+    console.error("[equipCosmetic]", e);
+    return res.status(500).json({ error: "Couldn't change that." });
+  }
+});
+
+/** How many pranks this student has sent this week. */
+async function prankSendCount(email, week) {
+  if (!supabaseAdmin) return 0;
+  const { count } = await supabaseAdmin.from("pranks")
+    .select("id", { count: "exact", head: true })
+    .eq("created_by", email).eq("week_start", week);
+  return count ?? 0;
+}
+
+/**
+ * The friends a prank may be sent to, with their names.
+ *
+ * It does NOT say which of them have opted out or are at their weekly ceiling.
+ * That is checked at send time and refused with a reason that cannot tell the
+ * two apart — a picker that greyed somebody out would publish "this person has
+ * turned pranks off" to everybody who opens the shelf, and the person who
+ * turned them off is exactly who a determined sender would then work around.
+ */
+async function prankableFriends(email) {
+  if (!supabaseAdmin || !email) return [];
+  try {
+    const [{ data: a }, { data: b }] = await Promise.all([
+      supabaseAdmin.from("friendships").select("recipient_email, recipient_username, recipient_name")
+        .eq("requester_email", email).eq("status", "accepted"),
+      supabaseAdmin.from("friendships").select("requester_email, requester_username, requester_name")
+        .eq("recipient_email", email).eq("status", "accepted"),
+    ]);
+    const out = [
+      ...(a || []).map((f) => ({ email: f.recipient_email, name: f.recipient_username || f.recipient_name })),
+      ...(b || []).map((f) => ({ email: f.requester_email, name: f.requester_username || f.requester_name })),
+    ].filter((f) => f.email && f.email !== email);
+    // One row per person: a pair can appear in both directions if a duplicate
+    // friendship was ever written, and a picker listing somebody twice reads
+    // as a bug on the one screen that has to feel considered.
+    return [...new Map(out.map((f) => [f.email, f])).values()]
+      .map((f) => ({ email: f.email, name: f.name || f.email.split("@")[0] }));
+  } catch (e) {
+    console.warn("[pranks] friend lookup failed:", e?.message);
+    return [];
+  }
+}
+
+/** Is this a mutual, ACCEPTED friendship? Both directions, because
+ *  `friendships` stores one row with a requester and a recipient. */
+async function arePranksMutual(me, them) {
+  if (!supabaseAdmin || !me || !them || me === them) return false;
+  const { data } = await supabaseAdmin
+    .from("friendships")
+    .select("id")
+    .eq("status", "accepted")
+    .or(`and(requester_email.eq.${me},recipient_email.eq.${them}),` +
+        `and(requester_email.eq.${them},recipient_email.eq.${me})`)
+    .limit(1);
+  return Array.isArray(data) && data.length > 0;
+}
+
+/**
+ * Send a prank. Every bound in `pranks.js` is checked HERE, because the client
+ * half is a courtesy and this is the half that is true.
+ *
+ * The ORDERING is the careful part: the recipient's own limits are checked
+ * BEFORE any credits move, so somebody who has opted out never costs a sender
+ * anything — a refusal that charged would make "did it take my credits" a way
+ * of finding out who has opted out, and the person who opted out is exactly who
+ * a determined sender would then work around.
+ */
+app.post("/local-ai/fn/sendPrank", async (req, res) => {
+  const user = await authenticateRequest(req);
+  if (!user) return res.status(401).json({ error: "Not signed in." });
+  if (!supabaseAdmin) return res.status(503).json({ error: "Unavailable." });
+
+  try {
+    const { kind, target_email } = req.body || {};
+    const spec = prankKind(kind);
+    if (!spec) return res.status(400).json({ error: "That isn't something you can send." });
+
+    const me = user.email;
+    const them = String(target_email || "").trim().toLowerCase();
+    if (!them || them === me) return res.status(400).json({ error: "Pick a friend to send it to." });
+
+    let profile = await loadUserProfile(me);
+    if (!profile) return res.status(404).json({ error: "No profile found." });
+    profile = await grantWeeklyCred(profile);
+
+    const week = marketWeekKey();
+    const [isFriend, targetRow, sentRes, gotRes] = await Promise.all([
+      arePranksMutual(me, them),
+      supabaseAdmin.from("user_profiles").select("extra, username, full_name")
+        .eq("created_by", them).limit(1).maybeSingle(),
+      supabaseAdmin.from("pranks").select("id", { count: "exact", head: true })
+        .eq("created_by", me).eq("week_start", week),
+      supabaseAdmin.from("pranks").select("id", { count: "exact", head: true })
+        .eq("target_email", them).eq("week_start", week),
+    ]);
+
+    const verdict = canSendPrank({
+      kind, isFriend,
+      target: targetRow?.data || null,
+      sentThisWeek: sentRes?.count ?? 0,
+      receivedThisWeek: gotRes?.count ?? 0,
+    });
+    if (!verdict.ok) return res.status(400).json({ error: verdict.reason });
+
+    // ── The charge, compare-and-set, exactly as `buyWithCred` does it ──────
+    const held = Math.max(0, Number(profile.cred_balance) || 0);
+    if (held < spec.price) {
+      return res.status(400).json({ error: `You need ${spec.price - held} more credits.` });
+    }
+    const { data: charged, error: chargeErr } = await supabaseAdmin.from("user_profiles")
+      .update({ cred_balance: held - spec.price })
+      .eq("id", profile.id)
+      .eq("cred_balance", profile.cred_balance)
+      .select("id, cred_balance")
+      .maybeSingle();
+    if (chargeErr) {
+      console.error("[sendPrank] charge failed:", chargeErr.message);
+      return res.status(500).json({ error: "Couldn't send that. Nothing was charged." });
+    }
+    if (!charged) {
+      return res.status(409).json({ error: "Your balance changed. Nothing was charged — try again." });
+    }
+
+    const { error: insErr } = await supabaseAdmin.from("pranks").insert({
+      created_by: me, target_email: them, kind: spec.id, week_start: week,
+    });
+    if (insErr) {
+      // THE ESCROW IS UNWOUND, the rule `takePosition` already keeps: the
+      // charge landed before the row exists and there is no transaction across
+      // PostgREST calls, so a failed insert refunds directly rather than
+      // through a cap-bounded path that would quietly keep part of it.
+      await supabaseAdmin.from("user_profiles")
+        .update({ cred_balance: held }).eq("id", profile.id);
+      console.error("[sendPrank] insert failed, refunded:", insErr.message);
+      return res.status(500).json({ error: "Couldn't send that. Your credits are back." });
+    }
+
+    return res.json({
+      success: true,
+      cred_balance: charged.cred_balance,
+      sent_this_week: (sentRes?.count ?? 0) + 1,
+      send_max: PRANK_SEND_MAX,
+    });
+  } catch (e) {
+    console.error("[sendPrank]", e);
+    return res.status(500).json({ error: "Couldn't send that." });
+  }
+});
+
+/**
+ * What has arrived for me and has not played yet, and it is marked SEEN on
+ * delivery rather than on dismissal — the rule `SettlementReveal` already
+ * keeps. A student who closes the tab has still had it put in front of them,
+ * and the alternative is a prank that replays every time they open the app,
+ * which is the pile-on the receive cap exists to prevent arriving by a
+ * different route.
+ */
+app.post("/local-ai/fn/getPranks", async (req, res) => {
+  const user = await authenticateRequest(req);
+  if (!user) return res.status(401).json({ error: "Not signed in." });
+  if (!supabaseAdmin) return res.json({ success: true, pranks: [] });
+
+  try {
+    const me = user.email;
+    const profile = await loadUserProfile(me);
+    // Opted out is opted out: nothing is fetched and nothing is marked, so
+    // turning it back on does not replay a term of pranks at somebody.
+    if (prankOptedOut(profile)) return res.json({ success: true, pranks: [], opted_out: true });
+
+    const { data, error } = await supabaseAdmin
+      .from("pranks")
+      .select("id, kind, created_by, created_date")
+      .eq("target_email", me)
+      .is("seen_at", null)
+      .order("created_date", { ascending: true })
+      .limit(PRANK_RECEIVE_MAX);
+    if (error) {
+      // A missing table means migration 0038 has not been applied. Silence is
+      // the right failure — the app works, nothing plays, and the student is
+      // not shown an error about a feature they did not ask for.
+      return res.json({ success: true, pranks: [] });
+    }
+
+    const rows = data || [];
+    if (rows.length) {
+      await supabaseAdmin.from("pranks")
+        .update({ seen_at: new Date().toISOString() })
+        .in("id", rows.map((r) => r.id));
+    }
+
+    // THE SENDER IS NAMED. A prank with nobody's name on it is not what this
+    // shipped as, so a row whose sender cannot be resolved is dropped rather
+    // than delivered anonymously.
+    const senders = [...new Set(rows.map((r) => r.created_by))];
+    const { data: who } = senders.length
+      ? await supabaseAdmin.from("user_profiles")
+          .select("created_by, username, full_name").in("created_by", senders)
+      : { data: [] };
+    const nameOf = new Map((who || []).map((w) =>
+      [w.created_by, w.username || (w.full_name || "").split(/\s+/)[0]]));
+
+    return res.json({
+      success: true,
+      pranks: rows
+        .map((r) => ({ id: r.id, kind: r.kind, from: nameOf.get(r.created_by) || null }))
+        .filter((r) => r.from && prankKind(r.kind)),
+    });
+  } catch (e) {
+    console.error("[getPranks]", e);
+    return res.json({ success: true, pranks: [] });
   }
 });
 
@@ -10765,6 +11263,7 @@ app.post("/local-ai/fn/getCredStore", async (req, res) => {
   if (!user) return res.status(401).json({ error: "Not signed in." });
   if (!supabaseAdmin) return res.status(503).json({ error: "Store unavailable." });
   try {
+    const week = marketWeekKey();
     let profile = await loadUserProfile(user.email);
     if (!profile) return res.status(404).json({ error: "No profile found." });
     profile = await grantWeeklyCred(profile);
@@ -10774,7 +11273,39 @@ app.post("/local-ai/fn/getCredStore", async (req, res) => {
       success: true,
       cred: Math.max(0, Number(profile.cred_balance) || 0),
       tier,
-      weekly_grant: grantForTier(tier),
+      weekly_grant: profile._grant_from
+        ? (profile._grant_from.source === "league"
+            ? grantForLeague({
+                tierIndex: Math.max(0, LEAGUE_TIERS.indexOf(profile._grant_from.tier)),
+                position: profile._grant_from.position,
+                groupSize: LEAGUE_GROUP_SIZE,
+              })
+            : grantForTier(profile._grant_from.tier))
+        : grantForTier(tier),
+      // WHERE the grant came from, so the panel explains the number rather
+      // than restating a reason that stopped being true when it moved.
+      grant_from: profile._grant_from || { source: "rank", tier },
+      // What converting looks like right now, computed HERE for the reason the
+      // per-item verdict is: a client that works out its own allowance has
+      // become a second rule, and the first disagreement is a slider that
+      // offers an amount the server refuses.
+      xp: {
+        convertible: convertibleXP(profile),
+        per_credit: XP_PER_CREDIT,
+        week_room: Math.max(0, WEEKLY_CONVERT_MAX - convertedThisWeek(profile, week)),
+        week_max: WEEKLY_CONVERT_MAX,
+      },
+      // WHO CAN BE SENT TO, resolved here because the client has no way to —
+      // `friendships` stores one row with a requester and a recipient, so a
+      // mutual friendship is two queries, and a client that could list other
+      // students' addresses to find out is not something this app offers.
+      friends: await prankableFriends(user.email),
+      pranks: {
+        kinds: PRANK_LIST,
+        sent_this_week: await prankSendCount(user.email, week),
+        send_max: PRANK_SEND_MAX,
+        opted_out: prankOptedOut(profile),
+      },
       owned: Array.isArray(profile.extra?.cred_owned) ? profile.extra.cred_owned : [],
       held: profile.extra?.cred_held || {},
       equipped: profile.extra?.cred_equipped || {},
