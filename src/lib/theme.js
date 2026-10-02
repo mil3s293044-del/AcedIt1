@@ -18,9 +18,9 @@
  *   dark     always dark.
  *   auto     follow the clock — light by day, dark after dark.
  *
- * `auto` is not a gimmick in this app specifically. The dashboard already
- * lights its table by time of day through tableHour(), so the product has had
- * a sense of morning and night in it from the start; this puts the rest of the
+ * `auto` is not a gimmick in this app specifically. The greeting has said
+ * "Morning, Miles" since the dashboard was written, so the product has had a
+ * sense of morning and night in it from the start; this puts the rest of the
  * app on the same clock. It is also just correct for the use case, which is a
  * student opening this at eleven at night.
  *
@@ -42,10 +42,9 @@ export const STORAGE_KEY = "acedit:theme";
 /**
  * Dark from this hour, light from the other.
  *
- * 19:00 to 06:00, which is a little later than tableHour()'s "evening" at 17.
- * Deliberate: the table's warm evening wash is a decoration and can start at
- * five, but turning the entire interface dark while it is still bright outside
- * reads as a fault rather than a feature.
+ * 19:00 to 06:00, which is later than the greeting calls evening. Deliberate:
+ * a word in a sentence can turn at five, but turning the entire interface dark
+ * while it is still bright outside reads as a fault rather than a feature.
  */
 export const DARK_FROM_HOUR = 19;
 export const LIGHT_FROM_HOUR = 6;
