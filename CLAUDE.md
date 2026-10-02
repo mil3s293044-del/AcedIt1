@@ -1368,6 +1368,31 @@ explanation as the defect. That is the false positive `fnResult.test.mjs` and
 than a red suite: the obvious way to make it green again is to delete the
 sentence that says why. Comments are stripped before both scans now.
 
+**THE SLOT IS TWO NUMBERS, because the board is one column on a phone.** 316px
+is the shortest real card at 384px wide; at a 360px phone the card is 328 wide
+and its title takes a third line — 338px, measured the same way. Six of those
+stacked is another 130px of jump, which is the bug `SLOT_H` was added to close,
+left behind on the half of the traffic that is phones. They live on the grid as
+`--slot-h` rather than as two constants and a template string: a class cannot be
+assembled, and a second copy of a measured number is the mirror this codebase
+keeps deleting.
+
+**AND HE IS NEVER OVER A CARD.** He stood at the board's left edge, on top of
+the first one, for the whole wait — and the cards are the thing a student is
+there to watch arrive. He deals from ABOVE the grid: his feet sit on the chip
+row and he rises into the tab strip, so the only things he overlaps are two
+rows of placeholder pills. He cannot be moved further OUT instead — `Room` pads
+the page by 16/24px and `max-w-6xl` leaves nothing at 1152, so a larger negative
+offset is a horizontal scrollbar at some width. Up is the direction with room in
+it, and the lane is MEASURED: about 118px between the headline's baseline and
+the grid, so he is sized to fit it rather than sized first and clipped after.
+
+**THE THROW IS ALWAYS INWARD, and that is a constraint rather than a choice.**
+The board is ONE full-width column on a phone, so a card starting to the RIGHT
+of its slot extends the page and puts a horizontal scrollbar on it; starting to
+the left runs into the margin and costs nothing. Measured: +90px of start offset
+was 74px of overflow at 390.
+
 Draw it with `scripts/_floorProbe.jsx?v=deal`, and judge it on the CLOCK rather
 than on one frame — the deal, the turn and the finish are three different
 screens.
@@ -2500,6 +2525,47 @@ Boss.
 it is the only surface where mission XP can be claimed, and removing a payout is
 a product call. It is mounted nowhere — read the note at the top of the file
 before rehoming it.
+
+## Ranked named the weakest component and gave nobody a door
+
+**A BAR WITH NO WAY THROUGH IS A DIAGNOSIS.** The panel drew the five ATAR
+components with their evidence, named the weakest in a sentence, and left every
+one of them to the student to work out which screen moves it. That is the same
+failure as a percentage with no evidence under it, one step further along — on
+the number the whole app is standardised around.
+
+`COMPONENT_MOVE` (`ranked.js`) is the door, and it is a DEEP LINK where one
+exists rather than a page: `/Study?tab=pomodoro` lands on the timer and not on
+the technique grid, `/Goals?plan=week` opens the plan dialog. That is
+`startFromSuggestion`'s rule — a suggestion that says it will build the thing
+has to build it.
+
+**TWO DELIBERATELY DO NOT DEEP-LINK**, and saying so is the honest answer rather
+than a shortfall. *Breadth*'s action IS choosing a technique you have not used,
+and Study's landing screen is that chooser — picking one FOR them would need the
+technique families the component only stores a COUNT of, so naming one would be
+a guess. *Consistency* counts DAYS: there is no screen that adds one, so it goes
+to today's move rather than pretending otherwise.
+
+**EACH LINK STATES WHAT TEN POINTS IS WORTH**, from `liftFor` — the same
+differenced model Today's Play and `StandingRail` already use, so it is
+checkable rather than a number the page invented. A gain that rounds to +0.00
+prints no figure and a component with no headroom is offered no action at all:
+a row whose number is not real teaches a student that none of the numbers here
+are, which is the rule the dashboard rail keeps.
+
+**FIVE QUIET LINKS AND ONE LOUD BUTTON.** Five filled buttons in a panel that
+already carries a primary one below reads as a toolbar; the loud one stays where
+it belongs, on the component that is actually costing them.
+
+`COMPONENT_PAGE` used to live inside `StandingRail` as its own object — the
+second copy this codebase keeps deleting, and Ranked needed the same mapping.
+`rankedMove.test.mjs` holds all of it: every ATAR component has a move, every
+page is a real route, the map is not restated, and **every query it emits is
+read by the page that has to honour it** — a link that lands on the right page
+while the thing it promised to open does not is the half-wired shape this app
+has met over and over. Verified by breaking the reader and by pointing one move
+at a page that does not exist.
 
 ## The first session DOES ONE REAL THING
 
@@ -4196,6 +4262,10 @@ stranger.
 - `src/lib/achievements.js` — the catalogue, its progress functions and the
   showcase ordering; `buildAchievementStats` in `server.mjs` is the only reader
   of the database, and adding an achievement means adding its stat there too
+- `src/lib/ranked.js` `COMPONENT_MOVE` + `rankedMove.test.mjs` — the one map
+  from an ATAR component to the thing that raises it, deep-linked where a deep
+  link exists. The test checks every query it emits is actually READ by the page
+  it points at; draw the panel with `scripts/_floorProbe.jsx?v=ranked`
 - `src/components/ranked/AchievementUnlock.jsx`, `CrestRow.jsx` — the moment,
   and the badges beside somebody's name
 - `src/components/shared/MarkdownMath.jsx`, `LatexRenderer.jsx` — KaTeX

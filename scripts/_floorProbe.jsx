@@ -46,6 +46,9 @@ import SourceRow from "@/components/study/SourceRow";
 import { Flag, Plus, Scale } from "lucide-react";
 import ActiveRecall from "@/components/study/ActiveRecall";
 import BlurtingMethod from "@/components/study/BlurtingMethod";
+import { ArrowRight, Target } from "lucide-react";
+import { COMPONENT_MOVE } from "@/lib/ranked";
+import { liftFor } from "@/lib/atarLift";
 
 const which = new URLSearchParams(location.search).get("v") || "deal";
 
@@ -923,6 +926,84 @@ views.setup = () => (
         </div>
     </div>
 );
+
+/* ── ?v=ranked — the five ATAR components, each with a door ─────────────────
+ *
+ * Ranked is auth-gated and the panel needs real `atar_components`, so this
+ * draws the bars against a fixture through the REAL `liftFor` and
+ * `COMPONENT_MOVE` — the figures and the labels are the page's own, only the
+ * component values are made up. It carries a MAXED component deliberately:
+ * that branch offers no action and prints no figure, and it is the one a
+ * fixture of ordinary numbers never reaches.
+ */
+const RANKED_COMPONENTS = {
+    mastery: 68, consistency: 72, effort: 41, breadth: 55, planning: 100,
+    quiz_marks: 124, cards_reviewed: 88, study_days: 14, minutes: 247,
+    technique_families: 3, technique_target: 5,
+};
+const RANKED_META = [
+    { key: "mastery", label: "Mastery", bar: "bg-chart-4", evidence: "124 quiz marks · 88 cards" },
+    { key: "consistency", label: "Consistency", bar: "bg-streak", evidence: "14 of 20 days" },
+    { key: "effort", label: "Effort", bar: "bg-xp", evidence: "4h 7m of ~20h" },
+    { key: "breadth", label: "Breadth", bar: "bg-chart-3", evidence: "3 of 5 techniques" },
+    { key: "planning", label: "Planning", bar: "bg-primary", evidence: "every goal kept" },
+];
+
+views.ranked = () => {
+    const weakest = { key: "effort", value: 41, action: "Book a focused block. This is minutes, plainly." };
+    return (
+        <div className="min-h-screen bg-background p-4 sm:p-6">
+            <div className="max-w-3xl mx-auto card-soft p-5 sm:p-6 space-y-4">
+                <div className="grid sm:grid-cols-2 gap-x-5 gap-y-3">
+                    {RANKED_META.map((c) => {
+                        const v = RANKED_COMPONENTS[c.key];
+                        const move = COMPONENT_MOVE[c.key];
+                        const lift = liftFor(RANKED_COMPONENTS, c.key, 10);
+                        const maxed = lift != null && lift.headroom <= 0;
+                        const gain = lift && lift.gain >= 0.005 ? lift.gain.toFixed(2) : null;
+                        return (
+                            <div key={c.key}>
+                                <div className="flex items-baseline justify-between mb-1 gap-2">
+                                    <span className="text-xs font-bold text-foreground">{c.label}</span>
+                                    <span className="text-xs font-bold text-foreground tabular-nums">{v}</span>
+                                </div>
+                                <div className="h-1.5 bg-secondary rounded-full overflow-hidden">
+                                    <div className={`h-full rounded-full ${c.bar}`} style={{ width: `${v}%` }} />
+                                </div>
+                                <p className="text-[10px] text-muted-foreground/70 mt-0.5 truncate">{c.evidence}</p>
+                                {move && (maxed ? (
+                                    <p className="text-[11px] font-bold text-muted-foreground mt-0.5">
+                                        Nothing left to gain here.
+                                    </p>
+                                ) : (
+                                    <span className="inline-flex items-center gap-1 mt-0.5 text-[11px] font-bold text-foreground">
+                                        {move.label}
+                                        {gain && <span className="text-primary tabular-nums">+{gain}</span>}
+                                        <ArrowRight className="w-3 h-3" />
+                                    </span>
+                                ))}
+                            </div>
+                        );
+                    })}
+                </div>
+
+                <div className="rounded-2xl border-2 border-border bg-secondary/40 p-3
+                    flex flex-wrap items-center gap-x-2.5 gap-y-2">
+                    <Target className="w-4 h-4 text-foreground flex-shrink-0" />
+                    <p className="text-xs text-muted-foreground leading-snug flex-1 min-w-[12rem]">
+                        <span className="font-bold text-foreground">Effort is your ceiling right now ({weakest.value}).</span>{" "}
+                        {weakest.action}
+                    </p>
+                    <span className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl
+                        bg-foreground text-background text-xs font-bold flex-shrink-0">
+                        {COMPONENT_MOVE[weakest.key].label}
+                        <ArrowRight className="w-3.5 h-3.5" />
+                    </span>
+                </div>
+            </div>
+        </div>
+    );
+};
 
 ReactDOM.createRoot(document.getElementById("root")).render(
     React.createElement(views[which] || views.deal));

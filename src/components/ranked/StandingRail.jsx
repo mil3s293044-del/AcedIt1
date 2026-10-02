@@ -32,7 +32,7 @@ import { motion } from "framer-motion";
 import { Link } from "react-router-dom";
 import { ChevronUp, ChevronDown, ArrowRight, Target, Crown } from "lucide-react";
 import { createPageUrl } from "@/utils";
-import { avatarHue, initialsOf, COMPONENT_ACTION } from "@/lib/ranked";
+import { avatarHue, initialsOf, COMPONENT_ACTION, moveHref } from "@/lib/ranked";
 import { bestLever } from "@/lib/atarLift";
 
 const TONE_PILL = {
@@ -44,12 +44,6 @@ const TONE_PILL = {
 const COMPONENT_LABEL = {
     mastery: "Mastery", consistency: "Consistency", effort: "Effort",
     breadth: "Breadth", planning: "Planning",
-};
-
-/** Where each component is actually moved. Every one has a screen. */
-const COMPONENT_PAGE = {
-    mastery: "MistakeBank", consistency: "Dashboard", effort: "Study",
-    breadth: "Study", planning: "Goals",
 };
 
 function Face({ name, size = 28 }) {
@@ -181,7 +175,7 @@ export default function StandingRail({
                     <p className="text-[11px] text-muted-foreground leading-snug mt-1.5">
                         {COMPONENT_ACTION[lever.key]}
                     </p>
-                    <Link to={createPageUrl(COMPONENT_PAGE[lever.key] || "Dashboard")}
+                    <Link to={moveHref(lever.key, createPageUrl) || createPageUrl("Dashboard")}
                         className="inline-flex items-center gap-1.5 text-xs font-black text-primary mt-2.5 hover:underline">
                         Go and move it <ArrowRight className="w-3.5 h-3.5" />
                     </Link>

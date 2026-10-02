@@ -166,6 +166,50 @@ export const COMPONENT_ACTION = {
     planning:    "Set a goal or plan a block, then actually keep it.",
 };
 
+/**
+ * WHERE EACH COMPONENT IS ACTUALLY MOVED, and the exact thing to do there.
+ *
+ * ─── A BAR WITH NO DOOR IS A DIAGNOSIS ──────────────────────────────────────
+ * Ranked drew five components and named the weakest one in a sentence, and
+ * every one of them left the student to work out which screen moves it. The
+ * score is the thing the whole app is standardised around; "your planning is
+ * 22" with no way through is the same failure as a percentage with no evidence
+ * under it, one step further along.
+ *
+ * It is a DEEP LINK where one exists rather than a page: `/Study?tab=pomodoro`
+ * lands on the timer and not on the technique grid, which is the rule
+ * `startFromSuggestion` keeps — a suggestion that says it will build the thing
+ * has to build it.
+ *
+ * TWO OF THEM DELIBERATELY DO NOT DEEP-LINK, and that is the honest answer
+ * rather than a shortfall:
+ *   breadth      — the action IS choosing a technique you have not used, and
+ *                  Study's landing screen is that chooser. Picking one FOR
+ *                  them would need the technique families the component only
+ *                  stores a COUNT of, so naming one would be a guess.
+ *   consistency  — it counts DAYS. There is no screen that adds one; the only
+ *                  thing that moves it is coming back tomorrow, so it goes to
+ *                  the move for today rather than pretending otherwise.
+ *
+ * `COMPONENT_PAGE` used to live inside StandingRail as its own object, which
+ * is the second copy this codebase keeps deleting — Ranked now needs the same
+ * mapping, and two of them would have drifted the first time one changed.
+ */
+export const COMPONENT_MOVE = {
+    mastery:     { label: "Fix a dropped mark", page: "MistakeBank" },
+    consistency: { label: "Today's move",       page: "Dashboard" },
+    effort:      { label: "Start a block",      page: "Study", query: "?tab=pomodoro" },
+    breadth:     { label: "Pick a new one",     page: "Study" },
+    planning:    { label: "Plan this week",     page: "Goals", query: "?plan=week" },
+};
+
+/** The href for a component's move, or null for a key that has none. */
+export function moveHref(key, pageUrl) {
+    const m = COMPONENT_MOVE[key];
+    if (!m || typeof pageUrl !== "function") return null;
+    return pageUrl(m.page) + (m.query || "");
+}
+
 export function weakestComponent(components) {
     if (!components) return null;
     const keys = Object.keys(COMPONENT_ACTION).filter(k => typeof components[k] === "number");

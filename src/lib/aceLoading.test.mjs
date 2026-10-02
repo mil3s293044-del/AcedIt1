@@ -132,6 +132,12 @@ check("THE DEAL DRAWS THE WHOLE FLOOR, not just the cards", () => {
     }
     assert.match(deal, /lg:grid-cols-\[minmax\(0,1fr\)_300px\]/,
         "the board/tape split is gone, so the board moves sideways on load");
+    // AND HE IS NEVER OVER A CARD. He stood at the board's left edge, on top
+    // of the first one, for the whole wait — the cards being the thing the
+    // student is here to watch arrive. A NEGATIVE top is what lifts him clear
+    // of the grid into the chip and tab rows above it.
+    assert.match(deal, /-top-\[\d+px\]/,
+        "Ace is back down on the board, covering the first card");
 });
 
 check("A SLOT IS A REAL CARD'S HEIGHT, measured rather than guessed", () => {
@@ -140,12 +146,21 @@ check("A SLOT IS A REAL CARD'S HEIGHT, measured rather than guessed", () => {
     // component whose own header promises nothing jumps. 316 is the commonest
     // card (a weekly streak line); the taller kinds cannot be matched and the
     // common one is what makes the usual case seamless.
+    // AND IT IS NOT ONE NUMBER. The board is one column under `sm`, where a
+    // 360px phone draws a 328px card whose title takes a third line — 338px,
+    // measured the same way. A single desktop figure leaves the same jump on
+    // the half of the traffic that is phones.
     const deal = read("src/components/market/AceDeal.jsx");
-    const m = /const SLOT_H = (\d+)/.exec(deal);
-    assert.ok(m, "SLOT_H is gone — the slot height is hand-written again");
-    const h = Number(m[1]);
-    assert.ok(h >= 280 && h <= 460,
-        `SLOT_H is ${h}px, which is not the height of any card on that board`);
+    const hits = [...deal.matchAll(/--slot-h:(\d+)px/g)].map((m) => Number(m[1]));
+    assert.equal(hits.length, 2,
+        "the slot needs a phone height and a desktop one, published on the grid");
+    for (const h of hits) {
+        assert.ok(h >= 280 && h <= 460,
+            `${h}px is not the height of any card on that board`);
+    }
+    // The narrow one is the TALLER one: less width is more wrapping.
+    assert.ok(hits[0] > hits[1],
+        "the phone slot must be the taller of the two, or the fix is backwards");
 });
 
 check("THE LATTICE IS IN PIXELS, so a wide card is not a different deck", () => {

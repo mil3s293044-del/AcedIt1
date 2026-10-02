@@ -23,8 +23,10 @@
 import React, { useState, useEffect, useMemo } from "react";
 import { motion } from "framer-motion";
 import {
-    GraduationCap, Zap, Clock, Trophy, Info, Target, TrendingUp, Users,
+    GraduationCap, Zap, Clock, Trophy, Info, Target, TrendingUp, Users, ArrowRight,
 } from "lucide-react";
+import { Link } from "react-router-dom";
+import { createPageUrl } from "@/utils";
 import { base44 } from "@/api/base44Client";
 import HelpButton from "@/components/shared/HelpButton";
 import MyProfile from "@/components/ranked/MyProfile";
@@ -35,7 +37,9 @@ import WeekStrip from "@/components/ranked/WeekStrip";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
     standing, titlesFor, nextBand, weakestComponent, BAND_TONE,
+    COMPONENT_MOVE, moveHref,
 } from "@/lib/ranked";
+import { liftFor } from "@/lib/atarLift";
 import AceTip from "@/components/ace/AceTip";
 import { planningEvidence } from "@/lib/atarBands";
 import { AceLoading } from "@/components/ace/AceShuffle";
@@ -186,11 +190,35 @@ export default function Ranked() {
                                         sub={next ? `to ${next.name}` : "nothing above this"} />
                                 </div>
 
-                                {/* The five components. */}
-                                <div className="grid sm:grid-cols-2 gap-x-5 gap-y-2">
+                                {/* ── The five components, each with a door ──────────
+                                    A bar with no way through is a DIAGNOSIS. The panel
+                                    named the weakest one in a sentence and left every
+                                    component to the student to work out which screen
+                                    moves it — the same shape as a percentage with no
+                                    evidence under it, one step further along.
+
+                                    A quiet LINK rather than a filled button, five times
+                                    over: five buttons in a panel that already carries a
+                                    primary one below reads as a toolbar. The loud one
+                                    stays where it belongs, on the component that is
+                                    actually costing them. */}
+                                <div className="grid sm:grid-cols-2 gap-x-5 gap-y-3">
                                     {COMPONENT_META.map(c => {
                                         const comps = data?.my_components || {};
                                         const v = comps[c.key] ?? 0;
+                                        const move = COMPONENT_MOVE[c.key];
+                                        // What ten points on THIS component is worth, from
+                                        // the same differenced model Today's Play and
+                                        // StandingRail use — so it is checkable rather
+                                        // than a number the page invented.
+                                        const lift = data?.my_components ? liftFor(comps, c.key, 10) : null;
+                                        // A component with nothing left to gain is not
+                                        // offered an action, and a gain that rounds to
+                                        // +0.00 prints no figure: a rail row whose number
+                                        // is not real teaches a student that none of the
+                                        // numbers here are.
+                                        const maxed = lift != null && lift.headroom <= 0;
+                                        const gain = lift && lift.gain >= 0.005 ? lift.gain.toFixed(2) : null;
                                         return (
                                             <div key={c.key}>
                                                 <div className="flex items-baseline justify-between mb-1 gap-2">
@@ -207,6 +235,21 @@ export default function Ranked() {
                                                 <p className="text-[10px] text-muted-foreground/70 mt-0.5 truncate">
                                                     {data?.my_components ? c.evidence(comps) : c.hint}
                                                 </p>
+                                                {move && (maxed ? (
+                                                    <p className="text-[11px] font-bold text-muted-foreground mt-0.5">
+                                                        Nothing left to gain here.
+                                                    </p>
+                                                ) : (
+                                                    <Link to={moveHref(c.key, createPageUrl)}
+                                                        className="inline-flex items-center gap-1 mt-0.5 text-[11px] font-bold
+                                                            text-foreground hover:text-primary transition-colors group">
+                                                        {move.label}
+                                                        {gain && (
+                                                            <span className="text-primary tabular-nums">+{gain}</span>
+                                                        )}
+                                                        <ArrowRight className="w-3 h-3 group-hover:translate-x-0.5 transition-transform" />
+                                                    </Link>
+                                                ))}
                                             </div>
                                         );
                                     })}
@@ -214,12 +257,25 @@ export default function Ranked() {
 
                                 {/* The one that's actually costing you. */}
                                 {weakest && weakestMeta && (
-                                    <div className="rounded-2xl border-2 border-border bg-secondary/40 p-3 flex items-start gap-2.5">
-                                        <Target className="w-4 h-4 text-foreground flex-shrink-0 mt-0.5" />
-                                        <p className="text-xs text-muted-foreground leading-snug">
+                                    <div className="rounded-2xl border-2 border-border bg-secondary/40 p-3
+                                        flex flex-wrap items-center gap-x-2.5 gap-y-2">
+                                        <Target className="w-4 h-4 text-foreground flex-shrink-0" />
+                                        <p className="text-xs text-muted-foreground leading-snug flex-1 min-w-[12rem]">
                                             <span className="font-bold text-foreground">{weakestMeta.label} is your ceiling right now ({weakest.value}).</span>{" "}
                                             {weakest.action}
                                         </p>
+                                        {/* THE ONE LOUD BUTTON on the panel, and it is on
+                                            the component that is actually costing them —
+                                            which is why the other five are quiet links. */}
+                                        {moveHref(weakest.key, createPageUrl) && (
+                                            <Link to={moveHref(weakest.key, createPageUrl)}
+                                                className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl
+                                                    bg-foreground text-background text-xs font-bold
+                                                    hover:opacity-90 transition-opacity flex-shrink-0">
+                                                {COMPONENT_MOVE[weakest.key].label}
+                                                <ArrowRight className="w-3.5 h-3.5" />
+                                            </Link>
+                                        )}
                                     </div>
                                 )}
                             </div>

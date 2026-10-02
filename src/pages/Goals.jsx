@@ -453,6 +453,23 @@ export default function Planner() {
     // ── ?mark=<assessment> ───────────────────────────────────────────────────
     // Compete's "report your mark" button lands here rather than opening a box
     // of its own: one place types a mark, and it is the place the mark belongs.
+    // ── /Goals?plan=week — Ranked's planning link lands ON the dialog ────────
+    // Ranked now offers a way into each ATAR component, and planning is the one
+    // whose action is a dialog rather than a page. Dropping somebody on the
+    // planner and leaving them to find "Plan this week for me" is the
+    // fill-two-fields-and-stop shape `startFromSuggestion` was written to end.
+    //
+    // It needs nothing loaded, so it is its own effect with its own ref and
+    // runs on mount; the mark link below waits for the assessments it searches.
+    const planLinked = useRef(false);
+    useEffect(() => {
+        if (planLinked.current) return;
+        planLinked.current = true;
+        if (new URLSearchParams(window.location.search).get("plan") === "week") {
+            setWeekPlanOpen(true);
+        }
+    }, []);
+
     // Fires once — a ref rather than state, because the assessments arrive in
     // the same tick that would re-run this and a second open is a dialog the
     // student already closed reappearing.
