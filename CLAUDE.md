@@ -1290,6 +1290,88 @@ not colours, and they are passed the floor's literal inks taken from
 `prefers-reduced-motion` the cards are simply placed. `AceShuffle` stays right
 for the other twenty-five screens: small, beside a line of text, out of the way.
 
+## The deal was a third of a skeleton, and the mascot was a caption
+
+**"Make the load animation look more like the page it loads into, and more
+dramatic."** Both halves were real, and the first one was a bug.
+
+**IT IS THE SKELETON, NOT A CURTAIN — AND IT ONLY WAS FOR THE CARDS.** The real
+floor is a header strip, three tabs, a chip row, a board and a 300px tape rail;
+`AceDeal` drew six card slots and nothing else, so every other region appeared
+at once when the data landed. And the slot was `h-[132px]` against a real
+`MarketCard` that MEASURES 316 at its shortest — three rows of that is about
+550px of jump, on the one screen whose loader exists to stop the page
+rearranging itself. Every region is drawn now, at its real size, and `SLOT_H`
+is the measured height of the commonest card with MarketCard's own shape inside
+it (kind row, title, the price well, the crowd row). Cards whose content runs
+longer are taller and nothing can fix that; targeting the common one is what
+makes the usual case seamless.
+
+**THE WAIT GOES IN THE HEADLINE SLOT.** "Opening the floor…" used to be its own
+line beside him — an element the real page does not have, and therefore one
+more thing that vanishes. It sits in the `h1`, exactly where "You're holding 3
+positions" is about to be, so the one honest non-skeleton element costs no
+layout at all.
+
+**THE DEAL IS FACE DOWN, THEN THE BOARD TURNS OVER.** Cards fly from his hand
+as real `CardBack`s and the board turns in a WAVE — a diagonal out of his hand,
+each card a beat behind the one before — into the skeleton. Six turning at once
+is a transition; six turning in sequence is somebody turning them. The back is
+the student's OWN if they have bought one, because the cred store's whole rule
+is that owned has to be worn somewhere a person can see it.
+
+`perspective` goes on the PARENT and the rotation on the child — an element
+cannot supply its own vanishing point, and a `rotateY` without one reads as a
+horizontal squash. MovePreview's card records the same lesson on the dashboard.
+
+**HE IS BIG AND HE STANDS AT THE TABLE.** At 56px in a caption he was labelling
+the wait rather than performing it: the arm is the only part of him that reads
+as a throw and it had about nine pixels of travel. He overlaps the board's
+near-left corner on purpose, and he CANNOT go further out — `Room` pads the page
+by 16/24px and `max-w-6xl` leaves nothing at 1152, so a larger negative offset
+is a horizontal scrollbar at some width, which is the exact bug `Room`'s own
+header records. A halo in the GROUND colour is what separates him from the card
+instead: the BrandMark glow idiom, pointed the other way.
+
+### `CardBack` stretched its own lattice, and said in its comment that it did not
+
+The weave is a `userSpaceOnUse` pattern — chosen, in that component's own
+words, so the gauge "stays the same whatever size the card is rendered at,
+because a CSS gradient lattice scales with the box and goes coarse on a big
+card". It was drawn inside `viewBox="0 0 100 140" preserveAspectRatio="none"`,
+**which scales user space with the box**, so the pattern scaled with it. On a
+normal card that is a 20% error nobody would see. On the floor's 400×304 slots
+the 8px weave came out at roughly 32×17 and skewed — the exact failure the
+comment describes, produced by the line directly under it.
+
+No viewBox, so user space IS CSS pixels and the gauge is constant at every size
+and every aspect, which is what nineteen callers already believed. Two smaller
+things fell out alongside, both because a room with its own palette had no way
+in: `ink`/`soft` may now be passed directly, since `tone` goes through `alpha()`
+which parses six hex digits and cannot read a `var()` — so inking a back in
+floor tokens previously meant writing a literal into a floor component, which
+the palette guard failed, correctly. And `medallion` is a prop, because 38% of
+the WIDTH is right for a card shaped like a card and a dinner plate on a wide
+one.
+
+### Two guards learned the same lesson, one of them the hard way
+
+`aceLoading.test.mjs` asserts the deal draws each region by name, that `SLOT_H`
+is within the range of a real card, and that the lattice is not back inside a
+stretched viewBox. All three verified by putting the bug back.
+
+**A COMMENT NAMING A HEX IS NOT A HEX.** `floorInk.test.mjs` read raw source,
+so the moment a floor component EXPLAINED why it does not write a literal — "so
+inking it that way meant a literal #FFC800 here" — the scan reported the
+explanation as the defect. That is the false positive `fnResult.test.mjs` and
+`hookDeps.test.mjs` each had to learn, and the cost of not learning it is worse
+than a red suite: the obvious way to make it green again is to delete the
+sentence that says why. Comments are stripped before both scans now.
+
+Draw it with `scripts/_floorProbe.jsx?v=deal`, and judge it on the CLOCK rather
+than on one frame — the deal, the turn and the finish are three different
+screens.
+
 **Minting is automatic, because an empty board kills a market site.** The first
 person to arrive on Monday must find something to trade, and "create the first
 market" is work nobody does. Minted on demand, deduped by a unique index on
@@ -4024,9 +4106,11 @@ stranger.
   spinner reappearing beside it. `scripts/_floorProbe.jsx?v=loaders` draws
   every size, both inks and the in-control case in one screen
 - `src/components/market/AceDeal.jsx` — the floor's arrival: Ace dealing the
-  board onto the grid the real cards fill, which is the skeleton rather than a
-  curtain in front of one. HE is what moves; the switches that turn his own
-  motion off are the bug this had
+  WHOLE page — header, tabs, chips, board and tape rail — face down, then
+  turning it over into the skeleton. It drew the cards alone at less than half
+  their real height, so the page it promised would not jump, jumped.
+  `aceLoading.test.mjs` holds the regions and the slot height; draw it with
+  `scripts/_floorProbe.jsx?v=deal`
 - `src/components/planner/MarkEntry.jsx` — what you actually got, typed once,
   on the planner. It fills `score`/`out_of` and `reportMark` reads them back to
   settle; `scripts/_floorProbe.jsx` renders it and the floor's other new

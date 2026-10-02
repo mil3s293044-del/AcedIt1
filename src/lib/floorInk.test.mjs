@@ -114,9 +114,21 @@ check("THE SOLID FILL AND ITS INK CANNOT DISAGREE", () => {
 check("no raw hex survives in the room", () => {
     // One literal is one colour that cannot follow the theme, and it is
     // invisible until somebody opens the floor in the other one.
+    //
+    // ── A COMMENT NAMING A HEX IS NOT A HEX ────────────────────────────────
+    // This read the raw file, so the moment a component EXPLAINED why it does
+    // not write one — "inking it that way meant a literal #FFC800 here" — the
+    // scan reported the explanation as the defect. That is the false positive
+    // `fnResult.test.mjs` and `hookDeps.test.mjs` each had to learn, and the
+    // cost of not learning it is worse than a red suite: the obvious way to
+    // make it green again is to delete the sentence that says why.
     const bad = [];
     for (const f of FLOOR) {
-        const hits = [...fs.readFileSync(f, "utf8").matchAll(/#[0-9A-Fa-f]{6}\b/g)].map((m) => m[0]);
+        const code = fs.readFileSync(f, "utf8")
+            .replace(/\{\/\*[\s\S]*?\*\/\}/g, "")
+            .replace(/\/\*[\s\S]*?\*\//g, "")
+            .replace(/^\s*\/\/.*$/gm, "");
+        const hits = [...code.matchAll(/#[0-9A-Fa-f]{6}\b/g)].map((m) => m[0]);
         if (hits.length) bad.push(`${rel(f)}: ${[...new Set(hits)].join(", ")}`);
     }
     assert.deepEqual(bad, []);
@@ -127,6 +139,11 @@ check("the scanner recognises the shapes it is looking for", () => {
     assert.ok(/bg-\[var\(--floor-solid\)\][^"'`]*?text-\[var\(--floor-on-bright\)\]/s.test(
         'className="bg-[var(--floor-solid)] py-2 text-[var(--floor-on-bright)]"'));
     assert.ok(/#[0-9A-Fa-f]{6}\b/.test('bg-[#121C2E]'));
+    // …and it still catches one in CODE after the comment strip above.
+    const strip = (t) => t.replace(/\{\/\*[\s\S]*?\*\/\}/g, "")
+        .replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "");
+    assert.ok(/#[0-9A-Fa-f]{6}\b/.test(strip('// mentions #AABBCC\nconst x = "#121C2E";')));
+    assert.ok(!/#[0-9A-Fa-f]{6}\b/.test(strip('// mentions #AABBCC only\nconst x = 1;')));
 });
 
 console.log(`\n${passed} passed`);
