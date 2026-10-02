@@ -2361,6 +2361,23 @@ nine across a two-column row.
 
 ## The dashboard answers one question
 
+**THE TABLE IS GONE, AND THE GROUND IS FLAT.** `TableGround` painted two radial
+washes, a vignette and a woven texture behind the dashboard, lit by the hour —
+warm from the top-left corner, falling away at the edges. It was the only page
+in the app whose ground was not flat `--background`, so the top of the page read
+as a tinted band that stopped partway down and lined up with nothing above or
+below it: the header strip, every other route and the dashboard's own lower half
+were all one colour and the hero was not.
+
+What it was FOR survives. The panels are objects on a surface because `.on-table`
+gives them elevation, and that is unchanged — the shadow was always doing that
+work; the paint underneath was only ever colour. `tableHour()` went with it, so
+`theme.js`'s two references to it were repointed rather than left naming a
+function nothing exports. The content wrapper's `relative z-10` went too: it
+existed solely to lift the page over an absolutely positioned ground, and a
+stacking context whose reason has been deleted is the drift this file keeps
+recording.
+
 **"What do I do right now."** Today's Play is the page; everything else is
 context around it. Progress belongs on Ranked and Analytics, which exist to
 show it properly — the distance-to-target block was removed for that reason,

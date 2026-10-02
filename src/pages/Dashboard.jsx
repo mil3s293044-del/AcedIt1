@@ -16,7 +16,6 @@ import { getStreakMultiplier as getStreakMultiplierValue } from "@/components/sh
 import RetentionCard from "@/components/dashboard/RetentionCard";
 import DueRadar from "@/components/dashboard/DueRadar";
 import WeekPace from "@/components/dashboard/WeekPace";
-import TableGround from "@/components/dashboard/TableGround";
 import TodaysPlay from "@/components/dashboard/TodaysPlay";
 import { buildCase, previewFor } from "@/lib/todaysCase";
 import HandRail from "@/components/dashboard/HandRail";
@@ -919,12 +918,15 @@ export default function Dashboard() {
     }
 
     return (
-        <div className="min-h-screen bg-background relative">
-            {/* The surface everything below is lying on. Static paint, behind
-                the content, and it is what stops a page full of playing cards
-                from still reading as a document. */}
-            <TableGround />
-            <div className="relative z-10 w-full px-4 lg:px-8 py-6 lg:py-10 max-w-[1600px] mx-auto space-y-8 lg:space-y-10">
+        <div className="min-h-screen bg-background">
+            {/* TableGround stood here: two radial washes, a vignette and a
+                woven texture, lit by the hour. It was the only page in the app
+                whose ground was not flat `--background`, so the top of the
+                dashboard read as a tinted band that stopped partway down and
+                did not line up with anything above or below it. The panels
+                still sit on the page — `on-table` is the elevation and is
+                unchanged; what is gone is the paint underneath them. */}
+            <div className="w-full px-4 lg:px-8 py-6 lg:py-10 max-w-[1600px] mx-auto space-y-8 lg:space-y-10">
 
                 {/* ── COACH STRIP ─────────────────────────────────────── */}
                 <Placed index={0}>
