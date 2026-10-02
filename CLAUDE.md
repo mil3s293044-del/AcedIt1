@@ -3216,6 +3216,92 @@ charges is the write that grants and the two cannot come apart. It leaves
 `extra.cred_chips_week` on any row that ever bought one; nothing reads it, and
 it is not cleaned up for the reason the leaked flashcard rows were not retagged.
 
+**THE WHOLE SHELF WAS AN INVENTORY WITH NO CONSUMERS.** `cred_owned`,
+`cred_equipped` and `cred_held` were written by the store and read by NOTHING —
+a student could spend 2,400 credits, most of a fortnight's earning, on a gilt
+card back that rendered nowhere, and the only evidence it existed was the word
+"Owned" on the shelf they bought it from. That is "collect nothing you don't
+use" inverted for the fifth recorded time and the worst version of it: the
+others asked a student something and ignored the answer; this took their money.
+
+- **A back is drawn from CONTEXT, never threaded.** `CardBack` is on nineteen
+  surfaces, so passing an equipped skin to each is nineteen chances to forget,
+  and a half-worn cosmetic is worse than an unworn one — the gilt back on the
+  flashcard shelf and the default in the quiz player reads as a broken app.
+  `CosmeticsProvider` reads the profile once and `CardBack` consumes it;
+  `skin={null}` is how a surface opts out explicitly rather than by omission.
+- **A skin is LITERAL ink, like the floor.** A gilt back is gilt in both
+  themes: it is a physical object somebody paid for, not a semantic colour, and
+  a token that flipped would mean the thing they bought looks like a different
+  thing after dark. `SpadePip` grew a `fill` for the same reason —
+  `fill-foreground` is near-white on dark and near-black on light, so the
+  medallion pip vanished on whichever theme matched the skin.
+- **With nothing equipped NOTHING CHANGES**, so this cannot move a pixel for
+  the ~130 students who have bought nothing.
+- **OWNED IS NOT WORN**, and the shelf now has the control. Buying used to end
+  the interaction, because `cred_equipped` had no writer either.
+
+**THE STREAK FREEZE WAS A SECOND FREEZE BESIDE A WORKING ONE.**
+`user_profiles.streak_shields` has existed since migration 0020, `updateStreak`
+already spends one to cover a slipped day, and the Dashboard already draws how
+many you hold. The store wrote its own into `extra.cred_held`, where nothing
+would ever look. The item declares its `column` now and the purchase increments
+the real one — one mechanism, which is the rule everywhere else here.
+
+**THE LEAGUE PAYS THE GRANT.** It used to read the all-time rank tier, which
+made Monday's credits a STATUS — a number following from lifetime XP, moving a
+few times a year — while `settleLeagueGroup` computed a `final_position` every
+week and granted nothing with it. `grantForLeague` splits the range so FINISH
+OUTWEIGHS TIER: a bronze student who wins their group (1400) out-earns a master
+who came last (1100). If the tier dominated, the grant would still be a status,
+just a slower one, and the league would still not be worth playing on a week you
+were already safe. The two weights SUM to the range, so the floor and ceiling
+are `GRANT_BASE`/`GRANT_TOP` by construction rather than by a clamp — the first
+draft multiplied a band by a spread and paid 1983 against a ceiling of 1800.
+
+`tierIndex` is a NUMBER, not a tier name: `server.mjs` owns `LEAGUE_TIERS` and
+a second copy of that list is the mirror this codebase keeps deleting. An
+unplaced finish takes the FLOOR of its band, never the middle. A student the
+league has not placed falls back to the rank grant, because granting the floor
+on somebody's first week leaves them unable to take a side at all.
+
+**AND THE SENTENCE FOLLOWS THE NUMBER.** The panel said "Rank 6 of 10 sets
+that" for exactly as long as rank did set it. Copy explaining a reason that
+stopped being true is worse than no copy: a student checks it against their rank,
+finds it does not move, and stops believing the panel. `grant_from` says which
+of the two paid, and the panel reads the league's own `ordinal` rather than a
+second copy of it.
+
+**XP CONVERTS, AND `total_xp` IS NEVER WRITTEN.** The ATAR is computed from the
+`xp_events` LOG, not from the column, so a debit would not move it — but it
+WOULD move level and rank, which is the failure `market.js` refuses about
+staking XP, and server.mjs already guards the column in its own words
+("total_xp is STRICTLY ADDITIVE"). So conversion spends from a BUDGET:
+`extra.xp_converted` records what has gone and the remainder is what is left.
+Each point of XP converts once, ever. Nothing a student does on the floor can
+cost them a mark, a level or a place on the ladder — the property the whole
+board rests on, extended to the one place it had not reached.
+
+`credStore.test.mjs` used to assert the module never MENTIONED XP, which was
+right while nothing converted and is too blunt now: conversion legitimately
+reads `total_xp`. It asserts the narrower true thing — nothing here assigns it,
+and no patch carries the key.
+
+**THE WEEKLY CAP IS WHAT STOPS THIS EATING THE LEAGUE.** Without it a student
+with a term of XP banked arrives on Monday with more credits than winning a
+group could pay, and `grantForLeague` stops mattering the day it ships.
+`WEEKLY_CONVERT_MAX` is well under the league's own spread, and the test asserts
+that relationship rather than the number.
+
+**TWO CEILINGS, AND THE ANSWER IS THE TIGHTER ONE.** There is a weekly cap and
+a balance cap, and checking them in sequence reports whichever is tested first
+rather than whichever binds — a student with 10 credits of room was told "you
+can convert 500 more this week", dragged the slider to 500, and was refused by a
+limit nobody had mentioned. One ceiling, and the message NAMES the binding half,
+because "wait until Monday" and "spend something" are different fixes. An
+overflow REFUSES rather than clamping: a clamp spends XP out of a budget that
+only spends once and hands back credits the cap discarded.
+
 **NOTHING IS REFUNDABLE, and that is what closes the arbitrage.** With no
 sell-back there is no path from an owned object to a balance, so a cosmetic
 cannot be laundered back into a balance. Asserted as an ABSENCE — the day
@@ -3557,6 +3643,9 @@ stranger.
   card, the price, the gesture and the payoff moment; `getMarkets` /
   `takePosition` / `openMarkMarket` / `reportMark` in `server.mjs` mint, escrow
   and settle
+- `src/lib/cosmetics.js`, `src/lib/CosmeticsContext.jsx` — what a student
+  bought, actually drawn. The provider is mounted in Layout; `CardBack` and the
+  crest consume it rather than being handed a skin by nineteen call sites
 - `src/components/market/PriceBar.jsx` — the price, drawn: the figure, the
   split, and what each side pays under its own end. One object where the card
   had an odds row, a price gutter and a change figure

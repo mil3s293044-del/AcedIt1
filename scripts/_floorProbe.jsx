@@ -31,6 +31,8 @@ import CredStore from "@/components/market/CredStore";
 import PriceTick from "@/components/market/PriceTick";
 import { CATALOGUE, grantForTier } from "@/lib/credStore";
 import BottomNav from "@/components/layout/BottomNav";
+import { CardBack } from "@/components/cards/PlayingCard";
+import { BACK_SKINS } from "@/lib/cosmetics";
 
 const which = new URLSearchParams(location.search).get("v") || "deal";
 
@@ -474,13 +476,19 @@ views.store = () => (
             <CredStore
                 busy={false}
                 onBuy={(id, u) => console.log("buy", id, u)}
+                onConvert={(xp) => console.log("convert", xp)}
+                onEquip={(id, slot) => console.log("equip", id, slot)}
                 store={{
                     cred: 2400,
                     tier: 6,
                     weekly_grant: grantForTier(6),
-                    owned: ["back-felt"],
+                    // What the shelf now has to draw: XP waiting to convert, and
+                    // a cosmetic that is owned AND worn, which is the state that
+                    // had nowhere to be shown before.
+                    xp: { convertible: 18400, per_credit: 4, week_room: 500, week_max: 500 },
+                    owned: ["back-felt", "crest-bolt"],
                     held: {},
-                    equipped: {},
+                    equipped: { back: "back-felt" },
                     items: CATALOGUE.map((i) => ({
                         ...i,
                         verdict: i.id === "back-gilt"
@@ -495,5 +503,35 @@ views.store = () => (
     </Room>
 );
 
+/* Every back a student can buy, beside the default, at the two sizes they are
+   actually dealt at. A skin that reads at 176px and smudges at 62px is a skin
+   that looks bought on the shelf and broken on the shelf it is worn to. */
+views.backs = () => (
+    <div className="p-8 bg-background min-h-screen">
+        <h1 className="font-display font-black text-2xl text-foreground mb-6">Card backs</h1>
+        {[176, 92, 62].map((w) => (
+            <div key={w} className="mb-8">
+                <p className="text-[11px] font-black uppercase tracking-widest text-muted-foreground mb-2">
+                    {w}px
+                </p>
+                <div className="flex items-end gap-4">
+                    <div>
+                        <CardBack tone="#58CC02" skin={null}
+                            style={{ width: w, height: w * 1.4 }} />
+                        <p className="text-[11px] text-muted-foreground mt-1.5">default</p>
+                    </div>
+                    {Object.values(BACK_SKINS).map((sk) => (
+                        <div key={sk.id}>
+                            <CardBack skin={sk} style={{ width: w, height: w * 1.4 }} />
+                            <p className="text-[11px] text-muted-foreground mt-1.5">{sk.label}</p>
+                        </div>
+                    ))}
+                </div>
+            </div>
+        ))}
+    </div>
+);
+
 ReactDOM.createRoot(document.getElementById("root")).render(
     React.createElement(views[which] || views.deal));
+

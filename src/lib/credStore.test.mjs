@@ -31,6 +31,9 @@ import {
     GRANT_BASE, GRANT_TOP, TIERS, MID_GRANT,
     CATALOGUE, grantForTier, itemById, owns, heldCount,
     priceOf, canBuy, purchasePatch, equipped,
+    grantForLeague, LEAGUE_BANDS,
+    convertibleXP, convertedThisWeek, convertQuote, convertPatch,
+    WEEKLY_CONVERT_MAX, XP_PER_CREDIT,
 } from "@/lib/credStore";
 import { CRED_WEEKLY_GRANT, CRED_BALANCE_CAP } from "@/lib/market";
 
@@ -184,7 +187,7 @@ check("A CONSUMABLE CANNOT BE STOCKPILED", () => {
     const first = purchasePatch(p, "streak-freeze", { week: WEEK });
     assert.ok(first);
     assert.equal(first.extra.cred_held["streak-freeze"], 1);
-    assert.deepEqual(first._effect, { type: "streak_freeze" });
+    assert.deepEqual(first._effect, { type: "streak_shield" });
 
     const holding = who({ extra: first.extra });
     assert.equal(canBuy(holding, "streak-freeze", { week: WEEK }).ok, false);
@@ -195,7 +198,7 @@ check("the patch NAMES what the caller still has to do", () => {
     // Named rather than inferred from the id: a handler switching on a string
     // is how a second catalogue entry of the same kind gets forgotten.
     const freeze = purchasePatch(who({ cred_balance: CRED_BALANCE_CAP }), "streak-freeze");
-    assert.deepEqual(freeze._effect, { type: "streak_freeze" });
+    assert.deepEqual(freeze._effect, { type: "streak_shield" });
 
     const cosmetic = purchasePatch(who({ cred_balance: CRED_BALANCE_CAP }), "back-ink");
     assert.equal(cosmetic._effect, null, "a cosmetic is complete once the patch lands");
@@ -256,17 +259,125 @@ check("YOU CANNOT EQUIP WHAT YOU DO NOT OWN", () => {
 
 /* ── The invariant the whole board rests on ──────────────────────────────── */
 
-check("XP SETS THE RATE AND IS NEVER SPENT", () => {
-    // market.js: "XP drives level, rank and the ATAR, so staking it makes the
-    // rational play 'never bet' — a market where abstaining is optimal is not a
-    // market." A conversion would make spending cred cost rank and cost the
-    // ATAR. This module may READ a rank tier and must never touch XP.
+check("XP IS READ AND NEVER WRITTEN — no patch may carry `total_xp`", () => {
+    // This assertion used to be "credStore never mentions XP at all", which was
+    // right while nothing converted and is too blunt now: the module legitimately
+    // READS `total_xp` to work out how much is left to convert. What must stay
+    // true is narrower and is the whole guarantee the design rests on — nothing
+    // here ever WRITES that column.
+    //
+    // A debit would leave the ATAR alone (it is computed from `xp_events`) and
+    // would still drop the student's LEVEL and RANK, which is the failure
+    // `market.js` refuses about staking XP. server.mjs guards the column in its
+    // own words — "total_xp is STRICTLY ADDITIVE" — and this is the client half.
     const code = withoutComments(
         fs.readFileSync(path.join(process.cwd(), "src/lib/credStore.js"), "utf8"));
-    assert.ok(!/total_xp|xp_awarded|awardXP|deductXP|spend.*xp/i.test(code),
-        "credStore reaches for XP — the grant is a RATE, and XP is never spent");
-    // The only XP-shaped input is a tier number, which carries no balance.
+    assert.ok(!/total_xp\s*[:=][^=]/.test(code),
+        "credStore assigns total_xp — XP is a budget to read, never a balance to write");
+    assert.ok(!/awardXP|deductXP|xp_awarded/i.test(code),
+        "credStore reaches into the XP economy");
+
+    // And the patch itself, which is what actually reaches the database.
+    const rich = who({ total_xp: 40000, cred_balance: 0 });
+    const patch = convertPatch(rich, 2000, WEEK);
+    assert.ok(patch, "a legitimate conversion was refused");
+    assert.ok(!("total_xp" in patch), "convertPatch would write total_xp");
     assert.equal(typeof grantForTier(7), "number");
+});
+
+/* ── XP → credits ────────────────────────────────────────────────────────── */
+
+check("CONVERSION SPENDS A BUDGET, NEVER A BALANCE", () => {
+    const rich = who({ total_xp: 40000, cred_balance: 0 });
+    assert.equal(convertibleXP(rich), 40000);
+
+    const patch = convertPatch(rich, 400, WEEK);
+    assert.equal(patch.cred_balance, 100, "400 XP is 100 credits at 4:1");
+    assert.equal(patch.extra.xp_converted, 400, "the budget records what was spent");
+
+    // Converting again spends from what is LEFT, not from the whole total.
+    const after = { ...rich, ...patch, extra: patch.extra };
+    assert.equal(convertibleXP(after), 39600);
+});
+
+check("THE WEEKLY CEILING STOPS THIS EATING THE LEAGUE", () => {
+    // If a term of banked XP could out-earn winning a league group, the grant
+    // this release just moved to the league would stop mattering immediately.
+    assert.ok(WEEKLY_CONVERT_MAX < GRANT_TOP - GRANT_BASE,
+        "a week of converting beats the league's whole spread");
+
+    const rich = who({ total_xp: 999999, cred_balance: 0 });
+    const maxed = who({
+        total_xp: 999999, cred_balance: 0,
+        extra: { xp_converted_week: { week: WEEK, credits: WEEKLY_CONVERT_MAX } },
+    });
+    assert.equal(convertQuote(rich, WEEKLY_CONVERT_MAX * XP_PER_CREDIT, WEEK).ok, true);
+    assert.match(convertQuote(maxed, 100, WEEK).reason, /this week/i);
+    // Last week's conversion does not count against this one.
+    const stale = who({ total_xp: 999999, extra: { xp_converted_week: { week: "2026-09-21", credits: WEEKLY_CONVERT_MAX } } });
+    assert.equal(convertedThisWeek(stale, WEEK), 0);
+});
+
+check("A CONVERSION THAT WOULD OVERFLOW THE CAP REFUSES, never clamps", () => {
+    // Clamping would spend XP out of a budget that only spends once and hand
+    // back credits the cap discarded — destroying the thing it is meant to be
+    // careful with, silently, when the student has the most of it.
+    const full = who({ total_xp: 40000, cred_balance: CRED_BALANCE_CAP });
+    const v = convertQuote(full, 4000, WEEK);
+    assert.equal(v.ok, false);
+    assert.match(v.reason, /full/i);
+    assert.equal(convertPatch(full, 4000, WEEK), null);
+
+    const nearly = who({ total_xp: 40000, cred_balance: CRED_BALANCE_CAP - 10 });
+    assert.match(convertQuote(nearly, 4000, WEEK).reason, /10 more/);
+    const fits = convertPatch(nearly, 40, WEEK);
+    assert.equal(fits.cred_balance, CRED_BALANCE_CAP, "exactly the remainder is allowed");
+});
+
+check("NOTHING IS CONVERTED FOR NOTHING", () => {
+    const rich = who({ total_xp: 40000, cred_balance: 0 });
+    for (const bad of [0, -100, NaN, null, "lots", 1.5]) {
+        assert.equal(convertQuote(rich, bad, WEEK).ok, false, `${bad} converted`);
+        assert.equal(convertPatch(rich, bad, WEEK), null);
+    }
+    // Under one credit's worth is a refusal, not a free credit and not a
+    // silent burn of the XP that did not reach the rate.
+    assert.equal(convertQuote(rich, XP_PER_CREDIT - 1, WEEK).ok, false);
+    assert.equal(convertQuote(who({ total_xp: 0 }), 100, WEEK).ok, false);
+});
+
+/* ── The league pays the grant ───────────────────────────────────────────── */
+
+check("FINISH OUTWEIGHS TIER, which is the point of moving the grant", () => {
+    const bronzeWinner = grantForLeague({ tierIndex: 0, position: 1 });
+    const masterLast = grantForLeague({ tierIndex: LEAGUE_BANDS - 1, position: 30 });
+    assert.ok(bronzeWinner > masterLast,
+        `winning bronze (${bronzeWinner}) must beat coasting in master (${masterLast})`);
+});
+
+check("THE GRANT IS BOUNDED BY CONSTRUCTION, never by a clamp", () => {
+    let lo = Infinity, hi = -Infinity;
+    for (let t = -2; t <= LEAGUE_BANDS + 2; t += 1) {
+        for (const pos of [null, undefined, NaN, -5, 0, 1, 2, 15, 29, 30, 99]) {
+            const g = grantForLeague({ tierIndex: t, position: pos, groupSize: 30 });
+            assert.ok(Number.isFinite(g), `tier ${t} pos ${pos} produced ${g}`);
+            lo = Math.min(lo, g); hi = Math.max(hi, g);
+        }
+    }
+    assert.equal(lo, GRANT_BASE, "something paid under the floor");
+    assert.equal(hi, GRANT_TOP, "something paid over the ceiling");
+});
+
+check("AN UNPLACED FINISH TAKES THE FLOOR OF ITS BAND, never the middle", () => {
+    // The same unknown-denies-everything asymmetry compliance.js keeps.
+    for (let t = 0; t < LEAGUE_BANDS; t += 1) {
+        assert.equal(grantForLeague({ tierIndex: t, position: null }),
+            grantForLeague({ tierIndex: t, position: 30 }),
+            "an unplaced student out-earned the last place in their tier");
+    }
+    // A group of one is a win, not an unplaced row.
+    assert.equal(grantForLeague({ tierIndex: 0, position: 1, groupSize: 1 }),
+        grantForLeague({ tierIndex: 0, position: 1, groupSize: 30 }));
 });
 
 console.log(`\ncredStore: ${passed} checks passed`);

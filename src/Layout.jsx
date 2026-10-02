@@ -15,6 +15,7 @@ import XPFeedback from "@/components/ranked/XPFeedback";
 import StreakCelebration from "@/components/ranked/StreakCelebration";
 import StakesPill from "@/components/arena/StakesPill";
 import { LiveProvider, useBusy, BUSY } from "@/lib/LiveContext";
+import { CosmeticsProvider } from "@/lib/CosmeticsContext";
 import AchievementUnlock from "@/components/ranked/AchievementUnlock";
 import { useAchievementWatch } from "@/lib/useAchievementWatch";
 import TopNav from "@/components/layout/TopNav";
@@ -489,6 +490,7 @@ export default function Layout({ children }) {
         // still while somebody is mid-question, and any page can read the tick
         // without a second data layer of its own.
         <LiveProvider>
+        <CosmeticsProvider profile={userProfile}>
         <div className="min-h-screen bg-background relative">
             {/* A running study timer is work in progress: the numbers must not
                 shuffle under somebody watching a clock. */}
@@ -600,6 +602,7 @@ export default function Layout({ children }) {
                 modal that used to mount here was a nine-step duplicate of it,
                 gated on a flag nothing ever set, so it never opened. */}
         </div>
+        </CosmeticsProvider>
         </LiveProvider>
     );
 }

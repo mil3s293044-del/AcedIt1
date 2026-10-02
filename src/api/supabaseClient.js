@@ -444,6 +444,11 @@ const PORTED_FUNCTIONS = {
   getPortfolio:             '/local-ai/fn/getPortfolio',
   getCredStore:             '/local-ai/fn/getCredStore',
   buyWithCred:              '/local-ai/fn/buyWithCred',
+  // Both WRITE, so neither goes in READ_ONLY_FUNCTIONS below: convertXP moves
+  // a balance and equipCosmetic moves `extra`, and a stale read of either is a
+  // student told they still own credits they have spent.
+  convertXP:                '/local-ai/fn/convertXP',
+  equipCosmetic:            '/local-ai/fn/equipCosmetic',
   getMarket:                '/local-ai/fn/getMarket',
   takePosition:             '/local-ai/fn/takePosition',
   openMarkMarket:           '/local-ai/fn/openMarkMarket',

@@ -36,6 +36,7 @@ import { SpadePip } from "@/components/ace/SpadeMark";
 import SuitPip from "@/components/cards/SuitPip";
 import CourtFigure from "@/components/cards/CourtFigure";
 import { SUIT_IS_RED, rankTitle } from "@/components/cards/cardIdentity";
+import { useCosmetics } from "@/lib/CosmeticsContext";
 
 /** Re-exported: five call sites import the pip from here, and the suit mark
  *  belonging to the card is the right mental model even now that it lives in
@@ -362,9 +363,17 @@ export default function PlayingCard({
  * gauge whatever size the card is rendered at — a CSS gradient lattice scales
  * with the box and goes coarse on a big card and muddy on a small one.
  */
-export function CardBack({ tone, flat = false, className = "", style, ...rest }) {
-    const ink = alpha(tone, 0.9) || "hsl(var(--primary))";
-    const soft = alpha(tone, 0.16) || "hsl(var(--primary) / 0.16)";
+export function CardBack({ tone, flat = false, className = "", style, skin: skinProp, ...rest }) {
+    // WHAT THE STUDENT BOUGHT, drawn. The equipped back is read from context
+    // rather than threaded through nineteen call sites — see CosmeticsContext.
+    // `skin={null}` forces the default, which is how a surface that must show
+    // the subject's own colour (the probe, a preview of another deck) opts out
+    // explicitly rather than by being the one that forgot.
+    const worn = useCosmetics().back;
+    const skin = skinProp === undefined ? worn : skinProp;
+
+    const ink = skin ? skin.ink : (alpha(tone, 0.9) || "hsl(var(--primary))");
+    const soft = skin ? skin.ground : (alpha(tone, 0.16) || "hsl(var(--primary) / 0.16)");
     // The lattice is a <pattern>, and a pattern is referenced BY ID. Two decks
     // with different subject colours on one screen would both resolve to
     // whichever back mounted first, so every back gets its own id. React's
@@ -372,10 +381,11 @@ export function CardBack({ tone, flat = false, className = "", style, ...rest })
     const pid = `ace-back-${useId().replace(/[^a-zA-Z0-9]/g, "")}`;
     return (
         <div
-            className={`relative rounded-[0.9rem] bg-surface border border-border overflow-hidden
+            className={`relative rounded-[0.9rem] border overflow-hidden
+                ${skin ? "" : "bg-surface border-border"}
                 ${flat ? "" : "shadow-[0_1px_2px_rgba(13,22,38,0.10),0_18px_34px_-18px_rgba(13,22,38,0.42)]"}
                 ${className}`}
-            style={style}
+            style={skin ? { background: skin.ground, borderColor: skin.ink, ...style } : style}
             aria-hidden="true"
             {...rest}
         >
@@ -396,8 +406,16 @@ export function CardBack({ tone, flat = false, className = "", style, ...rest })
                 reads as wallpaper rather than as the back of THIS deck. */}
             <span className="absolute inset-0 grid place-items-center">
                 <span className="grid place-items-center rounded-full w-[38%] aspect-square border-2"
-                    style={{ borderColor: ink, backgroundColor: "hsl(var(--surface))" }}>
-                    <SpadePip className="w-1/2 h-1/2" tone="fill-foreground" />
+                    style={{
+                        borderColor: ink,
+                        backgroundColor: skin ? skin.medallion : "hsl(var(--surface))",
+                    }}>
+                    {/* A skin paints its own pip: `fill-foreground` is near-white
+                        on dark and near-black on light, and a bought back has
+                        ONE ground in both themes — so the token would make the
+                        spade vanish on whichever theme matched it. The same bug
+                        AceShuffle's `ink="floor"` preset was built after. */}
+                    <SpadePip className="w-1/2 h-1/2" fill={skin ? skin.pip : undefined} />
                 </span>
             </span>
         </div>

@@ -464,6 +464,33 @@ export default function Competitions() {
 
     useEffect(() => { if (tab === "store" && !store) loadStore(); }, [tab, store, loadStore]);
 
+    /** XP → credits, and cosmetics on and off. Both take the SAME shape as
+     *  `buy`: invoke, unwrap the envelope (a refusal arrives as a 200 with an
+     *  `error` body — fnResult.js), then refetch BOTH the store and the board,
+     *  because each one moves a figure the other prints. */
+    const runStoreAction = useCallback(async (fn, body, fallback) => {
+        if (buying) return;
+        setBuying(true);
+        setError(null);
+        try {
+            const res = await base44.functions.invoke(fn, body);
+            const err = fnError(res);
+            if (err) throw new Error(err);
+            await Promise.all([loadStore(), load()]);
+        } catch (e) {
+            setError(e?.message || fallback);
+        } finally {
+            setBuying(false);
+        }
+    }, [buying, loadStore, load]);
+
+    const convert = useCallback((xp) =>
+        runStoreAction("convertXP", { xp }, "That didn't convert."), [runStoreAction]);
+
+    const equip = useCallback((itemId, slot) =>
+        runStoreAction("equipCosmetic", { item_id: itemId, slot }, "Couldn't change that."),
+    [runStoreAction]);
+
     const buy = useCallback(async (itemId, units) => {
         if (buying) return;
         setBuying(true);
@@ -720,7 +747,8 @@ export default function Competitions() {
                 </div>
 
                 {tab === "store" ? (
-                    <CredStore store={store} busy={buying} onBuy={buy} />
+                    <CredStore store={store} busy={buying} onBuy={buy}
+                        onConvert={convert} onEquip={equip} />
                 ) : tab === "book" ? (
                     <PortfolioPanel onOpenMarket={openMarket} />
                 ) : (

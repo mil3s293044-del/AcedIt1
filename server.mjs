@@ -23,8 +23,11 @@ import { mayBeMarketSubject } from "./src/lib/compliance.js";
 // The cred economy: what a rank is worth on Monday, and what cred buys.
 // Imported rather than mirrored, the rule market.js already keeps.
 import {
-  grantForTier, canBuy, purchasePatch, CATALOGUE,
+  grantForTier, grantForLeague, canBuy, purchasePatch, CATALOGUE,
+  convertQuote, convertPatch, convertibleXP, convertedThisWeek,
+  WEEKLY_CONVERT_MAX, XP_PER_CREDIT,
 } from "./src/lib/credStore.js";
+import { equipPatch, unequipPatch } from "./src/lib/cosmetics.js";
 import { rankTierFromXP } from "./src/lib/xpRanks.js";
 // The market model — the ONE object Compete is built on. Imported rather than
 // mirrored: forecast.js was mirrored deliberately and every session since has
@@ -9766,11 +9769,44 @@ async function grantWeeklyCred(profile) {
   const week = marketWeekKey();
   if (profile.cred_granted_week === week) return profile;
 
-  // `total_xp` rather than the stored `current_level`: every other screen in
-  // the app derives from total_xp, and the data export was once the one place
-  // able to print a stale level off the column. The tier is a number, so a
-  // junk or missing XP total lands on tier 1 — the floor, never the ceiling.
-  const grant = grantForTier(rankTierFromXP(profile.total_xp));
+  // ── THE LEAGUE PAYS THE GRANT ───────────────────────────────────────────
+  // The week's finish, not the all-time rank. `settleLeagueGroup` has been
+  // computing `final_position` every week and granting nothing with it, so the
+  // league decided a promotion and then had no consequence a student could
+  // spend. See `grantForLeague`.
+  //
+  // The FALLBACK is the old rank-tier grant, and it is not a formality: a new
+  // account, or anybody the league has not placed yet, would otherwise be
+  // granted the floor on their first week and arrive on the floor unable to
+  // take a side. `total_xp` rather than the stored `current_level`, because
+  // every other screen derives from it and the column can be stale.
+  let grant = grantForTier(rankTierFromXP(profile.total_xp));
+  let from = { source: "rank", tier: rankTierFromXP(profile.total_xp) };
+  try {
+    const { data: last } = await supabaseAdmin
+      .from("league_memberships")
+      .select("final_position, tier, week_start")
+      .eq("user_email", profile.created_by || profile.user_email)
+      .not("final_position", "is", null)
+      .order("week_start", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (last && Number.isFinite(Number(last.final_position))) {
+      // The tier is a NAME in the database and an INDEX in the model —
+      // `credStore.js` deliberately takes a number so `LEAGUE_TIERS` is not
+      // written down twice. An unrecognised name lands at index 0, the floor.
+      grant = grantForLeague({
+        tierIndex: Math.max(0, LEAGUE_TIERS.indexOf(last.tier)),
+        position: Number(last.final_position),
+        groupSize: LEAGUE_GROUP_SIZE,
+      });
+      from = { source: "league", tier: last.tier, position: Number(last.final_position) };
+    }
+  } catch (e) {
+    // A missing table or an unreadable row must not cost somebody their week:
+    // the rank-tier fallback above already holds a real figure.
+    console.warn("[markets] league grant lookup failed:", e?.message);
+  }
   const held = Math.max(0, Number(profile.cred_balance) || 0);
   const next = Math.min(CRED_BALANCE_CAP, Math.max(held, grant));
   const { error } = await supabaseAdmin.from("user_profiles")
@@ -9783,7 +9819,10 @@ async function grantWeeklyCred(profile) {
     console.warn("[markets] cred grant failed:", error.message);
     return profile;
   }
-  return { ...profile, cred_balance: next, cred_granted_week: week };
+  // Rides on the profile object rather than a column: it is a FACT ABOUT THIS
+  // GRANT, recomputed every time it is needed, so it cannot go stale the way a
+  // stored copy would — the rule `redoQueue` and `subjectHub` already keep.
+  return { ...profile, cred_balance: next, cred_granted_week: week, _grant_from: from };
 }
 
 // ─── Priors ─────────────────────────────────────────────────────────────────
@@ -10741,21 +10780,141 @@ app.post("/local-ai/fn/buyWithCred", async (req, res) => {
       return res.status(409).json({ error: "Your balance changed. Nothing was charged — try again." });
     }
 
-    // EVERY EFFECT ON THIS SHELF IS RECORDED BY THE PATCH ITSELF — a cosmetic
-    // in `cred_owned`, a consumable in `cred_held` — so the write that charged
-    // is the write that granted, and the two cannot come apart. That was not
-    // true while cred could buy chips: the effect was a second act after the
-    // charge, with no refund path to unwind it, which is why this handler used
-    // to carry a "charged but not granted" branch. It has nothing to do now.
+    // ── A CONSUMABLE GRANTS THE COLUMN THAT ALREADY EXISTS ────────────────
+    // The streak shield is the one item whose effect lives outside `extra`:
+    // `user_profiles.streak_shields` has existed since migration 0020 and
+    // `updateStreak` already spends one to cover a slipped day. Writing a
+    // second freeze into `extra.cred_held` built a mechanism beside a working
+    // one, which is how an app starts disagreeing with itself — so the item
+    // declares its `column` and this grants it.
+    //
+    // It is a SECOND write, which the chips door's removal was supposed to end,
+    // and the ordering rule still holds: the charge landed first, so a failure
+    // here is the recoverable direction and is logged loudly rather than
+    // silently swallowed.
+    const bought = CATALOGUE.find((i) => i.id === item_id);
+    let granted = null;
+    if (bought?.column === "streak_shields") {
+      const held = Math.max(0, Number(profile.streak_shields) || 0);
+      const { error: cErr } = await supabaseAdmin.from("user_profiles")
+        .update({ streak_shields: held + 1 })
+        .eq("id", profile.id);
+      if (cErr) {
+        console.error("[buyWithCred] CHARGED BUT SHIELD NOT GRANTED:", profile.id, cErr.message);
+        return res.status(500).json({
+          error: "Charged, but the shield did not land. Contact support and quote your email.",
+        });
+      }
+      granted = { streak_shields: held + 1 };
+    }
+
+    // EVERY OTHER EFFECT IS RECORDED BY THE PATCH ITSELF — a cosmetic in
+    // `cred_owned` — so the write that charged is the write that granted.
     return res.json({
       success: true,
       cred_balance: written.cred_balance,
       extra: written.extra,
       effect: _effect,
+      granted,
     });
   } catch (e) {
     console.error("[buyWithCred]", e);
     return res.status(500).json({ error: "Couldn't complete that." });
+  }
+});
+
+/**
+ * XP → credits. `total_xp` IS NEVER TOUCHED and that is the whole guarantee.
+ *
+ * The ATAR is computed from the `xp_events` log rather than from this column,
+ * so even a debit would not move it — but a debit WOULD move level and rank,
+ * which is the failure `market.js` refuses about staking XP, and server.mjs
+ * already guards the column as strictly additive. So conversion spends from a
+ * BUDGET instead: `extra.xp_converted` records what has been converted and the
+ * remainder is what is left. Each point of XP converts once, ever.
+ */
+app.post("/local-ai/fn/convertXP", async (req, res) => {
+  const user = await authenticateRequest(req);
+  if (!user) return res.status(401).json({ error: "Not signed in." });
+  if (!supabaseAdmin) return res.status(503).json({ error: "Unavailable." });
+
+  try {
+    const { xp } = req.body || {};
+    const week = marketWeekKey();
+    let profile = await loadUserProfile(user.email);
+    if (!profile) return res.status(404).json({ error: "No profile found." });
+    profile = await grantWeeklyCred(profile);
+
+    const quote = convertQuote(profile, xp, week);
+    if (!quote.ok) return res.status(400).json({ error: quote.reason });
+
+    const patch = convertPatch(profile, xp, week);
+    if (!patch) return res.status(400).json({ error: "That conversion is not available." });
+    const { _converted, ...columns } = patch;
+
+    // THE COMPARE-AND-SET, the same one `buyWithCred` keeps: two taps on a slow
+    // connection are two requests that both read the same balance, and
+    // PostgREST has no transaction across calls. The second matches no rows.
+    const { data: written, error } = await supabaseAdmin.from("user_profiles")
+      .update(columns)
+      .eq("id", profile.id)
+      .eq("cred_balance", profile.cred_balance)
+      .select("id, cred_balance, extra, total_xp")
+      .maybeSingle();
+    if (error) {
+      console.error("[convertXP] write failed:", error.code, error.message);
+      return res.status(500).json({ error: "Couldn't convert. Nothing was taken." });
+    }
+    if (!written) {
+      return res.status(409).json({ error: "Your balance changed. Nothing was taken — try again." });
+    }
+
+    return res.json({
+      success: true,
+      converted: _converted,
+      cred_balance: written.cred_balance,
+      // Echoed so the client can SEE it did not move, which is the one claim
+      // this endpoint makes that a student has to be able to check.
+      total_xp: written.total_xp,
+      convertible_xp: convertibleXP(written),
+      week_room: Math.max(0, WEEKLY_CONVERT_MAX - convertedThisWeek(written, week)),
+    });
+  } catch (e) {
+    console.error("[convertXP]", e);
+    return res.status(500).json({ error: "Couldn't convert." });
+  }
+});
+
+/** Wear something already owned, or take it off. The client decides what to
+ *  SHOW and the server decides what is TRUE — `equipPatch` refuses anything
+ *  `cred_owned` does not carry, so a crafted request cannot wear a gilt back
+ *  nobody paid for. */
+app.post("/local-ai/fn/equipCosmetic", async (req, res) => {
+  const user = await authenticateRequest(req);
+  if (!user) return res.status(401).json({ error: "Not signed in." });
+  if (!supabaseAdmin) return res.status(503).json({ error: "Unavailable." });
+
+  try {
+    const { item_id, slot } = req.body || {};
+    const profile = await loadUserProfile(user.email);
+    if (!profile) return res.status(404).json({ error: "No profile found." });
+
+    const patch = item_id ? equipPatch(profile, item_id) : unequipPatch(profile, slot);
+    if (!patch) return res.status(400).json({ error: "You do not own that." });
+
+    const { data: written, error } = await supabaseAdmin.from("user_profiles")
+      .update(patch)
+      .eq("id", profile.id)
+      .select("id, extra")
+      .maybeSingle();
+    if (error) {
+      console.error("[equipCosmetic] write failed:", error.code, error.message);
+      return res.status(500).json({ error: "Couldn't change that." });
+    }
+    return res.json({ success: true, extra: written?.extra || patch.extra });
+  } catch (e) {
+    console.error("[equipCosmetic]", e);
+    return res.status(500).json({ error: "Couldn't change that." });
   }
 });
 
@@ -10765,6 +10924,7 @@ app.post("/local-ai/fn/getCredStore", async (req, res) => {
   if (!user) return res.status(401).json({ error: "Not signed in." });
   if (!supabaseAdmin) return res.status(503).json({ error: "Store unavailable." });
   try {
+    const week = marketWeekKey();
     let profile = await loadUserProfile(user.email);
     if (!profile) return res.status(404).json({ error: "No profile found." });
     profile = await grantWeeklyCred(profile);
@@ -10774,7 +10934,28 @@ app.post("/local-ai/fn/getCredStore", async (req, res) => {
       success: true,
       cred: Math.max(0, Number(profile.cred_balance) || 0),
       tier,
-      weekly_grant: grantForTier(tier),
+      weekly_grant: profile._grant_from
+        ? (profile._grant_from.source === "league"
+            ? grantForLeague({
+                tierIndex: Math.max(0, LEAGUE_TIERS.indexOf(profile._grant_from.tier)),
+                position: profile._grant_from.position,
+                groupSize: LEAGUE_GROUP_SIZE,
+              })
+            : grantForTier(profile._grant_from.tier))
+        : grantForTier(tier),
+      // WHERE the grant came from, so the panel explains the number rather
+      // than restating a reason that stopped being true when it moved.
+      grant_from: profile._grant_from || { source: "rank", tier },
+      // What converting looks like right now, computed HERE for the reason the
+      // per-item verdict is: a client that works out its own allowance has
+      // become a second rule, and the first disagreement is a slider that
+      // offers an amount the server refuses.
+      xp: {
+        convertible: convertibleXP(profile),
+        per_credit: XP_PER_CREDIT,
+        week_room: Math.max(0, WEEKLY_CONVERT_MAX - convertedThisWeek(profile, week)),
+        week_max: WEEKLY_CONVERT_MAX,
+      },
       owned: Array.isArray(profile.extra?.cred_owned) ? profile.extra.cred_owned : [],
       held: profile.extra?.cred_held || {},
       equipped: profile.extra?.cred_equipped || {},

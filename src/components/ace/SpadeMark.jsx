@@ -157,10 +157,15 @@ export function SpadeFace({
 }
 
 /** A plain spade pip, no face — for suit labels and card corners. */
-export function SpadePip({ className = "w-3 h-3", tone = "fill-foreground" }) {
+export function SpadePip({ className = "w-3 h-3", tone = "fill-foreground", fill }) {
+    // `fill` is a LITERAL ink for the one case a token cannot serve: a bought
+    // card back has one ground in both themes, so `fill-foreground` would make
+    // the spade vanish on whichever theme matched it. It goes on the PATH,
+    // because that is what carries the class — an inline style on the <svg>
+    // loses to the child's own fill and the pip silently stays the token.
     return (
         <svg viewBox="0 0 64 64" className={className} aria-hidden="true">
-            <path d={SPADE} className={tone} />
+            <path d={SPADE} className={fill ? undefined : tone} style={fill ? { fill } : undefined} />
         </svg>
     );
 }
