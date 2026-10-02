@@ -41,6 +41,11 @@ import ScoreGuide from "@/components/league/ScoreGuide";
 import Crest from "@/components/shared/Crest";
 import { podiumGap, ordinal } from "@/lib/league";
 import { grantForLeague } from "@/lib/credStore";
+import WhatToTest from "@/components/study/WhatToTest";
+import SourceRow from "@/components/study/SourceRow";
+import { Flag, Plus, Scale } from "lucide-react";
+import ActiveRecall from "@/components/study/ActiveRecall";
+import BlurtingMethod from "@/components/study/BlurtingMethod";
 
 const which = new URLSearchParams(location.search).get("v") || "deal";
 
@@ -693,6 +698,231 @@ views.league = () => {
         </div>
     );
 };
+
+/* ── ?v=study — the Active Recall / Blurting setup card ─────────────────────
+ *
+ * Both pages load their own flashcards, maps, assessments and techniques from
+ * the database, so mounting the real component here renders an empty picks
+ * list and judges nothing. This draws the CARD — the picks, the handover rule
+ * and the source row — against suggestions of every kind, which is the part
+ * that changed and the part the complaint was about.
+ */
+const STUDY_CARDS = [
+    ...Array.from({ length: 20 }, (_, i) => ({
+        id: `c${i}`, subject_name: "Chemistry", topic: "Summary Unit 1",
+        question: `Define term ${i + 1}`, answer: `Answer ${i + 1}`, is_active: true,
+    })),
+    ...Array.from({ length: 12 }, (_, i) => ({
+        id: `l${i}`, subject_name: "Legal Studies", topic: "Slide 3",
+        question: `What is remedy ${i + 1}?`, answer: `Remedy ${i + 1}`, is_active: true,
+    })),
+];
+
+const STUDY_PICKS = [
+    {
+        kind: { id: "weak", rank: 1, label: "Costing you marks" },
+        subject: "Legal Studies", topic: "Legal Studies - Remedies",
+        why: "3 cards flagged as a weak spot",
+    },
+    {
+        kind: { id: "assessment", rank: 2, label: "Assessed soon" },
+        subject: "Chemistry", topic: "Summary Unit 1",
+        why: "In 6 days",
+    },
+    {
+        kind: { id: "slipped", rank: 3, label: "Slipping" },
+        subject: "Legal Studies", topic: "Slide 3",
+        why: "7 cards already past reliable recall",
+    },
+    {
+        kind: { id: "recent", rank: 4, label: "Picked up again" },
+        subject: "Legal Studies", topic: "AOS 2 Unit 2 slides 6,7",
+        why: "You studied this recently — test whether it stuck",
+    },
+];
+
+views.study = () => {
+    const [files, setFiles] = React.useState([]);
+    return (
+        <div className="min-h-screen bg-background p-4 sm:p-6">
+            <div className="max-w-3xl mx-auto">
+                <div className="card-soft p-5 sm:p-6 overflow-hidden">
+                    <WhatToTest picks={STUDY_PICKS} flashcards={STUDY_CARDS} maps={[]}
+                        onPick={() => {}} />
+
+                    <div className="flex items-center gap-3 my-5">
+                        <span className="h-px flex-1 bg-border" />
+                        <span className="stat-label text-muted-foreground">Or set it up yourself</span>
+                        <span className="h-px flex-1 bg-border" />
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div className="space-y-1.5">
+                            <p className="text-sm font-medium text-muted-foreground">Subject</p>
+                            <div className="h-11 rounded-xl border-2 border-border flex items-center px-3
+                                text-sm text-muted-foreground">Choose a subject…</div>
+                        </div>
+                        <div className="space-y-1.5">
+                            <p className="text-sm font-medium text-muted-foreground">
+                                Topic <span className="text-muted-foreground/60 font-normal">(optional)</span>
+                            </p>
+                            <div className="h-11 rounded-xl border-2 border-border flex items-center px-3
+                                text-sm text-muted-foreground/60">e.g. Causes of World War II</div>
+                        </div>
+                    </div>
+
+                    <div className="space-y-1.5 mt-4">
+                        <p className="text-sm font-medium text-muted-foreground">How many questions</p>
+                        <div className="flex gap-1.5">
+                            {[4, 6, 8, 12].map((n) => (
+                                <div key={n} className={`flex-1 rounded-xl border-2 py-2 text-sm font-bold text-center
+                                    ${n === 6 ? "border-chart-4 bg-chart-4/10 text-foreground"
+                                             : "border-border text-muted-foreground"}`}>{n}</div>
+                            ))}
+                        </div>
+                        <p className="text-[11px] text-muted-foreground">
+                            About 18 minutes at three minutes a question.
+                        </p>
+                    </div>
+
+                    <div className="mt-5 pt-5 border-t border-border">
+                        <SourceRow
+                            files={files}
+                            have="20 of your cards"
+                            hint="Optional. Without notes the questions come from your own cards and mind maps."
+                            onPick={() => setFiles([{ name: "chem-unit-1-notes.pdf" }])}
+                            onRemove={() => setFiles([])}
+                        />
+                    </div>
+
+                    <button className="w-full h-12 mt-5 bg-chart-4 text-white font-semibold rounded-xl
+                        shadow-soft inline-flex items-center justify-center gap-2">
+                        ▸ Start session (6 questions)
+                    </button>
+
+                    <div className="mt-4 pt-4 border-t border-border flex justify-center">
+                        <span className="text-xs font-bold text-muted-foreground">Previous sessions</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    );
+};
+
+/* ── ?v=planner — the re-sequenced lower half ───────────────────────────────
+ *
+ * The page is auth-gated and loads six tables, so this draws the two sections
+ * that changed — Upcoming (its form now behind a button) and Marks so far,
+ * split out of it — plus the empty state, which is the case the re-sequence
+ * most affects: with nothing tracked the old section opened on a five-field
+ * form and no list at all.
+ */
+const PLAN_SACS = [
+    { id: "a", subject_name: "Chemistry", title: "Unit 3 AOS1 SAC", due_date: "in 6 days", type: "SAC", pill: "bg-xp/15 text-xp", days: "6 days" },
+    { id: "b", subject_name: "Legal Studies", title: "Folio task 2", due_date: "Tue 14 Oct", type: "SAC", pill: "bg-secondary text-muted-foreground", days: "12 days" },
+    { id: "c", subject_name: "Methods", title: "Unit 4 Application task", due_date: "Mon 27 Oct", type: "TEST", pill: "bg-secondary text-muted-foreground", days: "25 days" },
+];
+const PLAN_MARKS = [
+    { id: "m1", subject_name: "Chemistry", title: "Unit 2 AOS2 SAC", score: 38, out_of: 45 },
+    { id: "m2", subject_name: "Legal Studies", title: "Folio task 1", score: 24, out_of: 30 },
+    { id: "m3", subject_name: "Methods", title: "Unit 3 SAC 2", score: 17, out_of: 30 },
+];
+
+views.planner = () => {
+    const [empty, setEmpty] = React.useState(false);
+    const sacs = empty ? [] : PLAN_SACS;
+    return (
+        <div className="min-h-screen bg-background p-4 sm:p-6">
+            <div className="max-w-[1400px] mx-auto space-y-6 lg:space-y-8">
+                <button onClick={() => setEmpty((e) => !e)}
+                    className="px-3 py-1.5 rounded-xl text-sm font-bold border-2 border-border text-muted-foreground">
+                    {empty ? "Show tracked" : "Show empty"}
+                </button>
+
+                <section>
+                    <div className="flex items-center justify-between gap-3 mb-3 flex-wrap">
+                        <h2 className="font-display font-extrabold text-foreground text-lg lg:text-xl flex items-center gap-2">
+                            <Flag className="w-5 h-5 text-chart-3" /> Upcoming
+                            {sacs.length > 0 && (
+                                <span className="text-sm font-bold text-muted-foreground tabular-nums">{sacs.length}</span>
+                            )}
+                        </h2>
+                        <button className="inline-flex items-center gap-1.5 h-9 px-3 rounded-xl border-2 border-border
+                            text-sm font-bold text-foreground">
+                            <Plus className="w-3.5 h-3.5" /> Track a SAC
+                        </button>
+                    </div>
+                    {sacs.length > 0 ? (
+                        <div className="space-y-2">
+                            {sacs.map((a) => (
+                                <div key={a.id} className="card-soft flex items-center gap-3 p-3.5">
+                                    <span className="w-6 h-6 rounded-lg border-2 border-border flex-shrink-0" />
+                                    <div className="flex-1 min-w-0">
+                                        <p className="font-bold text-foreground text-sm truncate">
+                                            {a.subject_name} — {a.title}
+                                        </p>
+                                        <p className="text-xs text-muted-foreground">{a.due_date} · {a.type}</p>
+                                    </div>
+                                    <span className={`pill flex-shrink-0 ${a.pill}`}>{a.days}</span>
+                                </div>
+                            ))}
+                        </div>
+                    ) : (
+                        <p className="text-sm text-muted-foreground">Nothing tracked yet.</p>
+                    )}
+                </section>
+
+                <section>
+                    <h2 className="font-display font-extrabold text-foreground text-lg lg:text-xl mb-3 flex items-center gap-2">
+                        <Scale className="w-5 h-5 text-chart-4" /> Marks so far
+                    </h2>
+                    <div className="card-soft divide-y divide-border">
+                        {PLAN_MARKS.map((a) => (
+                            <div key={a.id} className="flex items-baseline gap-3 px-4 py-2.5">
+                                <span className="text-sm text-foreground truncate min-w-0 flex-1">
+                                    {a.subject_name} <span className="text-muted-foreground">— {a.title}</span>
+                                </span>
+                                <span className="text-xs text-muted-foreground tabular-nums flex-shrink-0">
+                                    {a.score}/{a.out_of}
+                                </span>
+                                <span className="font-display font-black text-sm text-foreground
+                                    tabular-nums flex-shrink-0 w-11 text-right">
+                                    {Math.round((a.score / a.out_of) * 100)}%
+                                </span>
+                            </div>
+                        ))}
+                    </div>
+                </section>
+            </div>
+        </div>
+    );
+};
+
+/* ── ?v=setup — the REAL setup screens, on an account with no history ───────
+ *
+ * `?v=study` draws the card against fixture picks; this mounts the actual
+ * components. Their data loads fail here, so what it shows is the NO-PICKS
+ * path — a brand-new account — which is the case the handover rule has to not
+ * render into, and the one a fixture cannot reach. It also proves the two
+ * rebuilt `renderSetup` trees mount at all.
+ */
+views.setup = () => (
+    <div className="min-h-screen bg-background p-4 sm:p-6 space-y-8">
+        <div className="max-w-3xl mx-auto space-y-8">
+            <div>
+                <p className="stat-label text-muted-foreground mb-2">Active Recall</p>
+                <ActiveRecall onSessionComplete={async () => {}} userSubjects={[
+                    { id: "s1", subject_name: "Chemistry", color: "#58CC02" },
+                    { id: "s2", subject_name: "Legal Studies", color: "#8B5CF6" },
+                ]} />
+            </div>
+            <div>
+                <p className="stat-label text-muted-foreground mb-2">Blurting</p>
+                <BlurtingMethod onSessionComplete={async () => {}} />
+            </div>
+        </div>
+    </div>
+);
 
 ReactDOM.createRoot(document.getElementById("root")).render(
     React.createElement(views[which] || views.deal));

@@ -321,6 +321,9 @@ export default function Planner() {
     const [sacType, setSacType] = useState("sac");
     const [sacDate, setSacDate] = useState("");
     const [savingSac, setSavingSac] = useState(false);
+    // Tracking a SAC is a handful-of-times-a-term action, so it lives behind a
+    // button rather than taking five fields of the section every visit.
+    const [addSacOpen, setAddSacOpen] = useState(false);
     // Which assessment is having its mark entered. See MarkEntry.
     const [marking, setMarking] = useState(null);
     const [savingMark, setSavingMark] = useState(false);
@@ -599,7 +602,10 @@ export default function Planner() {
     const handleAddSac = async () => {
         setSavingSac(true);
         const ok = await addSac();
-        if (ok) { setSacTitle(""); setSacDate(""); }
+        // Only clear and close on a SUCCESS. Closing regardless would throw
+        // away what they typed on a failed write and leave them with nothing
+        // on screen explaining why nothing appeared.
+        if (ok) { setSacTitle(""); setSacDate(""); setAddSacOpen(false); }
         setSavingSac(false);
     };
 
@@ -1063,10 +1069,20 @@ export default function Planner() {
                         ) : (
                             <div className="rounded-3xl bg-surface border border-dashed border-border p-6 lg:p-8 text-center h-full flex flex-col items-center justify-center shadow-soft">
                                 <AceBody className="w-24 mb-1" pose="point" title="Ace" />
-                                <h2 className="font-display font-extrabold text-foreground text-lg mb-1">What's your next SAC?</h2>
+                                <h2 className="font-display font-extrabold text-foreground text-lg mb-1">What&apos;s your next SAC?</h2>
                                 <p className="text-muted-foreground text-sm max-w-sm">
-                                    Add it below — Study, Revision Mode and your Dashboard all start counting down with you.
+                                    Track it and Study, Revision Mode and your Dashboard all start counting down with you.
                                 </p>
+                                {/* THE ASK CARRIES THE ACTION. It used to read
+                                    "add it below", pointing at a form further
+                                    down the page — and then the form moved, so
+                                    the sentence was directing a student at a
+                                    section that no longer holds one. A panel
+                                    making an ask opens the thing that answers
+                                    it. */}
+                                <Button onClick={() => setAddSacOpen(true)} className="mt-4 gap-1.5">
+                                    <Plus className="w-4 h-4" /> Track a SAC
+                                </Button>
                             </div>
                         )}
                     </div>
@@ -1130,93 +1146,6 @@ export default function Planner() {
                             </div>
                         )}
                     </div>
-                </motion.section>
-
-                {/* ── UPCOMING SACS ───────────────────────────────────── */}
-                <motion.section initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }}>
-                    <h2 className="font-display font-extrabold text-foreground text-lg lg:text-xl mb-3 flex items-center gap-2">
-                        <Flag className="w-5 h-5 text-chart-3" /> Upcoming SACs
-                    </h2>
-
-                    <div className="card-soft p-4 mb-4">
-                        <div className="grid grid-cols-1 sm:grid-cols-[1fr,1fr,auto,auto,auto] gap-2 items-center">
-                            <Select value={sacSubject} onValueChange={setSacSubject}>
-                                <SelectTrigger><SelectValue placeholder="Subject" /></SelectTrigger>
-                                <SelectContent>
-                                    {subjects.map(s => <SelectItem key={s.id} value={s.subject_name}>{s.subject_name}</SelectItem>)}
-                                </SelectContent>
-                            </Select>
-                            <Input placeholder='Name — e.g. "Unit 3 AOS1 SAC"' value={sacTitle} onChange={e => setSacTitle(e.target.value)} maxLength={80} />
-                            <div className="flex gap-1.5">
-                                {TYPE_OPTIONS.map(t => (
-                                    <button key={t.value} onClick={() => setSacType(t.value)}
-                                        className={`px-2.5 py-2 rounded-xl text-xs font-bold border-2 transition-all ${sacType === t.value ? "bg-chart-3 border-chart-3 text-white" : "bg-surface border-border text-muted-foreground hover:border-chart-3/40"}`}>
-                                        {t.label}
-                                    </button>
-                                ))}
-                            </div>
-                            <Input type="date" value={sacDate} min={todayStr} onChange={e => setSacDate(e.target.value)} className="w-auto" />
-                            <Button onClick={handleAddSac} disabled={savingSac} className="gap-1.5">
-                                {savingSac ? <AceShuffle size="sm" /> : <Plus className="w-4 h-4" />} Track it
-                            </Button>
-                        </div>
-                    </div>
-
-                    {upcoming.length > 0 && (
-                        <div className="space-y-2">
-                            <AnimatePresence>
-                                {upcoming.map(a => {
-                                    const d = differenceInDays(parseISO(a.due_date), parseISO(todayStr));
-                                    return (
-                                        <motion.div key={a.id} layout initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, x: -20 }}
-                                            className="card-soft flex items-center gap-3 p-3.5">
-                                            <button onClick={() => toggleSacDone(a)} aria-label="Mark assessment done"
-                                                className="w-6 h-6 rounded-lg border-2 border-border hover:border-primary flex items-center justify-center flex-shrink-0 transition-colors" />
-                                            <div className="flex-1 min-w-0">
-                                                <p className="font-bold text-foreground text-sm truncate">{a.subject_name} — {a.title}</p>
-                                                <p className="text-xs text-muted-foreground">{fmtDate(a.due_date, "EEE d MMM")} · {(a.assessment_type || "sac").toUpperCase()}</p>
-                                            </div>
-                                            <span className={`pill flex-shrink-0 ${countdownPill(d)}`}>{daysLabel(d)}</span>
-                                            <button onClick={() => deleteSac(a)} aria-label="Remove assessment"
-                                                className="text-muted-foreground/40 hover:text-streak transition-colors flex-shrink-0">
-                                                <Trash2 className="w-4 h-4" />
-                                            </button>
-                                        </motion.div>
-                                    );
-                                })}
-                            </AnimatePresence>
-                        </div>
-                    )}
-
-                    {/* ── Marks so far ─────────────────────────────────── */}
-                    {/* Derived from the rows already loaded, so it cannot go
-                        stale or disagree with what was entered. Six, because
-                        this is a glance at how the term is going and not a
-                        transcript — Analytics is where a full record belongs. */}
-                    {marks.length > 0 && (
-                        <div className="mt-5">
-                            <p className="stat-label text-muted-foreground mb-2">Marks so far</p>
-                            <div className="space-y-1.5">
-                                {marks.map(a => {
-                                    const pct = markPercent(a.score, a.out_of);
-                                    return (
-                                        <div key={a.id} className="flex items-baseline gap-3">
-                                            <span className="text-sm text-foreground truncate min-w-0 flex-1">
-                                                {a.subject_name} — {a.title}
-                                            </span>
-                                            <span className="text-xs text-muted-foreground tabular-nums flex-shrink-0">
-                                                {a.score}/{a.out_of}
-                                            </span>
-                                            <span className="font-display font-black text-sm text-foreground
-                                                tabular-nums flex-shrink-0 w-11 text-right">
-                                                {pct}%
-                                            </span>
-                                        </div>
-                                    );
-                                })}
-                            </div>
-                        </div>
-                    )}
                 </motion.section>
 
                 {/* ── WEEK BOARD ──────────────────────────────────────── */}
@@ -1475,6 +1404,150 @@ export default function Planner() {
                         it — dropping it under another session starts it when that one finishes, on top puts it first.
                     </p>
                 </motion.section>
+
+                {/* ── TRACKED AND MARKED ──────────────────────────────── */}
+                {/* ── THE FORM USED TO SIT HERE, ALWAYS OPEN ───────────────
+                    Five fields in a row above the list, on every visit, for an
+                    action a student takes a handful of times a term — so the
+                    first thing under the heading was permanently a thing to
+                    fill in rather than the assessments they came to look at.
+                    It is a dialog behind one button now, the same call the
+                    Quizzes page made about three buttons for one dialog.
+
+                    And the two halves are SEPARATE SECTIONS. "Upcoming" is
+                    what is coming and "Marks so far" is what already happened;
+                    they were one block with the past tucked under the future,
+                    which is two questions sharing a heading. */}
+                <motion.section initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }}>
+                    <div className="flex items-center justify-between gap-3 mb-3 flex-wrap">
+                        <h2 className="font-display font-extrabold text-foreground text-lg lg:text-xl flex items-center gap-2">
+                            <Flag className="w-5 h-5 text-chart-3" /> Upcoming
+                            {upcoming.length > 0 && (
+                                <span className="text-sm font-bold text-muted-foreground tabular-nums">
+                                    {upcoming.length}
+                                </span>
+                            )}
+                        </h2>
+                        <Button onClick={() => setAddSacOpen(true)} size="sm" variant="outline"
+                            className="gap-1.5 rounded-xl border-2">
+                            <Plus className="w-3.5 h-3.5" /> Track a SAC
+                        </Button>
+                    </div>
+
+                    {upcoming.length > 0 ? (
+                        <div className="space-y-2">
+                            <AnimatePresence>
+                                {upcoming.map(a => {
+                                    const d = differenceInDays(parseISO(a.due_date), parseISO(todayStr));
+                                    return (
+                                        <motion.div key={a.id} layout initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, x: -20 }}
+                                            className="card-soft flex items-center gap-3 p-3.5">
+                                            <button onClick={() => toggleSacDone(a)} aria-label="Mark assessment done"
+                                                className="w-6 h-6 rounded-lg border-2 border-border hover:border-primary flex items-center justify-center flex-shrink-0 transition-colors" />
+                                            <div className="flex-1 min-w-0">
+                                                <p className="font-bold text-foreground text-sm truncate">{a.subject_name} — {a.title}</p>
+                                                <p className="text-xs text-muted-foreground">{fmtDate(a.due_date, "EEE d MMM")} · {(a.assessment_type || "sac").toUpperCase()}</p>
+                                            </div>
+                                            <span className={`pill flex-shrink-0 ${countdownPill(d)}`}>{daysLabel(d)}</span>
+                                            <button onClick={() => deleteSac(a)} aria-label="Remove assessment"
+                                                className="text-muted-foreground/40 hover:text-streak transition-colors flex-shrink-0">
+                                                <Trash2 className="w-4 h-4" />
+                                            </button>
+                                        </motion.div>
+                                    );
+                                })}
+                            </AnimatePresence>
+                        </div>
+                    ) : (
+                        /* One line, not a dashed box. The hero above already
+                           makes this exact ask when there is no next SAC, and
+                           two empty states saying the same thing on one screen
+                           is the paper-cut the Quizzes shelf records. */
+                        <p className="text-sm text-muted-foreground">Nothing tracked yet.</p>
+                    )}
+                </motion.section>
+
+                {/* ── MARKS SO FAR ────────────────────────────────────── */}
+                {/* Derived from the rows already loaded, so it cannot go
+                    stale or disagree with what was entered. Six, because
+                    this is a glance at how the term is going and not a
+                    transcript — Analytics is where a full record belongs. */}
+                {marks.length > 0 && (
+                    <motion.section initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.25 }}>
+                        <h2 className="font-display font-extrabold text-foreground text-lg lg:text-xl mb-3 flex items-center gap-2">
+                            <Scale className="w-5 h-5 text-chart-4" /> Marks so far
+                        </h2>
+                        <div className="card-soft divide-y divide-border">
+                            {marks.map(a => {
+                                const pct = markPercent(a.score, a.out_of);
+                                return (
+                                    <div key={a.id} className="flex items-baseline gap-3 px-4 py-2.5">
+                                        <span className="text-sm text-foreground truncate min-w-0 flex-1">
+                                            {a.subject_name} <span className="text-muted-foreground">— {a.title}</span>
+                                        </span>
+                                        <span className="text-xs text-muted-foreground tabular-nums flex-shrink-0">
+                                            {a.score}/{a.out_of}
+                                        </span>
+                                        <span className="font-display font-black text-sm text-foreground
+                                            tabular-nums flex-shrink-0 w-11 text-right">
+                                            {pct}%
+                                        </span>
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    </motion.section>
+                )}
+
+                {/* ── Track-a-SAC dialog ──────────────────────────────── */}
+                {/* The same five fields, stacked and labelled rather than
+                    crammed into a five-column grid that collapsed to five
+                    unlabelled rows on a phone. */}
+                <Dialog open={addSacOpen} onOpenChange={setAddSacOpen}>
+                    <DialogContent className="max-w-md rounded-3xl">
+                        <DialogHeader>
+                            <DialogTitle className="font-display font-extrabold">Track an assessment</DialogTitle>
+                        </DialogHeader>
+                        <div className="space-y-4">
+                            <div className="space-y-1.5">
+                                <p className="stat-label text-muted-foreground">Subject</p>
+                                <Select value={sacSubject} onValueChange={setSacSubject}>
+                                    <SelectTrigger><SelectValue placeholder="Choose a subject…" /></SelectTrigger>
+                                    <SelectContent>
+                                        {subjects.map(s => <SelectItem key={s.id} value={s.subject_name}>{s.subject_name}</SelectItem>)}
+                                    </SelectContent>
+                                </Select>
+                            </div>
+                            <div className="space-y-1.5">
+                                <p className="stat-label text-muted-foreground">What is it</p>
+                                <Input placeholder='e.g. "Unit 3 AOS1 SAC"' value={sacTitle}
+                                    onChange={e => setSacTitle(e.target.value)} maxLength={80} />
+                            </div>
+                            <div className="grid grid-cols-2 gap-3">
+                                <div className="space-y-1.5">
+                                    <p className="stat-label text-muted-foreground">Type</p>
+                                    <div className="flex gap-1.5">
+                                        {TYPE_OPTIONS.map(t => (
+                                            <button key={t.value} onClick={() => setSacType(t.value)}
+                                                aria-pressed={sacType === t.value}
+                                                className={`flex-1 px-2 py-2 rounded-xl text-xs font-bold border-2 transition-all ${sacType === t.value ? "bg-chart-3 border-chart-3 text-white" : "bg-surface border-border text-muted-foreground hover:border-chart-3/40"}`}>
+                                                {t.label}
+                                            </button>
+                                        ))}
+                                    </div>
+                                </div>
+                                <div className="space-y-1.5">
+                                    <p className="stat-label text-muted-foreground">When</p>
+                                    <Input type="date" value={sacDate} min={todayStr}
+                                        onChange={e => setSacDate(e.target.value)} />
+                                </div>
+                            </div>
+                            <Button onClick={handleAddSac} disabled={savingSac} className="w-full h-11 gap-1.5">
+                                {savingSac ? <AceShuffle size="sm" /> : <Plus className="w-4 h-4" />} Track it
+                            </Button>
+                        </div>
+                    </DialogContent>
+                </Dialog>
 
                 {/* ── Add-session dialog (with recurrence) ─────────────── */}
                 <Dialog open={!!planDay} onOpenChange={(o) => !o && closePlanDialog()}>

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useMemo, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -6,12 +6,12 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
-import { Brain, Play, Clock, CheckCircle, Upload, Wand2, Maximize, ArrowRight, ArrowLeft, RotateCcw, X, FolderOpen, Trash2, Sparkles, ChevronDown, ChevronUp, FileText, Zap } from "lucide-react";
+import { Brain, Play, Clock, CheckCircle, Upload, Wand2, Maximize, ArrowRight, ArrowLeft, RotateCcw, X, FolderOpen, Trash2, Sparkles, ChevronDown, ChevronUp, Zap } from "lucide-react";
 import { format } from "date-fns";
 import ReactMarkdown from 'react-markdown';
 import { useToast } from "@/components/ui/use-toast";
 import { base44 } from "@/api/base44Client";
-import { acceptFiles, uploadAll, STUDY_ACCEPT, STUDY_ACCEPT_LABEL } from "@/lib/pickFiles";
+import { acceptFiles, uploadAll, STUDY_ACCEPT } from "@/lib/pickFiles";
 import MegaPicker from "@/components/shared/MegaPicker";
 import { PRICE } from "@/lib/chips";
 import { aceDone } from "@/components/ace/AceReacts";
@@ -23,7 +23,8 @@ import { fmtDate } from "@/lib/safeDate";
 import { CONFIDENCE } from "@/lib/calibration";
 import CalibrationReport from "./CalibrationReport";
 import WhatToTest from "./WhatToTest";
-import { questionsFromCards, questionsFromMap } from "@/lib/recallSuggest";
+import { questionsFromCards, questionsFromMap, suggestTopics, ownMaterial } from "@/lib/recallSuggest";
+import SourceRow from "./SourceRow";
 import { deckCards } from "@/lib/mistakeBank";
 import AceShuffle from "@/components/ace/AceShuffle";
 
@@ -696,205 +697,206 @@ For each answer:
         incorrect: markingResults.filter(r => r.verdict === "Incorrect").length,
     } : null;
 
+    // The picks the card opens on. Computed HERE because the card has to know
+    // whether there are any before it draws the rule that hands over to the
+    // manual fields — with none, that rule would be handing over from nothing.
+    const picks = useMemo(
+        () => suggestTopics({
+            flashcards: ownFlashcards, assessments: ownAssessments,
+            techniques: ownTechniques, limit: 4,
+        }),
+        [ownFlashcards, ownAssessments, ownTechniques]);
+
+    // What a session could already be built from for the topic in the fields,
+    // so "Working from" states what they HAVE rather than asking for an upload
+    // they may not need.
+    const haveFor = useMemo(() => {
+        if (!selectedSubject) return null;
+        const m = ownMaterial({ flashcards: ownFlashcards, maps: ownMaps, subject: selectedSubject, topic });
+        const bits = [];
+        if (m.cards.length) bits.push(`${m.cards.length} of your cards`);
+        if (m.fromMap.length) bits.push(`${m.fromMap.length} from your map`);
+        return bits.length ? bits.join(" · ") : null;
+    }, [ownFlashcards, ownMaps, selectedSubject, topic]);
+
     const renderSetup = () => (
         <motion.div key="setup" initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -16 }} className="space-y-5">
-            {/* The page used to open on an empty subject picker and a button
-                offering "default questions". This answers the question the
-                student actually has. */}
-            <WhatToTest
-                flashcards={ownFlashcards}
-                assessments={ownAssessments}
-                techniques={ownTechniques}
-                maps={ownMaps}
-                onPick={startFromSuggestion}
-            />
 
-            <div className="grid grid-cols-1 lg:grid-cols-5 gap-5">
-                {/* Left: Setup */}
-                <div className="lg:col-span-3 card-soft p-6 space-y-5">
-                    <div className="flex items-center justify-between">
-                        <h3 className="font-semibold text-foreground text-lg">Session Setup</h3>
-                        <button
-                            onClick={() => { loadSessionHistory(); setShowSessionHistory(!showSessionHistory); }}
-                            className="flex items-center gap-1.5 text-sm text-chart-4 hover:text-chart-4/80 font-medium"
-                        >
-                            <FolderOpen className="w-4 h-4" /> History
-                        </button>
+            {/* ── ONE CARD ─────────────────────────────────────────────────
+                This was three: Ace's picks, "Session Setup", and "Turn your
+                notes into questions" — all answering "what am I about to
+                study", with a pick in the first quietly changing fields in the
+                second. One surface, one next move: the picks lead, a rule
+                hands over to the manual fields, and the sources sit with the
+                thing they are a source FOR. */}
+            <div className="card-soft p-5 sm:p-6 overflow-hidden">
+                <WhatToTest
+                    picks={picks}
+                    flashcards={ownFlashcards}
+                    assessments={ownAssessments}
+                    techniques={ownTechniques}
+                    maps={ownMaps}
+                    onPick={startFromSuggestion}
+                />
+
+                {/* The handover. Only drawn when there is something above it to
+                    hand over FROM — on a new account the card simply opens on
+                    the fields, which is the honest shape for somebody with no
+                    history to suggest from. */}
+                {picks.length > 0 && (
+                    <div className="flex items-center gap-3 my-5">
+                        <span className="h-px flex-1 bg-border" />
+                        <span className="stat-label text-muted-foreground">Or set it up yourself</span>
+                        <span className="h-px flex-1 bg-border" />
+                    </div>
+                )}
+
+                {fromMap && (
+                    <div className="rounded-xl border-2 border-map/30 bg-map/5 p-3.5 mb-4">
+                        <p className="text-sm font-bold text-foreground">
+                            {fromMap.count} question{fromMap.count === 1 ? "" : "s"} from your{fromMap.topic ? ` ${fromMap.topic}` : ""} mind map
+                        </p>
+                        <p className="text-xs text-muted-foreground mt-0.5 leading-snug">
+                            Your open questions and the nodes you marked shaky. Answer them from memory —
+                            that&apos;s the bit the map itself can&apos;t do for you.
+                        </p>
+                    </div>
+                )}
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div className="space-y-1.5">
+                        <Label className="text-sm font-medium text-muted-foreground">Subject</Label>
+                        <Select value={selectedSubject} onValueChange={setSelectedSubject}>
+                            <SelectTrigger className="h-11 border-2 border-border focus:border-chart-4 rounded-xl">
+                                <SelectValue placeholder="Choose a subject..." />
+                            </SelectTrigger>
+                            <SelectContent>
+                                {userSubjects.map(s => (
+                                    <SelectItem key={s.id} value={s.subject_name}>
+                                        <div className="flex items-center gap-2">
+                                            <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: s.color || '#7C3AED' }} />
+                                            {s.subject_name}
+                                        </div>
+                                    </SelectItem>
+                                ))}
+                            </SelectContent>
+                        </Select>
                     </div>
 
-                    {fromMap && (
-                        <div className="rounded-xl border-2 border-map/30 bg-map/5 p-3.5 mb-4">
-                            <p className="text-sm font-bold text-foreground">
-                                {fromMap.count} question{fromMap.count === 1 ? "" : "s"} from your{fromMap.topic ? ` ${fromMap.topic}` : ""} mind map
-                            </p>
-                            <p className="text-xs text-muted-foreground mt-0.5 leading-snug">
-                                Your open questions and the nodes you marked shaky. Answer them from memory —
-                                that's the bit the map itself can't do for you.
-                            </p>
-                        </div>
-                    )}
-
-                    <div className="space-y-4">
-                        <div className="space-y-1.5">
-                            <Label className="text-sm font-medium text-muted-foreground">Subject</Label>
-                            <Select value={selectedSubject} onValueChange={setSelectedSubject}>
-                                <SelectTrigger className="h-11 border-2 border-border focus:border-chart-4 rounded-xl">
-                                    <SelectValue placeholder="Choose a subject..." />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    {userSubjects.map(s => (
-                                        <SelectItem key={s.id} value={s.subject_name}>
-                                            <div className="flex items-center gap-2">
-                                                <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: s.color || '#7C3AED' }} />
-                                                {s.subject_name}
-                                            </div>
-                                        </SelectItem>
-                                    ))}
-                                </SelectContent>
-                            </Select>
-                        </div>
-
-                        <div className="space-y-1.5">
-                            <Label className="text-sm font-medium text-muted-foreground">Topic <span className="text-muted-foreground/60 font-normal">(optional)</span></Label>
-                            <Input
-                                placeholder="e.g. Causes of World War II"
-                                value={topic}
-                                onChange={e => setTopic(e.target.value)}
-                                className="h-11 border-2 border-border focus:border-chart-4 rounded-xl"
-                            />
-                        </div>
-
-                        {/* How many questions. The session used to be however
-                            many the generator happened to return. */}
-                        <div className="space-y-1.5">
-                            <Label className="text-sm font-medium text-muted-foreground">How many questions</Label>
-                            <div className="flex gap-1.5" data-question-count>
-                                {[4, 6, 8, 12].map(n => (
-                                    <button key={n} onClick={() => setQuestionCount(n)}
-                                        aria-pressed={questionCount === n}
-                                        className={`flex-1 rounded-xl border-2 py-2 text-sm font-bold transition-colors ${
-                                            questionCount === n
-                                                ? "border-chart-4 bg-chart-4/10 text-foreground"
-                                                : "border-border text-muted-foreground hover:text-foreground"}`}>
-                                        {n}
-                                    </button>
-                                ))}
-                            </div>
-                            <p className="text-[11px] text-muted-foreground">
-                                About {Math.round(questionCount * 3)} minutes at three minutes a question.
-                            </p>
-                        </div>
+                    <div className="space-y-1.5">
+                        <Label className="text-sm font-medium text-muted-foreground">
+                            Topic <span className="text-muted-foreground/60 font-normal">(optional)</span>
+                        </Label>
+                        <Input
+                            placeholder="e.g. Causes of World War II"
+                            value={topic}
+                            onChange={e => setTopic(e.target.value)}
+                            className="h-11 border-2 border-border focus:border-chart-4 rounded-xl"
+                        />
                     </div>
-
-                    {questions.length > 0 && (
-                        <div className="bg-chart-4/10 border border-chart-4/20 rounded-xl p-3.5">
-                            <div className="flex items-center gap-2 mb-2">
-                                <CheckCircle className="w-4 h-4 text-chart-4" />
-                                <span className="text-sm font-semibold text-chart-4">{questions.length} questions ready</span>
-                            </div>
-                            <div className="space-y-1">
-                                {questions.slice(0, 3).map((q, i) => (
-                                    <p key={i} className="text-xs text-chart-4 truncate">• {q}</p>
-                                ))}
-                                {questions.length > 3 && <p className="text-xs text-chart-4/60">+ {questions.length - 3} more...</p>}
-                            </div>
-                        </div>
-                    )}
-
-                    <Button
-                        onClick={startSession}
-                        disabled={!!sourceFiles.length && questions.length === 0}
-                        className="w-full h-12 bg-chart-4 hover:bg-chart-4/90 text-white font-semibold rounded-xl shadow-soft gap-2"
-                    >
-                        <Play className="w-5 h-5" />
-                        {questions.length > 0
-                            ? `Start session (${Math.min(questions.length, questionCount)} questions)`
-                            : `Start session (${questionCount} questions)`}
-                    </Button>
-                    {!!sourceFiles.length && questions.length === 0 && (
-                        <p className="text-xs text-center text-xp">Generate questions from your uploaded notes first.</p>
-                    )}
                 </div>
 
-                {/* Right: AI Questions */}
-                <div className="lg:col-span-2 card-soft bg-chart-4/5 p-6 space-y-4">
-                    <div className="flex items-center gap-2">
-                        <div className="w-8 h-8 bg-chart-4 rounded-xl flex items-center justify-center">
-                            <Sparkles className="w-4 h-4 text-white" />
-                        </div>
-                        <div>
-                            <h3 className="font-semibold text-foreground text-sm">Turn your notes into questions</h3>
-                            <p className="text-xs text-muted-foreground">Upload a PDF or slides and answer them here</p>
-                        </div>
+                {/* How many questions. The session used to be however many the
+                    generator happened to return. */}
+                <div className="space-y-1.5 mt-4">
+                    <Label className="text-sm font-medium text-muted-foreground">How many questions</Label>
+                    <div className="flex gap-1.5" data-question-count>
+                        {[4, 6, 8, 12].map(n => (
+                            <button key={n} onClick={() => setQuestionCount(n)}
+                                aria-pressed={questionCount === n}
+                                className={`flex-1 rounded-xl border-2 py-2 text-sm font-bold transition-colors ${
+                                    questionCount === n
+                                        ? "border-chart-4 bg-chart-4/10 text-foreground"
+                                        : "border-border text-muted-foreground hover:text-foreground"}`}>
+                                {n}
+                            </button>
+                        ))}
                     </div>
+                    <p className="text-[11px] text-muted-foreground">
+                        About {Math.round(questionCount * 3)} minutes at three minutes a question.
+                    </p>
+                </div>
 
-                    <div className={`rounded-2xl border-2 border-dashed transition-all ${sourceFiles.length ? 'border-chart-4/40 bg-chart-4/10' : 'border-border bg-surface'}`}>
-                        <label className="flex items-center gap-3 p-4 cursor-pointer hover:bg-chart-4/5 transition-colors rounded-2xl">
-                            <div className={`w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 ${sourceFiles.length ? 'bg-chart-4/15' : 'bg-secondary'}`}>
-                                <FileText className={`w-4 h-4 ${sourceFiles.length ? 'text-chart-4' : 'text-muted-foreground'}`} />
-                            </div>
-                            <div className="flex-1 min-w-0">
-                                <p className={`text-sm font-medium ${sourceFiles.length ? 'text-chart-4' : 'text-muted-foreground'}`}>
-                                    {sourceFiles.length ? `${sourceFiles.length} file${sourceFiles.length > 1 ? 's' : ''} selected` : 'Upload study material'}
-                                </p>
-                                <p className="text-xs text-muted-foreground/60">{STUDY_ACCEPT_LABEL}</p>
-                            </div>
-                            <input type="file" className="hidden" multiple onChange={async e => {
-                                const picked = Array.from(e.target.files || []);
-                                e.target.value = "";
-                                setSourceFiles(await acceptFiles(picked, { toast, existing: sourceFiles }));
-                            }} accept={STUDY_ACCEPT} />
-                        </label>
-                        {sourceFiles.length > 0 && (
-                            <div className="px-4 pb-3 space-y-1" onClick={e => e.stopPropagation()}>
-                                {sourceFiles.map((f, i) => (
-                                    <div key={i} className="flex items-center gap-2 bg-surface rounded-lg px-2 py-1 border border-chart-4/20">
-                                        <span className="flex-1 text-xs text-foreground truncate">{f.name}</span>
-                                        <button type="button" onClick={() => setSourceFiles(prev => prev.filter((_, idx) => idx !== i))} className="text-muted-foreground/60 hover:text-streak flex-shrink-0">
-                                            <X className="w-3 h-3" />
-                                        </button>
-                                    </div>
-                                ))}
-                            </div>
-                        )}
-                    </div>
-
-                    {/* Or a chapter of a textbook already stored. The ordinary
-                        picker tops out well below one — see megaUpload.js. */}
-                    <div className="rounded-2xl border-2 border-border bg-secondary/30 p-4">
+                {/* ── Working from ─────────────────────────────────────────
+                    Their own cards and map come first and need no upload, so
+                    the row says what it already has before it offers one. */}
+                <div className="mt-5 pt-5 border-t border-border">
+                    <SourceRow
+                        files={sourceFiles}
+                        have={haveFor}
+                        hint="Optional. Without notes the questions come from your own cards and mind maps."
+                        onPick={async (picked) => setSourceFiles(await acceptFiles(picked, { toast, existing: sourceFiles }))}
+                        onRemove={(i) => setSourceFiles(prev => prev.filter((_, idx) => idx !== i))}
+                    >
+                        {/* Or a chapter of a textbook already stored. The
+                            ordinary picker tops out well below one — see
+                            megaUpload.js. */}
                         <MegaPicker featurePrice={PRICE.active_recall}
                             onChange={setMegaPick} toast={toast} />
-                    </div>
 
-                    <Button
-                        onClick={handleGenerateQuestions}
-                        disabled={isGeneratingQuestions || !hasSource || !selectedSubject}
-                        className="w-full h-11 bg-chart-4 hover:bg-chart-4/90 text-white rounded-xl font-medium gap-2"
-                    >
-                        {isGeneratingQuestions ? (
-                            <><AceShuffle size="sm" /> Reading your notes…</>
-                        ) : (
-                            <><Wand2 className="w-4 h-4" /> Make questions from my notes</>
+                        {hasSource && (
+                            <>
+                                <Button
+                                    onClick={handleGenerateQuestions}
+                                    disabled={isGeneratingQuestions || !selectedSubject}
+                                    variant="outline"
+                                    className="w-full h-11 rounded-xl font-bold gap-2 border-2"
+                                >
+                                    {isGeneratingQuestions ? (
+                                        <><AceShuffle size="sm" /> Reading your notes…</>
+                                    ) : (
+                                        <><Wand2 className="w-4 h-4" /> Make questions from my notes</>
+                                    )}
+                                </Button>
+                                {/* A disabled button that will not say why is
+                                    the single most confusing control in an app.
+                                    This one needs a subject as well. */}
+                                {!isGeneratingQuestions && !selectedSubject && (
+                                    <p className="text-xs text-center text-muted-foreground">Pick a subject first.</p>
+                                )}
+                            </>
                         )}
-                    </Button>
-                    {/* A disabled button that will not say why is the single
-                        most confusing control in an app. This one needs BOTH a
-                        subject and a file and used to sit greyed out with
-                        neither stated. */}
-                    {!isGeneratingQuestions && (!hasSource || !selectedSubject) && (
-                        <p className="text-xs text-center text-muted-foreground -mt-2">
-                            {!selectedSubject && !hasSource
-                                ? "Pick a subject, then upload notes or choose a chapter."
-                                : !selectedSubject ? "Pick a subject first."
-                                    : "Upload your notes, or pick a chapter from a book."}
-                        </p>
-                    )}
+                    </SourceRow>
+                </div>
 
-                    <div className="bg-surface rounded-xl p-3 border border-chart-4/20">
-                        <p className="text-xs text-chart-4 leading-relaxed">
-                            <span className="font-semibold">Tip:</span> AI generates VCE-aligned questions using command terms like <em>Explain</em>, <em>Evaluate</em> and <em>Compare</em> — matching real VCAA criteria.
-                        </p>
+                {questions.length > 0 && (
+                    <div className="bg-chart-4/10 border border-chart-4/20 rounded-xl p-3.5 mt-4">
+                        <div className="flex items-center gap-2 mb-2">
+                            <CheckCircle className="w-4 h-4 text-chart-4" />
+                            <span className="text-sm font-semibold text-chart-4">{questions.length} questions ready</span>
+                        </div>
+                        <div className="space-y-1">
+                            {questions.slice(0, 3).map((q, i) => (
+                                <p key={i} className="text-xs text-chart-4 truncate">• {q}</p>
+                            ))}
+                            {questions.length > 3 && <p className="text-xs text-chart-4/60">+ {questions.length - 3} more...</p>}
+                        </div>
                     </div>
+                )}
+
+                <Button
+                    onClick={startSession}
+                    disabled={!!sourceFiles.length && questions.length === 0}
+                    className="w-full h-12 mt-5 bg-chart-4 hover:bg-chart-4/90 text-white font-semibold rounded-xl shadow-soft gap-2"
+                >
+                    <Play className="w-5 h-5" />
+                    {questions.length > 0
+                        ? `Start session (${Math.min(questions.length, questionCount)} questions)`
+                        : `Start session (${questionCount} questions)`}
+                </Button>
+                {!!sourceFiles.length && questions.length === 0 && (
+                    <p className="text-xs text-center text-xp mt-2">Generate questions from your uploaded notes first.</p>
+                )}
+
+                {/* Occasional, so it is a quiet line at the foot rather than a
+                    control competing with the heading. */}
+                <div className="mt-4 pt-4 border-t border-border flex justify-center">
+                    <button
+                        onClick={() => { loadSessionHistory(); setShowSessionHistory(!showSessionHistory); }}
+                        className="inline-flex items-center gap-1.5 text-xs font-bold text-muted-foreground hover:text-foreground transition-colors"
+                    >
+                        <FolderOpen className="w-3.5 h-3.5" /> Previous sessions
+                    </button>
                 </div>
             </div>
 

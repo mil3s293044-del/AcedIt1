@@ -2604,6 +2604,94 @@ that produces something; `tourShouldWait` holds the tour until that is done or
 skipped. The tour then answers the other question — where everything lives —
 which is a real question and not one the first run tries to cover.
 
+## Three panels asked one question, so they read as patched on
+
+**"The preset topics feel like a blob patched on top of the page."** Both study
+setup screens were THREE cards stacked — Ace's picks, "Session Setup", and an
+upload panel — and every one of them was answering *what am I about to study*.
+Picking a row in the first quietly changed two fields in the second, which a
+student has no reason to be looking at. So the most useful thing on the screen
+read as an advert for the form underneath it.
+
+**ONE CARD.** The picks lead it, a rule hands over to the manual fields, and
+the sources sit with the thing they are a source FOR. The same move the Quizzes
+page made when it carried five next-moves, on the screen a session starts from.
+
+- **A ROW IS A SPINE, NOT A BOX.** Each pick was a `rounded-2xl border-2` inside
+  a bordered card — box in a box, four times down the screen, which is most of
+  what made it read as pasted on. The kind's colour is a spine down a flush row
+  now, the idiom Subjects and the Quizzes shelf already use to identify a thing.
+  The pill stays: "costing you marks" is a CLAIM and a bare colour cannot make
+  one.
+- **THE HANDOVER IS ONLY DRAWN WHEN THERE IS SOMETHING TO HAND OVER FROM.**
+  `suggestTopics` returns [] on a new account, so the rule reading "or set it up
+  yourself" would be handing over from nothing. The parent computes the picks
+  and passes them down for exactly this — the card has to know before it draws.
+- **THE ROW STARTS THE SESSION ON BOTH PAGES.** Blurting's used to fill two
+  fields and stop, so one affordance meant two different things on two sibling
+  screens, and on one of them it left the student scrolling to find a button —
+  the failure `startFromSuggestion` was written to end. It sets `showFocusPrompt`
+  directly, because the subject is set in the same tick and `startSession`'s
+  guard would read the state before it updates.
+- **`SourceRow` is the other half.** "Turn your notes into questions" and "Your
+  notes (optional)" were panels of their own, which made an upload look like the
+  real way in — when the student's own cards and mind map are better material
+  and need no upload at all. That is the mega-picker's own rule (a second picker
+  would be "two answers to 'what am I working from'") one level up. The row
+  states what it ALREADY has for the chosen topic before it offers an upload.
+- Blurting's "How Blurting Works" list is four lines under the button rather
+  than a third of the screen beside it. It is read once, by somebody who has not
+  done this before, and it was taking that space from everybody who had.
+
+### Two sentences under those rows were false, and only a screenshot caught it
+
+Both render perfectly, pass lint and the build, and are simply wrong about the
+student they describe. `recallSuggest.test.mjs` asserts them; verified by
+putting each bug back.
+
+- **A 0% MISS RATE IS NOT EVIDENCE OF COSTING MARKS.** `weakTopicsFrom` keeps a
+  topic on `weakCards > 0` ALONE, so a deck whose every review landed still
+  arrives with a real `missRate` of 0 — and `missRate != null` is TRUE of 0. The
+  row printed **"0% of your reviews on this missed"** under a pill reading
+  *Costing you marks*: the app telling a student their clean record is the
+  problem. Another `Number`/falsy-zero, in a module the list did not yet have.
+- **A SUBJECT TOTAL IS NOT A TOPIC'S NUMBER.** `s.slipping` counts the whole
+  subject and was printed on every TOPIC row, two topics per subject — so both
+  rows read **"138 cards already past reliable recall"**, identically, and that
+  138 sat on the same line as "20 of your cards" for a topic that has twenty.
+  Two numbers disagreeing on one row, about one topic. `retentionOutlook` now
+  carries `topicCounts` — the same walk, kept per topic, free where the card is
+  already in hand.
+
+## The planner: a form you use monthly took the top of a section every visit
+
+**Re-sequenced rather than restyled.** The page opened with a coach line, the
+SAC hero, then an always-on five-field add-SAC form, then the week board — so
+the first thing under "Upcoming SACs" was permanently a thing to fill in rather
+than the assessments somebody came to look at, and planning the week, which is
+why the page is called the Planner, was third.
+
+- **The week board moves up**, directly under the hero.
+- **The form is a dialog behind one button.** Tracking a SAC is a
+  handful-of-times-a-term action; the same call the Quizzes page made about
+  three buttons for one dialog. Stacked and labelled in the dialog, rather than
+  a five-column grid that collapsed to five unlabelled rows on a phone. It
+  closes ONLY on a success — closing regardless throws away what they typed on a
+  failed write and leaves nothing on screen explaining why nothing appeared.
+- **Upcoming and Marks are separate sections.** "What is coming" and "what
+  already happened" were one block with the past tucked under the future, which
+  is two questions sharing a heading.
+- **THE ASK CARRIES THE ACTION.** The hero's empty state read "add it below",
+  pointing at a form further down — and then the form moved, so the sentence was
+  directing a student at a section that no longer holds one. It opens the dialog
+  itself now. The list's own empty state is one line, because the hero above
+  already makes that ask and two empty states saying the same thing on one
+  screen is a paper-cut this app has had before.
+
+Draw both with `scripts/_floorProbe.jsx?v=study` (the setup card against picks
+of every kind), `?v=setup` (the REAL components, which is the only way to see
+the no-picks path a fixture cannot reach) and `?v=planner`.
+
 ## The science rail folds away
 
 `NeuroPanel` is 380px of every Study screen, on every technique, permanently —
@@ -3886,6 +3974,11 @@ stranger.
 - `src/data/vceSubjects.js` — VCE subject catalog (`assessment_structure` and
   `key_skills` are read by `subjectHub.js`)
 - `src/lib/subjectHub.js`, `src/pages/SubjectHub.jsx` — one subject, gathered
+- `src/components/study/WhatToTest.jsx`, `SourceRow.jsx`,
+  `src/lib/recallSuggest.js` + `recallSuggest.test.mjs` — the picks that open a
+  session and the sources it runs on, drawn as the TOP OF the setup card rather
+  than as panels on it. The test holds the two sentences that were false under
+  a real account's rows
 - `src/lib/studyScore.js`, `src/components/subjects/ScoreCurve.jsx` — the state
   distribution, and the drag that finally sets `goal_study_score`
 - `src/lib/subjectBrowse.js`, `src/components/subjects/ScalingMark.jsx`,
