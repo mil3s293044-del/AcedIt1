@@ -52,6 +52,9 @@ const rel = (f) => path.relative(SRC, f);
 const SELF = new Set(["components/ace/AceShuffle.jsx", "lib/aceLoading.test.mjs"]);
 const files = walk(SRC).filter((f) => !SELF.has(rel(f)));
 
+/** One named file, from the repo root. */
+const read = (f) => fs.readFileSync(path.resolve(f), "utf8");
+
 check("nothing renders lucide's Loader2", () => {
     const offenders = files.filter((f) => /<Loader2\b/.test(fs.readFileSync(f, "utf8")));
     assert.deepEqual(offenders.map(rel), [],
@@ -108,5 +111,66 @@ check("every wait still has SOMETHING to draw", () => {
     });
     assert.deepEqual(offenders.map(rel), [], "renders the loader without importing it");
 });
+
+
+/* ── The floor's deal: the skeleton has to BE the page ───────────────────── */
+
+check("THE DEAL DRAWS THE WHOLE FLOOR, not just the cards", () => {
+    // It drew six card slots and nothing else, so the header, the three tabs,
+    // the chip row and the 300px tape rail all appeared at once the moment the
+    // data landed — on the one screen whose loader exists to stop the page
+    // rearranging itself. Each region is named here rather than counted,
+    // because a missing one is invisible: the page simply snaps when it loads.
+    const deal = read("src/components/market/AceDeal.jsx");
+    for (const region of [
+        "The floor",        // the header's kicker
+        "The tape",         // the 300px rail, the easiest one to forget
+        "Cred",             // the figure in the header strip
+    ]) {
+        assert.ok(deal.includes(`>${region}<`),
+            `the deal no longer draws "${region}" — that region will snap in`);
+    }
+    assert.match(deal, /lg:grid-cols-\[minmax\(0,1fr\)_300px\]/,
+        "the board/tape split is gone, so the board moves sideways on load");
+});
+
+check("A SLOT IS A REAL CARD'S HEIGHT, measured rather than guessed", () => {
+    // The slot was `h-[132px]` against a real MarketCard that measures 316 at
+    // its SHORTEST — three rows of that is about 550px of jump, under a
+    // component whose own header promises nothing jumps. 316 is the commonest
+    // card (a weekly streak line); the taller kinds cannot be matched and the
+    // common one is what makes the usual case seamless.
+    const deal = read("src/components/market/AceDeal.jsx");
+    const m = /const SLOT_H = (\d+)/.exec(deal);
+    assert.ok(m, "SLOT_H is gone — the slot height is hand-written again");
+    const h = Number(m[1]);
+    assert.ok(h >= 280 && h <= 460,
+        `SLOT_H is ${h}px, which is not the height of any card on that board`);
+});
+
+check("THE LATTICE IS IN PIXELS, so a wide card is not a different deck", () => {
+    // `CardBack` drew its weave inside `viewBox="0 0 100 140"` with
+    // `preserveAspectRatio="none"`, which scales user space with the box — so
+    // a `userSpaceOnUse` pattern inside it stretched too. On the floor's
+    // 400x304 slots the 8px weave came out at roughly 32x17 and skewed, which
+    // is the EXACT failure that component's own comment says the pattern was
+    // chosen to avoid. It renders perfectly either way; only a screenshot at an
+    // unusual aspect shows it.
+    // COMMENTS FIRST. The fix is documented in CardBack's own words, in prose
+    // that names the very attributes this looks for — so a scan over the raw
+    // source reads the explanation as the defect. That is the false positive
+    // `fnResult.test.mjs` and `hookDeps.test.mjs` each had to learn about, and
+    // it fired here on the first run.
+    const card = read("src/components/cards/PlayingCard.jsx")
+        .replace(/\{\/\*[\s\S]*?\*\/\}/g, "")
+        .replace(/\/\*[\s\S]*?\*\//g, "")
+        .replace(/^\s*\/\/.*$/gm, "");
+    const back = card.slice(card.indexOf("export function CardBack"));
+    assert.ok(!/viewBox=["']0 0 100 140["']/.test(back),
+        "CardBack's lattice is back inside a stretched viewBox");
+    assert.ok(!/preserveAspectRatio=["']none["']/.test(back),
+        "CardBack's lattice is being non-uniformly scaled again");
+});
+
 
 console.log(`\n${passed} passed`);

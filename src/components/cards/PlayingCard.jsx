@@ -363,7 +363,22 @@ export default function PlayingCard({
  * gauge whatever size the card is rendered at — a CSS gradient lattice scales
  * with the box and goes coarse on a big card and muddy on a small one.
  */
-export function CardBack({ tone, flat = false, className = "", style, skin: skinProp, ...rest }) {
+export function CardBack({
+    tone, flat = false, className = "", style, skin: skinProp,
+    // ── A ROOM WITH ITS OWN PALETTE NEEDS A WAY IN ──────────────────────────
+    // `tone` is a convenience: it is run through `alpha()`, which parses six
+    // hex digits and CANNOT read a `var()`. So the Compete floor — which
+    // scopes about thirty `--floor-*` tokens and whose own test fails any
+    // literal hex in its components — had no way to ink a card back except by
+    // writing one down, which is the bug that test exists for. These two win
+    // over the derivation when given, and nothing else changes.
+    ink: inkProp, soft: softProp,
+    // How much of the card the medallion takes. 38% is right for a card shaped
+    // like a card; a caller drawing a WIDE one (the floor's dealt slots are
+    // 400x304) gets a dinner plate, because the fraction is of the width.
+    medallion = "38%",
+    ...rest
+}) {
     // WHAT THE STUDENT BOUGHT, drawn. The equipped back is read from context
     // rather than threaded through nineteen call sites — see CosmeticsContext.
     // `skin={null}` forces the default, which is how a surface that must show
@@ -372,8 +387,8 @@ export function CardBack({ tone, flat = false, className = "", style, skin: skin
     const worn = useCosmetics().back;
     const skin = skinProp === undefined ? worn : skinProp;
 
-    const ink = skin ? skin.ink : (alpha(tone, 0.9) || "hsl(var(--primary))");
-    const soft = skin ? skin.ground : (alpha(tone, 0.16) || "hsl(var(--primary) / 0.16)");
+    const ink = inkProp || (skin ? skin.ink : (alpha(tone, 0.9) || "hsl(var(--primary))"));
+    const soft = softProp || (skin ? skin.ground : (alpha(tone, 0.16) || "hsl(var(--primary) / 0.16)"));
     // The lattice is a <pattern>, and a pattern is referenced BY ID. Two decks
     // with different subject colours on one screen would both resolve to
     // whichever back mounted first, so every back gets its own id. React's
@@ -389,26 +404,40 @@ export function CardBack({ tone, flat = false, className = "", style, skin: skin
             aria-hidden="true"
             {...rest}
         >
-            <svg className="absolute inset-[5px] w-[calc(100%-10px)] h-[calc(100%-10px)]"
-                viewBox="0 0 100 140" preserveAspectRatio="none">
+            {/* ── THE LATTICE IS IN PIXELS, NOT IN A STRETCHED VIEWBOX ──────
+                This carried `viewBox="0 0 100 140" preserveAspectRatio="none"`,
+                which scales user space with the box — so a `userSpaceOnUse`
+                pattern inside it stretches too, and the 8px weave came out at
+                32x17 and skewed on a wide card. That is EXACTLY the failure the
+                comment above says the pattern was chosen to avoid ("a CSS
+                gradient lattice scales with the box and goes coarse on a big
+                card"); the viewBox was quietly doing the same thing. With no
+                viewBox, user space IS CSS pixels and the gauge is constant at
+                every size — which is what every caller already believed. */}
+            <svg className="absolute inset-[5px] w-[calc(100%-10px)] h-[calc(100%-10px)]">
                 <defs>
                     <pattern id={pid} width="8" height="8" patternUnits="userSpaceOnUse">
                         <path d="M0 8 L8 0 M-2 2 L2 -2 M6 10 L10 6" stroke={ink}
                             strokeWidth="1" strokeOpacity="0.5" fill="none" />
                     </pattern>
                 </defs>
-                <rect width="100" height="140" rx="7" fill={soft} />
-                <rect width="100" height="140" rx="7" fill={`url(#${pid})`} />
-                <rect x="1" y="1" width="98" height="138" rx="6.5"
+                <rect width="100%" height="100%" rx="7" fill={soft} />
+                <rect width="100%" height="100%" rx="7" fill={`url(#${pid})`} />
+                <rect x="1" y="1" width="calc(100% - 2px)" height="calc(100% - 2px)" rx="6.5"
                     fill="none" stroke={ink} strokeOpacity="0.45" strokeWidth="1.5" />
             </svg>
             {/* The medallion. Something has to sit in the middle or the back
                 reads as wallpaper rather than as the back of THIS deck. */}
             <span className="absolute inset-0 grid place-items-center">
-                <span className="grid place-items-center rounded-full w-[38%] aspect-square border-2"
+                <span className="grid place-items-center rounded-full aspect-square border-2"
                     style={{
+                        width: medallion,
                         borderColor: ink,
-                        backgroundColor: skin ? skin.medallion : "hsl(var(--surface))",
+                        // `softProp` doubles as the medallion's ground for a
+                        // caller supplying its own palette: "hsl(var(--surface))"
+                        // is an APP token and would show the app's cream through
+                        // a room that has deliberately left it.
+                        backgroundColor: skin ? skin.medallion : (softProp || "hsl(var(--surface))"),
                     }}>
                     {/* A skin paints its own pip: `fill-foreground` is near-white
                         on dark and near-black on light, and a bought back has
