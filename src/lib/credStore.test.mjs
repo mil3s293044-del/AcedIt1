@@ -10,12 +10,14 @@
  *    with more than they earned, and by the time anybody notices, the ledger
  *    has been wrong for weeks.
  *
- * 2. THE CHIPS DOOR. `chips.js` prices a week's stack at $1.95 of real
- *    Anthropic spend, so every chip this module hands out is billable. The
- *    ceiling is written in micro-dollars and the chip count is DERIVED from it,
- *    and the test pins that direction — a cap expressed in chips silently
- *    doubles in cost the day chip pricing moves, which is the failure that
- *    would be found on an invoice rather than in the app.
+ * 2. A PURCHASE THAT COSTS REAL MONEY. There was one — a door converting cred
+ *    into AI chips, where `chips.js` prices a week's stack at $1.95 of actual
+ *    Anthropic spend — and it is gone. What replaces the ceiling it needed is
+ *    an ABSENCE: no catalogue entry is per-unit, and nothing in the module
+ *    reaches toward `chips.js` at all. That is a stronger guarantee than a cap,
+ *    and it is the shape the refund rule below already takes, because the day
+ *    somebody adds a door back is the day it should fail rather than the day
+ *    it turns up on an invoice.
  *
  * And one rule the whole design rests on: XP SETS THE RATE, NEVER THE BALANCE.
  * market.js's own header says a market where abstaining is optimal is not a
@@ -27,12 +29,16 @@ import fs from "node:fs";
 import path from "node:path";
 import {
     GRANT_BASE, GRANT_TOP, TIERS, MID_GRANT,
-    CHIPS_WEEKLY_MICRO_CAP, CHIPS_WEEKLY_MAX,
     CATALOGUE, grantForTier, itemById, owns, heldCount,
-    chipsConvertedThisWeek, priceOf, canBuy, purchasePatch, equipped,
+    priceOf, canBuy, purchasePatch, equipped,
 } from "@/lib/credStore";
-import { MICROS_PER_CHIP, WEEKLY_CHIPS, WEEKLY_CAP_MICROS } from "@/lib/chips";
 import { CRED_WEEKLY_GRANT, CRED_BALANCE_CAP } from "@/lib/market";
+
+/** Source with comments removed — a scan must never read its own explanation
+ *  as the defect, the false positive `fnResult.test.mjs` had to learn about. */
+const withoutComments = (src) => src
+    .replace(/\/\*[\s\S]*?\*\//g, "")
+    .split("\n").filter((l) => !l.trim().startsWith("//") && !l.trim().startsWith("*")).join("\n");
 
 let passed = 0;
 const check = (name, fn) => {
@@ -81,7 +87,7 @@ check("the ladder straddles the flat grant it replaced", () => {
 /* ── The catalogue ───────────────────────────────────────────────────────── */
 
 check("every item is buyable, priced, and of a kind something handles", () => {
-    const kinds = new Set(["cosmetic", "utility", "chips", "market"]);
+    const kinds = new Set(["cosmetic", "utility", "market"]);
     const ids = new Set();
     for (const item of CATALOGUE) {
         assert.ok(item.id && !ids.has(item.id), `duplicate or missing id: ${item.id}`);
@@ -115,62 +121,31 @@ check("PRICES ARE READABLE AS WEEKS, not as bare numbers", () => {
     }
 });
 
-/* ── The chips door, which is money ──────────────────────────────────────── */
+/* ── The money door, which is now an absence ─────────────────────────────── */
 
-check("THE CHIPS CEILING IS DERIVED FROM DOLLARS, never typed as chips", () => {
-    // A cap written as "300 chips" doubles in cost the day chip pricing moves,
-    // and the discovery happens on an invoice. Written as micro-dollars, it
-    // cannot.
-    assert.equal(CHIPS_WEEKLY_MAX, Math.floor(CHIPS_WEEKLY_MICRO_CAP / MICROS_PER_CHIP));
-    // And the ceiling is a real fraction of a week rather than a second stack.
-    assert.ok(CHIPS_WEEKLY_MICRO_CAP < WEEKLY_CAP_MICROS,
-        "a student can convert more than their whole weekly budget");
-    assert.ok(CHIPS_WEEKLY_MAX < WEEKLY_CHIPS / 2,
-        "the top-up is more than half a stack again");
+check("NO PURCHASE HERE COSTS REAL MONEY", () => {
+    // Cred could briefly be converted into AI chips, and `chips.js` prices a
+    // week's stack at $1.95 of actual Anthropic spend — so that one shelf row
+    // was the only thing in Compete that could be wrong in DOLLARS. It is gone,
+    // and the guarantee is an absence rather than a ceiling: nothing in this
+    // module may reach toward the chip economy in either direction.
+    const src = fs.readFileSync(path.join(process.cwd(), "src/lib/credStore.js"), "utf8");
+    const code = withoutComments(src);
+    assert.ok(!/chips/i.test(code),
+        "credStore reaches for chips again — a cred→AI door is money, and it was removed on purpose");
+    assert.ok(!/MICROS_PER_CHIP|WEEKLY_CHIPS|WEEKLY_CAP_MICROS/.test(code),
+        "a chip price crossed back into the cred economy");
 });
 
-check("THE MAXIMUM CONVERSION COSTS MORE THAN A TOP-TIER WEEK", () => {
-    // Nobody reaches the ceiling by accident, and no single week's grant can
-    // buy it — so it is only reachable by trading well, which is the point.
-    const chips = itemById("chips");
-    const full = priceOf(chips, CHIPS_WEEKLY_MAX);
-    assert.ok(full > GRANT_TOP,
-        `the whole weekly allowance costs ${full}, under one top grant of ${GRANT_TOP}`);
-    // And it must stay inside the balance cap, or it is unreachable at any rank.
-    assert.ok(full <= CRED_BALANCE_CAP,
-        `the maximum costs ${full}, which no student can ever hold`);
-});
-
-check("the weekly chips ceiling is enforced, and says WHICH problem you have", () => {
-    const rich = who({ cred_balance: CRED_BALANCE_CAP });
-    assert.equal(canBuy(rich, "chips", { units: 10, week: WEEK }).ok, true);
-
-    const maxed = who({
-        cred_balance: CRED_BALANCE_CAP,
-        extra: { cred_chips_week: { week: WEEK, chips: CHIPS_WEEKLY_MAX } },
-    });
-    const v = canBuy(maxed, "chips", { units: 10, week: WEEK });
-    assert.equal(v.ok, false);
-    assert.match(v.reason, /this week/i, "a maxed student was told they are short, which is false");
-    assert.ok(!/more cred/i.test(v.reason), "the ceiling was reported as a balance problem");
-
-    // Partway through: it names what is left rather than refusing flatly.
-    const partly = who({
-        cred_balance: CRED_BALANCE_CAP,
-        extra: { cred_chips_week: { week: WEEK, chips: CHIPS_WEEKLY_MAX - 5 } },
-    });
-    assert.match(canBuy(partly, "chips", { units: 20, week: WEEK }).reason, /5 more chips/);
-    assert.equal(canBuy(partly, "chips", { units: 5, week: WEEK }).ok, true, "exactly the remainder is allowed");
-});
-
-check("LAST WEEK'S CONVERSION DOES NOT COUNT AGAINST THIS WEEK", () => {
-    const stale = who({ extra: { cred_chips_week: { week: "2026-09-21", chips: CHIPS_WEEKLY_MAX } } });
-    assert.equal(chipsConvertedThisWeek(stale, WEEK), 0);
-    assert.equal(canBuy(stale, "chips", { units: 10, week: WEEK }).ok, true);
-    // …and a missing or junk log is zero, not a crash and not a free pass.
-    assert.equal(chipsConvertedThisWeek(who(), WEEK), 0);
-    assert.equal(chipsConvertedThisWeek({ extra: { cred_chips_week: { week: WEEK, chips: "lots" } } }, WEEK), 0);
-    assert.equal(chipsConvertedThisWeek(null, WEEK), 0);
+check("EVERY PRICE IS FIXED, so nothing is bought by the unit", () => {
+    // A per-unit row is what the money door needed and the only thing that
+    // needed it. With none, `priceOf` takes no multiplier, the store draws no
+    // quantity control, and the server has no `units` to validate — three
+    // places that cannot disagree about a quantity that does not exist.
+    for (const item of CATALOGUE) {
+        assert.equal(item.perUnit, undefined, `${item.id} is per-unit — see the header`);
+    }
+    assert.equal(priceOf.length, 1, "priceOf grew a second argument — a quantity is back");
 });
 
 /* ── Spending ────────────────────────────────────────────────────────────── */
@@ -217,19 +192,25 @@ check("A CONSUMABLE CANNOT BE STOCKPILED", () => {
 });
 
 check("the patch NAMES what the caller still has to do", () => {
-    // A handler switching on the id is how a second entry of the same kind gets
-    // forgotten. The effect is carried, not inferred.
-    const chips = purchasePatch(who({ cred_balance: CRED_BALANCE_CAP }), "chips", { units: 20, week: WEEK });
-    assert.deepEqual(chips._effect, { type: "grant_chips", chips: 20 });
-    assert.equal(chips.extra.cred_chips_week.chips, 20);
-    // Derived from the catalogue, never restated — a price written down
-    // twice is the drift this codebase keeps having to fix.
-    assert.equal(chips.cred_balance, CRED_BALANCE_CAP - priceOf(itemById("chips"), 20));
+    // Named rather than inferred from the id: a handler switching on a string
+    // is how a second catalogue entry of the same kind gets forgotten.
+    const freeze = purchasePatch(who({ cred_balance: CRED_BALANCE_CAP }), "streak-freeze");
+    assert.deepEqual(freeze._effect, { type: "streak_freeze" });
 
-    const line = purchasePatch(who(), "open-line", { week: WEEK });
-    assert.deepEqual(line._effect, { type: "open_market" });
-    // A cosmetic has nothing further to do.
-    assert.equal(purchasePatch(who(), "back-ink", { week: WEEK })._effect, null);
+    const cosmetic = purchasePatch(who({ cred_balance: CRED_BALANCE_CAP }), "back-ink");
+    assert.equal(cosmetic._effect, null, "a cosmetic is complete once the patch lands");
+    assert.ok(cosmetic.extra.cred_owned.includes("back-ink"));
+
+    // EVERY EFFECT IS RECORDED BY THE PATCH ITSELF, which is what lets the
+    // server charge and grant in ONE write. The money door was the only thing
+    // that needed a second act afterwards, and it had no refund path to unwind
+    // a charge that landed with a failed grant.
+    for (const item of CATALOGUE) {
+        const patch = purchasePatch(who({ cred_balance: CRED_BALANCE_CAP }), item.id);
+        assert.ok(patch, `${item.id} could not be bought at the cap`);
+        assert.ok(patch.extra || patch._effect,
+            `${item.id} charges and records nothing`);
+    }
 });
 
 check("a purchase never disturbs its neighbours in `extra`", () => {
@@ -243,22 +224,23 @@ check("NOTHING IS REFUNDABLE, which is what closes the arbitrage", () => {
     // With no sell-back there is no path from an owned object to a balance, so
     // a cosmetic cannot be laundered into chips. Asserted as an absence,
     // because the day somebody adds a refund is the day this stops being true.
-    const src = fs.readFileSync(path.join(process.cwd(), "src/lib/credStore.js"), "utf8");
-    const code = src.replace(/\/\*[\s\S]*?\*\//g, "")
-        .split("\n").filter((l) => !l.trim().startsWith("//") && !l.trim().startsWith("*")).join("\n");
+    const code = withoutComments(
+        fs.readFileSync(path.join(process.cwd(), "src/lib/credStore.js"), "utf8"));
     assert.ok(!/refund|sell|resell|cash.?out/i.test(code),
         "a refund path appeared — every price here assumes cred only moves one way");
 });
 
-check("zero and negative unit counts buy nothing", () => {
+check("AN UNKNOWN ITEM BUYS NOTHING, and never for free", () => {
     const rich = who({ cred_balance: CRED_BALANCE_CAP });
-    for (const u of [0, -5, 1.5, NaN, null, "ten"]) {
-        const v = canBuy(rich, "chips", { units: u, week: WEEK });
-        if (v.ok) assert.ok(priceOf(itemById("chips"), u) > 0, `units=${u} bought something for nothing`);
-        else assert.equal(purchasePatch(rich, "chips", { units: u, week: WEEK }), null);
+    for (const id of ["chips", "", null, undefined, "not-a-thing", 0]) {
+        assert.equal(canBuy(rich, id).ok, false, `${id} was buyable`);
+        assert.equal(purchasePatch(rich, id), null, `${id} produced a patch`);
     }
-    assert.equal(priceOf(itemById("chips"), 0), null);
-    assert.equal(priceOf(null, 1), null);
+    // A zero or negative price would read as FREE at every call site that
+    // checks affordability with a comparison, so it is null instead.
+    assert.equal(priceOf(null), null);
+    assert.equal(priceOf({ price: 0 }), null);
+    assert.equal(priceOf({ price: -10 }), null);
 });
 
 /* ── Equipping ───────────────────────────────────────────────────────────── */
@@ -279,9 +261,8 @@ check("XP SETS THE RATE AND IS NEVER SPENT", () => {
     // rational play 'never bet' — a market where abstaining is optimal is not a
     // market." A conversion would make spending cred cost rank and cost the
     // ATAR. This module may READ a rank tier and must never touch XP.
-    const src = fs.readFileSync(path.join(process.cwd(), "src/lib/credStore.js"), "utf8");
-    const code = src.replace(/\/\*[\s\S]*?\*\//g, "")
-        .split("\n").filter((l) => !l.trim().startsWith("//") && !l.trim().startsWith("*")).join("\n");
+    const code = withoutComments(
+        fs.readFileSync(path.join(process.cwd(), "src/lib/credStore.js"), "utf8"));
     assert.ok(!/total_xp|xp_awarded|awardXP|deductXP|spend.*xp/i.test(code),
         "credStore reaches for XP — the grant is a RATE, and XP is never spent");
     // The only XP-shaped input is a tier number, which carries no balance.

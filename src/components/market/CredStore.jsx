@@ -25,29 +25,31 @@
  * price list, and the first disagreement is a button that says yes to something
  * the server refuses — megaUpload's rule, on an economy rather than an upload.
  */
-import React, { useState } from "react";
+import React from "react";
 import { motion, AnimatePresence, useReducedMotion } from "framer-motion";
-import { Coins, Check, Lock, Sparkles, Flame, Zap, LineChart } from "lucide-react";
+import { Coins, Check, Lock, Sparkles, Flame, LineChart } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { CHIPS_BLOCK } from "@/lib/credStore";
 
 const GLYPH = {
     cosmetic: Sparkles,
     utility: Flame,
-    chips: Zap,
     market: LineChart,
 };
 
+/* NOTHING ON THIS SHELF COSTS REAL MONEY. There was an "AI" group converting
+   cred into chips and it is gone — see credStore.js's header. What went with
+   it is the only per-unit row here, which is why this component no longer
+   holds a quantity at all: a slider is a control for a shelf that has one,
+   and keeping it against the day something returns is how a half-wired
+   control ends up on a screen. */
 const GROUPS = [
     ["cosmetic", "Looks", "Yours for good, once bought. The room sees them."],
     ["utility", "Useful", "Spent on your behalf the moment it helps."],
-    ["chips", "AI", "Trade a good week on the floor for more AI."],
     ["market", "The board", "Put a question of your own up."],
 ];
 
 export default function CredStore({ store, busy, onBuy }) {
     const reduce = useReducedMotion();
-    const [units, setUnits] = useState(CHIPS_BLOCK);
 
     if (!store) {
         return (
@@ -99,14 +101,13 @@ export default function CredStore({ store, busy, onBuy }) {
                         <div className="grid sm:grid-cols-2 gap-2.5">
                             {rows.map((item) => {
                                 const mine = owned.has(item.id);
-                                const perUnit = !!item.perUnit;
-                                const cost = perUnit ? item.price * units : item.price;
+                                const cost = item.price;
                                 const v = item.verdict || {};
-                                // A per-unit row's server verdict was computed for ONE unit, so
-                                // the block price is checked here too — against the balance the
-                                // server just sent, never against a locally cached one.
-                                const affordable = perUnit ? (store.cred ?? 0) >= cost : v.ok;
-                                const blocked = perUnit ? (!v.ok && !/more cred/i.test(v.reason || "")) : !v.ok;
+                                // THE SERVER DECIDES. Every price here is fixed now, so there is
+                                // nothing for the client to recompute and no way for its answer
+                                // to disagree with the one the purchase is checked against.
+                                const affordable = !!v.ok;
+                                const blocked = !v.ok && !/more cred/i.test(v.reason || "");
 
                                 return (
                                     <motion.div
@@ -134,35 +135,6 @@ export default function CredStore({ store, busy, onBuy }) {
                                             )}
                                         </div>
 
-                                        {perUnit && !mine && (
-                                            <div className="mt-2.5">
-                                                <div className="flex items-center justify-between mb-1">
-                                                    <label htmlFor={`u-${item.id}`}
-                                                        className="text-[10px] font-black uppercase tracking-widest text-[var(--floor-dim)]">
-                                                        How many
-                                                    </label>
-                                                    <span className="font-display font-black text-sm tabular-nums text-[var(--floor-ink)]">
-                                                        {units} chips
-                                                    </span>
-                                                </div>
-                                                <input
-                                                    id={`u-${item.id}`}
-                                                    type="range"
-                                                    min={CHIPS_BLOCK}
-                                                    max={Math.max(CHIPS_BLOCK, store.chips_max || CHIPS_BLOCK)}
-                                                    step={CHIPS_BLOCK}
-                                                    value={units}
-                                                    onChange={(e) => setUnits(Number(e.target.value))}
-                                                    className="floor-range w-full"
-                                                    style={{
-                                                        "--range-fill": `${((units - CHIPS_BLOCK) /
-                                                            Math.max(1, (store.chips_max || CHIPS_BLOCK) - CHIPS_BLOCK)) * 100}%`,
-                                                        "--range-ink": "var(--floor-warn-ink)",
-                                                    }}
-                                                />
-                                            </div>
-                                        )}
-
                                         {!mine && (
                                             <div className="mt-3 flex items-center justify-between gap-2">
                                                 <span className="font-display font-black tabular-nums text-[var(--floor-warn-ink)]
@@ -173,7 +145,7 @@ export default function CredStore({ store, busy, onBuy }) {
                                                     size="sm"
                                                     className="font-bold"
                                                     disabled={busy || blocked || !affordable}
-                                                    onClick={() => onBuy(item.id, perUnit ? units : undefined)}
+                                                    onClick={() => onBuy(item.id)}
                                                 >
                                                     {blocked ? <Lock className="w-3.5 h-3.5" /> : "Buy"}
                                                 </Button>

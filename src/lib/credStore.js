@@ -30,27 +30,28 @@
  * long does this take to afford". A number typed directly goes stale the moment
  * a grant moves and nobody notices; a multiple cannot.
  *
- * ─── THE CHIPS DOOR IS THE ONLY ONE THAT COSTS REAL MONEY ───────────────────
- * Everything else here is free to run. Chips are not: `chips.js` prices a
- * week's stack at $1.95 of actual Anthropic spend, so cred → chips is a path
- * from "won a market" to "the bill goes up". And a market on your own study log
- * is allowed DELIBERATELY, so there is a farm at the end of that path — bounded
- * by the scoring rule, which pays ~nothing for backing a near-certainty you
- * control, but bounded is not zero.
+ * ─── NOTHING HERE COSTS REAL MONEY, AND THAT IS NOW A PROPERTY ─────────────
+ * There was one exception and it has been removed: a door converting cred into
+ * AI chips. `chips.js` prices a week's stack at $1.95 of actual Anthropic
+ * spend, so that door was a path from "won a market" to "the bill goes up" —
+ * and a market on your own study log is allowed DELIBERATELY, so there was a
+ * farm at the end of it. Bounded by the scoring rule, which pays ~nothing for
+ * backing a near-certainty you control, and by a weekly micro-dollar ceiling.
+ * Bounded is not zero, and it was the only thing on this shelf that could be
+ * wrong in dollars rather than in pixels.
  *
- * So the ceiling is written in MICRO-DOLLARS and the chip count is derived from
- * it. That direction matters: a cap of "300 chips" silently doubles in cost the
- * day chip pricing changes, and a cap of "$0.60" cannot.
+ * With it gone the shelf is cosmetics, one consumable and one action — all
+ * free to run, none of them reachable from a balance in either direction. THE
+ * INVARIANT IS THAT NO PURCHASE HERE MOVES MONEY, and `credStore.test.mjs`
+ * asserts it as an ABSENCE: no catalogue entry is per-unit, and nothing in this
+ * module reaches toward `chips.js`. The day somebody adds a door back is the
+ * day that stops being true, which is exactly when a test should say so.
+ *
+ * It leaves `extra.cred_chips_week` behind on any row that ever bought one.
+ * Nothing reads it now. It is not cleaned up, for the reason the leaked
+ * flashcard rows were not retagged: a migration to delete a key nobody reads
+ * is risk with no payoff.
  */
-
-// RELATIVE, NOT `@/lib/chips`. `server.mjs` imports this module, and node
-// resolves neither the alias nor the extensionless path — only vite and the
-// test loader do. So the alias built, passed lint, passed every test, and
-// crashed the server on boot in production, where the only symptom is a
-// health check that never answers. The same trap `holdings.js` records one
-// file over, arrived at from the other direction; `serverBoot.test.mjs` walks
-// the graph now rather than trusting a comment.
-import { MICROS_PER_CHIP } from "./chips.js";
 
 /* ── The grant ───────────────────────────────────────────────────────────── */
 
@@ -106,29 +107,11 @@ const shelfPrice = (weeks) => Math.round((MID_GRANT * weeks) / 50) * 50;
 /* ── What cred buys ──────────────────────────────────────────────────────── */
 
 /**
- * The chips ceiling, in MICRO-DOLLARS of real Anthropic spend per student per
- * week. Read the header: this is the one number here that is money.
- *
- * $0.60 against a $1.95 weekly stack is about a 30% top-up for the students who
- * earn it, and at ~30 actives a worst case where every one of them maxes it is
- * ~$18 a week. Only strong traders can reach it at all, so the real figure is a
- * fraction of that.
- */
-export const CHIPS_WEEKLY_MICRO_CAP = 600_000;
-
-/** How many chips that ceiling buys. DERIVED, so chip pricing moves it. */
-export const CHIPS_WEEKLY_MAX = Math.floor(CHIPS_WEEKLY_MICRO_CAP / MICROS_PER_CHIP);
-
-/** Chips are bought in blocks — a slider over 307 individual chips is not a control. */
-export const CHIPS_BLOCK = 50;
-
-/**
  * The catalogue.
  *
  * `kind` decides what BUYING means, and nothing else branches on the id:
  *   cosmetic  — owned forever, bought once, `extra.cred_owned` remembers it
  *   utility   — a consumable the app spends on the student's behalf
- *   chips     — the money door, capped weekly
  *   market    — buys an action rather than an object
  *
  * Prices are multiples of `MID_GRANT`, so they are readable as "about half a
@@ -170,20 +153,6 @@ export const CATALOGUE = [
         stackMax: 1,
     },
 
-    // ── The money door.
-    {
-        id: "chips", kind: "chips",
-        name: "AI chips", blurb: "Trade cred for more AI this week.",
-        // SEVEN cred a chip, and the seven is load-bearing. The first draft was
-        // four, which put the whole weekly allowance at 1228 — LESS than a
-        // top-tier grant of 1800, so the best students could max the money door
-        // every Monday without trading at all, which is the one thing this door
-        // must not allow. The test asserts the maximum costs more than any
-        // single grant, so the price cannot drift back under it.
-        price: 7,
-        perUnit: true,
-    },
-
     // ── Agency rather than an object.
     {
         id: "open-line", kind: "market", effect: "open_market",
@@ -215,26 +184,21 @@ export function heldCount(profile, id) {
     return Number.isFinite(n) && n > 0 ? Math.floor(n) : 0;
 }
 
-/** Chips already converted this week, keyed on the same week string the grant uses. */
-export function chipsConvertedThisWeek(profile, week) {
-    const log = profile?.extra?.cred_chips_week;
-    if (!log || log.week !== week) return 0;
-    const n = Number(log.chips);
-    return Number.isFinite(n) && n > 0 ? Math.floor(n) : 0;
-}
-
 /**
- * What one purchase costs, in cred. `units` only applies to a per-unit item.
+ * What one purchase costs, in cred.
  *
  * Returns null for anything unbuyable rather than 0 — a zero price would read
  * as free at every call site that checks affordability with a comparison.
+ *
+ * It took a `units` multiplier for the chips door and lost it with the door.
+ * A generic mechanism with no user is the half-wired shape this file's own
+ * neighbours keep recording, and re-adding one multiplication is cheaper than
+ * carrying a branch nothing exercises.
  */
-export function priceOf(item, units = 1) {
+export function priceOf(item) {
     if (!item) return null;
-    if (!item.perUnit) return item.price;
-    const u = Math.floor(Number(units));
-    if (!Number.isFinite(u) || u <= 0) return null;
-    return item.price * u;
+    const n = Number(item.price);
+    return Number.isFinite(n) && n > 0 ? n : null;
 }
 
 /**
@@ -245,7 +209,7 @@ export function priceOf(item, units = 1) {
  * every refusal here has a different fix — earn more, you already own it, wait
  * until Monday. Returns `{ ok, reason, cost }`.
  */
-export function canBuy(profile, id, { units = 1, week = null } = {}) {
+export function canBuy(profile, id) {
     const item = itemById(id);
     if (!item) return { ok: false, reason: "That is not something you can buy.", cost: null };
 
@@ -258,29 +222,7 @@ export function canBuy(profile, id, { units = 1, week = null } = {}) {
         return { ok: false, reason: "You are already holding one. Use it before buying another.", cost: null };
     }
 
-    let cost;
-    if (item.kind === "chips") {
-        const u = Math.floor(Number(units));
-        if (!Number.isFinite(u) || u <= 0) return { ok: false, reason: "Pick how many chips.", cost: null };
-        // THE WEEKLY CEILING IS CHECKED BEFORE THE BALANCE, so a student who has
-        // maxed it is told that rather than being told they are short — two
-        // different problems with two different fixes, and the second is a lie.
-        const already = chipsConvertedThisWeek(profile, week);
-        if (already >= CHIPS_WEEKLY_MAX) {
-            return { ok: false, reason: "You have converted all you can this week. It resets Monday.", cost: null };
-        }
-        if (already + u > CHIPS_WEEKLY_MAX) {
-            return {
-                ok: false,
-                reason: `You can convert ${CHIPS_WEEKLY_MAX - already} more chips this week.`,
-                cost: null,
-            };
-        }
-        cost = priceOf(item, u);
-    } else {
-        cost = priceOf(item, 1);
-    }
-
+    const cost = priceOf(item);
     if (cost === null) return { ok: false, reason: "That is not something you can buy.", cost: null };
     if (balance < cost) {
         return { ok: false, reason: `You need ${cost - balance} more cred.`, cost };
@@ -301,8 +243,8 @@ export function canBuy(profile, id, { units = 1, week = null } = {}) {
  * there is no arbitrage, no laundering a cosmetic into chips, and no path from
  * an owned object to a balance.
  */
-export function purchasePatch(profile, id, { units = 1, week = null } = {}) {
-    const verdict = canBuy(profile, id, { units, week });
+export function purchasePatch(profile, id) {
+    const verdict = canBuy(profile, id);
     if (!verdict.ok) return null;
     const item = itemById(id);
     const extra = { ...(profile?.extra || {}) };
@@ -311,20 +253,15 @@ export function purchasePatch(profile, id, { units = 1, week = null } = {}) {
         extra.cred_owned = [...ownedList(profile), item.id];
     } else if (item.kind === "utility") {
         extra.cred_held = { ...(extra.cred_held || {}), [item.id]: heldCount(profile, item.id) + 1 };
-    } else if (item.kind === "chips") {
-        const u = Math.floor(Number(units));
-        extra.cred_chips_week = { week, chips: chipsConvertedThisWeek(profile, week) + u };
     }
 
     return {
         cred_balance: Math.max(0, (Number(profile?.cred_balance) || 0) - verdict.cost),
         extra,
         // What the caller still has to do, named rather than inferred from the
-        // id — a handler switching on "chips" the string is how a second
-        // catalogue entry of the same kind gets forgotten.
-        _effect: item.kind === "chips"
-            ? { type: "grant_chips", chips: Math.floor(Number(units)) }
-            : (item.effect ? { type: item.effect } : null),
+        // id — a handler switching on a string is how a second catalogue entry
+        // of the same kind gets forgotten.
+        _effect: item.effect ? { type: item.effect } : null,
     };
 }
 
@@ -336,7 +273,6 @@ export function equipped(profile, slot) {
 
 export default {
     GRANT_BASE, GRANT_TOP, TIERS, MID_GRANT,
-    CHIPS_WEEKLY_MICRO_CAP, CHIPS_WEEKLY_MAX, CHIPS_BLOCK,
     CATALOGUE, grantForTier, itemById, owns, heldCount,
-    chipsConvertedThisWeek, priceOf, canBuy, purchasePatch, equipped,
+    priceOf, canBuy, purchasePatch, equipped,
 };

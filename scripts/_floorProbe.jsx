@@ -29,7 +29,7 @@ import ConsentBanner from "@/components/legal/ConsentBanner";
 import AgeGate from "@/components/legal/AgeGate";
 import CredStore from "@/components/market/CredStore";
 import PriceTick from "@/components/market/PriceTick";
-import { CATALOGUE, grantForTier, CHIPS_WEEKLY_MAX } from "@/lib/credStore";
+import { CATALOGUE, grantForTier } from "@/lib/credStore";
 import BottomNav from "@/components/layout/BottomNav";
 
 const which = new URLSearchParams(location.search).get("v") || "deal";
@@ -481,7 +481,6 @@ views.store = () => (
                     owned: ["back-felt"],
                     held: {},
                     equipped: {},
-                    chips_max: CHIPS_WEEKLY_MAX,
                     items: CATALOGUE.map((i) => ({
                         ...i,
                         verdict: i.id === "back-gilt"
