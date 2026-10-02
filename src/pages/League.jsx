@@ -30,12 +30,17 @@ import { useLiveTick } from "@/lib/LiveContext";
 import { takeFn } from "@/lib/fnResult";
 import { Countdown } from "@/components/competition/arenaHelpers";
 import WeeklyBoard from "@/components/league/WeeklyBoard";
+import Podium from "@/components/league/Podium";
+import ScoreGuide from "@/components/league/ScoreGuide";
+import Crest from "@/components/shared/Crest";
 import Reveal from "@/components/shared/Reveal";
 import LiveNumber from "@/components/shared/LiveNumber";
 import AceShuffle, { AceLoading } from "@/components/ace/AceShuffle";
 import {
     msUntilReset, untilLabel, isClosing, leagueLead, historySummary, ordinal, SCORE_MAX,
+    podiumGap, PODIUM,
 } from "@/lib/league";
+import { grantForLeague } from "@/lib/credStore";
 
 const TONE = {
     chase:   "text-chart-3",
@@ -84,6 +89,22 @@ export default function League() {
     const closing = isClosing(resetMs);
     const lead = useMemo(() => leagueLead({ rows, me, closing }), [rows, me, closing]);
     const hist = useMemo(() => historySummary(data?.history), [data?.history]);
+    const pod = useMemo(() => podiumGap(rows), [rows]);
+    // Monday's grant AT THIS FINISH. The same function the server grants with,
+    // so the figure here is the figure that lands — `grantForLeague` is
+    // imported rather than restated for the reason this whole release keeps
+    // deleting mirrors. `tiered` follows the server's own mode: in global mode
+    // there is one board and the finish takes the whole range.
+    const grantNow = useMemo(() => (
+        me.position
+            ? grantForLeague({
+                position: me.position,
+                groupSize: rows.length || 30,
+                tiered: data?.mode === "tiered",
+                tierIndex: 0,
+            })
+            : null
+    ), [me.position, rows.length, data?.mode]);
 
     const toggleAnon = async () => {
         setSavingAnon(true);
@@ -186,7 +207,62 @@ export default function League() {
                                     <LiveNumber value={me.weekly_xp ?? 0} />
                                 </p>
                             </div>
+                            {/* WHAT THE WEEK IS WORTH, at today's finish. The
+                                league granted credits off a finish it computed
+                                and never showed, so the one number a student
+                                weighs a Thursday session against was invisible.
+                                It is a projection and it says so. */}
+                            {grantNow != null && (
+                                <div>
+                                    <p className="stat-label text-muted-foreground">Monday pays</p>
+                                    <p className="font-display font-black text-3xl text-foreground tabular-nums">
+                                        {grantNow.toLocaleString()}
+                                        <span className="text-base font-bold text-muted-foreground ml-1">
+                                            credits
+                                        </span>
+                                    </p>
+                                </div>
+                            )}
                         </div>
+
+                        {/* ── THE PODIUM LINE, from where they stand ──────── */}
+                        {/* `leagueLead` above answers "the place above me".
+                            This answers the different question a league asks —
+                            whether they finish ON the podium, which is the only
+                            boundary on the board with anything on the other
+                            side of it. */}
+                        {pod && (
+                            <div className="flex items-start gap-2 mt-4 pt-4 border-t border-border">
+                                {pod.in
+                                    ? <Crest podium={pod.crest} className="mt-0.5" />
+                                    : <Trophy className="w-3.5 h-3.5 text-muted-foreground flex-shrink-0 mt-0.5" />}
+                                <p className="text-sm text-foreground">
+                                    {pod.in ? (
+                                        <>
+                                            <span className="font-bold">
+                                                On the podium in {ordinal(pod.position)}
+                                            </span>
+                                            {" — "}
+                                            <span className="text-muted-foreground">
+                                                {pod.margin} points clear of {pod.chaser}, who is first
+                                                in line for it.
+                                            </span>
+                                        </>
+                                    ) : (
+                                        <>
+                                            <span className="font-bold">
+                                                {pod.gap} points off the podium
+                                            </span>
+                                            {" — "}
+                                            <span className="text-muted-foreground">
+                                                {pod.holder} holds {ordinal(PODIUM)}. Top three take a
+                                                crest and the bigger Monday grant.
+                                            </span>
+                                        </>
+                                    )}
+                                </p>
+                            </div>
+                        )}
 
                         {/* ── THE GATE SAYS WHAT UNLOCKS IT ──────────────── */}
                         {/* A student who only ever sits short quizzes takes a
@@ -206,6 +282,15 @@ export default function League() {
                             </p>
                         )}
                     </section>
+
+                    {/* ── What is at the top ──────────────────────────── */}
+                    {/* Drawn ABOVE the standings, because the board answers
+                        "where am I" and cannot answer "what am I racing for" —
+                        in a ranked list the three paid places are the first
+                        three of thirty rows. It renders nothing on a board too
+                        small to have a podium. */}
+                    <Podium rows={rows} groupSize={rows.length || 30}
+                        tiered={data?.mode === "tiered"} />
 
                     {/* ── The board ───────────────────────────────────── */}
                     <section className="space-y-2">
@@ -293,14 +378,20 @@ export default function League() {
                         </section>
                     )}
 
-                    {/* Says what it measures, the way Ranked does about the
-                        ATAR. A weekly board that does not explain its own
-                        number invites a student to guess at it. */}
-                    <p className="text-xs text-muted-foreground text-center px-4">
-                        Your compete score is effort, mastery and consistency over the week —
-                        countable study minutes, your first sit of each quiz, and the days you
-                        turned up. It resets every Monday.
-                    </p>
+                    {/* ── Says what it measures, AND what a point costs ── */}
+                    {/* This was one sentence naming the three slices in
+                        passing, which is not something a student can act on: 40
+                        points off third is forty minutes, or one quiz, or a day,
+                        and the sentence could not say which. Ranked explains the
+                        ATAR under each bar for exactly this reason. */}
+                    <section className="space-y-2">
+                        <h2 className="font-display font-extrabold text-foreground text-base">
+                            How the week is scored
+                        </h2>
+                        <ScoreGuide
+                            breakdown={rows.find((r) => r.is_me)?.score_breakdown}
+                            me={me} />
+                    </section>
                 </Reveal>
             </div>
         </div>

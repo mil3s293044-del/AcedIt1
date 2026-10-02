@@ -24,7 +24,7 @@ import { base44 } from "@/api/base44Client";
 import { createPageUrl } from "@/utils";
 import { useLiveTick } from "@/lib/LiveContext";
 import { unwrapFn } from "@/lib/fnResult";
-import { msUntilReset, untilLabel, isClosing, ordinal } from "@/lib/league";
+import { msUntilReset, untilLabel, isClosing, ordinal, podiumGap } from "@/lib/league";
 import AceShuffle from "@/components/ace/AceShuffle";
 
 export default function WeekStrip() {
@@ -60,6 +60,11 @@ export default function WeekStrip() {
     const closing = isClosing(ms);
     const pos = state.me?.position;
     const total = state.rows?.length || 0;
+    // The PODIUM is what makes the strip a reason to click rather than a
+    // status line. It returns null on a board too small to have one, which is
+    // when the clock is the more useful thing to print anyway.
+    const pod = podiumGap(state.rows || []);
+    const clock = ms != null ? `resets in ${untilLabel(ms)}` : null;
 
     return (
         <Link
@@ -77,7 +82,14 @@ export default function WeekStrip() {
                         : "The weekly league"}
                 </p>
                 <p className="text-xs text-muted-foreground truncate">
-                    {ms != null
+                    {pod ? (
+                        <>
+                            <span className={pod.in ? "text-xp font-bold" : "font-bold text-foreground"}>
+                                {pod.in ? "On the podium" : `${pod.gap} off the podium`}
+                            </span>
+                            {clock && <> · {clock}</>}
+                        </>
+                    ) : ms != null
                         ? <>Resets in <span className={closing ? "text-xp font-bold" : ""}>{untilLabel(ms)}</span></>
                         : "Effort, mastery and consistency over seven days"}
                 </p>

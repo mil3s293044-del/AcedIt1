@@ -16,6 +16,16 @@ import { QUEST_BY_ID, questMultiplier } from "./src/lib/quests.js";
 // the client deliberately: the forecast layer and the column's CHECK
 // constraint drifting apart is what made placeForecast a guaranteed 500.
 import { WAGER } from "./src/lib/wagerStatus.js";
+// The weekly score, imported rather than mirrored. See league.js's header.
+import {
+  computeCompeteScore, SCORE_MAX as COMPETE_SCORE_MAX,
+  leagueXPFor, podiumCrest, podiumIsCurrent, LEAGUE_XP,
+} from "./src/lib/league.js";
+// A BOUGHT CREST IS MEANT TO BE SEEN BY OTHER STUDENTS, which means the board
+// has to send it — a cosmetic only its owner can see is the "paid for a thing
+// that renders nowhere" bug the cred store was written to end. Imported, never
+// mirrored, with the extension node needs.
+import { crestOf } from "./src/lib/cosmetics.js";
 // The one rule about who may be the SUBJECT of a market. Imported rather
 // than mirrored, for the reason market.js already is: two copies of a
 // consent rule is how one of them quietly stops being applied.
@@ -422,7 +432,19 @@ function prevTier(t) { const i = LEAGUE_TIERS.indexOf(t); return LEAGUE_TIERS[Ma
  * ranking from the same finished week, so the second write is the first one
  * again.
  */
-async function settleLeagueGroup(groupId, meEmail, currentTierOfUser) {
+/**
+ * `authHeader` is the SETTLING student's token, and every payout rides on it
+ * with `target_email` — the pattern `settleHoursCompetition` already uses,
+ * because `awardXP` authenticates the requester and a settlement pays
+ * everybody else on the board.
+ *
+ * Settlement is lazy here as it is everywhere in this app: the first person to
+ * open the league settles and pays the whole board, and with nobody on the page
+ * nothing happens. That is the trade this codebase takes rather than introduce
+ * a scheduler, and it is why the payout is idempotent two ways — `event_key`
+ * on the XP and the week on `league_award`.
+ */
+async function settleLeagueGroup(groupId, meEmail, currentTierOfUser, authHeader) {
   const nothing = { tier: currentTierOfUser, settled: 0 };
   if (!supabaseAdmin || !groupId) return nothing;
 
@@ -456,6 +478,53 @@ async function settleLeagueGroup(groupId, meEmail, currentTierOfUser) {
       .from('league_memberships')
       .update({ final_position: finalPosition, promoted, demoted })
       .eq('id', m.id);
+
+    // ── THE PODIUM IS PAID IN BOTH MODES ──────────────────────────────────
+    // Promotion is a tiered idea and is skipped below, but a finish is a
+    // finish: in global mode the top three of one board is the ONLY thing the
+    // league can reward, and skipping it with the tier logic would leave the
+    // feature computing a winner every week and paying them nothing — which is
+    // the state this release exists to end.
+    const xp = leagueXPFor(finalPosition);
+    const crest = podiumCrest(finalPosition);
+    if (xp > 0 || crest) {
+      const { data: row } = await supabaseAdmin.from('user_profiles')
+        .select('id, extra').eq('created_by', m.user_email).maybeSingle();
+      if (row) {
+        // KEYED ON THE WEEK, so a re-settle cannot pay twice. `settleLeagueGroup`
+        // returns early when any row already carries a position, but that guard
+        // is about the group and this is about the person — a student who moved
+        // groups mid-week would otherwise be payable from both.
+        const prior = row.extra?.league_award;
+        if (prior?.week !== weekStart) {
+          await supabaseAdmin.from('user_profiles').update({
+            extra: { ...(row.extra || {}), league_award: { week: weekStart, position: finalPosition, crest } },
+          }).eq('id', row.id);
+          if (xp > 0 && authHeader) {
+            // Through `awardXP` rather than a direct write, so the daily caps,
+            // the velocity check and the xp_events row all apply — a payout
+            // that went around them would be the one source of XP the ATAR's
+            // own integrity rules never see. `target_email` is what sends it to
+            // the finisher rather than to whoever happened to open the page;
+            // without it every podium bonus lands on one student, which is the
+            // bug `settleHoursCompetition` records in its own comment.
+            try {
+              await callLocalFn('awardXP', {
+                source: 'league_finish',
+                event_key: `league_${weekStart}_${m.user_email}`,
+                flat_xp: xp,
+                target_email: m.user_email,
+              }, authHeader);
+            } catch (e) {
+              // The crest and the position are already written; XP that does
+              // not land is logged rather than rolled back, because taking the
+              // podium away to undo a payout is the worse failure.
+              console.error('[league] podium XP failed:', m.user_email, e?.message);
+            }
+          }
+        }
+      }
+    }
 
     if (!tiered) continue;
 
@@ -536,7 +605,7 @@ async function findOrCreateOpenGroup(tier, weekStart) {
 // Place user in the current week's league. Handles lazy settlement of
 // previous week if stale. Returns the user's current membership row
 // (with group + position info) or null on failure.
-async function ensureCurrentLeagueMembership(userEmail, userProfile) {
+async function ensureCurrentLeagueMembership(userEmail, userProfile, authHeader) {
   if (!supabaseAdmin || !userEmail) return null;
   const weekStart = currentWeekStartUTC();
 
@@ -563,10 +632,20 @@ async function ensureCurrentLeagueMembership(userEmail, userProfile) {
   // why `final_position` was never once written in the feature's lifetime —
   // see settleLeagueGroup. Promotion and demotion are still tier-only; a
   // final position is not, and it is what a standings page is made of.
+  //
+  // BUT NEVER SETTLE WITHOUT A TOKEN TO PAY WITH. A settlement writes
+  // `final_position` on every row and `league_award` on every podium profile,
+  // and BOTH are one-shot guards: the group returns early once any position
+  // exists, and the award is keyed on the week. So a settle that could not
+  // pay — no header, so no `target_email` to send the podium XP to — would
+  // write the crest and lock the bonus out forever, which is worse than
+  // settling late. Deferring costs a tiered student one week at their current
+  // tier; the next read of the league page carries a token and settles it
+  // properly, which is the lazy pattern this whole feature already uses.
   let justSettled = 0;
-  if (stale?.[0]) {
+  if (stale?.[0] && authHeader) {
     const outcome = await settleLeagueGroup(
-      stale[0].league_group_id, userEmail, nextStartTier);
+      stale[0].league_group_id, userEmail, nextStartTier, authHeader);
     nextStartTier = outcome.tier;
     justSettled = outcome.settled;
   }
@@ -612,10 +691,15 @@ async function ensureCurrentLeagueMembership(userEmail, userProfile) {
 
 // Add XP delta to the user's current-week membership. Best-effort, lazily
 // initialises the membership if it doesn't exist yet.
-async function addLeagueXP(userEmail, userProfile, deltaXp) {
+async function addLeagueXP(userEmail, userProfile, deltaXp, authHeader) {
   if (!supabaseAdmin || !userEmail || !deltaXp || deltaXp <= 0) return;
   try {
-    const mem = await ensureCurrentLeagueMembership(userEmail, userProfile);
+    // The header is what lets a settlement triggered from here pay the podium:
+    // `awardXP` authenticates the requester, so sending a bonus to somebody
+    // else needs `target_email` AND a token. Without one, the membership is
+    // still placed and the week's XP still counted — only the settlement is
+    // deferred, see ensureCurrentLeagueMembership.
+    const mem = await ensureCurrentLeagueMembership(userEmail, userProfile, authHeader);
     if (!mem) return;
     await supabaseAdmin
       .from('league_memberships')
@@ -829,7 +913,7 @@ async function buildAchievementStats(userEmail, profile) {
 
 // Detect newly-qualified achievements, insert unlocks, grant reward XP.
 // Returns array of newly-unlocked achievement codes.
-async function checkAndGrantAchievements(userEmail, profile) {
+async function checkAndGrantAchievements(userEmail, profile, authHeader = "") {
   if (!supabaseAdmin || !userEmail) return [];
   try {
     // Already-unlocked set.
@@ -907,7 +991,7 @@ async function checkAndGrantAchievements(userEmail, profile) {
       } catch {}
 
       // Mirror to league weekly XP.
-      addLeagueXP(userEmail, profile, totalReward).catch(() => {});
+      addLeagueXP(userEmail, profile, totalReward, authHeader).catch(() => {});
     }
 
     console.log(`[achievements] unlocked ${granted.length} for ${userEmail}: ${granted.map(a => a.code).join(', ')}`);
@@ -3094,7 +3178,7 @@ app.post("/local-ai/fn/awardXP", async (req, res) => {
 
     // Weekly Leagues — credit XP to the user's current-week league
     // membership. Fire-and-forget; failure doesn't block the awardXP response.
-    addLeagueXP(userEmail, profile, finalXP).catch((e) =>
+    addLeagueXP(userEmail, profile, finalXP, req.headers.authorization || "").catch((e) =>
       console.warn("[leagues] hook from awardXP failed:", e?.message || e),
     );
 
@@ -3103,7 +3187,7 @@ app.post("/local-ai/fn/awardXP", async (req, res) => {
     // We pass the UPDATED profile (with new total_xp) so streak/xp checks
     // see the latest values.
     const updatedProfile = { ...profile, total_xp: newTotalXP, season_xp: newSeasonXP };
-    checkAndGrantAchievements(userEmail, updatedProfile).catch((e) =>
+    checkAndGrantAchievements(userEmail, updatedProfile, req.headers.authorization || "").catch((e) =>
       console.warn("[achievements] hook from awardXP failed:", e?.message || e),
     );
 
@@ -3289,7 +3373,7 @@ app.post("/local-ai/fn/awardXPIncremental", async (req, res) => {
       .eq("id", profile.id);
 
     // Leagues: credit incremental XP to the user's current weekly membership.
-    addLeagueXP(userEmail, profile, finalXP).catch(() => {});
+    addLeagueXP(userEmail, profile, finalXP, req.headers.authorization || "").catch(() => {});
 
     return res.json({ success: true, xp_awarded: finalXP, total_xp: newTotalXP });
   } catch (err) {
@@ -5296,7 +5380,7 @@ app.post("/local-ai/fn/settleHoursCompetition", async (req, res) => {
     for (const p of participants) {
       try {
         const pProfile = await loadUserProfile(p.email);
-        await checkAndGrantAchievements(p.email, pProfile);
+        await checkAndGrantAchievements(p.email, pProfile, req.headers.authorization || "");
       } catch {}
     }
 
@@ -8667,7 +8751,7 @@ app.post("/local-ai/fn/getAchievements", async (req, res) => {
     let newlyUnlocked = [];
     try {
       const profile = await loadUserProfile(user.email);
-      newlyUnlocked = await checkAndGrantAchievements(user.email, profile);
+      newlyUnlocked = await checkAndGrantAchievements(user.email, profile, req.headers.authorization || "");
     } catch (e) {
       console.warn("[getAchievements] self-heal failed:", e?.message || e);
     }
@@ -8731,7 +8815,7 @@ app.post("/local-ai/fn/checkAchievements", async (req, res) => {
   if (!user) return res.status(401).json({ error: "Unauthorized" });
   try {
     const profile = await loadUserProfile(user.email);
-    const newCodes = await checkAndGrantAchievements(user.email, profile);
+    const newCodes = await checkAndGrantAchievements(user.email, profile, req.headers.authorization || "");
     return res.json({ success: true, newly_unlocked: newCodes });
   } catch (err) {
     console.error("[checkAchievements] error:", err);
@@ -8751,12 +8835,11 @@ app.post("/local-ai/fn/checkAchievements", async (req, res) => {
 //   Effort (0–400) = study minutes this week, capped at 400
 //   Mastery (0–400) = average quiz accuracy this week
 //   Consistency (0–200) = active days this week + current streak
-function computeCompeteScore({ minutes = 0, avgAccuracy = 0, activeDays = 0, streak = 0 }) {
-  const effort = Math.round(Math.min(minutes, 400));
-  const mastery = Math.round((avgAccuracy / 100) * 400);
-  const consistency = Math.round(Math.min(activeDays / 7, 1) * 150 + Math.min(streak / 14, 1) * 50);
-  return { effort, mastery, consistency, total: effort + mastery + consistency };
-}
+// `computeCompeteScore` MOVED TO `src/lib/league.js` and is imported above.
+// It was a server-side function with its ceilings restated in league.js as a
+// comment promising they matched — the mirror this codebase keeps deleting,
+// on the one number a student is actually ranked by.
+
 
 // Compute one user's Compete Score over a competition window [startIso, now].
 // Used to rank battles by "best study" instead of raw hours.
@@ -8846,7 +8929,9 @@ async function leagueStandingRows(members = [], weekStartStr, now = new Date()) 
 
   const [pRes, sessRes, techRes, quizRes] = await Promise.all([
     supabaseAdmin.from('user_profiles')
-      .select('created_by, username, full_name, streak_days, total_xp').in('created_by', emails),
+      // `extra` carries `league_award` — last week's finish, which is what a
+      // crest beside a name is. One select rather than a second query per row.
+      .select('created_by, username, full_name, streak_days, total_xp, extra').in('created_by', emails),
     supabaseAdmin.from('study_sessions')
       .select('created_by, duration_minutes, date, created_date, extra')
       .in('created_by', emails).gte('date', weekStartStr),
@@ -8899,13 +8984,19 @@ async function leagueStandingRows(members = [], weekStartStr, now = new Date()) 
     const p = byEmail[m.user_email] || {};
     const b = bucket[m.user_email] || { study: [], scores: new Map(), days: new Set() };
     const sits = [...b.scores.values()];
+    // THE INPUTS TRAVEL WITH THE SCORE, not just the three totals. `nextPoint`
+    // prices what one more quiz or one more day is worth and cannot do that
+    // from the slices alone — the mastery ramp needs the sit COUNT and the
+    // average behind it. Computing them and throwing them away is this
+    // codebase's own recurring bug pointed at its own board.
+    const avgAccuracy = sits.length ? sits.reduce((s, n) => s + n, 0) / sits.length : 0;
     const cs = computeCompeteScore({
       minutes: countableStudyMinutes(b.study, now),
-      avgAccuracy: sits.length ? sits.reduce((s, n) => s + n, 0) / sits.length : 0,
+      avgAccuracy,
       activeDays: b.days.size,
-      streak: p.streak_days || 0,
+      sits: sits.length,
     });
-    return { m, p, cs, sits: sits.length };
+    return { m, p, cs, sits: sits.length, activeDays: b.days.size, avgAccuracy };
   });
 
   scored.sort((x, y) =>
@@ -8957,7 +9048,7 @@ async function competitionCompeteScore(email, startIso) {
     ...quizzes.map((q) => q.created_date?.slice(0, 10)),
   ].filter(Boolean)).size;
   return {
-    ...computeCompeteScore({ minutes, avgAccuracy, activeDays: days, streak: profile?.streak_days || 0 }),
+    ...computeCompeteScore({ minutes, avgAccuracy, activeDays: days, sits: boardSitCount }),
     sits: boardSitCount,
   };
 }
@@ -8971,7 +9062,7 @@ app.post("/local-ai/fn/getLeagueStanding", async (req, res) => {
     const profile = await loadUserProfile(user.email);
     if (!profile) return res.status(404).json({ error: "Profile not found" });
 
-    const mem = await ensureCurrentLeagueMembership(user.email, profile);
+    const mem = await ensureCurrentLeagueMembership(user.email, profile, req.headers.authorization || "");
     if (!mem) return res.status(500).json({ error: "Could not place in league" });
 
     // A week just closed on this request, so any Podium or Top Dog it earned
@@ -8981,7 +9072,7 @@ app.post("/local-ai/fn/getLeagueStanding", async (req, res) => {
     // self-heals, so the worst case is the badge landing a session later.
     if (mem.just_settled > 0) {
       try {
-        await checkAndGrantAchievements(user.email, profile);
+        await checkAndGrantAchievements(user.email, profile, req.headers.authorization || "");
       } catch (e) {
         console.warn('[leagues] achievement check after settle failed:', e?.message || e);
       }
@@ -9000,7 +9091,7 @@ app.post("/local-ai/fn/getLeagueStanding", async (req, res) => {
     const weekStartStr = currentWeekStartUTC();
     const scored = await leagueStandingRows(groupMembers || [], weekStartStr);
 
-    const rows = scored.map(({ m, p, cs, sits }, i) => {
+    const rows = scored.map(({ m, p, cs, sits, activeDays, avgAccuracy }, i) => {
       const isMe = m.user_email === user.email;
       const displayName = m.is_anonymous && !isMe
         ? `Anon #${(m.id || '').slice(-4)}`
@@ -9022,6 +9113,18 @@ app.post("/local-ai/fn/getLeagueStanding", async (req, res) => {
         // A student who only sits short quizzes otherwise takes a silent zero
         // on the 400-point mastery slice and is never told what unlocks it.
         board_sits:      isMe ? sits : null,
+        active_days:     isMe ? activeDays : null,
+        avg_accuracy:    isMe ? Math.round(avgAccuracy) : null,
+        // LAST week's finish, worn for ONE week. `podiumIsCurrent` is what
+        // makes a crest a claim about now rather than a permanent badge for one
+        // good week in March — and it is the only reward on this board that
+        // other students can SEE, which is what makes a league competitive
+        // rather than a private score.
+        crest:           podiumIsCurrent(p.extra?.league_award, weekStartStr)
+          ? p.extra.league_award.crest : null,
+        // What they BOUGHT and chose to wear, drawn only where no podium crest
+        // outranks it — the earned mark is the one with information in it.
+        crest_skin:      crestOf(p)?.shape || null,
       };
     });
 
@@ -9068,6 +9171,10 @@ app.post("/local-ai/fn/getLeagueStanding", async (req, res) => {
         promote_count: LEAGUES_SCALE_MODE === "tiered" ? LEAGUE_PROMOTE_COUNT : 0,
         demote_count:  LEAGUES_SCALE_MODE === "tiered" ? LEAGUE_DEMOTE_COUNT  : 0,
         group_size:    LEAGUE_GROUP_SIZE,
+        // What finishing well actually pays, SENT rather than restated in the
+        // page — the mirror rule, on the number a student weighs a week of
+        // effort against.
+        podium_xp:     LEAGUE_XP,
       },
       me: {
         user_email:    user.email,
@@ -9075,6 +9182,9 @@ app.post("/local-ai/fn/getLeagueStanding", async (req, res) => {
         compete_score: rows.find(r => r.is_me)?.compete_score ?? 0,
         board_sits:    rows.find(r => r.is_me)?.board_sits ?? 0,
         board_min_questions: BOARD_MIN_QUESTIONS,
+        active_days:   rows.find(r => r.is_me)?.active_days ?? 0,
+        avg_accuracy:  rows.find(r => r.is_me)?.avg_accuracy ?? 0,
+        crest:         rows.find(r => r.is_me)?.crest ?? null,
         weekly_xp:     mem.weekly_xp ?? 0,
         tier:          mem.tier,
         is_anonymous: mem.is_anonymous,
@@ -9790,20 +9900,32 @@ async function grantWeeklyCred(profile) {
   try {
     const { data: last } = await supabaseAdmin
       .from("league_memberships")
-      .select("final_position, tier, week_start")
+      .select("final_position, tier, week_start, league_group_id")
       .eq("user_email", profile.created_by || profile.user_email)
       .not("final_position", "is", null)
       .order("week_start", { ascending: false })
       .limit(1)
       .maybeSingle();
     if (last && Number.isFinite(Number(last.final_position))) {
+      // How many people that finish was against. A position means nothing
+      // without it: 20th is a good week in a group of 40 and the worst
+      // possible one in a group of 20.
+      const { count } = await supabaseAdmin.from("league_memberships")
+        .select("id", { count: "exact", head: true })
+        .eq("league_group_id", last.league_group_id);
+      last._group_size = count || LEAGUE_GROUP_SIZE;
       // The tier is a NAME in the database and an INDEX in the model —
       // `credStore.js` deliberately takes a number so `LEAGUE_TIERS` is not
       // written down twice. An unrecognised name lands at index 0, the floor.
       grant = grantForLeague({
         tierIndex: Math.max(0, LEAGUE_TIERS.indexOf(last.tier)),
         position: Number(last.final_position),
-        groupSize: LEAGUE_GROUP_SIZE,
+        // In global mode the whole board is ONE group of unlimited size, so
+        // the fixed 30 would make 20th of 40 read as last. The group's real
+        // size is what the finish is a fraction of.
+        groupSize: LEAGUES_SCALE_MODE === "tiered"
+          ? LEAGUE_GROUP_SIZE : (last._group_size || LEAGUE_GROUP_SIZE),
+        tiered: LEAGUES_SCALE_MODE === "tiered",
       });
       from = { source: "league", tier: last.tier, position: Number(last.final_position) };
     }

@@ -145,15 +145,30 @@ export const FINISH_WEIGHT = (GRANT_TOP - GRANT_BASE) - TIER_WEIGHT;
  * somebody the league has not placed yet would make their first week on the
  * floor unplayable.
  */
-export function grantForLeague({ tierIndex, position, groupSize = 30 } = {}) {
-    const ti = Number(tierIndex);
-    const tier = Number.isFinite(ti) ? Math.max(0, Math.min(LEAGUE_BANDS - 1, Math.floor(ti))) : 0;
-    const tierShare = LEAGUE_BANDS === 1 ? 0 : tier / (LEAGUE_BANDS - 1);
-
+export function grantForLeague({ tierIndex, position, groupSize = 30, tiered = true } = {}) {
     const size = Math.max(1, Math.floor(Number(groupSize) || 30));
     const pos = Math.floor(Number(position));
     const finishShare = (!Number.isFinite(pos) || pos < 1) ? 0
         : (size === 1 ? 1 : (size - Math.min(size, pos)) / (size - 1));
+
+    // ── WITH NO TIERS, FINISH TAKES THE WHOLE RANGE ───────────────────────
+    // The league runs in GLOBAL mode under 100 actives: one group, everybody
+    // in it, and `tier` on every membership is the same value. Splitting the
+    // range into a tier weight and a finish weight then leaves 400 points
+    // permanently unreachable — the top of the board earned 1400 against a
+    // documented ceiling of 1800, which is this file's own "a number nobody
+    // can reach" failure, shipped by me one release ago.
+    //
+    // There is only one thing to rank on while there are no tiers, so it is
+    // worth the whole band. When the league flips to tiered the split returns
+    // and nothing else moves.
+    if (!tiered) {
+        return Math.round(GRANT_BASE + finishShare * (GRANT_TOP - GRANT_BASE));
+    }
+
+    const ti = Number(tierIndex);
+    const tier = Number.isFinite(ti) ? Math.max(0, Math.min(LEAGUE_BANDS - 1, Math.floor(ti))) : 0;
+    const tierShare = LEAGUE_BANDS === 1 ? 0 : tier / (LEAGUE_BANDS - 1);
 
     return Math.round(GRANT_BASE + tierShare * TIER_WEIGHT + finishShare * FINISH_WEIGHT);
 }

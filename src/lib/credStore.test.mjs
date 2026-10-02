@@ -380,4 +380,37 @@ check("AN UNPLACED FINISH TAKES THE FLOOR OF ITS BAND, never the middle", () => 
         grantForLeague({ tierIndex: 0, position: 1, groupSize: 30 }));
 });
 
+
+check("GLOBAL MODE HAS NO TIER, so the finish takes the WHOLE range", () => {
+    // LEAGUES_SCALE_MODE has been "global" for the feature's whole life: one
+    // board, everybody on it, and `tier` a placeholder the UI ignores. Scoring
+    // the grant on it would hand the entire tier weight to every student
+    // identically, so winning the only board there is could never pay the
+    // ceiling — a reward nobody can reach is the "signal they can't reach"
+    // rule, pointed at the payout.
+    const won = grantForLeague({ tierIndex: 0, position: 1, groupSize: 30, tiered: false });
+    const last = grantForLeague({ tierIndex: 0, position: 30, groupSize: 30, tiered: false });
+    assert.equal(won, GRANT_TOP, `winning the global board paid ${won}, not the ceiling`);
+    assert.equal(last, GRANT_BASE, `coming last paid ${last}, not the floor`);
+    // The tier is genuinely ignored rather than merely outweighed.
+    const mid = grantForLeague({ tierIndex: 0, position: 4, groupSize: 30, tiered: false });
+    for (let t = 0; t < LEAGUE_BANDS; t += 1) {
+        assert.equal(grantForLeague({ tierIndex: t, position: 4, groupSize: 30, tiered: false }),
+            mid, `tier ${t} moved a global grant`);
+    }
+});
+
+check("global mode is bounded by the same two numbers", () => {
+    let lo = Infinity, hi = -Infinity;
+    for (const size of [1, 2, 12, 30, 130]) {
+        for (const pos of [null, undefined, NaN, -5, 0, 1, 2, size, size + 9]) {
+            const g = grantForLeague({ tierIndex: 0, position: pos, groupSize: size, tiered: false });
+            assert.ok(Number.isFinite(g), `size ${size} pos ${pos} produced ${g}`);
+            lo = Math.min(lo, g); hi = Math.max(hi, g);
+        }
+    }
+    assert.equal(lo, GRANT_BASE);
+    assert.equal(hi, GRANT_TOP);
+});
+
 console.log(`\ncredStore: ${passed} checks passed`);

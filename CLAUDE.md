@@ -3396,6 +3396,153 @@ The tape follows the same rule — new rows arrive with `layout` and read "just
 now", and the first paint flags nothing, or the whole week is breaking news on
 every load.
 
+## The weekly league: what it measures, and what it finally pays
+
+**The league has been computing a winner every week and paying them nothing.**
+`settleLeagueGroup` wrote `final_position`, the board ranked on a compete score,
+and the end of a week produced a number nobody saw and no consequence. A
+competition with no prize is a leaderboard with a clock on it.
+
+### THREE SLICES, AND TWO OF THEM MEASURED THE WRONG THING
+
+`computeCompeteScore` moved out of `server.mjs` into `league.js` and the server
+IMPORTS it — the mirror this codebase keeps deleting, on the ONE number a
+student is ranked on, which is a worse thing to keep two copies of than a page
+price. `league.test.mjs` asserts the import and asserts no second definition.
+
+- **Effort** (400) — a countable study minute is a point, through
+  `countableStudyMinutes`, so the integrity caps apply.
+- **Mastery** (400) — **AN AVERAGE ALONE PUNISHED DOING MORE WORK.** It was the
+  bare average of your first sit of each eligible quiz, so ONE easy quiz at 95%
+  scored 380 and TWELVE at 78% scored 312: the student who did twelve times the
+  work came second, every week, by construction, and the fastest way up the
+  board was to sit one quiz on your best topic and stop. The average still sets
+  the HEIGHT and the count sets how much of it you get, ramping to full at
+  `MASTERY_SITS_FULL` = four. Four because it is a real week of quizzing rather
+  than a grind — at twelve the ramp would reward volume over accuracy, the same
+  inversion pointed the other way. `BOARD_MIN_QUESTIONS`/`BOARD_MIN_MARKS`
+  already stop an eight-second quiz counting at all, so the ramp never has to be
+  the thing defending against that.
+- **Consistency** (200) — **EVERY SLICE MEASURES THIS WEEK, and one of them did
+  not.** It was `days/7 × 150 + streak/14 × 50`, and a streak is a LIFETIME
+  number sitting inside a weekly competition: a 60-day run banked 50 points
+  every Monday for nothing done that week, and a first-week student could not
+  close it however hard they worked. "Never score a student on a signal they
+  can't reach", on the one board whose whole promise is that it resets. Days
+  active takes the full 200 now; the streak still pays everywhere else it
+  always did.
+
+### THE PODIUM IS WHAT A WEEK IS FOR
+
+Three places pay, and three deliberately different KINDS of thing:
+
+- **credits**, the Monday grant, set by where you finished (`grantForLeague`);
+- **a crest**, worn beside your name for the week AFTER, on every board the app
+  draws — the only reward here other students can SEE, which is what makes a
+  league competitive rather than a private score;
+- **XP**, small, top three only (`LEAGUE_XP`).
+
+**THE XP IS SMALL ON PURPOSE.** XP feeds level, rank AND the ATAR. A payout big
+enough to move somebody's ATAR would mean a quiet week costs them twice — once
+on the board and once on the number the whole app is standardised around — and
+would make the flagship study score partly a measure of how competitive somebody
+is. These are worth about one good session: a nod, not a lever.
+
+**A PODIUM CREST IS EARNED AND IS NOT BOUGHT**, so it is stored apart from
+`cred_equipped` (`extra.league_award`, keyed on the week). One slot for both
+would mean winning the league silently took off a crest somebody paid 2,850
+credits for, or that buying one erased the proof they came first. Where both
+exist the EARNED one draws: it is the one with information in it.
+`podiumIsCurrent` is what makes it a claim about NOW — a permanent badge for one
+good week in March is a statement that stopped being true in March.
+
+**THE PODIUM IS PAID IN BOTH MODES.** Promotion and demotion are a TIERED idea
+and are skipped in global mode, where there is nowhere to go — but a finish is a
+finish, and the payout block sits deliberately ABOVE that `if (!tiered)
+continue`. `grantForLeague` grew a `tiered` flag for the same reason: scoring the
+grant on a tier that is a fixed placeholder handed every student the identical
+tier weight, so winning the only board there is could never pay the ceiling.
+A reward nobody can reach is the "signal they can't reach" rule pointed at the
+payout.
+
+### THE CREST RENDERER DID NOT EXIST
+
+`CRESTS` and `crestOf` shipped with the cred store, `useCosmetics` has exposed an
+equipped crest since Layout mounted the provider, and **nothing in the tree ever
+drew one** — so a student could buy a crest and the only evidence it existed was
+the word "Owned" on the shelf they bought it from. That is precisely the bug the
+store release was written to end, one file short of the finish.
+`components/shared/Crest.jsx` is the renderer, shared by both sources, and the
+board SENDS the bought one (`crest_skin`) because a cosmetic only its owner can
+see is not worn. `league.test.mjs` asserts the component is reached rather than
+merely present.
+
+**SHAPE CARRIES THE PLACE, NOT JUST COLOUR.** There is no bronze token and
+inventing one for a single mark is not worth a colour in the palette —
+WeeklyBoard's medal note already refused that. First is a filled medal in the XP
+amber, second filled in the muted ink, third the OUTLINE: three readings from two
+tokens, and it survives greyscale the way the floor's step dots have to.
+
+### PAYING ANOTHER STUDENT NEEDS A TOKEN, AND THE WRITE THAT RECORDS IT CAN LOCK IT OUT
+
+`awardXP` authenticates the requester, so a podium bonus needs `target_email`
+AND the caller's header — without it every finisher's XP lands on whoever
+happened to open the page, which is the bug `settleHoursCompetition` records in
+its own comment. `authHeader` is threaded through `checkAndGrantAchievements` →
+`addLeagueXP` → `ensureCurrentLeagueMembership` → `settleLeagueGroup`.
+
+**AND NEVER SETTLE WITHOUT A TOKEN TO PAY WITH.** A settlement writes
+`final_position` on every row and `league_award` on every podium profile, and
+BOTH are one-shot guards: the group returns early once any position exists, and
+the award is keyed on the week. So a settle that could not pay would write the
+crest and lock the bonus out FOREVER — worse than settling late. It defers
+instead, which costs a tiered student one week at their current tier, and the
+next read of the league page carries a token and settles it properly. The lazy
+pattern the whole feature already uses.
+
+### THE PAGE HAD THE RACE AND NOT THE REASON
+
+The board drew every gap to one scale and answered "where am I". It could not
+answer "what am I racing FOR", because in a ranked list the three paid places
+are the first three of thirty rows.
+
+- **`Podium`** is above the standings, and **the reward is printed on the step**
+  — a student deciding whether a quiet Thursday is worth one more session is
+  weighing exactly that, and a podium that draws three heights is decoration.
+  The credits come from `grantForLeague`, the same function the server grants
+  with. It is 2-1-3 at `sm` and a plain stacked list on a phone, because three
+  stepped columns at phone width are three unreadable slivers.
+- **The payline** is a rule across the board after third with what is on the
+  other side named. It is the only edge the board has, and it is drawn only when
+  somebody is below it — a line under the last row claims a cut-off that does
+  not exist.
+- **`podiumGap`** is the sentence. Out, it is the gap to THIRD, from wherever
+  you are. In, it is the margin over FOURTH rather than over the row below —
+  fourth is the only person who can take the crest, so for anyone in first or
+  second "8 ahead of 3rd" is a number about nothing at stake. It returns null on
+  a board of three or fewer: three paid places out of three students is
+  everybody, the same refusal `leagueLead` makes about "1st of 1". It also
+  carries `WeekStrip`, which is the entrance students actually land on.
+- **`ScoreGuide`** replaced one sentence naming the three slices in passing. A
+  student 40 points off third had no way to find out whether 40 points was forty
+  minutes, one quiz or a day — which is the difference between a board you can
+  play and a number that happens to you. Each slice states its rule and its
+  PRICE, and the price comes from `nextPoint`, which is the same arithmetic the
+  score is computed with rather than a second description of it. A FULL slice is
+  never priced; "study more" to somebody who has maxed effort is the app not
+  reading its own screen.
+
+**THE INPUTS TRAVEL WITH THE SCORE.** `nextPoint` cannot price a quiz from three
+slice totals — the mastery ramp needs the sit COUNT and the average behind it —
+so `leagueStandingRows` returns them and the payload carries `active_days` and
+`avg_accuracy` on the student's own row. Computing a number and throwing it away
+is this codebase's own recurring bug, pointed at its own board.
+
+Draw the whole page with `scripts/_floorProbe.jsx?v=league`, against a nine-row
+board with a crest on it: a two-row fixture hides the payline, the gap scale and
+the 2-1-3 step entirely, which is the lesson the Quizzes shelf learned about
+checking a layout against the shape of the data somebody actually has.
+
 ## Pranks: student-to-student, and every bound is asserted
 
 **This is the only feature where one student does something TO another**, on a
@@ -3848,10 +3995,16 @@ stranger.
   features were failing on imagined column names when the client half was added
 - `src/lib/wagerStatus.js` — the one vocabulary `score_wagers.status` may
   speak, imported by client AND server; `dbEnums.test.mjs` holds it
-- `src/lib/league.js`, `src/pages/League.jsx`,
-  `src/components/league/WeeklyBoard.jsx`, `src/components/ranked/WeekStrip.jsx`
-  — the weekly board; `leagueStandingRows` and `settleLeagueGroup` in
-  `server.mjs` are the one ranking and the settlement that writes it down
+- `src/lib/league.js` + `league.test.mjs`, `src/pages/League.jsx`,
+  `src/components/league/WeeklyBoard.jsx`, `Podium.jsx`, `ScoreGuide.jsx`,
+  `src/components/ranked/WeekStrip.jsx` — the weekly board: the compete score
+  (imported by `server.mjs`, never mirrored), what a finish pays, the payline
+  and what one more point costs. `leagueStandingRows` and `settleLeagueGroup`
+  in `server.mjs` are the one ranking and the settlement that finally writes a
+  payout down; draw the page with `scripts/_floorProbe.jsx?v=league`
+- `src/components/shared/Crest.jsx` — the mark beside a name, from either way
+  of getting one. The earned crest outranks the bought one; `CRESTS` was sold
+  for a release with no renderer at all
 - `src/lib/integrity.js` — the caps, the idle discount, the quiz floors and the
   verified/claimed split. Mirrored server-side by `countableStudyMinutes`,
   `verifiedStudyMinutes` and `boardQuizScores`; change one, change both
