@@ -101,11 +101,22 @@ const PER_ROW = 2;
 const ROWS = Math.ceil(DEALT / PER_ROW);
 
 /**
- * MEASURED, not guessed: 316px is the shortest real `MarketCard` on the board
- * (a weekly streak line, which is also the commonest kind minted). The old
- * 132 was a number from nowhere and it is why the board jumped.
+ * MEASURED, not guessed, AND IT IS NOT ONE NUMBER.
+ *
+ * 316px is the shortest real `MarketCard` at 384px wide — a weekly streak
+ * line, the commonest kind minted. The old 132 was a number from nowhere and
+ * it is why the board jumped. But the board is ONE COLUMN under `sm`, and at a
+ * 360px phone the card is 328px wide and its title takes a third line: 338px,
+ * measured the same way. Six of those stacked is another 130px of jump, which
+ * is the same bug this constant was added to close, left behind on the half of
+ * the traffic that is phones.
+ *
+ * They live on the GRID as a custom property rather than as two constants and
+ * a template string: a class cannot be assembled (the JIT cannot see it) and a
+ * second copy of a measured number is the mirror this codebase keeps deleting.
+ * `aceLoading.test.mjs` reads them straight out of the class.
  */
-const SLOT_H = 316;
+const SLOT_H_CLASS = "[--slot-h:340px] sm:[--slot-h:316px]";
 
 /** One beat of the deal: the flick, then the arm coming back. */
 const BEAT_MS = 380;
@@ -130,9 +141,16 @@ function fromAce(i) {
     const col = i % PER_ROW;
     const row = Math.floor(i / PER_ROW);
     return {
-        x: -(40 + col * 240),
-        y: 150 - row * 170,
-        rotate: -26 - col * 10,
+        // He is ABOVE the board at its left, so travel is down-and-right and
+        // the x is always NEGATIVE — which is not only where he is, it is the
+        // only direction that is free. The board is ONE full-width column on a
+        // phone, so a card starting to the RIGHT of its slot extends the page
+        // and puts a horizontal scrollbar on it; starting to the left runs into
+        // the margin, which costs nothing. Measured: +90 here was 74px of
+        // overflow at 390.
+        x: -(70 + col * 150),
+        y: -(170 + row * 190),
+        rotate: -22 - col * 12,
         scale: 0.78,
         opacity: 0,
     };
@@ -213,7 +231,8 @@ function DealtCard({ i, dealt, turned, frozen }) {
                 type: "spring", stiffness: 240, damping: 24,
                 delay: (i % PER_ROW) * 0.07,
             }}
-            style={{ height: SLOT_H, perspective: 1200 }}
+            className="h-[var(--slot-h)]"
+            style={{ perspective: 1200 }}
         >
             <motion.div
                 className="relative w-full h-full"
@@ -352,21 +371,33 @@ export default function AceDeal({ label = "Opening the floor…" }) {
                         it, and he overlaps its left margin because that is
                         where a dealer stands. `pointer-events-none`: the only
                         thing under him is a placeholder. */}
-                    {/* He stands at the board's near-left corner and
-                        overlaps it, because that is where a dealer stands —
-                        and the thing he overlaps is a placeholder nobody can
-                        click. He cannot go further out: `Room` pads the page
-                        by 16/24px and `max-w-6xl` leaves nothing at 1152, so a
-                        larger negative offset is a horizontal scrollbar at
-                        some width, which is the exact bug `Room`'s own header
-                        records. A halo in the GROUND colour is what separates
-                        him from the card instead — the BrandMark glow idiom,
-                        pointed the other way. */}
+                    {/* ── HE IS NEVER OVER A CARD ───────────────────────
+                        He stood at the board's left edge, which put him on top
+                        of the first card for the whole wait — and the cards
+                        are the thing the student is here to see arrive. He
+                        deals from ABOVE the grid now: his feet sit on the chip
+                        row and he rises into the tab strip, so the only things
+                        he overlaps are two rows of placeholder pills.
+
+                        He cannot be moved further OUT instead: `Room` pads the
+                        page by 16/24px and `max-w-6xl` leaves nothing at 1152,
+                        so a larger negative offset is a horizontal scrollbar at
+                        some width — the exact bug `Room`'s own header records.
+                        Up is the direction with room in it, and the lane is
+                        MEASURED: the gap between the headline's baseline and
+                        the grid is about 118px at `sm` and up, so he is sized
+                        to fit it rather than sized first and clipped after.
+                        Twice the 56px he was, and standing in his own space.
+
+                        The halo stays: a drop-shadow in the GROUND colour, the
+                        BrandMark glow idiom pointed the other way, so he reads
+                        as standing in front of the strip rather than printed on
+                        it. */}
                     <div className="absolute z-20 pointer-events-none
-                        -left-2 sm:-left-5 top-[96px] sm:top-[118px]"
+                        left-0 -top-[78px] sm:-top-[86px]"
                         style={{ filter: "drop-shadow(0 0 14px var(--floor-ground)) drop-shadow(0 0 26px var(--floor-ground))" }}>
                         <AceBody
-                            className="w-28 sm:w-40"
+                            className="w-[5.5rem] sm:w-28"
                             pose={pose}
                             tone="fill-[var(--floor-ink)]"
                             card="fill-[var(--floor-card)]"
@@ -392,7 +423,7 @@ export default function AceDeal({ label = "Opening the floor…" }) {
                         ))}
                     </div>
 
-                    <div className="grid sm:grid-cols-2 gap-3">
+                    <div className={`grid sm:grid-cols-2 gap-3 ${SLOT_H_CLASS}`}>
                         {Array.from({ length: DEALT }, (_, i) => (
                             <DealtCard key={i} i={i} dealt={dealt} turned={turned} frozen={reduce} />
                         ))}
