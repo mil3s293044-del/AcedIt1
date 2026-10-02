@@ -4,7 +4,7 @@ import { useToast } from "@/components/ui/use-toast";
 import { createPageUrl } from "@/utils";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion, AnimatePresence, useReducedMotion } from "framer-motion";
 import { Toaster } from "@/components/ui/toaster";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { base44 } from "@/api/base44Client";
@@ -16,6 +16,8 @@ import StreakCelebration from "@/components/ranked/StreakCelebration";
 import StakesPill from "@/components/arena/StakesPill";
 import { LiveProvider, useBusy, BUSY } from "@/lib/LiveContext";
 import { CosmeticsProvider } from "@/lib/CosmeticsContext";
+import PrankOverlay, { prankBodyClass } from "@/components/pranks/PrankOverlay";
+import { takeFn } from "@/lib/fnResult";
 import AchievementUnlock from "@/components/ranked/AchievementUnlock";
 import { useAchievementWatch } from "@/lib/useAchievementWatch";
 import TopNav from "@/components/layout/TopNav";
@@ -203,6 +205,29 @@ export default function Layout({ children }) {
     const dragRef = useRef(null);
     const timerRef = useRef(null);
     const [userProfile, setUserProfile] = useState(null);
+
+    /* ── Pranks, if any have arrived ─────────────────────────────────────
+       Fetched ONCE per mount rather than polled: a prank is not urgent, the
+       receive cap means there are never more than a few, and a timer asking
+       the server every thirty seconds whether somebody has been pranked is a
+       query per student per interval for a joke. They play on the next
+       navigation, which is soon enough and costs nothing. */
+    const reduceMotion = useReducedMotion();
+    const [prankQueue, setPrankQueue] = useState([]);
+    useEffect(() => {
+        if (!userProfile) return;
+        let alive = true;
+        (async () => {
+            try {
+                const res = await base44.functions.invoke("getPranks", {});
+                const data = takeFn(res);
+                if (alive && Array.isArray(data?.pranks)) setPrankQueue(data.pranks);
+            } catch { /* a prank that does not arrive is not an error worth showing */ }
+        })();
+        return () => { alive = false; };
+        // Deliberately keyed on the ACCOUNT rather than the profile object:
+        // the profile is re-fetched constantly and this must not re-run with it.
+    }, [userProfile?.id]);
     const [navigationGuard, setNavigationGuard] = useState({ show: false, targetUrl: null, onSave: null });
     const [pendingNavigation, setPendingNavigation] = useState(null);
     const { toast } = useToast();
@@ -491,7 +516,11 @@ export default function Layout({ children }) {
         // without a second data layer of its own.
         <LiveProvider>
         <CosmeticsProvider profile={userProfile}>
-        <div className="min-h-screen bg-background relative">
+        {/* THE SHAKE AND THE FLIP ACT ON THE PAGE, so they are a class on the
+            element the layout already owns rather than an overlay child —
+            neither changes layout, so nothing moves out from under a finger
+            mid-quiz, which is the one thing a prank may never cost. */}
+        <div className={`min-h-screen bg-background relative ${prankBodyClass(prankQueue[0], reduceMotion)}`}>
             {/* A running study timer is work in progress: the numbers must not
                 shuffle under somebody watching a clock. */}
             <TimerBusy running={showFloatingTimer} />
@@ -568,6 +597,16 @@ export default function Layout({ children }) {
             </Dialog>
             <XPFeedback />
             <StreakCelebration />
+
+            {/* ONE AT A TIME, and it advances itself. Two playing at once is a
+                mess nobody can read, and the receive cap means the queue is
+                never more than a few long. */}
+            {prankQueue[0] && (
+                <PrankOverlay
+                    prank={prankQueue[0]}
+                    onDone={() => setPrankQueue((q) => q.slice(1))}
+                />
+            )}
 
             <AceCompanion userProfile={userProfile} />
             {/* One mount for the whole app rather than a call on each of the

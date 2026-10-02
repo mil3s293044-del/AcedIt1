@@ -28,6 +28,11 @@ import {
   WEEKLY_CONVERT_MAX, XP_PER_CREDIT,
 } from "./src/lib/credStore.js";
 import { equipPatch, unequipPatch } from "./src/lib/cosmetics.js";
+import {
+  prankKind, canSend as canSendPrank, optedOut as prankOptedOut,
+  PRANK_LIST,
+  WEEKLY_SEND_MAX as PRANK_SEND_MAX, WEEKLY_RECEIVE_MAX as PRANK_RECEIVE_MAX,
+} from "./src/lib/pranks.js";
 import { rankTierFromXP } from "./src/lib/xpRanks.js";
 // The market model — the ONE object Compete is built on. Imported rather than
 // mirrored: forecast.js was mirrored deliberately and every session since has
@@ -10918,6 +10923,218 @@ app.post("/local-ai/fn/equipCosmetic", async (req, res) => {
   }
 });
 
+/** How many pranks this student has sent this week. */
+async function prankSendCount(email, week) {
+  if (!supabaseAdmin) return 0;
+  const { count } = await supabaseAdmin.from("pranks")
+    .select("id", { count: "exact", head: true })
+    .eq("created_by", email).eq("week_start", week);
+  return count ?? 0;
+}
+
+/**
+ * The friends a prank may be sent to, with their names.
+ *
+ * It does NOT say which of them have opted out or are at their weekly ceiling.
+ * That is checked at send time and refused with a reason that cannot tell the
+ * two apart — a picker that greyed somebody out would publish "this person has
+ * turned pranks off" to everybody who opens the shelf, and the person who
+ * turned them off is exactly who a determined sender would then work around.
+ */
+async function prankableFriends(email) {
+  if (!supabaseAdmin || !email) return [];
+  try {
+    const [{ data: a }, { data: b }] = await Promise.all([
+      supabaseAdmin.from("friendships").select("recipient_email, recipient_username, recipient_name")
+        .eq("requester_email", email).eq("status", "accepted"),
+      supabaseAdmin.from("friendships").select("requester_email, requester_username, requester_name")
+        .eq("recipient_email", email).eq("status", "accepted"),
+    ]);
+    const out = [
+      ...(a || []).map((f) => ({ email: f.recipient_email, name: f.recipient_username || f.recipient_name })),
+      ...(b || []).map((f) => ({ email: f.requester_email, name: f.requester_username || f.requester_name })),
+    ].filter((f) => f.email && f.email !== email);
+    // One row per person: a pair can appear in both directions if a duplicate
+    // friendship was ever written, and a picker listing somebody twice reads
+    // as a bug on the one screen that has to feel considered.
+    return [...new Map(out.map((f) => [f.email, f])).values()]
+      .map((f) => ({ email: f.email, name: f.name || f.email.split("@")[0] }));
+  } catch (e) {
+    console.warn("[pranks] friend lookup failed:", e?.message);
+    return [];
+  }
+}
+
+/** Is this a mutual, ACCEPTED friendship? Both directions, because
+ *  `friendships` stores one row with a requester and a recipient. */
+async function arePranksMutual(me, them) {
+  if (!supabaseAdmin || !me || !them || me === them) return false;
+  const { data } = await supabaseAdmin
+    .from("friendships")
+    .select("id")
+    .eq("status", "accepted")
+    .or(`and(requester_email.eq.${me},recipient_email.eq.${them}),` +
+        `and(requester_email.eq.${them},recipient_email.eq.${me})`)
+    .limit(1);
+  return Array.isArray(data) && data.length > 0;
+}
+
+/**
+ * Send a prank. Every bound in `pranks.js` is checked HERE, because the client
+ * half is a courtesy and this is the half that is true.
+ *
+ * The ORDERING is the careful part: the recipient's own limits are checked
+ * BEFORE any credits move, so somebody who has opted out never costs a sender
+ * anything — a refusal that charged would make "did it take my credits" a way
+ * of finding out who has opted out, and the person who opted out is exactly who
+ * a determined sender would then work around.
+ */
+app.post("/local-ai/fn/sendPrank", async (req, res) => {
+  const user = await authenticateRequest(req);
+  if (!user) return res.status(401).json({ error: "Not signed in." });
+  if (!supabaseAdmin) return res.status(503).json({ error: "Unavailable." });
+
+  try {
+    const { kind, target_email } = req.body || {};
+    const spec = prankKind(kind);
+    if (!spec) return res.status(400).json({ error: "That isn't something you can send." });
+
+    const me = user.email;
+    const them = String(target_email || "").trim().toLowerCase();
+    if (!them || them === me) return res.status(400).json({ error: "Pick a friend to send it to." });
+
+    let profile = await loadUserProfile(me);
+    if (!profile) return res.status(404).json({ error: "No profile found." });
+    profile = await grantWeeklyCred(profile);
+
+    const week = marketWeekKey();
+    const [isFriend, targetRow, sentRes, gotRes] = await Promise.all([
+      arePranksMutual(me, them),
+      supabaseAdmin.from("user_profiles").select("extra, username, full_name")
+        .eq("created_by", them).limit(1).maybeSingle(),
+      supabaseAdmin.from("pranks").select("id", { count: "exact", head: true })
+        .eq("created_by", me).eq("week_start", week),
+      supabaseAdmin.from("pranks").select("id", { count: "exact", head: true })
+        .eq("target_email", them).eq("week_start", week),
+    ]);
+
+    const verdict = canSendPrank({
+      kind, isFriend,
+      target: targetRow?.data || null,
+      sentThisWeek: sentRes?.count ?? 0,
+      receivedThisWeek: gotRes?.count ?? 0,
+    });
+    if (!verdict.ok) return res.status(400).json({ error: verdict.reason });
+
+    // ── The charge, compare-and-set, exactly as `buyWithCred` does it ──────
+    const held = Math.max(0, Number(profile.cred_balance) || 0);
+    if (held < spec.price) {
+      return res.status(400).json({ error: `You need ${spec.price - held} more credits.` });
+    }
+    const { data: charged, error: chargeErr } = await supabaseAdmin.from("user_profiles")
+      .update({ cred_balance: held - spec.price })
+      .eq("id", profile.id)
+      .eq("cred_balance", profile.cred_balance)
+      .select("id, cred_balance")
+      .maybeSingle();
+    if (chargeErr) {
+      console.error("[sendPrank] charge failed:", chargeErr.message);
+      return res.status(500).json({ error: "Couldn't send that. Nothing was charged." });
+    }
+    if (!charged) {
+      return res.status(409).json({ error: "Your balance changed. Nothing was charged — try again." });
+    }
+
+    const { error: insErr } = await supabaseAdmin.from("pranks").insert({
+      created_by: me, target_email: them, kind: spec.id, week_start: week,
+    });
+    if (insErr) {
+      // THE ESCROW IS UNWOUND, the rule `takePosition` already keeps: the
+      // charge landed before the row exists and there is no transaction across
+      // PostgREST calls, so a failed insert refunds directly rather than
+      // through a cap-bounded path that would quietly keep part of it.
+      await supabaseAdmin.from("user_profiles")
+        .update({ cred_balance: held }).eq("id", profile.id);
+      console.error("[sendPrank] insert failed, refunded:", insErr.message);
+      return res.status(500).json({ error: "Couldn't send that. Your credits are back." });
+    }
+
+    return res.json({
+      success: true,
+      cred_balance: charged.cred_balance,
+      sent_this_week: (sentRes?.count ?? 0) + 1,
+      send_max: PRANK_SEND_MAX,
+    });
+  } catch (e) {
+    console.error("[sendPrank]", e);
+    return res.status(500).json({ error: "Couldn't send that." });
+  }
+});
+
+/**
+ * What has arrived for me and has not played yet, and it is marked SEEN on
+ * delivery rather than on dismissal — the rule `SettlementReveal` already
+ * keeps. A student who closes the tab has still had it put in front of them,
+ * and the alternative is a prank that replays every time they open the app,
+ * which is the pile-on the receive cap exists to prevent arriving by a
+ * different route.
+ */
+app.post("/local-ai/fn/getPranks", async (req, res) => {
+  const user = await authenticateRequest(req);
+  if (!user) return res.status(401).json({ error: "Not signed in." });
+  if (!supabaseAdmin) return res.json({ success: true, pranks: [] });
+
+  try {
+    const me = user.email;
+    const profile = await loadUserProfile(me);
+    // Opted out is opted out: nothing is fetched and nothing is marked, so
+    // turning it back on does not replay a term of pranks at somebody.
+    if (prankOptedOut(profile)) return res.json({ success: true, pranks: [], opted_out: true });
+
+    const { data, error } = await supabaseAdmin
+      .from("pranks")
+      .select("id, kind, created_by, created_date")
+      .eq("target_email", me)
+      .is("seen_at", null)
+      .order("created_date", { ascending: true })
+      .limit(PRANK_RECEIVE_MAX);
+    if (error) {
+      // A missing table means migration 0038 has not been applied. Silence is
+      // the right failure — the app works, nothing plays, and the student is
+      // not shown an error about a feature they did not ask for.
+      return res.json({ success: true, pranks: [] });
+    }
+
+    const rows = data || [];
+    if (rows.length) {
+      await supabaseAdmin.from("pranks")
+        .update({ seen_at: new Date().toISOString() })
+        .in("id", rows.map((r) => r.id));
+    }
+
+    // THE SENDER IS NAMED. A prank with nobody's name on it is not what this
+    // shipped as, so a row whose sender cannot be resolved is dropped rather
+    // than delivered anonymously.
+    const senders = [...new Set(rows.map((r) => r.created_by))];
+    const { data: who } = senders.length
+      ? await supabaseAdmin.from("user_profiles")
+          .select("created_by, username, full_name").in("created_by", senders)
+      : { data: [] };
+    const nameOf = new Map((who || []).map((w) =>
+      [w.created_by, w.username || (w.full_name || "").split(/\s+/)[0]]));
+
+    return res.json({
+      success: true,
+      pranks: rows
+        .map((r) => ({ id: r.id, kind: r.kind, from: nameOf.get(r.created_by) || null }))
+        .filter((r) => r.from && prankKind(r.kind)),
+    });
+  } catch (e) {
+    console.error("[getPranks]", e);
+    return res.json({ success: true, pranks: [] });
+  }
+});
+
 /** What the store has, and what this student can do with it right now. */
 app.post("/local-ai/fn/getCredStore", async (req, res) => {
   const user = await authenticateRequest(req);
@@ -10955,6 +11172,17 @@ app.post("/local-ai/fn/getCredStore", async (req, res) => {
         per_credit: XP_PER_CREDIT,
         week_room: Math.max(0, WEEKLY_CONVERT_MAX - convertedThisWeek(profile, week)),
         week_max: WEEKLY_CONVERT_MAX,
+      },
+      // WHO CAN BE SENT TO, resolved here because the client has no way to —
+      // `friendships` stores one row with a requester and a recipient, so a
+      // mutual friendship is two queries, and a client that could list other
+      // students' addresses to find out is not something this app offers.
+      friends: await prankableFriends(user.email),
+      pranks: {
+        kinds: PRANK_LIST,
+        sent_this_week: await prankSendCount(user.email, week),
+        send_max: PRANK_SEND_MAX,
+        opted_out: prankOptedOut(profile),
       },
       owned: Array.isArray(profile.extra?.cred_owned) ? profile.extra.cred_owned : [],
       held: profile.extra?.cred_held || {},

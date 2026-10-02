@@ -386,6 +386,17 @@ export const CATALOGUE = [
         column: "streak_shields",
     },
 
+    // ── PRANKS ARE NOT IN THIS CATALOGUE, deliberately. Everything here is
+    //    bought through `purchasePatch`, which charges and records ownership
+    //    in one write — and a prank is not OWNED, it is SENT, so it needs a
+    //    recipient before it means anything. Listed here it would be buyable
+    //    through the generic path: charged, written into `cred_owned`, and
+    //    delivered to nobody. That is precisely the bug the rest of this
+    //    release exists to fix, re-introduced one file over.
+    //
+    //    They live in `pranks.js` with their own prices and their own gesture,
+    //    and `sendPrank` is the only thing that can charge for one.
+
     // ── Agency rather than an object.
     {
         id: "open-line", kind: "market", effect: "open_market",

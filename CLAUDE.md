@@ -3396,6 +3396,87 @@ The tape follows the same rule — new rows arrive with `layout` and read "just
 now", and the first paint flags nothing, or the whole week is breaking news on
 every load.
 
+## Pranks: student-to-student, and every bound is asserted
+
+**This is the only feature where one student does something TO another**, on a
+product whose users are mostly fifteen to eighteen and which is being sold to
+schools. Migration 0034 ruled out free text on Compete in its own words —
+"a text box on that is a moderation problem this app has no way to staff" — so
+this ships only because every one of those words can be made false about it.
+
+**FOUR BOUNDS, and the first two are what make it safe:**
+
+- **A FIXED VOCABULARY.** `KINDS` is the whole language. There is no free text
+  anywhere in a prank, in the table or on the screen, so nobody can say anything
+  to anybody: the most hostile thing that can arrive is a wobble.
+- **A RECEIVE CAP, which is the one that matters.** A send cap bounds each
+  sender and says nothing about a class of thirty deciding on one person — five
+  each is a hundred and fifty, which is a campaign. `WEEKLY_RECEIVE_MAX` makes
+  a pile-on structurally impossible, and is TIGHTER than the send cap: better to
+  hold one you cannot deliver than to receive one you did not want.
+- **FRIENDS ONLY**, mutual and accepted — the difference between a classmate you
+  know and a stranger on a public board picking a target.
+- **THE SENDER IS NAMED**, always, on the card itself. A row whose sender cannot
+  be resolved is DROPPED rather than delivered anonymously.
+
+**THE TWO RECIPIENT-SIDE REFUSALS ARE INDISTINGUISHABLE**, and the test asserts
+it. "They can't receive one right now" covers an opt-out AND a full week,
+because a refusal that said which would turn the shelf into a way of finding out
+who has opted out — and that person is exactly who a determined sender would
+then work around. Your OWN limit names itself, because a cap on your own
+behaviour is something you can act on, and it is checked first: a sender told
+"they can't receive one" when they had also run out would fix the wrong thing.
+The picker greys nobody out for the same reason.
+
+**NOTHING A PRANK DOES CAN REACH ANYTHING A STUDENT IS MEASURED ON** — not XP,
+a streak, the ATAR, a mark, a deck or a position. Asserted as an ABSENCE over
+the module, the shape the refund rule takes: the day somebody adds an effect
+that touches a mark is the day this stops being a prank and becomes a penalty
+that was bought. The two page-level kinds are pure transform and change no
+layout, so nothing moves out from under a finger mid-quiz.
+
+**A PRANK IS NOT IN THE CATALOGUE, and that was a real mistake caught mid-build.**
+Everything on the shelf is bought through `purchasePatch`, which charges and
+records ownership in ONE write — and a prank is not owned, it is SENT, so it
+needs a recipient before it means anything. Listed as a buyable item it would be
+charged, written into `cred_owned`, and delivered to nobody: precisely the bug
+the rest of this release exists to fix, reintroduced one file over. `sendPrank`
+is the only thing that may charge for one, and it refunds directly if the insert
+fails — the escrow rule `takePosition` already keeps.
+
+**IT IS NOT A MARKET COMPONENT.** `PrankOverlay` lives in `components/pranks/`
+because a prank is BOUGHT on the floor and PLAYS anywhere — over a quiz, the
+dashboard, the planner — so it follows the app's own tokens, not the floor's
+`--floor-*` palette, which is blank outside `.floor` and would have rendered an
+invisible prank on every screen except the one it was bought on.
+`floorInk.test.mjs` caught it sitting in `components/market/` with literal hex
+in it, which was two mistakes that looked like one.
+
+**REDUCED MOTION STILL DELIVERS.** The animation is suppressed and the CARD
+still plays, or a student with motion sensitivity silently receives nothing
+while their friend is charged for something that did not happen.
+
+**`getPranks` marks seen ON ARRIVAL**, the rule `SettlementReveal` keeps: a
+student who closes the tab has still had it put in front of them, and the
+alternative is a prank replaying on every load — the pile-on arriving by another
+route. It is in `READ_ONLY_FUNCTIONS` despite writing, because nothing reads
+`pranks` through the entity cache, so there is no cached value to invalidate;
+left off, it would flush the whole cache on every page mount.
+
+**Migration 0038 must be applied before any of this works.** Writes go through
+the service role only — every bound is checked in `sendPrank`, and a client that
+could insert directly would walk past all four.
+
+**AND `dbColumns.test.mjs` NOW HONOURS A COMMITTED MIGRATION.** Its message said
+"no migration" while only ever checking `schema.json`, which is a dump of what
+is DEPLOYED — so a table whose migration is written but not yet applied failed
+the check correctly and uselessly, and the suite would stay red through every
+release that adds one. A `create table` in `supabase/migrations/` now counts,
+with the columns it declares; the dump still WINS wherever both describe a
+table, because a migration can be superseded (0008's drop-and-recreate) and a
+parsed guess beating a measurement is the inversion that file's header warns
+about. Verified it still catches a genuinely imaginary table.
+
 ## The floor speaks forecasting, not betting
 
 **"Because we are selling to schools."** The board was built on Polymarket's
@@ -3670,6 +3751,11 @@ stranger.
   card, the price, the gesture and the payoff moment; `getMarkets` /
   `takePosition` / `openMarkMarket` / `reportMark` in `server.mjs` mint, escrow
   and settle
+- `src/lib/pranks.js` + `pranks.test.mjs`,
+  `src/components/pranks/PrankOverlay.jsx`, `supabase/migrations/0038_pranks.sql`
+  — the four bounds, and the tests that assert them rather than describing them.
+  `sendPrank` / `getPranks` in `server.mjs`; draw them with
+  `scripts/_floorProbe.jsx?v=pranks`, over real content
 - `src/lib/cosmetics.js`, `src/lib/CosmeticsContext.jsx` — what a student
   bought, actually drawn. The provider is mounted in Layout; `CardBack` and the
   crest consume it rather than being handed a skin by nineteen call sites

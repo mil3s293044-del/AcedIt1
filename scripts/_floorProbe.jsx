@@ -32,6 +32,8 @@ import PriceTick from "@/components/market/PriceTick";
 import { CATALOGUE, grantForTier } from "@/lib/credStore";
 import BottomNav from "@/components/layout/BottomNav";
 import { CardBack } from "@/components/cards/PlayingCard";
+import PrankOverlay from "@/components/pranks/PrankOverlay";
+import { PRANK_LIST } from "@/lib/pranks";
 import { BACK_SKINS } from "@/lib/cosmetics";
 
 const which = new URLSearchParams(location.search).get("v") || "deal";
@@ -531,6 +533,43 @@ views.backs = () => (
         ))}
     </div>
 );
+
+/* Every prank, over a page that looks like a real one. The card is the part
+   that must always be legible — it is what names who did this — so it is drawn
+   over content rather than over an empty screen. */
+views.pranks = () => {
+    const [i, setI] = React.useState(0);
+    const k = PRANK_LIST[i];
+    return (
+        <div className="min-h-screen bg-background p-8">
+            <h1 className="font-display font-black text-2xl text-foreground mb-2">Pranks</h1>
+            <div className="flex gap-2 mb-6 flex-wrap">
+                {PRANK_LIST.map((p, n) => (
+                    <button key={p.id} onClick={() => setI(n)}
+                        className={`px-3 py-1.5 rounded-xl text-sm font-bold border
+                            ${n === i ? "bg-primary text-primary-foreground border-primary"
+                                      : "border-border text-muted-foreground"}`}>
+                        {p.label}
+                    </button>
+                ))}
+            </div>
+            <div className="max-w-md space-y-3">
+                <div className="rounded-2xl border border-border bg-surface p-4">
+                    <p className="font-display font-black text-foreground">A page underneath</p>
+                    <p className="text-sm text-muted-foreground mt-1">
+                        The prank plays over whatever the student was doing, so the card has to
+                        read against real content rather than an empty screen.
+                    </p>
+                </div>
+                <div className="rounded-2xl border border-border bg-surface p-4">
+                    <p className="text-sm text-muted-foreground">Another panel, for contrast.</p>
+                </div>
+            </div>
+            <PrankOverlay key={`${k.id}-${i}`} prank={{ id: i, kind: k.id, from: "Priyanka" }}
+                onDone={() => {}} />
+        </div>
+    );
+};
 
 ReactDOM.createRoot(document.getElementById("root")).render(
     React.createElement(views[which] || views.deal));

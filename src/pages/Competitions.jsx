@@ -487,6 +487,10 @@ export default function Competitions() {
     const convert = useCallback((xp) =>
         runStoreAction("convertXP", { xp }, "That didn't convert."), [runStoreAction]);
 
+    const prank = useCallback((kind, target) =>
+        runStoreAction("sendPrank", { kind, target_email: target }, "That didn't send."),
+    [runStoreAction]);
+
     const equip = useCallback((itemId, slot) =>
         runStoreAction("equipCosmetic", { item_id: itemId, slot }, "Couldn't change that."),
     [runStoreAction]);
@@ -748,7 +752,7 @@ export default function Competitions() {
 
                 {tab === "store" ? (
                     <CredStore store={store} busy={buying} onBuy={buy}
-                        onConvert={convert} onEquip={equip} />
+                        onConvert={convert} onEquip={equip} onPrank={prank} />
                 ) : tab === "book" ? (
                     <PortfolioPanel onOpenMarket={openMarket} />
                 ) : (

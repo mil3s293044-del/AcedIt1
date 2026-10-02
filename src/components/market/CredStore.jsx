@@ -35,6 +35,8 @@ import { slotOf } from "@/lib/cosmetics";
 // a student check which one is right — and the grant is now a league result,
 // so it should speak the league's words.
 import { ordinal } from "@/lib/league";
+import { WEEKLY_RECEIVE_MAX } from "@/lib/pranks";
+import { Send } from "lucide-react";
 
 const GLYPH = {
     cosmetic: Sparkles,
@@ -54,9 +56,10 @@ const GROUPS = [
     ["market", "The board", "Put a question of your own up."],
 ];
 
-export default function CredStore({ store, busy, onBuy, onConvert, onEquip }) {
+export default function CredStore({ store, busy, onBuy, onConvert, onEquip, onPrank }) {
     const reduce = useReducedMotion();
     const [xp, setXp] = useState(0);
+    const [prankTo, setPrankTo] = useState("");
 
     if (!store) {
         return (
@@ -293,6 +296,88 @@ export default function CredStore({ store, busy, onBuy, onConvert, onEquip }) {
                     </section>
                 );
             })}
+            {/* ── SEND ONE TO A FRIEND ──────────────────────────────────────
+                Not a purchase, so not in the catalogue above: a prank needs a
+                RECIPIENT before it means anything, and listed as a buyable item
+                it would charge, record ownership and deliver to nobody — the
+                exact bug the rest of this shelf was just fixed for.
+
+                The picker does NOT say who has opted out or who is at their
+                weekly ceiling. Greying somebody out would publish "this person
+                turned pranks off" to everyone who opens the shelf. The refusal
+                comes at send time and cannot tell the two apart. */}
+            {store.pranks && !store.pranks.opted_out && (
+                <section>
+                    <div className="flex items-baseline gap-2 mb-1">
+                        <Send className="w-3.5 h-3.5 text-[var(--floor-muted)]" aria-hidden="true" />
+                        <h3 className="font-display font-black text-[var(--floor-ink)] text-sm">Send one</h3>
+                        <span className="flex-1 h-px bg-[var(--floor-edge)]" />
+                    </div>
+                    <p className="text-[12px] text-[var(--floor-dim)] mb-2.5">
+                        A few seconds on a friend&apos;s screen, with your name on it. Nothing it does
+                        touches their XP, their streak or their marks.
+                    </p>
+
+                    {!store.friends?.length ? (
+                        <p className="text-[13px] text-[var(--floor-muted-2)] px-1">
+                            These go to friends. Add somebody first.
+                        </p>
+                    ) : (
+                        <>
+                            <label htmlFor="prank-to"
+                                className="text-[10px] font-black uppercase tracking-widest text-[var(--floor-dim)]">
+                                Who
+                            </label>
+                            <select id="prank-to" value={prankTo}
+                                onChange={(e) => setPrankTo(e.target.value)}
+                                className="w-full mt-1 mb-3 rounded-xl bg-[var(--floor-card)] border
+                                    border-[var(--floor-edge-strong)] text-[var(--floor-ink)]
+                                    text-sm font-bold px-3 py-2">
+                                <option value="">Pick a friend</option>
+                                {store.friends.map((f) => (
+                                    <option key={f.email} value={f.email}>{f.name}</option>
+                                ))}
+                            </select>
+
+                            <div className="grid sm:grid-cols-2 gap-2.5">
+                                {store.pranks.kinds.map((k) => {
+                                    const afford = (store.cred ?? 0) >= k.price;
+                                    const spent = store.pranks.sent_this_week >= store.pranks.send_max;
+                                    return (
+                                        <div key={k.id}
+                                            className="rounded-2xl p-3.5 border bg-[var(--floor-card)]
+                                                border-[var(--floor-edge)]">
+                                            <p className="font-display font-black text-[var(--floor-ink)] text-sm leading-tight">
+                                                {k.label}
+                                            </p>
+                                            <p className="text-[12px] text-[var(--floor-muted-2)] mt-0.5 leading-snug">
+                                                {k.blurb}
+                                            </p>
+                                            <div className="mt-3 flex items-center justify-between gap-2">
+                                                <span className="font-display font-black tabular-nums
+                                                    text-[var(--floor-warn-ink)] inline-flex items-center gap-1 text-sm">
+                                                    <Coins className="w-3.5 h-3.5" />{k.price.toLocaleString()}
+                                                </span>
+                                                <Button size="sm" className="font-bold"
+                                                    disabled={busy || !prankTo || !afford || spent}
+                                                    onClick={() => onPrank?.(k.id, prankTo)}>
+                                                    Send
+                                                </Button>
+                                            </div>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+
+                            <p className="text-[11px] text-[var(--floor-dim)] mt-2.5 leading-snug">
+                                {store.pranks.send_max - store.pranks.sent_this_week} of {store.pranks.send_max} left
+                                to send this week. Nobody can receive more than {WEEKLY_RECEIVE_MAX} in a week,
+                                from everyone combined &mdash; and anybody can turn these off in Settings.
+                            </p>
+                        </>
+                    )}
+                </section>
+            )}
         </div>
     );
 }

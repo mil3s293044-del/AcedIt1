@@ -194,6 +194,34 @@ export default function Settings() {
     const marketEligible = maySeeSocial(marketBand);
     const marketSubject = mayBeMarketSubject(userProfile);
 
+    /** Pranks off entirely. Stored as an OPT-OUT rather than an opt-in, which is
+     *  the opposite of `market_subject_opt_in` directly above and is deliberate:
+     *  that one publishes a question about you to the whole board, this one is a
+     *  few seconds of screen from somebody you have already accepted as a
+     *  friend. The bounds that make that safe — friends only, a weekly ceiling
+     *  on what anybody RECEIVES, and your name on every one — live in
+     *  `pranks.js`, so the default here does not have to carry the weight. */
+    const prankOptOut = userProfile?.extra?.pranks_opt_out === true;
+
+    const togglePranks = async (checked) => {
+        if (!userProfile) return;
+        setIsSaving(true);
+        try {
+            const updated = await base44.entities.UserProfile.update(userProfile.id, {
+                extra: { ...(userProfile.extra || {}), pranks_opt_out: !checked },
+            });
+            setUserProfile(updated);
+        } catch (e) {
+            toast({
+                title: "That didn't save",
+                description: e?.message || "Try again in a moment.",
+                variant: "destructive",
+            });
+        } finally {
+            setIsSaving(false);
+        }
+    };
+
     const toggleMarketSubject = async (checked) => {
         if (!userProfile) return;
         setIsSaving(true);
@@ -619,6 +647,32 @@ export default function Settings() {
                             disabled={isSaving}
                         />
                     </div>
+
+                    {/* ── PRANKS FROM FRIENDS ──────────────────────────────
+                        A real refusal, on the screen somebody would look for it,
+                        and it is honoured at BOTH ends: `getPranks` fetches
+                        nothing for a student who has turned it off, so turning
+                        it back on does not replay a term of them. */}
+                    {marketEligible && (
+                        <div className="flex items-start justify-between gap-4 mt-4 pt-4 border-t border-border">
+                            <div className="min-w-0">
+                                <Label htmlFor="pranks" className="text-foreground font-bold text-sm block">
+                                    Let friends send you pranks
+                                </Label>
+                                <p className="text-xs text-muted-foreground mt-0.5 leading-relaxed">
+                                    A few seconds of confetti or a wobble, with their name on it. Friends
+                                    only, never more than a few a week, and nothing it does can touch your
+                                    XP, your streak or your marks.
+                                </p>
+                            </div>
+                            <Switch
+                                id="pranks"
+                                checked={!prankOptOut}
+                                onCheckedChange={togglePranks}
+                                disabled={isSaving}
+                            />
+                        </div>
+                    )}
 
                     {/* ── BEING THE SUBJECT OF A MARKET ────────────────────
                         Separate from the anonymity toggle above, because they
