@@ -55,7 +55,14 @@ export function suggestTopics({
             kind: SUGGESTION_KIND.weak,
             subject: t.subject,
             topic: t.topic,
-            why: t.missRate != null
+            // ── A 0% MISS RATE IS NOT EVIDENCE OF COSTING MARKS ────────────
+            // `weakTopicsFrom` keeps a topic on `weakCards > 0` ALONE, so a
+            // deck whose every review has landed still arrives here with a
+            // perfectly real `missRate` of 0 — and `!= null` is true of 0, so
+            // the row printed "0% of your reviews on this missed" under a pill
+            // reading "Costing you marks". The rate is only the reason when
+            // there is a rate; otherwise the flagged cards are.
+            why: t.missRate > 0
                 ? `${t.missRate}% of your reviews on this missed`
                 : `${t.weakCards} card${t.weakCards === 1 ? "" : "s"} flagged as a weak spot`,
             evidence: `${t.cards} card${t.cards === 1 ? "" : "s"}${t.reviews ? ` · ${t.reviews} reviews` : ""}`,
@@ -85,13 +92,20 @@ export function suggestTopics({
     const outlook = retentionOutlook(flashcards, { days: 7, now });
     for (const s of outlook.subjects) {
         for (const topic of s.topics.slice(0, 2)) {
+            // ── THE ROW'S NUMBER IS THE ROW'S TOPIC ────────────────────────
+            // This read `s.slipping`, a SUBJECT total, on every topic row — so
+            // two topics under one subject printed the identical sentence, and
+            // "138 cards already past reliable recall" sat beside "20 of your
+            // cards" for a topic that has twenty. `topicCounts` is the same
+            // walk, kept per topic.
+            const n = s.topicCounts?.[topic] || { slipping: 0, falling: 0 };
             push({
                 kind: SUGGESTION_KIND.slipped,
                 subject: s.subject,
                 topic,
-                why: s.slipping > 0
-                    ? `${s.slipping} card${s.slipping === 1 ? "" : "s"} already past reliable recall`
-                    : `${s.falling} card${s.falling === 1 ? "" : "s"} drop out of reach this week`,
+                why: n.slipping > 0
+                    ? `${n.slipping} card${n.slipping === 1 ? "" : "s"} already past reliable recall`
+                    : `${n.falling} card${n.falling === 1 ? "" : "s"} drop out of reach this week`,
                 evidence: `${s.total} at risk in ${s.subject}`,
             });
         }

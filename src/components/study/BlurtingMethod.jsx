@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useMemo, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useBusy, BUSY } from "@/lib/LiveContext";
 import { Button } from "@/components/ui/button";
@@ -7,13 +7,15 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
-import { PenTool, Play, Clock, CheckCircle, RotateCcw, Maximize, Wand2, X, Sparkles, FolderOpen, Trash2, FileText, AlertCircle, Lightbulb, Brain, Check, ChevronRight, Layers } from "lucide-react";
+import { PenTool, Play, Clock, CheckCircle, RotateCcw, Maximize, Wand2, X, Sparkles, FolderOpen, Trash2, AlertCircle, Brain, Check, ChevronRight, Layers } from "lucide-react";
 import { format } from "date-fns";
 import { useToast } from "@/components/ui/use-toast";
 import { base44 } from "@/api/base44Client";
-import { acceptFiles, uploadAll, STUDY_ACCEPT, STUDY_ACCEPT_LABEL } from "@/lib/pickFiles";
+import { acceptFiles, uploadAll } from "@/lib/pickFiles";
 import { aceDone } from "@/components/ace/AceReacts";
 import WhatToTest from "./WhatToTest";
+import SourceRow from "./SourceRow";
+import { suggestTopics } from "@/lib/recallSuggest";
 import { FEATURES, checkLiveTier } from "@/lib/tierAccess";
 import { getExaminerPrompt } from "@/lib/subjectExaminerPrompts";
 import { fmtDate } from "@/lib/safeDate";
@@ -392,157 +394,162 @@ Reference Study Design requirements in your feedback.`,
         }
     };
 
+    // Computed here, not inside the picks component: the card has to know
+    // whether there are any before it draws the rule handing over to the
+    // manual fields. See WhatToTest.
+    const picks = useMemo(
+        () => suggestTopics({
+            flashcards: ownFlashcards, assessments: ownAssessments,
+            techniques: ownTechniques, limit: 4,
+        }),
+        [ownFlashcards, ownAssessments, ownTechniques]);
+
+    /**
+     * A pick STARTS the blurt, the way Active Recall's does.
+     *
+     * It used to set two fields and stop, which made one affordance mean two
+     * different things on two sibling screens — and left the student scrolling
+     * past the card to find a button, which is the exact failure
+     * `startFromSuggestion` was written to end. `showFocusPrompt` is set
+     * directly rather than through `startSession`, because the subject is set
+     * in this same tick and that guard would read the state before it updates.
+     */
+    const startFromSuggestion = (sug) => {
+        if (sug.subject) setSelectedSubject(sug.subject);
+        setTopic(sug.topic || "");
+        setShowFocusPrompt(true);
+    };
+
     const renderSetup = () => (
         <motion.div key="setup" initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -16 }} className="space-y-5">
-            {/* Same question as Active Recall, same answer — the page used to
-                open on an empty subject picker and nothing else. */}
-            <WhatToTest
-                flashcards={ownFlashcards}
-                assessments={ownAssessments}
-                techniques={ownTechniques}
-                maps={ownMaps}
-                verb="Blurt"
-                onPick={(sug) => {
-                    if (sug.subject) setSelectedSubject(sug.subject);
-                    setTopic(sug.topic || "");
-                }}
-            />
 
-            <div className="grid grid-cols-1 lg:grid-cols-5 gap-5">
-                {/* Left: Setup */}
-                <div className="lg:col-span-3 card-soft p-6 space-y-5">
-                    <div className="flex items-center justify-between">
-                        <h3 className="font-semibold text-foreground text-lg">Session Setup</h3>
-                        <button
-                            onClick={() => { loadSessionHistory(); setShowSessionHistory(!showSessionHistory); }}
-                            className="flex items-center gap-1.5 text-sm text-xp hover:text-xp/80 font-medium"
-                        >
-                            <FolderOpen className="w-4 h-4" /> History
-                        </button>
+            {/* ── ONE CARD ─────────────────────────────────────────────────
+                Three panels used to ask one question between them — Ace's
+                picks, "Session Setup", and a notes upload sitting under a
+                "How Blurting Works" list. The picks lead, a rule hands over to
+                the manual fields, and the notes sit with the thing they are
+                notes FOR. */}
+            <div className="card-soft p-5 sm:p-6 overflow-hidden">
+                <WhatToTest
+                    picks={picks}
+                    flashcards={ownFlashcards}
+                    assessments={ownAssessments}
+                    techniques={ownTechniques}
+                    maps={ownMaps}
+                    verb="Blurt"
+                    onPick={startFromSuggestion}
+                />
+
+                {picks.length > 0 && (
+                    <div className="flex items-center gap-3 my-5">
+                        <span className="h-px flex-1 bg-border" />
+                        <span className="stat-label text-muted-foreground">Or set it up yourself</span>
+                        <span className="h-px flex-1 bg-border" />
                     </div>
+                )}
 
-                    <div className="space-y-4">
-                        <div className="space-y-1.5">
-                            <Label className="text-sm font-medium text-muted-foreground">Subject</Label>
-                            <Select value={selectedSubject} onValueChange={setSelectedSubject}>
-                                <SelectTrigger className="h-11 border-2 border-border focus:border-xp rounded-xl">
-                                    <SelectValue placeholder="Choose a subject..." />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    {userSubjects.map(s => (
-                                        <SelectItem key={s.id} value={s.subject_name}>
-                                            <div className="flex items-center gap-2">
-                                                <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: s.color || 'hsl(var(--xp))' }} />
-                                                {s.subject_name}
-                                            </div>
-                                        </SelectItem>
-                                    ))}
-                                </SelectContent>
-                            </Select>
-                        </div>
-
-                        <div className="space-y-1.5">
-                            <Label className="text-sm font-medium text-muted-foreground">Topic <span className="text-muted-foreground/60 font-normal">(optional)</span></Label>
-                            <Input
-                                placeholder="e.g. French Revolution"
-                                value={topic}
-                                onChange={e => setTopic(e.target.value)}
-                                className="h-11 border-2 border-border focus:border-xp rounded-xl"
-                            />
-                        </div>
-
-                        <div className="space-y-1.5">
-                            <Label className="text-sm font-medium text-muted-foreground">Session duration</Label>
-                            <div className="flex gap-2">
-                                {[5, 10, 15, 20].map(min => (
-                                    <button
-                                        key={min}
-                                        onClick={() => setSessionDuration(min)}
-                                        className={`flex-1 h-10 rounded-xl text-sm font-semibold border-2 transition-all ${
-                                            sessionDuration === min
-                                                ? 'bg-xp border-xp text-white shadow-soft'
-                                                : 'border-border text-muted-foreground hover:border-xp/40 hover:bg-xp/5'
-                                        }`}
-                                    >
-                                        {min}m
-                                    </button>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div className="space-y-1.5">
+                        <Label className="text-sm font-medium text-muted-foreground">Subject</Label>
+                        <Select value={selectedSubject} onValueChange={setSelectedSubject}>
+                            <SelectTrigger className="h-11 border-2 border-border focus:border-xp rounded-xl">
+                                <SelectValue placeholder="Choose a subject..." />
+                            </SelectTrigger>
+                            <SelectContent>
+                                {userSubjects.map(s => (
+                                    <SelectItem key={s.id} value={s.subject_name}>
+                                        <div className="flex items-center gap-2">
+                                            <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: s.color || 'hsl(var(--xp))' }} />
+                                            {s.subject_name}
+                                        </div>
+                                    </SelectItem>
                                 ))}
-                            </div>
-                        </div>
+                            </SelectContent>
+                        </Select>
                     </div>
 
-                    <Button
-                        onClick={startSession}
-                        className="w-full h-12 bg-xp hover:bg-xp/90 text-white font-semibold rounded-xl shadow-soft gap-2"
-                    >
-                        <Play className="w-5 h-5" /> Start Blurting ({sessionDuration} min)
-                    </Button>
+                    <div className="space-y-1.5">
+                        <Label className="text-sm font-medium text-muted-foreground">
+                            Topic <span className="text-muted-foreground/60 font-normal">(optional)</span>
+                        </Label>
+                        <Input
+                            placeholder="e.g. French Revolution"
+                            value={topic}
+                            onChange={e => setTopic(e.target.value)}
+                            className="h-11 border-2 border-border focus:border-xp rounded-xl"
+                        />
+                    </div>
                 </div>
 
-                {/* Right: How it works + notes upload */}
-                <div className="lg:col-span-2 space-y-4">
-                    {/* How it works */}
-                    <div className="card-soft bg-xp/5 border-xp/20 p-5 space-y-3">
-                        <div className="flex items-center gap-2">
-                            <div className="w-7 h-7 bg-xp rounded-xl flex items-center justify-center">
-                                <Lightbulb className="w-3.5 h-3.5 text-white" />
-                            </div>
-                            <h3 className="font-semibold text-foreground text-sm">How Blurting Works</h3>
-                        </div>
-                        {[
-                            { n: "1", text: "Close your notes completely" },
-                            { n: "2", text: "Write EVERYTHING you remember" },
-                            { n: "3", text: "Don't stop — just keep writing" },
-                            { n: "4", text: "AI checks what you missed" },
-                        ].map(step => (
-                            <div key={step.n} className="flex items-start gap-3">
-                                <span className="w-5 h-5 rounded-lg bg-xp/20 text-xp text-xs font-bold flex items-center justify-center flex-shrink-0 mt-0.5">{step.n}</span>
-                                <p className="text-sm text-foreground">{step.text}</p>
-                            </div>
+                <div className="space-y-1.5 mt-4">
+                    <Label className="text-sm font-medium text-muted-foreground">How long</Label>
+                    <div className="flex gap-1.5">
+                        {[5, 10, 15, 20].map(min => (
+                            <button
+                                key={min}
+                                onClick={() => setSessionDuration(min)}
+                                aria-pressed={sessionDuration === min}
+                                className={`flex-1 rounded-xl border-2 py-2 text-sm font-bold transition-colors ${
+                                    sessionDuration === min
+                                        ? 'border-xp bg-xp/10 text-foreground'
+                                        : 'border-border text-muted-foreground hover:text-foreground'
+                                }`}
+                            >
+                                {min}m
+                            </button>
                         ))}
                     </div>
+                </div>
 
-                    {/* Upload notes */}
-                    <div className="card-soft p-5 space-y-3">
-                        <div className="flex items-center gap-2">
-                            <Sparkles className="w-4 h-4 text-xp" />
-                            <h3 className="font-semibold text-foreground text-sm">Your notes <span className="font-normal text-muted-foreground">(optional)</span></h3>
-                        </div>
-                        <p className="text-xs text-muted-foreground leading-snug">
-                            Marking works without them. Add notes and it marks against what your
-                            class covered rather than the Study Design.
-                        </p>
-                        <div className={`rounded-2xl border-2 border-dashed transition-all ${sourceFiles.length ? 'border-xp/50 bg-xp/5' : 'border-border bg-secondary/50'}`}>
-                            <label className="flex items-center gap-3 p-3.5 cursor-pointer hover:bg-xp/5 transition-colors rounded-2xl">
-                                <div className={`w-8 h-8 rounded-xl flex items-center justify-center flex-shrink-0 ${sourceFiles.length ? 'bg-xp/10' : 'bg-surface'}`}>
-                                    <FileText className={`w-4 h-4 ${sourceFiles.length ? 'text-xp' : 'text-muted-foreground/60'}`} />
-                                </div>
-                                <div className="flex-1 min-w-0">
-                                    <p className={`text-sm font-medium ${sourceFiles.length ? 'text-xp' : 'text-muted-foreground'}`}>
-                                        {sourceFiles.length ? `${sourceFiles.length} file${sourceFiles.length > 1 ? 's' : ''} selected` : 'Upload notes'}
-                                    </p>
-                                    <p className="text-xs text-muted-foreground/60">{STUDY_ACCEPT_LABEL}</p>
-                                </div>
-                                <input type="file" className="hidden" multiple onChange={async e => {
-                                    const picked = Array.from(e.target.files || []);
-                                    e.target.value = "";
-                                    setSourceFiles(await acceptFiles(picked, { toast, existing: sourceFiles }));
-                                }} accept={STUDY_ACCEPT} />
-                            </label>
-                            {sourceFiles.length > 0 && (
-                                <div className="px-3.5 pb-3 space-y-1" onClick={e => e.stopPropagation()}>
-                                    {sourceFiles.map((f, i) => (
-                                        <div key={i} className="flex items-center gap-2 bg-surface rounded-lg px-2 py-1 border border-xp/20">
-                                            <span className="flex-1 text-xs text-foreground truncate">{f.name}</span>
-                                            <button type="button" onClick={() => setSourceFiles(prev => prev.filter((_, idx) => idx !== i))} className="text-muted-foreground/60 hover:text-streak">
-                                                <X className="w-3 h-3" />
-                                            </button>
-                                        </div>
-                                    ))}
-                                </div>
-                            )}
-                        </div>
-                    </div>
+                {/* ── Working from ─────────────────────────────────────────
+                    Marking works without notes, and saying so HERE is the
+                    whole point: the upload used to sit in its own panel, which
+                    made the marking look gated behind it. That is the shape
+                    this file's own history records — a feature almost nobody
+                    saw because it looked optional-but-required. */}
+                <div className="mt-5 pt-5 border-t border-border">
+                    <SourceRow
+                        files={sourceFiles}
+                        hint="Optional. Marking works without them — add notes and it marks against what your class covered rather than the Study Design."
+                        onPick={async (picked) => setSourceFiles(await acceptFiles(picked, { toast, existing: sourceFiles }))}
+                        onRemove={(i) => setSourceFiles(prev => prev.filter((_, idx) => idx !== i))}
+                    />
+                </div>
+
+                <Button
+                    onClick={startSession}
+                    className="w-full h-12 mt-5 bg-xp hover:bg-xp/90 text-white font-semibold rounded-xl shadow-soft gap-2"
+                >
+                    <Play className="w-5 h-5" /> Start blurting ({sessionDuration} min)
+                </Button>
+
+                {/* ── What a blurt IS ──────────────────────────────────────
+                    Four lines, under the button rather than in a panel beside
+                    it: it is read once, by somebody who has not done this
+                    before, and it was taking a third of the screen on every
+                    visit from everybody who had. */}
+                <ol className="mt-5 pt-5 border-t border-border grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-2">
+                    {[
+                        "Close your notes completely",
+                        "Write everything you remember",
+                        "Keep writing — no editing",
+                        "Ace marks what you missed",
+                    ].map((text, i) => (
+                        <li key={text} className="flex items-start gap-2.5">
+                            <span className="w-5 h-5 rounded-lg bg-xp/15 text-xp text-[11px] font-black
+                                flex items-center justify-center flex-shrink-0 mt-px">{i + 1}</span>
+                            <p className="text-xs text-muted-foreground leading-snug">{text}</p>
+                        </li>
+                    ))}
+                </ol>
+
+                <div className="mt-4 pt-4 border-t border-border flex justify-center">
+                    <button
+                        onClick={() => { loadSessionHistory(); setShowSessionHistory(!showSessionHistory); }}
+                        className="inline-flex items-center gap-1.5 text-xs font-bold text-muted-foreground hover:text-foreground transition-colors"
+                    >
+                        <FolderOpen className="w-3.5 h-3.5" /> Previous blurts
+                    </button>
                 </div>
             </div>
 

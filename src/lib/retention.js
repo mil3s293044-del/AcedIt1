@@ -113,9 +113,24 @@ export function retentionOutlook(cards = [], { days = 7, floor = RISK_FLOOR, now
     const bySubject = new Map();
     for (const x of [...slipping, ...falling]) {
         const key = x.card.subject_name || "Unsorted";
-        const prev = bySubject.get(key) || { subject: key, slipping: 0, falling: 0, topics: new Set(), worst: 1 };
+        const prev = bySubject.get(key) || {
+            subject: key, slipping: 0, falling: 0, topics: new Set(), worst: 1,
+            // ── A SUBJECT TOTAL IS NOT A TOPIC'S NUMBER ─────────────────────
+            // `slipping` counts the whole subject, and recallSuggest printed
+            // it on every TOPIC row it produced — so two topics under Legal
+            // Studies both read "138 cards already past reliable recall", and
+            // that 138 sat on the same row as "20 of your cards". Two numbers
+            // disagreeing on one line, about the same topic. The per-topic
+            // counts are free here, where the card is already in hand.
+            byTopic: new Map(),
+        };
         if (x.rNow < floor) prev.slipping++; else prev.falling++;
-        if (x.card.topic) prev.topics.add(x.card.topic);
+        if (x.card.topic) {
+            prev.topics.add(x.card.topic);
+            const t = prev.byTopic.get(x.card.topic) || { slipping: 0, falling: 0 };
+            if (x.rNow < floor) t.slipping++; else t.falling++;
+            prev.byTopic.set(x.card.topic, t);
+        }
         prev.worst = Math.min(prev.worst, x.rNow);
         bySubject.set(key, prev);
     }
@@ -126,6 +141,10 @@ export function retentionOutlook(cards = [], { days = 7, floor = RISK_FLOOR, now
             falling: s.falling,
             total: s.slipping + s.falling,
             topics: [...s.topics],
+            // Keyed by the same strings `topics` holds, so a caller that wants
+            // "how many of THIS topic" has it without re-walking the deck.
+            topicCounts: Object.fromEntries(
+                [...s.byTopic].map(([t, n]) => [t, { ...n, total: n.slipping + n.falling }])),
             worst: s.worst,
             minutes: reviewMinutes(s.slipping + s.falling),
         }))
