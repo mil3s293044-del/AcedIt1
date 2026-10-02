@@ -180,14 +180,14 @@ const views = {
                             text-[var(--floor-dim)] mb-2.5">The tape</h2>
                         <p className="text-[12px] text-[var(--floor-muted)]">
                             Ava took <span className="font-black text-[var(--floor-yes-ink)]">yes</span> at
-                            71¢ with 300 cred
+                            71% with 300 credits
                         </p>
                         <p className="text-[12px] text-[var(--floor-muted)]">
                             Ben took <span className="font-black text-[var(--floor-no-ink)]">no</span> at
-                            29¢ with 150 cred
+                            29% with 150 credits
                         </p>
                         <p className="text-[11px] text-[var(--floor-dimmest)] mt-2">
-                            Cred is not XP — losing a call can&apos;t touch your level.
+                            Credits are not XP — a call that goes against you can&apos;t touch your level.
                         </p>
                     </div>
                 </div>
@@ -468,7 +468,7 @@ function TickDemo() {
 views.store = () => (
     <Room>
         <div className="p-8 max-w-4xl mx-auto">
-            <h1 className="font-display font-black text-2xl text-[var(--floor-ink)] mb-1">Cred store</h1>
+            <h1 className="font-display font-black text-2xl text-[var(--floor-ink)] mb-1">Credits</h1>
             <p className="text-sm text-[var(--floor-muted-2)] mb-6">
                 Fixture profile: tier 6, 2,400 cred, owns the felt back.
             </p>

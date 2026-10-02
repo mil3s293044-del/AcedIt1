@@ -3396,6 +3396,33 @@ The tape follows the same rule — new rows arrive with `layout` and read "just
 now", and the first paint flags nothing, or the whole week is breaking news on
 every load.
 
+## The floor speaks forecasting, not betting
+
+**"Because we are selling to schools."** The board was built on Polymarket's
+vocabulary and inherited a betting shop's words with it. Every one of them had
+a more accurate replacement, which is the useful thing: this was not a
+euphemism pass.
+
+**`71¢` BECAME `71%`, AND THE CENT WAS THE WRONG UNIT BEFORE IT WAS THE WRONG
+WORD.** The number is a PROBABILITY — the model asks for a belief, scores it
+with a proper scoring rule and stores it in [0, 1]. Printing it in cents
+borrowed a unit for a quantity forecasting already has a word for, and implied
+a share you could buy and sell, which this board cannot do: there is no exit
+here, which is the same point `EXPECTED IS NOT UNREALISED` makes elsewhere.
+`priceLabel` is one function, so the whole app moved at once; the tests pinned
+the old unit and were repointed rather than loosened.
+
+- **"Stake" → "Commit."** A stake is wagered against a house. This is scored
+  against the room's own forecast, so the new word is also the true one.
+- **"Take a side" → "Take a position"**, the exchange idiom.
+- **"Longshot" → "Outside chance."**
+- **"cred" → "credits"** everywhere it is PRINTED.
+
+**STORAGE NAMES DID NOT MOVE.** `price_at_entry`, `payoutFor`, `stake`,
+`cred_balance` and the payload keys stay exactly as they are — renaming those
+rewrites history, which is the rule `sideLabels` already keeps about yes and no:
+only the LABEL moves, and every position already taken still reads back.
+
 ## Age, consent, and the policies the product did not implement
 
 **The Privacy Policy and Terms have promised guardian consent for months.**

@@ -219,13 +219,13 @@ export default function Market() {
                         {settled && settled.kind !== "void" && (
                             <p className="text-[13px] mt-2" style={{ color: INK.mid }}>
                                 You said <span className="font-bold" style={{ color: INK.bright }}>
-                                    {settled.said}¢</span>, the room said{" "}
+                                    {settled.said}%</span>, the room said{" "}
                                 <span className="font-bold" style={{ color: INK.bright }}>
-                                    {settled.room}¢</span> —{" "}
+                                    {settled.room}%</span> —{" "}
                                 <span className="font-black tabular-nums"
                                     style={{ color: settled.payout > 0 ? INK.up
                                         : settled.payout < 0 ? INK.down : INK.mid }}>
-                                    {settled.payout > 0 ? "+" : ""}{settled.payout} cred
+                                    {settled.payout > 0 ? "+" : ""}{settled.payout} credits
                                 </span>
                             </p>
                         )}
@@ -246,7 +246,7 @@ export default function Market() {
                             <span style={{ color: sideOf(mine.p) === YES ? INK.up : INK.down }}>
                                 {sideOf(mine.p) === YES ? "YES" : "NO"}
                             </span>
-                            {` · ${mine.stake} cred at ${priceLabel(mine.price_at_entry)}`}
+                            {` · ${mine.stake} credits at ${priceLabel(mine.price_at_entry)}`}
                         </p>
                         {market.status === "open" && mtm && (
                             <p className="text-[12px] mt-1.5 tabular-nums" style={{ color: INK.dim }}>

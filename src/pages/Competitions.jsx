@@ -884,7 +884,7 @@ export default function Competitions() {
                                             <p className="text-[11px] text-[var(--floor-dim)] tabular-nums">
                                                 {l.traders === 0
                                                     ? "nobody's taken a side yet"
-                                                    : `${l.traders} trading · room ${l.room}¢ · `
+                                                    : `${l.traders} trading · room ${l.room}% · `
                                                         + `${l.backed} backing, ${l.faded} fading`}
                                                 {l.actual !== null && ` · you got ${l.actual}%`}
                                             </p>
@@ -926,7 +926,7 @@ export default function Competitions() {
                         )}
 
                         <p className="text-[11px] text-[var(--floor-dimmest)] leading-snug px-1">
-                            Cred is not XP — losing a call can't touch your level, rank or ATAR.
+                            Credits are not XP — a call that goes against you can't touch your level, rank or ATAR.
                             You get {(me.weekly_grant ?? 1000).toLocaleString()} a week.
                             Agreeing with the price pays nothing; you earn by disagreeing and being right.
                         </p>

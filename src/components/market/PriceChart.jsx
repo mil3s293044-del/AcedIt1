@@ -278,7 +278,7 @@ export default function PriceChart({
                             style={{ color: shown.side === YES ? INK.up : INK.down }}>
                             {shown.side === YES ? "yes" : "no"}
                         </span>
-                        {` with ${shown.stake.toLocaleString()} cred · `}
+                        {` with ${shown.stake.toLocaleString()} credits · `}
                         <span className="tabular-nums">
                             {shown.delta > 0 ? "+" : ""}{shown.delta} to {priceLabel(shown.price)}
                         </span>

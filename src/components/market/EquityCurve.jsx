@@ -84,7 +84,7 @@ export default function EquityCurve({ curve, height = 120, footer = true }) {
             {footer && (
                 <p className="text-[11px] mt-1.5 leading-snug" style={{ color: INK.mid }}>
                     <span className="font-bold tabular-nums" style={{ color: ink }}>
-                        {curve.last > 0 ? "+" : ""}{curve.last.toLocaleString()} cred
+                        {curve.last > 0 ? "+" : ""}{curve.last.toLocaleString()} credits
                     </span>
                     {" from "}{pts.length - 1} settled {pts.length === 2 ? "call" : "calls"}
                     {curve.best > 0 && (

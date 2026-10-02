@@ -206,7 +206,7 @@ export default function CredStore({ store, busy, onBuy, onConvert, onEquip }) {
                                 // nothing for the client to recompute and no way for its answer
                                 // to disagree with the one the purchase is checked against.
                                 const affordable = !!v.ok;
-                                const blocked = !v.ok && !/more cred/i.test(v.reason || "");
+                                const blocked = !v.ok && !/more credits/i.test(v.reason || "");
 
                                 return (
                                     <motion.div
@@ -282,7 +282,7 @@ export default function CredStore({ store, busy, onBuy, onConvert, onEquip }) {
                                                     exit={{ opacity: 0, height: 0 }}
                                                     className="text-[11px] text-[var(--floor-dim)] mt-1.5 overflow-hidden"
                                                 >
-                                                    {v.reason || `You need ${(cost - (store.cred ?? 0)).toLocaleString()} more cred.`}
+                                                    {v.reason || `You need ${(cost - (store.cred ?? 0)).toLocaleString()} more credits.`}
                                                 </motion.p>
                                             )}
                                         </AnimatePresence>
