@@ -4,6 +4,9 @@
  */
 import UpdatePrompt from "@/components/shared/UpdatePrompt";
 import { LiveProvider } from "@/lib/LiveContext";
+import WeekStrip from "@/components/ranked/WeekStrip";
+import { Swords as ReachSwords, ListChecks as ReachList,
+    Trophy as ReachTrophy, GraduationCap as ReachCap } from "lucide-react";
 import React from "react";
 import ReactDOM from "react-dom/client";
 import "@/index.css";
@@ -26,7 +29,6 @@ import AceShuffle, { AceLoading } from "@/components/ace/AceShuffle";
 import { Button } from "@/components/ui/button";
 import { base44 } from "@/api/base44Client";
 import { MemoryRouter } from "react-router-dom";
-import SideRail from "@/components/layout/SideRail";
 import ConsentBanner from "@/components/legal/ConsentBanner";
 import AgeGate from "@/components/legal/AgeGate";
 import CredStore from "@/components/market/CredStore";
@@ -1029,6 +1031,45 @@ views.update = () => {
         </div>
     );
 };
+
+views.reach = () => (
+    // What this CAN draw honestly, and what it cannot.
+    //
+    // SideRail is not here either: it reads Layout's context, so mounted alone
+    // it renders a blank page rather than a nav. WeekStrip is not here because
+    // it fetches its own standing through `base44`, which is a PROXY over an
+    // axios SDK: assigning `.functions.invoke`, defineProperty and a patched
+    // `window.fetch` ALL fail to intercept it, and each one silently lets the
+    // real call 404 so the strip renders nothing. Worth knowing before anybody
+    // tries again. Its new payout block is `hidden sm:flex`, so it cannot move
+    // the phone layout at all, and `reachable.test.mjs` holds where its figure
+    // comes from.
+    //
+    // So this is the three-tab bar and the renamed shelf control — the two
+    // things that changed shape and can be judged on their own.
+    <MemoryRouter initialEntries={["/Review"]}>
+        <div className="min-h-screen bg-background">
+            <div className="p-4 sm:p-6 space-y-5">
+                <div className="grid w-full sm:w-auto sm:inline-grid grid-cols-3 h-auto p-1.5 rounded-2xl bg-surface border-2 border-border shadow-soft">
+                    {[["Leaderboard", ReachTrophy], ["League", ReachSwords], ["Profile", ReachCap]].map(([label, Icon], i) => (
+                        <span key={label} className={`flex items-center justify-center gap-1.5 py-2.5 px-3 sm:px-6 rounded-xl text-sm font-bold whitespace-nowrap ${i === 0 ? "bg-foreground text-background" : "text-muted-foreground"}`}>
+                            <Icon className="hidden sm:block w-4 h-4" /> {label}
+                        </span>
+                    ))}
+                </div>
+                <div className="flex gap-2 flex-wrap">
+                    <span className="gap-2 border-2 border-border rounded-xl h-11 px-4 inline-flex items-center text-sm font-bold text-foreground bg-surface">
+                        <ReachList className="w-4 h-4" /> Review queue
+                        <span className="ml-0.5 px-1.5 py-0.5 rounded-md bg-chart-3/15 text-chart-3 text-xs font-extrabold tabular-nums">34</span>
+                    </span>
+                    <span className="gap-2 border-2 border-border rounded-xl h-11 px-4 inline-flex items-center text-sm font-bold text-foreground bg-surface">
+                        <ReachList className="w-4 h-4" /> New Deck
+                    </span>
+                </div>
+            </div>
+        </div>
+    </MemoryRouter>
+);
 
 ReactDOM.createRoot(document.getElementById("root")).render(
     React.createElement(views[which] || views.deal));

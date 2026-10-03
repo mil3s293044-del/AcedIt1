@@ -49,7 +49,21 @@ const TONE = {
     lead:    "text-primary",
 };
 
-export default function League() {
+/**
+ * `embedded` is Ranked's League TAB rendering this exact component rather than
+ * a second copy of it. The league was reachable only through a strip in a
+ * sticky rail that, below `xl`, stacks underneath the whole thirty-row board —
+ * so on a phone the way in sat below everything, and a student with no league
+ * row got no strip at all and the page became unreachable. A tab says the word
+ * "league" before anybody clicks and reads the same at every width.
+ *
+ * It is a PROP rather than a copy because the page still exists: `/League` is
+ * a real route that WeekStrip and any link already point at, and two renderings
+ * of one board is the mirror this codebase keeps deleting. Embedded drops only
+ * the page shell — the back link (you are already on Ranked), the min-height
+ * and the width, which Ranked's own grid owns.
+ */
+export default function League({ embedded = false }) {
     const [data, setData] = useState(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
@@ -116,25 +130,33 @@ export default function League() {
     };
 
     if (loading) {
-        return (
+        return embedded ? (
+            <div className="py-10 flex justify-center">
+                <AceLoading>Loading this week&apos;s board…</AceLoading>
+            </div>
+        ) : (
             <div className="min-h-screen flex items-center justify-center">
                 <AceLoading>Loading this week&apos;s board…</AceLoading>
             </div>
         );
     }
 
-    return (
-        <div className="min-h-screen p-4 sm:p-6">
-            <div className="max-w-4xl mx-auto">
+    const body = (
                 <Reveal className="space-y-5">
 
                     {/* ── Back, and the week's clock ───────────────────── */}
-                    <div className="flex items-center justify-between gap-3">
-                        <Link to={createPageUrl("Ranked")}
-                            className="inline-flex items-center gap-1.5 text-sm font-bold text-muted-foreground
-                                hover:text-foreground transition-colors">
-                            <ChevronLeft className="w-4 h-4" /> Ranked
-                        </Link>
+                    {/* The back link is the PAGE's, not the board's: embedded
+                        in Ranked's own tab, a link back to Ranked points at the
+                        screen you are looking at. The clock stays either way —
+                        it is the one thing on this row that is information. */}
+                    <div className={`flex items-center gap-3 ${embedded ? "justify-end" : "justify-between"}`}>
+                        {!embedded && (
+                            <Link to={createPageUrl("Ranked")}
+                                className="inline-flex items-center gap-1.5 text-sm font-bold text-muted-foreground
+                                    hover:text-foreground transition-colors">
+                                <ChevronLeft className="w-4 h-4" /> Ranked
+                            </Link>
+                        )}
                         {data?.group?.resets_at && (
                             <Countdown targetDate={data.group.resets_at} variant="chip" />
                         )}
@@ -393,7 +415,13 @@ export default function League() {
                             me={me} />
                     </section>
                 </Reveal>
-            </div>
+    );
+
+    // Embedded, Ranked's grid already owns the width and the padding; a second
+    // `max-w-4xl` inside it would narrow the board against the one beside it.
+    return embedded ? body : (
+        <div className="min-h-screen p-4 sm:p-6">
+            <div className="max-w-4xl mx-auto">{body}</div>
         </div>
     );
 }

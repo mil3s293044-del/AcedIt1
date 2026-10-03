@@ -32,6 +32,7 @@
 import React, { useState } from "react";
 import { Link } from "react-router-dom";
 import { useReducedMotion } from "framer-motion";
+import { ChevronRight } from "lucide-react";
 import { createPageUrl } from "@/utils";
 import { colorFor } from "@/components/cards/cardIdentity";
 import { plotRadar, flareDelay, radiusOf, HORIZON_DAYS, CORE_R, EDGE_R } from "@/lib/radar";
@@ -64,11 +65,24 @@ export default function DueRadar({ items = [], className = "" }) {
                     is wrong, here is where you argue" — which is the thing the
                     panel could not do before, and the reason its numbers were
                     allowed to grow until people stopped reading them. */}
+                {/* It read "Check the pile" — a phrase nobody uses, at 11px,
+                    in a corner, and it was the MAIN entrance to a page that is
+                    in no nav at all. The page calls itself "Your review queue",
+                    so this says that; and it carries the count, because a link
+                    that states what is being asked is a decision rather than a
+                    label. It is a nav item now too, so this no longer has to
+                    carry the whole feature on its own. */}
                 {blips.length > 0 && (
                     <Link to={createPageUrl("Review")}
-                        className="text-[11px] font-bold text-muted-foreground hover:text-foreground
-                            underline underline-offset-2">
-                        Check the pile
+                        className="inline-flex items-center gap-1 text-[11px] font-bold
+                            text-muted-foreground hover:text-foreground transition-colors group">
+                        Review queue
+                        {overdue > 0 && (
+                            <span className="px-1.5 py-0.5 rounded-md bg-streak/15 text-streak tabular-nums">
+                                {overdue} overdue
+                            </span>
+                        )}
+                        <ChevronRight className="w-3 h-3 group-hover:translate-x-0.5 transition-transform" />
                     </Link>
                 )}
             </div>

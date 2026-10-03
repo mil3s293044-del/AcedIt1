@@ -792,6 +792,14 @@ The documents provided may be PowerPoint slides, Word documents, PDFs or text fi
             (filterSubject === 'all' || d.subject_name === filterSubject);
     });
 
+    // WHAT THE QUEUE IS ACTUALLY ASKING, on the button that opens it. "Check
+    // the pile" was jargon over a number the student could not see, so there
+    // was nothing to weigh: a shelf with four cards due and a shelf with two
+    // hundred read identically. Counted off the UNFILTERED decks, because the
+    // queue is not filtered by the search box above it — a button reporting
+    // "3" because somebody typed "chem" would be lying about the pile it opens.
+    const queueReady = decks.reduce((sum, d) => sum + (d.cards || []).filter(isReady).length, 0);
+
     const decksBySubject = {};
     filteredDecks.forEach(deck => {
         const sub = deck.subject_name || 'Other';
@@ -1107,10 +1115,24 @@ The documents provided may be PowerPoint slides, Word documents, PDFs or text fi
                         {/* The way out of a pile that has got away from you.
                             Every other control here makes MORE cards; this is
                             the only one that lets you tell the app it is wrong
-                            about the ones you already have. */}
+                            about the ones you already have.
+
+                            It said "Check the pile", which is a phrase nobody
+                            uses about a thing nobody had seen — and the page it
+                            opens calls itself "Your review queue" in its own
+                            h1. Two names for one screen is how a student stops
+                            believing either. The count is what makes it a
+                            decision rather than a label. */}
                         <Link to={createPageUrl("Review")}>
                             <Button variant="outline" className="gap-2 border-2 border-border rounded-xl h-11 text-foreground">
-                                <ListChecks className="w-4 h-4" /> Check the pile
+                                <ListChecks className="w-4 h-4" />
+                                Review queue
+                                {queueReady > 0 && (
+                                    <span className="ml-0.5 px-1.5 py-0.5 rounded-md bg-chart-3/15 text-chart-3
+                                        text-xs font-extrabold tabular-nums">
+                                        {queueReady}
+                                    </span>
+                                )}
                             </Button>
                         </Link>
                         <Button onClick={() => setIsCreatingDeck(true)} variant="outline" className="gap-2 border-2 border-border rounded-xl h-11 text-foreground">

@@ -2629,6 +2629,99 @@ and cannot become a second Ace talking over the first. Draw it with
 `scripts/_floorProbe.jsx?v=update`, which stubs the endpoint and waits out the
 focus gap — judge it in both themes and at 390.
 
+## TWO INTEGRAL SCREENS NOBODY COULD FIND
+
+**"The check pile in flashcards and the leagues in Ranked are kinda hidden,
+despite being an integral part of the website."** Both were worse than hidden,
+and in the same way: a page that exists, renders perfectly, and has no entrance
+worth the name. This codebase has shipped that failure three times and written
+it down twice — `League`'s own header ("the league endpoint existed, worked, and
+nothing ever called it"), `WeekStrip`'s ("a page with no entrance is the shape
+this whole feature already had"), and `fnResult.js` on the strip then reading
+the wrong field so the one entrance rendered nothing.
+
+**`/Review` WAS IN NEITHER NAV.** Not the side rail, not the bottom sheet. Its
+main entrance was an **11px muted underlined link in the corner of one dashboard
+panel** — and that panel only draws the link when it has blips to plot, so on a
+quiet week the page had one entrance left, buried inside Spaced Repetition.
+
+**`/League` HAD ONE ENTRANCE, IN THE SECOND COLUMN.** `WeekStrip` sat in
+Ranked's `xl:sticky` rail, and that rail is the second cell of
+`xl:grid-cols-[1fr_320px]` — so **below xl, which is every phone, it stacks
+UNDER the whole thirty-row board.** The way into a weekly competition sat below
+everything on the page for most of the traffic. And the strip returns `null` on
+any failure or missing membership, so a student with no league row got no
+entrance at all and the page became unreachable rather than merely buried.
+
+### The league is a TAB, because a tab reads the same at every width
+
+Ranked is already the page about where you stand — the ATAR over 28 days, the
+league over the week — so the third tab belongs there rather than as a sixth nav
+item, which is the trade `WeekStrip`'s header argues and is still right. What
+changed is that a tab puts the word "league" on screen **before anybody clicks**,
+and cannot stack under anything.
+
+**IT RENDERS THE REAL PAGE.** `League` takes an `embedded` prop rather than
+Ranked building its own view: `/League` is still a route that links already point
+at, and two renderings of one board is the mirror this codebase keeps deleting.
+Embedded drops only the page shell — the back link (a link to Ranked, on Ranked),
+the min-height and the width, which Ranked's grid owns.
+
+**AND THE STRIP LEADS THE BOARD.** It is out of the rail and full width at the
+top of the Leaderboard tab, so it is read on the way past rather than found. It
+opens the TAB rather than the route, because the route is the thing beside it —
+`onOpen` is a prop, so without a parent it stays a real link and the component
+does not require Ranked to be useful.
+
+### The queue is in the nav, and everything calls it the same thing
+
+"Check the pile" is a phrase nobody uses, on a page whose own h1 reads **"Your
+review queue"**. Four surfaces, three names, and the one a student had never
+heard was the one doing the navigating. It is **Review queue** everywhere now —
+a real nav item in both navs, the shelf button, and the dashboard link — and
+`reachable.test.mjs` asserts the entrances match the page's own h1, so a rename
+on either side fails the suite rather than quietly splitting the screen in two.
+
+### THE ENTRANCE STATES THE STAKE
+
+Neither was only hard to find; neither said why it mattered. A label is not a
+reason to tap.
+
+- **The queue's entrances carry a number.** A shelf with four cards ready and one
+  with two hundred read identically before. Counted off the UNFILTERED decks —
+  a button reporting "3" because somebody typed "chem" in the search box would be
+  lying about the queue it opens.
+- **The league's entrance says what a finish pays**, from `grantForLeague`, the
+  function the server actually grants with, never a figure typed into a
+  component. Only on a board big enough to HAVE a podium: "top 3 take" on a board
+  of two is everybody, the refusal `podiumGap` and `leagueLead` already make.
+
+### Three tabs did not fit, and only a screenshot said so
+
+At 360 the bar is a full-width `grid-cols-3`, so each cell is about 105px.
+`px-6` made "My profile" **wrap to two lines**, doubling the bar's height;
+`whitespace-nowrap` turned that into "Leaderboard" **clipped inside its own
+pill**. Both render, neither throws, and the measurement that found them is the
+tab's own height against its height at 1280 — 60 against 40.
+
+The fix is three things, each the smallest one that works: `px-3 sm:px-6`,
+"My profile" → **"Profile"** (unambiguous on a page about you), and the icons
+**hidden below `sm`**. That last one is this file's own rule applied rather than
+bent: a trophy beside "Leaderboard" and a cap beside "Profile" restate the word
+next to them, so they are decoration exactly where width is the binding
+constraint — and they stay at `sm` and up, where a repeated set legitimately
+keeps its glyphs.
+
+**What the probe cannot draw, and why it is worth knowing.** `WeekStrip` fetches
+its own standing through `base44`, which is a **Proxy over an axios SDK**:
+assigning `.functions.invoke`, `Object.defineProperty` and a patched
+`window.fetch` ALL fail to intercept it, and each failure silently lets the real
+call 404 so the strip renders nothing — the exact shape this feature already had
+in production. `SideRail` reads Layout's context and renders blank alone. So
+`?v=reach` draws the tab bar and the shelf control, which are what changed shape;
+the strip's payout block is `hidden sm:flex` and cannot move the phone layout at
+all.
+
 ## Ranked: the board is the race, the profile is the climb
 
 The page is two tabs and the split between them is the whole design. The BOARD
@@ -4456,6 +4549,11 @@ stranger.
   `src/components/shared/UpdatePrompt.jsx` — noticing a deploy and asking to
   reload into it. The version is the hash of the served `index.html`, and the
   hold list is `liveRefresh`'s own, imported rather than restated
+- `src/lib/reachable.test.mjs` — the guard on a page nobody can find: the
+  Review queue is in both navs, the League is a tab on Ranked, every entrance
+  uses the page's own name and carries a real number, and no nav entry points
+  at a route that is not there. Draw the bar with
+  `scripts/_floorProbe.jsx?v=reach`
 - `src/lib/ranked.js` `COMPONENT_MOVE` + `rankedMove.test.mjs` — the one map
   from an ATAR component to the thing that raises it, deep-linked where a deep
   link exists. The test checks every query it emits is actually READ by the page
