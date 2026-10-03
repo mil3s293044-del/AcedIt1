@@ -23,7 +23,7 @@
 import React, { useState, useEffect, useMemo } from "react";
 import { motion } from "framer-motion";
 import {
-    GraduationCap, Zap, Clock, Trophy, Info, Target, TrendingUp, Users, ArrowRight,
+    GraduationCap, Zap, Clock, Trophy, Info, Target, TrendingUp, Users, ArrowRight, Swords,
 } from "lucide-react";
 import { Link } from "react-router-dom";
 import { createPageUrl } from "@/utils";
@@ -34,6 +34,7 @@ import AtarDial from "@/components/ranked/AtarDial";
 import RankedBoard from "@/components/ranked/RankedBoard";
 import StandingRail from "@/components/ranked/StandingRail";
 import WeekStrip from "@/components/ranked/WeekStrip";
+import League from "@/pages/League";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
     standing, titlesFor, nextBand, weakestComponent, BAND_TONE,
@@ -109,6 +110,11 @@ export default function Ranked() {
     const [loading, setLoading] = useState(true);
     const [board, setBoard] = useState("atar");
     const [scope, setScope] = useState("global");
+    // CONTROLLED, because WeekStrip above the standings now switches to the
+    // League tab rather than navigating to /League. An uncontrolled Tabs can
+    // only be moved by the trigger it owns, and a strip that says "you are 2nd
+    // this week" should open the board it is talking about.
+    const [tab, setTab] = useState("board");
 
     useEffect(() => {
         base44.functions.invoke("getRankedBoards", {})
@@ -288,18 +294,38 @@ export default function Ranked() {
                     </div>
                 </motion.section>
 
-                {/* ── BOARD / PROFILE ─────────────────────────────────── */}
-                <Tabs defaultValue="board" className="space-y-5">
-                    <TabsList className="grid w-full sm:w-auto sm:inline-grid grid-cols-2 h-auto p-1.5 rounded-2xl bg-surface border-2 border-border shadow-soft">
-                        {[["board", "Leaderboard", Trophy], ["profile", "My profile", GraduationCap]].map(([v, label, Icon]) => (
+                {/* ── BOARD / LEAGUE / PROFILE ────────────────────────── */}
+                {/* THE LEAGUE IS A TAB, because it was a strip in a sticky
+                    rail — and that rail is the second column of an
+                    `xl:grid-cols-[1fr_320px]`, so below xl it stacks UNDER the
+                    whole thirty-row board. On a phone the only way into a
+                    weekly competition sat below everything on the page, and a
+                    student whose league row did not exist got no strip at all,
+                    which made the page unreachable rather than merely buried.
+                    A tab puts the word on screen before anybody clicks and
+                    reads identically at every width — and Ranked is already the
+                    page about where you stand: the ATAR over 28 days, the
+                    league over the week. */}
+                <Tabs value={tab} onValueChange={setTab} className="space-y-5">
+                    <TabsList className="grid w-full sm:w-auto sm:inline-grid grid-cols-3 h-auto p-1.5 rounded-2xl bg-surface border-2 border-border shadow-soft">
+                        {[["board", "Leaderboard", Trophy], ["league", "League", Swords], ["profile", "Profile", GraduationCap]].map(([v, label, Icon]) => (
                             <TabsTrigger key={v} value={v}
-                                className="flex items-center justify-center gap-1.5 py-2.5 px-6 rounded-xl text-sm font-bold text-muted-foreground data-[state=active]:bg-foreground data-[state=active]:text-background transition-all">
-                                <Icon className="w-4 h-4" /> {label}
+                                className="flex items-center justify-center gap-1.5 py-2.5 px-3 sm:px-6 rounded-xl text-sm font-bold whitespace-nowrap text-muted-foreground data-[state=active]:bg-foreground data-[state=active]:text-background transition-all">
+                                <Icon className="hidden sm:block w-4 h-4" /> {label}
                             </TabsTrigger>
                         ))}
                     </TabsList>
 
-                    <TabsContent value="board" className="mt-0">
+                    <TabsContent value="board" className="mt-0 space-y-5">
+                        {/* THE WEEK LEADS THE BOARD. It was in the sticky rail,
+                            which is the second column — so below xl it sat
+                            under thirty rows. Full width and first, it is a
+                            status line a student reads on the way past: where
+                            they are this week, how long is left, and what the
+                            podium pays. It opens the tab rather than the route,
+                            because the route is the thing beside it. */}
+                        <WeekStrip onOpen={() => setTab("league")} />
+
                         <div className="grid xl:grid-cols-[minmax(0,1fr)_320px] gap-6 items-start">
                             <div className="min-w-0 space-y-3">
                                 <div className="flex flex-wrap items-center justify-between gap-2">
@@ -353,12 +379,6 @@ export default function Ranked() {
                                 contest instead — who is above, who is behind,
                                 and what the gap costs in work. */}
                             <div className="xl:sticky xl:top-6 space-y-3">
-                                {/* The weekly league. Ranked is already the
-                                    page about where you stand — the ATAR board
-                                    over 28 days, this over the week — so the
-                                    way in belongs here rather than as a sixth
-                                    nav item. */}
-                                <WeekStrip />
                                 <StandingRail
                                     mine={mine} boardMeta={meta} board={board}
                                     nameOf={(r) => displayName(r, data?.me)}
@@ -374,6 +394,13 @@ export default function Ranked() {
                         attempts and every flashcard — for tiles that are gone
                         now — while the data they were comparing against was
                         already in this scope. */}
+                    {/* The REAL page, not a copy of it — `/League` is still a
+                        route and two renderings of one board is the mirror this
+                        codebase keeps deleting. */}
+                    <TabsContent value="league" className="mt-0">
+                        <League embedded />
+                    </TabsContent>
+
                     <TabsContent value="profile" className="mt-0">
                         <MyProfile data={data} loading={loading} />
                     </TabsContent>
