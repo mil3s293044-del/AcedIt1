@@ -2,6 +2,8 @@
  * A fixture harness for the floor's three new surfaces. Lives under scripts/
  * so it is never an entry point of the production build.
  */
+import UpdatePrompt from "@/components/shared/UpdatePrompt";
+import { LiveProvider } from "@/lib/LiveContext";
 import React from "react";
 import ReactDOM from "react-dom/client";
 import "@/index.css";
@@ -1001,6 +1003,29 @@ views.ranked = () => {
                     </span>
                 </div>
             </div>
+        </div>
+    );
+};
+
+views.update = () => {
+    // The real component, against the real tokens. It only ever renders when a
+    // poll says the build changed, so the probe forces it: a fake version
+    // endpoint that answers a different id on the second call.
+    let n = 0;
+    const realFetch = window.fetch.bind(window);
+    window.fetch = (url, opts) => (String(url).includes("/local-ai/version")
+        ? Promise.resolve(new Response(JSON.stringify({ version: (n++ ? "deploy-2" : "deploy-1") }),
+            { headers: { "Content-Type": "application/json" } }))
+        : realFetch(url, opts));
+    setTimeout(() => window.dispatchEvent(new Event("focus")), 400);
+    return (
+        <div className="min-h-screen bg-background p-6">
+            <h1 className="font-display font-extrabold text-3xl text-foreground">Behind the prompt</h1>
+            <p className="text-muted-foreground mt-2">A page the student was looking at.</p>
+            <div className="card-soft on-table p-6 mt-6 h-40" />
+            <MemoryRouter initialEntries={["/Dashboard"]}>
+                <LiveProvider><UpdatePrompt /></LiveProvider>
+            </MemoryRouter>
         </div>
     );
 };

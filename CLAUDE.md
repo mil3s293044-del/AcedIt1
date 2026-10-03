@@ -2464,6 +2464,120 @@ than silence. A pile under ten also no longer falls through the cracks: the
 high-priority branch needs ten to beat a streak on the line, the low-priority
 one only has to beat a generic Pomodoro.
 
+## NOTHING EVER INSERTED A LEADERBOARD ROW
+
+**"Some users earned XP, doesn't sync up with Ranked or the ATAR."** One cause,
+eleven call sites, and it had been there since the migration.
+
+Every mirror into `leaderboards` — XP, streak, study time, the ATAR, on seven
+server paths and four client ones — was shaped `select id where user_email → if
+(row) update`. **There was no `else` anywhere in the tree.** The only rows in
+the table are the 42 that phase 3c migrated against 132 profiles, so roughly
+ninety accounts plus every account created since earned XP into `user_profiles`
+and were simply ABSENT from the board.
+
+**It reports nothing.** PostgREST answers 200 for an update that matched no
+rows, so all eleven sites looked like they worked, logged nothing, and passed
+lint, the build and every test — the same silent class as the missing columns
+`dbColumns.test.mjs` exists for.
+
+**What the student saw is why this reads as a sync bug rather than a missing
+row.** The Ranked hero prints `my_atar` off `user_profiles`, so they have a
+score; the board below is built from `leaderboards` and does not contain them;
+and `MyProfile` reads XP off that same board row, so the profile tab printed
+`totalXP={0}` — Level 1, tier 1, an empty ladder, on an account with 18,439 XP.
+One screen, two tables, and only one of them had ever been written.
+
+`syncBoardRow` is the one writer now, and `boardSync.test.mjs` scans for a write
+that goes around it — exempting the two writers BY NAME and asserting both still
+exist, because an exemption pointing at something that has moved covers nothing
+and the scan passes anyway.
+
+**UPDATE-THEN-INSERT, NOT UPSERT, AND THE REASON IS PRIVACY.** `is_anonymous` is
+the student's own setting, written from Settings, and `user_name` is theirs too.
+A blanket upsert sets every column it carries on conflict, so mirroring XP would
+quietly clear the anonymity of anybody who had turned it on. The common path is
+a plain UPDATE of the columns that caller owns; the INSERT runs once per account
+ever and is the only thing that seeds identity, from
+`is_anonymous_on_leaderboard` on the profile. Of everything in this fix, that is
+the one part that could not be repaired afterwards — a student outed on a public
+board cannot be un-outed.
+
+**The seed is a FLOOR, and the order of the spread decides it.** The `Math.max`
+against the profile's figures sits AFTER `...fields`, or a first mirror carrying
+only a streak creates a row reporting zero XP for an account that has eighteen
+thousand. Asserted, because it reads as a formatting preference and is not.
+
+**`sweepBoardRows` is the backfill**, lazy and budgeted off whoever opens
+Ranked, like the ATAR sweep beside it and the league's settlement — because
+"the next time they earn XP" never comes for the dormant accounts, which are
+exactly the ones missing. The viewer's OWN row is ensured BEFORE the board is
+read, since a student who just earned XP and opened Ranked to see it must not be
+told they are nowhere.
+
+Three smaller things fell out of the same audit:
+
+- **A THIRD LEVEL CURVE.** `awardGoalXP` computed `Math.floor(currentXP / 100) +
+  1` and wrote it to `current_level` and the board's `level` — so finishing a
+  goal overwrote the real level with a number off a different curve (level 181
+  against a true 15 at 18,000 XP) until the next ordinary award put it back.
+  `mirrors.test.mjs` exists because two copies of this curve drift; this was a
+  third that never agreed with either. The scan now refuses the hand-rolled form.
+- **The board read was an unordered `.limit(300)`**, which hands back whichever
+  300 PostgREST feels like — the same arbitrary-prefix bug the ATAR window
+  queries had. Moot under 300 students, wrong above it.
+- **QuizPlayer is the ONLY writer of `total_study_time`** and stopped at the
+  same `if (entries.length > 0)`, so the hours board stayed at zero for anyone
+  without a row. It creates one now: `recordStudyAndGetStreak()` above it is
+  fire-and-forget, so a student's very first quiz can still land before the row
+  that call would have made exists.
+
+## A NEW BUILD IS ANNOUNCED, NOT WALKED INTO
+
+`lazyPage.js` already records the failure: the 24 pages are code-split, a deploy
+replaces `index.html` and DELETES the old chunks, and a student holding an open
+tab is one navigation from a white screen. `lazyPage` is the safety net — retry,
+then one guarded reload. `UpdatePrompt` is the other half: telling them first,
+so the reload is something they chose.
+
+**THE VERSION IS WHATEVER THE SERVER IS SERVING.** No constant to bump, nothing
+stamped at build time: `/local-ai/version` is the sha1 of the built
+`index.html`, the one file that names every chunk. Two properties fall out and
+both were verified by rebuilding: a code change moves the id, and **a restart
+with no deploy does not**, so a crash loop cannot nag anybody. Null in dev,
+where there is no `dist/` and hot reload makes the whole idea pointless. It is
+registered BEFORE the SPA fallback, which otherwise answers it with
+`index.html`, and `no-store` on both ends — the one request whose job is to
+notice a change must not be answered from a cache written before it.
+
+**IT NEVER ARRIVES OVER REAL WORK, and that is the only reason a blocking
+prompt is safe.** A reload is strictly larger than the refetch `liveRefresh.js`
+was written to schedule: it destroys typed answers, a marking call in flight and
+a running focus block. So the hold list is not a second opinion — `holdReasons`
+was extracted from `decideRefresh` and BOTH import it, which is what makes
+QuizPlayer, ExamMode, the pomodoro, blurting, the floating timer and every AI
+stream hold the reload automatically, having only ever declared themselves once.
+Written twice, the two would disagree within a release, and the half that
+drifted would be the one that reloads a quiz away.
+
+**DEFER, NEVER DROP**, the same rule that file keeps: an update noticed mid-quiz
+waits in a ref and is shown the moment the registry clears — not at the next
+poll, which is three minutes away. The poll is deliberately slow; being late
+costs a few minutes on an old bundle, which `lazyPage` covers anyway, and being
+fast costs a request per tab forever to answer a question that changes a few
+times a week.
+
+**THE SCRIM IS LITERAL.** `bg-foreground/60` inverts with the theme —
+`--foreground` is near-white in the dark — so the overlay came out a pale wash
+that BRIGHTENED the page it was meant to push back. Only a screenshot caught it.
+A scrim is SHADOW, not ink: `bg-black/60`, in both themes, for the same reason
+focus mode's ground is a literal `#0A121F`.
+
+It draws the brand MARK rather than a body, so it claims nobody in `ACE_ORDER`
+and cannot become a second Ace talking over the first. Draw it with
+`scripts/_floorProbe.jsx?v=update`, which stubs the endpoint and waits out the
+focus gap — judge it in both themes and at 390.
+
 ## Ranked: the board is the race, the profile is the climb
 
 The page is two tabs and the split between them is the whole design. The BOARD
@@ -4279,6 +4393,14 @@ stranger.
 - `src/lib/achievements.js` — the catalogue, its progress functions and the
   showcase ordering; `buildAchievementStats` in `server.mjs` is the only reader
   of the database, and adding an achievement means adding its stat there too
+- `syncBoardRow` / `sweepBoardRows` in `server.mjs` + `boardSync.test.mjs` —
+  the ONE writer of `leaderboards` and the lazy backfill. Nothing in the tree
+  had ever INSERTED a row, so ~90 accounts earned XP and never appeared on the
+  board; the scan is what stops a twelfth mirror being written the old way
+- `src/lib/appVersion.js` + `appVersion.test.mjs`,
+  `src/components/shared/UpdatePrompt.jsx` — noticing a deploy and asking to
+  reload into it. The version is the hash of the served `index.html`, and the
+  hold list is `liveRefresh`'s own, imported rather than restated
 - `src/lib/ranked.js` `COMPONENT_MOVE` + `rankedMove.test.mjs` — the one map
   from an ATAR component to the thing that raises it, deep-linked where a deep
   link exists. The test checks every query it emits is actually READ by the page

@@ -980,15 +980,7 @@ async function checkAndGrantAchievements(userEmail, profile, authHeader = "") {
         .eq('id', profile.id);
 
       // Mirror to leaderboards.
-      try {
-        const { data: lbRows } = await supabaseAdmin
-          .from('leaderboards').select('id').eq('user_email', userEmail).limit(1);
-        if (lbRows?.[0]) {
-          await supabaseAdmin.from('leaderboards')
-            .update({ total_xp: newTotal, season_xp: newSeason, last_updated: new Date().toISOString() })
-            .eq('id', lbRows[0].id);
-        }
-      } catch {}
+      await syncBoardRow(userEmail, { total_xp: newTotal, season_xp: newSeason }, profile);
 
       // Mirror to league weekly XP.
       addLeagueXP(userEmail, profile, totalReward, authHeader).catch(() => {});
@@ -2464,21 +2456,7 @@ app.post("/local-ai/fn/updateStreak", async (req, res) => {
     if (updateErr) throw updateErr;
 
     // Mirror to Leaderboard (best-effort — non-fatal)
-    try {
-      const { data: lbEntries } = await supabaseAdmin
-        .from("leaderboards")
-        .select("id")
-        .eq("user_email", userEmail)
-        .limit(1);
-      if (lbEntries?.[0]) {
-        await supabaseAdmin
-          .from("leaderboards")
-          .update({ streak_days: newStreak, last_updated: new Date().toISOString() })
-          .eq("id", lbEntries[0].id);
-      }
-    } catch (e) {
-      console.warn("[updateStreak] leaderboard mirror failed:", e?.message);
-    }
+    await syncBoardRow(userEmail, { streak_days: newStreak }, profile);
 
     // Weekly streak bonus — +75 XP on every 7th consecutive day. The source
     // existed in the XP engine but nothing ever fired it. event_key includes
@@ -2522,6 +2500,97 @@ app.post("/local-ai/fn/updateStreak", async (req, res) => {
 });
 
 // ─── awardXP — XP engine v2 (verified, idempotent, anti-cheat) ─────────────
+/**
+ * syncBoardRow — the ONE write to `leaderboards`, and the reason Ranked was
+ * showing students a level 1 ladder on an account with eighteen thousand XP.
+ *
+ * ─── NOTHING IN THIS CODEBASE HAD EVER INSERTED A LEADERBOARD ROW ───────────
+ * Seven server paths and four client ones mirrored XP, streak, study time and
+ * the ATAR to this table, and every single one of them was shaped:
+ *
+ *     select id where user_email = ?  →  if (row) update
+ *
+ * No row, no mirror, and no `else`. The only rows in the table are the 42 that
+ * phase 3c migrated against 132 profiles, so roughly ninety accounts — plus
+ * every account created since — earned XP into `user_profiles` and were simply
+ * ABSENT from the board. It renders perfectly and reports nothing: PostgREST
+ * answers 200 for an update that matched no rows, so each of those eleven call
+ * sites looked like it worked.
+ *
+ * What the student saw is the giveaway, and it is why this reads as a sync bug
+ * rather than a missing row: the Ranked hero prints `my_atar` off
+ * `user_profiles`, so they have a score — while the board below is built from
+ * `leaderboards` and does not contain them, and `MyProfile` reads XP off that
+ * same board row, so the profile tab printed `totalXP={0}`. One screen, two
+ * tables, and only one of them had ever been written.
+ *
+ * ─── UPDATE-THEN-INSERT, NOT UPSERT, AND THE REASON IS PRIVACY ──────────────
+ * `is_anonymous` is the student's own setting, written from Settings.jsx, and
+ * `user_name` is theirs too. A blanket upsert sets every column it carries on
+ * conflict, so mirroring XP would quietly reset the anonymity of anybody who
+ * had turned it on. So the common path is a plain UPDATE of the columns this
+ * caller actually owns, and the insert — which runs once per account, ever —
+ * is the only thing that seeds identity, from `is_anonymous_on_leaderboard` on
+ * the profile, which is where that preference really lives.
+ *
+ * Two callers racing both see zero rows and both insert; `user_email` is
+ * UNIQUE, so the loser takes a 23505 and re-runs its update. That is the
+ * whole of the concurrency story.
+ *
+ * It returns a boolean rather than throwing: a mirror has never been allowed
+ * to fail the XP award that triggered it, and that part was always right.
+ */
+async function syncBoardRow(userEmail, patch = {}, profile = null) {
+  if (!supabaseAdmin || !userEmail) return false;
+  const fields = { ...patch, last_updated: new Date().toISOString() };
+  try {
+    const { data: hit } = await supabaseAdmin
+      .from("leaderboards").update(fields).eq("user_email", userEmail).select("id");
+    if (hit?.[0]) return true;
+
+    // No row yet. Seed one from the profile — and fetch the profile if the
+    // caller had no reason to hold it, because a board row carrying a null
+    // name reads as a blank line on the page it exists to appear on.
+    let seed = profile;
+    if (!seed) {
+      const { data: rows } = await supabaseAdmin
+        .from("user_profiles")
+        .select("full_name, username, is_anonymous_on_leaderboard, total_xp, season_xp, streak_days")
+        .eq("created_by", userEmail).limit(1);
+      seed = rows?.[0] || null;
+    }
+    const { error } = await supabaseAdmin.from("leaderboards").insert({
+      created_by: userEmail,
+      user_email: userEmail,
+      user_name: seed?.full_name || null,
+      username: seed?.username || null,
+      is_anonymous: !!seed?.is_anonymous_on_leaderboard,
+      ...fields,
+      // AFTER the spread, because the profile is the FLOOR: a first mirror
+      // carrying only a streak would otherwise create a row reporting zero XP
+      // for an account that has eighteen thousand. Whichever of the two is
+      // larger is the true figure — the mirror is always the newer number and
+      // the profile is always the complete one.
+      total_xp: Math.max(seed?.total_xp || 0, fields.total_xp || 0),
+      season_xp: Math.max(seed?.season_xp || 0, fields.season_xp || 0),
+      streak_days: Math.max(seed?.streak_days || 0, fields.streak_days || 0),
+    });
+    if (!error) return true;
+    // Lost the race — the row exists now, so the update that found nothing a
+    // moment ago will find it.
+    if (String(error.code) === "23505" || /duplicate|unique/i.test(error.message || "")) {
+      const { data: retry } = await supabaseAdmin
+        .from("leaderboards").update(fields).eq("user_email", userEmail).select("id");
+      return !!retry?.[0];
+    }
+    console.warn("[board] row create failed:", error.message);
+    return false;
+  } catch (e) {
+    console.warn("[board] mirror failed:", e?.message);
+    return false;
+  }
+}
+
 // Direct port of base44/functions/awardXP/entry.ts. All formulas, daily caps,
 // velocity caps, level curve, and rank tiers are bit-for-bit identical so
 // numbers don't shift when we cut over. See that file for the full design doc.
@@ -3155,26 +3224,8 @@ app.post("/local-ai/fn/awardXP", async (req, res) => {
     }
 
     // Leaderboard mirror — best-effort
-    try {
-      const { data: lbRows } = await supabaseAdmin
-        .from("leaderboards")
-        .select("id")
-        .eq("user_email", userEmail)
-        .limit(1);
-      if (lbRows?.[0]) {
-        await supabaseAdmin
-          .from("leaderboards")
-          .update({
-            total_xp: newTotalXP,
-            level: newLevel,
-            season_xp: newSeasonXP,
-            last_updated: new Date().toISOString(),
-          })
-          .eq("id", lbRows[0].id);
-      }
-    } catch (e) {
-      console.warn("[awardXP] leaderboard update failed:", e?.message);
-    }
+    await syncBoardRow(userEmail,
+      { total_xp: newTotalXP, level: newLevel, season_xp: newSeasonXP }, profile);
 
     // Weekly Leagues — credit XP to the user's current-week league
     // membership. Fire-and-forget; failure doesn't block the awardXP response.
@@ -3413,14 +3464,22 @@ app.post("/local-ai/fn/awardGoalXP", async (req, res) => {
     }
     if (xpAwarded === 0) return res.json({ xp_awarded: 0, message: "No XP to award" });
 
-    // Profile update — note: legacy uses simple "100 XP per level" math
+    // A SECOND LEVEL CURVE, and it wrote to the same two columns as the real
+    // one. This read `Math.floor(currentXP / 100) + 1` — "legacy 100 XP per
+    // level" — while every other XP path, every screen and `xpSystem.jsx` use
+    // `levelFromXP` (120 x i^1.6). So finishing a goal did not merely award XP,
+    // it OVERWROTE `current_level` and the board's `level` with a number off a
+    // different curve: at 18,000 XP that is level 181 against a true level 15,
+    // until the next ordinary award quietly put it back. `mirrors.test.mjs`
+    // exists because two copies of this curve drift; this was a third copy
+    // that never agreed with either.
     const { data: profileRows } = await supabaseAdmin
       .from("user_profiles")
       .select("*")
       .eq("created_by", userEmail);
     let profile = profileRows?.[0];
     const currentXP = (profile?.total_xp || 0) + xpAwarded;
-    const newLevel = Math.floor(currentXP / 100) + 1;
+    const newLevel = levelFromXP(currentXP);
 
     if (profile) {
       await supabaseAdmin
@@ -3437,21 +3496,7 @@ app.post("/local-ai/fn/awardGoalXP", async (req, res) => {
     }
 
     // Leaderboard mirror — best-effort
-    try {
-      const { data: lbRows } = await supabaseAdmin
-        .from("leaderboards")
-        .select("id")
-        .eq("user_email", userEmail)
-        .limit(1);
-      if (lbRows?.[0]) {
-        await supabaseAdmin
-          .from("leaderboards")
-          .update({ total_xp: currentXP, level: newLevel })
-          .eq("id", lbRows[0].id);
-      }
-    } catch (e) {
-      console.warn("[awardGoalXP] leaderboard update failed:", e?.message);
-    }
+    await syncBoardRow(userEmail, { total_xp: currentXP, level: newLevel }, profile);
 
     return res.json({
       success: true,
@@ -5461,22 +5506,7 @@ app.post("/local-ai/fn/resolveScoreWager", async (req, res) => {
         .from("user_profiles")
         .update({ total_xp: newXP, season_xp: newSeasonXP })
         .eq("id", profile.id);
-      try {
-        const { data: lbRows } = await supabaseAdmin
-          .from("leaderboards").select("id").eq("user_email", userEmail).limit(1);
-        if (lbRows?.[0]) {
-          await supabaseAdmin
-            .from("leaderboards")
-            .update({
-              total_xp: newXP,
-              season_xp: newSeasonXP,
-              last_updated: new Date().toISOString(),
-            })
-            .eq("id", lbRows[0].id);
-        }
-      } catch (e) {
-        console.warn("[resolveScoreWager] leaderboard update failed:", e?.message);
-      }
+      await syncBoardRow(userEmail, { total_xp: newXP, season_xp: newSeasonXP }, profile);
     } else {
       // Win path: route through awardXP so events + caps + leaderboard mirror are uniform.
       try {
@@ -5563,18 +5593,8 @@ async function deductXPWithAudit(userEmail, amount, eventKey, source, metadata =
     .from("user_profiles")
     .update({ total_xp: newXP, season_xp: newSeasonXP, current_level: levelFromXP(newXP) })
     .eq("id", profile.id);
-  try {
-    const { data: lbRows } = await supabaseAdmin
-      .from("leaderboards").select("id").eq("user_email", userEmail).limit(1);
-    if (lbRows?.[0]) {
-      await supabaseAdmin
-        .from("leaderboards")
-        .update({ total_xp: newXP, season_xp: newSeasonXP, last_updated: new Date().toISOString() })
-        .eq("id", lbRows[0].id);
-    }
-  } catch (e) {
-    console.warn(`[${source}] leaderboard mirror failed:`, e?.message);
-  }
+  await syncBoardRow(userEmail,
+    { total_xp: newXP, season_xp: newSeasonXP, level: levelFromXP(newXP) }, profile);
   await insertXPEvent({
     created_by: userEmail,
     event_key: eventKey,
@@ -5859,15 +5879,8 @@ async function creditXPWithAudit(userEmail, amount, eventKey, source, metadata =
     .from("user_profiles")
     .update({ total_xp: newXP, season_xp: newSeasonXP, current_level: levelFromXP(newXP) })
     .eq("id", profile.id);
-  try {
-    const { data: lbRows } = await supabaseAdmin
-      .from("leaderboards").select("id").eq("user_email", userEmail).limit(1);
-    if (lbRows?.[0]) {
-      await supabaseAdmin.from("leaderboards")
-        .update({ total_xp: newXP, season_xp: newSeasonXP, last_updated: new Date().toISOString() })
-        .eq("id", lbRows[0].id);
-    }
-  } catch (e) { console.warn(`[${source}] leaderboard mirror failed:`, e?.message); }
+  await syncBoardRow(userEmail,
+    { total_xp: newXP, season_xp: newSeasonXP, level: levelFromXP(newXP) }, profile);
   await insertXPEvent({
     created_by: userEmail,
     event_key: eventKey,
@@ -8344,10 +8357,7 @@ async function refreshAcedItATAR(email, force = false) {
     }
 
     await supabaseAdmin.from("user_profiles").update(patch).eq("id", profile.id);
-    try {
-      await supabaseAdmin.from("leaderboards")
-        .update({ acedit_atar: atar }).eq("user_email", email);
-    } catch { /* mirror is best-effort */ }
+    await syncBoardRow(email, { acedit_atar: atar });
     return { atar, components };
   } catch (e) {
     console.warn("[acedit_atar] refresh failed:", e?.message);
@@ -8432,6 +8442,82 @@ async function sweepStaleATARs(emails = [], viewer = null) {
   return done;
 }
 
+/**
+ * sweepBoardRows — the backfill for every account the board never had a row
+ * for, run lazily off the page that needs them.
+ *
+ * `syncBoardRow` closes this going forward: the next time anybody earns XP, a
+ * row appears. But "the next time anybody earns XP" never comes for a student
+ * who stopped opening the app, and those accounts are exactly the ones the
+ * board is missing — so without this the standings stay wrong until every one
+ * of ~130 students happens to study again.
+ *
+ * Lazy and budgeted, like the ATAR sweep directly above and the league's own
+ * settlement: whoever opens Ranked pays for a handful of rows and waits for
+ * none of it, and the board fills in over the next few loads rather than
+ * holding one student's page open for a hundred inserts.
+ *
+ * The rows it writes carry the profile's real figures, so a student arrives on
+ * the board with the XP they actually have rather than at zero — and with
+ * `is_anonymous` seeded from `is_anonymous_on_leaderboard`, because creating a
+ * row for somebody who had turned anonymity ON and defaulting it to off would
+ * put their name on a public board they had opted out of. That is the one
+ * thing in this backfill that cannot be fixed afterwards.
+ */
+const BOARD_BACKFILL_BUDGET = 25;
+
+async function sweepBoardRows() {
+  if (!supabaseAdmin) return 0;
+  try {
+    const [{ data: profiles, error: pErr }, { data: board, error: bErr }] = await Promise.all([
+      supabaseAdmin.from("user_profiles")
+        .select("created_by, full_name, username, is_anonymous_on_leaderboard, total_xp, season_xp, streak_days, acedit_atar")
+        .order("total_xp", { ascending: false }).limit(1000),
+      supabaseAdmin.from("leaderboards").select("user_email").limit(1000),
+    ]);
+    // Destructured because their absence changes a branch: a failed board read
+    // read as an empty board would try to insert a row for every student on
+    // the site, and every one of them would collide.
+    if (pErr || bErr) {
+      console.warn("[board] backfill could not read:", (pErr || bErr).message);
+      return 0;
+    }
+    const have = new Set((board || []).map((r) => r.user_email));
+    const missing = (profiles || [])
+      .filter((p) => p.created_by && !have.has(p.created_by))
+      .slice(0, BOARD_BACKFILL_BUDGET);
+    if (!missing.length) return 0;
+
+    const { error } = await supabaseAdmin.from("leaderboards").insert(
+      missing.map((p) => ({
+        created_by: p.created_by,
+        user_email: p.created_by,
+        user_name: p.full_name || null,
+        username: p.username || null,
+        is_anonymous: !!p.is_anonymous_on_leaderboard,
+        total_xp: p.total_xp || 0,
+        season_xp: p.season_xp || 0,
+        streak_days: p.streak_days || 0,
+        level: levelFromXP(p.total_xp || 0),
+        acedit_atar: p.acedit_atar ?? null,
+        last_updated: new Date().toISOString(),
+      })),
+    );
+    if (error) {
+      // A unique violation means another request backfilled the same student
+      // between the read and the write. Nothing to repair — the row exists,
+      // which is the entire point.
+      if (String(error.code) !== "23505") console.warn("[board] backfill failed:", error.message);
+      return 0;
+    }
+    console.log(`[board] backfilled ${missing.length} missing row${missing.length === 1 ? "" : "s"}`);
+    return missing.length;
+  } catch (e) {
+    console.warn("[board] backfill failed:", e?.message);
+    return 0;
+  }
+}
+
 // ─── getRankedBoards — the three boards + my score, one call ───────────────
 app.post("/local-ai/fn/getRankedBoards", async (req, res) => {
   const user = await authenticateRequest(req);
@@ -8451,14 +8537,39 @@ app.post("/local-ai/fn/getRankedBoards", async (req, res) => {
       }
     }
 
-    const [{ data: board }, { data: fA }, { data: fB }, { data: profileRows }] = await Promise.all([
+    // THE VIEWER IS ON THE BOARD BEFORE THE BOARD IS READ. Their own row is
+    // the one thing this page cannot be missing — a student who has just
+    // earned XP and opens Ranked to see it must not be told they are nowhere,
+    // and must not have to come back tomorrow for the sweep below to reach
+    // them. One update that usually hits an existing row; an insert only ever
+    // on the first visit after this shipped.
+    const { data: meRows } = await supabaseAdmin
+      .from("user_profiles")
+      .select("created_by, school_name, acedit_atar, atar_components, full_name, username, is_anonymous_on_leaderboard, total_xp, season_xp, streak_days")
+      .eq("created_by", me).limit(1);
+    const meProfile = meRows?.[0] || null;
+    if (meProfile) {
+      await syncBoardRow(me, {
+        total_xp: meProfile.total_xp || 0,
+        season_xp: meProfile.season_xp || 0,
+        streak_days: meProfile.streak_days || 0,
+        level: levelFromXP(meProfile.total_xp || 0),
+      }, meProfile);
+    }
+
+    const [{ data: board }, { data: fA }, { data: fB }] = await Promise.all([
       supabaseAdmin.from("leaderboards")
         .select("user_email, user_name, username, total_xp, total_study_time, streak_days, is_anonymous, acedit_atar")
+        // ORDERED, because an unbounded `.limit(300)` hands back whichever 300
+        // PostgREST feels like — the same arbitrary-prefix bug the ATAR window
+        // queries had. Below 300 students this changes nothing; past it, the
+        // board keeps the most-active students rather than a random slice.
+        .order("total_xp", { ascending: false })
         .limit(300),
       supabaseAdmin.from("friendships").select("recipient_email").eq("requester_email", me).eq("status", "accepted"),
       supabaseAdmin.from("friendships").select("requester_email").eq("recipient_email", me).eq("status", "accepted"),
-      supabaseAdmin.from("user_profiles").select("created_by, school_name, acedit_atar, atar_components").eq("created_by", me).limit(1),
     ]);
+    const profileRows = meRows;
 
     // School map for the School scope (one query, service role).
     const emails = (board || []).map((r) => r.user_email);
@@ -8499,6 +8610,11 @@ app.post("/local-ai/fn/getRankedBoards", async (req, res) => {
     // should. See sweepStaleATARs.
     sweepStaleATARs(emails, me).catch((e) =>
       console.warn("[acedit_atar] sweep hook failed:", e?.message || e));
+
+    // And the students who have no row at all yet. Same posture: the viewer
+    // waits for nothing and the board fills in over the next few loads.
+    sweepBoardRows().catch((e) =>
+      console.warn("[board] backfill hook failed:", e?.message || e));
 
     return res.json({
       success: true,
@@ -12291,15 +12407,54 @@ app.post("/local-ai/fn/stripe-webhook", async (req, res) => {
 // In production we serve the Vite-built React app from the same Node service.
 // Locally `npm run dev` uses Vite's dev server on :5173 and proxies API calls
 // to this server on :3001 — `dist/` doesn't exist there and that's fine.
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const distDir = join(__dirname, "dist");
 
+/**
+ * BUILD_ID — which bundle this process is actually serving.
+ *
+ * It is the hash of the built `index.html`, which is the one file that names
+ * every other one: Vite fingerprints each chunk, so the moment any of them
+ * changes, the script tags in here change and so does this. Nothing has to be
+ * stamped at build time, no version has to be remembered to bump, and the id
+ * cannot claim a release the server is not serving — it IS the thing being
+ * served, read off disk.
+ *
+ * Read ONCE at boot, which is exactly right rather than a shortcut: Render
+ * replaces the process on every deploy, so a new build and a new BUILD_ID
+ * arrive together by construction. A restart with no deploy re-reads the same
+ * file and produces the same id, so a crash-loop cannot nag anybody to reload.
+ *
+ * Null in dev — `npm run dev` serves through Vite and there is no `dist/`, so
+ * the client is told there is no version to compare and never prompts. A
+ * developer with hot reload does not need to be told the code changed.
+ */
+let BUILD_ID = null;
+if (existsSync(join(distDir, "index.html"))) {
+  try {
+    BUILD_ID = createHash("sha1")
+      .update(readFileSync(join(distDir, "index.html")))
+      .digest("hex").slice(0, 12);
+  } catch { /* unreadable index.html → no version, no prompt */ }
+}
+
+// Registered BEFORE the SPA fallback below, which swallows everything that is
+// not already a route.
+app.get("/local-ai/version", (_req, res) => {
+  // NO-STORE, or the one request whose entire job is to notice a change is
+  // answered from a cache written before it. An `h`-hour-old reply here means
+  // students sit on a dead bundle for `h` hours and meet the blank page
+  // `lazyPage` exists to retry, which is the failure this endpoint prevents.
+  res.set("Cache-Control", "no-store, max-age=0");
+  res.json({ version: BUILD_ID });
+});
+
 if (existsSync(distDir)) {
-  console.log(`[local-ai] serving static build from ${distDir}`);
+  console.log(`[local-ai] serving static build from ${distDir}${BUILD_ID ? ` (build ${BUILD_ID})` : ""}`);
   app.use(express.static(distDir, { maxAge: "1h", index: false }));
   // SPA fallback — every non-API request returns index.html so react-router
   // takes over on the client. Express 5 requires a named splat ("*splat") and
