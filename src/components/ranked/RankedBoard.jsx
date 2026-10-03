@@ -52,6 +52,19 @@
  * fills the bar and is simply "far"; the exact number is printed beside it, so
  * the cap loses nothing a student needed.
  *
+ * ─── IT OPENS AT TEN, BECAUSE THIRTY ROWS IS A DOCUMENT ─────────────────────
+ * The board drew every ranked student — fifty at the cap — which on a phone is
+ * a page you scroll rather than a standing you read. Ten is the number every
+ * league table in the world opens at, and it is the podium's three plus seven
+ * so that the count means TEN PEOPLE rather than "ten rows after the three at
+ * the top", which would be thirteen and quietly wrong.
+ *
+ * COLLAPSING MUST NEVER HIDE YOU FROM YOURSELF. A student outside the ten gets
+ * their own row appended under the seven, carrying its real place number, with
+ * the gap to the row above it — so the one row they came to find is always
+ * drawn whatever the board is showing. That is the same rule the pinned bar
+ * keeps, applied to the other way a row can go missing.
+ *
  * ─── AND YOUR ROW IS NEVER LOST ─────────────────────────────────────────────
  * Scroll past yourself and a compact bar pins your place, your figure and your
  * reach to the bottom of the screen; tap it to go back to the row. Being 18th
@@ -254,13 +267,28 @@ function Row({ row, place, isMe, boardMeta, title, name, gap, gapScale, near, mo
     );
 }
 
+/**
+ * How many PEOPLE a collapsed board shows, podium included. Ten is the count
+ * a league table is read at; the list below the podium is therefore seven.
+ */
+export const COLLAPSED_TO = 10;
+
 export default function RankedBoard({
     rows = [], me, boardMeta, titles = new Map(), nameOf, myStanding, movement = null,
 }) {
+    const [expanded, setExpanded] = useState(false);
+
     const top = rows.slice(0, 3);
-    const rest = rows.slice(3);
+    const all = rows.slice(3);
+    // Seven, so the podium's three make ten people rather than thirteen.
+    const rest = expanded ? all : all.slice(0, Math.max(0, COLLAPSED_TO - top.length));
+    const hidden = all.length - rest.length;
+
     const meIndex = rows.findIndex(r => r.user_email === me);
     const meVisible = meIndex >= 0;
+    // Drawn below the seven when collapsing would otherwise lose them. The
+    // podium is always shown, so somebody in the top three is never "outside".
+    const meCutOff = meIndex >= 3 + rest.length;
 
     // Every adjacent gap on the visible board, and the one scale all the bars
     // are drawn against.
@@ -404,7 +432,47 @@ export default function RankedBoard({
                                 gap={gaps[idx]} gapScale={gapScale} />
                         );
                     })}
+
+                    {/* YOU, WHEREVER YOU ACTUALLY ARE. Appended under the seven
+                        with your real place, so collapsing the board can never
+                        be the reason you cannot find yourself — the rule the
+                        pinned bar keeps, reached from the other direction. The
+                        rule above it says the rows between are not drawn
+                        rather than letting 8th and 24th sit flush and read as
+                        adjacent. */}
+                    {!expanded && meCutOff && meVisible && (
+                        <>
+                            <div className="px-4 py-1.5 bg-secondary/40 border-t border-border
+                                text-[10px] font-bold text-muted-foreground tracking-wide">
+                                ⋯ {meIndex - (3 + rest.length) } more
+                            </div>
+                            <Row row={rows[meIndex]} place={meIndex + 1} isMe innerRef={myRowRef}
+                                boardMeta={boardMeta} title={titles.get(me)} name={nameOf(rows[meIndex])}
+                                move={movement?.[me] || null}
+                                gap={gaps[meIndex]} gapScale={gapScale} />
+                        </>
+                    )}
                 </div>
+            )}
+
+            {/* ONE CONTROL, AND IT SAYS HOW MANY. "Show all" is a label; "Show
+                all 31" is a number a student can decide about — the same rule
+                the review queue's entrances keep. */}
+            {hidden > 0 && (
+                <button type="button" onClick={() => setExpanded(true)} data-expand-board
+                    className="w-full card-soft py-2.5 text-xs font-bold text-foreground
+                        hover:bg-secondary/50 transition-colors inline-flex items-center justify-center gap-1.5">
+                    Show all {rows.length}
+                    <ChevronDown className="w-3.5 h-3.5" />
+                </button>
+            )}
+            {expanded && all.length > COLLAPSED_TO - 3 && (
+                <button type="button" onClick={() => setExpanded(false)} data-collapse-board
+                    className="w-full card-soft py-2.5 text-xs font-bold text-muted-foreground
+                        hover:bg-secondary/50 transition-colors inline-flex items-center justify-center gap-1.5">
+                    Show the top {COLLAPSED_TO}
+                    <ChevronUp className="w-3.5 h-3.5" />
+                </button>
             )}
 
             {rest.length > 0 && (

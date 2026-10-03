@@ -32,25 +32,29 @@
  *   2. WHERE THE MARKS ARE GOING — the topics costing you, which is the only
  *      panel on the old page that already ended in something to do.
  *   3. WHERE THE HOURS WENT — one row per subject, with the way into it.
- *   4. THE COACH — the model reading all of it, on request.
  *
- * ─── It loads its own three extras ──────────────────────────────────────────
- * The queue needs six reads. The coach needs three more — the subject list and
- * the two session tables it summarises — and asking for them on a tab nobody
- * has opened is three round trips spent on nothing. Radix unmounts an inactive
- * TabsContent, so mounting IS the tab being opened.
+ * ─── AND THE COACH WENT WITH IT ───────────────────────────────────────────
+ * "Ask the coach" was a model call that read everything above and said what it
+ * would change. It failed the same test the charts did, one level up: the
+ * panels here each name one thing and point at the screen that moves it, so a
+ * paragraph of generated advice on top of them is a SECOND answer to a
+ * question four panels have already answered properly — and the one answer
+ * nobody can check, on a page whose whole rebuild was about only printing
+ * things a student can act on and verify.
+ *
+ * It took three queries with it. `UserSubject`, `ActiveRecallSession` and
+ * `BlurtingSession` were loaded for the coach alone, so this tab now costs
+ * NOTHING beyond what the page already had — everything below draws from rows
+ * the queue tab loaded.
  */
-import React, { useEffect, useState } from "react";
+import React from "react";
 import { motion } from "framer-motion";
-import { base44 } from "@/api/base44Client";
 import CognitiveProfilePanel from "@/components/analytics/CognitiveProfilePanel";
 import MemoryPanel from "@/components/analytics/MemoryPanel";
 import AttentionPanel from "@/components/analytics/AttentionPanel";
 import WeakTopicsPanel from "@/components/analytics/WeakTopicsPanel";
-import AIPerformanceAnalyzer from "@/components/analytics/AIPerformanceAnalyzer";
 import SubjectSplit from "@/components/analytics/SubjectSplit";
 import { studyEvents } from "@/lib/studyLog";
-import AceShuffle from "@/components/ace/AceShuffle";
 
 function Band({ title, blurb, children }) {
     return (
@@ -72,29 +76,6 @@ function Band({ title, blurb, children }) {
 }
 
 export default function InsightsTab({ data, today }) {
-    const [extra, setExtra] = useState(null);
-
-    useEffect(() => {
-        let cancelled = false;
-        (async () => {
-            try {
-                const user = await base44.auth.me();
-                const [subjects, activeRecall, blurting] = await Promise.all([
-                    base44.entities.UserSubject.filter({ created_by: user.email }),
-                    base44.entities.ActiveRecallSession.filter({ created_by: user.email }),
-                    base44.entities.BlurtingSession.filter({ created_by: user.email }),
-                ].map(p => p.catch(() => [])));
-                if (!cancelled) setExtra({ subjects: subjects || [], activeRecall: activeRecall || [], blurting: blurting || [] });
-            } catch {
-                // The coach is the only thing that needs these. Everything else
-                // on this tab draws from what the page already loaded, so a
-                // failure here costs one panel rather than the screen.
-                if (!cancelled) setExtra({ subjects: [], activeRecall: [], blurting: [] });
-            }
-        })();
-        return () => { cancelled = true; };
-    }, []);
-
     if (!data) return null;
 
     const cards = data.cards || [];
@@ -137,23 +118,6 @@ export default function InsightsTab({ data, today }) {
                 blurb="Your subjects beside each other, and what the time bought.">
                 <SubjectSplit events={events} quizzes={data.quizzes} attempts={data.attempts}
                     cards={cards} today={today} />
-            </Band>
-
-            <Band title="Ask the coach"
-                blurb="The model reads everything above and says what it would change.">
-                {extra ? (
-                    <AIPerformanceAnalyzer data={{
-                        subjects: extra.subjects,
-                        techniques,
-                        activeRecall: extra.activeRecall,
-                        blurting: extra.blurting,
-                        quizzes: data.quizzes,
-                        attempts: data.attempts,
-                        flashcards: cards,
-                    }} />
-                ) : (
-                    <div className="card-soft p-8"><AceShuffle size="md" label="Gathering your work" /></div>
-                )}
             </Band>
         </motion.div>
     );
