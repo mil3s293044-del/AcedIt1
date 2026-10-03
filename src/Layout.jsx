@@ -17,6 +17,7 @@ import StakesPill from "@/components/arena/StakesPill";
 import { LiveProvider, useBusy, BUSY } from "@/lib/LiveContext";
 import { CosmeticsProvider } from "@/lib/CosmeticsContext";
 import PrankOverlay, { prankBodyClass } from "@/components/pranks/PrankOverlay";
+import UpdatePrompt from "@/components/shared/UpdatePrompt";
 import { takeFn } from "@/lib/fnResult";
 import AchievementUnlock from "@/components/ranked/AchievementUnlock";
 import { useAchievementWatch } from "@/lib/useAchievementWatch";
@@ -607,6 +608,14 @@ export default function Layout({ children }) {
                     onDone={() => setPrankQueue((q) => q.slice(1))}
                 />
             )}
+
+            {/* A NEW BUILD, ANNOUNCED RATHER THAN WALKED INTO. One mount for
+                every authenticated route, inside LiveProvider because the hold
+                list it respects — a quiz on screen, a running block, a marking
+                call — is that provider's registry. It draws the brand MARK and
+                not a body, so it claims nothing in ACE_ORDER and cannot become
+                a second Ace on the screen. */}
+            <UpdatePrompt />
 
             <AceCompanion userProfile={userProfile} />
             {/* One mount for the whole app rather than a call on each of the

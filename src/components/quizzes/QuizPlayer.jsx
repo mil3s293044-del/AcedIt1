@@ -701,10 +701,21 @@ In two or three sentences, explain what makes that the right answer and what the
             if (user?.email) {
                 const tempCorrect = shuffledQuiz.questions.filter((q, i) => q.type === 'mcq' && userAnswers[i] !== undefined && parseInt(userAnswers[i]) === q.correct_answer).length;
                 await base44.entities.StudySession.create({ subject: quiz.subject, duration_minutes: Math.ceil(timeTaken / 60), technique: "quiz", notes: `Quiz: ${quiz.title}`, productivity_rating: tempCorrect === quiz.questions.length ? 5 : Math.max(1, Math.ceil((tempCorrect / quiz.questions.length) * 5)), date: new Date().toISOString().split('T')[0] });
+                // THIS IS THE ONLY WRITER OF `total_study_time`, so the
+                // `if (entries.length)` it used to stop at meant the hours
+                // board stayed at zero forever for anybody without a row —
+                // and nothing in the app ever created one. The server closes
+                // that now, but `recordStudyAndGetStreak()` above is
+                // fire-and-forget, so a student's very FIRST quiz can still
+                // land here before the row it would have made exists. Create
+                // it rather than dropping the hours on the floor.
+                const minutes = Math.ceil(timeTaken / 60);
                 const leaderboardEntries = await base44.entities.Leaderboard.filter({ user_email: user.email });
-                if (leaderboardEntries.length > 0) {
-                    const entry = leaderboardEntries[0];
-                    await base44.entities.Leaderboard.update(entry.id, { total_study_time: (entry.total_study_time || 0) + Math.ceil(timeTaken / 60), total_sessions: (entry.total_sessions || 0) + 1, last_updated: new Date().toISOString() });
+                const entry = leaderboardEntries[0];
+                if (entry) {
+                    await base44.entities.Leaderboard.update(entry.id, { total_study_time: (entry.total_study_time || 0) + minutes, total_sessions: (entry.total_sessions || 0) + 1, last_updated: new Date().toISOString() });
+                } else {
+                    await base44.entities.Leaderboard.create({ user_email: user.email, total_study_time: minutes, total_sessions: 1, last_updated: new Date().toISOString() });
                 }
             }
         } catch {}

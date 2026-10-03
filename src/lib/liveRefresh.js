@@ -95,6 +95,34 @@ export function focusedFieldHasContent(el) {
 }
 
 /**
+ * What is currently holding the student — the ONE answer to "may we interrupt".
+ *
+ * Pulled out of `decideRefresh` because a second surface needed it: the update
+ * prompt, which reloads the page when a new version ships. A reload is a
+ * strictly larger interruption than the refetch this file was written for — it
+ * destroys typed answers rather than moving a number — so it has to respect at
+ * least the same holds, and the one way to guarantee that is for both to ask
+ * the same function. Written twice, the two would disagree within a release,
+ * and the half that drifted would be the one that reloads a quiz out from
+ * under somebody.
+ *
+ * Returns the reasons in order of how costly interrupting would be, so a
+ * caller that wants to name one names the worst.
+ */
+export function holdReasons({
+    now = Date.now(),
+    lastInputAt = 0,
+    busy = [],
+    focusedHasContent = false,
+    force = false,
+} = {}) {
+    const reasons = [...busy];
+    if (!force && now - lastInputAt < TYPING_QUIET_MS) reasons.push(BUSY.TYPING);
+    else if (focusedHasContent) reasons.push(BUSY.TYPING);
+    return reasons;
+}
+
+/**
  * The decision, as a pure function of the world.
  *
  * Kept separate from the React that drives it so the rules can be asserted
@@ -120,9 +148,7 @@ export function decideRefresh({
     // A forced refresh (the student pressed something, or a write just landed)
     // still respects busy — that is what makes "defer" trustworthy — but it
     // ignores the poll gap and the visibility check.
-    const reasons = [...busy];
-    if (!force && now - lastInputAt < TYPING_QUIET_MS) reasons.push(BUSY.TYPING);
-    else if (focusedHasContent) reasons.push(BUSY.TYPING);
+    const reasons = holdReasons({ now, lastInputAt, busy, focusedHasContent, force });
 
     if (reasons.length) return { action: "defer", reason: reasons[0], reasons };
 
