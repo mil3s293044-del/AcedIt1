@@ -53,7 +53,7 @@ const DESTINATIONS = [
     { label: "Friends",   icon: Users,        link: "Friends",      rank: "9",  suit: "heart",   tone: "#EC4899" },
     { label: "Planner",   icon: Map,          link: "Goals",        rank: "8",  suit: "club",    tone: "#10B981" },
     { label: "Compete",   icon: Swords,       link: "Competitions", rank: "7",  suit: "diamond", tone: "#F97316" },
-    { label: "Analytics", icon: BarChart3,    link: "Analytics",    rank: "6",  suit: "spade",   tone: "#0EA5E9" },
+    { label: "Progress",  icon: BarChart3,    link: "Review",       rank: "6",  suit: "spade",   tone: "#0EA5E9" },
 ];
 
 /**

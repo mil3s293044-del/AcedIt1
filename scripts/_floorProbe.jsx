@@ -51,7 +51,15 @@ import { Flag, Plus, Scale } from "lucide-react";
 import ActiveRecall from "@/components/study/ActiveRecall";
 import BlurtingMethod from "@/components/study/BlurtingMethod";
 import { ArrowRight, Target } from "lucide-react";
-import { COMPONENT_MOVE } from "@/lib/ranked";
+import { COMPONENT_MOVE, boardById, titlesFor, standing } from "@/lib/ranked";
+import RankedBoard from "@/components/ranked/RankedBoard";
+import QueueRow from "@/components/study/QueueRow";
+import SubjectSplit from "@/components/analytics/SubjectSplit";
+import { studyQueue, queueLead } from "@/lib/studyQueue";
+import StandingRail from "@/components/ranked/StandingRail";
+import { ScopeSwitch, BoardSwitch } from "@/components/ranked/BoardControls";
+import { movementMap } from "@/lib/boardMovement";
+import { boardsFor } from "@/lib/ranked";
 import { liftFor } from "@/lib/atarLift";
 
 const which = new URLSearchParams(location.search).get("v") || "deal";
@@ -1009,6 +1017,181 @@ views.ranked = () => {
     );
 };
 
+
+// ─── THE BOARD, AGAINST THE SHAPE OF REAL DATA ─────────────────────────────
+// A two-row fixture hides everything that was redesigned: the podium needs
+// three, the median gap scale needs a spread, the movement column needs
+// climbers AND fallers AND an arrival, and the pinned bar needs the viewer far
+// enough down the list to scroll past. The Quizzes shelf learned this the hard
+// way — three-quizzes-per-subject hid a layout that fell apart on a real
+// account.
+const BOARD_NAMES = [
+    "Priyanka", "Maya", "Sam", "Tom", "Aisha", "Leo", "you", "Grace",
+    "Noah", "Zara", "Ollie", "Mia", "Finn", "Ruby",
+];
+const BOARD_ROWS = BOARD_NAMES.map((n, i) => ({
+    user_email: n === "you" ? "me@acedit.au" : `${n.toLowerCase()}@school.edu.au`,
+    user_name: n === "you" ? "You" : n,
+    username: n === "you" ? "You" : n,
+    // A spread with a long tail, so the median-doubled scale is exercised:
+    // tight gaps at the top, then one student 9 points clear further down.
+    acedit_atar: [94.2, 91.8, 91.05, 90.9, 88.4, 88.4, 86.15, 85.9,
+        85.2, 76.1, 75.4, 74.9, 72.2, 71.8][i],
+    total_xp: [41200, 38800, 30100, 29400, 24050, 23980, 18439, 17200,
+        16050, 9900, 9400, 8800, 4200, 3900][i],
+    total_study_time: [9120, 8400, 7100, 6900, 5200, 5150, 4260, 3980,
+        3600, 2100, 1900, 1750, 900, 820][i],
+    streak_days: [112, 46, 31, 7, 3, 0, 22, 0, 9, 0, 61, 0, 0, 2][i],
+    is_anonymous: n === "Zara",
+    band: null,
+    crests: i === 0 ? [{ code: "a", name: "Centurion", icon: "Flame", rarity: "legendary" }]
+        : i === 6 ? [{ code: "b", name: "Marked", icon: "Target", rarity: "rare" }] : [],
+}));
+
+views.board = () => {
+    const [scope, setScope] = React.useState("global");
+    const [boardId, setBoardId] = React.useState("atar");
+    const meta = boardById(boardId);
+    const me = "me@acedit.au";
+
+    const field = React.useMemo(
+        () => [...BOARD_ROWS].sort((a, b) => (meta.value(b) || 0) - (meta.value(a) || 0)),
+        [meta]);
+    // A snapshot with every case in it: climbers, fallers, somebody holding,
+    // and two rows absent so the NEW badge is drawn.
+    const snapshot = {
+        "priyanka@school.edu.au": 2, "maya@school.edu.au": 1, "sam@school.edu.au": 3,
+        "tom@school.edu.au": 7, "aisha@school.edu.au": 4, "leo@school.edu.au": 5,
+        "me@acedit.au": 11, "grace@school.edu.au": 6, "noah@school.edu.au": 8,
+        "zara@school.edu.au": 9, "ollie@school.edu.au": 10, "mia@school.edu.au": 12,
+    };
+    const movement = movementMap(field, snapshot);
+    const titles = titlesFor(field);
+    const mine = { ...standing(field, me, meta.value), row: field.find(r => r.user_email === me) };
+    const nameOf = (r) => (r.user_email === me ? "You"
+        : r.is_anonymous ? `Anon #${r.user_email.slice(0, 4)}` : r.user_name);
+
+    return (
+        <MemoryRouter>
+            <div className="min-h-screen bg-background p-4 lg:px-8 py-6 space-y-5">
+                <div className="max-w-[1600px] mx-auto space-y-4">
+                    <div className="flex flex-wrap items-end justify-between gap-x-4 gap-y-2">
+                        <div>
+                            <h2 className="font-display text-xl sm:text-2xl font-extrabold text-foreground leading-tight">
+                                {meta.label}
+                            </h2>
+                            <p className="text-xs text-muted-foreground mt-0.5">
+                                {meta.window} · you&rsquo;re {ordinal(mine.rank)} of {mine.total}
+                            </p>
+                        </div>
+                        <BoardSwitch boards={[boardById("atar"), ...boardsFor("alltime")]} board={boardId} onBoard={setBoardId} />
+                    </div>
+                    <ScopeSwitch scope={scope} onScope={setScope} hasSchool={false} />
+                    <div className="grid xl:grid-cols-[minmax(0,1fr)_320px] gap-6 items-start">
+                        <div className="min-w-0">
+                            <RankedBoard rows={field} me={me} boardMeta={meta} titles={titles}
+                                movement={movement} nameOf={nameOf} myStanding={mine} />
+                        </div>
+                        <div className="xl:sticky xl:top-6">
+                            <StandingRail mine={mine} boardMeta={meta} board={meta.id}
+                                nameOf={nameOf} components={RANKED_COMPONENTS}
+                                title={titles.get(me)} />
+                        </div>
+                    </div>
+                    {/* Tall filler, so the pinned "your place" bar can be
+                        judged — it only appears once the real row is off
+                        screen, which a short page can never reach. */}
+                    <div className="h-[120vh] rounded-2xl border-2 border-dashed border-border
+                        flex items-start justify-center pt-6 text-xs text-muted-foreground">
+                        scroll past your row — the pinned bar sits above the bottom nav
+                    </div>
+                </div>
+                <BottomNav />
+            </div>
+        </MemoryRouter>
+    );
+};
+
+
+// ─── THE QUEUE, AGAINST AN ACCOUNT THAT HAS ALL SIX KINDS ──────────────────
+// Every kind at once is the layout's worst case and the only way to judge the
+// spine colours against each other, the lead sentence, and the one-loud-button
+// rule. A fixture with two rows shows none of it.
+const QDAY = (n) => new Date(Date.now() + n * 86400000).toISOString().split("T")[0];
+const QCARD = (i, over) => ({
+    id: `qc${i}`, subject_name: ["Chemistry", "Methods", "Legal"][i % 3],
+    topic: "Topic", is_active: true, repetitions: 4, ease_factor: 2.5,
+    interval_days: 10, last_reviewed_date: QDAY(-20), next_review_date: QDAY(-over),
+});
+
+views.queue = () => {
+    const cards = [...Array(14)].map((_, i) => QCARD(i, (i % 5) + 1));
+    // One decayed hard, so the slipping row has something behind it.
+    cards.push({ id: "slip", subject_name: "Biology", topic: "Cells", is_active: true,
+        repetitions: 3, ease_factor: 2.4, interval_days: 2,
+        last_reviewed_date: QDAY(-40), next_review_date: QDAY(-38) });
+
+    const bank = [0, 1, 2].map((i) => ({
+        id: `m${i}`, topic: "Mistake bank", subject_name: "Legal", unit: "Unit 3",
+        repetitions: 0, next_review_date: QDAY(-1), is_active: true,
+        extra: { mistake: { criterion: "names the transfer of risk", topic: "Contracts" } },
+    }));
+
+    const quizzes = [{ id: "q1", title: "Redox practice", subject: "Chemistry",
+        questions: [{ question: "Explain the oxidation half-equation." }, { question: "b" }] }];
+    const attempts = [
+        { id: "a1", quiz_id: "q1", created_date: "2026-10-01", score: 60,
+          extra: { question_results: [{ q_index: 0, marks: null }, { q_index: 1, marks: 1, marks_max: 2 }] } },
+        // `is_correct`, which is the field QuizPlayer actually writes —
+        // `correct` renders identically in a fixture and makes `weakSpots`
+        // skip the row, which is how the resit kind went missing from the
+        // first draw of this probe.
+        { id: "a2", quiz_id: "q1", quiz_title: "Redox practice", created_date: "2026-09-20", score: 40,
+          extra: { question_results: [{ q_index: 0, marks: 0, marks_max: 3, is_correct: false, question: "Explain the oxidation half-equation." },
+                                      { q_index: 1, marks: 0, marks_max: 2, is_correct: false, question: "b" }] } },
+        { id: "a3", quiz_id: "q1", quiz_title: "Redox practice", created_date: "2026-09-10", score: 45,
+          extra: { question_results: [{ q_index: 0, marks: 0, marks_max: 3, is_correct: false, question: "Explain the oxidation half-equation." }] } },
+    ];
+    const assessments = [
+        { id: "s1", subject_name: "Chemistry", title: "Unit 4 AOS 1 SAC", due_date: QDAY(3) },
+        { id: "s2", subject_name: "Legal Studies", title: "Folio task", due_date: QDAY(9) },
+    ];
+    const events = [
+        { day: QDAY(-1), subject: "Methods", minutes: 95 },
+        { day: QDAY(-2), subject: "Methods", minutes: 50 },
+        { day: QDAY(-3), subject: "Biology", minutes: 40 },
+        { day: QDAY(-12), subject: "Chemistry", minutes: 25 },
+    ];
+
+    const today = QDAY(0);
+    const items = studyQueue({
+        cards, bankCards: bank, quizzes, attempts, assessments, events,
+        piles: [], isReady: () => true, today,
+    });
+    const lead = queueLead(items);
+
+    return (
+        <MemoryRouter>
+            <div className="min-h-screen bg-background p-4 sm:p-6 lg:p-8">
+                <div className="max-w-5xl mx-auto space-y-5">
+                    <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider">Progress</span>
+                    <h1 className="font-display text-2xl sm:text-3xl font-extrabold tracking-tight text-foreground leading-[1.15]">
+                        {lead ? lead.line : "You're all caught up."}
+                    </h1>
+                    <div className="card-soft on-table overflow-hidden">
+                        {items.map((it, i) => (
+                            <QueueRow key={it.key} item={it} index={i} lead={i === 0}
+                                href={`/${it.page}${it.query || ""}`} />
+                        ))}
+                    </div>
+                    <SubjectSplit events={events} quizzes={quizzes} attempts={attempts}
+                        cards={cards} today={today} />
+                </div>
+            </div>
+        </MemoryRouter>
+    );
+};
+
 views.update = () => {
     // The real component, against the real tokens. It only ever renders when a
     // poll says the build changed, so the probe forces it: a fake version
@@ -1051,7 +1234,15 @@ views.reach = () => (
         <div className="min-h-screen bg-background">
             <div className="p-4 sm:p-6 space-y-5">
                 <div className="grid w-full sm:w-auto sm:inline-grid grid-cols-3 h-auto p-1.5 rounded-2xl bg-surface border-2 border-border shadow-soft">
-                    {[["Leaderboard", ReachTrophy], ["League", ReachSwords], ["Profile", ReachCap]].map(([label, Icon], i) => (
+                    {/* The ERA tabs. The labels moved with the split — see
+                        Ranked.jsx — and the widths have to be rechecked when
+                        they do: at 360 this bar is `grid-cols-3`, so each cell
+                        is about 105px and a label one word too long wraps the
+                        whole bar to two lines. That is what "Leaderboard" did,
+                        and `whitespace-nowrap` then turned the wrap into a clip
+                        inside the pill. Both render; only the measurement says
+                        so. */}
+                    {[["My rank", ReachCap], ["League", ReachSwords], ["All time", ReachTrophy]].map(([label, Icon], i) => (
                         <span key={label} className={`flex items-center justify-center gap-1.5 py-2.5 px-3 sm:px-6 rounded-xl text-sm font-bold whitespace-nowrap ${i === 0 ? "bg-foreground text-background" : "text-muted-foreground"}`}>
                             <Icon className="hidden sm:block w-4 h-4" /> {label}
                         </span>

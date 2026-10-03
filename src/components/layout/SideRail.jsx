@@ -3,7 +3,7 @@ import { Link, useLocation } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { BrandSpade } from "@/components/shared/BrandMark";
 import {
-    Brain, FileQuestion, Sparkles, Map, BarChart3, Trophy, ListChecks,
+    Brain, FileQuestion, Sparkles, Map, Trophy, ListChecks,
     Users, Swords,
     BookOpen, CreditCard, Settings as SettingsIcon, HelpCircle, LifeBuoy,
 } from "lucide-react";
@@ -15,21 +15,15 @@ const NAV_SECTIONS = [
         items: [
             { label: "Study Session", path: "Study",        icon: Brain },
             { label: "Quizzes",       path: "Quizzes",      icon: FileQuestion },
-            { label: "Review queue",  path: "Review",       icon: ListChecks },
+            { label: "Progress",      path: "Review",       icon: ListChecks },
             { label: "AI Tools",      path: "AITools",      icon: Sparkles },
             { label: "Planner",       path: "Goals", icon: Map },
         ],
     },
     {
-        label: "Progress",
-        items: [
-            { label: "Analytics", path: "Analytics", icon: BarChart3 },
-            { label: "Ranked",    path: "Ranked",    icon: Trophy },
-        ],
-    },
-    {
         label: "Social",
         items: [
+            { label: "Ranked",  path: "Ranked",       icon: Trophy },
             { label: "Friends", path: "Friends",      icon: Users },
             { label: "Compete", path: "Competitions", icon: Swords },
         ],

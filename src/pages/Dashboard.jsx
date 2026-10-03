@@ -217,7 +217,7 @@ const CHALLENGE_MOVES = {
         label: "Your sticking point",
         title: "Find out what you're actually shaky on",
         sub: "You said it's hard to tell, and your analytics already know which topics keep costing you marks.",
-        cta: "See weak topics", link: "Analytics", accent: "chart-3", icon: BarChart3,
+        cta: "See weak topics", link: "Review", query: "?tab=insights", accent: "chart-3", icon: BarChart3,
         component: "mastery",
     },
     motivated: {

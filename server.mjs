@@ -8658,6 +8658,90 @@ async function catchUpEveryone() {
   }
 }
 
+/**
+ * ─── WHERE EVERYBODY STOOD WHEN THE WEEK OPENED ─────────────────────────────
+ *
+ * The board draws an arrow on every row, and an arrow needs a previous board.
+ * There is no scheduler here, so the snapshot is written LAZILY by whoever
+ * opens Ranked first in a given week — the same posture as the league's
+ * settlement, the market sweep and `sweepStaleATARs` beside it. Migration 0039
+ * has the full reasoning for why this is one row per board per week rather
+ * than a column on 300 student rows.
+ *
+ * THE IDS MUST MATCH `BOARDS` IN `src/lib/ranked.js`, which is the client's
+ * one list of boards. The accessors are restated here rather than imported
+ * because that module resolves `@/lib/atarBands` — the alias node cannot read,
+ * which `serverBoot.test.mjs` exists to catch — so `rankedBoards.test.mjs`
+ * asserts the two id lists agree instead.
+ */
+const SNAPSHOT_BOARDS = [
+  { id: "atar", of: (r) => r.acedit_atar },
+  { id: "xp",   of: (r) => r.total_xp || 0 },
+  { id: "time", of: (r) => r.total_study_time || 0 },
+];
+
+/** Positions keyed by email, from the same ordering the client ranks with. */
+function boardRanksFor(rows, of) {
+  const ranked = (rows || [])
+    .filter((r) => of(r) != null)
+    .sort((a, b) => (of(b) || 0) - (of(a) || 0));
+  const out = {};
+  ranked.forEach((r, i) => {
+    if (r.user_email && !(r.user_email in out)) out[r.user_email] = i + 1;
+  });
+  return out;
+}
+
+/**
+ * This week's snapshots, writing any that are missing on the way past.
+ *
+ * A SNAPSHOT WRITTEN BY THIS REQUEST IS NOT RETURNED. It describes right now,
+ * so every movement computed against it would be zero — and the point of
+ * leaving it out is that the board then draws NOTHING rather than telling the
+ * whole field it is holding position. The next load reports properly.
+ *
+ * A read error means migration 0039 has not been applied. That answers {} —
+ * no movement anywhere, which is the honest degradation and never a fake
+ * arrow.
+ */
+let snapshotReadWarned = false;
+async function weekBoardSnapshots(rows) {
+  const week = currentWeekStartUTC();
+  const { data, error } = await supabaseAdmin
+    .from("board_snapshots").select("board, ranks").eq("week_start", week);
+  if (error) {
+    // ONCE. Before migration 0039 is applied this fails on every board load
+    // for every student, and a log line per page view is how a real warning
+    // stops being read — the same posture `storeFile` takes about a missing
+    // service key.
+    if (!snapshotReadWarned) {
+      snapshotReadWarned = true;
+      console.warn("[board_snapshots] read failed (migration 0039 not applied?):", error.message);
+    }
+    return {};
+  }
+
+  const have = new Map((data || []).map((s) => [s.board, s.ranks || {}]));
+  const missing = SNAPSHOT_BOARDS.filter((b) => !have.has(b.id));
+  if (missing.length && (rows || []).length) {
+    // Fire-and-forget: nothing in this response depends on it, so the viewer
+    // waits for nothing. A 23505 is the correct outcome of two students
+    // opening the board in the same second — the unique index is what makes
+    // that a no-op rather than a snapshot split across two rows.
+    supabaseAdmin.from("board_snapshots").insert(
+      missing.map((b) => ({ week_start: week, board: b.id, ranks: boardRanksFor(rows, b.of) })),
+    ).then(({ error: insErr }) => {
+      if (insErr && insErr.code !== "23505") {
+        console.warn("[board_snapshots] write failed:", insErr.message);
+      }
+    }, (e) => console.warn("[board_snapshots] write threw:", e?.message || e));
+  }
+
+  const out = {};
+  for (const b of SNAPSHOT_BOARDS) if (have.has(b.id)) out[b.id] = have.get(b.id);
+  return out;
+}
+
 // ─── getRankedBoards — the three boards + my score, one call ───────────────
 app.post("/local-ai/fn/getRankedBoards", async (req, res) => {
   const user = await authenticateRequest(req);
@@ -8756,6 +8840,10 @@ app.post("/local-ai/fn/getRankedBoards", async (req, res) => {
     sweepBoardRows().catch((e) =>
       console.warn("[board] backfill hook failed:", e?.message || e));
 
+    // Where everybody stood on Monday, so each row can draw which way it has
+    // gone. Awaited because the payload carries it; the WRITE inside is not.
+    const snapshots = await weekBoardSnapshots(board);
+
     return res.json({
       success: true,
       me,
@@ -8773,6 +8861,10 @@ app.post("/local-ai/fn/getRankedBoards", async (req, res) => {
         band: atarBand(r.acedit_atar),
         crests: crestMap[r.user_email] || [],
       })),
+      // Positions as of this Monday, per board, keyed by email — the rows this
+      // response is already sending and no others. The client re-ranks them
+      // within whatever scope is on screen; see `movementMap`.
+      snapshots,
     });
   } catch (err) {
     console.error("[getRankedBoards] error:", err);

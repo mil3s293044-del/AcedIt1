@@ -384,7 +384,7 @@ export const PAGES = {
     AITools:      { route: "/AITools",      title: "AI Tools",     intro: "One chat, several specialists. This page is part of Premium." },
     Planner:      { route: "/Goals",        title: "Planner",      intro: "Your week as sessions, built around the dates you're actually working towards." },
     Goals:        { route: "/Goals",        title: "Planner",      intro: "Your week as sessions, built around the dates you're actually working towards." },
-    Analytics:    { route: "/Analytics",    title: "Analytics",    intro: "Everything measured about your study — for deciding what to do differently, rather than what to do next." },
+    Review:       { route: "/Review",       title: "Progress",     intro: "Everything outstanding, worst first — and whether any of what you have done is sticking." },
     Ranked:       { route: "/Ranked",       title: "Ranked",       intro: "Where you sit against everyone, your friends, or your school." },
     Friends:      { route: "/Friends",      title: "Friends",      intro: "Classmates to share decks and quizzes with, and to measure yourself against." },
     Competitions: { route: "/Competitions", title: "Compete",      intro: "Head-to-head challenges. Most people will do it for a friend when they won't do it for themselves." },

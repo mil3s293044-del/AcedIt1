@@ -15,9 +15,13 @@
  *
  *   /Review   — in NEITHER nav. Its main entrance was an 11px muted link in
  *               the corner of one dashboard panel, labelled "Check the pile",
- *               which is a phrase nobody uses about a page whose own h1 says
- *               "Your review queue". Two names for one screen is how a student
- *               stops believing either.
+ *               which is a phrase nobody uses about a page whose own heading
+ *               said something else. Two names for one screen is how a student
+ *               stops believing either. The page is PROGRESS now — the
+ *               flashcard audit and the old /Analytics merged into one queue
+ *               and one set of insights — so the name is checked against what
+ *               the page calls ITSELF rather than against a string written
+ *               down here, which is the thing that would quietly rot.
  *   /League   — one entrance, in Ranked's sticky rail. That rail is the second
  *               column of an `xl:` grid, so below xl it stacks UNDER the whole
  *               thirty-row board: on a phone the way into a weekly competition
@@ -90,9 +94,16 @@ check("the tab renders the REAL page rather than a second copy of the board", ()
 check("the tab bar grew a column to fit it", () => {
     // Three triggers in a two-column grid overlap. It renders, and it renders
     // wrong, which no other check here would see.
-    const i = RANKED.indexOf("<TabsList");
-    const bar = RANKED.slice(i, i + 400);
-    const triggers = (RANKED.slice(i, i + 900).match(/\["(board|league|profile)"/g) || []).length;
+    //
+    // Counted off the `TABS` declaration rather than off the markup near
+    // `<TabsList>`: the triggers are a `.map` over a module constant now, so a
+    // window around the list matches nothing and this passed for the wrong
+    // reason — "0 tabs in a grid that is not grid-cols-0". `rankedBoards`
+    // owns which ids they are and what order they go in.
+    const decl = RANKED.slice(RANKED.indexOf("const TABS = ["));
+    const triggers = (decl.slice(0, decl.indexOf("];")).match(/\["[a-z]+",/g) || []).length;
+    assert.ok(triggers >= 3, `only ${triggers} tabs found — the TABS list has moved`);
+    const bar = RANKED.slice(RANKED.indexOf("<TabsList"), RANKED.indexOf("<TabsList") + 400);
     assert.match(bar, new RegExp(`grid-cols-${triggers}\\b`),
         `${triggers} tabs in a grid that is not grid-cols-${triggers}`);
 });
@@ -110,31 +121,51 @@ check("THE WEEK LEADS THE BOARD rather than sitting below thirty rows", () => {
 
 // ─── One name per screen ───────────────────────────────────────────────────
 
+/** The four places that send somebody to the merged Progress page. */
+const ENTRANCES = ["src/components/dashboard/DueRadar.jsx",
+    "src/components/study/SpacedRepetition.jsx",
+    "src/components/layout/SideRail.jsx",
+    "src/components/layout/BottomNav.jsx"];
+
 check("NOBODY SAYS \"check the pile\" ANY MORE", () => {
-    // The page's own h1 is "Your review queue". A nav item, a shelf button and
-    // a dashboard link calling it something else means four names for one
-    // screen, and "the pile" is the one a student has never heard.
-    const files = ["src/components/dashboard/DueRadar.jsx",
-        "src/components/study/SpacedRepetition.jsx",
-        "src/components/layout/SideRail.jsx",
-        "src/components/layout/BottomNav.jsx"];
-    for (const f of files) {
+    // A nav item, a shelf button and a dashboard link each calling one screen
+    // something different means four names for it, and "the pile" was the one
+    // a student had never heard.
+    for (const f of ENTRANCES) {
         assert.ok(!/check the pile/i.test(strip(read(f))),
-            `${f} still calls it "the pile" — the page calls itself "Your review queue"`);
+            `${f} still calls it "the pile", which is not what the page calls itself`);
     }
 });
 
 check("and every entrance uses the page's OWN name", () => {
+    // READ THE NAME OFF THE PAGE rather than restating it here. A string
+    // written down in the test is a fifth copy, and the first rename would
+    // make the suite red for being out of date rather than for a real split.
     const review = read("src/pages/Review.jsx");
-    assert.match(review, /Your review queue/,
-        "the page's h1 has changed — the entrances below are now named after nothing");
-    for (const f of ["src/components/dashboard/DueRadar.jsx",
-        "src/components/study/SpacedRepetition.jsx",
-        "src/components/layout/SideRail.jsx",
-        "src/components/layout/BottomNav.jsx"]) {
-        assert.match(strip(read(f)), /Review queue/,
-            `${f} does not name the queue, so its entrance says nothing about where it goes`);
+    const m = /uppercase tracking-wider">([^<]+)<\/span>/.exec(review);
+    assert.ok(m, "Review.jsx no longer declares a page name, so there is nothing to match against");
+    const name = m[1].trim();
+    assert.ok(name.length > 2, `the page name "${name}" is too short to be one`);
+    for (const f of ENTRANCES) {
+        assert.ok(strip(read(f)).includes(name),
+            `${f} does not say "${name}", which is what the page calls itself — ` +
+            `two names for one screen is how a student stops believing either`);
     }
+});
+
+check("ANALYTICS MERGED IN, and its old link still lands somewhere", () => {
+    // The route is gone from pages.config, so without the redirect every
+    // bookmark, every old in-app link and the AI coach's own suggestions hit
+    // the 404 page.
+    assert.ok(!/pages\/Analytics/.test(read("src/pages.config.js")),
+        "Analytics is still a registered page as well as a tab — two surfaces for one set " +
+        "of charts is the mirror this codebase keeps deleting");
+    assert.match(read("src/App.jsx"), /path="\/Analytics" element=\{<Navigate to="\/Review\?tab=insights"/,
+        "nothing redirects /Analytics, so every existing link to it 404s");
+    // And the page honours the query it is sent.
+    assert.match(read("src/pages/Review.jsx"), /get\("tab"\) === "insights"/,
+        "the redirect names a tab the page does not read, which lands on the queue instead " +
+        "of the charts somebody asked for");
 });
 
 // ─── The entrance states the stake ─────────────────────────────────────────

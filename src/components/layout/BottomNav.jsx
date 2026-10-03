@@ -4,7 +4,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import {
     Home, Brain, Sparkles, Trophy, Menu, X,
     FileQuestion, BookOpen, Users, Map, ListChecks,
-    Swords, BarChart3, Settings as SettingsIcon,
+    Swords, Settings as SettingsIcon,
     CreditCard, HelpCircle, LifeBuoy
 } from "lucide-react";
 import { createPageUrl } from "@/utils";
@@ -21,14 +21,8 @@ const MORE_GROUPS = [
         label: "Study",
         items: [
             { label: "Quizzes",       path: "Quizzes",      icon: FileQuestion },
-            { label: "Review queue",  path: "Review",       icon: ListChecks },
+            { label: "Progress",      path: "Review",       icon: ListChecks },
             { label: "Planner",       path: "Goals", icon: Map },
-        ],
-    },
-    {
-        label: "Progress",
-        items: [
-            { label: "Analytics", path: "Analytics", icon: BarChart3 },
         ],
     },
     {

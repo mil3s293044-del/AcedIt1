@@ -14,7 +14,7 @@ const PAGE_TITLES = {
     "Quizzes":        "Quizzes",
     "AITools":        "AI Tools",
     "Goals":          "Planner",
-    "Analytics":      "Analytics",
+    "Review":         "Progress",
     "Ranked":         "Ranked",
     "Friends":        "Friends",
     "Competitions":   "Compete",
