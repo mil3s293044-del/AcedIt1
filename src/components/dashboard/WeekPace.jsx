@@ -133,7 +133,10 @@ export default function WeekPace({ events = [], className = "" }) {
             className={`card-soft on-table p-5 lg:p-6 h-full flex flex-col ${className}`}>
             <div className="flex items-baseline justify-between gap-3 mb-4">
                 <p className="stat-label">Your study week</p>
-                <Link to={createPageUrl("Analytics")}
+                {/* Where the hours went, which is the panel this strip is a
+                    summary of. Analytics merged into Review; the deep link
+                    goes straight to the tab rather than through the redirect. */}
+                <Link to={`${createPageUrl("Review")}?tab=insights`}
                     className="text-[11px] font-bold text-muted-foreground hover:text-foreground
                         underline underline-offset-2">
                     View all

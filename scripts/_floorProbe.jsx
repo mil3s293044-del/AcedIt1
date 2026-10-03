@@ -53,6 +53,9 @@ import BlurtingMethod from "@/components/study/BlurtingMethod";
 import { ArrowRight, Target } from "lucide-react";
 import { COMPONENT_MOVE, boardById, titlesFor, standing } from "@/lib/ranked";
 import RankedBoard from "@/components/ranked/RankedBoard";
+import QueueRow from "@/components/study/QueueRow";
+import SubjectSplit from "@/components/analytics/SubjectSplit";
+import { studyQueue, queueLead } from "@/lib/studyQueue";
 import StandingRail from "@/components/ranked/StandingRail";
 import { ScopeSwitch, BoardSwitch } from "@/components/ranked/BoardControls";
 import { movementMap } from "@/lib/boardMovement";
@@ -1104,6 +1107,86 @@ views.board = () => {
                     </div>
                 </div>
                 <BottomNav />
+            </div>
+        </MemoryRouter>
+    );
+};
+
+
+// ─── THE QUEUE, AGAINST AN ACCOUNT THAT HAS ALL SIX KINDS ──────────────────
+// Every kind at once is the layout's worst case and the only way to judge the
+// spine colours against each other, the lead sentence, and the one-loud-button
+// rule. A fixture with two rows shows none of it.
+const QDAY = (n) => new Date(Date.now() + n * 86400000).toISOString().split("T")[0];
+const QCARD = (i, over) => ({
+    id: `qc${i}`, subject_name: ["Chemistry", "Methods", "Legal"][i % 3],
+    topic: "Topic", is_active: true, repetitions: 4, ease_factor: 2.5,
+    interval_days: 10, last_reviewed_date: QDAY(-20), next_review_date: QDAY(-over),
+});
+
+views.queue = () => {
+    const cards = [...Array(14)].map((_, i) => QCARD(i, (i % 5) + 1));
+    // One decayed hard, so the slipping row has something behind it.
+    cards.push({ id: "slip", subject_name: "Biology", topic: "Cells", is_active: true,
+        repetitions: 3, ease_factor: 2.4, interval_days: 2,
+        last_reviewed_date: QDAY(-40), next_review_date: QDAY(-38) });
+
+    const bank = [0, 1, 2].map((i) => ({
+        id: `m${i}`, topic: "Mistake bank", subject_name: "Legal", unit: "Unit 3",
+        repetitions: 0, next_review_date: QDAY(-1), is_active: true,
+        extra: { mistake: { criterion: "names the transfer of risk", topic: "Contracts" } },
+    }));
+
+    const quizzes = [{ id: "q1", title: "Redox practice", subject: "Chemistry",
+        questions: [{ question: "Explain the oxidation half-equation." }, { question: "b" }] }];
+    const attempts = [
+        { id: "a1", quiz_id: "q1", created_date: "2026-10-01", score: 60,
+          extra: { question_results: [{ q_index: 0, marks: null }, { q_index: 1, marks: 1, marks_max: 2 }] } },
+        // `is_correct`, which is the field QuizPlayer actually writes —
+        // `correct` renders identically in a fixture and makes `weakSpots`
+        // skip the row, which is how the resit kind went missing from the
+        // first draw of this probe.
+        { id: "a2", quiz_id: "q1", quiz_title: "Redox practice", created_date: "2026-09-20", score: 40,
+          extra: { question_results: [{ q_index: 0, marks: 0, marks_max: 3, is_correct: false, question: "Explain the oxidation half-equation." },
+                                      { q_index: 1, marks: 0, marks_max: 2, is_correct: false, question: "b" }] } },
+        { id: "a3", quiz_id: "q1", quiz_title: "Redox practice", created_date: "2026-09-10", score: 45,
+          extra: { question_results: [{ q_index: 0, marks: 0, marks_max: 3, is_correct: false, question: "Explain the oxidation half-equation." }] } },
+    ];
+    const assessments = [
+        { id: "s1", subject_name: "Chemistry", title: "Unit 4 AOS 1 SAC", due_date: QDAY(3) },
+        { id: "s2", subject_name: "Legal Studies", title: "Folio task", due_date: QDAY(9) },
+    ];
+    const events = [
+        { day: QDAY(-1), subject: "Methods", minutes: 95 },
+        { day: QDAY(-2), subject: "Methods", minutes: 50 },
+        { day: QDAY(-3), subject: "Biology", minutes: 40 },
+        { day: QDAY(-12), subject: "Chemistry", minutes: 25 },
+    ];
+
+    const today = QDAY(0);
+    const items = studyQueue({
+        cards, bankCards: bank, quizzes, attempts, assessments, events,
+        piles: [], isReady: () => true, today,
+    });
+    const lead = queueLead(items);
+
+    return (
+        <MemoryRouter>
+            <div className="min-h-screen bg-background p-4 sm:p-6 lg:p-8">
+                <div className="max-w-5xl mx-auto space-y-5">
+                    <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider">Progress</span>
+                    <h1 className="font-display text-2xl sm:text-3xl font-extrabold tracking-tight text-foreground leading-[1.15]">
+                        {lead ? lead.line : "You're all caught up."}
+                    </h1>
+                    <div className="card-soft on-table overflow-hidden">
+                        {items.map((it, i) => (
+                            <QueueRow key={it.key} item={it} index={i} lead={i === 0}
+                                href={`/${it.page}${it.query || ""}`} />
+                        ))}
+                    </div>
+                    <SubjectSplit events={events} quizzes={quizzes} attempts={attempts}
+                        cards={cards} today={today} />
+                </div>
             </div>
         </MemoryRouter>
     );

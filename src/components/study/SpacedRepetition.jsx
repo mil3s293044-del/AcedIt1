@@ -1126,7 +1126,7 @@ The documents provided may be PowerPoint slides, Word documents, PDFs or text fi
                         <Link to={createPageUrl("Review")}>
                             <Button variant="outline" className="gap-2 border-2 border-border rounded-xl h-11 text-foreground">
                                 <ListChecks className="w-4 h-4" />
-                                Review queue
+                                Progress
                                 {queueReady > 0 && (
                                     <span className="ml-0.5 px-1.5 py-0.5 rounded-md bg-chart-3/15 text-chart-3
                                         text-xs font-extrabold tabular-nums">

@@ -76,7 +76,7 @@ export default function DueRadar({ items = [], className = "" }) {
                     <Link to={createPageUrl("Review")}
                         className="inline-flex items-center gap-1 text-[11px] font-bold
                             text-muted-foreground hover:text-foreground transition-colors group">
-                        Review queue
+                        Progress
                         {overdue > 0 && (
                             <span className="px-1.5 py-0.5 rounded-md bg-streak/15 text-streak tabular-nums">
                                 {overdue} overdue

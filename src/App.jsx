@@ -167,6 +167,11 @@ const AuthenticatedApp = () => {
       <Route path="/StudyRoadmap" element={<Navigate to="/Goals" replace />} />
       {/* Explore became Help and moved under Account */}
       <Route path="/Explore" element={<Navigate to="/Help" replace />} />
+      {/* Analytics merged into Review: the queue is what you owe, Insights is
+          the half of the old page that ended in something to do. Old links,
+          bookmarks and the AI coach's own suggestions still land on the
+          charts rather than on a 404. */}
+      <Route path="/Analytics" element={<Navigate to="/Review?tab=insights" replace />} />
       <Route path="/Paywall" element={<Paywall />} />
       <Route path="/Suspended" element={<Suspended />} />
       <Route path="/AdminIPPanel" element={<LayoutWrapper currentPageName="AdminIPPanel"><AdminIPPanel /></LayoutWrapper>} />

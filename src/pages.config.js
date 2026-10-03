@@ -61,7 +61,6 @@ import { lazyPage } from '@/lib/lazyPage';
 // round trip before the chrome appears.
 const AITools = lazyPage('AITools', () => import('./pages/AITools'));
 const AIToolsHistory = lazyPage('AIToolsHistory', () => import('./pages/AIToolsHistory'));
-const Analytics = lazyPage('Analytics', () => import('./pages/Analytics'));
 const Checkout = lazyPage('Checkout', () => import('./pages/Checkout'));
 const Competitions = lazyPage('Competitions', () => import('./pages/Competitions'));
 // One question, in full. The id rides in the query string — createPageUrl
@@ -99,7 +98,6 @@ export const PAGES = {
     "League": League,
     "MistakeBank": MistakeBank,
     "AIToolsHistory": AIToolsHistory,
-    "Analytics": Analytics,
     "Checkout": Checkout,
     "Competitions": Competitions,
     "Market": Market,

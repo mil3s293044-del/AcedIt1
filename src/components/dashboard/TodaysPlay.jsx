@@ -108,7 +108,11 @@ export default function TodaysPlay({
                         invented one large. */}
                     <CommitmentRun commitment={commitment} fmtTime={fmtTime} hasCard={!!preview} />
 
-                    <Link to={createPageUrl(move.link)} className="inline-block mt-5">
+                    {/* `query` is how a move deep-links rather than landing on
+                        a page and leaving the student to find the thing it
+                        promised — `startFromSuggestion`'s rule, and the one
+                        `rankedMove.test.mjs` holds for the ATAR components. */}
+                    <Link to={createPageUrl(move.link) + (move.query || "")} className="inline-block mt-5">
                         <Button size="lg" className="text-base">
                             {move.cta} <ArrowRight className="w-4 h-4" />
                         </Button>
