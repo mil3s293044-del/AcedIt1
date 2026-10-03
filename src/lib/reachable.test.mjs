@@ -90,9 +90,16 @@ check("the tab renders the REAL page rather than a second copy of the board", ()
 check("the tab bar grew a column to fit it", () => {
     // Three triggers in a two-column grid overlap. It renders, and it renders
     // wrong, which no other check here would see.
-    const i = RANKED.indexOf("<TabsList");
-    const bar = RANKED.slice(i, i + 400);
-    const triggers = (RANKED.slice(i, i + 900).match(/\["(board|league|profile)"/g) || []).length;
+    //
+    // Counted off the `TABS` declaration rather than off the markup near
+    // `<TabsList>`: the triggers are a `.map` over a module constant now, so a
+    // window around the list matches nothing and this passed for the wrong
+    // reason — "0 tabs in a grid that is not grid-cols-0". `rankedBoards`
+    // owns which ids they are and what order they go in.
+    const decl = RANKED.slice(RANKED.indexOf("const TABS = ["));
+    const triggers = (decl.slice(0, decl.indexOf("];")).match(/\["[a-z]+",/g) || []).length;
+    assert.ok(triggers >= 3, `only ${triggers} tabs found — the TABS list has moved`);
+    const bar = RANKED.slice(RANKED.indexOf("<TabsList"), RANKED.indexOf("<TabsList") + 400);
     assert.match(bar, new RegExp(`grid-cols-${triggers}\\b`),
         `${triggers} tabs in a grid that is not grid-cols-${triggers}`);
 });

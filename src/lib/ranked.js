@@ -217,3 +217,73 @@ export function weakestComponent(components) {
     const key = keys.reduce((w, k) => (components[k] < components[w] ? k : w));
     return { key, value: components[key], action: COMPONENT_ACTION[key] };
 }
+
+/**
+ * ─── THE BOARDS, AND THE ERA EACH ONE MEASURES ──────────────────────────────
+ *
+ * These descriptors were inline in `Ranked.jsx`, which was fine while one tab
+ * held all three. The page is split by ERA now — the ATAR is a trailing 28-day
+ * score and belongs with the panel that explains it, XP and study time are
+ * lifetime totals and belong together — so two tabs need the list and a second
+ * copy of it is the mirror this codebase keeps deleting.
+ *
+ * `era` is what decides which tab a board appears on, so the split is a fact
+ * about the board rather than two hard-coded arrays that can disagree about
+ * where the ATAR lives.
+ *
+ * `gap` is the sentence form ("1.24 behind"); `gapShort` is what fits beside a
+ * bar on a board row, where the direction is already drawn by an arrow.
+ */
+export const fmtMins = (m) => {
+    if (!m) return "0m";
+    const h = Math.floor(m / 60), mm = Math.round(m % 60);
+    return h === 0 ? `${mm}m` : mm === 0 ? `${h}h` : `${h}h ${mm}m`;
+};
+
+export const BOARDS = [
+    {
+        id: "atar", era: "month", label: "ATAR", icon: "GraduationCap",
+        // What the board is OF, printed under the heading. A board nobody can
+        // name the window of is a board a student cannot argue with — and
+        // these three measure three different spans of time, which is most of
+        // what made one chip row holding all of them confusing.
+        window: "Trailing 28 days",
+        value: (r) => r.acedit_atar,
+        fmt: (v) => (v == null ? "—" : v.toFixed(2)),
+        gap: (g) => `${g.toFixed(2)} behind`,
+        gapShort: (g) => g.toFixed(2),
+    },
+    {
+        id: "xp", era: "alltime", label: "XP", icon: "Zap",
+        window: "Everything you have ever earned",
+        value: (r) => r.total_xp || 0,
+        fmt: (v) => (v || 0).toLocaleString(),
+        gap: (g) => `${Math.round(g).toLocaleString()} XP behind`,
+        gapShort: (g) => Math.round(g).toLocaleString(),
+    },
+    {
+        id: "time", era: "alltime", label: "Study time", icon: "Clock",
+        window: "Every minute you have logged",
+        value: (r) => r.total_study_time || 0,
+        fmt: (v) => fmtMins(v || 0),
+        gap: (g) => `${fmtMins(g)} behind`,
+        gapShort: (g) => fmtMins(g),
+    },
+];
+
+/** The boards on one tab. Derived, so the tabs cannot disagree about the ATAR. */
+export const boardsFor = (era) => BOARDS.filter(b => b.era === era);
+export const boardById = (id) => BOARDS.find(b => b.id === id) || BOARDS[0];
+
+/**
+ * Who you are being measured against.
+ *
+ * ONE control rather than three chips beside three more. At 360px the old row
+ * was six bordered buttons on one line, which is most of what made the board
+ * header read as a toolbar rather than as a leaderboard.
+ */
+export const SCOPES = [
+    { id: "global", label: "Global", blurb: "Everyone on AcedIt" },
+    { id: "friends", label: "Friends", blurb: "People you know" },
+    { id: "school", label: "School", blurb: "Your school" },
+];

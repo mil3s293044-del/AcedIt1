@@ -90,6 +90,64 @@ function declarationLines(lines) {
 }
 
 /**
+ * Every function PARAMETER, with the line span of the body that owns it.
+ *
+ * ─── The false positive this closes ─────────────────────────────────────────
+ * `declarationLines` sees `const` and `let` only, and the deps check above
+ * already states the intent in its own words: "anything declared above,
+ * imported, OR A PARAMETER is fine." It could not act on the last one. So a
+ * helper taking an argument that happens to share a name with a `const` lower
+ * down the file — `function useBoardView(data, meta, scope)` in `Ranked.jsx`,
+ * above the component's own `const [data, setData] = useState(null)` — was
+ * reported as a TDZ crash on code that is correct: inside that helper, `data`
+ * is the parameter, bound before the first line of the body runs.
+ *
+ * That is the false-positive class `fnResult.test.mjs` and this file's own
+ * comment scan each had to learn, and the cost of not learning it is worse
+ * than a red suite: the obvious way to make it green is to rename a perfectly
+ * good parameter, or to delete the check.
+ *
+ * A BRACE-DEPTH WALK, the idiom `dbColumns.test.mjs` already uses. The span
+ * has to be the owning body and not the whole file, or a parameter named
+ * `data` in one helper would exempt a genuine TDZ hazard in the component
+ * beside it — which would be a hole rather than a fix.
+ */
+function paramScopes(lines) {
+    const out = [];
+    const re = /(?:function\s+[A-Za-z_$][\w$]*\s*|=>\s*|\(\s*function\s*)?\(([^()]*)\)\s*(?:=>\s*)?\{\s*$/;
+    lines.forEach((line, i) => {
+        // Only a signature that OPENS a body on this line. Anything else is a
+        // call, and a call's arguments bind nothing.
+        const m = /^\s*(?:export\s+)?(?:async\s+)?function\s+[A-Za-z_$][\w$]*\s*\(([^)]*)\)\s*\{\s*$/.exec(line)
+            || /^\s*(?:export\s+)?(?:const|let)\s+[A-Za-z_$][\w$]*\s*=\s*(?:async\s*)?\(([^)]*)\)\s*=>\s*\{\s*$/.exec(line);
+        if (!m) return;
+        const names = m[1].split(",").map((x) => x.trim().split(/[=:\s]/)[0])
+            .filter((x) => /^[A-Za-z_$][\w$]*$/.test(x));
+        if (!names.length) return;
+
+        // Walk to the matching close brace. Strings and comments are not
+        // tracked — a stray brace in either would end the span early, which
+        // errs toward REPORTING rather than toward a hole.
+        let depth = 0, end = lines.length - 1;
+        for (let j = i; j < lines.length; j++) {
+            for (const ch of lines[j]) {
+                if (ch === "{") depth += 1;
+                else if (ch === "}") depth -= 1;
+            }
+            if (j > i && depth <= 0) { end = j; break; }
+        }
+        for (const n of names) out.push({ name: n, start: i, end });
+    });
+    void re;
+    return out;
+}
+
+/** Is `name` a parameter of some function whose body contains `line`? */
+function isParamAt(params, name, line) {
+    return params.some((p) => p.name === name && line >= p.start && line <= p.end);
+}
+
+/**
  * Every hook dependency array in a file, as { line, names }.
  *
  * Matches the closing `}, [...])` of a hook call. Arrays spanning lines are
@@ -187,14 +245,16 @@ check("NO DEPENDENCY ARRAY NAMES A CONST DECLARED LATER IN THE SAME FILE", () =>
         if (!/use(Effect|Memo|Callback|LayoutEffect)\s*\(/.test(src)) continue;
         const lines = src.split("\n");
         const declaredAt = declarationLines(lines);
+        const params = paramScopes(lines);
 
         for (const { line, names } of depArrays(src)) {
             for (const name of names) {
                 const decl = declaredAt.get(name);
                 // Only a genuine "declared below where it is read" is a
                 // problem. Anything declared above, imported, or a parameter
-                // is fine.
-                if (decl != null && decl > line) {
+                // is fine — and `paramScopes` is what finally lets the last of
+                // those be honoured rather than only stated.
+                if (decl != null && decl > line && !isParamAt(params, name, line)) {
                     problems.push(
                         `${file}:${line + 1} — dependency "${name}" is declared at line ${decl + 1}. `
                         + "A deps array is evaluated during render, so this throws a TDZ "
@@ -252,6 +312,29 @@ check("a hook with a deferred body is left to the deps-array check", () => {
     // are not read whole and only the array matters.
     const sample = `useEffect(() => { later(); }, []);\nconst later = () => {};`;
     assert.deepEqual(hookArgs(sample), []);
+});
+
+check("a PARAMETER is not a later declaration, and the exemption is scoped", () => {
+    const lines = [
+        "function useView(data, scope) {",
+        "    const field = useMemo(() => pick(data), [data, scope]);",
+        "    return field;",
+        "}",
+        "export default function Page() {",
+        "    const rows = useMemo(() => f(), [data]);",
+        "    const [data, setData] = useState(null);",
+        "    return rows;",
+        "}",
+    ];
+    const params = paramScopes(lines);
+    assert.ok(params.some((p) => p.name === "data" && p.start === 0),
+        "a plain function signature's parameters are not being found at all");
+    assert.ok(isParamAt(params, "data", 1),
+        "a dep inside the helper that declares the parameter is still reported — the false " +
+        "positive this closes");
+    assert.ok(!isParamAt(params, "data", 5),
+        "the exemption leaked out of the helper's body into the component below it, which " +
+        "would hide the real TDZ hazard on line 6 — a hole, not a fix");
 });
 
 check("the scanner actually recognises the shape it is looking for", () => {

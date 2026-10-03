@@ -2722,6 +2722,165 @@ in production. `SideRail` reads Layout's context and renders blank alone. So
 the strip's payout block is `hidden sm:flex` and cannot move the phone layout at
 all.
 
+## Ranked is THREE ERAS, and the ATAR was on all of them
+
+**"Only one page having all the ATAR and ranks."** The page carried an
+always-on hero — the dial, the five components, the rank tiles — ABOVE the tab
+bar, so a student heading for the weekly league scrolled past a 230px gauge of
+a trailing-28-day score to get there, and the profile tab opened under the same
+gauge. One number owning the top of every tab, including the two it has nothing
+to do with.
+
+Everything here answers "where do I stand", and the only real difference
+between the answers is the WINDOW:
+
+| tab | window | what is on it |
+|---|---|---|
+| **My rank** | trailing 28 days | the ATAR dial, the five components with their doors, the ATAR board, and the ten-tier ladder + achievements |
+| **League** | this week | the real `/League`, embedded |
+| **All time** | lifetime | XP and study time |
+
+**`era` IS A FIELD ON THE BOARD, not two hard-coded arrays.** `BOARDS` moved
+out of `Ranked.jsx` into `ranked.js` and each descriptor declares `month` or
+`alltime`; `boardsFor(era)` is what fills a tab. Two lists instead would be the
+mirror this codebase keeps deleting, and the failure is silent — the ATAR
+quietly appearing under a heading reading "everything you have ever earned".
+Each one also states its `window`, printed under the board's own heading: a
+leaderboard whose span is not stated is one a student cannot argue with, and
+three different spans sharing one chip row is most of what made the old header
+confusing.
+
+`useBoardView` is the scoped, sorted field plus everything derived from it —
+the rows, the titles, the standing, the movement — so the two board tabs cannot
+arrive at a rank differently from the list they drew it on.
+
+**SIX BORDERED CHIPS ON ONE LINE IS A TOOLBAR.** Three board chips beside three
+scope chips, at 360px, is what the header was. The board question is answered by
+the TABS now, so each tab needs one control and it is a real segmented switch —
+inset on the secondary ground with the live segment lifted onto the surface,
+deliberately QUIETER than the tab bar above it. Two controls drawn identically,
+one inside the other, is how a student loses track of which one they are using.
+`BoardSwitch` draws nothing when handed fewer than two boards, which is the
+single-tab `Tabs` rule and is what lets the ATAR tab pass none at all.
+
+### The board moves now, and nothing about that may be invented
+
+**AN ORDER THAT LOOKS IDENTICAL EVERY TIME YOU OPEN IT READS AS A FIXTURE.**
+One arrow per row is the cheapest thing that turns a ranking into a race, and
+`boardMovement.js` is the whole model.
+
+**ONE SNAPSHOT PER BOARD PER WEEK** (migration 0039, `board_snapshots`). Written
+per student — `leaderboards.extra` — it would be 300 rows to write and read, and
+PostgREST has no bulk update with per-row values except an upsert, which
+`syncBoardRow` already records being unable to use here: an upsert sets every
+column it carries on conflict, so it would quietly clear `is_anonymous` for
+anybody who had turned it on. One row holding `{ email: rank }` is one read, one
+insert, three rows a week for the whole site — and it is the stronger design as
+well as the cheaper one, because every row's movement is measured against the
+SAME instant.
+
+Written LAZILY by whoever opens Ranked first in a given week, the posture the
+league's settlement, the market sweep and `sweepStaleATARs` all take. The unique
+index on `(week_start, board)` is what makes that safe: two students opening the
+board in the same second cannot split one week's snapshot across two rows, and
+the 23505 is the correct outcome rather than an error to log.
+
+**A SNAPSHOT WRITTEN BY THIS REQUEST IS NOT RETURNED.** It describes right now,
+so every movement against it is zero — and leaving it out means the board draws
+NOTHING rather than telling the whole field it is holding position.
+
+**A LOWER RANK NUMBER IS BETTER**, so the delta is `was - now`. One character
+the other way renders perfectly and draws every climb as a fall, on the student
+who had the best week.
+
+**AND IT NEVER INVENTS A POSITION.** Four ways a previous rank can be absent and
+not one of them may print a number of places: no snapshot (null for the whole
+board), a student not in it (`new`, a badge — they did not climb from last
+place, they were not there), a junk value (treated as absent, or a corrupt row
+becomes last week's leader and shifts everybody), and a real zero, which is
+`level` and draws a dash. **`Number(null) === 0`** is the live trap: coerced, 0
+beats every real rank, so every new student reads as having FALLEN — a
+plausible, wrong, red arrow on exactly the rows that should be celebrating.
+That trap has now reached `criterionIndexFor`, `expiredKeys`, `markPercent`,
+`standingOf`, `closingFacts`, `weakTopicsFrom` and this.
+
+**THE SNAPSHOT IS RE-RANKED WITHIN THE ROWS ON SCREEN.** The stored map is the
+whole field; the board may be a SCOPE of it. In a scope of five, being 2nd now
+against a stored 7th is two numbers from two different boards subtracted, so
+last week's placing is recomputed as the row's position among these rows sorted
+by its stored rank. Subsetting cannot reorder anybody, so that is exactly their
+scope placing at snapshot time, and on the global board it is the stored number
+back again.
+
+**AN ARRIVAL DOES PUSH EVERYBODY DOWN**, and the test was written expecting the
+opposite. The tempting rule is that being overtaken by somebody who was not on
+the board last week should not count as slipping. It is wrong and visibly so:
+the place numeral beside the arrow SAYS 2, so a chip reading "holding" sits
+directly next to the evidence that they are not. A board that contradicts its
+own rank column has spent the credibility that column had.
+
+**SHAPE CARRIES THE DIRECTION.** The brand green and the streak red sit at ΔE
+7.0 under deuteranopia — the floor's step-dot lesson — so an up arrow against a
+down arrow is what makes this readable, with the number as the third channel.
+The lane is a FIXED WIDTH even with no snapshot, or every other column shifts
+sideways the moment arrows appear.
+
+### What makes the rows read as premium
+
+**THE COLUMNS ARE FIXED WIDTHS, and that is most of it.** Every figure shares a
+right edge, every place numeral a lane, every arrow a third. Before this the
+score sat at the end of a flex row, so its left edge moved with the length of
+the name beside it and a column of numbers came out ragged — the difference
+between a table somebody designed and a list of divs. The place numeral went
+from a 7px muted digit to display type with real weight, because on a
+leaderboard the rank IS the content.
+
+**THE PODIUM IS AN OBJECT**, capped at `max-w-2xl` and centred. Stretched to a
+1100px board column each card was ~360px holding a 56px avatar and one number,
+so the ceremony at the top of the board was the emptiest part of the page. The
+medal rides ON the avatar ring and the place is a numeral on a plinth — the
+first version had a "1st" pill, a medal glyph AND the number in one card, which
+is this file's own icon rule broken three times in one place. The title is
+`hidden sm:` there: at 360 a podium card is a third of the screen and
+"Metronome" beside a movement chip is wider than that, so the pill was clipped
+by the card's own `overflow-hidden` and bled off the side as a cut-off word.
+
+**YOUR ROW IS NEVER LOST.** Scroll past yourself and a compact bar pins your
+place, your figure and your reach to the bottom; tap it to go back. It appears
+only when the real row is off screen — a permanent bar would be a second,
+smaller copy of a row already in front of them — and it sits at
+`bottom-[5.25rem] md:bottom-5` with `z-30`, ABOVE a bottom nav that is
+`fixed bottom-0 z-40` and about 72px tall. Under it, it is a control nobody can
+tap on a phone, and only a screenshot would say so.
+
+`rankedBoards.test.mjs` holds all of it — the movement rules, the era split, the
+ATAR panel being inside the first tab, the server's snapshot ids matching the
+client's `BOARDS`, and the pinned bar's clearance against the nav's real
+classes. Draw the board with `scripts/_floorProbe.jsx?v=board`, against
+**fourteen rows with climbers, fallers, a holder and two arrivals** — a two-row
+fixture hides the podium, the median gap scale, the movement column and the
+pinned bar at once, which is the lesson the Quizzes shelf learned about checking
+a layout against the shape of the data somebody actually has.
+
+### `hookDeps.test.mjs` could not see a function parameter
+
+Its TDZ check states the intent in its own words — "anything declared above,
+imported, OR A PARAMETER is fine" — and `declarationLines` sees `const` and
+`let` only. So `function useBoardView(data, meta, scope)`, sitting above the
+component's own `const [data, setData] = useState(null)`, was reported as a
+crash on code that is correct: inside that helper `data` is the parameter, bound
+before the first line of the body runs.
+
+`paramScopes` is a brace-depth walk — `dbColumns.test.mjs`'s idiom — and the
+span has to be the OWNING BODY rather than the whole file, or a parameter named
+`data` in one helper would exempt a genuine TDZ hazard in the component beside
+it. That would be a hole rather than a fix, so it is asserted both ways, and
+the real crash shape was put back to confirm it still bites. This is the
+false-positive class `fnResult.test.mjs` and this file's own comment scan each
+had to learn, and the cost of not learning it is worse than a red suite: the
+obvious way to make it green is to rename a perfectly good parameter, or to
+delete the check.
+
 ## Ranked: the board is the race, the profile is the climb
 
 The page is two tabs and the split between them is the whole design. The BOARD
@@ -4554,6 +4713,16 @@ stranger.
   uses the page's own name and carries a real number, and no nav entry points
   at a route that is not there. Draw the bar with
   `scripts/_floorProbe.jsx?v=reach`
+- `src/lib/ranked.js` `BOARDS` / `boardsFor` + `src/lib/boardMovement.js` +
+  `rankedBoards.test.mjs` — the three boards, the ERA that decides which tab
+  each sits on, and which way every row has gone since Monday. The movement
+  rules are the whole file: a lower rank number is better, a missing previous
+  placing is NEW and never a fall from zeroth, and no snapshot draws nothing.
+  `weekBoardSnapshots` / `board_snapshots` (migration 0039) are the server half
+- `src/components/ranked/RankedBoard.jsx`, `BoardControls.jsx` — the board: one
+  right-aligned figure column, the place as display type, the movement lane,
+  the capped podium and the bar that pins your row once you scroll past it.
+  Draw it with `scripts/_floorProbe.jsx?v=board`, against fourteen rows
 - `src/lib/ranked.js` `COMPONENT_MOVE` + `rankedMove.test.mjs` — the one map
   from an ATAR component to the thing that raises it, deep-linked where a deep
   link exists. The test checks every query it emits is actually READ by the page
