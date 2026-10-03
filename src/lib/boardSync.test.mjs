@@ -230,6 +230,90 @@ check("the backfill reads BOTH tables before it writes", () => {
         "turns a backfill into an insert storm");
 });
 
+// ─── The one-shot catch-up ─────────────────────────────────────────────────
+
+check("THE XP PASS ONLY EVER RAISES", () => {
+    const span = spanOf(SRC, "catchUpEveryone");
+    assert.ok(span, "catchUpEveryone is gone — nothing backfills the roster");
+    const body = SRC.slice(span[0], span[1]);
+    // The log is INCOMPLETE: awardGoalXP writes total_xp directly and records
+    // no event, and so does the achievement reward. So a profile is often
+    // legitimately AHEAD of its own log, and setting it from the log would
+    // delete real XP from real students — silently, across the whole roster,
+    // in one pass. The comparison is the only thing standing between those two
+    // outcomes.
+    assert.match(body, /if\s*\(\s*logged\s*>\s*stored\s*\)/,
+        "the XP pass does not compare before writing — a profile ahead of its log is overwritten");
+    assert.ok(!/total_xp:\s*logged\s*,?\s*\n?\s*(?!.*Math\.max)/.test(
+        body.replace(/if \(logged > stored\)[\s\S]{0,400}/, "")),
+        "total_xp is set from the log somewhere outside the guarded branch");
+    assert.match(body, /Math\.max\(stored,\s*logged\)/,
+        "the figure mirrored to the board is not the max of the two");
+});
+
+check("THE RECONSTRUCTION IS THE SUM, NEVER max(total_xp_after)", () => {
+    const start = SRC.indexOf("async function loggedXPFor");
+    assert.ok(start > -1, "loggedXPFor is gone");
+    const body = SRC.slice(start, start + 900);
+    assert.match(body, /reduce\(/, "the log is no longer summed");
+    assert.ok(!/total_xp_after/.test(body),
+        "reading total_xp_after looks tighter and hands back every point a student " +
+        "staked on a progress bet: an earlier row's running total is higher than the " +
+        "balance after deductXPWithAudit took the escrow out");
+});
+
+check("IT PAGES, AND THE PAGES ARE ORDERED", () => {
+    const start = SRC.indexOf("async function loggedXPFor");
+    const body = SRC.slice(start, start + 900);
+    assert.match(body, /fetchAllRows\(/,
+        "an unbounded read of xp_events stops at PostgREST's 1000 rows and undercounts " +
+        "exactly the heaviest users, who are the ones a reconcile is for");
+    assert.match(body, /\.order\(/,
+        "fetchAllRows walks with .range(); without an order the database may reorder " +
+        "between pages, so rows are double-counted or missed");
+});
+
+check("it runs ONCE, and never holds the process open", () => {
+    assert.match(SRC, /catchUpRan/,
+        "nothing stops the catch-up running twice in one process");
+    const start = SRC.indexOf("async function catchUpEveryone");
+    assert.match(SRC.slice(start, start + 400), /if\s*\(catchUpRan/,
+        "the once-guard is declared and not checked");
+    assert.match(SRC, /CATCHUP_DELAY_MS\)\.unref\(\)/,
+        "the boot timer is not unref'd, so the process cannot exit while it waits");
+});
+
+check("IT DOES NOT BLOCK THE HEALTH CHECK", () => {
+    const listen = SRC.indexOf("app.listen(PORT");
+    assert.ok(listen > -1);
+    const call = SRC.indexOf("catchUpEveryone()", listen);
+    assert.ok(call > -1, "the catch-up is never fired");
+    // Inside a setTimeout after listen, not awaited in the boot path: Render
+    // marks a deploy failed on a health check that does not answer, and this
+    // walks every profile on the site.
+    assert.match(SRC.slice(listen, call), /setTimeout\(/,
+        "the catch-up runs inline at boot — a slow pass is a failed deploy");
+});
+
+check("SERIAL, not a hundred concurrent recomputes", () => {
+    // Bounded by spanOf, not a fixed window: a 5000-character slice overruns
+    // into the next function, and the first draft of this check failed on a
+    // `Promise.all` that was never in catchUpEveryone at all.
+    const span = spanOf(SRC, "catchUpEveryone");
+    assert.ok(span, "catchUpEveryone is gone");
+    const body = SRC.slice(span[0], span[1]);
+    assert.ok(!/Promise\.all\(/.test(body),
+        "each ATAR recompute pages xp_events and reads five tables; doing those at " +
+        "once is a spike on a database nobody is waiting on");
+    assert.match(body, /await breathe\(\)/,
+        "nothing paces the walk");
+});
+
+check("it can be turned off without a deploy", () => {
+    assert.match(SRC, /ACEDIT_SKIP_CATCHUP/,
+        "there is no way to stop this against the real database short of shipping a fix");
+});
+
 // ─── The client half ───────────────────────────────────────────────────────
 
 check("the hours board creates its own row too", () => {

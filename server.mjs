@@ -8518,6 +8518,146 @@ async function sweepBoardRows() {
   }
 }
 
+/**
+ * loggedXPFor — what `xp_events` says a student has earned, all of it.
+ *
+ * `xp_events` IS the audit log, and `deductXPWithAudit` says so in its own
+ * words where it writes a NEGATIVE row for bet escrow: "so the audit log stays
+ * the source of truth for integrity restores". So the reconstruction is the
+ * running SUM of `xp_awarded`, negatives included — never `max(total_xp_after)`,
+ * which looks tighter and would hand back every point a student staked on a
+ * progress bet, because an earlier row's running total is higher than the
+ * balance after the escrow came out.
+ *
+ * It PAGES. An unordered `.limit(n)` on `xp_events` is the exact bug the ATAR
+ * window queries had — PostgREST caps a response at 1000 rows and says nothing
+ * — and here it would undercount precisely the heaviest users, who are the ones
+ * a reconcile exists for. `fetchAllRows` needs an `order` or `.range()` walks a
+ * set the database is free to reorder between pages.
+ */
+async function loggedXPFor(email) {
+  const rows = await fetchAllRows(() => supabaseAdmin
+    .from("xp_events").select("xp_awarded")
+    .eq("user_email", email).order("created_date", { ascending: true }), 20000);
+  return rows.reduce((sum, r) => sum + (r.xp_awarded || 0), 0);
+}
+
+/**
+ * catchUpEveryone — the one-shot backfill, for the accounts the lazy sweeps
+ * would otherwise reach some time next week.
+ *
+ * `sweepBoardRows` and `sweepStaleATARs` are budgeted at 25 rows and 6 scores
+ * per visit, off whoever opens Ranked. That converges, and "converges" is a
+ * poor answer to ~130 students who have no ATAR at all and ninety who have no
+ * board row: it needs twenty-odd page loads to finish, and a quiet week moves
+ * nothing. This walks the whole roster once instead.
+ *
+ * ─── IT IS NOT A SCHEDULER, and the distinction is the one this codebase
+ * keeps making. It runs ONCE per process, finds what is missing, fixes it and
+ * stops. After the first pass there is nothing missing, so a later restart
+ * costs two cheap counting queries and exits — which is also why a crash loop
+ * cannot turn it into load.
+ *
+ * SERIAL, with a breath between students, for the reason `sweepStaleATARs`
+ * gives: each ATAR recompute pages `xp_events` and reads five tables, and
+ * doing those concurrently is a spike on a database nobody is waiting on. It
+ * starts after a delay so the health check answers first — on Render a slow
+ * boot is a failed deploy.
+ *
+ * ─── THE XP PASS ONLY EVER RAISES ─────────────────────────────────────────
+ * `max(stored, logged)`, never a set, and that is load-bearing in both
+ * directions. The log is INCOMPLETE: `awardGoalXP` writes `total_xp` directly
+ * and records no event at all, and the achievement reward does the same, so a
+ * profile is legitimately ahead of its own log and setting it from the log
+ * would DELETE real XP. And the profile can be behind, which is the case this
+ * repairs — the existing restore in `awardXP` only ever fired on a stored total
+ * of exactly zero, so a profile that lost one write stayed wrong forever.
+ */
+const CATCHUP_DELAY_MS = 20000;
+const CATCHUP_BREATH_MS = 120;
+const CATCHUP_MAX = 2000;
+
+let catchUpRan = false;
+
+async function catchUpEveryone() {
+  if (catchUpRan || !supabaseAdmin) return;
+  catchUpRan = true;
+  const breathe = () => new Promise((r) => setTimeout(r, CATCHUP_BREATH_MS));
+
+  try {
+    // 1. Board rows. sweepBoardRows is budgeted per call, so it is driven to
+    //    exhaustion here rather than reimplemented — one writer, one place.
+    let made = 0;
+    for (let pass = 0; pass < 100; pass += 1) {
+      const n = await sweepBoardRows();
+      made += n;
+      if (!n) break;
+      await breathe();
+    }
+
+    const { data: profiles, error } = await supabaseAdmin
+      .from("user_profiles")
+      .select("id, created_by, total_xp, season_xp, acedit_atar, atar_updated_at")
+      .order("total_xp", { ascending: false }).limit(CATCHUP_MAX);
+    if (error) {
+      console.warn("[catchup] could not read profiles:", error.message);
+      return;
+    }
+
+    // 2. XP. Only where the log is AHEAD of the profile — which is a repair,
+    //    never a correction downward.
+    let fixedXP = 0;
+    for (const p of profiles || []) {
+      if (!p.created_by) continue;
+      try {
+        const logged = await loggedXPFor(p.created_by);
+        const stored = p.total_xp || 0;
+        if (logged > stored) {
+          await supabaseAdmin.from("user_profiles")
+            .update({ total_xp: logged, current_level: levelFromXP(logged) })
+            .eq("id", p.id);
+          fixedXP += 1;
+          console.log(`[catchup] xp restored for ${p.created_by}: ${stored} -> ${logged}`);
+        }
+        // The board is mirrored either way: a profile that was always right
+        // can still have a row carrying a figure from before this shipped,
+        // because for ninety accounts no mirror had ever landed at all.
+        const total = Math.max(stored, logged);
+        await syncBoardRow(p.created_by, {
+          total_xp: total,
+          season_xp: p.season_xp || 0,
+          level: levelFromXP(total),
+        }, p);
+      } catch (e) {
+        console.warn(`[catchup] xp pass failed for ${p.created_by}:`, e?.message);
+      }
+      await breathe();
+    }
+
+    // 3. ATAR, for everyone who has never had one computed. An existing score
+    //    is left to `sweepStaleATARs`, which is about ageing rather than
+    //    absence and already runs on its own clock.
+    const missing = (profiles || []).filter((p) => p.created_by && !p.atar_updated_at);
+    let scored = 0;
+    for (const p of missing) {
+      try {
+        const out = await refreshAcedItATAR(p.created_by, true);
+        if (out) scored += 1;
+      } catch (e) {
+        console.warn(`[catchup] atar failed for ${p.created_by}:`, e?.message);
+      }
+      await breathe();
+    }
+
+    console.log(`[catchup] done — ${made} board row${made === 1 ? "" : "s"} created, ` +
+      `${fixedXP} XP total${fixedXP === 1 ? "" : "s"} restored, ` +
+      `${scored} ATAR${scored === 1 ? "" : "s"} computed ` +
+      `(${missing.length} had none)`);
+  } catch (e) {
+    console.warn("[catchup] failed:", e?.message);
+  }
+}
+
 // ─── getRankedBoards — the three boards + my score, one call ───────────────
 app.post("/local-ai/fn/getRankedBoards", async (req, res) => {
   const user = await authenticateRequest(req);
@@ -12472,4 +12612,16 @@ if (existsSync(distDir)) {
 
 app.listen(PORT, () => {
   console.log(`[local-ai] listening on http://localhost:${PORT} (model: ${MODEL})`);
+
+  // The one-shot backfill. AFTER listen and behind a delay, because Render
+  // marks a deploy failed on a health check that does not answer, and this
+  // walks every profile on the site. `unref` so it can never hold the process
+  // open, and the whole thing is a no-op on a second boot once nothing is
+  // missing. ACEDIT_SKIP_CATCHUP=1 turns it off without a deploy, for the one
+  // case this cannot anticipate: it misbehaving against the real database.
+  if (supabaseAdmin && process.env.ACEDIT_SKIP_CATCHUP !== "1") {
+    setTimeout(() => {
+      catchUpEveryone().catch((e) => console.warn("[catchup] hook failed:", e?.message));
+    }, CATCHUP_DELAY_MS).unref();
+  }
 });

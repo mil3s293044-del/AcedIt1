@@ -2532,6 +2532,57 @@ Three smaller things fell out of the same audit:
   fire-and-forget, so a student's very first quiz can still land before the row
   that call would have made exists.
 
+### And the lazy sweeps were too slow to be the whole answer
+
+`sweepBoardRows` and `sweepStaleATARs` are budgeted — 25 rows and 6 scores per
+Ranked visit — which converges, and "converges" is a poor answer to ~130
+students who have never had an ATAR computed at all. It needs twenty-odd page
+loads, and a quiet week moves nothing. `catchUpEveryone` walks the whole roster
+ONCE at boot instead: board rows, then XP, then every missing score.
+
+**IT IS NOT A SCHEDULER**, which is the distinction this file keeps making. It
+runs once per process, finds what is missing, fixes it and stops — so a second
+boot costs two counting queries and exits, and a crash loop cannot turn it into
+load. It fires behind a timer AFTER `listen` and is `unref`'d: Render marks a
+deploy failed on a health check that does not answer, and this reads every
+profile on the site. `ACEDIT_SKIP_CATCHUP=1` stops it without a deploy.
+
+**THE XP PASS ONLY EVER RAISES, and that is not caution — it is correctness.**
+The log is INCOMPLETE: `awardGoalXP` writes `total_xp` directly and records no
+`xp_events` row at all, and the achievement reward does the same. So a profile
+is routinely and legitimately AHEAD of its own log, and setting the column from
+the log would DELETE real XP from real students, silently, across the whole
+roster, in one pass. `max(stored, logged)` is the only safe shape, and it is
+the same one `reconcileXP` and `awardXP`'s own integrity restore already take —
+that restore only ever fired on a stored total of exactly ZERO, so a profile
+that lost a single write stayed wrong forever.
+
+**THE RECONSTRUCTION IS THE RUNNING SUM OF `xp_awarded`, NEVER
+`max(total_xp_after)`.** The second looks tighter — it is the running total the
+server itself recorded, so it survives the unlogged bumps — and it is wrong,
+because XP legitimately goes DOWN: `deductXPWithAudit` takes escrow for a
+progress bet and writes a negative row, so an earlier row's running total sits
+above the real balance. Taking the max of it hands every student back what they
+staked. The sum includes the negatives, which is why `deductXPWithAudit`'s own
+comment says the audit log "stays the source of truth for integrity restores".
+
+It PAGES, with an ORDER. An unbounded read of `xp_events` stops at PostgREST's
+1000 rows, which would undercount exactly the heaviest users — the ones a
+reconcile is for — and `fetchAllRows` walks with `.range()`, so without an
+order the database may reorder between pages and rows are double-counted or
+missed.
+
+Both of the destructive shapes are asserted and both were verified by putting
+the bug back, because neither throws and neither shows up in a render: the
+first quietly lowers a number, the second quietly raises one.
+
+**What could not be verified here:** the container's `.env.local` points at
+`stub.supabase.co` and carries no service-role key, so none of this was run
+against the real database. Every column it names is checked against
+`supabase/schema.json` by `dbColumns.test.mjs` — confirmed non-vacuous by
+breaking one and watching it name the line — but the first real pass happens on
+deploy. The log line it prints says exactly what it did.
+
 ## A NEW BUILD IS ANNOUNCED, NOT WALKED INTO
 
 `lazyPage.js` already records the failure: the 24 pages are code-split, a deploy
@@ -4393,6 +4444,10 @@ stranger.
 - `src/lib/achievements.js` — the catalogue, its progress functions and the
   showcase ordering; `buildAchievementStats` in `server.mjs` is the only reader
   of the database, and adding an achievement means adding its stat there too
+- `catchUpEveryone` / `loggedXPFor` in `server.mjs` — the one-shot roster
+  backfill at boot: missing board rows, XP behind its own log, and every ATAR
+  never computed. The XP pass only ever RAISES, because `awardGoalXP` logs no
+  event and setting from the log would delete real XP
 - `syncBoardRow` / `sweepBoardRows` in `server.mjs` + `boardSync.test.mjs` —
   the ONE writer of `leaderboards` and the lazy backfill. Nothing in the tree
   had ever INSERTED a row, so ~90 accounts earned XP and never appeared on the
