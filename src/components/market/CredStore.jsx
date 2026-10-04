@@ -30,13 +30,19 @@ import { motion, AnimatePresence, useReducedMotion } from "framer-motion";
 import { Coins, Check, Lock, Sparkles, Flame, LineChart, ArrowRightLeft } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { slotOf } from "@/lib/cosmetics";
+// THE OBJECT LEADS. Every row here used to be name/blurb/price/Buy, so a gilt
+// back costing a fortnight showed a student the words "Gilt back" and three
+// card backs were three identical rows. Nothing had to be built — CardBack,
+// Crest and PrankOverlay all already render; the shelf simply never called
+// them. See StorePreview's header.
+import StorePreview from "@/components/market/StorePreview";
 // THE LEAGUE'S OWN ORDINAL. A second copy here is how two surfaces start
 // spelling a position differently, which is the small disagreement that makes
 // a student check which one is right — and the grant is now a league result,
 // so it should speak the league's words.
 import { ordinal } from "@/lib/league";
 import { WEEKLY_RECEIVE_MAX } from "@/lib/pranks";
-import { Send } from "lucide-react";
+import { Send, Play } from "lucide-react";
 
 const GLYPH = {
     cosmetic: Sparkles,
@@ -56,7 +62,7 @@ const GROUPS = [
     ["market", "The board", "Put a question of your own up."],
 ];
 
-export default function CredStore({ store, busy, onBuy, onConvert, onEquip, onPrank }) {
+export default function CredStore({ store, busy, onBuy, onConvert, onEquip, onPrank, onPreviewPrank }) {
     const reduce = useReducedMotion();
     const [xp, setXp] = useState(0);
     const [prankTo, setPrankTo] = useState("");
@@ -220,7 +226,12 @@ export default function CredStore({ store, busy, onBuy, onConvert, onEquip, onPr
                                                 ? "bg-[var(--floor-well)] border-[var(--floor-yes-ink)]/40"
                                                 : "bg-[var(--floor-card)] border-[var(--floor-edge)]"}`}
                                     >
-                                        <div className="flex items-start justify-between gap-2">
+                                        <StorePreview
+                                            item={item}
+                                            held={item.column ? (store.columns?.[item.column] ?? 0) : 0}
+                                        />
+
+                                        <div className="flex items-start justify-between gap-2 mt-3">
                                             <div className="min-w-0">
                                                 <p className="font-display font-black text-[var(--floor-ink)] text-sm leading-tight">
                                                     {item.name}
@@ -315,7 +326,8 @@ export default function CredStore({ store, busy, onBuy, onConvert, onEquip, onPr
                     </div>
                     <p className="text-[12px] text-[var(--floor-dim)] mb-2.5">
                         A few seconds on a friend&apos;s screen, with your name on it. Nothing it does
-                        touches their XP, their streak or their marks.
+                        touches their XP, their streak or their marks. Preview plays it on yours
+                        &mdash; free, and it reaches nobody.
                     </p>
 
                     {!store.friends?.length ? (
@@ -358,11 +370,24 @@ export default function CredStore({ store, busy, onBuy, onConvert, onEquip, onPr
                                                     text-[var(--floor-warn-ink)] inline-flex items-center gap-1 text-sm">
                                                     <Coins className="w-3.5 h-3.5" />{k.price.toLocaleString()}
                                                 </span>
-                                                <Button size="sm" className="font-bold"
-                                                    disabled={busy || !prankTo || !afford || spent}
-                                                    onClick={() => onPrank?.(k.id, prankTo)}>
-                                                    Send
-                                                </Button>
+                                                <div className="flex items-center gap-1.5">
+                                                    {/* A PRANK IS PURE MOTION, so it is the one thing on
+                                                        this shelf no still picture can sell — and until
+                                                        now the only way to find out what one did to a
+                                                        friend's screen was to pay for it. Playing it on
+                                                        YOUR screen costs nothing to run, sends nothing,
+                                                        charges nothing and reaches nobody. */}
+                                                    <Button size="sm" variant="ghost"
+                                                        className="font-bold text-[var(--floor-muted-2)]"
+                                                        onClick={() => onPreviewPrank?.(k.id)}>
+                                                        <Play className="w-3.5 h-3.5 mr-1" />Preview
+                                                    </Button>
+                                                    <Button size="sm" className="font-bold"
+                                                        disabled={busy || !prankTo || !afford || spent}
+                                                        onClick={() => onPrank?.(k.id, prankTo)}>
+                                                        Send
+                                                    </Button>
+                                                </div>
                                             </div>
                                         </div>
                                     );

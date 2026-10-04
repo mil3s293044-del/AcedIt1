@@ -493,7 +493,9 @@ function TickDemo() {
     );
 }
 
-views.store = () => (
+function StoreView() {
+    const [preview, setPreview] = React.useState(null);
+    return (
     <Room>
         <div className="p-8 max-w-4xl mx-auto">
             <h1 className="font-display font-black text-2xl text-[var(--floor-ink)] mb-1">Credits</h1>
@@ -506,6 +508,8 @@ views.store = () => (
                 onBuy={(id, u) => console.log("buy", id, u)}
                 onConvert={(xp) => console.log("convert", xp)}
                 onEquip={(id, slot) => console.log("equip", id, slot)}
+                onPrank={(k, to) => console.log("prank", k, to)}
+                onPreviewPrank={(k) => setPreview({ id: `p-${k}-${Date.now()}`, kind: k, from: "You" })}
                 store={{
                     cred: 2400,
                     tier: 6,
@@ -516,7 +520,24 @@ views.store = () => (
                     xp: { convertible: 18400, per_credit: 4, week_room: 500, week_max: 500 },
                     owned: ["back-felt", "crest-bolt"],
                     held: {},
+                    // THE SHIELD PREVIEW READS THE REAL COLUMN the purchase
+                    // increments, not the dead `extra.cred_held` beside it, so
+                    // the fixture has to carry one or the probe would draw a
+                    // state no account can be in.
+                    columns: { streak_shields: 1 },
                     equipped: { back: "back-felt" },
+                    // The prank shelf, which is where Preview lives. Without a
+                    // friend in the list the whole section renders its empty
+                    // state and the button cannot be judged at all — the lesson
+                    // the Quizzes shelf learned about fixtures that carry less
+                    // shape than a real account.
+                    friends: [{ email: "sam@example.com", name: "Sam" }],
+                    pranks: {
+                        kinds: PRANK_LIST,
+                        sent_this_week: 1,
+                        send_max: 3,
+                        opted_out: false,
+                    },
                     items: CATALOGUE.map((i) => ({
                         ...i,
                         verdict: i.id === "back-gilt"
@@ -528,8 +549,11 @@ views.store = () => (
                 }}
             />
         </div>
+        {preview && <PrankOverlay prank={preview} onDone={() => setPreview(null)} />}
     </Room>
-);
+    );
+}
+views.store = () => <StoreView />;
 
 /* Every back a student can buy, beside the default, at the two sizes they are
    actually dealt at. A skin that reads at 176px and smudges at 62px is a skin
