@@ -19,6 +19,7 @@ import {
 import { createPageUrl } from "@/utils";
 import { base44 } from "@/api/base44Client";
 import { saveResult, deleteResult, loadSavedResults } from "@/lib/saveResult";
+import { chatRows } from "@/lib/bench";
 import { invokeLLMStream } from "@/lib/streamingAI";
 import { useToast } from "@/components/ui/use-toast";
 import { recordStudyAndGetStreak } from "@/components/shared/streakHelpers";
@@ -69,6 +70,20 @@ export default function UnifiedChat({
     startTool = null,
     startSubject = "",
     startSeed = "",
+    // ── THE STEP SAVES AGAINST ITS BENCH ────────────────────────────────────
+    // A bench is not stored: it is the steps run on one workpiece, grouped by
+    // the workpiece's key (`bench.js`). So the only thing that has to persist
+    // is this — the workpiece and which operation this step is — riding in
+    // `input_data` on the conversation row that already saves. No table, no
+    // migration, and nothing that can drift from the steps it is made of.
+    workpiece = null,
+    operation = null,
+    // An EXISTING conversation to reopen, which is what makes a step a thing
+    // you can push on rather than a transcript. Hydrated once on mount.
+    startConversation = null,
+    // Told the row id the moment one exists, so the bench can reopen this step
+    // without waiting for a reload.
+    onSaved = null,
     onExit = null,
     exitLabel = "",
 } = {}) {
@@ -143,7 +158,25 @@ export default function UnifiedChat({
             // subjects, and critically setConversations() — never ran, which
             // is why the sidebar looked permanently empty regardless of what
             // had actually been saved.
-            if (linked) {
+            // ── A STEP ALREADY RUN IS REOPENED, NOT RESTARTED ───────────
+            // The bench's whole promise is that a step is a thing you can push
+            // on: "I still do not get part b" has to land in the conversation
+            // that explained part b. Hydrated inline rather than through
+            // `openConversation` below, which is a `const` declared further
+            // down — it is bound by the time an effect runs, but a function
+            // this effect depends on being hoisted is a TDZ crash one reorder
+            // away, which is the class `hookDeps.test.mjs` exists for.
+            if (startConversation?.input_data?.messages?.length) {
+                const c = startConversation;
+                convIdRef.current = c.id;
+                setActiveConvId(c.id);
+                const ct = CHAT_TOOLS.find((t) => t.id === c.tool_type) || CHAT_TOOLS[0];
+                setActiveTool(ct.id);
+                setSubjectName(c.input_data?.subject || startSubject || "");
+                setToolOptions({ ...defaultOptions(ct), ...(c.input_data?.options || {}) });
+                setMessages(c.input_data.messages);
+                setConvFiles(c.input_data?.files || []);
+            } else if (linked) {
                 setActiveTool(linked.id);
                 // The subject rides in the link too, because a tool opened for
                 // "Chemistry" with the subject picker still on its default is
@@ -151,6 +184,18 @@ export default function UnifiedChat({
                 // landed on the right page and the thing it promised to open
                 // did not open.
                 const subject = startSubject || params.get("subject") || "";
+                // ── THE SUBJECT GOES IN `subjectName`, NOT THE OPTIONS ──────
+                // Every tool's `system(s, o)` reads the subject off `s`, which
+                // is `subjectName`, and `subjectBlock(s)` is what loads that
+                // study's VCAA EXAMINER PROFILE. Setting it on `toolOptions`
+                // alone — which is what this did — landed on the right tool
+                // with the subject nowhere the prompt could see it, so a bench
+                // opened on a Chemistry question ran the general VCE preamble
+                // instead of the Chemistry profile. The same half-wired shape
+                // the comment above warns about, in the line below it, and the
+                // identical failure `markingPrompt.js` records about the marker
+                // being told to be an examiner and shown none of the rules.
+                if (subject) setSubjectName(subject);
                 setToolOptions({
                     ...defaultOptions(linked),
                     ...(subject ? { subject } : {}),
@@ -170,7 +215,10 @@ export default function UnifiedChat({
             setSubjects((subs || []).filter(s => !seen.has(s.subject_name) && seen.add(s.subject_name)));
             // Only chat-format rows join the sidebar (legacy saved results
             // live on the History page). Merge DB + localStorage.
-            const allConvs = (convs || []).filter(c => Array.isArray(c.input_data?.messages) && c.input_data.messages.length);
+            // ONE PREDICATE, shared with the bench shelf (`bench.js`). Two
+            // copies would let the sidebar and the shelf disagree about what
+            // the student has, on two lists of the same rows.
+            const allConvs = chatRows(convs);
             // Dedupe by id (might have both DB and local copies)
             const deduped = [];
             const seenIds = new Set();
@@ -232,6 +280,16 @@ export default function UnifiedChat({
 
     const optsRef = useRef({});
     const filesRef = useRef([]);
+    // REFS, NOT THE CLOSURE. `persist` runs in the same tick a send completes
+    // and is memoised on `user` alone; reading the props through the closure
+    // would save whatever workpiece was mounted when that callback was built.
+    // The same trap `startFromSuggestion` and the pomodoro commit both record.
+    const wpRef = useRef(workpiece);
+    const opRef = useRef(operation);
+    const onSavedRef = useRef(onSaved);
+    useEffect(() => { wpRef.current = workpiece; }, [workpiece]);
+    useEffect(() => { opRef.current = operation; }, [operation]);
+    useEffect(() => { onSavedRef.current = onSaved; }, [onSaved]);
     const persist = useCallback(async (finalMessages, usedTool, usedSubject) => {
         if (!user?.email) return;
         const flat = finalMessages.map(m => `${m.role === "user" ? "Student" : "AI"}: ${m.content}`).join("\n\n");
@@ -240,19 +298,33 @@ export default function UnifiedChat({
             title: (finalMessages[0]?.content || "Chat").slice(0, 60),
             subject_name: usedSubject || null,
             content: flat.slice(0, 20000),
-            input_data: { tool: usedTool.id, subject: usedSubject || null, options: optsRef.current, files: filesRef.current, messages: finalMessages },
+            input_data: {
+                tool: usedTool.id, subject: usedSubject || null,
+                options: optsRef.current, files: filesRef.current, messages: finalMessages,
+                // Carried rather than recomputed. A step whose workpiece was
+                // dropped here is a step no bench can find again, which is the
+                // one way this feature can lose a student's work.
+                ...(wpRef.current ? { workpiece: wpRef.current } : {}),
+                ...(opRef.current ? { operation: opRef.current } : {}),
+            },
             date_created: new Date().toISOString().split("T")[0],
         };
         try {
             if (convIdRef.current) {
                 const { ok } = await saveResult('update', payload, convIdRef.current);
-                if (ok) setConversations(prev => prev.map(c => c.id === convIdRef.current ? { ...c, ...payload } : c));
+                if (ok) {
+                    const id = convIdRef.current;
+                    setConversations(prev => prev.map(c => c.id === id ? { ...c, ...payload } : c));
+                    onSavedRef.current?.({ ...payload, id });
+                }
             } else {
                 const { ok, id } = await saveResult('create', payload);
                 if (ok && id) {
                     convIdRef.current = id;
                     setActiveConvId(id);
-                    setConversations(prev => [{ ...payload, id, created_date: new Date().toISOString() }, ...prev]);
+                    const row = { ...payload, id, created_date: new Date().toISOString() };
+                    setConversations(prev => [row, ...prev]);
+                    onSavedRef.current?.(row);
                 }
             }
         } catch (e) { console.error("Chat persist failed:", e); }

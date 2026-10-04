@@ -31,7 +31,7 @@ import { Link } from "react-router-dom";
 import { ArrowLeft, Check, Coins, Plus } from "lucide-react";
 import MarkdownMath from "@/components/shared/MarkdownMath";
 import { createPageUrl } from "@/utils";
-import { toolsFor, SOURCES, KINDS } from "@/lib/workpiece";
+import { toolsFor, SOURCES, KINDS, KIND_LIST } from "@/lib/workpiece";
 import { toolById } from "@/components/ai_tools/chatTools";
 import { priceLabel } from "@/lib/chips";
 
@@ -39,7 +39,14 @@ import { priceLabel } from "@/lib/chips";
 
 function Piece({ workpiece, onBack }) {
     const src = SOURCES[workpiece.source];
+    // A DRAFT HAS NO KIND, and the eyebrow may NOT fill that in. It read "On
+    // the bench · You worked on this before", which is a placeholder sitting in
+    // the slot that names what the thing IS, directly above a section asking
+    // the student that exact question. The source becomes the eyebrow instead,
+    // so the header says the one true thing it has and the question below is
+    // the only place the kind is claimed.
     const kind = KINDS[workpiece.kind];
+    const lead = kind?.label || src?.label || "On the bench";
     return (
         <div className="rounded-2xl border-2 border-border bg-surface overflow-hidden">
             <div className="flex items-center gap-2 px-4 pt-3 pb-2 flex-wrap">
@@ -51,9 +58,9 @@ function Piece({ workpiece, onBack }) {
                     </button>
                 )}
                 <span className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">
-                    {kind?.label || "On the bench"}
+                    {lead}
                 </span>
-                {src && (
+                {src && kind && (
                     <span className="text-[10px] font-bold text-muted-foreground/70">· {src.label}</span>
                 )}
                 {workpiece.subject && (
@@ -157,23 +164,68 @@ function StepRow({ step, index, onOpen }) {
 
 export default function WorkBench({
     workpiece,
+    // ── A DRAFT IS A BENCH MISSING ONE FACT ─────────────────────────────────
+    // A saved chat from before the bench existed has a body, a subject and its
+    // earlier steps, and no KIND — which is what decides the toolbar. Inferring
+    // it from the tool that was used does not survive the table: only two of
+    // the eight tools name a single kind and the rest apply to two, three or
+    // four, so a guess would be wrong on most rows and a wrong one silently
+    // removes the tool the student came for. So the bench ASKS, once, and
+    // `bench.js` carries that argument in full.
+    draft = null,
     steps = [],
     busy = false,
     onRun,
     onOpenStep,
+    onKind,
     onBack,
     onNew,
 }) {
-    const tools = toolsFor(workpiece);
+    const piece = workpiece || draft;
+    const tools = workpiece ? toolsFor(workpiece) : [];
     const runs = steps.reduce((m, s) => {
         m[s.op] = (m[s.op] || 0) + 1;
         return m;
     }, {});
 
+    // Nothing to draw. The page's picker is the empty state, not a bench with
+    // no piece on it.
+    if (!piece) return null;
+
     return (
         <div className="max-w-3xl mx-auto w-full px-4 py-6 space-y-5">
-            <Piece workpiece={workpiece} onBack={onBack} />
+            <Piece workpiece={piece} onBack={onBack} />
 
+            {draft && !workpiece && (
+                <section>
+                    <div className="flex items-baseline gap-2 mb-2.5">
+                        <h2 className="font-display font-extrabold text-foreground text-base">
+                            What is this?
+                        </h2>
+                        <span className="flex-1 h-px bg-border" />
+                    </div>
+                    <p className="text-[13px] text-muted-foreground mb-2.5">
+                        You worked on this before the bench existed. Say what it
+                        is and the tools that can act on it come up.
+                    </p>
+                    <div className="flex flex-wrap gap-1.5">
+                        {KIND_LIST.map((k) => (
+                            <button
+                                key={k.id}
+                                type="button"
+                                onClick={() => onKind?.(k.id)}
+                                className="px-2.5 py-1.5 rounded-lg text-[12px] font-bold border-2
+                                    border-border bg-background text-muted-foreground
+                                    hover:border-primary hover:text-foreground transition-colors"
+                            >
+                                {k.label}
+                            </button>
+                        ))}
+                    </div>
+                </section>
+            )}
+
+            {workpiece && (
             <section>
                 <div className="flex items-baseline gap-2 mb-2.5">
                     <h2 className="font-display font-extrabold text-foreground text-base">
@@ -204,6 +256,7 @@ export default function WorkBench({
                     </p>
                 )}
             </section>
+            )}
 
             {steps.length > 0 && (
                 <section>

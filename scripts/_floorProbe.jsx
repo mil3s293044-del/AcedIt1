@@ -41,6 +41,7 @@ import WorkBench from "@/components/ai_tools/WorkBench";
 import WorkPicker from "@/components/ai_tools/WorkPicker";
 import { makeWorkpiece } from "@/lib/workpiece";
 import { candidates as wpCandidates } from "@/lib/workpieceSources";
+import { benches } from "@/lib/bench";
 
 /** A real ISO day N days out, so the assessment card has a date to count to. */
 const inDaysISO = (n) => {
@@ -612,6 +613,49 @@ const BENCH_ESSAY = makeWorkpiece({
     source: "typed",
 });
 
+/* The SHELF is built from saved conversation rows, so the fixture has to be
+   rows rather than benches — anything else would skip `bench.js` entirely and
+   the probe would draw a shape the real page cannot produce. Two of them: a
+   workshop bench with two steps on it, and a chat from before the workpiece
+   existed, which is the DRAFT case and about half of what is on this site. */
+const BENCH_ROWS = [
+    {
+        id: "c1", tool_type: "concept_explainer", title: "Explain why graphite conducts",
+        subject_name: "Chemistry", created_date: "2026-10-01T09:00:00.000Z",
+        input_data: {
+            workpiece: BENCH_PIECE, operation: "explain", subject: "Chemistry",
+            messages: [{ role: "user", content: "x" }, { role: "assistant", content: "y" }],
+        },
+    },
+    {
+        id: "c2", tool_type: "exam_questions", title: "Write me exam-style questions",
+        subject_name: "Chemistry", created_date: "2026-10-02T09:00:00.000Z",
+        input_data: {
+            workpiece: BENCH_PIECE, operation: "test", subject: "Chemistry",
+            messages: [{ role: "user", content: "x" }, { role: "assistant", content: "y" }],
+        },
+    },
+    {
+        // study_coach has no OPERATION — it is advice about studying rather than
+        // something you do to a piece of work — so this is the bare case: the
+        // row's own title is all the step has to print. Worth drawing, because
+        // it is a large share of what is actually saved on this site.
+        id: "c3", tool_type: "study_coach",
+        title: "I keep running out of time in Methods exam 2",
+        subject_name: "Methods",
+        created_date: "2026-10-03T09:00:00.000Z",
+        input_data: {
+            subject: "Methods",
+            messages: [
+                { role: "user", content: "I keep running out of time in Methods exam 2 and I am not sure whether to skip the hard ones or push through them." },
+                { role: "assistant", content: "Here is the thing." },
+            ],
+        },
+    },
+];
+const BENCH_SHELF = benches(BENCH_ROWS);
+const BENCH_DRAFT = BENCH_SHELF.find((b) => b.draft);
+
 views.bench = () => (
     <MemoryRouter>
     <div className="bg-background min-h-screen py-6 space-y-10">
@@ -619,7 +663,12 @@ views.bench = () => (
             <p className="px-8 text-[11px] font-black uppercase tracking-widest text-muted-foreground mb-2">
                 Arriving — the picker
             </p>
-            <WorkPicker candidates={BENCH_PICKS} onPick={(w) => console.log("pick", w)} />
+            <WorkPicker
+                candidates={BENCH_PICKS}
+                benches={BENCH_SHELF}
+                onPick={(w) => console.log("pick", w)}
+                onOpenBench={(b) => console.log("bench", b)}
+            />
         </div>
         <div className="border-t border-border pt-6">
             <p className="px-8 text-[11px] font-black uppercase tracking-widest text-muted-foreground mb-2">
@@ -634,6 +683,18 @@ views.bench = () => (
                 onRun={(o) => console.log("run", o)}
                 onOpenStep={(s) => console.log("open", s)}
                 onNew={() => {}}
+            />
+        </div>
+        <div className="border-t border-border pt-6">
+            <p className="px-8 text-[11px] font-black uppercase tracking-widest text-muted-foreground mb-2">
+                A chat from before the bench — the one fact it is missing
+            </p>
+            <WorkBench
+                draft={BENCH_DRAFT?.draft}
+                steps={BENCH_DRAFT?.steps || []}
+                onKind={(k) => console.log("kind", k)}
+                onOpenStep={(st) => console.log("open", st)}
+                onBack={() => {}}
             />
         </div>
         <div className="border-t border-border pt-6">

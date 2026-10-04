@@ -8,6 +8,16 @@
  * keep dropping, a SAC on the planner — and every one of them is derived, so a
  * card disappears because the fact behind it stopped being true.
  *
+ * ─── AND WHAT THEY HAVE ALREADY STARTED COMES FIRST ─────────────────────────
+ * A bench is not stored — it is the steps run on one workpiece, grouped by that
+ * workpiece's key (`bench.js`) — so the shelf is derived like everything else
+ * here. It leads because carrying on with something half-done beats starting a
+ * sixth thing, and because a student who ran one tool yesterday and came back
+ * for the next one is exactly who this page was rebuilt for. Every saved chat
+ * is on it, including the months of them that predate the workpiece: one with
+ * no workpiece opens as a DRAFT and the bench asks the single thing it is
+ * missing rather than guessing it.
+ *
  * ─── AND IT STILL TAKES ANYTHING ────────────────────────────────────────────
  * A student with a worksheet in front of them has to be able to put it on the
  * bench. "Something else" is a real second half rather than an escape hatch:
@@ -17,7 +27,7 @@
  */
 import React, { useState } from "react";
 import { motion } from "framer-motion";
-import { ArrowRight, Pencil } from "lucide-react";
+import { ArrowRight, Pencil, RotateCcw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { KIND_LIST, SOURCES, makeWorkpiece } from "@/lib/workpiece";
@@ -46,7 +56,42 @@ function Candidate({ workpiece, index, onPick }) {
     );
 }
 
-export default function WorkPicker({ candidates = [], onPick, loading = false }) {
+/**
+ * A bench already on the go.
+ *
+ * It states HOW MANY STEPS have been run, because that is the thing that makes
+ * it worth coming back to rather than starting again — and a draft says so
+ * instead, since the one thing it needs is a kind and pretending otherwise
+ * would open a bench with no toolbar on it.
+ */
+function BenchRow({ bench, index, onOpen }) {
+    const n = bench.steps.length;
+    return (
+        <motion.button
+            type="button"
+            initial={{ opacity: 0, y: 5 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: index * 0.04 }}
+            onClick={() => onOpen(bench)}
+            className="w-full text-left rounded-2xl border-2 border-border bg-surface p-4
+                hover:border-primary/40 transition-colors"
+        >
+            <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">
+                {bench.draft ? "A chat you had" : `${n} ${n === 1 ? "step" : "steps"} done`}
+                {bench.subject ? ` · ${bench.subject}` : ""}
+            </p>
+            <p className="font-semibold text-foreground text-sm leading-snug mt-1 line-clamp-2">
+                {bench.title}
+            </p>
+            <span className="inline-flex items-center gap-1 text-[12px] font-bold text-primary mt-2">
+                <RotateCcw className="w-3 h-3" />
+                {bench.draft ? "Put it on the bench" : "Carry on"}
+            </span>
+        </motion.button>
+    );
+}
+
+export default function WorkPicker({ candidates = [], benches = [], onPick, onOpenBench, loading = false }) {
     const [open, setOpen] = useState(false);
     const [kind, setKind] = useState("question");
     const [body, setBody] = useState("");
@@ -73,12 +118,42 @@ export default function WorkPicker({ candidates = [], onPick, loading = false })
                 What are we working on?
             </h2>
 
+            {benches.length > 0 && onOpenBench && (
+                <section className="mb-5">
+                    <div className="flex items-baseline gap-2 mb-2.5">
+                        <h3 className="text-[11px] font-black uppercase tracking-widest text-muted-foreground">
+                            Already on the go
+                        </h3>
+                        <span className="flex-1 h-px bg-border" />
+                    </div>
+                    <div className="space-y-2.5">
+                        {benches.map((b, i) => (
+                            <BenchRow key={b.key} bench={b} index={i} onOpen={onOpenBench} />
+                        ))}
+                    </div>
+                </section>
+            )}
+
             {candidates.length > 0 && (
-                <div className="space-y-2.5 mb-5">
-                    {candidates.map((w, i) => (
-                        <Candidate key={`${w.source}:${w.title}`} workpiece={w} index={i} onPick={onPick} />
-                    ))}
-                </div>
+                <section className="mb-5">
+                    {/* THE HEADING ONLY APPEARS WHEN THERE IS SOMETHING ABOVE
+                        IT. On a first visit there is one list and a second
+                        heading over it would be a section divider dividing
+                        nothing — the single-tab `Tabs` rule. */}
+                    {benches.length > 0 && onOpenBench && (
+                        <div className="flex items-baseline gap-2 mb-2.5">
+                            <h3 className="text-[11px] font-black uppercase tracking-widest text-muted-foreground">
+                                Or start on
+                            </h3>
+                            <span className="flex-1 h-px bg-border" />
+                        </div>
+                    )}
+                    <div className="space-y-2.5">
+                        {candidates.map((w, i) => (
+                            <Candidate key={w.key || `${w.source}:${w.title}`} workpiece={w} index={i} onPick={onPick} />
+                        ))}
+                    </div>
+                </section>
             )}
 
             {!open ? (
@@ -89,7 +164,7 @@ export default function WorkPicker({ candidates = [], onPick, loading = false })
                         hover:text-foreground transition-colors"
                 >
                     <Pencil className="w-3.5 h-3.5" />
-                    {candidates.length ? "Something else" : "Put something on the bench"}
+                    {candidates.length || benches.length ? "Something else" : "Put something on the bench"}
                 </button>
             ) : (
                 <div className="rounded-2xl border-2 border-border bg-surface p-4 space-y-3">

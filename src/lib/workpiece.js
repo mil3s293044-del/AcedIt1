@@ -231,10 +231,37 @@ export const SOURCES = {
     slipping:   { id: "slipping",   label: "Cards that are slipping" },
     typed:      { id: "typed",      label: "You wrote this" },
     uploaded:   { id: "uploaded",   label: "You uploaded this" },
+    chat:       { id: "chat",       label: "You worked on this before" },
 };
 
 /** Trim and bound a body. A workpiece is a thing to work on, not a textbook. */
 export const BODY_MAX = 6000;
+
+/**
+ * The identity of a workpiece, which is WHAT IT IS and not when it was picked.
+ *
+ * A bench is reconstructed by grouping the steps saved against it (`bench.js`),
+ * so a workpiece needs a key that is the same every time the same thing is put
+ * on the bench. Derived from the kind and the body, which is the honest reading:
+ * the same question picked out of the mistake bank on Tuesday and again on
+ * Friday is ONE piece of work, and a timestamp or a random id would have made
+ * it two benches with the Tuesday half stranded.
+ *
+ * FNV-1a over the normalised text — no dependency, and deterministic across
+ * engines, which a key used to group stored rows has to be. It is not a
+ * security hash and nothing here depends on it being one: a collision would
+ * merge two benches, which is visible and recoverable, and the inputs are the
+ * student's own text rather than anything an attacker chooses.
+ */
+export function workpieceKey({ kind = "", body = "" } = {}) {
+    const text = `${kind}\u0000${String(body || "").replace(/\s+/g, " ").trim().toLowerCase()}`;
+    let h = 0x811c9dc5;
+    for (let i = 0; i < text.length; i++) {
+        h ^= text.charCodeAt(i);
+        h = Math.imul(h, 0x01000193) >>> 0;
+    }
+    return `wp_${h.toString(36)}_${text.length.toString(36)}`;
+}
 
 /**
  * Make a workpiece.
@@ -252,12 +279,21 @@ export function makeWorkpiece({
     source = "typed",
     ref = null,
     files = [],
+    key = null,
 } = {}) {
     const text = String(body || "").trim();
     if (!text || !isKind(kind)) return null;
+    const clipped = text.slice(0, BODY_MAX);
     return {
         kind,
-        body: text.slice(0, BODY_MAX),
+        body: clipped,
+        // KEYED ON THE CLIPPED BODY, which is the body that gets stored. Keying
+        // on the full text would give a 6,001-character paste a different key
+        // from the one that comes back out of the step row it was saved on.
+        // A caller may pass one — an adopted chat keys on its ROW, because its
+        // kind is not known at the moment the bench opens and a key that moved
+        // when the student named the kind would split the bench in half.
+        key: key ? String(key) : workpieceKey({ kind, body: clipped }),
         title: String(title || "").trim() || titleFrom(text),
         subject: subject || null,
         source: SOURCES[source] ? source : "typed",
@@ -317,6 +353,6 @@ export function seedFor(op, workpiece) {
 
 export default {
     KINDS, KIND_LIST, isKind, OPERATIONS, operationById,
-    toolsFor, leadTool, SOURCES, makeWorkpiece, titleFrom,
+    toolsFor, leadTool, SOURCES, makeWorkpiece, titleFrom, workpieceKey,
     stepTitle, seedFor, BODY_MAX,
 };
