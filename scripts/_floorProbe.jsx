@@ -35,7 +35,8 @@ import PriceTick from "@/components/market/PriceTick";
 import { CATALOGUE, grantForTier } from "@/lib/credStore";
 import BottomNav from "@/components/layout/BottomNav";
 import { CardBack } from "@/components/cards/PlayingCard";
-import PrankOverlay from "@/components/pranks/PrankOverlay";
+import PrankOverlay, { prankBodyClass } from "@/components/pranks/PrankOverlay";
+import { PrankStageProvider } from "@/lib/PrankStage";
 import ToolBrief from "@/components/ai_tools/ToolBrief";
 import { toolBrief } from "@/lib/toolBrief";
 
@@ -502,8 +503,14 @@ function TickDemo() {
 }
 
 function StoreView() {
-    const [preview, setPreview] = React.useState(null);
+    // THE PROBE HAS TO MIRROR LAYOUT, not just mount the store. Shake and
+    // upside down ARE the body class, so a probe that renders the provider
+    // without also applying `prankBodyClass` would show exactly the broken
+    // preview this change fixes — and pass.
+    const [queue, setQueue] = React.useState([]);
     return (
+    <div className={prankBodyClass(queue[0], false)}>
+    <PrankStageProvider queue={queue} setQueue={setQueue}>
     <Room>
         <div className="p-8 max-w-4xl mx-auto">
             <h1 className="font-display font-black text-2xl text-[var(--floor-ink)] mb-1">Credits</h1>
@@ -517,7 +524,7 @@ function StoreView() {
                 onConvert={(xp) => console.log("convert", xp)}
                 onEquip={(id, slot) => console.log("equip", id, slot)}
                 onPrank={(k, to) => console.log("prank", k, to)}
-                onPreviewPrank={(k) => setPreview({ id: `p-${k}-${Date.now()}`, kind: k, from: "You" })}
+
                 store={{
                     cred: 2400,
                     tier: 6,
@@ -557,8 +564,12 @@ function StoreView() {
                 }}
             />
         </div>
-        {preview && <PrankOverlay prank={preview} onDone={() => setPreview(null)} />}
+        {queue[0] && (
+            <PrankOverlay prank={queue[0]} onDone={() => setQueue((q) => q.slice(1))} />
+        )}
     </Room>
+    </PrankStageProvider>
+    </div>
     );
 }
 views.store = () => <StoreView />;

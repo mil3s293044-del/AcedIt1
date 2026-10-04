@@ -31,7 +31,6 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { motion, AnimatePresence } from "framer-motion";
 import LiveNumber from "@/components/shared/LiveNumber";
 import CredStore from "@/components/market/CredStore";
-import PrankOverlay from "@/components/pranks/PrankOverlay";
 import { TrendingUp, Coins, Plus, X } from "lucide-react";
 import AceDeal from "@/components/market/AceDeal";
 import { base44 } from "@/api/base44Client";
@@ -521,41 +520,6 @@ export default function Competitions() {
 
     const me = data?.me || {};
 
-    // ── A PREVIEW SENDS NOTHING AND CHARGES NOTHING ────────────────────────
-    // It builds a prank-shaped object locally and hands it to the same overlay
-    // Layout plays a real one with, so what a student sees here is exactly what
-    // their friend will see — a second renderer would be the mirror this
-    // codebase keeps deleting, and the one that drifts would be the one selling
-    // the thing.
-    //
-    // `from` is the student's OWN address: every prank names its sender and a
-    // row whose sender cannot be resolved is dropped rather than delivered
-    // anonymously, so a preview with an empty sender would be the one card in
-    // the app that breaks that rule.
-    //
-    // The body transform (shake, upside down) is deliberately NOT applied here.
-    // `prankBodyClass` goes on Layout's root, and reaching up to it from a page
-    // would be a second writer of a class Layout owns; the overlay's own card
-    // and particles are what the student is choosing between anyway.
-    //
-    // IT SITS BELOW `me` ON PURPOSE. A deps array is evaluated at render, so a
-    // hook above that const throws before the page paints — the exact hazard
-    // hookDeps.test.mjs exists for, and this one slipped past it. See the note
-    // there about optional chaining.
-    const [previewPrank, setPreviewPrank] = useState(null);
-    const previewOne = useCallback((kind) => {
-        // The store's own `me_name`, resolved server-side the way getPranks
-        // resolves a real sender, so the preview card reads word for word as
-        // the one their friend gets. A missing name falls back to "You" rather
-        // than to an address or an empty card — a prank whose sender cannot be
-        // resolved is DROPPED in the real path, and the preview has nothing to
-        // drop, so it says the only true thing left.
-        setPreviewPrank({
-            id: `preview-${kind}-${Date.now()}`,
-            kind,
-            from: store?.me_name || "You",
-        });
-    }, [store?.me_name]);
     const board = useMemo(() => {
         const rows = (data?.markets || [])
             .map((m) => readMarket(m, m.positions || [], me.email))
@@ -790,8 +754,7 @@ export default function Competitions() {
 
                 {tab === "store" ? (
                     <CredStore store={store} busy={buying} onBuy={buy}
-                        onConvert={convert} onEquip={equip} onPrank={prank}
-                        onPreviewPrank={previewOne} />
+                        onConvert={convert} onEquip={equip} onPrank={prank} />
                 ) : tab === "book" ? (
                     <PortfolioPanel onOpenMarket={openMarket} />
                 ) : (
@@ -984,12 +947,6 @@ export default function Competitions() {
                         taken={takenSacs} email={me.email} />
                 )}
             </AnimatePresence>
-
-            {/* A prank played on your own screen, from the Preview button on the
-                shelf. Same component Layout plays a real one with. */}
-            {previewPrank && (
-                <PrankOverlay prank={previewPrank} onDone={() => setPreviewPrank(null)} />
-            )}
 
             {/* Everything else on this page pays out visibly; the one place
                 with a real result was a line on the tape. */}
