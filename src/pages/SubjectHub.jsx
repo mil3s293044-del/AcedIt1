@@ -50,6 +50,7 @@ import { deckCards, BANK_TOPIC } from "@/lib/mistakeBank";
 import { studyEvents } from "@/lib/studyLog";
 import { VCE_SUBJECTS } from "@/data/vceSubjects";
 import { markSplit, coverage, subjectStats, subjectLead } from "@/lib/subjectHub";
+import { toolQuery, personaFor } from "@/lib/toolBrief";
 import HelpButton from "@/components/shared/HelpButton";
 
 const fmtTime = (m) => {
@@ -432,6 +433,26 @@ export default function SubjectHub() {
                                         ? ` — or ${cov.untouched.length - 1} other area${cov.untouched.length > 2 ? "s" : ""}.`
                                         : "."}
                                 </span>
+                                {/* ── A GAP WITH A DOOR ───────────────────────────
+                                    This sentence named an area of study the
+                                    student has never written anything about, and
+                                    then stopped — which is the "a bar with no way
+                                    through is a diagnosis" rule the ATAR
+                                    components already keep, on the one finding
+                                    here they cannot act on from their own notes.
+                                    There is nothing of theirs to review, so the
+                                    move is to have it explained. */}
+                                {" "}
+                                <Link
+                                    to={`${createPageUrl("AITools")}?${toolQuery({
+                                        tool: personaFor(name) === "math_tutor" ? "math_tutor" : "concept_explainer",
+                                        subject: name,
+                                        seed: `I have not covered ${cov.untouched[0]} in ${name} yet. Start from the beginning, tell me what VCAA expects me to be able to do, and check I have got it.`,
+                                    })}`}
+                                    className="font-bold text-primary underline underline-offset-2"
+                                >
+                                    Start it
+                                </Link>
                             </p>
                         )}
                         {/* The honest half. A page that claims to know what you

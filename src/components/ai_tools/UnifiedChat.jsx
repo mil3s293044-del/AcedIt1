@@ -14,8 +14,9 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
     Plus, Send, Square, Trash2, ChevronDown, ChevronRight, Paperclip,
-    History, X, Archive, Wand2
+    History, X, Archive, Wand2, Lock
 } from "lucide-react";
+import { createPageUrl } from "@/utils";
 import { base44 } from "@/api/base44Client";
 import { saveResult, deleteResult, loadSavedResults } from "@/lib/saveResult";
 import { invokeLLMStream } from "@/lib/streamingAI";
@@ -28,6 +29,9 @@ import ExamQuestionsArtifact from "./ExamQuestionsArtifact";
 import LineMemoriserArtifact from "./LineMemoriserArtifact";
 import { actionById } from "./chatActions";
 import { todaysIntent } from "@/lib/studyIntent";
+import { toolBrief } from "@/lib/toolBrief";
+import ToolBrief from "@/components/ai_tools/ToolBrief";
+import { deckCards, isBankCard } from "@/lib/mistakeBank";
 import { fmtDate } from "@/lib/safeDate";
 import AceShuffle from "@/components/ace/AceShuffle";
 
@@ -58,7 +62,7 @@ ${fileBlock}${transcript ? `CONVERSATION SO FAR:\n${transcript}\n\n` : ""}Studen
 Respond as the ${tool.label} directly to the student. Markdown formatting.`;
 }
 
-export default function UnifiedChat() {
+export default function UnifiedChat({ locked = false }) {
     const { toast } = useToast();
     const [user, setUser] = useState(null);
     const [subjects, setSubjects] = useState([]);
@@ -71,6 +75,10 @@ export default function UnifiedChat() {
     const [toolOptions, setToolOptions] = useState(() => defaultOptions(CHAT_TOOLS[0]));
     const [subjectName, setSubjectName] = useState("");
     const [messages, setMessages] = useState([]);
+    // THE BRIEF. Derived from rows this page now loads once, never stored —
+    // see toolBrief.js. `null` while it loads, so nothing is drawn before
+    // anything has been counted; `[]` is the real answer for a new account.
+    const [brief, setBrief] = useState(null);
     const [input, setInput] = useState("");
     const [attachment, setAttachment] = useState(null);
     // Documents already sent in this conversation — re-attached to every
@@ -90,14 +98,56 @@ export default function UnifiedChat() {
         base44.auth.me().then(async (u) => {
             setUser(u);
             if (!u?.email) return;
-            const [subs, convs, profiles] = await Promise.all([
+            // ── ONE ROUND TRIP FOR EVERYTHING, including the brief ───────
+            // Three more reads join the two that were already here rather than
+            // being loaded separately, the way /Review loads its queue. Every
+            // one of them is a cached read (src/api/readCache.js), so a student
+            // arriving from a page that already asked for their flashcards
+            // shares that promise rather than issuing a second query.
+            //
+            // Each one CATCHES TO AN EMPTY LIST on its own. `Promise.all` is
+            // the wrong primitive for a list of independent reads — one
+            // unreadable table would discard the other four and the page would
+            // render as though the student had no history at all, which is this
+            // codebase's own recurring finding about account deletion.
+            const [subs, convs, profiles, flashcards, attempts, assessments] = await Promise.all([
                 base44.entities.UserSubject.filter({ created_by: u.email, is_active: true }).catch(() => []),
                 loadSavedResults(null, u.email).catch(() => []),
                 base44.entities.UserProfile.filter({ created_by: u.email }).catch(() => []),
+                base44.entities.Flashcard.filter({ created_by: u.email, is_active: true }).catch(() => []),
+                base44.entities.QuizAttempt.filter({ created_by: u.email }).catch(() => []),
+                base44.entities.SubjectAssessment.filter({ created_by: u.email }).catch(() => []),
             ]);
+
+            // THE DECK HALF AND THE BANK HALF ARE SPLIT ONCE. `deckCards` is
+            // the filter every deck surface reads through; a banked mistake is
+            // a flashcards ROW and is not a flashcard, so counting it among the
+            // cards would have the slipping card reporting the mistake bank as
+            // a subject going stale.
+            const cards = deckCards(flashcards || []);
+            const bankCards = (flashcards || []).filter(isBankCard);
+            setBrief(toolBrief({ assessments: assessments || [], bankCards, cards, attempts: attempts || [] }));
             // Open on the tool that fits what they said today is for. Safe to
             // set unconditionally — this runs once on mount, before any saved
             // conversation has been opened.
+            // ── A DEEP LINK BEATS THE INTENT ────────────────────────────
+            // `/AITools?tool=<id>&q=<first message>` is how every screen that
+            // KNOWS what is wrong hands over — the mistake bank with the exact
+            // criterion, the subject hub with the course gap, the brief below.
+            // It is read before the intent because it is more specific: an
+            // intent is what today is broadly for, and a link is a student
+            // having just pressed something about one thing.
+            //
+            // The tool id is CHECKED against the catalogue rather than trusted,
+            // so a stale or hand-edited link lands on the default tool instead
+            // of an empty switcher.
+            // `toolById` FALLS BACK TO THE FIRST TOOL rather than returning
+            // null, so testing its result for truthiness would make every visit
+            // look like a deep link and silently kill the intent default below.
+            // The param is matched against the catalogue directly instead.
+            const params = new URLSearchParams(window.location.search);
+            const wantedId = params.get("tool") || "";
+            const linked = CHAT_TOOLS.find((t) => t.id === wantedId) || null;
             const intent = todaysIntent(profiles?.[0]);
             const wanted = intent && toolById(intent.plan.tool);
             // `intent` is null on any day the student hasn't set one (the
@@ -108,7 +158,26 @@ export default function UnifiedChat() {
             // subjects, and critically setConversations() — never ran, which
             // is why the sidebar looked permanently empty regardless of what
             // had actually been saved.
-            if (intent && wanted?.id === intent.plan.tool) {
+            if (linked) {
+                setActiveTool(linked.id);
+                // The subject rides in the link too, because a tool opened for
+                // "Chemistry" with the subject picker still on its default is
+                // the half-wired shape this app has met over and over: it
+                // landed on the right page and the thing it promised to open
+                // did not open.
+                const subject = params.get("subject") || "";
+                setToolOptions({
+                    ...defaultOptions(linked),
+                    ...(subject ? { subject } : {}),
+                });
+                // THE SEED IS PUT IN THE COMPOSER, NOT SENT. A link that spends
+                // a chip before the student has read the screen would be the
+                // one action in the app that costs them something they did not
+                // press — megaUpload's rule that the price is on screen before
+                // it is spent. They can edit it, and they can delete it.
+                const seed = params.get("q") || "";
+                if (seed) setInput(seed);
+            } else if (intent && wanted?.id === intent.plan.tool) {
                 setActiveTool(wanted.id);
                 setToolOptions(defaultOptions(wanted));
             }
@@ -413,6 +482,22 @@ export default function UnifiedChat() {
         </div>
     );
 
+    /**
+     * Open a brief card.
+     *
+     * It does exactly what the deep link does, because it IS the same
+     * handover — the card is in this component so it can skip the navigation,
+     * and a second behaviour here would be the mirror this codebase keeps
+     * deleting. The seed goes in the COMPOSER rather than being sent: a card
+     * that spent a chip on one tap would be the only action in the app that
+     * costs a student something they have not read yet.
+     */
+    const startFromBrief = (card) => {
+        selectTool(card.tool);
+        if (card.subject) setToolOptions((prev) => ({ ...prev, subject: card.subject }));
+        setInput(card.seed);
+    };
+
     // ── Shared composer pieces — rendered centre-stage on a new chat, pinned
     // to the bottom once the conversation starts ─────────────────────────────
     const optionsRow = (tool.options || []).length > 0 ? (
@@ -460,6 +545,31 @@ export default function UnifiedChat() {
             )}
         </div>
     ) : null;
+
+    /**
+     * The upgrade strip a free student gets where the composer would be.
+     *
+     * It REPLACES the composer rather than disabling it. A greyed-out textarea
+     * with a lock on it invites somebody to type into a box that will refuse
+     * them, and a disabled control that does not say why is the paper-cut this
+     * codebase has already recorded about Active Recall's generate button.
+     */
+    const upgradeBox = (
+        <Link
+            to={createPageUrl("Subscription")}
+            className="block rounded-3xl border-2 border-primary/30 bg-primary/5 px-4 py-4
+                text-left transition-colors hover:border-primary/50"
+        >
+            <p className="font-bold text-foreground text-sm inline-flex items-center gap-2">
+                <Lock className="w-3.5 h-3.5 text-primary" aria-hidden="true" />
+                The tools are Premium
+            </p>
+            <p className="text-[13px] text-muted-foreground mt-1 leading-snug">
+                What is above is yours either way &mdash; it is counted off your own
+                work. $5 a week unlocks the {CHAT_TOOLS.length} tools that act on it.
+            </p>
+        </Link>
+    );
 
     const composerBox = (
         <div className="rounded-3xl border-2 border-border bg-background shadow-soft px-4 pt-3 pb-2 transition-colors focus-within:border-primary/50">
@@ -577,19 +687,36 @@ export default function UnifiedChat() {
             <div className="flex-1 min-h-0 overflow-y-auto">
                 {messages.length === 0 ? (
                     <div className="min-h-full flex flex-col items-center justify-center text-center px-4 py-8">
-                        <div className={`w-16 h-16 rounded-2xl ${tool.accentBg} flex items-center justify-center mb-4`}>
-                            <tool.icon className={`w-8 h-8 ${tool.accentText}`} />
-                        </div>
-                        <h2 className="font-display font-extrabold text-foreground text-2xl sm:text-3xl mb-1.5">
-                            What are we working on?
-                        </h2>
-                        <p className="text-sm text-muted-foreground max-w-sm mb-6">{tool.blurb}</p>
+                        {/* ── THE BRIEF REPLACES THE GENERIC HEADLINE ─────────
+                            "What are we working on?" is the page asking the
+                            student to do the diagnosis. When the app has
+                            actually measured something it says what, and the
+                            question stops being rhetorical. With nothing
+                            measured the old hero stands exactly as it did — an
+                            empty brief must not take the greeting with it. */}
+                        {brief?.length ? (
+                            <ToolBrief
+                                cards={brief}
+                                locked={locked}
+                                onOpen={startFromBrief}
+                            />
+                        ) : (
+                            <>
+                                <div className={`w-16 h-16 rounded-2xl ${tool.accentBg} flex items-center justify-center mb-4`}>
+                                    <tool.icon className={`w-8 h-8 ${tool.accentText}`} />
+                                </div>
+                                <h2 className="font-display font-extrabold text-foreground text-2xl sm:text-3xl mb-1.5">
+                                    What are we working on?
+                                </h2>
+                                <p className="text-sm text-muted-foreground max-w-sm mb-6">{tool.blurb}</p>
+                            </>
+                        )}
 
                         {/* The composer IS the call to action — centre stage on a new chat */}
                         <div className="w-full max-w-2xl text-left">
                             {fileChipsRow}
-                            {composerBox}
-                            {optionsRow && <div className="pt-2.5">{optionsRow}</div>}
+                            {locked ? upgradeBox : composerBox}
+                            {!locked && optionsRow && <div className="pt-2.5">{optionsRow}</div>}
                         </div>
 
                         <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 w-full max-w-2xl mt-7">
@@ -674,11 +801,19 @@ export default function UnifiedChat() {
             {messages.length > 0 && (
                 <div className="w-full px-3 sm:px-5 pb-3 pt-1 flex-shrink-0">
                     <div className="max-w-3xl mx-auto">
-                        {optionsRow && <div className="pb-2">{optionsRow}</div>}
+                        {!locked && optionsRow && <div className="pb-2">{optionsRow}</div>}
                         {fileChipsRow}
-                        {composerBox}
+                        {locked ? upgradeBox : composerBox}
+                        {/* "daily AI limits apply per tool" described the eleven
+                            per-feature daily counters chips.js replaced — they
+                            were sized independently of the dollar ceiling and
+                            permitted 4.5x what it allowed, which is the whole
+                            argument that file opens with. There is one weekly
+                            stack now, and a line describing the limit a student
+                            is NOT subject to is the copy drift this codebase
+                            keeps finding. */}
                         <p className="text-[10px] text-muted-foreground/50 text-center pt-1.5">
-                            Chats save automatically — daily AI limits apply per tool.
+                            Chats save automatically — each send spends from this week&apos;s chips.
                         </p>
                     </div>
                 </div>

@@ -341,7 +341,13 @@ async function callInvokeAI({ prompt, response_json_schema, feature, req }) {
 // bucket made them unusable (6 messages = whole day's tools gone). They get
 // their own generous daily message bucket; the weekly $ ceiling is still the
 // real cost backstop. Free users' chat shares the free tools lifetime cap.
-const TIER_FREE_CAPS    = { quiz_ai_gen: 5, quiz_ai_mark: 5, flashcard_ai_gen: 5, ai_tool: 5, ai_chat: 5 };
+// `ai_tool` and `ai_chat` USED TO BE HERE AT 5 EACH and could never be spent:
+// /AITools gated the whole page, so the counters behind them could not move.
+// That is "collect nothing you don't use" inverted, on the two features a free
+// student is most likely to come for. The page splits now — the brief is free,
+// the tools are not (see src/pages/AITools.jsx) — and the gate there is the one
+// thing deciding, so a cap that contradicted it is gone rather than restated.
+const TIER_FREE_CAPS    = { quiz_ai_gen: 5, quiz_ai_mark: 5, flashcard_ai_gen: 5 };
 const TIER_FREE_COUNTER = { quiz_ai_gen: "free_ai_quizzes_used", quiz_ai_mark: "free_ai_quiz_marks_used", flashcard_ai_gen: "free_ai_flashcards_used", ai_tool: "free_ai_tools_used", ai_chat: "free_ai_tools_used" };
 // Premium is gated by the chip stack now, not by eleven per-feature daily
 // caps. Those caps were sized independently of the dollar ceiling they were
