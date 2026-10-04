@@ -39,6 +39,7 @@ import PrankOverlay, { prankBodyClass } from "@/components/pranks/PrankOverlay";
 import { PrankStageProvider } from "@/lib/PrankStage";
 import WorkBench from "@/components/ai_tools/WorkBench";
 import WorkPicker from "@/components/ai_tools/WorkPicker";
+import QuestionPanel from "@/components/mistakes/QuestionPanel";
 import { makeWorkpiece } from "@/lib/workpiece";
 import { candidates as wpCandidates } from "@/lib/workpieceSources";
 import { benches } from "@/lib/bench";
@@ -716,6 +717,62 @@ views.bench = () => (
 /* Every back a student can buy, beside the default, at the two sizes they are
    actually dealt at. A skin that reads at 176px and smudges at 62px is a skin
    that looks bought on the shelf and broken on the shelf it is worn to. */
+/* ── ?v=question — the bank's question panel, against the three shapes a real
+   question comes in. A character count would have put the LaTeX one in the
+   wrong bucket and the phone column in the other wrong bucket, which is why
+   the panel measures and why this draws all three at both widths. */
+const Q_SHORT = "Explain why graphite conducts electricity but diamond does not. (2 marks)";
+const Q_MATHS = "Let $f(x) = \\dfrac{2x^2 - 3x + 1}{x - 1}$ for $x \\in \\mathbb{R} \\setminus \\{1\\}$. Find $f'(x)$, state the coordinates of any stationary points, and determine the nature of each. (5 marks)";
+const Q_LONG = [
+    "A manufacturer of lithium-ion cells is investigating why a new electrode coating reduces",
+    "capacity after repeated charge cycles. In a trial, 120 cells were coated and cycled 500",
+    "times at 25 °C, and a control group of 120 uncoated cells was cycled under identical",
+    "conditions. The coated cells retained 71% of their initial capacity; the control retained",
+    "88%.",
+    "",
+    "a. Write a balanced half-equation for the oxidation that occurs at the anode during",
+    "discharge. (2 marks)",
+    "",
+    "b. With reference to the data above, explain ONE chemical reason the coating could reduce",
+    "capacity retention. Your answer should refer to the solid electrolyte interphase and to",
+    "the mobility of lithium ions. (4 marks)",
+    "",
+    "c. Evaluate whether the trial design supports the conclusion that the coating causes the",
+    "loss, naming one variable that was controlled and one that was not. (3 marks)",
+].join("\n");
+
+views.question = () => (
+    <div className="bg-background min-h-screen py-6 space-y-8 px-4 max-w-2xl mx-auto">
+        <div>
+            <p className="text-[11px] font-black uppercase tracking-widest text-muted-foreground mb-2">
+                Short — fits, so no control at all
+            </p>
+            <QuestionPanel>{Q_SHORT}</QuestionPanel>
+        </div>
+        <div>
+            <p className="text-[11px] font-black uppercase tracking-widest text-muted-foreground mb-2">
+                Maths — long as source, small on screen
+            </p>
+            <QuestionPanel>{Q_MATHS}</QuestionPanel>
+        </div>
+        <div>
+            <p className="text-[11px] font-black uppercase tracking-widest text-muted-foreground mb-2">
+                Long — collapsed, with the way to the whole thing
+            </p>
+            <QuestionPanel>{Q_LONG}</QuestionPanel>
+        </div>
+        <div className="card-soft border-2 border-border p-4">
+            <p className="text-[11px] font-black uppercase tracking-widest text-muted-foreground mb-2">
+                In a list row (plain), where it used to be line-clamp-2
+            </p>
+            <div className="rounded-xl border border-border p-2.5">
+                <QuestionPanel label="" tone="plain"
+                    textClass="text-xs font-bold text-foreground leading-snug">{Q_LONG}</QuestionPanel>
+            </div>
+        </div>
+    </div>
+);
+
 views.backs = () => (
     <div className="p-8 bg-background min-h-screen">
         <h1 className="font-display font-black text-2xl text-foreground mb-6">Card backs</h1>
