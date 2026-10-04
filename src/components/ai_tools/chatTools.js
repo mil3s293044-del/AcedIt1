@@ -7,10 +7,14 @@
  * - its original tier feature tag — caps unchanged.
  */
 import {
-    Calculator, PenTool, FileQuestion, GraduationCap, Lightbulb,
-    FileText, Drama, Sparkles, Repeat
+    Calculator, PenTool, FileQuestion, Lightbulb,
+    FileText, Drama, Sparkles, Repeat, Crosshair, Scale
 } from "lucide-react";
 import { getExaminerPrompt, getLatexRules } from "@/lib/subjectExaminerPrompts";
+// ONE COPY OF THE NAMES. Plain modules (bench.js, the tests) cannot import this
+// file — it carries icons and React — so the labels live in a .js they can read
+// and are pulled back in here rather than written twice.
+import { TOOL_LABELS } from "@/lib/toolLabels";
 
 const COACH_TONE = `TONE: You are part of AcedIt, a study app for VCE students. Chill, encouraging coach — warm, specific, never condescending. Markdown formatting.`;
 
@@ -228,7 +232,7 @@ RULES
 export const CHAT_TOOLS = [
     {
         id: "math_tutor",
-        label: "Math Tutor",
+        label: TOOL_LABELS.math_tutor,
         icon: Calculator,
         accentText: "text-chart-3", accentBg: "bg-chart-3/10", accentSolid: "bg-chart-3",
         feature: "ai_chat",
@@ -242,7 +246,7 @@ export const CHAT_TOOLS = [
     },
     {
         id: "english_mentor",
-        label: "English Mentor",
+        label: TOOL_LABELS.english_mentor,
         icon: PenTool,
         accentText: "text-chart-4", accentBg: "bg-chart-4/10", accentSolid: "bg-chart-4",
         feature: "ai_chat",
@@ -263,7 +267,7 @@ export const CHAT_TOOLS = [
     },
     {
         id: "exam_questions",
-        label: "Exam Questions",
+        label: TOOL_LABELS.exam_questions,
         icon: FileQuestion,
         accentText: "text-streak", accentBg: "bg-streak/10", accentSolid: "bg-streak",
         feature: "ai_tool",
@@ -280,7 +284,7 @@ export const CHAT_TOOLS = [
     },
     {
         id: "concept_explainer",
-        label: "Concept Explainer",
+        label: TOOL_LABELS.concept_explainer,
         // The old tool's "quiz me after" wrote a real Quiz you could sit later.
         actions: (s, o = {}) => (o.quiz === "quiz" ? ["make_quiz"] : []),
         icon: Lightbulb,
@@ -296,7 +300,7 @@ export const CHAT_TOOLS = [
     },
     {
         id: "essay_planner",
-        label: "Essay Planner",
+        label: TOOL_LABELS.essay_planner,
         icon: FileText,
         accentText: "text-primary", accentBg: "bg-primary/10", accentSolid: "bg-primary",
         feature: "ai_tool",
@@ -309,7 +313,7 @@ export const CHAT_TOOLS = [
     },
     {
         id: "teaching_assistant",
-        label: "Teach It Back",
+        label: TOOL_LABELS.teaching_assistant,
         // Teaching it back was always meant to end in a quiz on what you taught.
         actions: () => ["make_quiz"],
         icon: Drama,
@@ -322,7 +326,7 @@ export const CHAT_TOOLS = [
     },
     {
         id: "note_summariser",
-        label: "Note Summariser",
+        label: TOOL_LABELS.note_summariser,
         // Recall pairs were always destined for Spaced Repetition; the cheat
         // sheet has its own artifact and doesn't need this.
         actions: (s, o = {}) => (o.format === "cheat_sheet" ? [] : ["make_flashcards"]),
@@ -341,7 +345,7 @@ export const CHAT_TOOLS = [
     },
     {
         id: "line_memoriser",
-        label: "Line Memoriser",
+        label: TOOL_LABELS.line_memoriser,
         icon: Repeat,
         accentText: "text-streak", accentBg: "bg-streak/10", accentSolid: "bg-streak",
         feature: "ai_tool",
@@ -360,16 +364,47 @@ export const CHAT_TOOLS = [
         system: (s) => `${subjectBlock(s)}\n\n${COACH_TONE}\n\nROLE: Memorisation coach. The student pastes a quote, passage, definition or set of lines and drills it line by line.\n\nFORMAT SIGNATURE: short and practical — what to memorise first, what usually trips people up in this passage, and one hook or association per hard line.`,
         artifact: (s, o = {}) => LINE_MEMORISER_ARTIFACT(s, o),
     },
+    // ── THE THREE REPAIRS NOTHING HERE OFFERED ──────────────────────────────
+    // Rebuilding the page around FAULTS rather than personas made the gaps
+    // obvious. Each of these repairs a fault class `diagnostic.js` can report
+    // and nothing else in the app could fix, and each one reads data that has
+    // been in the repo for months: `COMMAND_TERMS` and the per-subject
+    // `commonMistakes` in subjectExaminerPrompts.js, which until now only the
+    // MARKER had ever been shown.
     {
-        id: "study_coach",
-        label: "Study Coach",
-        icon: GraduationCap,
-        accentText: "text-primary", accentBg: "bg-primary/10", accentSolid: "bg-primary",
-        feature: "ai_tool",
-        blurb: "Strategy, motivation, exam technique.",
+        id: "command_term",
+        label: TOOL_LABELS.command_term,
+        icon: Crosshair,
+        accentText: "text-streak", accentBg: "bg-streak/10", accentSolid: "bg-streak",
+        feature: "ai_chat",
+        // The single largest avoidable mark loss in VCE, and the table that
+        // settles it was sitting two imports away from every surface.
+        blurb: "What the question actually asked you to do.",
         supportsFiles: false,
         options: [],
-        system: (s) => `${subjectBlock(s)}\n\n${COACH_TONE}\n\nROLE: VCE study coach — technique, SAC/exam strategy, time management, motivation. Specific to their actual situation, never generic productivity fluff.\n\nFORMAT SIGNATURE: short and punchy. Open with the one-line real talk, then at most three concrete moves as bullets, then **Tonight:** — the single next action. No essays.`,
+        system: (s) => `${subjectBlock(s)}\n\n${COACH_TONE}\n\nROLE: Command term analyst. The student has answered a question as though it asked something else — the commonest avoidable mark loss in VCE.\n\nWork from the VCAA command term table above. Name the term the question used, state the behaviour it demands, name the behaviour the answer actually performs, and show the difference on ONE of their own sentences — rewritten to do what was asked, same content.\n\nNever rewrite the whole answer. The student is learning to read the verb, and handing them a finished response teaches nothing.\n\nFORMAT SIGNATURE: **The term** (one line on what it demands), **What this does instead**, **The same sentence, doing it** — their words, minimally changed.`,
+    },
+    {
+        id: "precision",
+        label: TOOL_LABELS.precision,
+        icon: Crosshair,
+        accentText: "text-chart-4", accentBg: "bg-chart-4/10", accentSolid: "bg-chart-4",
+        feature: "ai_chat",
+        blurb: "Everyday wording swapped for the terms that score.",
+        supportsFiles: false,
+        options: [],
+        system: (s) => `${subjectBlock(s)}\n\n${COACH_TONE}\n\nROLE: Terminology pass. VCAA pays for the study design's own vocabulary; "goes up" does not earn what "increases exponentially" earns, and "the thing that carries it" does not earn what "the carrier protein" earns.\n\nWork from the key terminology and the common mistakes listed above. Find the places where the student has written around a term rather than using it, and give the swap — their sentence, one word or phrase changed, so they can see it is an edit rather than a rewrite.\n\nONLY flag wording the study design actually prices. Style preferences are not marks, and a list of them buries the three swaps that are.\n\nFORMAT SIGNATURE: a short table — **What you wrote** / **What scores** / **Why** — at most five rows, worst first. Then one line on the pattern, if there is one.`,
+    },
+    {
+        id: "allocation",
+        label: TOOL_LABELS.allocation,
+        icon: Scale,
+        accentText: "text-xp", accentBg: "bg-xp/10", accentSolid: "bg-xp",
+        feature: "ai_chat",
+        blurb: "Whether the answer is the right size for the marks.",
+        supportsFiles: false,
+        options: [],
+        system: (s) => `${subjectBlock(s)}\n\n${COACH_TONE}\n\nROLE: Mark allocation check. A VCAA mark is a piece of content, so the number of marks tells the student how many distinct points the answer needs. Two marks is two points; eight marks is not "write more", it is eight things.\n\nState how many scoring points the allocation implies, list the points the answer actually makes, and name what is missing or what is padding. Three paragraphs on a 2-mark question is time the student did not have in the exam, and that is worth saying as plainly as a gap is.\n\nIf the marks available are not stated, ASK for them in one line rather than guessing — an allocation check against an invented denominator is worse than none.\n\nFORMAT SIGNATURE: **Marks on offer / points needed**, then a checklist of the points with a tick or a cross, then **The gap** or **The padding** in one line.`,
     },
 ];
 

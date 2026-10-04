@@ -12,7 +12,8 @@ import { readFileSync } from "node:fs";
 import {
     benches, chatRows, draftFromChat, benchKeyOf, stepFromRow, BENCH_MAX,
 } from "./bench.js";
-import { makeWorkpiece, workpieceKey, OPERATIONS, SOURCES, isKind } from "./workpiece.js";
+import { makeWorkpiece, workpieceKey, SOURCES, isKind } from "./workpiece.js";
+import { TOOL_LABELS, labelForTool } from "./toolLabels.js";
 
 let n = 0;
 const ok = (name, fn) => { fn(); n += 1; console.log("  ok ", name); };
@@ -31,7 +32,7 @@ const msgs = (text = "hello") => ([
 
 const row = (over = {}) => ({
     id: over.id || "r1",
-    tool_type: over.tool_type || "concept_explainer",
+    tool_type: over.tool_type ?? "concept_explainer",
     title: over.title ?? "Explain this",
     subject_name: over.subject_name ?? "Chemistry",
     created_date: over.created_date || "2026-10-01T09:00:00.000Z",
@@ -211,28 +212,36 @@ ok("A STEP CARRIES THE CONVERSATION IT IS, or it cannot be reopened", () => {
     assert.ok(s.conv.input_data.messages.length);
 });
 
-ok("EVERY OPERATION ROUND-TRIPS THROUGH A SAVED ROW", () => {
-    for (const op of OPERATIONS) {
-        const s = stepFromRow(row({ id: "r", operation: op.id, tool_type: op.tool }), WP);
-        assert.equal(s.op, op.id, `operation ${op.id} did not survive the row`);
-        assert.equal(s.tool, op.tool);
-        assert.ok(s.title.startsWith(op.verb), `step title lost the verb for ${op.id}`);
-        assert.equal(s.preview, op.does);
+ok("EVERY LIVE TOOL ROUND-TRIPS THROUGH A SAVED ROW", () => {
+    for (const id of Object.keys(TOOL_LABELS)) {
+        const s = stepFromRow(row({ id: "r", title: "", tool_type: id }), WP);
+        assert.equal(s.tool, id);
+        assert.equal(s.title, TOOL_LABELS[id], `step lost its name for ${id}`);
+        assert.equal(s.preview, TOOL_LABELS[id]);
     }
 });
 
-ok("AN UNKNOWN OPERATION IS NOT AN OPERATION", () => {
-    // A hand-edited row, or a step saved by a version that had an operation
-    // this one does not. It falls back to the row's own title rather than
-    // printing a verb the bench cannot run.
-    const s = stepFromRow(row({ id: "r", operation: "frobnicate", title: "Something older" }), WP);
-    assert.equal(s.op, null);
+ok("A RETIRED TOOL KEEPS ITS OWN NAME, never the first tool's", () => {
+    // `toolById` falls back to CHAT_TOOLS[0], so a coaching chat saved before
+    // the rebuild would otherwise reopen quietly labelled "Math Tutor" — a
+    // wrong answer wearing the right label.
+    assert.equal(labelForTool("study_coach"), "Study Coach");
+    assert.notEqual(labelForTool("study_coach"), TOOL_LABELS.math_tutor);
+    const s = stepFromRow(row({ id: "r", title: "", tool_type: "study_coach" }), WP);
+    assert.equal(s.title, "Study Coach");
+});
+
+ok("AN UNKNOWN TOOL IS NOT NAMED AT ALL", () => {
+    assert.equal(labelForTool("frobnicate"), "");
+    const s = stepFromRow(row({ id: "r", tool_type: "frobnicate", title: "Something older" }), WP);
     assert.equal(s.title, "Something older");
 });
 
-ok("A STEP WITH NEITHER AN OPERATION NOR A TITLE STILL READS", () => {
-    const s = stepFromRow(row({ id: "r", operation: null, title: "" }), null);
-    assert.equal(s.title, "Earlier");
+ok("A STEP WITH NO TITLE FALLS BACK TO ITS TOOL, then to Earlier", () => {
+    // The tool's own name is a better fallback than a placeholder and it is
+    // free, so "Earlier" is only reached by a row with nothing at all on it.
+    assert.equal(stepFromRow(row({ id: "r", title: "" }), null).title, "Concept Explainer");
+    assert.equal(stepFromRow(row({ id: "r", title: "", tool_type: "" }), null).title, "Earlier");
 });
 
 /* ── Keys ───────────────────────────────────────────────────────────────── */
@@ -316,11 +325,24 @@ ok("THE STEP SAVES ITS WORKPIECE, or no bench can ever find it again", () => {
         "persist() reads the workpiece through the closure — use a ref");
 });
 
-ok("THE PAGE HANDS THE WORKPIECE AND THE OPERATION DOWN", () => {
+ok("THE PAGE HANDS THE WORKPIECE DOWN, so a repair saves against its work", () => {
     const src = strip("../pages/AITools.jsx");
-    for (const prop of ["workpiece={", "operation={", "startConversation={", "onSaved={"]) {
+    for (const prop of ["workpiece={", "operation={"]) {
         assert.ok(src.includes(prop), `AITools no longer passes ${prop} to UnifiedChat`);
     }
+});
+
+ok("A SAVED RUN REOPENS AS THE WORK, never as stale findings", () => {
+    // The scan is not stored, deliberately: findings are claims about a
+    // VERSION, and a student who comes back has usually revised. Printing the
+    // old readout over the new text would be the "ephemeral reference on a
+    // permanent row" failure — a lie on a timer — so reopening sets the work
+    // and an EMPTY finding list, and the student re-scans if they want one.
+    const src = strip("../pages/AITools.jsx");
+    const fn = src.slice(src.indexOf("const openRecent"), src.indexOf("if (premium === undefined)"));
+    assert.ok(fn.length > 60, "could not find openRecent");
+    assert.ok(/setFindings\(\[\]\)/.test(fn),
+        "openRecent restores findings from a saved row — they describe a version that has moved");
 });
 
 ok("A DEEP-LINKED SUBJECT REACHES THE PROMPT, not just the options", () => {

@@ -46,8 +46,10 @@ export function missedQuestions(quizzes = [], attempts = [], bankCards = []) {
         if (!text) continue;
         const w = makeWorkpiece({
             // A QUESTION, not a problem, whatever the subject. The kind is what
-            // the thing IS; `toolsFor` promotes the maths tutor on a maths
-            // subject without having to relabel the object.
+            // the thing IS. Nothing ROUTES on it any more — `diagnostic.js`
+            // reads the work itself and the subject gates which faults may be
+            // reported — but a candidate still says what it is, and the intake
+            // prints it.
             kind: "question",
             body: String(text),
             title: row.title ? `${row.title}` : "",

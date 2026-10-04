@@ -37,10 +37,11 @@ import BottomNav from "@/components/layout/BottomNav";
 import { CardBack } from "@/components/cards/PlayingCard";
 import PrankOverlay, { prankBodyClass } from "@/components/pranks/PrankOverlay";
 import { PrankStageProvider } from "@/lib/PrankStage";
-import WorkBench from "@/components/ai_tools/WorkBench";
-import WorkPicker from "@/components/ai_tools/WorkPicker";
+import Readout from "@/components/ai_tools/Readout";
+import ScanIntake from "@/components/ai_tools/ScanIntake";
 import QuestionPanel from "@/components/mistakes/QuestionPanel";
 import { makeWorkpiece } from "@/lib/workpiece";
+import { readScan } from "@/lib/diagnostic";
 import { candidates as wpCandidates } from "@/lib/workpieceSources";
 import { benches } from "@/lib/bench";
 
@@ -578,12 +579,8 @@ function StoreView() {
 }
 views.store = () => <StoreView />;
 
-/* ── ?v=bench — the workshop, in the three states it has. Only one of them
-   can be seen on a real login at a time, which is the whole reason this draws
-   all three: the PICKER a student arrives on, the BENCH once something is on
-   it, and the bench for a kind with a narrower toolbar. The step state is the
-   real chat and cannot be drawn here — `base44` is a Proxy over an axios SDK
-   and cannot be stubbed, the lesson ?v=reach already records. */
+/* The intake's two derived lists. Real candidate rows rather than hand-made
+   cards, so `workpieceSources` is exercised rather than bypassed. */
 const BENCH_PICKS = wpCandidates({
     assessments: [{ id: "a1", subject_name: "Chemistry", title: "Unit 4 AOS 1 SAC", due_date: inDaysISO(3) }],
     bankCards: [1, 2].map((i) => ({
@@ -600,178 +597,99 @@ const BENCH_PICKS = wpCandidates({
 
 const BENCH_PIECE = makeWorkpiece({
     kind: "question",
-    body: "Explain why graphite conducts electricity but diamond does not. Refer to bonding and structure in your answer. (4 marks)",
+    body: "Explain why graphite conducts electricity but diamond does not. (4 marks)",
     title: "links the structure to the property",
     subject: "Chemistry",
     source: "mistake",
-    ref: { page: "MistakeBank", label: "In your bank" },
 });
 
-const BENCH_ESSAY = makeWorkpiece({
-    kind: "writing",
-    body: "Macbeth's ambition is the cause of his downfall. Shakespeare shows this through the dagger soliloquy, where Macbeth is already imagining the murder before anyone pushes him to it.",
-    subject: "English",
-    source: "typed",
-});
-
-/* The SHELF is built from saved conversation rows, so the fixture has to be
-   rows rather than benches — anything else would skip `bench.js` entirely and
-   the probe would draw a shape the real page cannot produce. Two of them: a
-   workshop bench with two steps on it, and a chat from before the workpiece
-   existed, which is the DRAFT case and about half of what is on this site. */
-const BENCH_ROWS = [
+const BENCH_SHELF = benches([
     {
         id: "c1", tool_type: "concept_explainer", title: "Explain why graphite conducts",
         subject_name: "Chemistry", created_date: "2026-10-01T09:00:00.000Z",
         input_data: {
-            workpiece: BENCH_PIECE, operation: "explain", subject: "Chemistry",
+            workpiece: BENCH_PIECE, subject: "Chemistry",
             messages: [{ role: "user", content: "x" }, { role: "assistant", content: "y" }],
         },
     },
-    {
-        id: "c2", tool_type: "exam_questions", title: "Write me exam-style questions",
-        subject_name: "Chemistry", created_date: "2026-10-02T09:00:00.000Z",
-        input_data: {
-            workpiece: BENCH_PIECE, operation: "test", subject: "Chemistry",
-            messages: [{ role: "user", content: "x" }, { role: "assistant", content: "y" }],
+]);
+
+/* ── ?v=scan — the readout, in the states only one of which a real login can
+   show at a time: faults open, part cleared, all clear, and a CLEAN scan that
+   found nothing. The last one is the state the whole design rests on — a scan
+   that always finds something is a horoscope — and it is the one a fixture is
+   the only way to see. */
+const SCAN_WORK = `The rate of reaction goes up when you heat it because the particles move faster and bump into each other more. This means more collisions happen so the reaction is quicker. Also the activation energy is lower when it is hot.`;
+
+const scanFindings = () => readScan({
+    findings: [
+        {
+            fault: "understanding",
+            says: "States that activation energy is lowered by heating. Temperature does not change the activation energy; it changes the proportion of particles that exceed it.",
+            wanted: "A higher temperature raises the average kinetic energy, so a greater proportion of collisions exceed the unchanged activation energy.",
+            quote: "the activation energy is lower when it is hot",
         },
-    },
-    {
-        // study_coach has no OPERATION — it is advice about studying rather than
-        // something you do to a piece of work — so this is the bare case: the
-        // row's own title is all the step has to print. Worth drawing, because
-        // it is a large share of what is actually saved on this site.
-        id: "c3", tool_type: "study_coach",
-        title: "I keep running out of time in Methods exam 2",
-        subject_name: "Methods",
-        created_date: "2026-10-03T09:00:00.000Z",
-        input_data: {
-            subject: "Methods",
-            messages: [
-                { role: "user", content: "I keep running out of time in Methods exam 2 and I am not sure whether to skip the hard ones or push through them." },
-                { role: "assistant", content: "Here is the thing." },
-            ],
+        {
+            fault: "command_term",
+            says: "The question used EXPLAIN, which requires the cause and its mechanism. The response describes what happens without naming why collision frequency rises.",
+            wanted: "Each step linked to the one before it, ending at the measured rate.",
+            quote: "",
         },
-    },
-];
-const BENCH_SHELF = benches(BENCH_ROWS);
-const BENCH_DRAFT = BENCH_SHELF.find((b) => b.draft);
+        {
+            fault: "precision",
+            says: "Everyday wording in place of the study design's terms throughout.",
+            wanted: "\u201ccollision frequency\u201d and \u201ckinetic energy\u201d rather than \u201cbump into each other\u201d and \u201cmove faster\u201d.",
+            quote: "bump into each other more",
+        },
+        // Gated out of Chemistry on purpose: VCAA does not price expression
+        // here, and a readout that flagged it would send a student to spend
+        // their evening on the one thing that could never earn a mark.
+        { fault: "expression", says: "Comma splice in the second sentence.", quote: "" },
+    ],
+}, { work: SCAN_WORK, subject: "Chemistry" }).findings;
 
-views.bench = () => (
-    <MemoryRouter>
-    <div className="bg-background min-h-screen py-6 space-y-10">
-        <div>
-            <p className="px-8 text-[11px] font-black uppercase tracking-widest text-muted-foreground mb-2">
-                Arriving — the picker
-            </p>
-            <WorkPicker
-                candidates={BENCH_PICKS}
-                benches={BENCH_SHELF}
-                onPick={(w) => console.log("pick", w)}
-                onOpenBench={(b) => console.log("bench", b)}
-            />
-        </div>
-        <div className="border-t border-border pt-6">
-            <p className="px-8 text-[11px] font-black uppercase tracking-widest text-muted-foreground mb-2">
-                A question on the bench, two steps done
-            </p>
-            <WorkBench
-                workpiece={BENCH_PIECE}
-                steps={[
-                    { id: "s1", op: "explain", tool: "concept_explainer", title: "Explain it · Chemistry", preview: "What this is actually asking, from the start." },
-                    { id: "s2", op: "test", tool: "exam_questions", title: "Question me · Chemistry", preview: "Exam-style questions, with marking guides." },
-                ]}
-                onRun={(o) => console.log("run", o)}
-                onOpenStep={(s) => console.log("open", s)}
-                onNew={() => {}}
-            />
-        </div>
-        <div className="border-t border-border pt-6">
-            <p className="px-8 text-[11px] font-black uppercase tracking-widest text-muted-foreground mb-2">
-                A chat from before the bench — the one fact it is missing
-            </p>
-            <WorkBench
-                draft={BENCH_DRAFT?.draft}
-                steps={BENCH_DRAFT?.steps || []}
-                onKind={(k) => console.log("kind", k)}
-                onOpenStep={(st) => console.log("open", st)}
-                onBack={() => {}}
-            />
-        </div>
-        <div className="border-t border-border pt-6">
-            <p className="px-8 text-[11px] font-black uppercase tracking-widest text-muted-foreground mb-2">
-                Something you wrote — a narrower toolbar, and nothing done yet
-            </p>
-            <WorkBench
-                workpiece={BENCH_ESSAY}
-                steps={[]}
-                onRun={(o) => console.log("run", o)}
-                onOpenStep={() => {}}
-                onBack={() => {}}
-            />
-        </div>
-    </div>
-    </MemoryRouter>
-);
-
-/* Every back a student can buy, beside the default, at the two sizes they are
-   actually dealt at. A skin that reads at 176px and smudges at 62px is a skin
-   that looks bought on the shelf and broken on the shelf it is worn to. */
-/* ── ?v=question — the bank's question panel, against the three shapes a real
-   question comes in. A character count would have put the LaTeX one in the
-   wrong bucket and the phone column in the other wrong bucket, which is why
-   the panel measures and why this draws all three at both widths. */
-const Q_SHORT = "Explain why graphite conducts electricity but diamond does not. (2 marks)";
-const Q_MATHS = "Let $f(x) = \\dfrac{2x^2 - 3x + 1}{x - 1}$ for $x \\in \\mathbb{R} \\setminus \\{1\\}$. Find $f'(x)$, state the coordinates of any stationary points, and determine the nature of each. (5 marks)";
-const Q_LONG = [
-    "A manufacturer of lithium-ion cells is investigating why a new electrode coating reduces",
-    "capacity after repeated charge cycles. In a trial, 120 cells were coated and cycled 500",
-    "times at 25 °C, and a control group of 120 uncoated cells was cycled under identical",
-    "conditions. The coated cells retained 71% of their initial capacity; the control retained",
-    "88%.",
-    "",
-    "a. Write a balanced half-equation for the oxidation that occurs at the anode during",
-    "discharge. (2 marks)",
-    "",
-    "b. With reference to the data above, explain ONE chemical reason the coating could reduce",
-    "capacity retention. Your answer should refer to the solid electrolyte interphase and to",
-    "the mobility of lithium ions. (4 marks)",
-    "",
-    "c. Evaluate whether the trial design supports the conclusion that the coating causes the",
-    "loss, naming one variable that was controlled and one that was not. (3 marks)",
-].join("\n");
-
-views.question = () => (
-    <div className="bg-background min-h-screen py-6 space-y-8 px-4 max-w-2xl mx-auto">
-        <div>
-            <p className="text-[11px] font-black uppercase tracking-widest text-muted-foreground mb-2">
-                Short — fits, so no control at all
-            </p>
-            <QuestionPanel>{Q_SHORT}</QuestionPanel>
-        </div>
-        <div>
-            <p className="text-[11px] font-black uppercase tracking-widest text-muted-foreground mb-2">
-                Maths — long as source, small on screen
-            </p>
-            <QuestionPanel>{Q_MATHS}</QuestionPanel>
-        </div>
-        <div>
-            <p className="text-[11px] font-black uppercase tracking-widest text-muted-foreground mb-2">
-                Long — collapsed, with the way to the whole thing
-            </p>
-            <QuestionPanel>{Q_LONG}</QuestionPanel>
-        </div>
-        <div className="card-soft border-2 border-border p-4">
-            <p className="text-[11px] font-black uppercase tracking-widest text-muted-foreground mb-2">
-                In a list row (plain), where it used to be line-clamp-2
-            </p>
-            <div className="rounded-xl border border-border p-2.5">
-                <QuestionPanel label="" tone="plain"
-                    textClass="text-xs font-bold text-foreground leading-snug">{Q_LONG}</QuestionPanel>
+function ScanView() {
+    const all = scanFindings();
+    const part = all.map((f, i) => (i === 0 ? { ...f, cleared: true } : f));
+    const done = all.map((f) => ({ ...f, cleared: true }));
+    return (
+        <MemoryRouter>
+        <div className="bg-background min-h-screen py-6 space-y-10">
+            {[
+                ["Scanned \u2014 three faults open", all],
+                ["One cleared \u2014 the trace runs green from the top", part],
+                ["All clear", done],
+            ].map(([title, rows]) => (
+                <div key={title} className="border-t border-border pt-6 first:border-0 first:pt-0">
+                    <p className="px-8 text-[11px] font-black uppercase tracking-widest text-muted-foreground mb-2">
+                        {title}
+                    </p>
+                    <Readout work={SCAN_WORK} subject="Chemistry" findings={rows}
+                        onRepair={() => {}} onClear={() => {}} onRescan={() => {}} onNew={() => {}} />
+                </div>
+            ))}
+            <div className="border-t border-border pt-6">
+                <p className="px-8 text-[11px] font-black uppercase tracking-widest text-muted-foreground mb-2">
+                    A clean scan \u2014 the state the whole design rests on
+                </p>
+                <Readout work={SCAN_WORK} subject="Chemistry" findings={[]} onNew={() => {}} />
+            </div>
+            <div className="border-t border-border pt-6">
+                <p className="px-8 text-[11px] font-black uppercase tracking-widest text-muted-foreground mb-2">
+                    The intake
+                </p>
+                <ScanIntake
+                    candidates={BENCH_PICKS}
+                    recent={BENCH_SHELF}
+                    subjects={["Chemistry", "Mathematical Methods", "English"]}
+                    onPick={() => {}} onOpenRecent={() => {}} onScan={() => {}}
+                />
             </div>
         </div>
-    </div>
-);
+        </MemoryRouter>
+    );
+}
+views.scan = () => <ScanView />;
 
 views.backs = () => (
     <div className="p-8 bg-background min-h-screen">
