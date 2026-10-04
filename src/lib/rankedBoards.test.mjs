@@ -191,34 +191,52 @@ check("boardById never answers undefined", () => {
 
 // ─── 6. One page holds all the ATAR ────────────────────────────────────────
 
-check("THE ATAR PANEL IS INSIDE THE FIRST TAB, not above all three", () => {
+check("THE ATAR PANEL IS INSIDE THE SCORE TAB, not above all four", () => {
     const p = strip(PAGE);
-    const rank = p.indexOf('value="rank"');
-    const league = p.indexOf('value="league"');
+    const score = p.indexOf('value="score"');
+    const board = p.indexOf('value="board"');
     const dial = p.indexOf("<AtarDial");
-    assert.ok(rank > -1 && league > rank, "the tabs are not in era order");
-    assert.ok(dial > rank && dial < league,
-        "the ATAR dial is drawn outside the \"My rank\" tab — a 230px gauge of a 28-day " +
-        "score at the top of the league and all-time tabs is what this split removed");
+    assert.ok(score > -1 && board > score, "the tabs are not in order");
+    assert.ok(dial > score && dial < board,
+        "the ATAR dial is drawn outside the Score tab — a 230px gauge of a 28-day score " +
+        "at the top of every other tab is what this split removed");
 });
 
-check("the three tabs are rank, league, all time — in that order", () => {
-    const ids = [...PAGE.matchAll(/\["(rank|league|alltime)",/g)].map(m => m[1]);
-    assert.deepEqual(ids, ["rank", "league", "alltime"],
-        "the tab order is the era order: 28 days, this week, everything");
+check("FOUR TABS, FLAT: score, board, league, all time", () => {
+    // Flat rather than three with a second bar inside the first. "My rank"
+    // held the dial, the five components, the whole leaderboard AND the
+    // ten-tier ladder on one scroll, and the obvious fix — sub-tabs — is the
+    // nested control this page already refused once.
+    const ids = [...PAGE.matchAll(/\["(score|board|league|alltime)",/g)].map(m => m[1]);
+    assert.deepEqual(ids, ["score", "board", "league", "alltime"],
+        "you (28 days), everyone else (28 days), this week, everything");
     const i = PAGE.indexOf("<TabsList");
-    assert.match(PAGE.slice(i, i + 400), /grid-cols-3\b/,
-        "three tabs in a grid that is not grid-cols-3 overlap — it renders, and it renders wrong");
+    assert.match(PAGE.slice(i, i + 400), /grid-cols-4\b/,
+        "four tabs in a grid that is not grid-cols-4 overlap — it renders, and it renders wrong");
+    assert.ok(!/TabsList[\s\S]{0,4000}<Tabs\b/.test(PAGE),
+        "a second Tabs opened inside the first — two tab bars drawn alike, one nested in " +
+        "the other, is how a student loses track of which one they are using");
 });
 
-check("the rank ladder and achievements are on that same tab", () => {
+check("the climb is on SCORE and the leaderboard is on BOARD", () => {
     const p = strip(PAGE);
-    const rank = p.indexOf('value="rank"');
+    const score = p.indexOf('value="score"');
+    const board = p.indexOf('value="board"');
     const league = p.indexOf('value="league"');
     const profile = p.indexOf("<MyProfile");
-    assert.ok(profile > rank && profile < league,
-        "the climb is back behind a tab of its own, which splits one page about where you " +
-        "stand into two");
+    assert.ok(profile > score && profile < board,
+        "the ladder and the badges are not on the tab about you");
+    const section = p.indexOf("<BoardSection");
+    assert.ok(section > board && section < league,
+        "the ATAR board is not on the Board tab");
+});
+
+check("AND THE RANK STAT OPENS THE BOARD", () => {
+    // The board moved a tab away, so the tile that states your standing is
+    // what has to carry you there — a bar with no way through is a diagnosis,
+    // which is the rule the five components below it already keep.
+    assert.match(strip(PAGE), /onClick=\{mine\.rank \? \(\) => setTab\("board"\) : null\}/,
+        "the rank tile is a dead readout again, on a tab that no longer shows the board");
 });
 
 // ─── 7. The pinned row has to be reachable ─────────────────────────────────
@@ -308,6 +326,43 @@ check("migration 0039 exists, with the index that makes the lazy write safe", ()
     assert.ok(!/create policy/.test(sql),
         "a client policy was added — the ranks map is everybody's position, which is more " +
         "than any one student is allowed to see");
+});
+
+// ─── 10. Collapsing must never hide a student from themselves ──────────────
+
+check("THE BOARD OPENS AT TEN PEOPLE, PODIUM INCLUDED", () => {
+    // Ten is the count a league table is read at, and it has to mean ten
+    // PEOPLE — the podium's three plus seven. Slicing ten rows AFTER the
+    // podium is thirteen, which renders perfectly and is a different promise
+    // from the one the button makes.
+    assert.match(BOARD, /COLLAPSED_TO = 10/, "the collapsed size is no longer ten");
+    assert.match(BOARD, /all\.slice\(0, Math\.max\(0, COLLAPSED_TO - top\.length\)\)/,
+        "the list is sliced without subtracting the podium, so \"top 10\" draws thirteen people");
+});
+
+check("YOUR OWN ROW SURVIVES THE COLLAPSE", () => {
+    // The one row a student came to find is the one a cut-off can take, and
+    // nothing would say so — the board would simply stop above them. Appended
+    // with its REAL place number, which is why the row is read out of `rows`
+    // rather than out of the sliced list.
+    assert.match(BOARD, /const meCutOff = meIndex >= 3 \+ rest\.length/,
+        "nothing works out whether collapsing has cut you off");
+    assert.match(BOARD, /!expanded && meCutOff && meVisible/,
+        "the appended row is not gated on actually being cut off — drawn otherwise it is a " +
+        "duplicate of a row already on screen");
+    assert.match(BOARD, /place=\{meIndex \+ 1\}/,
+        "the appended row would print its position in the slice rather than on the board");
+    // And a rule between them, or 8th and 24th sit flush and read as adjacent.
+    assert.match(BOARD, /more<\/div>|more\s*<\/div>|\bmore\b/,
+        "nothing marks the rows that were skipped");
+});
+
+check("the toggle says HOW MANY, and both directions exist", () => {
+    assert.match(BOARD, /Show all \{rows\.length\}/,
+        "\"Show all\" is a label; the number is what a student can decide about");
+    assert.match(BOARD, /Show the top \{COLLAPSED_TO\}/,
+        "the board expands and cannot be put back");
+    assert.match(BOARD, /data-expand-board/, "the control is not addressable for a probe");
 });
 
 console.log(`\nrankedBoards: ${passed} checks passed`);

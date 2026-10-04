@@ -2847,6 +2847,107 @@ where `question_results` carries `is_correct`, which renders identically in a
 fixture and made `weakSpots` skip the row, so the resit kind was silently
 missing from the first draw.
 
+## Ranked is FOUR tabs now, and the XP table was lying
+
+**"My rank feels cramped — the ATAR and ranks might need their own pages."** It
+held three complete screens on one scroll: the dial with its five components,
+the whole ATAR leaderboard, and the ten-tier ladder with achievements. On a
+phone that is a page nobody reaches the bottom of.
+
+**IT SPLITS FLAT, NOT NESTED.** The obvious fix is a second tab bar inside My
+rank, and that is the control this page already refused once — two tab bars
+drawn alike, one inside the other, is how a student loses track of which one
+they are using. So: **Score** (everything about you — the dial, the components
+with their doors, the ladder, the badges), **Board** (everyone else on the same
+28 days), **League**, **All time**. Four one-word labels, measured at 360 where
+the bar is `grid-cols-4` and each cell is about 90px: 56px tall at every width,
+nothing wrapped, nothing clipped.
+
+**AND THE RANK TILE BECAME THE DOOR.** The board moved a tab away, so the stat
+that states your standing is what opens it — a bar with no way through is a
+diagnosis, which is the rule the five components under it already keep.
+
+### The board opens at ten, and the collapse may not hide you
+
+**TEN PEOPLE, PODIUM INCLUDED.** It is the podium's three plus seven, so the
+count means ten PEOPLE rather than "ten rows after the three at the top", which
+is thirteen and a different promise from the one the button makes.
+
+**YOUR OWN ROW SURVIVES IT.** A student outside the ten gets their row appended
+under the seven with its REAL place number and its real gap, behind a "⋯ N
+more" rule so 10th and 24th cannot sit flush and read as adjacent. The one row
+somebody came to find is exactly the row a cut-off takes, and nothing on screen
+would say so — the board would simply stop above them. Same rule the pinned bar
+keeps, reached from the other direction. The toggle says **"Show all 14"**
+rather than "Show all", because a number is what a student can decide about.
+
+### `WeekStrip` is deleted
+
+It existed because the league had one entrance and that entrance was in a
+sticky rail which, below xl, stacked under thirty rows. A TAB cannot stack
+under anything, so once League became one the strip was a second entrance to a
+screen one tap away — sitting at the top of a tab about the ATAR, saying
+nothing about the ATAR. The property it carried survives where it belongs:
+`Podium` prints what each place pays, on the step, from `grantForLeague`.
+
+### The AI coach went, and took three queries with it
+
+"Ask the coach" read everything on Insights and said what it would change. It
+failed the same test the charts did, one level up: every panel there names one
+thing and points at the screen that moves it, so a paragraph of generated
+advice on top of them is a SECOND answer to a question four panels have already
+answered properly — and the one answer nobody can check, on a page whose whole
+rebuild was about printing only things a student can act on and verify.
+`UserSubject`, `ActiveRecallSession` and `BlurtingSession` were loaded for it
+alone, so the tab now costs nothing beyond what the page already had.
+
+### "Where XP comes from" was wrong in four places
+
+And it was wrong in the most embarrassing way available: the component carried
+a comment congratulating itself for having dropped an "AI Challenges" row
+because the feature was never wired up — *"retire something, grep the copy"* —
+directly above a **Score wagers** row and a **Competitions** row, both of which
+the Compete rebuild replaced with markets that pay CREDITS and no XP at all.
+
+| printed | actually pays |
+|---|---|
+| Flashcards "0.6–1.5 XP/card" | 2 for a card you got right, 1 for one you did not |
+| Focus "1.6–96 XP/hr" | 4 XP a minute — 240 an hour |
+| Quizzes "8–50 XP" | 2 XP a mark |
+| Wagers "up to 3.5× bet" | ×3 exact, ×1.5 close — and unreachable |
+
+**A RULE, NOT A RANGE.** Every row states the arithmetic where there is any:
+"4 XP a minute", "2 XP a card", "2 XP a mark". A student can multiply that by
+what they just did and check the number that landed, which is the entire point
+of publishing it. A range is unfalsifiable, and an unfalsifiable number on a
+page about your own progress is decoration.
+
+**AND IT IS PINNED TO THE SERVER.** `xpRates.js` holds the figures;
+`xpRates.test.mjs` PARSES the calculators out of `server.mjs` — which boots
+Express on load and cannot be imported — and RUNS them against every published
+one. The `mirrors.test.mjs` idiom: behaviour rather than source, so a reformat
+passes and a changed constant fails naming the row. Verified by moving
+`STUDY_SESSION_XP_PER_MIN` and the flashcard drip and watching each fail.
+
+Two things the lift had to get right, both of which silently returned half a
+function: the constants carry trailing comments, so an anchored `;$` match
+reports them as deleted; and several calculators DESTRUCTURE their argument, so
+a brace-depth walk from the `function` keyword closes the "body" at the end of
+the parameter list. It counts from after the signature's closing paren.
+
+**THE LEAGUE BONUS IS DELIBERATELY NOT A FIGURE.** It is small on purpose
+because it feeds level, rank AND the ATAR, and printing it invites exactly the
+grinding it is sized to avoid. The test asserts the row carries no digit.
+
+`RETIRED_SOURCES` is written down rather than simply absent, and the test
+refuses any row mentioning a wager, a bet, a competition, a challenge or a
+duel — otherwise the obvious "restore the old table" fixes nothing and nobody
+notices.
+
+**One thing the build could not catch:** `scripts/_floorProbe.jsx` still
+imported the deleted `WeekStrip`, and `npm run build` was green because the
+probe is not an entry point. Only loading the dev server surfaced it.
+
 ## Ranked is THREE ERAS, and the ATAR was on all of them
 
 **"Only one page having all the ATAR and ranks."** The page carried an
@@ -4852,6 +4953,10 @@ stranger.
   rules are the whole file: a lower rank number is better, a missing previous
   placing is NEW and never a fall from zeroth, and no snapshot draws nothing.
   `weekBoardSnapshots` / `board_snapshots` (migration 0039) are the server half
+- `src/lib/xpRates.js` + `xpRates.test.mjs` — what the app ACTUALLY pays,
+  published as a rule rather than a range and pinned to `server.mjs`'s own
+  calculators by parsing and running them. The hand-typed table it replaced was
+  wrong in four places and advertised two features the UI cannot reach
 - `src/components/ranked/RankedBoard.jsx`, `BoardControls.jsx` — the board: one
   right-aligned figure column, the place as display type, the movement lane,
   the capped podium and the bar that pins your row once you scroll past it.

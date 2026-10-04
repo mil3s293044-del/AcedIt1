@@ -4,7 +4,6 @@
  */
 import UpdatePrompt from "@/components/shared/UpdatePrompt";
 import { LiveProvider } from "@/lib/LiveContext";
-import WeekStrip from "@/components/ranked/WeekStrip";
 import { Swords as ReachSwords, ListChecks as ReachList,
     Trophy as ReachTrophy, GraduationCap as ReachCap } from "lucide-react";
 import React from "react";
@@ -52,6 +51,7 @@ import ActiveRecall from "@/components/study/ActiveRecall";
 import BlurtingMethod from "@/components/study/BlurtingMethod";
 import { ArrowRight, Target } from "lucide-react";
 import { COMPONENT_MOVE, boardById, titlesFor, standing } from "@/lib/ranked";
+import { XPSources } from "@/components/ranked/XPLevelCard";
 import RankedBoard from "@/components/ranked/RankedBoard";
 import QueueRow from "@/components/study/QueueRow";
 import SubjectSplit from "@/components/analytics/SubjectSplit";
@@ -1089,6 +1089,10 @@ views.board = () => {
                     <ScopeSwitch scope={scope} onScope={setScope} hasSchool={false} />
                     <div className="grid xl:grid-cols-[minmax(0,1fr)_320px] gap-6 items-start">
                         <div className="min-w-0">
+                            {/* FOURTEEN rows against a board that opens at
+                                ten, so the collapse, the skipped-rows rule and
+                                the appended own-row are all on screen at once —
+                                which a ten-row fixture would hide entirely. */}
                             <RankedBoard rows={field} me={me} boardMeta={meta} titles={titles}
                                 movement={movement} nameOf={nameOf} myStanding={mine} />
                         </div>
@@ -1192,6 +1196,15 @@ views.queue = () => {
     );
 };
 
+// The XP table, which was eight hand-typed strings and four wrong figures.
+// Drawn because it changed SHAPE as well as content — each row now carries the
+// rule under it, which is the thing that makes a rate checkable.
+views.xp = () => (
+    <div className="min-h-screen bg-background p-4 sm:p-6">
+        <div className="max-w-sm mx-auto"><XPSources /></div>
+    </div>
+);
+
 views.update = () => {
     // The real component, against the real tokens. It only ever renders when a
     // poll says the build changed, so the probe forces it: a fake version
@@ -1219,21 +1232,21 @@ views.reach = () => (
     // What this CAN draw honestly, and what it cannot.
     //
     // SideRail is not here either: it reads Layout's context, so mounted alone
-    // it renders a blank page rather than a nav. WeekStrip is not here because
-    // it fetches its own standing through `base44`, which is a PROXY over an
-    // axios SDK: assigning `.functions.invoke`, defineProperty and a patched
-    // `window.fetch` ALL fail to intercept it, and each one silently lets the
-    // real call 404 so the strip renders nothing. Worth knowing before anybody
-    // tries again. Its new payout block is `hidden sm:flex`, so it cannot move
-    // the phone layout at all, and `reachable.test.mjs` holds where its figure
-    // comes from.
+    // it renders a blank page rather than a nav. WeekStrip is DELETED — the
+    // league is its own tab now, and a strip above the ATAR score advertising
+    // the screen one tap to the right was the same page offered twice. Worth
+    // keeping why it could never be drawn here: it fetched its own standing
+    // through `base44`, which is a PROXY over an axios SDK, and assigning
+    // `.functions.invoke`, defineProperty and a patched `window.fetch` ALL
+    // fail to intercept it — each one silently letting the real call 404 so
+    // the strip rendered nothing.
     //
     // So this is the three-tab bar and the renamed shelf control — the two
     // things that changed shape and can be judged on their own.
     <MemoryRouter initialEntries={["/Review"]}>
         <div className="min-h-screen bg-background">
             <div className="p-4 sm:p-6 space-y-5">
-                <div className="grid w-full sm:w-auto sm:inline-grid grid-cols-3 h-auto p-1.5 rounded-2xl bg-surface border-2 border-border shadow-soft">
+                <div className="grid w-full sm:w-auto sm:inline-grid grid-cols-4 h-auto p-1.5 rounded-2xl bg-surface border-2 border-border shadow-soft">
                     {/* The ERA tabs. The labels moved with the split — see
                         Ranked.jsx — and the widths have to be rechecked when
                         they do: at 360 this bar is `grid-cols-3`, so each cell
@@ -1242,7 +1255,7 @@ views.reach = () => (
                         and `whitespace-nowrap` then turned the wrap into a clip
                         inside the pill. Both render; only the measurement says
                         so. */}
-                    {[["My rank", ReachCap], ["League", ReachSwords], ["All time", ReachTrophy]].map(([label, Icon], i) => (
+                    {[["Score", ReachCap], ["Board", ReachTrophy], ["League", ReachSwords], ["All time", ReachList]].map(([label, Icon], i) => (
                         <span key={label} className={`flex items-center justify-center gap-1.5 py-2.5 px-3 sm:px-6 rounded-xl text-sm font-bold whitespace-nowrap ${i === 0 ? "bg-foreground text-background" : "text-muted-foreground"}`}>
                             <Icon className="hidden sm:block w-4 h-4" /> {label}
                         </span>

@@ -47,7 +47,6 @@ import MyProfile from "@/components/ranked/MyProfile";
 import AtarDial from "@/components/ranked/AtarDial";
 import RankedBoard from "@/components/ranked/RankedBoard";
 import StandingRail from "@/components/ranked/StandingRail";
-import WeekStrip from "@/components/ranked/WeekStrip";
 import { ScopeSwitch, BoardSwitch } from "@/components/ranked/BoardControls";
 import League from "@/pages/League";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -91,8 +90,23 @@ const COMPONENT_META = [
       evidence: (c) => planningEvidence(c) },
 ];
 
+/**
+ * ─── FOUR TABS, FLAT, AND NOT THREE WITH A SECOND ROW INSIDE ────────────────
+ * "My rank" held the ATAR dial and its five components, the whole ATAR
+ * leaderboard, AND the ten-tier ladder with achievements — three complete
+ * screens on one scroll, which on a phone is a page nobody reaches the bottom
+ * of. The obvious fix is a second tab bar inside it, and that is the control
+ * this page already refused once: two tab bars drawn alike, one nested in the
+ * other, is how a student loses track of which one they are using.
+ *
+ * So it splits FLAT. SCORE is everything about you — the dial, the components
+ * with their doors, the ladder, the badges. BOARD is everyone else on the same
+ * 28-day score. Then the two other eras. Four labels at 360px is about 90px a
+ * cell, which is why they are one word each.
+ */
 const TABS = [
-    ["rank", "My rank", GraduationCap],
+    ["score", "Score", GraduationCap],
+    ["board", "Board", Trophy],
     ["league", "League", Swords],
     ["alltime", "All time", History],
 ];
@@ -142,11 +156,10 @@ function useBoardView(data, meta, scope) {
 export default function Ranked() {
     const [data, setData] = useState(null);
     const [loading, setLoading] = useState(true);
-    // CONTROLLED, because WeekStrip on the first tab switches to the League tab
-    // rather than navigating to /League. An uncontrolled Tabs can only be moved
-    // by the trigger it owns, and a strip that says "you are 2nd this week"
-    // should open the board it is talking about.
-    const [tab, setTab] = useState("rank");
+    // CONTROLLED rather than uncontrolled: the Score tab's standing line opens
+    // the Board tab, and an uncontrolled Tabs can only be moved by the trigger
+    // it owns.
+    const [tab, setTab] = useState("score");
     const [board, setBoard] = useState("xp");   // which of the two all-time boards
     const [scope, setScope] = useState("global");
 
@@ -191,7 +204,7 @@ export default function Ranked() {
                 </div>
 
                 <Tabs value={tab} onValueChange={setTab} className="space-y-6">
-                    <TabsList className="grid w-full sm:w-auto sm:inline-grid grid-cols-3 h-auto p-1.5 rounded-2xl bg-surface border-2 border-border shadow-soft">
+                    <TabsList className="grid w-full sm:w-auto sm:inline-grid grid-cols-4 h-auto p-1.5 rounded-2xl bg-surface border-2 border-border shadow-soft">
                         {TABS.map(([v, label, Icon]) => (
                             <TabsTrigger key={v} value={v}
                                 className="flex items-center justify-center gap-1.5 py-2.5 px-3 sm:px-6 rounded-xl text-sm font-bold whitespace-nowrap text-muted-foreground data-[state=active]:bg-foreground data-[state=active]:text-background transition-all">
@@ -200,8 +213,8 @@ export default function Ranked() {
                         ))}
                     </TabsList>
 
-                    {/* ══ MY RANK — the ATAR, the field, and the climb ══════ */}
-                    <TabsContent value="rank" className="mt-0 space-y-6">
+                    {/* ══ SCORE — the ATAR, and the ladder you have climbed ══ */}
+                    <TabsContent value="score" className="mt-0 space-y-6">
 
                         <motion.h1 initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}
                             className="font-display text-2xl sm:text-3xl lg:text-4xl font-extrabold tracking-tight text-foreground leading-[1.1]">
@@ -230,9 +243,15 @@ export default function Ranked() {
                                     <div className="space-y-4 min-w-0">
                                         {/* Where you sit, and what the next rung costs. */}
                                         <div className="grid sm:grid-cols-3 gap-2.5">
+                                            {/* A BAR WITH NO WAY THROUGH IS A DIAGNOSIS,
+                                                and so is a rank. The board is a tab
+                                                away now rather than directly below,
+                                                so the tile that states the standing
+                                                is what opens it. */}
                                             <Stat icon={Trophy} label="Rank"
                                                 value={mine.rank ? `#${mine.rank}` : "—"}
-                                                sub={mine.rank ? `of ${mine.total} ranked` : "not ranked yet"} />
+                                                sub={mine.rank ? `of ${mine.total} ranked` : "not ranked yet"}
+                                                onClick={mine.rank ? () => setTab("board") : null} />
                                             <Stat icon={Users} label="Percentile"
                                                 value={mine.percentile ? `Top ${mine.percentile}%` : "—"}
                                                 sub={scope === "global" ? "across AcedIt" : `in ${scope}`} />
@@ -339,21 +358,6 @@ export default function Ranked() {
                             </div>
                         </motion.section>
 
-                        {/* THE WEEK, read on the way past. It was in the sticky
-                            rail, which is the second column — so below xl it
-                            sat under thirty rows. Full width and above the
-                            board, it is a status line: where they are this
-                            week, how long is left, and what the podium pays. It
-                            opens the TAB rather than the route, because the
-                            route is the thing beside it. */}
-                        <WeekStrip onOpen={() => setTab("league")} />
-
-                        <BoardSection
-                            heading="The ATAR board" meta={ATAR_BOARD}
-                            scope={scope} onScope={setScope} hasSchool={!!data?.my_school}
-                            view={atarView} data={data} loading={loading} nameOf={nameOf}
-                            emptyText="No ranked students in this scope yet — three study days gets you on the board." />
-
                         {/* ── YOUR CLIMB ──────────────────────────────────────
                             Rank, level, the ten-tier ladder and what you have
                             unlocked. It was a tab of its own, which split the
@@ -376,6 +380,24 @@ export default function Ranked() {
                             </div>
                             <MyProfile data={data} loading={loading} />
                         </section>
+                    </TabsContent>
+
+                    {/* ══ BOARD — everyone else, on the same 28 days ════════ */}
+                    <TabsContent value="board" className="mt-0 space-y-6">
+                        <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}>
+                            <h1 className="font-display text-2xl sm:text-3xl lg:text-4xl font-extrabold tracking-tight text-foreground leading-[1.1]">
+                                {loading ? "Sizing up the field…"
+                                    : mine.rank
+                                        ? `${ordinal(mine.rank)} of ${mine.total} on the ATAR board.`
+                                        : "Three study days puts you on the board."}
+                            </h1>
+                        </motion.div>
+
+                        <BoardSection
+                            heading="The ATAR board" meta={ATAR_BOARD}
+                            scope={scope} onScope={setScope} hasSchool={!!data?.my_school}
+                            view={atarView} data={data} loading={loading} nameOf={nameOf}
+                            emptyText="No ranked students in this scope yet — three study days gets you on the board." />
                     </TabsContent>
 
                     {/* ══ LEAGUE — this week ════════════════════════════════ */}
@@ -491,13 +513,16 @@ function BoardSection({
     );
 }
 
-function Stat({ icon: Icon, label, value, sub }) {
+function Stat({ icon: Icon, label, value, sub, onClick = null }) {
+    const Tag = onClick ? "button" : "div";
     return (
-        <div className="rounded-2xl border-2 border-border bg-secondary/30 p-3">
+        <Tag {...(onClick ? { type: "button", onClick } : {})}
+            className={`rounded-2xl border-2 border-border bg-secondary/30 p-3 w-full text-left ${
+                onClick ? "hover:border-foreground/30 hover:bg-secondary/60 transition-colors" : ""}`}>
             <p className="stat-label flex items-center gap-1.5 mb-1"><Icon className="w-3 h-3" /> {label}</p>
             <p className="font-display font-black text-foreground text-xl leading-none tabular-nums">{value}</p>
             <p className="text-[10px] text-muted-foreground mt-1 truncate">{sub}</p>
-        </div>
+        </Tag>
     );
 }
 

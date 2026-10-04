@@ -108,15 +108,17 @@ check("the tab bar grew a column to fit it", () => {
         `${triggers} tabs in a grid that is not grid-cols-${triggers}`);
 });
 
-check("THE WEEK LEADS THE BOARD rather than sitting below thirty rows", () => {
-    const r = strip(RANKED);
-    const strip_ = r.indexOf("<WeekStrip");
-    const grid = r.indexOf("xl:grid-cols-[minmax(0,1fr)_320px]");
-    assert.ok(strip_ > -1, "WeekStrip is gone from Ranked");
-    assert.ok(grid > -1, "the board grid has moved — check this still means what it says");
-    assert.ok(strip_ < grid,
-        "WeekStrip is inside the rail column again, which below xl stacks under the " +
-        "entire board — the exact way this was hidden");
+check("THE LEAGUE IS ITS OWN TAB, and nothing else has to carry it", () => {
+    // `WeekStrip` is DELETED. It existed because the league had one entrance
+    // and that entrance was in a sticky rail which, below xl, stacked under
+    // thirty rows. A tab cannot stack under anything, so the strip became a
+    // second entrance to a screen one tap away — and it sat at the top of a
+    // tab about the ATAR, saying nothing about the ATAR.
+    assert.ok(!/WeekStrip/.test(strip(RANKED)),
+        "WeekStrip is back on Ranked. The tab beside it is the entrance; a strip above " +
+        "the score repeating it is the same screen advertised twice");
+    assert.ok(!fs.existsSync(path.join(root, "src/components/ranked/WeekStrip.jsx")),
+        "the component is back with no importer — read why it went before rehoming it");
 });
 
 // ─── One name per screen ───────────────────────────────────────────────────
@@ -186,21 +188,17 @@ check("THE QUEUE'S ENTRANCES CARRY A NUMBER, not just a word", () => {
         "the dashboard entrance says nothing about what is being asked");
 });
 
-check("THE LEAGUE'S ENTRANCE SAYS WHAT A FINISH PAYS", () => {
-    const w = read("src/components/ranked/WeekStrip.jsx");
-    assert.match(w, /grantForLeague\(/,
-        "the strip prints a position and a clock and nothing about whether the week " +
-        "is worth anything — so there is no reason to open it");
-    assert.ok(!/\b1[0-9]{3}\s*credits/i.test(strip(w)),
-        "a payout figure is written out here rather than taken from grantForLeague, " +
-        "which is the function the server actually grants with");
-});
-
-check("it refuses to print a podium on a board too small to have one", () => {
-    const w = read("src/components/ranked/WeekStrip.jsx");
-    assert.match(w, /total\s*>\s*PODIUM/,
-        "\"top 3 take\" on a board of two is everybody — the refusal podiumGap " +
-        "already makes, and the one leagueLead makes about \"1st of 1\"");
+check("AND THE LEAGUE PAGE STILL SAYS WHAT A FINISH PAYS", () => {
+    // The property survives the strip: `Podium` prints the reward ON the step,
+    // from `grantForLeague` — the function the server actually grants with,
+    // never a figure typed into a component. That was always the better place
+    // for it; the strip was a preview of it one screen earlier.
+    const podium = read("src/components/league/Podium.jsx");
+    assert.match(podium, /grantForLeague\(/,
+        "nothing on the league page says what a finish is worth, so there is no reason " +
+        "to play a week you are already safe in");
+    assert.ok(!/\b1[0-9]{3}\s*credits/i.test(strip(podium)),
+        "a payout figure is written out here rather than taken from grantForLeague");
 });
 
 // ─── Nothing points at a page that is not there ────────────────────────────

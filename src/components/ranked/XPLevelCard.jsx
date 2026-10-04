@@ -32,6 +32,7 @@
  * toggle, while a third of the screen sat empty beside it.
  */
 import React from "react";
+import { XP_RATES, XP_FOOTNOTE } from "@/lib/xpRates";
 import { motion } from "framer-motion";
 import { Progress } from "@/components/ui/progress";
 import { Zap, Trophy, Crown, Flame } from "lucide-react";
@@ -173,31 +174,38 @@ export function XPSources() {
         <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }}
             className="card-soft p-5">
             <p className="stat-label mb-3">Where XP comes from</p>
-            <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-1 gap-2 text-sm">
-                {/* No "AI Challenges" row. That feature was never wired into
-                    the live UI and ChallengeEngine.jsx is deleted — this table
-                    was advertising a way to earn XP that does not exist.
-                    Retire something, grep the copy. */}
-                {[
-                    ["Focus sessions", "1.6–96 XP/hr"],
-                    ["Flashcards", "0.6–1.5 XP/card"],
-                    ["Quizzes", "8–50 XP"],
-                    ["Sub-goals", "40–195 XP"],
-                    ["Full goals", "240–540 XP"],
-                    ["Daily streak", "15–100 XP"],
-                    ["Score wagers", "up to 3.5× bet"],
-                    ["Competitions", "Bonus XP"],
-                ].map(([label, xp]) => (
-                    <div key={label} className="flex justify-between items-center gap-2 bg-secondary/50 rounded-lg px-2.5 py-1.5">
-                        <span className="text-foreground text-xs truncate">{label}</span>
-                        <span className="font-bold text-chart-3 text-xs flex-shrink-0">{xp}</span>
+            {/* DERIVED, NEVER RETYPED. This table was eight hand-written
+                strings and four of them were wrong — flashcards were paying
+                more than it claimed, study sessions nearly three times more,
+                and two rows pointed at features the UI has not been able to
+                reach since Compete became a market board. `xpRates.js` holds
+                the figures and `xpRates.test.mjs` parses the server's own
+                calculators out of `server.mjs` and RUNS them against every one,
+                so a changed payout fails the suite rather than quietly making
+                this screen lie again. */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-1 gap-2">
+                {XP_RATES.map((row) => (
+                    <div key={row.id} className="bg-secondary/50 rounded-lg px-2.5 py-1.5">
+                        <div className="flex justify-between items-baseline gap-2">
+                            <span className="text-foreground text-xs font-bold truncate">{row.label}</span>
+                            <span className="font-bold text-chart-3 text-xs flex-shrink-0 tabular-nums">
+                                {row.rate}
+                            </span>
+                        </div>
+                        {/* THE RULE IS THE POINT, and the note is what makes it
+                            checkable: "2 XP a card" with "1 if you miss it"
+                            under it is something a student can multiply out
+                            against the session they just finished. */}
+                        {row.note && (
+                            <p className="text-[10px] text-muted-foreground/80 mt-0.5 leading-snug">
+                                {row.note}
+                            </p>
+                        )}
                     </div>
                 ))}
             </div>
-            <p className="text-[11px] text-muted-foreground mt-3 leading-snug">
-                Your streak multiplier applies to all of it. Daily caps stop grinding — difficulty and
-                accuracy are what move the number.
-            </p>
+            <p className="text-[11px] text-muted-foreground mt-3 leading-snug">{XP_FOOTNOTE}</p>
         </motion.div>
     );
 }
+
