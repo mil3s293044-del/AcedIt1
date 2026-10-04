@@ -4997,6 +4997,162 @@ its kind, and a piece of writing whose toolbar is two tools wide. Only one of
 them can be seen on a real login at a time, which is the whole reason it draws
 them together.
 
+## AI Tools IS A DIAGNOSTIC: scan, findings, clear
+
+**"Get rid of the bench terminology. Make it feel like diagnostics of a
+computer — a problem has a thin red line that goes up at 90°, shows a problem
+with understanding or grammar, and then the AI tool can fix it until the whole
+problem is resolved."**
+
+The page had been nine personas behind a dropdown, then eight verbs on a
+"bench". Both opened by asking the student the two hardest parts of the job —
+which tool solves this, and what exactly is wrong — and a student who could
+answer the second rarely needed the first. **So the app answers it.** The work
+is scanned, every fault is located and named, each one carries the tool that
+repairs it, and the readout runs clean as they are cleared.
+
+**A TOOL IS A REPAIR FOR A FAULT, NOT A PERSONA.** That reorganisation is what
+made three obvious gaps visible, each of which reads data that has been in the
+repo for months and only the MARKER had ever been shown: **Command Term** (the
+single largest avoidable mark loss in VCE, with `COMMAND_TERMS` sitting two
+imports away from every surface), **Precision Pass** (the per-subject
+`commonMistakes` list), and **Mark Fit** (a VCAA mark is a piece of content, so
+the allocation says how many points the answer needs). `study_coach` left the
+catalogue — it is advice about studying rather than a repair on a piece of
+work, and /Review answers that with numbers a student can check. The `study_coach`
+FEATURE is untouched: that is Ace the companion, a different surface.
+
+### THE SCAN IS A REAL MODEL CALL, and the honest thing is to say so
+
+`toolBrief.js` calls no model on purpose and **that reasoning does not
+transfer.** It diagnosed the student's HISTORY, which is arithmetic over rows
+they own and can check line by line. A diagnosis of a paragraph they typed
+thirty seconds ago cannot be arithmetic — there is nothing to count. So the
+split is: **diagnosing your history is free, diagnosing your work costs a
+scan**, 4 chips of 1000, on the button before it is pressed.
+
+**IT IS PINNED TO HAIKU, not routed through `fast`.** `FAST_MODEL` falls back
+to `MODEL` when `ANTHROPIC_FAST_MODEL` is unset, so a published price resting on
+it would be true on one deploy and silently wrong on the next. `SCAN_MODEL` is a
+constant the server forces, exactly as `MEGA_MODEL` is. Haiku is also right on
+the merits: locating faults against a closed menu is classification. The
+REPAIRS run on the student's own tier, because a repair is judgement.
+
+### IT MUST BE ABLE TO COME BACK CLEAN
+
+The property the whole design rests on. **A scan that always finds five faults
+is a horoscope**, and the first time a student pastes something good and is told
+it is broken, every later finding is read as decoration too — the failure
+`recallSuggest` records a screenshot catching. `readScan` returns an empty list
+happily, the prompt says so in as many words, and the readout has a real screen
+for it rather than looking like the page failed to load.
+
+### THE FAULT SET IS FIXED AT SCAN TIME, so the loop terminates
+
+The obvious build re-scans after every repair and **does not converge**: each
+pass finds new or reshaped faults, and the all-clear the student is working
+toward never arrives. That is the non-convergence this file already records
+about review bots. So one scan produces ONE set; `applyRescan` may only CLEAR
+or KEEP, and anything new a later pass thinks it sees is discarded. The re-scan
+prompt says that, so reporting one costs the model nothing but the student a
+finding they could have had.
+
+**AND THE STUDENT CLEARS IT, never the model.** `drill.js` makes this call
+already: the model suggests, the student presses. Whether they actually
+understand it now is the one judgement only they can make. The re-scan is PROOF
+for anyone who wants it, and it never re-opens something they cleared.
+
+### GRAMMAR ON A CHEMISTRY ANSWER IS MISEDUCATING
+
+`markingPrompt.js` records that VCAA does not penalise spelling, or notation
+written legibly another way, outside the English studies — the leniency is in
+the rubric for that reason. A readout flagging EXPRESSION on a Chemistry
+response would send a student to spend their evening on the one thing that was
+never going to earn a mark, with the app's authority behind it. So faults are
+subject-gated, and **the gate reaches the PROMPT rather than only the
+validator**: dropping an inapplicable finding afterwards still paid for it and
+still spent one of the student's six. Working is gated the other way — there is
+none to show in an English essay.
+
+The families are name matches, because **`subjectIsMathHeavy` is the wrong flag
+and it is the obvious one**: it decides whether a prompt needs the LaTeX rules,
+so it is TRUE for Chemistry.
+
+### THE TRACE IS THE PROGRESS BAR
+
+A hairline runs down the left of the findings and breaks out at 90° into each
+one — a bus with branches, which is what makes it read as instrumentation. Each
+row owns its own segment, so the line turns GREEN FROM THE TOP as findings
+clear. That is "fix it until the whole thing is resolved" drawn once, instead of
+a list plus a percentage saying it twice.
+
+**IT IS ROWS, NOT CALLOUTS, and that is why it survives a phone.** The literal
+reading is an engineering callout — a leader line from a phrase, up, then out to
+a floating label. At 390px there is no margin for the label to float in, and
+half this app's traffic is phones. Worse, a callout can only exist where there
+is something to point AT, and **the strongest findings are the unquotable ones**:
+"never names the mechanism" is unquotable precisely in that the words are
+absent. That is the failure `MarkModule` was rebuilt to end. So the ROW holds
+and the UNDERLINE points, and a finding with nothing to point at loses only its
+underline.
+
+**Overlapping underlines are dropped**, not nested or merged — `annotate.js`
+settled that: nesting claims the inner phrase carries both faults, merging
+invents a span neither finding named.
+
+**NO THIRD ROOM.** A terminal-green-on-black panel was the tempting version. The
+Compete floor earns its own palette by being somewhere else; a third is a third
+set of tokens to keep in sync, and `floorInk.test.mjs` exists because every way
+to break that is silent. High-tech here is PRECISION — a mono fault code,
+hairlines, a numbered lane, one sweep on arrival — in the app's own tokens.
+**Shape carries the state**: open is a hollow ring, cleared is filled with a
+tick, because the brand green and the streak red sit at ΔE 7.0 under
+deuteranopia.
+
+Two things only the screenshot caught. **The gap between rows was a MARGIN**,
+and the trace spans the element's box — so the line broke into one dash per row
+and stopped reading as a bus at all; it is padding now. And **`line-through` on
+a cleared label crosses the SPACE**, so "Command term" rendered as
+"Command-term" — a hyphen the app appeared to have invented.
+
+### What the intake asks, and what it refuses to claim
+
+The five KINDS are gone. Nothing routes on them any more, so the question is
+gone with them and what is left is only what changes the result: the work, the
+SUBJECT (which gates the faults), and optionally the QUESTION and the MARKS.
+**Without the question the scan is told it may not report a command-term or a
+mark-fit finding** — both are claims about a question it cannot see, which is
+the `markPercent` failure — and the intake SAYS so before the button, or a
+readout missing two classes reads as a thin scan rather than as a missing input.
+
+`workpiece.js` kept identity, provenance and the candidate shape and lost the
+routing; `diagnostic.js` replaced it. **The stored key did not move**:
+`input_data.workpiece` is on real rows, and renaming it to match the new
+vocabulary would strand them — the `sideLabels` rule, only the label moves.
+`toolLabels.js` is the names out of the `.jsx` catalogue (the `xpRanks.js`
+move), and it keeps RETIRED names too, because `toolById` falls back to the
+FIRST tool — so without it a coaching chat saved before the rebuild would
+reopen quietly labelled "Math Tutor".
+
+`diagnostic.test.mjs` holds 32 checks and every one was verified by putting the
+bug back: grammar reaching Chemistry, a re-scan appending, a gated fault
+reaching the screen, an unmatched quote anchoring anyway, the server unpinning
+Haiku, the prompt offering every fault regardless of subject, and bench
+vocabulary returning to the copy.
+
+**And the copy scan had the bug it exists to catch.** Its string class allowed
+newlines, so one match ran from one quote to the next across the whole file and
+reported an import three screens away as the defect. The two forms need
+different rules and that is not a detail: a quoted literal must stay on one
+line, and a JSX text node is bounded by its own angle brackets and is routinely
+wrapped over three — excluding newlines there made it blind to every paragraph
+on the page, which is most of the copy it reads.
+
+Draw it with `scripts/_floorProbe.jsx?v=scan`, against four states only one of
+which a real login shows at a time: faults open, part cleared, all clear, and a
+CLEAN scan. That last one is the state the design rests on and a fixture is the
+only way to see it.
+
 ## What the app SAYS it does, and what it does
 
 **"Can you check the whole site again for anything else inaccurate."** Twelve,

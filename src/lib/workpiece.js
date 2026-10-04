@@ -1,40 +1,26 @@
 /**
- * workpiece — the thing you are working ON, and the tools that act on it.
+ * workpiece — the piece of work a scan is about, and where it came from.
  *
- * ─── A CHAT LOSES THE ARTIFACT ──────────────────────────────────────────────
- * /AITools was nine personas behind a dropdown. Ask the essay planner for a
- * plan and the plan is a message in a scroll; the next tool cannot act on it,
- * so the student copies it back in and restates the context. One piece of work
- * meant up to nine separate conversations about it, none of which knew about
- * the others.
+ * ─── IT IS THE OBJECT, NOT THE ROUTING ──────────────────────────────────────
+ * This module used to be the whole model behind a "bench": a kind of thing,
+ * and the operations that applied to it. `diagnostic.js` replaced the routing
+ * half — the scan reads the work and names the faults, and each fault carries
+ * its own repair, so nothing has to ask the student what sort of thing they
+ * have before it can help.
  *
- * So the WORKPIECE is the object and the tools are operations on it. What each
- * tool produced stays on the bench, in order, and every later tool has the ones
- * before it as context. That is the difference between a workshop and a chat
- * window, and it is also the shape of how a SAC actually gets done: explain,
- * plan, draft, mark, fix.
+ * What is left is the part the scan does not do and should not: what the thing
+ * IS (`makeWorkpiece`), what identifies it across sessions (`workpieceKey`,
+ * which `bench.js` groups saved conversations on), and where it came from
+ * (`SOURCES`, printed so a candidate pulled out of the mistake bank carries a
+ * way back to it).
  *
- * ─── A TOOL IS A VERB, NOT A PERSON ─────────────────────────────────────────
- * "Math Tutor" is somebody you talk to. "Work it through" is something you do
- * to a problem. The personas are unchanged underneath — `chatTools.js` still
- * owns the prompts, the options and the feature tag that bills them — and this
- * module is the layer that says what each one DOES and what it can do it to.
- *
- * ─── A TOOL THAT CANNOT ACT ON THIS WORKPIECE IS NOT OFFERED ────────────────
- * You do not memorise a quadratic and you do not mark a concept. A dropdown
- * cannot express that and a toolbar must, or the bench is a nine-item menu with
- * the same problem the dropdown had. `toolsFor` returns only what applies, in
- * the order it is worth doing, and the FIRST one is the one the bench leads
- * with. Nothing is hidden for being advanced; it is hidden for being
- * inapplicable, which is a fact about the workpiece rather than a judgement
- * about the student.
- *
- * ─── NOTHING HERE CALLS A MODEL ─────────────────────────────────────────────
- * Same rule `toolBrief.js` keeps. This picks the tools, writes the opening
- * message and names the step; the model runs when the student presses one.
+ * ─── THE STORED SHAPE DID NOT MOVE ──────────────────────────────────────────
+ * `input_data.workpiece` is on real rows, saved by real students. Renaming it
+ * to match the new vocabulary would strand every one of them, which is the rule
+ * `sideLabels` already keeps about yes and no: ONLY THE LABEL MOVES. Every word
+ * a student reads is the scan's; the key underneath stays as it is.
  */
 
-import { personaFor } from "./toolBrief.js";
 
 /* ── What a workpiece can be ─────────────────────────────────────────────── */
 
@@ -79,139 +65,27 @@ export const KIND_LIST = Object.values(KINDS);
 /** Is this a kind the bench knows? Anything else cannot be given tools. */
 export const isKind = (id) => Object.prototype.hasOwnProperty.call(KINDS, String(id || ""));
 
-/* ── The operations ──────────────────────────────────────────────────────── */
+/* ── The operations are GONE, and `diagnostic.js` is why ─────────────────── */
 
 /**
- * Every tool, as a verb, with what it can act on.
+ * This file used to carry eight OPERATIONS — a verb per tool, with the kinds it
+ * applied to — and `toolsFor` routed from the kind of thing on the bench to the
+ * tools that could act on it.
  *
- * `tool` is the `chatTools.js` id and is what actually runs — this adds the
- * VERB, the kinds it applies to, and the opening message. `rank` is the order
- * within a kind, lowest first, and it is the order a student would actually do
- * them in rather than a popularity guess: understand it, then plan it, then
- * produce, then check, then rehearse.
+ * That is a SECOND answer to the question the scan now answers properly. The
+ * bench asked "what sort of thing is this?" and offered everything that could
+ * apply; the scan reads the work and names what is actually wrong, and each
+ * fault carries its own repair. Keeping both would mean a student could be
+ * offered "Mark it" by the kind router while the readout said the only fault
+ * was a command term — two surfaces answering "which tool", disagreeing, with
+ * nothing on screen saying which to believe. That is the shape this codebase
+ * keeps deleting.
  *
- * `study_coach` is deliberately ABSENT. It is advice about studying rather than
- * an operation on a piece of work, so putting it on a bench beside "mark it"
- * would be the one tool here that does nothing to the thing in front of you.
- * It stays reachable as its own chat.
+ * What survives here is what the scan does NOT do: identity (`workpieceKey`),
+ * provenance (`SOURCES`), and the shape a candidate from the student's own
+ * work arrives in. `KINDS` stays with it — a candidate still says what it is,
+ * and the intake prints it — but nothing ROUTES on it any more.
  */
-export const OPERATIONS = [
-    {
-        id: "explain",
-        tool: "concept_explainer",
-        verb: "Explain it",
-        does: "What this is actually asking, from the start.",
-        appliesTo: ["question", "problem", "topic", "material"],
-        rank: 10,
-        seed: (w) => `Explain this properly, from the start, and check I have got it.\n\n${w.body}`,
-    },
-    {
-        id: "work",
-        tool: "math_tutor",
-        verb: "Work it through",
-        does: "Step by step, with the working shown.",
-        appliesTo: ["problem", "question"],
-        rank: 20,
-        seed: (w) => `Work this through step by step. Show every line, and stop to check I am following.\n\n${w.body}`,
-    },
-    {
-        id: "plan",
-        tool: "essay_planner",
-        verb: "Plan it",
-        does: "A contention, a structure and the evidence.",
-        appliesTo: ["question", "writing"],
-        rank: 30,
-        seed: (w) => `Help me plan a response to this — contention, structure, and what evidence each part needs.\n\n${w.body}`,
-    },
-    {
-        id: "mark",
-        tool: "english_mentor",
-        verb: "Mark it",
-        does: "Against the real criteria, like an assessor.",
-        appliesTo: ["writing"],
-        rank: 40,
-        seed: (w) => `Mark this against the VCAA criteria. Tell me what a full-mark version would have contained.\n\n${w.body}`,
-    },
-    {
-        id: "test",
-        tool: "exam_questions",
-        verb: "Question me",
-        does: "Exam-style questions, with marking guides.",
-        appliesTo: ["topic", "material", "question", "problem"],
-        rank: 50,
-        seed: (w) => `Write me exam-style questions on this, with marking guides.\n\n${w.body}`,
-    },
-    {
-        id: "condense",
-        tool: "note_summariser",
-        verb: "Condense it",
-        does: "Down to what is worth revising.",
-        appliesTo: ["material", "topic"],
-        rank: 60,
-        seed: (w) => `Condense this down to what is actually worth revising.\n\n${w.body}`,
-    },
-    {
-        id: "teach",
-        tool: "teaching_assistant",
-        verb: "Teach it back",
-        does: "You explain, it asks why.",
-        appliesTo: ["topic", "material"],
-        rank: 70,
-        seed: (w) => `I am going to teach you this. Play a student who asks why, and stop me where I am vague.\n\n${w.body}`,
-    },
-    {
-        id: "memorise",
-        tool: "line_memoriser",
-        verb: "Memorise it",
-        does: "Line by line, until it holds.",
-        appliesTo: ["material"],
-        rank: 80,
-        seed: (w) => `Help me memorise this line by line.\n\n${w.body}`,
-    },
-];
-
-/** One operation by its id. */
-export const operationById = (id) =>
-    OPERATIONS.find((o) => o.id === String(id || "")) || null;
-
-/**
- * The tools that can act on this workpiece, best first.
- *
- * SUBJECT OVERRIDES RANK FOR ONE PAIR ONLY. `personaFor` already decides which
- * persona marks a subject's written work, and a maths question belongs with the
- * tutor rather than the explainer however the ranks fall. Letting the subject
- * reorder everything would make the toolbar move about for reasons a student
- * cannot see, so it promotes exactly the one operation whose tool the subject
- * names, and nothing else shifts.
- *
- * ─── A FALLBACK IS NOT A NOMINATION, and promoting one was visibly wrong ────
- * `personaFor` returns `exam_questions` for everything it does not recognise —
- * which is the honest default for MARKING and is not a statement that questions
- * are the thing to do first. Promoted on it, every subject that is not maths or
- * English led with "Question me": a Chemistry criterion the student keeps
- * dropping opened offering to test them on it rather than to explain it, which
- * is the wrong end of the ladder and was obvious the moment the bench was drawn.
- * Only a SPECIALIST persona promotes; the general one leaves the ranks alone.
- */
-const SPECIALIST = new Set(["math_tutor", "english_mentor"]);
-
-export function toolsFor(workpiece) {
-    const kind = workpiece?.kind;
-    if (!isKind(kind)) return [];
-    const named = personaFor(workpiece?.subject);
-    const persona = SPECIALIST.has(named) ? named : null;
-    return OPERATIONS
-        .filter((o) => o.appliesTo.includes(kind))
-        .slice()
-        .sort((a, b) => {
-            const pa = a.tool === persona ? 0 : 1;
-            const pb = b.tool === persona ? 0 : 1;
-            return pa - pb || a.rank - b.rank;
-        });
-}
-
-/** The one the bench leads with, or null when nothing applies. */
-export const leadTool = (workpiece) => toolsFor(workpiece)[0] || null;
 
 /* ── Building one ────────────────────────────────────────────────────────── */
 
@@ -325,34 +199,14 @@ export function titleFrom(body = "") {
 /* ── Steps ───────────────────────────────────────────────────────────────── */
 
 /**
- * What a tool run leaves behind.
- *
- * A step is a CONVERSATION, which is why the bench did not need a second send
- * path: `UnifiedChat` already streams, handles artifacts, bills the right
- * feature and persists. A step is that conversation scoped to one operation on
- * one workpiece, so "make it harder" and "I still do not get part b" land where
- * they belong instead of in a general thread about everything.
+ * A step is still a CONVERSATION, which is why there is no second send path —
+ * but its title and its opening message come from the FINDING it repairs now
+ * (`diagnostic.repairSeed`), not from an operation. `bench.js` names an older
+ * step from its tool instead, through `toolLabels.js`.
  */
-export function stepTitle(op, workpiece) {
-    if (!op) return "Step";
-    const subject = workpiece?.subject ? ` · ${workpiece.subject}` : "";
-    return `${op.verb}${subject}`;
-}
 
-/**
- * The opening message for an operation.
- *
- * It CARRIES THE WORKPIECE, which is the entire point: the student never
- * restates what they are working on, and every step after the first is about
- * the same thing by construction rather than by them remembering to say so.
- */
-export function seedFor(op, workpiece) {
-    if (!op || !workpiece?.body) return "";
-    return op.seed(workpiece);
-}
 
 export default {
-    KINDS, KIND_LIST, isKind, OPERATIONS, operationById,
-    toolsFor, leadTool, SOURCES, makeWorkpiece, titleFrom, workpieceKey,
-    stepTitle, seedFor, BODY_MAX,
+    KINDS, KIND_LIST, isKind,
+    SOURCES, makeWorkpiece, titleFrom, workpieceKey, BODY_MAX,
 };

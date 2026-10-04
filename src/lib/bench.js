@@ -26,22 +26,19 @@
  * about an unrecognised topic.
  */
 
-import { OPERATIONS, operationById, stepTitle, titleFrom, workpieceKey } from "./workpiece.js";
+import { titleFrom, workpieceKey } from "./workpiece.js";
+import { labelForTool } from "./toolLabels.js";
 
 /**
  * The tool a step was run with, in words.
  *
- * OFF THE OPERATIONS TABLE rather than out of `chatTools.js`, which is a .jsx
- * module carrying icons and React — `bench.js` is imported by the test loader
- * and has to stay plain. A tool with no operation (`study_coach`, the artifact
- * tools) is not named rather than guessed at, which is the same refusal the
- * kind makes one function down.
+ * From `toolLabels.js` rather than `chatTools.js`, which carries icons and
+ * React — this module is imported by the plain-node test loader and has to stay
+ * resolvable without a bundler. That map also keeps the names of RETIRED tools,
+ * so a coaching chat saved before the rebuild still says what it was instead of
+ * reopening quietly labelled as the first tool in the list.
  */
-function toolLabel(toolId) {
-    if (!toolId) return "";
-    const op = OPERATIONS.find((o) => o.tool === toolId);
-    return op ? op.verb : "";
-}
+const toolLabel = labelForTool;
 
 /** How many benches the shelf offers. It is a shelf, not a history. */
 export const BENCH_MAX = 4;
@@ -103,7 +100,9 @@ export function benchKeyOf(row) {
 
 /** One step, off the conversation that is it. */
 export function stepFromRow(row, workpiece) {
-    const op = operationById(row?.input_data?.operation);
+    // `input_data.operation` is on rows saved by the bench build and is read
+    // only as a fallback label now — the scan names a step by its FINDING.
+    const opLabel = labelForTool(row?.input_data?.tool || row?.tool_type);
     return {
         id: String(row.id),
         // The conversation this step IS. Opening the step reopens it rather
@@ -111,14 +110,14 @@ export function stepFromRow(row, workpiece) {
         // whole reason a step is worth being a step.
         convId: String(row.id),
         conv: row,
-        op: op?.id || null,
+        op: row?.input_data?.operation || null,
         tool: row.tool_type || row.input_data?.tool || null,
-        title: op ? stepTitle(op, workpiece) : String(row.title || "").trim() || "Earlier",
+        title: String(row.title || "").trim() || opLabel || "Earlier",
         // WHICH TOOL IT WAS is the preview for a step that has no operation —
         // every adopted chat, which is most of what is on this site. The row
         // otherwise drew as a bare line with a glyph and nothing to read, and
         // the tool is the one fact about it the student can act on.
-        preview: op?.does || toolLabel(row.tool_type) || "",
+        preview: toolLabel(row.tool_type) || "",
         at: row.updated_date || row.created_date || null,
     };
 }
