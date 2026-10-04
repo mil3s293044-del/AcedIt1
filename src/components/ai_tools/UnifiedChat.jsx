@@ -19,7 +19,7 @@ import {
 import { createPageUrl } from "@/utils";
 import { base44 } from "@/api/base44Client";
 import { saveResult, deleteResult, loadSavedResults } from "@/lib/saveResult";
-import { chatRows } from "@/lib/bench";
+import { chatRows } from "@/lib/aiChats";
 import { invokeLLMStream } from "@/lib/streamingAI";
 import { useToast } from "@/components/ui/use-toast";
 import { recordStudyAndGetStreak } from "@/components/shared/streakHelpers";
@@ -62,27 +62,20 @@ Respond as the ${tool.label} directly to the student. Markdown formatting.`;
 
 export default function UnifiedChat({
     locked = false,
-    // ── A STEP ON THE BENCH ─────────────────────────────────────────────────
-    // The bench opens this component scoped to ONE operation on one workpiece.
-    // These take precedence over the `?tool=` deep link below, because a prop
-    // is the more specific instruction: the student is already inside a bench
-    // and the URL is whatever they arrived on.
+    // ── OPENED ON SOMETHING ─────────────────────────────────────────────────
+    // The dashboard opens this component already pointed at a tool — from a
+    // direction card, or from a tool in the toolkit. These take precedence over
+    // the `?tool=` deep link below, because a prop is the more specific
+    // instruction: the student pressed something on this screen, and the URL is
+    // whatever they arrived on.
     startTool = null,
     startSubject = "",
     startSeed = "",
-    // ── THE STEP SAVES AGAINST ITS BENCH ────────────────────────────────────
-    // A bench is not stored: it is the steps run on one workpiece, grouped by
-    // the workpiece's key (`bench.js`). So the only thing that has to persist
-    // is this — the workpiece and which operation this step is — riding in
-    // `input_data` on the conversation row that already saves. No table, no
-    // migration, and nothing that can drift from the steps it is made of.
-    workpiece = null,
-    operation = null,
-    // An EXISTING conversation to reopen, which is what makes a step a thing
-    // you can push on rather than a transcript. Hydrated once on mount.
+    // An EXISTING conversation to reopen, which is what makes the Recent list
+    // a way back into work rather than a transcript. Hydrated once on mount.
     startConversation = null,
-    // Told the row id the moment one exists, so the bench can reopen this step
-    // without waiting for a reload.
+    // Told the row id the moment one exists, so the dashboard's Recent list is
+    // current when the student comes back out without waiting for a reload.
     onSaved = null,
     onExit = null,
     exitLabel = "",
@@ -141,7 +134,7 @@ export default function UnifiedChat({
             // null, so testing its result for truthiness would make every visit
             // look like a deep link and silently kill the intent default below.
             // The param is matched against the catalogue directly instead.
-            // A PROP BEATS THE URL. The bench already decided which operation
+            // A PROP BEATS THE URL. The dashboard already decided which tool
             // this is; the query string is only how a link from another screen
             // asks for one, and both land in the same branch below so there is
             // one opening behaviour rather than two.
@@ -158,10 +151,10 @@ export default function UnifiedChat({
             // subjects, and critically setConversations() — never ran, which
             // is why the sidebar looked permanently empty regardless of what
             // had actually been saved.
-            // ── A STEP ALREADY RUN IS REOPENED, NOT RESTARTED ───────────
-            // The bench's whole promise is that a step is a thing you can push
-            // on: "I still do not get part b" has to land in the conversation
-            // that explained part b. Hydrated inline rather than through
+            // ── A CONVERSATION IS REOPENED, NOT RESTARTED ───────────────
+            // That is the whole promise of the Recent list: "I still do not get
+            // part b" has to land in the conversation that explained part b,
+            // not in a second thread about it. Hydrated inline rather than through
             // `openConversation` below, which is a `const` declared further
             // down — it is bound by the time an effect runs, but a function
             // this effect depends on being hoisted is a TDZ crash one reorder
@@ -189,7 +182,7 @@ export default function UnifiedChat({
                 // is `subjectName`, and `subjectBlock(s)` is what loads that
                 // study's VCAA EXAMINER PROFILE. Setting it on `toolOptions`
                 // alone — which is what this did — landed on the right tool
-                // with the subject nowhere the prompt could see it, so a bench
+                // with the subject nowhere the prompt could see it, so a tool
                 // opened on a Chemistry question ran the general VCE preamble
                 // instead of the Chemistry profile. The same half-wired shape
                 // the comment above warns about, in the line below it, and the
@@ -215,9 +208,9 @@ export default function UnifiedChat({
             setSubjects((subs || []).filter(s => !seen.has(s.subject_name) && seen.add(s.subject_name)));
             // Only chat-format rows join the sidebar (legacy saved results
             // live on the History page). Merge DB + localStorage.
-            // ONE PREDICATE, shared with the bench shelf (`bench.js`). Two
-            // copies would let the sidebar and the shelf disagree about what
-            // the student has, on two lists of the same rows.
+            // ONE PREDICATE, shared with the dashboard's Recent list
+            // (`aiChats.js`). Two copies would let the sidebar and that list
+            // disagree about what the student has, on two lists of one table.
             const allConvs = chatRows(convs);
             // Dedupe by id (might have both DB and local copies)
             const deduped = [];
@@ -281,14 +274,10 @@ export default function UnifiedChat({
     const optsRef = useRef({});
     const filesRef = useRef([]);
     // REFS, NOT THE CLOSURE. `persist` runs in the same tick a send completes
-    // and is memoised on `user` alone; reading the props through the closure
-    // would save whatever workpiece was mounted when that callback was built.
+    // and is memoised on `user` alone; reading `onSaved` through the closure
+    // would call whichever handler was mounted when that callback was built.
     // The same trap `startFromSuggestion` and the pomodoro commit both record.
-    const wpRef = useRef(workpiece);
-    const opRef = useRef(operation);
     const onSavedRef = useRef(onSaved);
-    useEffect(() => { wpRef.current = workpiece; }, [workpiece]);
-    useEffect(() => { opRef.current = operation; }, [operation]);
     useEffect(() => { onSavedRef.current = onSaved; }, [onSaved]);
     const persist = useCallback(async (finalMessages, usedTool, usedSubject) => {
         if (!user?.email) return;
@@ -301,11 +290,6 @@ export default function UnifiedChat({
             input_data: {
                 tool: usedTool.id, subject: usedSubject || null,
                 options: optsRef.current, files: filesRef.current, messages: finalMessages,
-                // Carried rather than recomputed. A step whose workpiece was
-                // dropped here is a step no bench can find again, which is the
-                // one way this feature can lose a student's work.
-                ...(wpRef.current ? { workpiece: wpRef.current } : {}),
-                ...(opRef.current ? { operation: opRef.current } : {}),
             },
             date_created: new Date().toISOString().split("T")[0],
         };
@@ -688,13 +672,12 @@ export default function UnifiedChat({
 
             <div className="relative flex flex-col flex-1 min-w-0 min-h-0">
             {/* ── Context strip — mobile pills; on desktop only shows in-chat ── */}
-            {/* ── THE WAY BACK TO THE BENCH ───────────────────────────────
-                A step is one operation on one workpiece, so there has to be a
-                way out of it that is not the browser's back button — and it
-                carries the WORKPIECE's name rather than the word "back",
-                because what the student is returning to is the thing they are
-                working on. Only drawn when a bench opened this; reached any
-                other way the chat is the page and has nothing to exit to. */}
+            {/* ── THE WAY BACK TO THE DASHBOARD ───────────────────────────
+                A chat opened from the dashboard needs a way out of it that is
+                not the browser's back button, and it names what it returns TO
+                rather than saying "back". Only drawn when something opened this
+                with an exit; reached by a deep link from another screen the
+                chat is the page and has nothing to exit to. */}
             {onExit && (
                 <div className="flex items-center gap-2 px-3 sm:px-4 pt-2 flex-shrink-0">
                     <button
@@ -704,7 +687,7 @@ export default function UnifiedChat({
                             hover:text-foreground transition-colors min-w-0"
                     >
                         <ArrowLeft className="w-3.5 h-3.5 flex-shrink-0" />
-                        <span className="truncate">{exitLabel || "Bench"}</span>
+                        <span className="truncate">{exitLabel || "AI Tools"}</span>
                     </button>
                 </div>
             )}

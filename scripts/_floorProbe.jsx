@@ -37,13 +37,10 @@ import BottomNav from "@/components/layout/BottomNav";
 import { CardBack } from "@/components/cards/PlayingCard";
 import PrankOverlay, { prankBodyClass } from "@/components/pranks/PrankOverlay";
 import { PrankStageProvider } from "@/lib/PrankStage";
-import Readout from "@/components/ai_tools/Readout";
-import ScanIntake from "@/components/ai_tools/ScanIntake";
+import ToolsDashboard from "@/components/ai_tools/ToolsDashboard";
 import QuestionPanel from "@/components/mistakes/QuestionPanel";
-import { makeWorkpiece } from "@/lib/workpiece";
-import { readScan } from "@/lib/diagnostic";
-import { candidates as wpCandidates } from "@/lib/workpieceSources";
-import { benches } from "@/lib/bench";
+import { toolBrief } from "@/lib/toolBrief";
+import { recentChats } from "@/lib/aiChats";
 
 /** A real ISO day N days out, so the assessment card has a date to count to. */
 const inDaysISO = (n) => {
@@ -579,9 +576,16 @@ function StoreView() {
 }
 views.store = () => <StoreView />;
 
-/* The intake's two derived lists. Real candidate rows rather than hand-made
-   cards, so `workpieceSources` is exercised rather than bypassed. */
-const BENCH_PICKS = wpCandidates({
+/* ── ?v=tools — the AI Tools dashboard, in the three states a real login can
+   only show one of at a time: an account with work behind it (direction cards
+   AND recent conversations), a LOCKED free account, and a first-week account
+   with nothing measured. That last one is the honest common case and the one a
+   fixture is the only way to see — every card builder refuses rather than
+   padding, so a new student gets the empty sentence and the toolkit.
+
+   The cards come through `toolBrief` off real rows rather than being hand-made,
+   so the builders are exercised rather than bypassed. */
+const TOOLS_ROWS = {
     assessments: [{ id: "a1", subject_name: "Chemistry", title: "Unit 4 AOS 1 SAC", due_date: inDaysISO(3) }],
     bankCards: [1, 2].map((i) => ({
         id: `m${i}`, topic: "Mistake bank", subject_name: "Chemistry", is_active: true,
@@ -590,106 +594,66 @@ const BENCH_PICKS = wpCandidates({
             criterion: "links the structure to the property",
             topic: "Bonding",
             question: "Explain why graphite conducts electricity but diamond does not.",
-            question_title: "Explain why graphite conducts",
         } },
     })),
-});
+    cards: [],
+    attempts: [],
+};
 
-const BENCH_PIECE = makeWorkpiece({
-    kind: "question",
-    body: "Explain why graphite conducts electricity but diamond does not. (4 marks)",
-    title: "links the structure to the property",
-    subject: "Chemistry",
-    source: "mistake",
-});
+const TOOLS_CARDS = toolBrief({ ...TOOLS_ROWS, isReady: () => true });
 
-const BENCH_SHELF = benches([
+const TOOLS_RECENT = recentChats([
     {
-        id: "c1", tool_type: "concept_explainer", title: "Explain why graphite conducts",
+        id: "c1", tool_type: "concept_explainer", title: "Explain why graphite conducts electricity",
         subject_name: "Chemistry", created_date: "2026-10-01T09:00:00.000Z",
-        input_data: {
-            workpiece: BENCH_PIECE, subject: "Chemistry",
-            messages: [{ role: "user", content: "x" }, { role: "assistant", content: "y" }],
-        },
+        input_data: { subject: "Chemistry", messages: [
+            { role: "user", content: "Why does graphite conduct and diamond not?" },
+            { role: "assistant", content: "y" },
+        ] },
     },
+    {
+        id: "c2", tool_type: "math_tutor", title: "",
+        subject_name: "Mathematical Methods", created_date: "2026-09-29T19:30:00.000Z",
+        input_data: { subject: "Mathematical Methods", messages: [
+            { role: "user", content: "I keep losing the chain rule on the inside function, can you walk me through one" },
+            { role: "assistant", content: "y" },
+        ] },
+    },
+    // A row with no timestamp sorts LAST and is NOT dropped — the falsy-zero
+    // rule `expiredKeys` keeps, pointed at a list rather than at a delete.
+    {
+        id: "c3", tool_type: "study_coach", title: "What to do with three weeks left",
+        input_data: { messages: [{ role: "user", content: "three weeks until my SAC" }] },
+    },
+    // Opened and never sent: not a conversation, and it must not take a slot.
+    { id: "c4", tool_type: "essay_planner", input_data: { messages: [] } },
 ]);
 
-/* ── ?v=scan — the readout, in the states only one of which a real login can
-   show at a time: faults open, part cleared, all clear, and a CLEAN scan that
-   found nothing. The last one is the state the whole design rests on — a scan
-   that always finds something is a horoscope — and it is the one a fixture is
-   the only way to see. */
-const SCAN_WORK = `The rate of reaction goes up when you heat it because the particles move faster and bump into each other more. This means more collisions happen so the reaction is quicker. Also the activation energy is lower when it is hot.`;
-
-const scanFindings = () => readScan({
-    findings: [
-        {
-            fault: "understanding",
-            says: "States that activation energy is lowered by heating. Temperature does not change the activation energy; it changes the proportion of particles that exceed it.",
-            wanted: "A higher temperature raises the average kinetic energy, so a greater proportion of collisions exceed the unchanged activation energy.",
-            quote: "the activation energy is lower when it is hot",
-        },
-        {
-            fault: "command_term",
-            says: "The question used EXPLAIN, which requires the cause and its mechanism. The response describes what happens without naming why collision frequency rises.",
-            wanted: "Each step linked to the one before it, ending at the measured rate.",
-            quote: "",
-        },
-        {
-            fault: "precision",
-            says: "Everyday wording in place of the study design's terms throughout.",
-            wanted: "\u201ccollision frequency\u201d and \u201ckinetic energy\u201d rather than \u201cbump into each other\u201d and \u201cmove faster\u201d.",
-            quote: "bump into each other more",
-        },
-        // Gated out of Chemistry on purpose: VCAA does not price expression
-        // here, and a readout that flagged it would send a student to spend
-        // their evening on the one thing that could never earn a mark.
-        { fault: "expression", says: "Comma splice in the second sentence.", quote: "" },
-    ],
-}, { work: SCAN_WORK, subject: "Chemistry" }).findings;
-
-function ScanView() {
-    const all = scanFindings();
-    const part = all.map((f, i) => (i === 0 ? { ...f, cleared: true } : f));
-    const done = all.map((f) => ({ ...f, cleared: true }));
+function ToolsView() {
+    const noop = () => {};
     return (
         <MemoryRouter>
-        <div className="bg-background min-h-screen py-6 space-y-10">
+        <div className="bg-background min-h-screen">
             {[
-                ["Scanned \u2014 three faults open", all],
-                ["One cleared \u2014 the trace runs green from the top", part],
-                ["All clear", done],
-            ].map(([title, rows]) => (
-                <div key={title} className="border-t border-border pt-6 first:border-0 first:pt-0">
-                    <p className="px-8 text-[11px] font-black uppercase tracking-widest text-muted-foreground mb-2">
+                ["An account with work behind it", { cards: TOOLS_CARDS, recent: TOOLS_RECENT, locked: false }],
+                ["Locked — a free account reads the same diagnosis", { cards: TOOLS_CARDS, recent: [], locked: true }],
+                ["Nothing measured yet — the first week", { cards: [], recent: [], locked: false }],
+            ].map(([title, props]) => (
+                <div key={title} className="border-t border-border first:border-0">
+                    <p className="px-4 pt-6 text-[11px] font-black uppercase tracking-widest text-muted-foreground">
                         {title}
                     </p>
-                    <Readout work={SCAN_WORK} subject="Chemistry" findings={rows}
-                        onRepair={() => {}} onClear={() => {}} onRescan={() => {}} onNew={() => {}} />
+                    <ToolsDashboard
+                        {...props}
+                        onOpenCard={noop} onOpenTool={noop} onOpenChat={noop}
+                    />
                 </div>
             ))}
-            <div className="border-t border-border pt-6">
-                <p className="px-8 text-[11px] font-black uppercase tracking-widest text-muted-foreground mb-2">
-                    A clean scan \u2014 the state the whole design rests on
-                </p>
-                <Readout work={SCAN_WORK} subject="Chemistry" findings={[]} onNew={() => {}} />
-            </div>
-            <div className="border-t border-border pt-6">
-                <p className="px-8 text-[11px] font-black uppercase tracking-widest text-muted-foreground mb-2">
-                    The intake
-                </p>
-                <ScanIntake
-                    candidates={BENCH_PICKS}
-                    recent={BENCH_SHELF}
-                    subjects={["Chemistry", "Mathematical Methods", "English"]}
-                    onPick={() => {}} onOpenRecent={() => {}} onScan={() => {}}
-                />
-            </div>
         </div>
         </MemoryRouter>
     );
 }
-views.scan = () => <ScanView />;
+views.tools = () => <ToolsView />;
 
 views.backs = () => (
     <div className="p-8 bg-background min-h-screen">
