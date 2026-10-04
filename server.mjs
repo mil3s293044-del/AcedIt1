@@ -68,7 +68,6 @@ import { estimateCostMicros, isUnpricedModel, formatMicros } from "./src/lib/aiC
 // Which model a student's work runs on. The tier lives on their profile, so it
 // is resolved here rather than trusted from the request body.
 import { modelFor } from "./src/lib/aiModels.js";
-import { SCAN_FEATURE, SCAN_MODEL } from "./src/lib/diagnostic.js";
 import { priceOf, stackOf, spendableFor, WEEKLY_CHIPS, chipsSpent } from "./src/lib/chips.js";
 // A textbook is stored whole and read a CHAPTER at a time — the caps, the
 // range maths and the chip price all live in one module because the number
@@ -3833,15 +3832,7 @@ app.post("/local-ai/invokeAIStream", async (req, res) => {
       // textbook is bulk comprehension rather than the judgement marking
       // needs. The screen names the model rather than leaving somebody to
       // wonder why a chapter read thinner than a quiz mark.
-      // A DIAGNOSTIC SCAN IS PINNED, not left to `fast`. `FAST_MODEL` falls
-      // back to MODEL when ANTHROPIC_FAST_MODEL is unset, so a price claim
-      // resting on it would be true on one deploy and silently wrong on the
-      // next — and `src/lib/chips.js` publishes this scan at the Haiku rate on
-      // the button before the student presses it. Locating faults against a
-      // closed menu is classification, which is what Haiku is for here; the
-      // REPAIRS run on the student's own tier, because a repair is judgement.
-      model: feature === SCAN_FEATURE ? SCAN_MODEL
-        : megaPages > 0 ? MEGA_MODEL : modelFor(tierProfile?.ai_model_preference, feature, {
+      model: megaPages > 0 ? MEGA_MODEL : modelFor(tierProfile?.ai_model_preference, feature, {
         fast: params.fast,
         vision: params.vision === true,
         standardModel: MODEL,
@@ -4223,15 +4214,7 @@ app.post("/local-ai/invokeAI", async (req, res) => {
       // textbook is bulk comprehension rather than the judgement marking
       // needs. The screen names the model rather than leaving somebody to
       // wonder why a chapter read thinner than a quiz mark.
-      // A DIAGNOSTIC SCAN IS PINNED, not left to `fast`. `FAST_MODEL` falls
-      // back to MODEL when ANTHROPIC_FAST_MODEL is unset, so a price claim
-      // resting on it would be true on one deploy and silently wrong on the
-      // next — and `src/lib/chips.js` publishes this scan at the Haiku rate on
-      // the button before the student presses it. Locating faults against a
-      // closed menu is classification, which is what Haiku is for here; the
-      // REPAIRS run on the student's own tier, because a repair is judgement.
-      model: feature === SCAN_FEATURE ? SCAN_MODEL
-        : megaPages > 0 ? MEGA_MODEL : modelFor(tierProfile?.ai_model_preference, feature, {
+      model: megaPages > 0 ? MEGA_MODEL : modelFor(tierProfile?.ai_model_preference, feature, {
         fast: params.fast,
         vision: params.vision === true,
         standardModel: MODEL,

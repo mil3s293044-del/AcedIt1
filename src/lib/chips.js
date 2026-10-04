@@ -71,11 +71,6 @@ export const MICROS_PER_CHIP = WEEKLY_CAP_MICROS / WEEKLY_CHIPS;
  */
 export const PRICE = {
     study_coach:      2,    // $0.0027 on Haiku  — 42% margin
-    // A diagnostic scan: ~1.5k in, ~600 out, PINNED to Haiku by
-    // `diagnostic.js` rather than left to the student's tier, because
-    // locating faults against a fixed menu is classification rather than
-    // judgement. $0.0045 real against $0.0078 charged.
-    ai_scan:          4,    // $0.0045 on Haiku  — 42% margin
     active_recall:    8,    // $0.0120           — 30%
     blurting:         8,    // $0.0141           — 11%
     ai_chat:          8,    // $0.0144           —  8%
@@ -121,7 +116,7 @@ export function saverDivisor() {
  * discount him again — he would otherwise be billed a third of a price that
  * was already computed from Haiku.
  */
-export const ALREADY_CHEAP = new Set(["study_coach", "ai_scan"]);
+export const ALREADY_CHEAP = new Set(["study_coach"]);
 
 export function priceOf(feature, tier = "standard") {
     const base = PRICE[feature] ?? DEFAULT_PRICE;

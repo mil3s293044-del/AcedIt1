@@ -6,10 +6,7 @@
  *   maths strands, difficulty, essay types…) baked into the prompt
  * - its original tier feature tag — caps unchanged.
  */
-import {
-    Calculator, PenTool, FileQuestion, Lightbulb,
-    FileText, Drama, Sparkles, Repeat, Crosshair, Scale
-} from "lucide-react";
+import { Calculator, PenTool, FileQuestion, Lightbulb, FileText, Drama, Sparkles, Repeat, Crosshair, Scale, GraduationCap } from "lucide-react";
 import { getExaminerPrompt, getLatexRules } from "@/lib/subjectExaminerPrompts";
 // ONE COPY OF THE NAMES. Plain modules (bench.js, the tests) cannot import this
 // file — it carries icons and React — so the labels live in a .js they can read
@@ -405,6 +402,24 @@ export const CHAT_TOOLS = [
         supportsFiles: false,
         options: [],
         system: (s) => `${subjectBlock(s)}\n\n${COACH_TONE}\n\nROLE: Mark allocation check. A VCAA mark is a piece of content, so the number of marks tells the student how many distinct points the answer needs. Two marks is two points; eight marks is not "write more", it is eight things.\n\nState how many scoring points the allocation implies, list the points the answer actually makes, and name what is missing or what is padding. Three paragraphs on a 2-mark question is time the student did not have in the exam, and that is worth saying as plainly as a gap is.\n\nIf the marks available are not stated, ASK for them in one line rather than guessing — an allocation check against an invented denominator is worse than none.\n\nFORMAT SIGNATURE: **Marks on offer / points needed**, then a checklist of the points with a tick or a cross, then **The gap** or **The padding** in one line.`,
+    },
+    {
+        id: "study_coach",
+        label: TOOL_LABELS.study_coach,
+        icon: GraduationCap,
+        accentText: "text-primary", accentBg: "bg-primary/10", accentSolid: "bg-primary",
+        feature: "ai_tool",
+        // ─── IT CAME BACK, AND THE REASON IT LEFT WAS ABOUT THE PAGE ────────
+        // It was cut when /AITools was rebuilt around faults on one piece of
+        // work: there it was the only tool that did nothing to the thing in
+        // front of you. The page is a dashboard again, where "I do not know
+        // what to do" is the exact question the first screen is for — and the
+        // direction cards above answer it with arithmetic, so this one is the
+        // follow-up conversation rather than the only answer.
+        blurb: "Strategy, technique and what to do next.",
+        supportsFiles: false,
+        options: [],
+        system: (s) => `${subjectBlock(s)}\n\n${COACH_TONE}\n\nROLE: VCE study coach — technique, SAC/exam strategy, time management, motivation. Specific to their actual situation, never generic productivity fluff.\n\nFORMAT SIGNATURE: short and punchy. Open with the one-line real talk, then at most three concrete moves as bullets, then **Tonight:** — the single next action. No essays.`,
     },
 ];
 

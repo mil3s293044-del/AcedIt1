@@ -4709,6 +4709,11 @@ re-checked to confirm it is still scoped to the body that declares it.
 
 ### AI Tools: the diagnosis is arithmetic, the agent is what you hand it to
 
+*(The page was rebuilt twice after this and the brief came back unchanged — it
+is the LEAD of the dashboard now. See "AI Tools is a DASHBOARD in front of the
+chat" below for where it sits; everything here about what it counts and what it
+refuses still holds.)*
+
 `/AITools` was a chat with a nine-persona dropdown that opened on an empty
 thread. So the first thing it asked for was the two hardest parts of the job —
 knowing which tool solves your problem, and stating the problem — while nine
@@ -4775,7 +4780,10 @@ is about them. The TOOLS are an Anthropic bill. So the page renders for
 everybody and the COMPOSER locks, with every card going to /Subscription.
 
 The upgrade strip REPLACES the composer rather than disabling it: a greyed-out
-textarea invites somebody to type into a box that will refuse them.
+textarea invites somebody to type into a box that will refuse them. The TOOLKIT
+locks the same way and is still fully DESCRIBED — a free student reading what
+each tool does is the argument for upgrading; a grid of greyed-out rectangles
+is not.
 
 This also settled a model that disagreed with the product. `TIER_FREE_CAPS`
 granted free accounts 5 `ai_tool` and 5 `ai_chat` uses the page gate made
@@ -4789,9 +4797,10 @@ no longer exists.
 limits apply per tool", describing the eleven per-feature daily counters
 `chips.js` replaced — a line about a limit the student is not subject to.
 
-Draw the brief with `scripts/_floorProbe.jsx?v=brief`, which renders a loaded
-account, the LOCKED variant and an account with nothing measured, because only
-one of the three can be seen on a real login at a time. Draw the shelf with
+Draw the brief with `scripts/_floorProbe.jsx?v=tools` (it was `?v=brief` until
+the dashboard absorbed it), which renders a loaded account, the LOCKED variant
+and an account with nothing measured, because only one of the three can be seen
+on a real login at a time. Draw the shelf with
 `?v=store`, whose fixture now carries a friend and a shield so the prank
 Preview and the held count are drawable at all. **The probe does not follow
 `colorScheme`** — the app's theme is a CLASS, so a dark screenshot needs
@@ -4872,286 +4881,156 @@ real question comes in — short, LaTeX-heavy, and a multi-part stem — because
 character count would have put the first two in the wrong bucket and a phone
 column puts the third one there.
 
-## AI Tools is a WORKBENCH, and the workpiece comes first
+## AI Tools is a DASHBOARD in front of the chat
 
-**"Have each AI tool be a literal tool used to work on a piece of work or
-question. Almost like a workshop."** The brief above was the right half of the
-answer and it stopped one step short: it told a student WHAT to work on and
-then handed them to a chat, where the thing they were working on is a message
-that scrolls away the moment they reply to it. So every tool after the first
-needed the context restated, and one piece of work meant up to nine separate
-conversations about it, none of which knew about the others.
+**"Revert the AI tools to just the chatbot format it was in. But I still think
+users need direction."** Both halves, and the second one is why this page has
+now been rebuilt three times.
 
-**THE WORKPIECE IS THE OBJECT AND THE TOOLS ARE OPERATIONS ON IT.**
-`workpiece.js` is the model: five KINDS — a question, something you wrote, a
-problem, your material, a topic — and eight OPERATIONS, each declaring which
-kinds it applies to. `toolsFor` is the whole routing, and it is the difference
-between a workshop and a dropdown: a question offers Explain / Work through /
-Plan / Question me, and something you wrote offers Mark and Plan and nothing
-else. **A tool that cannot act on the thing on the bench is NOT DRAWN.** Not
-greyed out — a bench drawing all eight with six disabled is the dropdown again
-with more pixels. Nothing is hidden for being advanced; it is hidden for being
-INAPPLICABLE, which is a fact about the workpiece rather than a judgement about
-the student.
+`/AITools` has been a persona dropdown over an empty thread, then a BENCH of
+verbs over a "workpiece", then a SCAN that diagnosed a pasted paragraph against
+the VCAA conventions and drew the faults on a trace. The last two both replaced
+the chat, and **that was the wrong lever every time.** The chat is the right
+surface — it streams, it saves, it bills the right feature through
+`chatTools.js`, and a conversation is what a student actually wants from an AI
+tool. What was wrong was ARRIVING at it, which asks for the two hardest parts of
+the job at once: which tool solves this, and what exactly is wrong.
 
-**A TOOL IS A VERB, NOT A PERSON.** "Math Tutor" is somebody you talk to;
-"Work it through" is something you do to a problem. The personas are unchanged
-underneath — `chatTools.js` still owns the prompts, the options and the feature
-tag that bills them — and this layer says what each one DOES and what it can do
-it to.
+So the chat is back exactly as it was and `ToolsDashboard` is what the page
+opens on. **Three blocks, in the order the questions get asked:**
 
-**`study_coach` IS DELIBERATELY NOT AN OPERATION.** It is advice about
-studying rather than an operation on a piece of work, so on a bench it would be
-the one tool that does nothing to the thing in front of you. It stays reachable
-as its own chat.
+- **WHAT YOUR OWN WORK SAYS** (`ToolBrief`) — counted off rows the page already
+  loaded, so every line is checkable, and it LEADS. A dashboard that opens with
+  twelve tool cards has put the catalogue first and asked the student to match
+  themselves to it, which is the dropdown again with more pixels.
+- **YOUR TOOLKIT** — all twelve, grouped by WHEN YOU REACH FOR ONE.
+- **PICK UP WHERE YOU LEFT OFF** — the conversations that already save.
 
-**THE SPECIALIST PROMOTES AND THE FALLBACK DOES NOT, and that was visibly
-wrong.** `personaFor` returns `exam_questions` for every subject it does not
-profile — the honest default for MARKING, and not a statement that questions
-are the thing to do first. Promoted on it, every subject that is not maths or
-English led with "Question me": a Chemistry criterion the student keeps
-dropping opened offering to TEST them on it rather than to explain it, which is
-the wrong end of the ladder. Only `math_tutor` and `english_mentor` are
-SPECIALISTS; a fallback sorts on rank like everything else. Caught by a
-screenshot and pinned by injection.
+**NOTHING HERE CALLS A MODEL AND NOTHING IS STORED.** The cards are arithmetic
+(`toolBrief.js`) and the Recent list is a read of rows that exist
+(`aiChats.js`). A dashboard that generated its own advice would be a second
+answer to a question the cards already answer properly — and the one answer
+nobody can check, which is exactly what was deleted from Insights. Asserted as
+an absence over all three files.
 
-**A STEP IS A CONVERSATION, which is why there is no second send path.**
-`UnifiedChat` already streams, handles artifacts, bills the right feature and
-persists; a step hands it a tool, a subject and an opening message. Writing a
-bespoke runner would be a second copy of the surface `quizScore.js` has had to
-fix four times, and the first thing to drift would be the billing. **Pressing a
-tool calls nothing** — it puts the opening message in the composer, so the
-price is on screen before a chip is spent, which is megaUpload's rule applied
-to the surface that most invites a second press. Every tool prints that price
-on its own button.
+**ARRIVING COSTS NOTHING, and pressing a tool costs nothing either.** The seed
+goes in the COMPOSER rather than being sent — megaUpload's rule that the price
+is on screen before it is spent, pointed at the surface that most invites a
+second press. Which is also why **the price is NOT on the tool cards**: nothing
+on this screen spends a chip, and twelve figures across twelve cards would be
+twelve numbers none of which is yet true of anything. The send button already
+carries the cost.
 
-### THE BENCH IS NOT STORED, so nothing is stranded and nothing can drift
+### The phase is the map, and it is the only axis a stranger can use
 
-A bench is a workpiece plus the steps run on it, and every step IS a
-conversation that already saves. So `bench.js` reconstructs the shelf by
-GROUPING those rows on the workpiece's key, riding in `input_data` on rows that
-already persist. No table, no migration, and nothing that can disagree with the
-steps it is made of — the rule `redoQueue`, `subjectHub` and `priceHistory`
-already keep.
+Twelve tools in one grid is the dropdown with more pixels. Sorting them by
+relevance would be a ranking nobody can check, on a screen whose other half is
+built out of facts they can. Grouping by SUBJECT puts most of the catalogue in
+one bucket called "any subject". **When you reach for one** is the only axis a
+student can place themselves on without knowing a single tool's name — somebody
+with a SAC on Friday knows whether they have written anything yet.
 
-**THE KEY IS WHAT THE THING IS, never when it was picked.** `workpieceKey` is
-FNV-1a over the kind and the normalised body, so the same question pulled out
-of the mistake bank on Tuesday and again on Friday is ONE bench with the
-Tuesday half still on it. A timestamp or a random id would have made it two,
-and the earlier work would simply have been gone. It is keyed on the CLIPPED
-body — the one that gets stored — or a 6,001-character paste would key
-differently from the row it saved to.
+`PHASES` and `TOOL_PHASE` live in `toolLabels.js`, which is the plain-node copy
+`chatTools.js` reads back — one list, so a renamed or re-grouped tool moves
+everywhere. `toolBrief.test.mjs` asserts every live tool has exactly one phase,
+that `TOOL_PHASE` names no tool the catalogue lacks, and that the two lists
+describe **the same twelve tools in both directions**: a label with no tool
+draws nothing, and a tool with no label reads as the FIRST tool in the list,
+because `toolById` falls back rather than returning null. Both render perfectly.
 
-**EVERY CHAT FROM BEFORE THE BENCH IS ON THE SHELF.** There are months of them.
-Leaving them to a history sidebar would strand them on the one screen rebuilt
-around picking work back up, so a chat with no workpiece becomes a DRAFT: its
-first message is the thing on the bench, and the single fact it is missing is
-the KIND.
+**A band with nothing in it is DROPPED**, and the order is `PHASES`' order
+rather than however the catalogue happens to be written — "after you write"
+above "before you start" is a map arguing with itself. Each band's heading ends
+in **a rule to the end of the row**, the Quizzes-shelf idiom: "After you write"
+holds two tools and will never fill three columns, and the rule is what turns
+that from a hole into a shelf.
 
-**AND THE KIND IS ASKED FOR RATHER THAN INFERRED.** The tempting rule is to
-read it off the tool that was used, and it does not survive the table: only
-`english_mentor` and `line_memoriser` name a single kind, and the other six
-apply to two, three or four. So an inferred kind would be a guess on most rows,
-and a wrong one SILENTLY REMOVES the tool the student came for. The bench asks,
-once — the same refusal `WorkPicker` makes about typed work and `coverage`
-makes about an unrecognised topic.
+### `study_coach` came back, and the reason it left was about the PAGE
 
-**AN ADOPTED DRAFT KEYS ON ITS ROW, not on its body**, and that is load-bearing
-rather than an implementation detail: the kind is inside the key, so a
-body-derived key would CHANGE the moment the student named the kind and split
-one bench in half with the original conversation on the far side of it.
+It was cut when the page was rebuilt around faults on one piece of work: there
+it was the only tool that did nothing to the thing in front of you. On a
+dashboard, "I do not know what to do" is the exact question the first screen is
+for. The FEATURE was never touched — that is Ace the companion, a different
+surface — so its chip price is still the cheap one, and the test pins that.
 
-**A DRAFT'S HEADER MAY NOT FILL IN THE BLANK.** The eyebrow names what the
-thing IS, and for a draft there is no answer yet — it fell back to "On the
-bench", a placeholder sitting directly above a section asking the student that
-exact question. The source becomes the eyebrow instead, so the header states
-the one true thing it has.
+`RETIRED_TOOLS` therefore ships EMPTY, and **the mechanism is the point**, the
+same posture `DISTRIBUTIONS` takes in examinerReports.js: a conversation saved
+against a tool that later leaves the catalogue would reopen quietly labelled
+"Math Tutor" — a wrong answer wearing the right label. The test exercises that
+path against a fixture so it cannot rot unused, and separately asserts the
+shipped map is empty.
 
-**A DEEP-LINKED SUBJECT WAS NEVER REACHING THE PROMPT.** Every tool's
-`system(s, o)` reads the subject off `s`, which is `subjectName`, and
-`subjectBlock(s)` is what loads that study's VCAA EXAMINER PROFILE. The link
-set it on `toolOptions` alone, so a bench opened on a Chemistry question ran
-the general VCE preamble instead of the Chemistry profile — the half-wired
-shape the comment directly above it warns about, in the line below it, and the
-same failure `markingPrompt.js` records about the marker being told to be an
-examiner and shown none of the rules. It renders identically either way; the
-only symptom is a worse answer.
+### ONE chat-row predicate, and the saved row is MERGED
 
-**`persist` READS THE WORKPIECE THROUGH A REF.** It is memoised on `user`
-alone and fires in the tick a turn completes, so reading the prop through the
-closure would save whichever workpiece was mounted when that callback was
-built — the trap `startFromSuggestion` and the pomodoro commit both record. A
-step saved without its workpiece is a step no bench can ever find again: the
-bench works perfectly for one session and the shelf is empty forever, with no
-error and no warning. `bench.test.mjs` scans `persist` for both, and for the
-subject above, because all three are invisible in a render.
+`chatRows` moved into `aiChats.js` and BOTH the dashboard's Recent list and
+`UnifiedChat`'s own sidebar import it. Two copies would let one screen show a
+student something the other says they do not have, on two lists of one table.
+A row whose `messages` array is empty is not a conversation — a chat opened and
+never sent has nothing to reopen — and nor is one with no STUDENT message,
+because the preview is their own words.
 
-**ONE CHAT-ROW PREDICATE.** `chatRows` is exported and `UnifiedChat`'s sidebar
-imports it rather than restating the filter, or the shelf and the sidebar come
-to disagree about what the student has, on two lists of the same rows. The test
-caught that duplication on its first run.
+**A ROW WITH NO TIMESTAMP SORTS LAST AND IS NOT DROPPED.** `Number(null)` is 0,
+which is 1970: coerced, an undated local-storage row sinks silently; dropped, a
+real conversation is lost over a missing field. The `expiredKeys` rule, pointed
+at a list rather than at a delete. Ordering is on `updated_date` first, so a
+thread carried on today leads one started last month — which is the whole
+promise of the list.
 
-Draw all four states with `scripts/_floorProbe.jsx?v=bench` — the picker with
-the shelf above the candidates, a question mid-work, an adopted chat waiting on
-its kind, and a piece of writing whose toolbar is two tools wide. Only one of
-them can be seen on a real login at a time, which is the whole reason it draws
-them together.
+**`onSaved` MERGES, it does not refetch.** `UnifiedChat` persists after every
+completed reply, so a save counter in the effect's dependency array would be
+five round trips per message to update a list the student cannot currently see.
+The row it hands over is the row it just wrote, and `{ ...prev, ...row }` keeps
+the stored timestamp an UPDATE does not carry, which is what the list sorts on.
 
-## AI Tools IS A DIAGNOSTIC: scan, findings, clear
+### Two things only the screenshot said
 
-**"Get rid of the bench terminology. Make it feel like diagnostics of a
-computer — a problem has a thin red line that goes up at 90°, shows a problem
-with understanding or grammar, and then the AI tool can fix it until the whole
-problem is resolved."**
+- **A TITLE CUT MID-WORD READS AS A RENDERING FAULT.** The fallback title was
+  `ask.slice(0, 70)`, which produced *"…can you walk me t"*. It cuts on a word
+  boundary with an ellipsis now — the ellipsis is what says it was cut; without
+  one a sentence simply stops. A single unbroken word longer than the limit is
+  still cut, or a pasted URL runs the width of the card. Same complaint the
+  mistake bank's clipped questions drew, one surface along.
+- **"Pick a tool below, or just start typing" POINTED AT A COMPOSER THAT IS NOT
+  THERE.** It was written when the brief sat directly above a chat box. On a
+  dashboard there is nothing to type into, so the sentence offered a control
+  that does not exist — copy cannot be wrong at runtime, so a scan is the only
+  thing that catches it. The test refuses the phrase AND asserts the file holds
+  no composer to offer.
 
-The page had been nine personas behind a dropdown, then eight verbs on a
-"bench". Both opened by asking the student the two hardest parts of the job —
-which tool solves this, and what exactly is wrong — and a student who could
-answer the second rarely needed the first. **So the app answers it.** The work
-is scanned, every fault is located and named, each one carries the tool that
-repairs it, and the readout runs clean as they are cleared.
+### What a deep link must still do
 
-**A TOOL IS A REPAIR FOR A FAULT, NOT A PERSONA.** That reorganisation is what
-made three obvious gaps visible, each of which reads data that has been in the
-repo for months and only the MARKER had ever been shown: **Command Term** (the
-single largest avoidable mark loss in VCE, with `COMMAND_TERMS` sitting two
-imports away from every surface), **Precision Pass** (the per-subject
-`commonMistakes` list), and **Mark Fit** (a VCAA mark is a piece of content, so
-the allocation says how many points the answer needs). `study_coach` left the
-catalogue — it is advice about studying rather than a repair on a piece of
-work, and /Review answers that with numbers a student can check. The `study_coach`
-FEATURE is untouched: that is Ace the companion, a different surface.
+`?tool=` goes STRAIGHT to the chat, read in `AITools.jsx` as well as inside
+`UnifiedChat` — the page has to know which of two screens to draw and the chat
+has to know which tool to open. Every `toolQuery` link in the app builds one
+(MistakeBank's repeat rows, SubjectHub's course gap), and landing them on a
+dashboard is the half-wired shape this app keeps meeting: the right page, and
+the thing it promised to open does not open. Leaving the chat STRIPS the query,
+or the way out leads straight back in.
 
-### THE SCAN IS A REAL MODEL CALL, and the honest thing is to say so
+The test checks each chat prop **for a value rather than for its own name** —
+its first draft asserted the string was present, and `startConversation={null}`
+contains it, so dropping the wiring and keeping the attribute passed. Verified
+by putting exactly that back.
 
-`toolBrief.js` calls no model on purpose and **that reasoning does not
-transfer.** It diagnosed the student's HISTORY, which is arithmetic over rows
-they own and can check line by line. A diagnosis of a paragraph they typed
-thirty seconds ago cannot be arithmetic — there is nothing to count. So the
-split is: **diagnosing your history is free, diagnosing your work costs a
-scan**, 4 chips of 1000, on the button before it is pressed.
+### What was deleted
 
-**IT IS PINNED TO HAIKU, not routed through `fast`.** `FAST_MODEL` falls back
-to `MODEL` when `ANTHROPIC_FAST_MODEL` is unset, so a published price resting on
-it would be true on one deploy and silently wrong on the next. `SCAN_MODEL` is a
-constant the server forces, exactly as `MEGA_MODEL` is. Haiku is also right on
-the merits: locating faults against a closed menu is classification. The
-REPAIRS run on the student's own tier, because a repair is judgement.
+`diagnostic.js`, `diagnosticPrompt.js`, `Readout.jsx`, `ScanIntake.jsx`,
+`workpiece.js`, `workpieceSources.js`, `bench.js` and their four tests — with
+the `ai_scan` chip price, its `ALREADY_CHEAP` entry and the `SCAN_MODEL` pin in
+`server.mjs`, which is the one piece of this that could have been wrong in
+DOLLARS rather than in pixels. The test asserts all of it as an absence,
+including that nothing on disk imports a module that is gone.
 
-### IT MUST BE ABLE TO COME BACK CLEAN
+**KEPT: the three tools the scan release added** — `command_term`, `precision`
+and `allocation`. They came out of reading `COMMAND_TERMS` and the per-subject
+`commonMistakes` list, which had been in the repo for months and only the MARKER
+had ever been shown; the revert was of the FORMAT, not of the catalogue.
 
-The property the whole design rests on. **A scan that always finds five faults
-is a horoscope**, and the first time a student pastes something good and is told
-it is broken, every later finding is read as decoration too — the failure
-`recallSuggest` records a screenshot catching. `readScan` returns an empty list
-happily, the prompt says so in as many words, and the readout has a real screen
-for it rather than looking like the page failed to load.
-
-### THE FAULT SET IS FIXED AT SCAN TIME, so the loop terminates
-
-The obvious build re-scans after every repair and **does not converge**: each
-pass finds new or reshaped faults, and the all-clear the student is working
-toward never arrives. That is the non-convergence this file already records
-about review bots. So one scan produces ONE set; `applyRescan` may only CLEAR
-or KEEP, and anything new a later pass thinks it sees is discarded. The re-scan
-prompt says that, so reporting one costs the model nothing but the student a
-finding they could have had.
-
-**AND THE STUDENT CLEARS IT, never the model.** `drill.js` makes this call
-already: the model suggests, the student presses. Whether they actually
-understand it now is the one judgement only they can make. The re-scan is PROOF
-for anyone who wants it, and it never re-opens something they cleared.
-
-### GRAMMAR ON A CHEMISTRY ANSWER IS MISEDUCATING
-
-`markingPrompt.js` records that VCAA does not penalise spelling, or notation
-written legibly another way, outside the English studies — the leniency is in
-the rubric for that reason. A readout flagging EXPRESSION on a Chemistry
-response would send a student to spend their evening on the one thing that was
-never going to earn a mark, with the app's authority behind it. So faults are
-subject-gated, and **the gate reaches the PROMPT rather than only the
-validator**: dropping an inapplicable finding afterwards still paid for it and
-still spent one of the student's six. Working is gated the other way — there is
-none to show in an English essay.
-
-The families are name matches, because **`subjectIsMathHeavy` is the wrong flag
-and it is the obvious one**: it decides whether a prompt needs the LaTeX rules,
-so it is TRUE for Chemistry.
-
-### THE TRACE IS THE PROGRESS BAR
-
-A hairline runs down the left of the findings and breaks out at 90° into each
-one — a bus with branches, which is what makes it read as instrumentation. Each
-row owns its own segment, so the line turns GREEN FROM THE TOP as findings
-clear. That is "fix it until the whole thing is resolved" drawn once, instead of
-a list plus a percentage saying it twice.
-
-**IT IS ROWS, NOT CALLOUTS, and that is why it survives a phone.** The literal
-reading is an engineering callout — a leader line from a phrase, up, then out to
-a floating label. At 390px there is no margin for the label to float in, and
-half this app's traffic is phones. Worse, a callout can only exist where there
-is something to point AT, and **the strongest findings are the unquotable ones**:
-"never names the mechanism" is unquotable precisely in that the words are
-absent. That is the failure `MarkModule` was rebuilt to end. So the ROW holds
-and the UNDERLINE points, and a finding with nothing to point at loses only its
-underline.
-
-**Overlapping underlines are dropped**, not nested or merged — `annotate.js`
-settled that: nesting claims the inner phrase carries both faults, merging
-invents a span neither finding named.
-
-**NO THIRD ROOM.** A terminal-green-on-black panel was the tempting version. The
-Compete floor earns its own palette by being somewhere else; a third is a third
-set of tokens to keep in sync, and `floorInk.test.mjs` exists because every way
-to break that is silent. High-tech here is PRECISION — a mono fault code,
-hairlines, a numbered lane, one sweep on arrival — in the app's own tokens.
-**Shape carries the state**: open is a hollow ring, cleared is filled with a
-tick, because the brand green and the streak red sit at ΔE 7.0 under
-deuteranopia.
-
-Two things only the screenshot caught. **The gap between rows was a MARGIN**,
-and the trace spans the element's box — so the line broke into one dash per row
-and stopped reading as a bus at all; it is padding now. And **`line-through` on
-a cleared label crosses the SPACE**, so "Command term" rendered as
-"Command-term" — a hyphen the app appeared to have invented.
-
-### What the intake asks, and what it refuses to claim
-
-The five KINDS are gone. Nothing routes on them any more, so the question is
-gone with them and what is left is only what changes the result: the work, the
-SUBJECT (which gates the faults), and optionally the QUESTION and the MARKS.
-**Without the question the scan is told it may not report a command-term or a
-mark-fit finding** — both are claims about a question it cannot see, which is
-the `markPercent` failure — and the intake SAYS so before the button, or a
-readout missing two classes reads as a thin scan rather than as a missing input.
-
-`workpiece.js` kept identity, provenance and the candidate shape and lost the
-routing; `diagnostic.js` replaced it. **The stored key did not move**:
-`input_data.workpiece` is on real rows, and renaming it to match the new
-vocabulary would strand them — the `sideLabels` rule, only the label moves.
-`toolLabels.js` is the names out of the `.jsx` catalogue (the `xpRanks.js`
-move), and it keeps RETIRED names too, because `toolById` falls back to the
-FIRST tool — so without it a coaching chat saved before the rebuild would
-reopen quietly labelled "Math Tutor".
-
-`diagnostic.test.mjs` holds 32 checks and every one was verified by putting the
-bug back: grammar reaching Chemistry, a re-scan appending, a gated fault
-reaching the screen, an unmatched quote anchoring anyway, the server unpinning
-Haiku, the prompt offering every fault regardless of subject, and bench
-vocabulary returning to the copy.
-
-**And the copy scan had the bug it exists to catch.** Its string class allowed
-newlines, so one match ran from one quote to the next across the whole file and
-reported an import three screens away as the defect. The two forms need
-different rules and that is not a detail: a quoted literal must stay on one
-line, and a JSX text node is bounded by its own angle brackets and is routinely
-wrapped over three — excluding newlines there made it blind to every paragraph
-on the page, which is most of the copy it reads.
-
-Draw it with `scripts/_floorProbe.jsx?v=scan`, against four states only one of
-which a real login shows at a time: faults open, part cleared, all clear, and a
-CLEAN scan. That last one is the state the design rests on and a fixture is the
-only way to see it.
+Draw it with `scripts/_floorProbe.jsx?v=tools`, against the three states a real
+login can only show one of at a time: an account with work behind it (cards AND
+conversations), a LOCKED free account, and a first-week account with nothing
+measured. That last one is the honest common case — every card builder refuses
+rather than padding — and a fixture is the only way to see it.
 
 ## What the app SAYS it does, and what it does
 
@@ -5541,11 +5420,15 @@ somebody opening the pricing page and the gate in the same sitting.
   at a route that is not there. Draw the bar with
   `scripts/_floorProbe.jsx?v=reach`
 - `src/lib/toolBrief.js` + `toolBrief.test.mjs`,
-  `src/components/ai_tools/ToolBrief.jsx` — what to use an AI tool FOR today,
-  counted off rows the page already loaded. No model call and nothing stored,
-  so a student can check every line; `toolQuery` is the one builder every
-  screen hands a problem over with. Draw it with
-  `scripts/_floorProbe.jsx?v=brief`, which carries the locked and empty states
+  `src/components/ai_tools/ToolBrief.jsx`,
+  `src/components/ai_tools/ToolsDashboard.jsx`, `src/lib/toolLabels.js`,
+  `src/lib/aiChats.js` — the screen /AITools opens on, in front of the
+  unchanged chat: what your own work says is worth a tool (counted off rows the
+  page already loaded, so every line is checkable), the twelve tools grouped by
+  WHEN you reach for one, and the conversations you can carry on. No model call
+  and nothing stored. `toolQuery` is the one builder every screen hands a
+  problem over with, and `?tool=` still goes straight to the chat. Draw it with
+  `scripts/_floorProbe.jsx?v=tools`, which carries the locked and empty states
 - `src/components/market/StorePreview.jsx` — the thing you are about to buy,
   drawn with the component that draws it when it is worn. A crest at both the
   size you choose it and the size you wear it; the prank Preview plays through
