@@ -121,7 +121,25 @@ function paramScopes(lines) {
         const m = /^\s*(?:export\s+)?(?:async\s+)?function\s+[A-Za-z_$][\w$]*\s*\(([^)]*)\)\s*\{\s*$/.exec(line)
             || /^\s*(?:export\s+)?(?:const|let)\s+[A-Za-z_$][\w$]*\s*=\s*(?:async\s*)?\(([^)]*)\)\s*=>\s*\{\s*$/.exec(line);
         if (!m) return;
-        const names = m[1].split(",").map((x) => x.trim().split(/[=:\s]/)[0])
+        // ── A DESTRUCTURED PARAMETER IS STILL A PARAMETER ──────────────────
+        // `function Row({ card, index })` splits on commas to `{ card`, so the
+        // FIRST name kept its brace and was dropped by the identifier filter —
+        // and the first name is the one a component's props list leads with.
+        // So `card` was never exempt inside `MistakeRow`, and a `const card` in
+        // a different function further down the file reported it as a crash.
+        //
+        // That is this repo's own recurring shape: `xpRates.test.mjs` records a
+        // brace walk that closed early because "several calculators DESTRUCTURE
+        // their argument", and the cost of not fixing it is worse than a red
+        // suite — the obvious way to make it green is to rename a perfectly
+        // good prop, or to delete the check.
+        //
+        // Brackets are stripped before splitting, so a destructured or array
+        // pattern yields its names. Adding a name here only ever EXEMPTS, and
+        // only within the body of the function that declares it, so a loose
+        // read cannot reach a sibling function.
+        const names = m[1].replace(/[{}[\]]/g, " ")
+            .split(",").map((x) => x.trim().split(/[=:\s]/)[0])
             .filter((x) => /^[A-Za-z_$][\w$]*$/.test(x));
         if (!names.length) return;
 
@@ -150,35 +168,81 @@ function isParamAt(params, name, line) {
 /**
  * Every hook dependency array in a file, as { line, names }.
  *
- * Matches the closing `}, [...])` of a hook call. Arrays spanning lines are
- * joined first so a wrapped list is still seen whole.
+ * ─── IT WALKS THE CALL, IT DOES NOT MATCH THE CLOSING BRACE ─────────────────
+ * This used to be one regex anchored on `}, [...])` — the closing brace of a
+ * hook whose body is a BLOCK. So a concise-body arrow, which is the other
+ * half of how every hook in this codebase is written:
+ *
+ *     const x = useCallback(() => me.email, [me.email]);
+ *
+ * had no brace to match and was INVISIBLE to the whole check. The scan passed,
+ * and the one shape it exists to catch walked straight through it. That was
+ * found by writing a real TDZ crash into a page, watching the suite stay green,
+ * and only then looking at the regex.
+ *
+ * It finds each hook opener and walks to its matching close paren instead, then
+ * reads the LAST argument and takes it only if it is an array literal. That is
+ * the `hookArgs` idiom below and `dbColumns.test.mjs`'s brace walk, and it is
+ * indifferent to what shape the body took.
  */
 function depArrays(src) {
     const found = [];
     const flat = src.replace(/\r/g, "");
-    const re = /\}\s*,\s*\[([^\]]*)\]\s*\)/g;
+    const re = /\buse(?:Effect|Memo|Callback|LayoutEffect|ImperativeHandle)\s*\(/g;
     let m;
     while ((m = re.exec(flat)) !== null) {
-        const upto = flat.slice(0, m.index);
-        // Only hook calls. A plain `}, [x])` in an ordinary function call has
-        // no dependency semantics and no TDZ risk worth reporting.
-        if (!/use(?:Effect|Memo|Callback|LayoutEffect|ImperativeHandle)\s*\($/m.test(
-            upto.replace(/[\s\S]*?(use\w+\s*\()?[^(]*$/, "$1") || "")) {
-            // Fall back to a scan backwards for the nearest hook opener, which
-            // is more reliable than trying to anchor the regex.
-            const back = upto.slice(-4000);
-            const lastHook = Math.max(
-                back.lastIndexOf("useEffect("), back.lastIndexOf("useMemo("),
-                back.lastIndexOf("useCallback("), back.lastIndexOf("useLayoutEffect("));
-            if (lastHook === -1) continue;
+        // Walk to the matching close paren. Nested parens, braces and brackets
+        // inside the body are counted, so the walk ends on the hook's own call.
+        let depth = 1;
+        let i = m.index + m[0].length;
+        while (i < flat.length && depth > 0) {
+            const c = flat[i];
+            if (c === "(") depth += 1;
+            else if (c === ")") depth -= 1;
+            i += 1;
         }
+        if (depth > 0) continue;                      // unterminated; nothing to read
+        const inner = flat.slice(m.index + m[0].length, i - 1);
+
+        // THE DEPS ARRAY IS THE LAST ARGUMENT AND MUST BE A LITERAL `[...]`.
+        // A hook called with no array (useEffect with one argument) or with a
+        // variable in that slot has nothing evaluated at the call site that
+        // this check can name, so it is skipped rather than guessed at.
+        const tail = inner.replace(/\s+$/, "");
+        if (!tail.endsWith("]")) continue;
+        let d = 0, start = -1;
+        for (let k = tail.length - 1; k >= 0; k--) {
+            const c = tail[k];
+            if (c === "]") d += 1;
+            else if (c === "[") { d -= 1; if (d === 0) { start = k; break; } }
+        }
+        if (start <= 0) continue;                     // not an array, or the whole arg
+        if (!/,\s*$/.test(tail.slice(0, start))) continue;  // not a separate last argument
+
+        const upto = flat.slice(0, m.index);
         const line = upto.split("\n").length - 1;
-        const names = m[1]
+        const names = tail.slice(start + 1, tail.length - 1)
             .split(",")
             .map((s) => s.trim())
             .filter(Boolean)
-            // Bare identifiers only: `a.b`, `a?.b` and literals carry no TDZ
-            // risk of their own for the base name we could check.
+            // ── A MEMBER EXPRESSION IS ITS BASE NAME, and dropping those was
+            // a hole this scanner shipped with. The comment here used to read
+            // "`a.b`, `a?.b` and literals carry no TDZ risk", which is simply
+            // false: `[me.email]` is evaluated at render exactly like `[me]`
+            // is, so a `const me` declared further down throws before the page
+            // paints. It is also the COMMONEST shape in this codebase — a deps
+            // array naming a field of an object built earlier in the component
+            // — so the filter was discarding most of what it was written to
+            // check, and a real crash walked straight past it.
+            //
+            // The base name is taken instead: `me.email` and `me?.email` both
+            // reduce to `me`. A call (`f()`), an index (`a[i]`), a literal and
+            // anything else carrying punctuation are still dropped, because
+            // their base is either not an identifier or not the thing at risk.
+            .map((s) => {
+                const base = /^([A-Za-z_$][\w$]*)(?:\?\.|\.)[\w$.?]*$/.exec(s);
+                return base ? base[1] : s;
+            })
             .filter((s) => /^[A-Za-z_$][\w$]*$/.test(s));
         found.push({ line, names });
     }

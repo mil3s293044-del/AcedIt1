@@ -4638,6 +4638,165 @@ immediately.
 machine, leaving the last student's band behind applies their permissions to a
 stranger.
 
+## The store sold nine text rows, and AI Tools opened on a blank box
+
+Two screens, one failure: **the app knew the thing and did not show it.**
+
+### Every item on the shelf now draws itself
+
+A gilt card back costs a fortnight of earning and the only thing on screen was
+the WORDS "Gilt back". Three backs and three crests were six rows that looked
+identical. Nothing had to be built, which is the part worth keeping:
+`CardBack`, `Crest` and `PrankOverlay` all already render — the shelf simply
+never called them. That is the store release's own rule, *owned has to be worn
+somewhere a person can see it*, arriving one step too late; before you buy is
+exactly when seeing it matters.
+
+**IT DRAWS THE REAL COMPONENT, NEVER A PICTURE OF ONE.** A back at the gauge a
+pack deals it, a crest beside a name on a board row, the shield with how many
+you hold, a line with the split a market prints. A still image would be one
+more mirror to drift, and it would go stale silently.
+
+**TWO SIZES FOR A CREST, AND BOTH ARE TRUE.** A crest IS 14px beside a username
+and nothing changes that, so the row is the honest drawing — but three crests
+at 14px are three identical smudges on a shelf whose job is telling them apart,
+which the first screenshot showed. The mark is drawn large enough to CHOOSE
+between and again at its real size in place.
+
+**A PRANK IS PURE MOTION**, so it is the one thing here no still picture can
+sell, and until now the only way to learn what one did to a friend's screen was
+to pay for it. Preview plays it on your own screen through the same overlay
+Layout plays a real one with — sends nothing, charges nothing, reaches nobody.
+It wears the sender name `getPranks` would resolve, so it reads word for word
+as the card the friend gets; handed an email it would have printed a
+sixteen-year-old's own address back at them.
+
+**The shield preview reads the column the purchase WRITES.** `extra.cred_held`
+sits beside it and is the dead half — the freeze was a second freeze beside a
+working one and the purchase increments `streak_shields` now — so reading the
+old key would print a stale zero at somebody holding two.
+
+**A `className` COLOUR PASSED INTO A COMPONENT THAT SETS ITS OWN DOES NOTHING.**
+An early draft inked the crest with `text-[var(--floor-warn-ink)]`; `Crest`
+sets `text-muted-foreground` itself, and two utilities for one property are
+resolved by STYLESHEET ORDER rather than by the order in the attribute. It
+rendered no differently, which is worse than not writing it: the next person
+reads it as the decision. Same trap the Ranked board records about `divide-y`.
+
+### `hookDeps.test.mjs` had three holes, and a real crash walked through all of them
+
+Found by writing a TDZ crash into a page and watching the suite stay green.
+
+- **A member expression was DROPPED**, on a comment claiming "`a.b` carries no
+  TDZ risk". It carries exactly the risk a bare name does — `[me.email]` is
+  evaluated at render like `[me]` is — and it is the commonest shape in this
+  codebase, so the filter was discarding most of what the check existed to
+  find. The base name is taken now.
+- **The deps array was matched on the CLOSING BRACE of a block body**, so a
+  concise arrow — `useCallback(() => x, [x])` — had no brace and was invisible
+  to the whole check. It walks the call to its matching paren instead and reads
+  the last argument, which is indifferent to what shape the body took.
+- **A destructured first parameter kept its brace** through the comma split, so
+  `function Row({ card })` never exempted `card`, and a `const card` in a
+  sibling function reported a crash that was not there. Widening the scanner
+  surfaced that live false positive in MistakeBank immediately. This is the
+  `xpRates` brace-walk lesson again, and the cost of not fixing it is worse
+  than a red suite: the obvious way to green is renaming a good prop or
+  deleting the check.
+
+All three verified by putting the bug back, and the parameter exemption
+re-checked to confirm it is still scoped to the body that declares it.
+
+### AI Tools: the diagnosis is arithmetic, the agent is what you hand it to
+
+`/AITools` was a chat with a nine-persona dropdown that opened on an empty
+thread. So the first thing it asked for was the two hardest parts of the job —
+knowing which tool solves your problem, and stating the problem — while nine
+modules already knew exactly what was wrong: `studyQueue`, `bankSummary`,
+`weakTopicsFrom`, `retentionOutlook`, `subject_assessments`. **And nothing in
+the app deep-linked into a tool.** Not MistakeBank, which knows the exact
+criterion. Not SubjectHub, which knows the course gap. The most informed
+screens all stopped one link short of the one surface that could act on them.
+
+**THE TEMPTING BUILD IS AN AGENT THAT WRITES THE DIAGNOSIS, and it is what was
+deleted from Insights last release.** The reason holds harder here: every panel
+there names one thing and points at the screen that moves it, so generated
+advice on top is a second answer to an already-answered question — and the one
+answer nobody can check. So `toolBrief.js` calls no model and stores nothing.
+Every line is counted off rows the page already loaded, which means a student
+can CHECK it: "three times" is three, and the three are on /MistakeBank. The
+model runs when they press the card, on a problem already established.
+
+**EACH CARD IS A FACT AND AN OFFER, printed separately and in that order.** The
+fact is the half they can check us on; the offer is what the button does.
+Collapsed into one sentence they read as a single claim and the checkable half
+stops being checkable.
+
+**`subjectIsMathHeavy` IS THE WRONG FLAG and it was the obvious one.** It
+exists to decide whether a prompt needs the LaTeX rules, so it is TRUE for
+Chemistry, Physics, Economics and Psychology — and routed on it, a student with
+a Chemistry SAC was sent to the MATH TUTOR, which reads as the app not knowing
+what subject they take. Caught by this module's test on its first run. Both
+branches are name matches over the studies the catalogue profiles, exact at
+this size, the same call `subjectBrowse` makes about hand-mapping areas.
+
+**A MISS RATE IS ALREADY A PERCENTAGE.** `weakTopicsFrom` returns 0–100 and
+NULL for a topic with no reviews; multiplying by 100 would have printed 3000%.
+Two guards survive it and they are REDUNDANT ON PURPOSE, which is worth
+stating: removing either alone is invisible to the test and only removing both
+is caught. The filter refuses a null (`Number(null)` is 0, which reads as a
+perfect record rather than as no record); the `if (!pct)` refuses a genuine
+zero, which is the "0% of your reviews missed" sentence `recallSuggest` records
+a screenshot catching under a pill reading *Costing you marks*.
+
+**THERE IS NO `briefLead`, AND THERE WAS.** It returned the first card's fact
+on `queueLead`'s rule that naming beats counting — right for a queue, wrong
+here for a reason only the screenshot showed: the first CARD prints that same
+sentence two inches below in bold. One fact, twice, on a screen claiming every
+line is worth reading. The heading frames; the cards lead themselves.
+
+**THE SEED GOES IN THE COMPOSER AND IS NOT SENT.** A card that spent a chip on
+one tap would be the only action in the app costing a student something they
+had not read — megaUpload's rule that the price is on screen first. They can
+edit it and they can delete it.
+
+**`toolById` FALLS BACK TO THE FIRST TOOL rather than returning null**, so
+testing its result for truthiness made every visit look like a deep link and
+silently killed the intent default. The param is matched against the catalogue
+directly.
+
+### The brief is free and the tools are not
+
+The page sat entirely behind `RequirePremium`, so a free student met a locked
+door and nothing else. The two halves cost different things: the DIAGNOSIS is
+arithmetic over rows they already own — no model call, no chips, no money — and
+it is the most convincing argument this app can make for the tools, because it
+is about them. The TOOLS are an Anthropic bill. So the page renders for
+everybody and the COMPOSER locks, with every card going to /Subscription.
+
+The upgrade strip REPLACES the composer rather than disabling it: a greyed-out
+textarea invites somebody to type into a box that will refuse them.
+
+This also settled a model that disagreed with the product. `TIER_FREE_CAPS`
+granted free accounts 5 `ai_tool` and 5 `ai_chat` uses the page gate made
+unspendable — counters that could never move, the previous release's one
+recorded open question. Both are gone, so the gate on the page is the only
+thing deciding. `RequirePremium` had no other caller and is deleted with it;
+three comments naming it were repointed rather than left describing a gate that
+no longer exists.
+
+**One copy fix fell out of the same screen:** the composer footer read "daily AI
+limits apply per tool", describing the eleven per-feature daily counters
+`chips.js` replaced — a line about a limit the student is not subject to.
+
+Draw the brief with `scripts/_floorProbe.jsx?v=brief`, which renders a loaded
+account, the LOCKED variant and an account with nothing measured, because only
+one of the three can be seen on a real login at a time. Draw the shelf with
+`?v=store`, whose fixture now carries a friend and a shield so the prank
+Preview and the held count are drawable at all. **The probe does not follow
+`colorScheme`** — the app's theme is a CLASS, so a dark screenshot needs
+`documentElement.classList.add("dark")` or it silently renders light twice.
+
 ## What the app SAYS it does, and what it does
 
 **"Can you check the whole site again for anything else inaccurate."** Twelve,
@@ -5025,6 +5184,16 @@ somebody opening the pricing page and the gate in the same sitting.
   uses the page's own name and carries a real number, and no nav entry points
   at a route that is not there. Draw the bar with
   `scripts/_floorProbe.jsx?v=reach`
+- `src/lib/toolBrief.js` + `toolBrief.test.mjs`,
+  `src/components/ai_tools/ToolBrief.jsx` — what to use an AI tool FOR today,
+  counted off rows the page already loaded. No model call and nothing stored,
+  so a student can check every line; `toolQuery` is the one builder every
+  screen hands a problem over with. Draw it with
+  `scripts/_floorProbe.jsx?v=brief`, which carries the locked and empty states
+- `src/components/market/StorePreview.jsx` — the thing you are about to buy,
+  drawn with the component that draws it when it is worn. A crest at both the
+  size you choose it and the size you wear it; the prank Preview plays through
+  Layout's own overlay
 - `src/lib/studyQueue.js` + `studyQueue.test.mjs`,
   `src/components/study/QueueRow.jsx` — everything you owe, in one ranked list:
   seven sources, four tiers, nothing stored and no zero rows. The spine is the

@@ -16,9 +16,11 @@ import AceShuffle from "@/components/ace/AceShuffle";
 //   - 'Goals' (the Planner) is marked premium. It is not gated anywhere.
 //   - 'Analytics' is a redirect to /Review?tab=insights, which nothing gates.
 //
-// The REAL gates are two, and neither is a page list: <RequirePremium> wraps
-// /AITools, and every AI action goes through canUseFeature (src/lib/tierAccess)
-// against the server's own checkTierAccess. Anything new belongs there.
+// The REAL gate is not a page list: every AI action goes through
+// canUseFeature (src/lib/tierAccess) against the server's own checkTierAccess,
+// and /AITools decides for itself whether to lock its COMPOSER (the brief
+// above it is free). <RequirePremium> wrapped that page until the split and is
+// deleted; anything new belongs in the per-action gate.
 //
 // CRITICAL: Page access control based on database subscription_tier
 // Never allow premium pages to render without database verification

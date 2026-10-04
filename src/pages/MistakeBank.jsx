@@ -32,6 +32,7 @@ import { motion, AnimatePresence, useReducedMotion } from "framer-motion";
 import { Link } from "react-router-dom";
 import { base44 } from "@/api/base44Client";
 import { createPageUrl } from "@/utils";
+import { toolQuery } from "@/lib/toolBrief";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/components/ui/use-toast";
 import { ToastAction } from "@/components/ui/toast";
@@ -838,6 +839,27 @@ export default function MistakeBank() {
                                                     · {r.open} open
                                                 </span>
                                             )}
+                                            {/* ── THE HANDOVER ──────────────────────────────
+                                                This row is the most specific thing the app
+                                                knows about a student's writing: the exact
+                                                words an assessor wanted, and that they have
+                                                missed them more than once. It stopped here.
+                                                The explainer takes the criterion verbatim —
+                                                the ladder on this page DRILLS it, which is
+                                                the right move once you understand it, and
+                                                this is the other half for when you do not. */}
+                                            <Link
+                                                to={`${createPageUrl("AITools")}?${toolQuery({
+                                                    tool: "concept_explainer",
+                                                    subject: r.subjects.length === 1 ? r.subjects[0] : null,
+                                                    seed: `An assessor keeps marking me down for this: "${r.criterion}"${
+                                                        r.subjects.length === 1 ? ` in ${r.subjects[0]}` : ""
+                                                    }. Explain what they are actually looking for, and show me what a full-mark version sounds like.`,
+                                                })}`}
+                                                className="font-normal text-muted-foreground hover:text-foreground underline underline-offset-2"
+                                            >
+                                                explain
+                                            </Link>
                                         </>}
                                 </span>
                             </li>

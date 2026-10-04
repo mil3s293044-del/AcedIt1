@@ -285,9 +285,10 @@ export default function Layout({ children }) {
                 }
 
                 // Onboarding + subscription gates intentionally removed for v1 launch:
-                //   • Free users keep access to free-tier features. Premium-only
-                //     features are gated at the page level via <RequirePremium>
-                //     (e.g. /AITools) — no app-wide blanket block.
+                //   • Free users keep access to free-tier features. Premium
+                //     features gate per ACTION (canUseFeature / checkTierAccess),
+                //     and /AITools locks its composer while leaving its brief
+                //     free — no app-wide blanket block, and no page wrapper.
                 //   • Onboarding modal disabled until we redesign the flow.
                 // If you ever want either back, uncomment the original blocks
                 // in git history (commit `Add SAC mode, skeleton loading, ...`).

@@ -341,7 +341,13 @@ async function callInvokeAI({ prompt, response_json_schema, feature, req }) {
 // bucket made them unusable (6 messages = whole day's tools gone). They get
 // their own generous daily message bucket; the weekly $ ceiling is still the
 // real cost backstop. Free users' chat shares the free tools lifetime cap.
-const TIER_FREE_CAPS    = { quiz_ai_gen: 5, quiz_ai_mark: 5, flashcard_ai_gen: 5, ai_tool: 5, ai_chat: 5 };
+// `ai_tool` and `ai_chat` USED TO BE HERE AT 5 EACH and could never be spent:
+// /AITools gated the whole page, so the counters behind them could not move.
+// That is "collect nothing you don't use" inverted, on the two features a free
+// student is most likely to come for. The page splits now — the brief is free,
+// the tools are not (see src/pages/AITools.jsx) — and the gate there is the one
+// thing deciding, so a cap that contradicted it is gone rather than restated.
+const TIER_FREE_CAPS    = { quiz_ai_gen: 5, quiz_ai_mark: 5, flashcard_ai_gen: 5 };
 const TIER_FREE_COUNTER = { quiz_ai_gen: "free_ai_quizzes_used", quiz_ai_mark: "free_ai_quiz_marks_used", flashcard_ai_gen: "free_ai_flashcards_used", ai_tool: "free_ai_tools_used", ai_chat: "free_ai_tools_used" };
 // Premium is gated by the chip stack now, not by eleven per-feature daily
 // caps. Those caps were sized independently of the dollar ceiling they were
@@ -11654,8 +11660,24 @@ app.post("/local-ai/fn/getCredStore", async (req, res) => {
         send_max: PRANK_SEND_MAX,
         opted_out: prankOptedOut(profile),
       },
+      // ── THE NAME A PREVIEW HAS TO WEAR ──────────────────────────────────
+      // `getPranks` resolves a sender as `username || first name` and the card
+      // prints THAT. A preview exists to show a student exactly what lands on
+      // their friend's screen, so it has to carry the same string, derived the
+      // same way — handed an email it would print a sixteen-year-old's address
+      // back at them, which is both wrong and the one thing on that card that
+      // is never shown to anybody.
+      me_name: profile.username || String(profile.full_name || "").split(/\s+/)[0] || null,
       owned: Array.isArray(profile.extra?.cred_owned) ? profile.extra.cred_owned : [],
       held: profile.extra?.cred_held || {},
+      // ── WHAT A CONSUMABLE ACTUALLY LOOKS AT ──────────────────────────────
+      // `extra.cred_held` above is the DEAD half and is kept only so an older
+      // client reading it still parses: the streak freeze was a second freeze
+      // beside a working one, and the purchase increments the real
+      // `streak_shields` column now. The shelf draws how many you hold, so it
+      // has to read the column the purchase writes or it would print a stale
+      // zero at somebody who holds two.
+      columns: { streak_shields: Math.max(0, Number(profile.streak_shields) || 0) },
       equipped: profile.extra?.cred_equipped || {},
       // The verdict per item is computed HERE rather than on the client, so the
       // button cannot say yes to something the server is about to refuse — the

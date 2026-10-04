@@ -6,19 +6,15 @@ import { canAfford, stackOf, stackWarning, priceOf, WEEKLY_CHIPS } from './chips
 // Free tier:
 //   • AI quiz generation     → 5 lifetime
 //   • AI flashcard generation → 5 lifetime
-//   • AI study tools (combined) → 5 lifetime, BUT SEE BELOW
-//   • AI chat (shares the tools counter) → 5 lifetime, same caveat
 //   • Lifetime cost ceiling  → 100 cents ($1) hard backstop
 //   • All other AI features   → BLOCKED (premium-only)
 //
-//   THE FREE TOOL ALLOWANCE IS CURRENTLY UNREACHABLE. /AITools is wrapped in
-//   <RequirePremium>, which blocks a free account at the PAGE, so the five
-//   ai_tool / ai_chat uses this table grants can never be spent and the
-//   counters behind them can never move. Two coherent answers and this is
-//   neither: let the per-action gate do the work and drop the page wrapper, or
-//   drop these two caps so the model matches the product. Marketing copy has
-//   been written to the page gate ("No AI study tools") since it is what a
-//   student actually meets.
+//   AI TOOLS AND AI CHAT ARE PREMIUM, and this table no longer pretends
+//   otherwise. It used to grant 5 of each, which /AITools' page gate made
+//   unspendable — counters that could never move. The page splits now: the
+//   BRIEF is free, because it is arithmetic over the student's own rows and
+//   costs nothing to run, and the TOOLS are premium, because they are an
+//   Anthropic bill. src/pages/AITools.jsx carries the whole argument.
 //
 // Premium tier ($5/week):
 //   • ONE WEEKLY STACK of 1,000 chips, spent on whatever they like.
@@ -74,8 +70,12 @@ export const FREE_LIFETIME_CAPS = {
   [FEATURES.QUIZ_AI_GEN]:      5,
   [FEATURES.QUIZ_AI_MARK]:     5,  // AI marking of played quizzes, lifetime
   [FEATURES.FLASHCARD_AI_GEN]: 5,
-  [FEATURES.AI_TOOL]:          5,  // combined across the AI study tools
-  [FEATURES.AI_CHAT]:          5,  // free chat shares the tools lifetime counter below
+  // AI_TOOL and AI_CHAT are NOT here any more, and the absence is the point.
+  // They sat at 5 each and could never be spent, because /AITools gated the
+  // whole page — counters that could not move, on the two features a free
+  // student is most likely to want. The page splits now (the brief is free,
+  // the tools are premium) and that gate is the only thing deciding, so a cap
+  // disagreeing with it is deleted rather than kept as a second opinion.
 };
 
 // Hard cost ceiling for free users (lifetime, in cents). Even if their count

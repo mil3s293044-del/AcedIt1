@@ -36,6 +36,14 @@ import { CATALOGUE, grantForTier } from "@/lib/credStore";
 import BottomNav from "@/components/layout/BottomNav";
 import { CardBack } from "@/components/cards/PlayingCard";
 import PrankOverlay from "@/components/pranks/PrankOverlay";
+import ToolBrief from "@/components/ai_tools/ToolBrief";
+import { toolBrief } from "@/lib/toolBrief";
+
+/** A real ISO day N days out, so the assessment card has a date to count to. */
+const inDaysISO = (n) => {
+    const d = new Date(); d.setDate(d.getDate() + n);
+    return d.toISOString().slice(0, 10);
+};
 import { PRANK_LIST } from "@/lib/pranks";
 import { BACK_SKINS } from "@/lib/cosmetics";
 import WeeklyBoard from "@/components/league/WeeklyBoard";
@@ -493,7 +501,9 @@ function TickDemo() {
     );
 }
 
-views.store = () => (
+function StoreView() {
+    const [preview, setPreview] = React.useState(null);
+    return (
     <Room>
         <div className="p-8 max-w-4xl mx-auto">
             <h1 className="font-display font-black text-2xl text-[var(--floor-ink)] mb-1">Credits</h1>
@@ -506,6 +516,8 @@ views.store = () => (
                 onBuy={(id, u) => console.log("buy", id, u)}
                 onConvert={(xp) => console.log("convert", xp)}
                 onEquip={(id, slot) => console.log("equip", id, slot)}
+                onPrank={(k, to) => console.log("prank", k, to)}
+                onPreviewPrank={(k) => setPreview({ id: `p-${k}-${Date.now()}`, kind: k, from: "You" })}
                 store={{
                     cred: 2400,
                     tier: 6,
@@ -516,7 +528,24 @@ views.store = () => (
                     xp: { convertible: 18400, per_credit: 4, week_room: 500, week_max: 500 },
                     owned: ["back-felt", "crest-bolt"],
                     held: {},
+                    // THE SHIELD PREVIEW READS THE REAL COLUMN the purchase
+                    // increments, not the dead `extra.cred_held` beside it, so
+                    // the fixture has to carry one or the probe would draw a
+                    // state no account can be in.
+                    columns: { streak_shields: 1 },
                     equipped: { back: "back-felt" },
+                    // The prank shelf, which is where Preview lives. Without a
+                    // friend in the list the whole section renders its empty
+                    // state and the button cannot be judged at all — the lesson
+                    // the Quizzes shelf learned about fixtures that carry less
+                    // shape than a real account.
+                    friends: [{ email: "sam@example.com", name: "Sam" }],
+                    pranks: {
+                        kinds: PRANK_LIST,
+                        sent_this_week: 1,
+                        send_max: 3,
+                        opted_out: false,
+                    },
                     items: CATALOGUE.map((i) => ({
                         ...i,
                         verdict: i.id === "back-gilt"
@@ -528,7 +557,58 @@ views.store = () => (
                 }}
             />
         </div>
+        {preview && <PrankOverlay prank={preview} onDone={() => setPreview(null)} />}
     </Room>
+    );
+}
+views.store = () => <StoreView />;
+
+/* ── ?v=brief — the AI Tools brief, against an account that has all four
+   kinds, and against one that has nothing. Both states matter and only one of
+   them can be seen on a real account at a time: the loaded case is what the
+   layout has to hold, and the empty case is what every new student meets. The
+   locked variant is what a free account sees, which is the whole argument for
+   the split — the diagnosis is real and about them, and only the tools cost
+   anything to run. */
+const BRIEF_CARDS = toolBrief({
+    assessments: [{ id: "a1", subject_name: "Chemistry", title: "Unit 4 AOS 1 SAC", due_date: inDaysISO(3) }],
+    bankCards: [1, 2, 3].map((i) => ({
+        id: `m${i}`, topic: "Mistake bank", subject_name: "Chemistry", is_active: true,
+        question: "q", answer: "a",
+        extra: { mistake: { criterion: "links the structure to the property", topic: "Bonding", question: "Q", cost: 1 } },
+    })),
+    cards: [{
+        id: "c1", subject_name: "Mathematical Methods", topic: "Differentiation", is_active: true,
+        total_reviews: 12, review_count_good: 4, review_count_easy: 0, is_weak_spot: true,
+    }],
+    attempts: [],
+});
+
+views.brief = () => (
+    // A LOCKED CARD AND THE UPGRADE STRIP ARE BOTH <Link>s, so this view needs
+    // a router or every one of them throws before a pixel is drawn.
+    <MemoryRouter>
+    <div className="bg-background min-h-screen py-8 space-y-10">
+        <div>
+            <p className="px-8 text-[11px] font-black uppercase tracking-widest text-muted-foreground mb-2">
+                Loaded account
+            </p>
+            <ToolBrief cards={BRIEF_CARDS} onOpen={(c) => console.log("open", c)} />
+        </div>
+        <div className="border-t border-border pt-8">
+            <p className="px-8 text-[11px] font-black uppercase tracking-widest text-muted-foreground mb-2">
+                Free account — same diagnosis, locked tools
+            </p>
+            <ToolBrief cards={BRIEF_CARDS} locked onOpen={() => {}} />
+        </div>
+        <div className="border-t border-border pt-8">
+            <p className="px-8 text-[11px] font-black uppercase tracking-widest text-muted-foreground mb-2">
+                Nothing measured yet
+            </p>
+            <ToolBrief cards={[]} onOpen={() => {}} />
+        </div>
+    </div>
+    </MemoryRouter>
 );
 
 /* Every back a student can buy, beside the default, at the two sizes they are
