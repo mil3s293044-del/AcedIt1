@@ -4797,6 +4797,81 @@ Preview and the held count are drawable at all. **The probe does not follow
 `colorScheme`** — the app's theme is a CLASS, so a dark screenshot needs
 `documentElement.classList.add("dark")` or it silently renders light twice.
 
+## A CLIPPED QUESTION IS WORSE THAN NO QUESTION
+
+**"In the mistake bank, none of the questions get cut off — it must be fully
+displayed. If it's so long, make it collapsible."** The bank already records
+this failure once: `question_title` is `clip(question, 60)`, a sixty-character
+cut of the question ITSELF, and `extra.mistake.question` was added to hold the
+real one for exactly that reason. It then got cut again at every surface that
+printed it, in four different ways:
+
+- **The row's label line printed `questionTitle` inside `truncate
+  max-w-[16rem]`** — a sixty-character clip, truncated a second time, landing
+  mid-word on anything long.
+- **The drill header did the same**, beside the subject.
+- **The "Sit again" list clamped the question to `line-clamp-2`** — on the one
+  list whose whole job is deciding whether to sit a question again, where two
+  lines of a four-mark stem is the half that carries no command term.
+- **The expanded row did not show the question AT ALL.** It had the criterion,
+  the quote and the model answer, and the only trace of what was actually
+  asked was the clipped label above it.
+
+`QuestionPanel` is the one printer now and the clips are gone — including both
+labels, because `mistakeMeta.question` already falls back to `question_title`,
+so the panel always has something and the label was only ever a second, worse
+copy.
+
+**IT COLLAPSES, AND EXPANDING GOES TO FULL HEIGHT.** The two failures are
+different and both are real: a clipped question cannot be read, and a forty-line
+one pushes the exercise it is context FOR off the bottom of the screen — which
+is how a question panel ends up clamped and back where it started. A collapse
+closes the second without reopening the first. Never an inner scroller: a
+scrollbar inside a collapsed box is two cuts where there was one, and the
+student still cannot see the whole thing at once.
+
+**That is the opposite call from `SourcePanel`, and the difference is what the
+two are FOR.** A stimulus is read WHILE answering, so it has to stay in place
+beside the answer box and scrolls at a height. This is context ABOVE a drill, so
+it gets out of the way and comes back whole.
+
+**IT MEASURES RATHER THAN COUNTING CHARACTERS.** The obvious threshold is a
+character count and it is wrong at both ends, and wrong DIFFERENTLY at each
+width: `\frac{\mathrm{d}y}{\mathrm{d}x}` is thirty characters and renders as one
+small glyph cluster, and two hundred characters of prose is two lines on a
+desktop and five at 390. So the rendered height is compared against the clamp
+through a `ResizeObserver` — which also catches KaTeX swapping in its own fonts
+after the first paint, and a rotation.
+
+**A QUESTION THAT FITS GROWS NO CONTROL AT ALL** — no button, no fade, no
+border change. A toggle over nothing is the single-tab `Tabs` rule, and the
+common case is a VCAA stem with its mark allocation, which fits.
+
+**THE FADE IS A MASK, NOT A GRADIENT IN A COLOUR.** The panel is drawn over
+`bg-secondary/40` in the drill, a plain card in a list row, and both themes
+everywhere, so a gradient with a hard-coded stop is a grey smear on one of them.
+A `mask-image` asks nothing about the ground underneath it.
+
+**THE CALLER OWNS THE TYPE** (`textClass`). A list row prints questions small
+and bold and the drill's inset prints them at body size; baking one in would
+have quietly restyled every row this replaced — a change nobody asked for riding
+along with a fix. `COLLAPSED_MAX` is a HEIGHT, so it means the same thing at
+either scale.
+
+`mistakeBank.test.mjs` holds three guards, all verified by putting the bug
+back: no question or criterion behind a `line-clamp` and no `questionTitle`
+printed on the page; the panel does not scroll, does not clamp and does not
+threshold on string length; and the question still renders through
+`MarkdownMath`. That last one is a REWRITE — it used to scan the 400 characters
+around `{meta.question}` and it failed the moment the four printers were unified
+behind one component, which is the right failure: a window scan asserts where a
+thing is written, and following the component asserts what it does.
+
+Draw it with `scripts/_floorProbe.jsx?v=question`, against the three shapes a
+real question comes in — short, LaTeX-heavy, and a multi-part stem — because a
+character count would have put the first two in the wrong bucket and a phone
+column puts the third one there.
+
 ## AI Tools is a WORKBENCH, and the workpiece comes first
 
 **"Have each AI tool be a literal tool used to work on a piece of work or

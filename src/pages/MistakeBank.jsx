@@ -48,6 +48,7 @@ import { redoQueue } from "@/lib/quizInsight";
 import QuizPlayer from "@/components/quizzes/QuizPlayer";
 import { drillFor, suggestRating, ladderFor } from "@/lib/drill";
 import LadderTrack from "@/components/mistakes/LadderTrack";
+import QuestionPanel from "@/components/mistakes/QuestionPanel";
 import ClozeDrill from "@/components/mistakes/ClozeDrill";
 import CommandTermPanel from "@/components/quizzes/CommandTermPanel";
 import RepairDrill from "@/components/mistakes/RepairDrill";
@@ -138,9 +139,17 @@ function MistakeRow({ card, index, attempts, onClear }) {
                     <MarkdownMath className="text-sm font-bold text-foreground leading-snug">
                         {meta.criterion || card.question}
                     </MarkdownMath>
+                    {/* NO CLIPPED QUESTION IN THE LABEL LINE. `question_title`
+                        is `clip(question, 60)` — the question itself, cut at
+                        sixty characters — and this printed it inside a 16rem
+                        `truncate`, so it was cut twice and landed mid-word on
+                        anything long. The real question is in the body below,
+                        whole; the subject and the cost are what identify the
+                        row, and `mistakeMeta.question` falls back to this very
+                        field, so nothing is lost for a card banked before it
+                        was stored. */}
                     <span className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px] text-muted-foreground mt-0.5">
                         {card.subject_name && <span>{card.subject_name}</span>}
-                        {meta.questionTitle && <span className="truncate max-w-[16rem]">· {meta.questionTitle}</span>}
                         {meta.cost > 0 && (
                             <span className="tabular-nums">· cost {meta.cost} mark{meta.cost === 1 ? "" : "s"}</span>
                         )}
@@ -163,8 +172,19 @@ function MistakeRow({ card, index, attempts, onClear }) {
                         className="overflow-hidden"
                     >
                         <div className="px-3 pb-3 space-y-2 border-t border-border/60">
+                            {/* THE QUESTION WAS NOT HERE AT ALL. The row's only
+                                trace of it was `questionTitle` in the label
+                                above — a sixty-character clip, truncated AGAIN
+                                at 16rem — so the one screen built for reading a
+                                dropped mark showed everything about it except
+                                what was asked. */}
+                            {meta.question && (
+                                <div className="pt-2">
+                                    <QuestionPanel>{meta.question}</QuestionPanel>
+                                </div>
+                            )}
                             {meta.quote && (
-                                <p className="text-sm text-muted-foreground italic leading-snug pt-2">
+                                <p className="text-sm text-muted-foreground italic leading-snug">
                                     You wrote “{meta.quote}”
                                 </p>
                             )}
@@ -272,15 +292,19 @@ function Runner({ queue, onGraded, onDone }) {
 
             <div className="card-soft border-2 border-border p-5 space-y-4">
                 {/* THE CRITERION IS THE HEADING, not the card's question text.
-                    The question already contains the assessment title and the
-                    quote, and the label above repeats the title — so the old
-                    screen printed the same title twice and buried the actual
-                    mark under a paragraph of prose. */}
+                    The question is drawn in full in its own panel below, so
+                    leading with it would bury the actual mark under a paragraph
+                    of prose. (The label line used to carry `questionTitle`
+                    beside the subject as well — a sixty-character clip of this
+                    same question — which made it the SECOND place one question
+                    appeared and the only place it was cut. It is gone.) */}
                 <div>
                     <div className="flex items-center gap-2 flex-wrap">
                         <span className={`pill text-[10px] ${badge.cls}`}>{badge.label}</span>
+                        {/* Same clip, same reason it is gone: the panel below
+                            prints the question in full. */}
                         <p className="stat-label text-muted-foreground">
-                            {card.subject_name || "Mistake"}{meta.questionTitle ? ` · ${meta.questionTitle}` : ""}
+                            {card.subject_name || "Mistake"}
                         </p>
                     </div>
                     <p className="text-[11px] text-muted-foreground mt-1.5">{badge.blurb}</p>
@@ -299,15 +323,15 @@ function Runner({ queue, onGraded, onDone }) {
                     student cannot judge "what did the assessor want here"
                     against `\frac{dy}{dx}` printed as its source. Drawn as a
                     quieter inset than the exercise under it: it is the context
-                    for the drill and never the drill itself. */}
-                {meta.question && (
-                    <div className="rounded-xl bg-secondary/40 border-l-2 border-border pl-3 pr-3 py-2.5">
-                        <p className="stat-label text-muted-foreground mb-1">The question</p>
-                        <MarkdownMath className="text-sm text-foreground leading-snug">
-                            {meta.question}
-                        </MarkdownMath>
-                    </div>
-                )}
+                    for the drill and never the drill itself.
+
+                    `QuestionPanel` is what keeps BOTH halves of that true. A
+                    long stem printed whole pushes the exercise it is context
+                    for off the bottom of the screen, which is how a question
+                    panel ends up clamped and back where it started — so it
+                    collapses instead, measured rather than guessed at, and
+                    expands to full height. */}
+                <QuestionPanel>{meta.question}</QuestionPanel>
 
                 {drill.stage === "recognise" && (
                     <>
@@ -930,9 +954,15 @@ export default function MistakeBank() {
                     <ul className="border-t border-border/60 divide-y divide-border/60">
                         {summary.cleared.map((c) => (
                             <li key={c.id} className="flex items-center gap-3 px-3 py-2">
-                                <MarkdownMath className="text-xs text-muted-foreground leading-snug flex-1 min-w-0 line-clamp-2">
-                                    {mistakeMeta(c).criterion || c.question}
-                                </MarkdownMath>
+                                {/* The fallback here is a whole QUESTION, for
+                                    every card banked before `criterion` was
+                                    stored, so this clamp cut one too. */}
+                                <div className="flex-1 min-w-0">
+                                    <QuestionPanel label="" tone="plain"
+                                        textClass="text-xs text-muted-foreground leading-snug">
+                                        {mistakeMeta(c).criterion || c.question}
+                                    </QuestionPanel>
+                                </div>
                                 <button type="button" onClick={() => restore([c])}
                                     className="pill border-2 border-border text-[10px] text-muted-foreground
                                         hover:text-foreground hover:border-foreground/40 flex-shrink-0">
@@ -1125,9 +1155,15 @@ function RedoTab({ groups, cases, onSit }) {
                     <ul className="space-y-2 mt-3">
                         {g.rows.map((r) => (
                             <li key={r.key} className="rounded-xl border border-border p-2.5">
-                                <MarkdownMath className="text-xs font-bold text-foreground leading-snug line-clamp-2">
+                                {/* NOT `line-clamp-2`. This is the list a
+                                    student decides from — "do I need to sit
+                                    this again" is a judgement about the whole
+                                    question, and two lines of a four-mark stem
+                                    is the half that carries no command term. */}
+                                <QuestionPanel label="" tone="plain"
+                                    textClass="text-xs font-bold text-foreground leading-snug">
                                     {r.question.question}
-                                </MarkdownMath>
+                                </QuestionPanel>
                                 <p className="flex flex-wrap items-center gap-x-2 text-[11px] text-muted-foreground mt-1">
                                     {r.reasons.map((why, i) => (
                                         <span key={i} className="inline-flex items-center gap-1">

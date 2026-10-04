@@ -579,12 +579,66 @@ check("a card banked before the question was stored still shows something", () =
 check("THE BANK RENDERS THE QUESTION AS MATHS", () => {
     // Stored raw is only half of it: printed as source, `\\frac{dy}{dx}` is not
     // something a student can judge an answer against.
+    //
+    // It goes through ONE component now, so this follows it rather than
+    // scanning the window around each call site — which is what the first
+    // version did, and it failed the moment the four printers were unified
+    // behind `QuestionPanel`. A window scan asserts where a thing is written;
+    // this asserts what it does.
     const page = fs.readFileSync("src/pages/MistakeBank.jsx", "utf8");
+    assert.ok(/<QuestionPanel[\s>]/.test(page), "the bank no longer prints the question through one panel");
     assert.ok(/\{meta\.question\}/.test(page), "the drill screen does not print the question");
-    const at = page.indexOf("{meta.question}");
-    const around = page.slice(Math.max(0, at - 400), at);
-    assert.ok(/MarkdownMath/.test(around),
+    const panel = fs.readFileSync("src/components/mistakes/QuestionPanel.jsx", "utf8");
+    assert.ok(/<MarkdownMath/.test(panel),
         "the question is printed outside MarkdownMath, so a maths question renders as its source");
+});
+
+check("A QUESTION IS NEVER CLIPPED, ANYWHERE IN THE BANK", () => {
+    // The whole class, asserted as an absence. Each of these renders perfectly
+    // and is simply the question stopping mid-sentence, which on a four-mark
+    // stem is the half that carries the command term — and the student has no
+    // way to tell there was more.
+    const page = fs.readFileSync("src/pages/MistakeBank.jsx", "utf8")
+        .replace(/\/\*[\s\S]*?\*\//g, "")
+        .replace(/^\s*\/\/.*$/gm, "");
+
+    // A question or a criterion inside a clamp.
+    for (const m of page.matchAll(/line-clamp-\d/g)) {
+        const around = page.slice(Math.max(0, m.index - 300), m.index + 300);
+        assert.ok(!/meta\.question|\.question\.question|criterion|card\.question/.test(around),
+            "a question or criterion is behind line-clamp — use QuestionPanel, which collapses instead");
+    }
+
+    // `question_title` is `clip(question, 60)` — the question itself, cut. It
+    // may be STORED (mistakeBank.js writes it) and read as a fallback, and it
+    // may not be the thing a student is shown in place of the question.
+    assert.ok(!/questionTitle/.test(page),
+        "the page prints `questionTitle`, which is a sixty-character clip of the question itself");
+});
+
+check("THE PANEL COLLAPSES RATHER THAN CUTTING, and measures to decide", () => {
+    const panel = fs.readFileSync("src/components/mistakes/QuestionPanel.jsx", "utf8")
+        .replace(/\/\*[\s\S]*?\*\//g, "")
+        .replace(/^\s*\/\/.*$/gm, "");
+    // Expanding goes to FULL height. An inner scroller would be two cuts where
+    // there was one, and the student still could not see the whole thing.
+    assert.ok(!/overflow-y-auto|overflow-auto|overflow-scroll/.test(panel),
+        "the panel scrolls its content — expanding has to go to full height");
+    assert.ok(!/line-clamp/.test(panel), "the panel clamps by line count rather than collapsing");
+    // MEASURED, not a character count: the same string is two lines on a
+    // desktop and five on a phone, and a LaTeX fragment is long as source and
+    // small on screen.
+    // `new ResizeObserver(`, not the bare word — the file also carries a
+    // `typeof ResizeObserver === "undefined"` guard, so a presence check
+    // passes with the observer gone. Verified by deleting the construction.
+    assert.ok(/new ResizeObserver\(/.test(panel) && /scrollHeight/.test(panel),
+        "the panel guesses at length instead of measuring what it rendered");
+    // A character count is the obvious threshold and it is wrong at both ends.
+    assert.ok(!/children[^\n]*\.length\s*[<>]/.test(panel),
+        "the panel thresholds on the string's length rather than its rendered height");
+    // And a question that fits grows no control at all.
+    assert.ok(/\{tall && \(/.test(panel),
+        "the toggle is drawn unconditionally — a control over nothing is chrome");
 });
 
 console.log(`\n${passed} passed`);
