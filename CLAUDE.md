@@ -4797,6 +4797,131 @@ Preview and the held count are drawable at all. **The probe does not follow
 `colorScheme`** — the app's theme is a CLASS, so a dark screenshot needs
 `documentElement.classList.add("dark")` or it silently renders light twice.
 
+## AI Tools is a WORKBENCH, and the workpiece comes first
+
+**"Have each AI tool be a literal tool used to work on a piece of work or
+question. Almost like a workshop."** The brief above was the right half of the
+answer and it stopped one step short: it told a student WHAT to work on and
+then handed them to a chat, where the thing they were working on is a message
+that scrolls away the moment they reply to it. So every tool after the first
+needed the context restated, and one piece of work meant up to nine separate
+conversations about it, none of which knew about the others.
+
+**THE WORKPIECE IS THE OBJECT AND THE TOOLS ARE OPERATIONS ON IT.**
+`workpiece.js` is the model: five KINDS — a question, something you wrote, a
+problem, your material, a topic — and eight OPERATIONS, each declaring which
+kinds it applies to. `toolsFor` is the whole routing, and it is the difference
+between a workshop and a dropdown: a question offers Explain / Work through /
+Plan / Question me, and something you wrote offers Mark and Plan and nothing
+else. **A tool that cannot act on the thing on the bench is NOT DRAWN.** Not
+greyed out — a bench drawing all eight with six disabled is the dropdown again
+with more pixels. Nothing is hidden for being advanced; it is hidden for being
+INAPPLICABLE, which is a fact about the workpiece rather than a judgement about
+the student.
+
+**A TOOL IS A VERB, NOT A PERSON.** "Math Tutor" is somebody you talk to;
+"Work it through" is something you do to a problem. The personas are unchanged
+underneath — `chatTools.js` still owns the prompts, the options and the feature
+tag that bills them — and this layer says what each one DOES and what it can do
+it to.
+
+**`study_coach` IS DELIBERATELY NOT AN OPERATION.** It is advice about
+studying rather than an operation on a piece of work, so on a bench it would be
+the one tool that does nothing to the thing in front of you. It stays reachable
+as its own chat.
+
+**THE SPECIALIST PROMOTES AND THE FALLBACK DOES NOT, and that was visibly
+wrong.** `personaFor` returns `exam_questions` for every subject it does not
+profile — the honest default for MARKING, and not a statement that questions
+are the thing to do first. Promoted on it, every subject that is not maths or
+English led with "Question me": a Chemistry criterion the student keeps
+dropping opened offering to TEST them on it rather than to explain it, which is
+the wrong end of the ladder. Only `math_tutor` and `english_mentor` are
+SPECIALISTS; a fallback sorts on rank like everything else. Caught by a
+screenshot and pinned by injection.
+
+**A STEP IS A CONVERSATION, which is why there is no second send path.**
+`UnifiedChat` already streams, handles artifacts, bills the right feature and
+persists; a step hands it a tool, a subject and an opening message. Writing a
+bespoke runner would be a second copy of the surface `quizScore.js` has had to
+fix four times, and the first thing to drift would be the billing. **Pressing a
+tool calls nothing** — it puts the opening message in the composer, so the
+price is on screen before a chip is spent, which is megaUpload's rule applied
+to the surface that most invites a second press. Every tool prints that price
+on its own button.
+
+### THE BENCH IS NOT STORED, so nothing is stranded and nothing can drift
+
+A bench is a workpiece plus the steps run on it, and every step IS a
+conversation that already saves. So `bench.js` reconstructs the shelf by
+GROUPING those rows on the workpiece's key, riding in `input_data` on rows that
+already persist. No table, no migration, and nothing that can disagree with the
+steps it is made of — the rule `redoQueue`, `subjectHub` and `priceHistory`
+already keep.
+
+**THE KEY IS WHAT THE THING IS, never when it was picked.** `workpieceKey` is
+FNV-1a over the kind and the normalised body, so the same question pulled out
+of the mistake bank on Tuesday and again on Friday is ONE bench with the
+Tuesday half still on it. A timestamp or a random id would have made it two,
+and the earlier work would simply have been gone. It is keyed on the CLIPPED
+body — the one that gets stored — or a 6,001-character paste would key
+differently from the row it saved to.
+
+**EVERY CHAT FROM BEFORE THE BENCH IS ON THE SHELF.** There are months of them.
+Leaving them to a history sidebar would strand them on the one screen rebuilt
+around picking work back up, so a chat with no workpiece becomes a DRAFT: its
+first message is the thing on the bench, and the single fact it is missing is
+the KIND.
+
+**AND THE KIND IS ASKED FOR RATHER THAN INFERRED.** The tempting rule is to
+read it off the tool that was used, and it does not survive the table: only
+`english_mentor` and `line_memoriser` name a single kind, and the other six
+apply to two, three or four. So an inferred kind would be a guess on most rows,
+and a wrong one SILENTLY REMOVES the tool the student came for. The bench asks,
+once — the same refusal `WorkPicker` makes about typed work and `coverage`
+makes about an unrecognised topic.
+
+**AN ADOPTED DRAFT KEYS ON ITS ROW, not on its body**, and that is load-bearing
+rather than an implementation detail: the kind is inside the key, so a
+body-derived key would CHANGE the moment the student named the kind and split
+one bench in half with the original conversation on the far side of it.
+
+**A DRAFT'S HEADER MAY NOT FILL IN THE BLANK.** The eyebrow names what the
+thing IS, and for a draft there is no answer yet — it fell back to "On the
+bench", a placeholder sitting directly above a section asking the student that
+exact question. The source becomes the eyebrow instead, so the header states
+the one true thing it has.
+
+**A DEEP-LINKED SUBJECT WAS NEVER REACHING THE PROMPT.** Every tool's
+`system(s, o)` reads the subject off `s`, which is `subjectName`, and
+`subjectBlock(s)` is what loads that study's VCAA EXAMINER PROFILE. The link
+set it on `toolOptions` alone, so a bench opened on a Chemistry question ran
+the general VCE preamble instead of the Chemistry profile — the half-wired
+shape the comment directly above it warns about, in the line below it, and the
+same failure `markingPrompt.js` records about the marker being told to be an
+examiner and shown none of the rules. It renders identically either way; the
+only symptom is a worse answer.
+
+**`persist` READS THE WORKPIECE THROUGH A REF.** It is memoised on `user`
+alone and fires in the tick a turn completes, so reading the prop through the
+closure would save whichever workpiece was mounted when that callback was
+built — the trap `startFromSuggestion` and the pomodoro commit both record. A
+step saved without its workpiece is a step no bench can ever find again: the
+bench works perfectly for one session and the shelf is empty forever, with no
+error and no warning. `bench.test.mjs` scans `persist` for both, and for the
+subject above, because all three are invisible in a render.
+
+**ONE CHAT-ROW PREDICATE.** `chatRows` is exported and `UnifiedChat`'s sidebar
+imports it rather than restating the filter, or the shelf and the sidebar come
+to disagree about what the student has, on two lists of the same rows. The test
+caught that duplication on its first run.
+
+Draw all four states with `scripts/_floorProbe.jsx?v=bench` — the picker with
+the shelf above the candidates, a question mid-work, an adopted chat waiting on
+its kind, and a piece of writing whose toolbar is two tools wide. Only one of
+them can be seen on a real login at a time, which is the whole reason it draws
+them together.
+
 ## What the app SAYS it does, and what it does
 
 **"Can you check the whole site again for anything else inaccurate."** Twelve,

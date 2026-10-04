@@ -35,9 +35,13 @@ import PriceTick from "@/components/market/PriceTick";
 import { CATALOGUE, grantForTier } from "@/lib/credStore";
 import BottomNav from "@/components/layout/BottomNav";
 import { CardBack } from "@/components/cards/PlayingCard";
-import PrankOverlay from "@/components/pranks/PrankOverlay";
-import ToolBrief from "@/components/ai_tools/ToolBrief";
-import { toolBrief } from "@/lib/toolBrief";
+import PrankOverlay, { prankBodyClass } from "@/components/pranks/PrankOverlay";
+import { PrankStageProvider } from "@/lib/PrankStage";
+import WorkBench from "@/components/ai_tools/WorkBench";
+import WorkPicker from "@/components/ai_tools/WorkPicker";
+import { makeWorkpiece } from "@/lib/workpiece";
+import { candidates as wpCandidates } from "@/lib/workpieceSources";
+import { benches } from "@/lib/bench";
 
 /** A real ISO day N days out, so the assessment card has a date to count to. */
 const inDaysISO = (n) => {
@@ -502,8 +506,14 @@ function TickDemo() {
 }
 
 function StoreView() {
-    const [preview, setPreview] = React.useState(null);
+    // THE PROBE HAS TO MIRROR LAYOUT, not just mount the store. Shake and
+    // upside down ARE the body class, so a probe that renders the provider
+    // without also applying `prankBodyClass` would show exactly the broken
+    // preview this change fixes — and pass.
+    const [queue, setQueue] = React.useState([]);
     return (
+    <div className={prankBodyClass(queue[0], false)}>
+    <PrankStageProvider queue={queue} setQueue={setQueue}>
     <Room>
         <div className="p-8 max-w-4xl mx-auto">
             <h1 className="font-display font-black text-2xl text-[var(--floor-ink)] mb-1">Credits</h1>
@@ -517,7 +527,7 @@ function StoreView() {
                 onConvert={(xp) => console.log("convert", xp)}
                 onEquip={(id, slot) => console.log("equip", id, slot)}
                 onPrank={(k, to) => console.log("prank", k, to)}
-                onPreviewPrank={(k) => setPreview({ id: `p-${k}-${Date.now()}`, kind: k, from: "You" })}
+
                 store={{
                     cred: 2400,
                     tier: 6,
@@ -557,55 +567,147 @@ function StoreView() {
                 }}
             />
         </div>
-        {preview && <PrankOverlay prank={preview} onDone={() => setPreview(null)} />}
+        {queue[0] && (
+            <PrankOverlay prank={queue[0]} onDone={() => setQueue((q) => q.slice(1))} />
+        )}
     </Room>
+    </PrankStageProvider>
+    </div>
     );
 }
 views.store = () => <StoreView />;
 
-/* ── ?v=brief — the AI Tools brief, against an account that has all four
-   kinds, and against one that has nothing. Both states matter and only one of
-   them can be seen on a real account at a time: the loaded case is what the
-   layout has to hold, and the empty case is what every new student meets. The
-   locked variant is what a free account sees, which is the whole argument for
-   the split — the diagnosis is real and about them, and only the tools cost
-   anything to run. */
-const BRIEF_CARDS = toolBrief({
+/* ── ?v=bench — the workshop, in the three states it has. Only one of them
+   can be seen on a real login at a time, which is the whole reason this draws
+   all three: the PICKER a student arrives on, the BENCH once something is on
+   it, and the bench for a kind with a narrower toolbar. The step state is the
+   real chat and cannot be drawn here — `base44` is a Proxy over an axios SDK
+   and cannot be stubbed, the lesson ?v=reach already records. */
+const BENCH_PICKS = wpCandidates({
     assessments: [{ id: "a1", subject_name: "Chemistry", title: "Unit 4 AOS 1 SAC", due_date: inDaysISO(3) }],
-    bankCards: [1, 2, 3].map((i) => ({
+    bankCards: [1, 2].map((i) => ({
         id: `m${i}`, topic: "Mistake bank", subject_name: "Chemistry", is_active: true,
         question: "q", answer: "a",
-        extra: { mistake: { criterion: "links the structure to the property", topic: "Bonding", question: "Q", cost: 1 } },
+        extra: { mistake: {
+            criterion: "links the structure to the property",
+            topic: "Bonding",
+            question: "Explain why graphite conducts electricity but diamond does not.",
+            question_title: "Explain why graphite conducts",
+        } },
     })),
-    cards: [{
-        id: "c1", subject_name: "Mathematical Methods", topic: "Differentiation", is_active: true,
-        total_reviews: 12, review_count_good: 4, review_count_easy: 0, is_weak_spot: true,
-    }],
-    attempts: [],
 });
 
-views.brief = () => (
-    // A LOCKED CARD AND THE UPGRADE STRIP ARE BOTH <Link>s, so this view needs
-    // a router or every one of them throws before a pixel is drawn.
+const BENCH_PIECE = makeWorkpiece({
+    kind: "question",
+    body: "Explain why graphite conducts electricity but diamond does not. Refer to bonding and structure in your answer. (4 marks)",
+    title: "links the structure to the property",
+    subject: "Chemistry",
+    source: "mistake",
+    ref: { page: "MistakeBank", label: "In your bank" },
+});
+
+const BENCH_ESSAY = makeWorkpiece({
+    kind: "writing",
+    body: "Macbeth's ambition is the cause of his downfall. Shakespeare shows this through the dagger soliloquy, where Macbeth is already imagining the murder before anyone pushes him to it.",
+    subject: "English",
+    source: "typed",
+});
+
+/* The SHELF is built from saved conversation rows, so the fixture has to be
+   rows rather than benches — anything else would skip `bench.js` entirely and
+   the probe would draw a shape the real page cannot produce. Two of them: a
+   workshop bench with two steps on it, and a chat from before the workpiece
+   existed, which is the DRAFT case and about half of what is on this site. */
+const BENCH_ROWS = [
+    {
+        id: "c1", tool_type: "concept_explainer", title: "Explain why graphite conducts",
+        subject_name: "Chemistry", created_date: "2026-10-01T09:00:00.000Z",
+        input_data: {
+            workpiece: BENCH_PIECE, operation: "explain", subject: "Chemistry",
+            messages: [{ role: "user", content: "x" }, { role: "assistant", content: "y" }],
+        },
+    },
+    {
+        id: "c2", tool_type: "exam_questions", title: "Write me exam-style questions",
+        subject_name: "Chemistry", created_date: "2026-10-02T09:00:00.000Z",
+        input_data: {
+            workpiece: BENCH_PIECE, operation: "test", subject: "Chemistry",
+            messages: [{ role: "user", content: "x" }, { role: "assistant", content: "y" }],
+        },
+    },
+    {
+        // study_coach has no OPERATION — it is advice about studying rather than
+        // something you do to a piece of work — so this is the bare case: the
+        // row's own title is all the step has to print. Worth drawing, because
+        // it is a large share of what is actually saved on this site.
+        id: "c3", tool_type: "study_coach",
+        title: "I keep running out of time in Methods exam 2",
+        subject_name: "Methods",
+        created_date: "2026-10-03T09:00:00.000Z",
+        input_data: {
+            subject: "Methods",
+            messages: [
+                { role: "user", content: "I keep running out of time in Methods exam 2 and I am not sure whether to skip the hard ones or push through them." },
+                { role: "assistant", content: "Here is the thing." },
+            ],
+        },
+    },
+];
+const BENCH_SHELF = benches(BENCH_ROWS);
+const BENCH_DRAFT = BENCH_SHELF.find((b) => b.draft);
+
+views.bench = () => (
     <MemoryRouter>
-    <div className="bg-background min-h-screen py-8 space-y-10">
+    <div className="bg-background min-h-screen py-6 space-y-10">
         <div>
             <p className="px-8 text-[11px] font-black uppercase tracking-widest text-muted-foreground mb-2">
-                Loaded account
+                Arriving — the picker
             </p>
-            <ToolBrief cards={BRIEF_CARDS} onOpen={(c) => console.log("open", c)} />
+            <WorkPicker
+                candidates={BENCH_PICKS}
+                benches={BENCH_SHELF}
+                onPick={(w) => console.log("pick", w)}
+                onOpenBench={(b) => console.log("bench", b)}
+            />
         </div>
-        <div className="border-t border-border pt-8">
+        <div className="border-t border-border pt-6">
             <p className="px-8 text-[11px] font-black uppercase tracking-widest text-muted-foreground mb-2">
-                Free account — same diagnosis, locked tools
+                A question on the bench, two steps done
             </p>
-            <ToolBrief cards={BRIEF_CARDS} locked onOpen={() => {}} />
+            <WorkBench
+                workpiece={BENCH_PIECE}
+                steps={[
+                    { id: "s1", op: "explain", tool: "concept_explainer", title: "Explain it · Chemistry", preview: "What this is actually asking, from the start." },
+                    { id: "s2", op: "test", tool: "exam_questions", title: "Question me · Chemistry", preview: "Exam-style questions, with marking guides." },
+                ]}
+                onRun={(o) => console.log("run", o)}
+                onOpenStep={(s) => console.log("open", s)}
+                onNew={() => {}}
+            />
         </div>
-        <div className="border-t border-border pt-8">
+        <div className="border-t border-border pt-6">
             <p className="px-8 text-[11px] font-black uppercase tracking-widest text-muted-foreground mb-2">
-                Nothing measured yet
+                A chat from before the bench — the one fact it is missing
             </p>
-            <ToolBrief cards={[]} onOpen={() => {}} />
+            <WorkBench
+                draft={BENCH_DRAFT?.draft}
+                steps={BENCH_DRAFT?.steps || []}
+                onKind={(k) => console.log("kind", k)}
+                onOpenStep={(st) => console.log("open", st)}
+                onBack={() => {}}
+            />
+        </div>
+        <div className="border-t border-border pt-6">
+            <p className="px-8 text-[11px] font-black uppercase tracking-widest text-muted-foreground mb-2">
+                Something you wrote — a narrower toolbar, and nothing done yet
+            </p>
+            <WorkBench
+                workpiece={BENCH_ESSAY}
+                steps={[]}
+                onRun={(o) => console.log("run", o)}
+                onOpenStep={() => {}}
+                onBack={() => {}}
+            />
         </div>
     </div>
     </MemoryRouter>

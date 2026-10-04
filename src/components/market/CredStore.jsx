@@ -43,6 +43,11 @@ import StorePreview from "@/components/market/StorePreview";
 import { ordinal } from "@/lib/league";
 import { WEEKLY_RECEIVE_MAX } from "@/lib/pranks";
 import { Send, Play } from "lucide-react";
+// THE BUTTON OWNS THE CAPABILITY. Threading an `onPreviewPrank` through the
+// page and the probe meant two parents had to remember to wire it, and the
+// probe forgot — which renders a Preview button that silently does nothing,
+// the exact half-wired shape this shelf was just fixed for.
+import { usePrankStage } from "@/lib/PrankStage";
 
 const GLYPH = {
     cosmetic: Sparkles,
@@ -62,8 +67,14 @@ const GROUPS = [
     ["market", "The board", "Put a question of your own up."],
 ];
 
-export default function CredStore({ store, busy, onBuy, onConvert, onEquip, onPrank, onPreviewPrank }) {
+export default function CredStore({ store, busy, onBuy, onConvert, onEquip, onPrank }) {
     const reduce = useReducedMotion();
+    // A preview plays through the SAME QUEUE a delivered prank lands in, so
+    // what a student sees before spending is what their friend gets by
+    // construction. Shake and upside down are entirely the body transform that
+    // queue drives; handed straight to the overlay they drew a card and
+    // nothing else. See PrankStage.jsx.
+    const { play: playPrank } = usePrankStage();
     const [xp, setXp] = useState(0);
     const [prankTo, setPrankTo] = useState("");
 
@@ -379,7 +390,7 @@ export default function CredStore({ store, busy, onBuy, onConvert, onEquip, onPr
                                                         charges nothing and reaches nobody. */}
                                                     <Button size="sm" variant="ghost"
                                                         className="font-bold text-[var(--floor-muted-2)]"
-                                                        onClick={() => onPreviewPrank?.(k.id)}>
+                                                        onClick={() => playPrank(k.id, store.me_name || "You", { preview: true })}>
                                                         <Play className="w-3.5 h-3.5 mr-1" />Preview
                                                     </Button>
                                                     <Button size="sm" className="font-bold"

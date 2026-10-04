@@ -16,6 +16,7 @@ import StreakCelebration from "@/components/ranked/StreakCelebration";
 import StakesPill from "@/components/arena/StakesPill";
 import { LiveProvider, useBusy, BUSY } from "@/lib/LiveContext";
 import { CosmeticsProvider } from "@/lib/CosmeticsContext";
+import { PrankStageProvider } from "@/lib/PrankStage";
 import PrankOverlay, { prankBodyClass } from "@/components/pranks/PrankOverlay";
 import UpdatePrompt from "@/components/shared/UpdatePrompt";
 import { takeFn } from "@/lib/fnResult";
@@ -564,7 +565,13 @@ export default function Layout({ children }) {
 
             <main className="text-foreground w-full pb-20 md:pb-0 md:pl-16">
                 <StakesPill />
-                {children}
+                {/* THE STAGE IS WHERE PAGES REACH THE PRANK QUEUE. It wraps the
+                    children rather than the whole layout because the class that
+                    shakes and flips the page is on the div ABOVE this, and
+                    Layout owns the state that sets it — see PrankStage.jsx. */}
+                <PrankStageProvider queue={prankQueue} setQueue={setPrankQueue}>
+                    {children}
+                </PrankStageProvider>
             </main>
 
             <BottomNav />
