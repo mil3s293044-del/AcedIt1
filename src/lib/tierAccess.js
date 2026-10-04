@@ -6,9 +6,19 @@ import { canAfford, stackOf, stackWarning, priceOf, WEEKLY_CHIPS } from './chips
 // Free tier:
 //   • AI quiz generation     → 5 lifetime
 //   • AI flashcard generation → 5 lifetime
-//   • AI study tools (combined) → 5 lifetime
+//   • AI study tools (combined) → 5 lifetime, BUT SEE BELOW
+//   • AI chat (shares the tools counter) → 5 lifetime, same caveat
 //   • Lifetime cost ceiling  → 100 cents ($1) hard backstop
 //   • All other AI features   → BLOCKED (premium-only)
+//
+//   THE FREE TOOL ALLOWANCE IS CURRENTLY UNREACHABLE. /AITools is wrapped in
+//   <RequirePremium>, which blocks a free account at the PAGE, so the five
+//   ai_tool / ai_chat uses this table grants can never be spent and the
+//   counters behind them can never move. Two coherent answers and this is
+//   neither: let the per-action gate do the work and drop the page wrapper, or
+//   drop these two caps so the model matches the product. Marketing copy has
+//   been written to the page gate ("No AI study tools") since it is what a
+//   student actually meets.
 //
 // Premium tier ($5/week):
 //   • ONE WEEKLY STACK of 1,000 chips, spent on whatever they like.
@@ -46,8 +56,16 @@ export const FEATURES = {
   ROADMAP_AI_GEN:   'roadmap_ai_gen',    // free: blocked, premium: 15 chips
   BLURTING:         'blurting',          // free: blocked, premium: 8 chips
   ACTIVE_RECALL:    'active_recall',     // free: blocked, premium: 8 chips
-  SPACED_REP:       'spaced_repetition', // free: blocked, premium: unlimited (no AI cost)
-  ADVANCED_ANALYTICS: 'advanced_analytics', // free: blocked, premium: unlimited (no AI cost)
+  // NEITHER OF THE NEXT TWO IS A GATE, and the comments used to say they were.
+  // Both are declared here, labelled in TierUsagePill, and CHECKED NOWHERE —
+  // `grep -rn SPACED_REP src/` finds one label and no canUseFeature call. So
+  // spaced repetition and the progress charts are free for everybody, which is
+  // the honest reading anyway: neither costs an AI call, and both are how a
+  // student finds out the AI features are worth paying for. They are kept as
+  // names, not promises, because five marketing surfaces were selling them as
+  // premium off these two lines.
+  SPACED_REP:       'spaced_repetition', // NOT GATED — free and premium alike
+  ADVANCED_ANALYTICS: 'advanced_analytics', // NOT GATED — free and premium alike
   STUDY_COACH:      'study_coach',       // Ace companion — premium-only, 2 chips a message (Haiku, the cheap tier)
 };
 

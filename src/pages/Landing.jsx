@@ -722,8 +722,9 @@ export default function Landing() {
                   Study with your group, not alone at midnight.
                 </h3>
                 <p className="text-[#0D1626]/60 text-sm leading-relaxed max-w-md">
-                  Compete on weekly XP, set score wagers, run goal challenges
-                  with your year level. The whole school can be on AcedIt.
+                  Trade predictions on each other&apos;s weeks, climb the weekly
+                  league, and chase the leaderboards with your year level. The
+                  whole school can be on AcedIt.
                 </p>
               </div>
               <div className="flex-shrink-0 w-full md:w-72 rounded-2xl bg-[#FBF7F0] p-5 border border-black/5">
@@ -903,7 +904,7 @@ export default function Landing() {
                 "Ace, your study companion, awake whenever you are",
                 "Unlimited quizzes, flashcards & practice",
                 "Active recall, blurting & spaced repetition",
-                "Compete: XP battles, wagers & friend leaderboards",
+                "Compete: prediction markets, a weekly league & leaderboards",
                 "A planner that maps your week around your SACs",
                 "Full progress & analytics dashboard",
               ].map((f) => (

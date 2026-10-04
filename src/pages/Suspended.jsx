@@ -28,7 +28,7 @@ export default function Suspended() {
                 </p>
 
                 <a href="mailto:support@acedit.com.au" className="block">
-                    <Button className="w-full" style={{ backgroundColor: "#534AB7" }}>
+                    <Button className="w-full">
                         Contact Support
                     </Button>
                 </a>

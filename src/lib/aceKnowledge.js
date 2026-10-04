@@ -147,7 +147,7 @@ export const FEATURES = [
     },
     {
         id: "weak_spots", name: "Weak spots", section: "Study", suit: "diamond",
-        to: "/Analytics", parent: "spaced_repetition",
+        to: "/Review?tab=insights", parent: "spaced_repetition",
         what: "The topics your reviews keep failing on, worked out from every card you've rated.",
         when: "You've got limited time and need to spend it where it's actually costing you.",
         needs: NEEDS.reviewed,
@@ -276,16 +276,16 @@ export const FEATURES = [
         aka: ["atar", "score", "predicted atar", "how am I going", "rank"],
     },
     {
-        id: "analytics", name: "Analytics", section: "Progress", suit: "diamond",
-        to: "/Analytics",
-        what: "Everything the app has measured about your study, broken down by subject, topic and technique.",
-        when: "Deciding what to do differently, rather than deciding what to do next.",
+        id: "analytics", name: "Progress", section: "Progress", suit: "diamond",
+        to: "/Review",
+        what: "Two tabs. Queue is everything you owe, worst first — a SAC with no prep started, marks already dropped, cards slipping, cards ready. Insights is whether any of it is sticking, where the marks are going and where the hours went.",
+        when: "Queue for what to do next. Insights for what to do differently.",
         needs: NEEDS.sessions,
-        aka: ["analytics", "stats", "progress", "data", "charts", "trends"],
+        aka: ["analytics", "stats", "progress", "data", "charts", "trends", "queue", "review queue", "what do I owe", "outstanding", "due"],
     },
     {
         id: "cognition", name: "Cognition", section: "Progress", suit: "diamond",
-        to: "/Analytics?tab=cognition",
+        to: "/Review?tab=insights",
         what: "Five axes drawn from how you actually study — retrieval, stability, durability, spread and focus.",
         when: "You want to know how you're learning rather than how much. It's a projection from your own logs, not a scan of anything.",
         needs: NEEDS.reviewed,
@@ -302,7 +302,7 @@ export const FEATURES = [
     {
         id: "streak", name: "Streak", section: "Progress", suit: "heart",
         to: "/Dashboard",
-        what: "Consecutive days you've studied, and one of the five parts your AcedIt ATAR is built from.",
+        what: "Consecutive days you've studied. It multiplies the XP you earn — it is not one of the five parts your AcedIt ATAR is built from, which counts study days rather than a run of them.",
         when: "Not a thing you open — a thing you keep.",
         needs: null,
         aka: ["streak", "days in a row", "consistency", "flame"],
@@ -312,7 +312,7 @@ export const FEATURES = [
     {
         id: "ranked", name: "Ranked", section: "Social", suit: "club",
         to: "/Ranked",
-        what: "Three leaderboards — ATAR, XP and study time — against everyone, your friends, or your school.",
+        what: "Your AcedIt ATAR and what it is built from, the leaderboards for it, the weekly league, and the all-time boards for XP and study time.",
         when: "Comparison motivates you. If it doesn't, leave it alone; it isn't load-bearing.",
         needs: null,
         aka: ["ranked", "leaderboard", "rank", "compete", "top", "school"],
@@ -320,11 +320,11 @@ export const FEATURES = [
     {
         id: "competitions", name: "Compete", section: "Social", suit: "club",
         to: "/Competitions",
-        what: "Head-to-head challenges with a friend on a goal or a score.",
-        when: "You'll do it for a friend when you won't do it for yourself.",
-        needs: NEEDS.friends,
+        what: "A prediction market on how everyone's week actually goes. Take a position with credits, and you are scored against what the room believed rather than against the house.",
+        when: "Twelve people reading your week is a better reason to study than a number going up.",
+        needs: null,
         proof: "Social accountability — a watched commitment gets kept.",
-        aka: ["duel", "challenge", "compete", "versus", "bet", "race"],
+        aka: ["market", "compete", "predict", "position", "credits", "forecast", "floor"],
     },
     {
         id: "friends", name: "Friends", section: "Social", suit: "club",
@@ -384,7 +384,12 @@ export const PAGES = {
     AITools:      { route: "/AITools",      title: "AI Tools",     intro: "One chat, several specialists. This page is part of Premium." },
     Planner:      { route: "/Goals",        title: "Planner",      intro: "Your week as sessions, built around the dates you're actually working towards." },
     Goals:        { route: "/Goals",        title: "Planner",      intro: "Your week as sessions, built around the dates you're actually working towards." },
-    Review:       { route: "/Review",       title: "Progress",     intro: "Everything outstanding, worst first — and whether any of what you have done is sticking." },
+    Review:       { route: "/Review",       title: "Progress",     intro: "Everything outstanding, worst first — and whether any of what you have done is sticking.", notes: [
+        "The queue is four tiers: a date you cannot move, then marks already lost, then marks about to be, then the ordinary pile.",
+        "A card you have never opened is new, not overdue. When the due number looked frightening, it was usually mostly that.",
+        "\"I know this\" takes a card out of the queue without deleting it, and it is one button to undo.",
+        "Insights is the other tab. Every panel there names one thing and points at the screen that moves it.",
+    ] },
     Ranked:       { route: "/Ranked",       title: "Ranked",       intro: "Where you sit against everyone, your friends, or your school." },
     Friends:      { route: "/Friends",      title: "Friends",      intro: "Classmates to share decks and quizzes with, and to measure yourself against." },
     Competitions: { route: "/Competitions", title: "Compete",      intro: "Head-to-head challenges. Most people will do it for a friend when they won't do it for themselves." },
@@ -392,12 +397,6 @@ export const PAGES = {
     Strategise:   { route: "/Strategise",   title: "Strategise",   intro: "A short check-in that turns how you're going into the next concrete move." },
     Guides:       { route: "/Guides",       title: "Guides",       intro: "Written guides on study technique and VCE specifics." },
     StudyGroups:  { route: "/StudyGroups",  title: "Study Groups", intro: "A shared space for a class or a group, with shared resources and a chat." },
-    Review:       { route: "/Review",       title: "Your review queue",    intro: "Everything the app is keeping track of, why it thinks each thing is due, and how to tell it otherwise.", notes: [
-        "A card you have never opened is new, not overdue. When the due number looked frightening, it was usually mostly that.",
-        "\"I know this\" takes a card out of the queue without deleting it, and it is one button to undo.",
-        "\"Not this week\" is the honest way to clear a backlog you have not learnt yet. It does not count as a lapse when the card comes back.",
-        "The day's queue is capped so a backlog stays a session rather than a wall. Whatever is behind it is always shown, never hidden.",
-    ] },
 
     // Plumbing. Deliberately absent from FEATURES — a guide that offers to
     // walk you through the billing page has misunderstood the job — but these
