@@ -4638,6 +4638,92 @@ immediately.
 machine, leaving the last student's band behind applies their permissions to a
 stranger.
 
+## What the app SAYS it does, and what it does
+
+**"Can you check the whole site again for anything else inaccurate."** Twelve,
+and the shape is the one the XP table already recorded: **a figure or a feature
+name typed into copy, with nothing checking it.** Lint, the build and 1,082
+checks pass on every one of them, because none of them is code — they are
+sentences, and a sentence cannot be wrong at runtime.
+
+**THE PRICING PAGE WAS WRONG IN BOTH DIRECTIONS AT ONCE**, which is the part
+worth keeping. Free was undersold and premium was oversold, and the two errors
+came from the same place: nobody had read the gates since the features moved.
+
+| printed | actually |
+|---|---|
+| free: "No Spaced Repetition" | `SPACED_REP` is declared in `FEATURES`, labelled in TierUsagePill, and **checked nowhere** — free gets it in full |
+| free: "No Advanced Analytics" | `ADVANCED_ANALYTICS`, same: declared, labelled, never checked. /Review is open to everybody |
+| premium: "Goal & **Roadmap** AI generation" | /StudyRoadmap redirects to /Goals. The AI feature survived under `Strategise`; the page did not |
+| premium: "Advanced Analytics & **Performance Coach**" | the coach was deleted with the Analytics merge |
+| Paywall: "Spaced repetition flashcards with SM-2" | free |
+| Paywall: "Weak topic detection" | free — it is an Insights panel |
+| Paywall: "Pomodoro timer, study planner and SAC calendar" | all free. A paywall listing free things is selling nothing |
+
+**A GATE THAT IS DECLARED AND NEVER CHECKED IS A PROMISE TO MARKETING.** Those
+first two lines are the whole mechanism: somebody added `SPACED_REP` to the
+`FEATURES` enum intending to gate it, never wrote the `canUseFeature` call, and
+five marketing surfaces then sold it. `grep -rn SPACED_REP src/` finds one
+label and no check. The enum entries are KEPT — deleting them would just move
+the next person's guess — but they now say `NOT GATED` on the line, because the
+comment beside them used to say "free: blocked".
+
+**AND THE FREE AI-TOOL ALLOWANCE CANNOT BE SPENT.** `TIER_FREE_CAPS` grants
+`ai_tool: 5` and `ai_chat: 5` on the server and the client mirrors it — while
+`/AITools` is wrapped in `<RequirePremium>`, which blocks a free account at the
+PAGE. So the five uses are unreachable and the counters behind them can never
+move: "collect nothing you don't use", inverted, on the two features a free
+student is most likely to come for. Two coherent answers — drop the page
+wrapper and let the per-action gate do the work, or drop the two caps — and
+this is NEITHER. Recorded at the caps, copy written to the page gate because
+that is what a student actually meets. **This one is a product decision and is
+deliberately not made here.**
+
+**THE RETIRED COMPETE OBJECTS WERE STILL BEING ADVERTISED** on the landing
+page, the paywall and inside Ace's own map — battles, wagers, duels, goal
+challenges, all replaced by the market rebuild. `aceKnowledge`'s Compete entry
+still required friends and answered to `aka: ["duel", "bet", "race"]`, so a
+student asking Ace about the floor was told about a feature that no longer
+exists. Retire something, grep the copy.
+
+**TWO `Review:` KEYS IN ONE OBJECT LITERAL.** The later one wins silently, so
+Ace's map called the page **"Your review queue"** — the exact name
+`reachable.test.mjs` exists to stop — and described a flashcard-only screen
+that now carries seven kinds, while the "Progress" entry added by the merge sat
+dead three lines above it. Its notes promised a daily queue cap, which is real
+(`DAILY_CAP`, `dueQueue` in due.js) and **has zero callers outside its own
+test** — a half-wired feature being described to students as shipped.
+
+**THE STREAK IS NOT ONE OF THE FIVE ATAR PARTS**, and Ace said it was.
+Consistency is `days.size / 20` — DISTINCT STUDY DAYS in the window, not a run
+of them. A student who breaks a 40-day streak and keeps studying loses nothing
+from the ATAR, which is most of the reason the component is written that way,
+and the one sentence explaining it said the opposite.
+
+**`ProtectedRoute.jsx` IS AN UNMOUNTED MODEL OF ACCESS THAT CONTRADICTS THE
+REAL ONE.** Zero importers, and every list in it is wrong about the shipped
+product: its free list omits Review, MistakeBank, Competitions, League,
+SubjectHub, Help, Support, Strategise and Timer, and it marks the PLANNER
+premium. Wiring it up as-is would paywall most of the app. Kept under this
+file's own rule about unused symbols, with a header saying so and naming the
+two real gates (`<RequirePremium>` on /AITools, `canUseFeature` everywhere
+else), because the danger here is not the dead code — it is the next session
+reading it as the design.
+
+**`#534AB7` SURVIVED THE LOGO SWEEP ON THE ONE PAGE THAT ASKS FOR MONEY.**
+BrandMark unified eight call sites; /Paywall was not one of them, so it still
+drew the retired purple mortarboard, and /Suspended kept the hex on its button
+after its logo was fixed. Two more things fell out of looking at that page in
+the dark, and only a screenshot said so: the tutor-pricing well and the
+research panel were literal light fills with light-mode ink (`#F0EEFF` +
+`text-purple-800`, `bg-green-50` + `text-green-800`), so both came out as
+bright slabs on a near-black page — the focus-mode lesson, on a page nobody had
+opened in dark mode. And the research panel used **"Don't" twice**, which is on
+the banned-words list at the top of this file.
+
+Nothing here needed a test, because a test cannot read. What it needed was
+somebody opening the pricing page and the gate in the same sitting.
+
 ## Voice / UX guardrails (from prior decisions)
 
 - **Tone**: chill motivational coach. Never cocky.

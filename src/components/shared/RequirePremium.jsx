@@ -73,10 +73,11 @@ export default function RequirePremium({ children, featureName = "this feature",
                     </p>
                     <ul className="text-xs text-muted-foreground space-y-1.5">
                         <li>• {TOOL_COUNT} AI study tools (essay planner, note summariser, math tutor, more)</li>
-                        <li>• AI-generated quizzes & flashcard sets every day</li>
-                        <li>• AI test marker and goal generation</li>
-                        <li>• Blurting, active recall, spaced repetition</li>
-                        <li>• Advanced analytics</li>
+                        <li>• AI-generated quizzes & flashcard sets from your notes</li>
+                        <li>• AI quiz marking against real VCAA criteria</li>
+                        <li>• AI marking for blurting and active recall</li>
+                        <li>• Ace, your study companion</li>
+                        <li>• A fresh stack of AI credits every Monday</li>
                     </ul>
                 </div>
             </div>

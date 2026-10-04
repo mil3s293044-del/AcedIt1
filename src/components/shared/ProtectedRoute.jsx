@@ -4,6 +4,22 @@ import UpgradeModal from './UpgradeModal';
 import { getUserTier } from './subscriptionHelpers';
 import AceShuffle from "@/components/ace/AceShuffle";
 
+// UNMOUNTED, AND ITS MODEL OF ACCESS IS NOT THE APP'S.
+//
+// Zero importers. Left in place rather than deleted under this repo's own rule
+// that twice now an "unused" symbol here has marked a half-wired feature — but
+// do not wire it up as it stands, because every list below is wrong about the
+// shipped product and would lock most of the app behind a paywall:
+//
+//   - FEATURE_ACCESS.free omits Review, MistakeBank, Competitions, League,
+//     SubjectHub, Help, Support, Strategise and Timer, all of which are free.
+//   - 'Goals' (the Planner) is marked premium. It is not gated anywhere.
+//   - 'Analytics' is a redirect to /Review?tab=insights, which nothing gates.
+//
+// The REAL gates are two, and neither is a page list: <RequirePremium> wraps
+// /AITools, and every AI action goes through canUseFeature (src/lib/tierAccess)
+// against the server's own checkTierAccess. Anything new belongs there.
+//
 // CRITICAL: Page access control based on database subscription_tier
 // Never allow premium pages to render without database verification
 const FEATURE_ACCESS = {
