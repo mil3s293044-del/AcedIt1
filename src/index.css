@@ -661,27 +661,114 @@
    thing these are not allowed to cost.
    Both are suppressed under `prefers-reduced-motion`; the overlay's card still
    plays, so the prank is still delivered and still named. */
-@keyframes prank-shake-kf {
-  0%, 100% { transform: translate3d(0, 0, 0) rotate(0deg); }
-  15% { transform: translate3d(-8px, 0, 0) rotate(-0.6deg); }
-  30% { transform: translate3d(7px, 0, 0) rotate(0.5deg); }
-  45% { transform: translate3d(-6px, 0, 0) rotate(-0.4deg); }
-  60% { transform: translate3d(5px, 0, 0) rotate(0.3deg); }
-  80% { transform: translate3d(-3px, 0, 0) rotate(-0.2deg); }
-}
-.prank-shake { animation: prank-shake-kf 0.9s ease-in-out; }
+/* ─── THE PAGE-LEVEL PRANKS ────────────────────────────────────────────────
+   Four of the seven act ON the page rather than drawing over it, so they are a
+   class on the element Layout already owns rather than an overlay child.
 
+   NONE OF THEM CHANGES LAYOUT. Every one is a `transform` or a `filter`, which
+   are composited and affect nothing's position in flow — so nothing moves out
+   from under a finger mid-quiz, which is the one thing a prank may never cost.
+
+   AND THE OVERLAY IS NOT INSIDE THIS ELEMENT. A transformed (or filtered)
+   ancestor becomes the containing block for `position: fixed` descendants, so
+   the card naming the sender used to turn over with the page during a flip and
+   could not be read. It renders as a sibling now — see Layout. */
+
+/* A WOBBLE IS NOT A QUAKE, and the first version was a wobble: ±8px over nine
+   tenths of a second, which on a phone is most of a scroll jitter. It hits hard
+   and DECAYS, because an even-amplitude shake reads as a loop and a decaying
+   one reads as an impact. */
+@keyframes prank-shake-kf {
+  0%   { transform: translate3d(0, 0, 0) rotate(0deg) scale(1); }
+  6%   { transform: translate3d(-22px, 6px, 0) rotate(-1.8deg) scale(1.03); }
+  13%  { transform: translate3d(20px, -7px, 0) rotate(1.6deg) scale(1.02); }
+  21%  { transform: translate3d(-17px, 5px, 0) rotate(-1.3deg) scale(1.02); }
+  30%  { transform: translate3d(14px, -4px, 0) rotate(1deg) scale(1.01); }
+  40%  { transform: translate3d(-10px, 3px, 0) rotate(-0.7deg) scale(1.01); }
+  52%  { transform: translate3d(7px, -2px, 0) rotate(0.5deg) scale(1); }
+  65%  { transform: translate3d(-4px, 1px, 0) rotate(-0.3deg); }
+  80%  { transform: translate3d(2px, 0, 0) rotate(0.15deg); }
+  100% { transform: translate3d(0, 0, 0) rotate(0deg) scale(1); }
+}
+.prank-shake { animation: prank-shake-kf 0.9s cubic-bezier(.36,.07,.19,.97); }
+
+/* THE FLIP OVERSHOOTS AND PULLS BACK, which is what makes it read as something
+   somebody DID rather than a CSS rotation: it goes past 180, settles, and on
+   the way home swings through the other side. The scale dip is the page
+   "lifting" off the table to turn over — without it the corners clip against
+   the viewport on a wide screen and the turn looks like a crop. */
 .prank-upside {
-  animation: prank-upside-kf 2.5s ease-in-out;
+  animation: prank-upside-kf 2.5s cubic-bezier(.5,-0.4,.3,1.4);
   transform-origin: 50% 50%;
 }
 @keyframes prank-upside-kf {
-  0% { transform: rotate(0deg); }
-  12% { transform: rotate(180deg); }
-  88% { transform: rotate(180deg); }
-  100% { transform: rotate(0deg); }
+  0%   { transform: rotate(0deg) scale(1); }
+  8%   { transform: rotate(96deg) scale(0.86); }
+  16%  { transform: rotate(196deg) scale(0.9); }
+  22%  { transform: rotate(180deg) scale(1); }
+  78%  { transform: rotate(180deg) scale(1); }
+  86%  { transform: rotate(344deg) scale(0.88); }
+  94%  { transform: rotate(366deg) scale(0.97); }
+  100% { transform: rotate(360deg) scale(1); }
 }
 
+/* THE KNOCK rides with Ace: he crosses the screen and shoulders it on the way
+   past, so the run has a consequence instead of being a sprite sliding over a
+   still page. The delay is tuned to where `AceRun` is at mid-screen. */
+@keyframes prank-knock-kf {
+  0%, 100% { transform: translate3d(0, 0, 0) rotate(0deg); }
+  20% { transform: translate3d(0, 9px, 0) rotate(0.9deg); }
+  45% { transform: translate3d(0, -6px, 0) rotate(-0.6deg); }
+  70% { transform: translate3d(0, 3px, 0) rotate(0.3deg); }
+}
+.prank-knock { animation: prank-knock-kf 0.55s ease-out 0.95s; }
+
+/* THE GLITCH IS A CHROMATIC FRINGE, NOT A DUPLICATED PAGE. A real RGB split
+   needs the content drawn three times; `drop-shadow` in two complementary hues
+   fringes every element on the page for the cost of one filter, which is the
+   same read at a tenth of the work. The jitter is in sharp STEPS rather than
+   eased, because a glitch that tweens is a wobble.
+
+   `filter` also makes this element the containing block for `position: fixed`,
+   exactly as `transform` does — which is the second reason the overlay is a
+   sibling rather than a child. */
+@keyframes prank-glitch-kf {
+  0%, 100% { transform: translate3d(0, 0, 0) skewX(0deg);
+             filter: none; }
+  8%   { transform: translate3d(-9px, 2px, 0) skewX(-7deg);
+         filter: drop-shadow(3px 0 hsl(var(--streak))) drop-shadow(-3px 0 hsl(var(--chart-3))) saturate(1.5); }
+  14%  { transform: translate3d(7px, -3px, 0) skewX(5deg);
+         filter: drop-shadow(-4px 0 hsl(var(--streak))) drop-shadow(4px 0 hsl(var(--chart-3))); }
+  22%  { transform: translate3d(0, 0, 0) skewX(0deg); filter: none; }
+  34%  { transform: translate3d(12px, 4px, 0) skewX(9deg);
+         filter: drop-shadow(5px 0 hsl(var(--streak))) drop-shadow(-5px 0 hsl(var(--chart-3))) invert(0.08); }
+  41%  { transform: translate3d(-6px, -2px, 0) skewX(-4deg);
+         filter: drop-shadow(-2px 0 hsl(var(--streak))) drop-shadow(2px 0 hsl(var(--chart-3))); }
+  50%  { transform: translate3d(0, 0, 0) skewX(0deg); filter: none; }
+  63%  { transform: translate3d(-14px, 3px, 0) skewX(-10deg);
+         filter: drop-shadow(6px 0 hsl(var(--streak))) drop-shadow(-6px 0 hsl(var(--chart-3))) saturate(1.8); }
+  70%  { transform: translate3d(8px, -1px, 0) skewX(6deg);
+         filter: drop-shadow(-3px 0 hsl(var(--streak))) drop-shadow(3px 0 hsl(var(--chart-3))); }
+  78%  { transform: translate3d(0, 0, 0) skewX(0deg); filter: none; }
+  88%  { transform: translate3d(-4px, 1px, 0) skewX(-2deg);
+         filter: drop-shadow(2px 0 hsl(var(--streak))) drop-shadow(-2px 0 hsl(var(--chart-3))); }
+}
+.prank-glitch { animation: prank-glitch-kf 1.8s steps(1, end); }
+
+/* Scanlines for the glitch overlay. A repeating gradient at a FIXED gauge, the
+   lesson `.console-lattice` and `CardBack` both record: in percentages the
+   lines would be coarse on a tall page and fine on a short one. */
+.prank-scanlines {
+  background-image: repeating-linear-gradient(
+    to bottom,
+    rgba(0, 0, 0, 0.26) 0 1px,
+    transparent 1px 3px);
+}
+
+/* ─── REDUCED MOTION ───────────────────────────────────────────────────────
+   The page does not move. The CARD still plays, in the overlay, because the
+   alternative is a student with motion sensitivity silently receiving nothing
+   while their friend is charged for something that did not happen. */
 @media (prefers-reduced-motion: reduce) {
-  .prank-shake, .prank-upside { animation: none; }
+  .prank-shake, .prank-upside, .prank-knock, .prank-glitch { animation: none; }
 }

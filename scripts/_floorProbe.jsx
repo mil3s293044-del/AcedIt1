@@ -685,39 +685,66 @@ views.backs = () => (
    that must always be legible — it is what names who did this — so it is drawn
    over content rather than over an empty screen. */
 views.pranks = () => {
+    /* ── THE PROBE HAS TO MIRROR LAYOUT OR IT DRAWS HALF A PRANK ────────────
+       Four of the seven act on the PAGE through `prankBodyClass` and three draw
+       over it. Rendering the overlay alone shows the overlay half and nothing
+       else — which is exactly the failure `PrankStage.jsx` records about the
+       store's first Preview button: a comment explaining the gap, and two
+       previews that visibly did nothing.
+
+       So this applies the class to a wrapper and renders the overlay as its
+       SIBLING, which is also the arrangement that matters: inside it, the name
+       plate turns over with the page during a flip and `position: fixed`
+       resolves against the transform rather than the viewport. */
     const [i, setI] = React.useState(0);
+    const [run, setRun] = React.useState(0);
     const k = PRANK_LIST[i];
+    const prank = { id: `${k.id}-${run}`, kind: k.id, from: "Priyanka" };
+    const play = (n) => { setI(n); setRun((r) => r + 1); };
     return (
-        <div className="min-h-screen bg-background p-8">
-            <h1 className="font-display font-black text-2xl text-foreground mb-2">Pranks</h1>
-            <div className="flex gap-2 mb-6 flex-wrap">
-                {PRANK_LIST.map((p, n) => (
-                    <button key={p.id} onClick={() => setI(n)}
-                        className={`px-3 py-1.5 rounded-xl text-sm font-bold border
-                            ${n === i ? "bg-primary text-primary-foreground border-primary"
-                                      : "border-border text-muted-foreground"}`}>
-                        {p.label}
-                    </button>
-                ))}
-            </div>
-            <div className="max-w-md space-y-3">
-                <div className="rounded-2xl border border-border bg-surface p-4">
-                    <p className="font-display font-black text-foreground">A page underneath</p>
-                    <p className="text-sm text-muted-foreground mt-1">
-                        The prank plays over whatever the student was doing, so the card has to
-                        read against real content rather than an empty screen.
+        <div className="min-h-screen bg-background">
+            <div className={prankBodyClass(prank, false)}>
+                <div className="p-8">
+                    <h1 className="font-display font-black text-2xl text-foreground mb-1">Pranks</h1>
+                    <p className="text-sm text-muted-foreground mb-5">
+                        Press one to replay it. Judge it on the CLOCK rather than on a frame.
                     </p>
-                </div>
-                <div className="rounded-2xl border border-border bg-surface p-4">
-                    <p className="text-sm text-muted-foreground">Another panel, for contrast.</p>
+                    <div className="flex gap-2 mb-6 flex-wrap">
+                        {PRANK_LIST.map((p, n) => (
+                            <button key={p.id} onClick={() => play(n)}
+                                className={`px-3 py-1.5 rounded-xl text-sm font-bold border
+                                    ${n === i ? "bg-primary text-primary-foreground border-primary"
+                                              : "border-border text-muted-foreground"}`}>
+                                {p.label}
+                            </button>
+                        ))}
+                    </div>
+                    {/* REAL CONTENT UNDERNEATH. A prank plays over whatever the
+                        student was doing, and the glitch's chromatic fringe and
+                        the blackout both read against text and panels rather
+                        than against an empty page. */}
+                    <div className="grid sm:grid-cols-2 gap-3 max-w-3xl">
+                        {[0, 1, 2, 3].map((n) => (
+                            <div key={n} className="rounded-2xl border border-border bg-surface p-4">
+                                <p className="font-display font-black text-foreground">
+                                    {["Unit 4 AOS 1 SAC", "Chemistry deck", "Methods quiz", "This week"][n]}
+                                </p>
+                                <p className="text-sm text-muted-foreground mt-1">
+                                    The prank plays over whatever they were doing, so the plate has to
+                                    read against real content rather than an empty screen.
+                                </p>
+                                <div className="mt-3 h-2 rounded-full bg-secondary overflow-hidden">
+                                    <div className="h-full bg-primary" style={{ width: `${30 + n * 18}%` }} />
+                                </div>
+                            </div>
+                        ))}
+                    </div>
                 </div>
             </div>
-            <PrankOverlay key={`${k.id}-${i}`} prank={{ id: i, kind: k.id, from: "Priyanka" }}
-                onDone={() => {}} />
+            <PrankOverlay key={prank.id} prank={prank} onDone={() => {}} />
         </div>
     );
 };
-
 /* ── ?v=league — the podium, the payline and the guide ──────────────────────
  *
  * The League page is auth-gated and the board needs a dozen scored members to

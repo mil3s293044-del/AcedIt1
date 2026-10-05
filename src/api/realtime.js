@@ -79,3 +79,71 @@ export async function subscribeCompete({ onChange, onReady } = {}) {
         try { supabase.removeChannel(channel); } catch { /* already torn down */ }
     };
 }
+
+/**
+ * A prank landing on THIS student, pushed.
+ *
+ * ─── IT IS A DOORBELL, NOT A DELIVERY ───────────────────────────────────────
+ * Same rule as above and it matters more here: the callback is told only that
+ * something arrived, and the caller then goes through `getPranks` like always.
+ * That endpoint is what resolves the sender's NAME, drops a row it cannot
+ * attribute rather than delivering it anonymously, and stamps `seen_at`. A
+ * client that drew the broadcast row would have an anonymous prank — the one
+ * thing migration 0038 says this feature may never have — and no way to mark
+ * it seen, so it would replay on every load.
+ *
+ * ─── FILTERED TO THEM, not just secured to them ─────────────────────────────
+ * RLS on `pranks` already limits what a student may read, so the filter is not
+ * what makes this safe. It is what stops every open tab in the school waking up
+ * for a prank sent to somebody else — the socket delivers to the channel, and
+ * `target_email=eq.` is how that work is never done.
+ *
+ * INSERT only. A prank's other write is `seen_at`, which this client just
+ * caused by fetching, so listening for it would be the app ringing its own
+ * doorbell.
+ */
+export async function subscribePranks({ email, onChange, onReady } = {}) {
+    if (!email || !shouldUseSupabase?.() || !supabase?.channel) {
+        onReady?.(false);
+        return () => {};
+    }
+
+    // Shorter than the compete burst: a prank is a single row and the whole
+    // point is that it lands while they are there. This only coalesces the
+    // case of two friends sending in the same breath, so one fetch collects
+    // both — which is what the queue wants anyway.
+    const QUIET_MS = 350;
+    let timer = null;
+    const fire = () => {
+        clearTimeout(timer);
+        timer = setTimeout(() => { try { onChange?.(); } catch { /* caller's problem */ } }, QUIET_MS);
+    };
+
+    let channel;
+    try {
+        channel = supabase.channel(`pranks-${email}`);
+        channel.on("postgres_changes", {
+            event: "INSERT", schema: "public", table: "pranks",
+            filter: `target_email=eq.${email}`,
+        }, fire);
+        channel.subscribe((status) => {
+            // SUBSCRIBED says the socket is up and NOT that `pranks` is in the
+            // publication — an unpublished table is silent and there is no
+            // status for it. So the poll stays running underneath regardless,
+            // which is what makes migration 0040 an improvement rather than a
+            // dependency.
+            if (status === "SUBSCRIBED") onReady?.(true);
+            if (status === "CHANNEL_ERROR" || status === "TIMED_OUT" || status === "CLOSED") {
+                onReady?.(false);
+            }
+        });
+    } catch {
+        onReady?.(false);
+        return () => {};
+    }
+
+    return () => {
+        clearTimeout(timer);
+        try { supabase.removeChannel(channel); } catch { /* already torn down */ }
+    };
+}

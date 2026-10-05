@@ -18,8 +18,8 @@ import { LiveProvider, useBusy, BUSY } from "@/lib/LiveContext";
 import { CosmeticsProvider } from "@/lib/CosmeticsContext";
 import { PrankStageProvider } from "@/lib/PrankStage";
 import PrankOverlay, { prankBodyClass } from "@/components/pranks/PrankOverlay";
+import PrankWatcher from "@/components/pranks/PrankWatcher";
 import UpdatePrompt from "@/components/shared/UpdatePrompt";
-import { takeFn } from "@/lib/fnResult";
 import AchievementUnlock from "@/components/ranked/AchievementUnlock";
 import { useAchievementWatch } from "@/lib/useAchievementWatch";
 import TopNav from "@/components/layout/TopNav";
@@ -209,27 +209,26 @@ export default function Layout({ children }) {
     const [userProfile, setUserProfile] = useState(null);
 
     /* ── Pranks, if any have arrived ─────────────────────────────────────
-       Fetched ONCE per mount rather than polled: a prank is not urgent, the
-       receive cap means there are never more than a few, and a timer asking
-       the server every thirty seconds whether somebody has been pranked is a
-       query per student per interval for a joke. They play on the next
-       navigation, which is soon enough and costs nothing. */
+       THIS USED TO BE A ONE-SHOT FETCH and a prank did not arrive until the
+       recipient reloaded the tab — Layout does not unmount between
+       navigations, so the effect ran once per page load. `PrankWatcher` owns
+       the arriving now: a push, the live tick underneath it, and one on mount.
+       It is rendered INSIDE `LiveProvider` because the tick is that provider's,
+       which is also why the queue has to stay up here where the body class is
+       applied from. */
     const reduceMotion = useReducedMotion();
     const [prankQueue, setPrankQueue] = useState([]);
-    useEffect(() => {
-        if (!userProfile) return;
-        let alive = true;
-        (async () => {
-            try {
-                const res = await base44.functions.invoke("getPranks", {});
-                const data = takeFn(res);
-                if (alive && Array.isArray(data?.pranks)) setPrankQueue(data.pranks);
-            } catch { /* a prank that does not arrive is not an error worth showing */ }
-        })();
-        return () => { alive = false; };
-        // Deliberately keyed on the ACCOUNT rather than the profile object:
-        // the profile is re-fetched constantly and this must not re-run with it.
-    }, [userProfile?.id]);
+    /** Append, DEDUPED. `getPranks` reads unseen rows and then marks them, so a
+     *  push and a tick arriving together can read one row twice; the watcher's
+     *  in-flight guard makes that nearly impossible and this makes it
+     *  harmless. A preview joins the same queue, so ids are mixed. */
+    const onPranks = useCallback((rows) => {
+        setPrankQueue((q) => {
+            const have = new Set(q.map((p) => String(p?.id)));
+            const add = rows.filter((r) => r?.id && !have.has(String(r.id)));
+            return add.length ? [...q, ...add] : q;
+        });
+    }, []);
     const [navigationGuard, setNavigationGuard] = useState({ show: false, targetUrl: null, onSave: null });
     const [pendingNavigation, setPendingNavigation] = useState(null);
     const { toast } = useToast();
@@ -607,15 +606,9 @@ export default function Layout({ children }) {
             <XPFeedback />
             <StreakCelebration />
 
-            {/* ONE AT A TIME, and it advances itself. Two playing at once is a
-                mess nobody can read, and the receive cap means the queue is
-                never more than a few long. */}
-            {prankQueue[0] && (
-                <PrankOverlay
-                    prank={prankQueue[0]}
-                    onDone={() => setPrankQueue((q) => q.slice(1))}
-                />
-            )}
+            {/* The watcher is here because `useLiveTick` is LiveProvider's and
+                this is inside it. It draws nothing. */}
+            <PrankWatcher email={userProfile?.created_by} onArrive={onPranks} />
 
             {/* A NEW BUILD, ANNOUNCED RATHER THAN WALKED INTO. One mount for
                 every authenticated route, inside LiveProvider because the hold
@@ -658,6 +651,29 @@ export default function Layout({ children }) {
                 modal that used to mount here was a nine-step duplicate of it,
                 gated on a flag nothing ever set, so it never opened. */}
         </div>
+
+        {/* ── THE PRANK PLAYS OUTSIDE THE ELEMENT IT SHAKES ────────────────
+            It used to render INSIDE the wrapper above, which carries
+            `prank-upside` — so during a flip the card naming the sender turned
+            over with the page and could not be read, on the one kind where the
+            attribution matters most because the student cannot tell what is
+            happening. And a transformed ancestor becomes the containing block
+            for `position: fixed`, the trap MarkModule and AceRoam each record,
+            so the overlay's `fixed inset-0` was not the viewport at all.
+
+            Out here it is the viewport again, the plate stays upright while the
+            page turns over behind it, and a CSS filter on the wrapper (the
+            glitch) cannot reach it either.
+
+            ONE AT A TIME, and it advances itself: two playing at once is a mess
+            nobody can read, and the receive cap means the queue is never more
+            than a few long. */}
+        {prankQueue[0] && (
+            <PrankOverlay
+                prank={prankQueue[0]}
+                onDone={() => setPrankQueue((q) => q.slice(1))}
+            />
+        )}
         </CosmeticsProvider>
         </LiveProvider>
     );

@@ -4534,6 +4534,143 @@ table, because a migration can be superseded (0008's drop-and-recreate) and a
 parsed guess beating a measurement is the inversion that file's header warns
 about. Verified it still catches a genuinely imaginary table.
 
+## A prank needed a refresh, and one of them hid its own name
+
+**"Make sure when a prank is sent it appears without the receiver having to
+refresh, and make sure for all pranks it displays who pranked the receiver."**
+Both were real, and the second was not the bug it looked like.
+
+**THE ONE-SHOT FETCH WAS A DECISION, AND IT WAS THE WRONG WAY ROUND.** Layout
+fetched `getPranks` once, keyed on the account — and Layout does not unmount
+between navigations, so it ran once per PAGE LOAD. A prank sent while somebody
+had the app open sat in the table until they reloaded the tab. The comment
+beside it argued the case in its own words: *"a prank is not urgent, the receive
+cap means there are never more than a few, and a timer asking the server every
+thirty seconds whether somebody has been pranked is a query per student per
+interval for a joke."* Every clause of that is true and the conclusion is still
+wrong, because the whole point of a prank is that it lands WHILE THEY ARE THERE.
+A joke that arrives next Tuesday is not one, and the sender paid credits for it.
+
+`PrankWatcher` owns arriving now, on THREE TRIGGERS:
+
+- **a push** — `subscribePranks`, a realtime INSERT filtered to this student;
+- **the tick** — `useLiveTick`, the poll LiveContext was ALREADY running for
+  Compete, so this costs one more request per existing tick rather than a timer
+  of its own. That is the objection above answered rather than ignored;
+- **on mount**, which is the old behaviour kept.
+
+**THE SLOWEST TRIGGER IS THE FLOOR, and that is what makes this shippable.** A
+table outside the `supabase_realtime` publication is SILENT — the channel
+subscribes, reports SUBSCRIBED, and never fires, and there is no status that
+says so. So without the tick, migration 0040 would be a dependency rather than
+an improvement, and the feature would deliver nothing at all until somebody ran
+it.
+
+**THE PUSH IS A DOORBELL, NEVER A DELIVERY** — `realtime.js`'s own rule, and it
+matters more here than on Compete. `getPranks` is what resolves the sender's
+NAME, drops a row it cannot attribute rather than delivering it anonymously, and
+stamps `seen_at`. A client that drew the broadcast row would have an anonymous
+prank, which is the one thing migration 0038 says this may never be, and nothing
+would ever mark it seen, so it would replay on every load forever. The filter is
+not what makes it safe — RLS already does that — it is what stops every open tab
+in the school waking up for somebody else's prank.
+
+It plays IMMEDIATELY, including over a quiz, and that is a deliberate call:
+`holdReasons` exists for a REFETCH, which can change numbers under somebody
+mid-answer, and a prank changes no layout, takes no tap and touches nothing a
+student is measured on. Interrupting is the joke.
+
+### The name WAS drawn on all five. One of them drew it upside down
+
+**`PrankOverlay` rendered INSIDE the element carrying `prank-upside`**, so
+during a flip the card naming the sender turned over with the page and could not
+be read — on the one kind where the attribution matters most, because the
+student cannot otherwise tell what is happening to their screen. And a
+transformed ancestor is the **containing block for `position: fixed`**, the trap
+MarkModule and AceRoam each record, so the overlay's `fixed inset-0` was not the
+viewport at all.
+
+It is a SIBLING of that element now. The page turns over and a plate stays
+upright telling you who did it, which is a better joke than the bug was. It also
+means the glitch's CSS `filter` — which creates a containing block exactly as a
+transform does — cannot reach the plate either.
+
+**And it is a PLATE rather than a pill now**: the name at display size with what
+they sent under it, springing in and holding for the whole prank, so arriving
+halfway through still answers the question. Drawn in LITERAL ink, because it
+plays over the lights-out blackout and a `bg-foreground` plate would go
+white-on-white in one theme — the focus-mode rule, met again.
+
+### The animations were gentler than their names
+
+Shake was ±8px over nine tenths of a second, which on a phone is a scroll
+jitter. Confetti was 28 pieces released from the top edge falling straight down,
+which is the shape of a LOADING STATE rather than of a celebration. "Ace attack"
+was one 64px pip sliding across at constant speed.
+
+- **The quake DECAYS.** An even-amplitude shake reads as a loop; a decaying one
+  reads as an impact.
+- **The confetti is a CANNON.** Two emitters in the bottom corners, each piece
+  thrown out and up before gravity takes it, with three shapes — a field of
+  identical rectangles reads as a texture and a mixed one reads as paper.
+- **The flip OVERSHOOTS and dips in scale**, which is what makes it read as
+  something somebody DID rather than as a CSS rotation. The dip is also what
+  stops the corners clipping the viewport on a wide screen.
+- **The blizzard has DEPTH and WEATHER.** Three layers of size, opacity and
+  speed is what makes it read as space rather than as a sprite sheet, and the
+  gust is shared so the field moves TOGETHER — which is the part that says wind
+  rather than noise. Frost creeps in as an inset shadow, so it needs no
+  assumption about the colour of the page under it.
+- **Ace actually runs** — squash and stretch on the stride, dust at his heels to
+  give a symmetrical shape a direction, and he KNOCKS the screen as he passes,
+  so the run has a consequence instead of playing over a still page.
+
+**Two new kinds.** `glitch` is a chromatic fringe on the page (`drop-shadow` in
+two complementary hues fringes every element for the cost of one filter, where a
+real RGB split needs the content drawn three times) with tear bands over it;
+`lights` drops the room to near-black and sweeps a beam across. The tears
+CORRUPT what is behind them via `backdrop-filter: invert()` rather than being
+laid over it — the first version used `mix-blend-mode: difference` with a brand
+hue, which against the app's cream page resolves to a PASTEL, and a band of pale
+pink across a study screen reads as a rendering fault in the gentlest possible
+way.
+
+**`ease: "steps(1, end)"` THROWS, AND IT KILLED THE NAME PLATE.** A tear jumps
+rather than sliding, so a stepped easing is the obvious way to say it — and
+framer-motion rejects a CSS easing string at runtime with `Invalid easing type`,
+which **aborts the whole animation batch for that render.** The plate sat at its
+initial `opacity: 0` for the entire glitch. Lint passed, the build passed, every
+test passed, and the only trace was one line in the console. Held keyframes do
+the same job with nothing to get wrong, and the scan refuses any `ease:` string
+outside framer's own set.
+
+### Three of the new guards were vacuous, and the injections are what said so
+
+Every assertion here was verified by putting the bug back, and three of them
+passed with the bug in place on the first attempt:
+
+- **The overlay-placement check looked for a `</div>` between the prank class
+  and the overlay.** The entire page tree sits between those two points, so it
+  passed whether the overlay was inside or out. It is a DIV-DEPTH WALK now —
+  the `dbColumns` idiom — which finds where the wrapper actually closes.
+- **The plate check compared indices**, and passed when the plate was wrapped in
+  a branch on its own line, because `spec.id === "` then sits at a LOWER index
+  than `<NamePlate` on that same line. It reads the LINE now.
+- **The reduced-motion check sliced from the first `prefers-reduced-motion` to
+  the end of the file**, which swept up the prank rules THEMSELVES, so every
+  class was "found" whether or not anything suppressed it. It extracts the
+  block by brace depth now.
+
+That is the same lesson three times in one sitting: a scan that matches
+somewhere in a large span is not a scan, and the only way to know is to break
+the thing and watch.
+
+**Migration 0040 adds `pranks` to the publication**, guarded both ways so it is
+safe to run twice and does not assume 0038 has run. Worth knowing:
+`PENDING_run_me.sql` says it covers 0022–0035 and **has not been extended since**
+— 0036 through 0040 are not in it, so the prank feature needs 0038 and 0040
+applied by hand.
+
 ## The floor speaks forecasting, not betting
 
 **"Because we are selling to schools."** The board was built on Polymarket's
@@ -5502,6 +5639,11 @@ somebody opening the pricing page and the gate in the same sitting.
   card, the price, the gesture and the payoff moment; `getMarkets` /
   `takePosition` / `openMarkMarket` / `reportMark` in `server.mjs` mint, escrow
   and settle
+- `src/components/pranks/PrankWatcher.jsx` + `subscribePranks` in
+  `src/api/realtime.js` + `supabase/migrations/0040_pranks_realtime.sql` — how a
+  prank arrives: a push, the live tick underneath it so an unapplied migration
+  delivers late rather than never, and one on mount. The push is a doorbell —
+  `getPranks` is still what names the sender and marks the row seen
 - `src/lib/pranks.js` + `pranks.test.mjs`,
   `src/components/pranks/PrankOverlay.jsx`, `supabase/migrations/0038_pranks.sql`
   — the four bounds, and the tests that assert them rather than describing them.

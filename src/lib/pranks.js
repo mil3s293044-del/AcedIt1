@@ -66,8 +66,16 @@ export const KINDS = {
         ms: 4000, price: 250,
     },
     spade: {
-        id: "spade", label: "Ace attack", blurb: "Ace runs across their screen.",
+        id: "spade", label: "Ace attack", blurb: "Ace tears across their screen.",
         ms: 2600, price: 350,
+    },
+    glitch: {
+        id: "glitch", label: "Glitch", blurb: "Their screen tears itself apart for a second.",
+        ms: 1800, price: 350,
+    },
+    lights: {
+        id: "lights", label: "Lights out", blurb: "The lights go out. Something sweeps past.",
+        ms: 2800, price: 450,
     },
 };
 
