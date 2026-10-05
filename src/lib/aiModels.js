@@ -60,6 +60,28 @@ export const DEFAULT_TIER = "standard";
  */
 export const SAVER_EXCLUDES = [];
 
+/**
+ * Features that ALWAYS run on the cheap model, whatever the student's tier.
+ *
+ * The mirror image of `SAVER_EXCLUDES`, and the lever for the rule this app
+ * now follows everywhere: judgement runs on the student's own model, and
+ * CLASSIFICATION runs cheap. A Feynman recheck decides whether a question that
+ * has already been identified is now answered — the judgement was the first
+ * pass, and it has been made and paid for.
+ *
+ * IT LIVES HERE RATHER THAN AS A CONSTANT PINNED IN `server.mjs`. A previous
+ * release pinned one model for one feature inside the request handler, which
+ * meant a second mechanism for deciding models beside the function whose whole
+ * job is deciding models. `modelFor` is read on every call, so this is the one
+ * place to look.
+ *
+ * It must NOT be used to make something cheaper that a student can feel. An app
+ * that quietly downgrades the model and lets them conclude it is just bad has
+ * spent their trust to save its own money — which is why the mega reader names
+ * its model on screen, and why nothing that produces PROSE belongs in here.
+ */
+export const ALWAYS_CHEAP = ["feynman_recheck"];
+
 /** Fraction of the ceiling at which switching is still worth recommending. */
 export const NUDGE_AT = 0.70;
 
@@ -85,6 +107,10 @@ export function modelFor(preference, feature, { fast = false, standardModel, fas
     // gets MARKED — so saving a fraction of a cent here costs them marks. It is
     // also the cheapest call in the app: one small cropped image.
     if (vision && visionModel) return visionModel;
+    // Below vision, above the tier: a cheap-by-design pass is cheap for
+    // everybody, so a Standard student does not pay Sonnet rates to be told
+    // which of five questions they have now answered.
+    if (ALWAYS_CHEAP.includes(feature)) return TIERS.saver.model;
     if (tier === "saver" && !SAVER_EXCLUDES.includes(feature)) return TIERS.saver.model;
     return fast ? (fastModel || standard) : standard;
 }

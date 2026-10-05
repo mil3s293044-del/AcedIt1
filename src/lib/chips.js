@@ -71,7 +71,13 @@ export const MICROS_PER_CHIP = WEEKLY_CAP_MICROS / WEEKLY_CHIPS;
  */
 export const PRICE = {
     study_coach:      2,    // $0.0027 on Haiku  — 42% margin
-    active_recall:    8,    // $0.0120           — 30%
+    // A Feynman RECHECK: the rewrite against the questions already raised.
+    // Pinned to Haiku by `ALWAYS_CHEAP` in aiModels.js — it decides whether a
+    // named question is now answered, which is classification. The first pass
+    // is the judgement and is billed at `feynman` below.
+    feynman_recheck:  3,    // $0.0040 on Haiku  — 31% margin
+    active_recall:    8,
+    feynman:          8,    // $0.0139           — 13%    // $0.0120           — 30%
     blurting:         8,    // $0.0141           — 11%
     ai_chat:          8,    // $0.0144           —  8%
     quiz_ai_mark:    10,    // $0.0165           — 18%
@@ -116,7 +122,7 @@ export function saverDivisor() {
  * discount him again — he would otherwise be billed a third of a price that
  * was already computed from Haiku.
  */
-export const ALREADY_CHEAP = new Set(["study_coach"]);
+export const ALREADY_CHEAP = new Set(["study_coach", "feynman_recheck"]);
 
 export function priceOf(feature, tier = "standard") {
     const base = PRICE[feature] ?? DEFAULT_PRICE;
