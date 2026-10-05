@@ -3621,6 +3621,20 @@ through all of them.
 ## Known issues / paper-cuts
 
 - Console 400s on `/study_plans` and `/flashcards` — missing-column patches. Non-blocking.
+- **MIND MAPS PAID NOTHING FOR MONTHS AND A COMMENT SAID SO.** `MindMaps` was
+  the one technique never handed `onSessionComplete`, so it wrote no
+  `study_techniques` row — which is not "no XP": `studyEvents` reads that table,
+  so an hour on the canvas was missing from the dashboard's week panel, the
+  ATAR's effort and consistency, the league's hours, AND the breadth component,
+  whose own comment in `server.mjs` recorded the fact and was never acted on.
+  Writing a defect down is not fixing it. What it is worth is a separate
+  question and has its own section below — the first wiring paid by the WALL
+  CLOCK, which on a canvas is not a measurement of anything. **The breadth
+  target stayed at 5**: raising it because a family became reachable would
+  retroactively lower every student's score. `xpRates.test.mjs` pins Study.jsx's
+  `sourceMap` against the server's own `awardXP` switch, because an unknown
+  source is a 400 the catch swallows — the student earns nothing and nothing
+  anywhere says so.
 - Supabase is on the FREE plan and the app now self-limits to stay inside it
   (see the storage section). If you raise any upload cap, re-read the
   arithmetic there first — the failure mode is the whole project 402ing, not a
@@ -5032,6 +5046,82 @@ conversations), a LOCKED free account, and a first-week account with nothing
 measured. That last one is the honest common case — every card builder refuses
 rather than padding — and a fixture is the only way to see it.
 
+## A canvas is not a clock
+
+**The first wiring timed the session from when the map was OPENED**, clamped at
+four hours. That is the shape every other technique on the Study page takes and
+it is the wrong shape for this one: the other six have a definite START — a
+student presses a timer, begins a recall session, submits a blurt — and a canvas
+is simply open. So the honest reading of a tab left up overnight was 240 minutes
+of study, and the only thing bounding it was that **`mind_map` had no
+`DAILY_CAPS` entry at all** and silently inherited the 500 default — five times
+blurting's and more than a full day of quizzing, which was an accident rather
+than a number anybody chose. It is 120 now, the same as Active Recall: thirty
+genuine minutes of mapping, which is what a sitting on this is.
+
+**IT DISCOUNTS THE CLAIM; IT DOES NOT ACCUSE ANYBODY.** `integrity.js`'s rule,
+and the only version of this that can be wrong occasionally without doing harm.
+A student who maps for twenty minutes notices none of it. A student who leaves
+the tab open finds the time was not worth anything — a different statement from
+being told they cheated, and the only one of the two this app is entitled to
+make.
+
+**TWO RULES, AND THEY CLOSE DIFFERENT HOLES** (`src/lib/mindmapXp.js`):
+
+- **ACTIVE MINUTES.** A minute counts only if an EDIT landed in it, bucketed so
+  a burst of six is one minute rather than six. `edit()` in MindMaps.jsx is the
+  SINGLE mutation path — every node, rename, link, note and cross-link goes
+  through it — so the stamp is one line and cannot be routed around by the next
+  feature somebody adds to the canvas.
+- **A GROWTH FLOOR.** Active minutes alone still pay a student nudging one node
+  once a minute, so a sitting pays nothing unless the map actually GREW.
+  `contentWeight` is deliberately broader than the node count — a note and a
+  labelled connection each count, because a session spent annotating and
+  marking what is shaky is real mapping work and would otherwise score a flat
+  zero. **Only MOVING and DELETING fail to move it**, which is exactly the case
+  the floor means to refuse: twenty minutes of reorganising a map while adding
+  nothing to it.
+
+**NEITHER IS A NEW CURRENCY.** The payout is still `calcStudySessionXP` at the
+published 4 XP a minute; these decide how many of the minutes were real, which
+is the same job `calcFocusTimerXP`'s idle discount already does for the
+pomodoro, reached from the other direction. Nothing had to be published, and
+`xpRates.js` names mind maps in the study row rather than growing one.
+
+**THE DECISION IS A PURE FUNCTION BECAUSE IT PAYS.** `expiredKeys` and
+`pageIndices` record the same reasoning: a payout taken inside a handler cannot
+be checked until it has already paid the wrong number. `sessionPayout` returns a
+REASON on every refusal — `idle`, `too_small`, `no_growth` — so the caller can
+say which, rather than silently writing nothing, and **every floor is written as
+a comparison rather than a truthiness test**, because `Number(null) === 0` would
+pay a sitting with nothing in it. That trap is now in its ninth module.
+
+**CLOSING A SITTING RESETS IT, which is what lets there be two boundaries.** A
+session banks on the AI gap check AND on leaving the map, because the check is
+the natural end of a sitting and plenty of students never press it — and
+whatever the first one banks, the second starts from nothing, so one sitting
+cannot be paid twice. The wall-clock version restarted a clock for the same
+reason and could still pay a minute for a second check landing in the same
+breath, because its floor was `Math.max(1, …)`. **And no zero row is ever
+written**: a refused session writes no `study_techniques` row at all, rather than
+one claiming a minute, which is the rule every builder in `studyQueue` keeps.
+
+The banking goes through a REF to the latest `bank`, and the unmount effect is
+keyed on `map?.id` only. Keyed on the callback it would fire on every re-render
+of the component and bank a sitting mid-edit; reading `bank` directly from the
+cleanup closure it would bank with a stale map and lose the last minute's work.
+
+**AND THE GUARD ASSERTS THE PROPERTY, NOT THE MECHANISM.** `xpRates.test.mjs`
+had pinned the exact lines of the wall clock — `sessionStart.current =
+Date.now()` and the `Math.min(SESSION_MAX_MINUTES` clamp — so replacing the wall
+clock with something strictly better made the suite RED for being out of date.
+That is the `reachable.test.mjs` lesson (a name written down in a test is one
+more copy) pointed at an algorithm: it now asserts that the sitting is decided
+by `closeSession` and clamped by `maxMinutes`, and `mindmapXp.test.mjs` owns the
+rules themselves. Every one of its 14 checks was verified by putting the bug
+back — including the two that only a scan can see: the stamp living inside
+`edit()`, and the wall clock being gone rather than merely unused.
+
 ## What the app SAYS it does, and what it does
 
 **"Can you check the whole site again for anything else inaccurate."** Twelve,
@@ -5451,6 +5541,11 @@ somebody opening the pricing page and the gate in the same sitting.
   published as a rule rather than a range and pinned to `server.mjs`'s own
   calculators by parsing and running them. The hand-typed table it replaced was
   wrong in four places and advertised two features the UI cannot reach
+- `src/lib/mindmapXp.js` + `mindmapXp.test.mjs` — what a sitting on the canvas
+  is worth: active minutes floored by what the map actually GREW, a pure
+  decision because it pays, and a reason on every refusal. `MindMaps.jsx` stamps
+  from its one mutation path and banks on the gap check and on leaving;
+  `mind_map` in `DAILY_CAPS` is the outer valve it had been missing entirely
 - `src/components/ranked/RankedBoard.jsx`, `BoardControls.jsx` — the board: one
   right-aligned figure column, the place as display type, the movement lane,
   the capped podium and the bar that pins your row once you scroll past it.
