@@ -3035,7 +3035,6 @@ app.post("/local-ai/fn/awardXP", async (req, res) => {
       case "active_recall":
       case "blurting":
       case "mind_map":
-      case "feynman":
         rawXP = calcStudySessionXP(duration_minutes || 0);
         break;
       case "streak":
@@ -7969,7 +7968,7 @@ export function atarBand(atar) {
 
 // ── Breadth: which technique families a student's events map to ─────────────
 // Reachable families are focus, quiz, mock, flashcard, active_recall, blurting
-// mind_map and feynman — eight. `challenge` is retired and cannot be earned.
+// and mind_map — seven. `challenge` is retired and cannot be earned.
 //
 // MIND MAPS WERE UNREACHABLE AND THIS COMMENT SAID SO FOR MONTHS. `MindMaps`
 // was the one technique on the Study page never handed `onSessionComplete`, so
