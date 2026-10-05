@@ -56,7 +56,7 @@ export const XP_RATES = [
         id: "study",
         label: "Study sessions",
         rate: "4 XP a minute",
-        note: "Pomodoro, active recall and blurting, by the minute actually studied",
+        note: "Pomodoro, active recall, blurting and mind maps, by the minute actually studied",
         // calcStudySessionXP(60)
         check: { fn: "calcStudySessionXP", args: [60], expect: 240 },
     },

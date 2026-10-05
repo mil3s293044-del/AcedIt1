@@ -165,4 +165,100 @@ check("XPLevelCard DERIVES the table, never retypes it", () => {
         "a hand-typed rate string is back in the component");
 });
 
+// ─── 4. Every technique that logs a session is PAID for it ────────────────
+//
+// `awardXP` answers 400 for a source it does not recognise, and Study.jsx's
+// handler console.errors the rejection — so a technique wired to a source the
+// server has never heard of earns the student exactly nothing, silently, with
+// lint and the build green. The same invisible class as the missing columns.
+//
+// MIND MAPS WERE WORSE THAN THAT: the component was never handed
+// `onSessionComplete` at all, so there was no row, no minutes and no breadth
+// family, and the server's own breadth comment recorded the fact for months.
+
+const STUDY = read("src/pages/Study.jsx");
+
+/** The `source` values the server's awardXP switch accepts. */
+function serverSources() {
+    const at = SERVER.indexOf("switch (source)");
+    assert.ok(at > 0, "awardXP's source switch has moved — this check is now vacuous");
+    const body = SERVER.slice(at, SERVER.indexOf("Unknown source", at));
+    return new Set([...body.matchAll(/case "([a-z_]+)":/g)].map((m) => m[1]));
+}
+
+/** The technique → source map Study.jsx sends. */
+function clientSources() {
+    const at = STUDY.indexOf("const sourceMap = {");
+    assert.ok(at > 0, "Study.jsx's sourceMap has moved — this check is now vacuous");
+    const body = STUDY.slice(at, STUDY.indexOf("}", at));
+    return Object.fromEntries(
+        [...body.matchAll(/(\w+):\s*'([a-z_]+)'/g)].map((m) => [m[1], m[2]])
+    );
+}
+
+check("every source Study.jsx sends is one the server ACCEPTS", () => {
+    const accepted = serverSources();
+    const sent = clientSources();
+    assert.ok(Object.keys(sent).length >= 4, "the source map shrank — a technique stopped paying");
+    for (const [technique, source] of Object.entries(sent)) {
+        assert.ok(accepted.has(source),
+            `${technique} sends source "${source}", which awardXP rejects with a 400 — ` +
+            `the catch in handleSessionComplete swallows it and the student earns nothing`);
+    }
+});
+
+check("MIND MAPS LOG A SESSION, which is what makes the time count at all", () => {
+    // Not only XP. `studyEvents` reads `study_techniques`, so with no row the
+    // minutes were missing from the dashboard's week panel, the ATAR's effort
+    // and consistency, and the league's hours.
+    assert.match(STUDY, /<MindMaps[\s\S]{0,200}onSessionComplete=\{handleSessionComplete\}/,
+        "MindMaps is not handed onSessionComplete again — an hour on the canvas pays nothing");
+    const sent = clientSources();
+    assert.equal(sent.mind_map, "mind_map",
+        "mind maps fold into study_session again, so `techniqueFamily` cannot see them " +
+        "and the ATAR's breadth component stays one family short");
+
+    const MAPS = read("src/components/study/MindMaps.jsx");
+    assert.match(MAPS, /technique_name: "mind_map"/, "the session row names no technique");
+    // THE CLOCK RESTARTS ON EACH CHECK, or a second gap check on one map pays
+    // the whole sitting twice.
+    assert.match(MAPS, /sessionStart\.current = Date\.now\(\);[\s\S]{0,200}onSessionComplete/,
+        "the session clock is not restarted at the check — two checks pay one sitting twice");
+    // And it is CLAMPED, because a canvas can sit open overnight and the
+    // dashboard's week panel reads the raw figure.
+    // ASSERTED ON THE CLAMP, NOT ON THE SYMBOL. The first draft matched
+    // /SESSION_MAX_MINUTES/ anywhere in the file, which the IMPORT line
+    // satisfies — so swapping the clamp for a literal passed. Verified by
+    // putting exactly that back.
+    assert.match(MAPS, /Math\.min\(\s*SESSION_MAX_MINUTES/,
+        "the mind-map duration is unclamped — an overnight tab logs a day of study");
+});
+
+check("THE BREADTH TARGET DID NOT MOVE when a family became reachable", () => {
+    // Raising it because mind maps now count would LOWER the breadth score of
+    // every student on the site — a retroactive cut to the number the whole app
+    // is standardised around, in exchange for nothing.
+    const m = SERVER.match(/const BREADTH_TARGET_FAMILIES = (\d+);/);
+    assert.ok(m, "BREADTH_TARGET_FAMILIES is gone");
+    assert.equal(m[1], "5");
+    assert.ok(!/mind maps emit no XP event/.test(SERVER),
+        "the breadth comment still says mind maps are unreachable, which is now false — " +
+        "a comment describing a fixed defect sends the next session to fix it again");
+});
+
+check("the published RATE names every technique it pays", () => {
+    // The study row is what a student checks their own figure against. Leaving
+    // a technique out of it is the same failure as a wrong figure: the table
+    // is read as the whole answer.
+    const row = XP_RATES.find((r) => r.id === "study");
+    assert.ok(row, "the study row is gone");
+    const sent = clientSources();
+    const byMinute = Object.keys(sent).filter((t) => sent[t] !== "quiz");
+    for (const technique of byMinute) {
+        const word = technique.replace(/_/g, " ");
+        assert.ok(row.note.toLowerCase().includes(word),
+            `"${word}" pays by the minute and the published note does not mention it`);
+    }
+});
+
 console.log(`\nxpRates: ${passed} checks passed`);

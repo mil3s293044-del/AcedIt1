@@ -33,6 +33,11 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { base44 } from "@/api/base44Client";
 import { useToast } from "@/components/ui/use-toast";
+import { format } from "date-fns";
+// The one cap on a single sitting. `integrity.js` is the server's mirror —
+// it had no client consumer after the Compete rebuild and this is one again,
+// which is better than a second copy of the number living here.
+import { SESSION_MAX_MINUTES } from "@/lib/integrity";
 import {
     Network, Plus, EyeOff, Sparkles, ArrowLeft, Trash2, Check, AlertTriangle,
     Lightbulb, ListTree, Layers, TrendingUp, ChevronRight, Link2, X, Zap, Target,
@@ -215,7 +220,7 @@ function SaveState({ state, onRetry }) {
 /** Per-map, per-device dismissal of the rebuild prompt. */
 const REBUILD_DISMISSED = "acedit_mindmap_rebuild_dismissed_v1";
 
-export default function MindMaps({ user, subjects = [] }) {
+export default function MindMaps({ user, subjects = [], onSessionComplete = null }) {
     const { toast } = useToast();
     const [allMaps, setAllMaps] = useState([]);
     const [loading, setLoading] = useState(true);
@@ -250,6 +255,30 @@ export default function MindMaps({ user, subjects = [] }) {
     const allMapsRef = useRef([]);
     const mapRef = useRef(null);
     useEffect(() => { mapRef.current = map; }, [map]);
+
+    // ── THE CANVAS WAS WORTH NOTHING, AND NOT ONLY IN XP ────────────────────
+    // `MindMaps` was the one technique on the Study page never handed
+    // `onSessionComplete`, so an hour here wrote no `study_techniques` row at
+    // all — which is not merely "no XP". `studyEvents` reads that table, so the
+    // time was missing from the dashboard's week panel, from the ATAR's effort
+    // and consistency, and from the league's hours; and `techniqueFamily` could
+    // never see a `mind_map` family, so the ATAR's breadth component had six
+    // reachable families and only five earnable. The server's own comment said
+    // so and nothing acted on it.
+    //
+    // THE CHECK IS THE SESSION, exactly as the marking is for blurting: you
+    // build it blind, then you find out what is missing. A map built and never
+    // checked is a blurt never submitted, and neither logs — there is nothing
+    // to measure until the student asks.
+    const sessionStart = useRef(null);
+    useEffect(() => {
+        // Opening a map starts the clock; closing it stops it. A map is a ROW
+        // that is reopened over days, so timing from `created_date` would log a
+        // fortnight for one sitting.
+        sessionStart.current = map ? Date.now() : null;
+        // Only on the identity of the open map — re-running this on every node
+        // edit would restart the clock on every keystroke.
+    }, [map?.id]);
 
     const selected = useMemo(
         () => map?.nodes.find(n => n.id === selectedId) || null, [map, selectedId]);
@@ -772,6 +801,35 @@ export default function MindMaps({ user, subjects = [] }) {
             if (data?.error) throw new Error(data.error);
             setReview(data);
             edit(m => ({ ...m, phase: "checked" }));
+
+            // ── The session lands HERE, and the clock restarts ──────────────
+            // Restarted rather than left running, so a second check on the same
+            // map logs only the minutes since the first one. Without that, a
+            // student who checks twice is paid twice for one sitting.
+            const started = sessionStart.current;
+            sessionStart.current = Date.now();
+            if (onSessionComplete && started) {
+                // CLAMPED, because a canvas can sit open all day. The server
+                // caps this for the boards and the ATAR already, but the
+                // dashboard's week panel reads the raw figure — so an
+                // overnight tab would print "412 minutes" at a student who
+                // studied for twenty.
+                const mins = Math.min(
+                    SESSION_MAX_MINUTES,
+                    Math.max(1, Math.floor((Date.now() - started) / 60000))
+                );
+                const gaps = Array.isArray(data?.gaps) ? data.gaps.length : null;
+                onSessionComplete({
+                    technique_name: "mind_map",
+                    session_duration: mins,
+                    subject: map.subject || null,
+                    topic: map.topic || map.title || "Mind map",
+                    notes: `Mapped ${map.nodes.length} nodes${
+                        map.phase === "blind" ? " from memory" : ""
+                    }.${gaps != null ? ` ${gaps} gap${gaps === 1 ? "" : "s"} found.` : ""}`,
+                    date: format(new Date(), "yyyy-MM-dd"),
+                }).catch(() => {});
+            }
         } catch (e) {
             toast({ title: "Couldn't check the map", description: e.message, variant: "destructive" });
         } finally { setBusy(false); }

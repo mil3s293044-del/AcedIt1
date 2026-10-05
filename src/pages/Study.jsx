@@ -273,10 +273,21 @@ export default function Study() {
             const mins = sessionData.session_duration || 0;
             if (mins >= 1) {
                 const technique = sessionData.technique_name; // pomodoro, active_recall, blurting
+                // EVERY TECHNIQUE THAT LOGS A SESSION NEEDS A SOURCE HERE, and
+                // the server must accept it — an unknown one is a 400 that the
+                // catch below swallows, so the student simply earns nothing and
+                // nothing anywhere reports a problem. `xpRates.test.mjs` pins
+                // this map against the server's own switch for that reason.
+                //
+                // `mind_map` is its own source rather than falling through to
+                // `study_session`, because `techniqueFamily` keys the ATAR's
+                // BREADTH component on it: folded into focus time it would pay
+                // the minutes and still be unreachable as a family.
                 const sourceMap = {
                     pomodoro: 'study_session',
                     active_recall: 'active_recall',
                     blurting: 'blurting',
+                    mind_map: 'mind_map',
                 };
                 const source = sourceMap[technique] || 'study_session';
                 const eventKey = `${source}_${user.email}_${Date.now()}`;
@@ -331,6 +342,7 @@ export default function Study() {
             <MindMaps
                 user={user}
                 subjects={userSubjects}
+                onSessionComplete={handleSessionComplete}
             />
         )
     };
