@@ -2866,6 +2866,13 @@ const DAILY_CAPS = {
   // that punishes a normal afternoon. 960 is four hours of pomodoro.
   study_session:      960,
   active_recall:      120,
+  // 30 active minutes of mapping. It had NO ENTRY here and silently inherited
+  // the 500 default — five times blurting's and more than a full day of
+  // quizzing — which was an accident rather than a decision anybody made. The
+  // minutes it counts are active ones now (`mindmapXp.js`), so this is a
+  // ceiling on real work rather than the only thing standing between a student
+  // and an idle tab.
+  mind_map:           120,
   blurting:           80,
   streak:             100,
   weekly_streak:      75,
