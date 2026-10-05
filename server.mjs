@@ -3034,6 +3034,7 @@ app.post("/local-ai/fn/awardXP", async (req, res) => {
       case "study_session":
       case "active_recall":
       case "blurting":
+      case "mind_map":
         rawXP = calcStudySessionXP(duration_minutes || 0);
         break;
       case "streak":
@@ -7966,9 +7967,20 @@ export function atarBand(atar) {
 }
 
 // ── Breadth: which technique families a student's events map to ─────────────
-// Reachable families are focus, quiz, mock, flashcard, active_recall and
-// blurting — six. `challenge` is retired and mind maps emit no XP event, so
-// neither can be earned; five of the six earns full breadth.
+// Reachable families are focus, quiz, mock, flashcard, active_recall, blurting
+// and mind_map — seven. `challenge` is retired and cannot be earned.
+//
+// MIND MAPS WERE UNREACHABLE AND THIS COMMENT SAID SO FOR MONTHS. `MindMaps`
+// was the one technique on the Study page never handed `onSessionComplete`, so
+// it wrote no session row and emitted no event — which cost a student the
+// minutes on the dashboard, the effort and consistency in the ATAR, and a
+// whole family here. Recording a defect in a comment is not fixing it, and the
+// cost of that one landed on the students using the technique.
+//
+// THE TARGET STAYS AT FIVE. It is "five different families earns full
+// breadth", and raising it because a seventh became reachable would silently
+// LOWER the breadth score of every student on the site — a retroactive cut to
+// the number the whole app is standardised around, in exchange for nothing.
 const BREADTH_TARGET_FAMILIES = 5;
 function techniqueFamily(source) {
   if (source === "study_session" || source === "focus_session") return "focus";
