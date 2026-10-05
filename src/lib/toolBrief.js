@@ -223,10 +223,20 @@ export function weakTopicCard(cards = []) {
 /**
  * Cards whose predicted recall has fallen through the floor.
  *
- * The tool is TEACH IT BACK rather than an explainer, deliberately: the student
- * has already met this material and recall is what failed, so being told it
- * again is recognition — the illusion drill.js is built to refuse. Explaining
- * it to somebody is retrieval.
+ * TEACH IT BACK rather than an explainer, deliberately: the student has already
+ * met this material and recall is what failed, so being told it again is
+ * recognition — the illusion drill.js is built to refuse. Explaining it is
+ * retrieval.
+ *
+ * ─── AND IT POINTS AT THE TECHNIQUE NOW, NOT AT A CHAT WINDOW ───────────────
+ * This card made the right argument and then dead-ended: it opened the
+ * `teaching_assistant` persona, so the app's own best reasoning about fading
+ * material handed the student a text box. /Study?tab=feynman is the same idea
+ * built as a session — it logs minutes, it pays XP, it earns a breadth family,
+ * and it ends in a rewrite rather than a transcript.
+ *
+ * `to` is how a card says it is a LINK rather than a seed. A card without one
+ * is unchanged and still opens the chat with its message in the composer.
  */
 export function slippingCard(cards = [], now = Date.now()) {
     const o = retentionOutlook(cards, { now });
@@ -239,9 +249,13 @@ export function slippingCard(cards = [], now = Date.now()) {
         tool: "teaching_assistant",
         subject: worst.subject,
         fact: `${worst.slipping} of your ${worst.subject} cards are past reliable recall.`,
-        offer: "Teach it back and find the holes",
+        offer: "Teach it back, and answer what you cannot",
         seed: `I am going to teach you ${worst.subject}. Play a student who asks why, and stop me where I am vague.`,
         options: { subject: worst.subject },
+        // The Feynman technique, opened on this subject. The tool above stays
+        // as the card's GLYPH and name — a conversation about the same material
+        // is still worth having — but the button goes to the session.
+        to: { page: "Study", query: { tab: "feynman", subject: worst.subject } },
         urgency: 700 + worst.slipping,
     };
 }

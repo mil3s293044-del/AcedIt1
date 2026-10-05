@@ -1,21 +1,7 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { StudyTechnique, UserProfile, User, UserSubject } from "@/entities/all";
 import { motion } from "framer-motion";
-import {
-    Clock,
-    Brain,
-    RefreshCw,
-    PenTool,
-    AlertTriangle,
-    GraduationCap,
-    BookOpen,
-    Flame,
-    Sparkles,
-    Timer,
-    Layers,
-    Swords,
-    Network
-} from "lucide-react";
+import { Clock, Brain, RefreshCw, PenTool, AlertTriangle, GraduationCap, BookOpen, Flame, Sparkles, Timer, Layers, Swords, Network, MessageCircleQuestion } from "lucide-react";
 import { useStakes } from "@/components/arena/useStakes";
 import { METRICS as DUEL_METRICS, firstName as rivalFirstName } from "@/components/arena/arenaMeta";
 import { Button } from "@/components/ui/button";
@@ -29,6 +15,7 @@ import ActiveRecall from "../components/study/ActiveRecall";
 import BlurtingMethod from "../components/study/BlurtingMethod";
 import ExamMode from "../components/study/ExamMode";
 import MindMaps from "../components/study/MindMaps";
+import Feynman from "../components/study/Feynman";
 import HelpButton from "@/components/shared/HelpButton";
 import NeuroPanel from "../components/study/NeuroPanel";
 import { todaysIntent } from "@/lib/studyIntent";
@@ -52,6 +39,7 @@ const TECHNIQUES = [
     { id: "active_recall",     name: "Active Recall",     icon: Brain,         tile: "bg-chart-4/10",  text: "text-chart-4",  accent: "chart-4",  blurb: "Quiz yourself instead of re-reading notes.",                                   goodFor: "Testing what you actually know vs. what feels familiar." },
     { id: "blurting",          name: "Blurting",          icon: PenTool,       tile: "bg-xp/10",       text: "text-xp",       accent: "xp",       blurb: "Brain-dump everything you remember on a topic, then check.",                   goodFor: "Spotting blind spots before exams hit them first." },
     { id: "exam",              name: "Revision Mode",     icon: GraduationCap, tile: "bg-streak/10",   text: "text-streak",   accent: "streak",   blurb: "A timed mock exam built from your own cards and quizzes.",                     goodFor: "Building exam stamina and timing under real conditions." },
+    { id: "feynman",           name: "Feynman",           icon: MessageCircleQuestion, tile: "bg-berry/10", text: "text-berry", accent: "berry", blurb: "Teach it back in your own words, then answer what you could not.", goodFor: "Finding out whether you understand it, or just recognise the words." },
     { id: "mind_map",          name: "Mind Maps",         icon: Network,       tile: "bg-map/10",      text: "text-map",      accent: "map",      blurb: "Map a topic from memory, then get interrogated on the gaps.",                  goodFor: "Seeing how ideas connect — and finding the links you can't explain." },
 ];
 
@@ -61,6 +49,12 @@ const ACCENT_THEME = {
     "chart-4": { bg: "bg-chart-4/10",  border: "border-chart-4/25",  iconBg: "bg-chart-4/15",  iconText: "text-chart-4",  divider: "border-chart-4/15",  pillBg: "bg-chart-4/15",  pillText: "text-chart-4"  },
     xp:        { bg: "bg-xp/10",       border: "border-xp/25",       iconBg: "bg-xp/15",       iconText: "text-xp",       divider: "border-xp/15",       pillBg: "bg-xp/15",       pillText: "text-xp"       },
     streak:    { bg: "bg-streak/10",   border: "border-streak/25",   iconBg: "bg-streak/15",   iconText: "text-streak",   divider: "border-streak/15",   pillBg: "bg-streak/15",   pillText: "text-streak"   },
+    // `berry` is a palette hue the mind-map node types already use, exactly as
+    // `chart-3` and `chart-4` are reused as technique accents. A near-duplicate
+    // token three degrees away would have been the mirror this codebase keeps
+    // deleting, and the two never co-occur: berry on the grid is a technique,
+    // berry inside the canvas is a node type.
+    berry:     { bg: "bg-berry/10",    border: "border-berry/25",    iconBg: "bg-berry/15",    iconText: "text-berry",    divider: "border-berry/15",    pillBg: "bg-berry/15",    pillText: "text-berry"    },
     map:       { bg: "bg-map/10",      border: "border-map/25",      iconBg: "bg-map/15",      iconText: "text-map",      divider: "border-map/15",      pillBg: "bg-map/15",      pillText: "text-map"      },
 };
 
@@ -104,6 +98,9 @@ export default function Study() {
     const [flashcards, setFlashcards] = useState([]);
     const [assessments, setAssessments] = useState([]);
     const [activeTab, setActiveTab] = useState("pomodoro");
+    // The subject a deep link arrived on, handed to whichever technique can use
+    // it. Null for every other way in.
+    const [deepSubject, setDeepSubject] = useState(null);
 
     // ── The science rail is a PREFERENCE, answered once ─────────────────────
     // One key for every technique, not one per technique: a student who folds
@@ -128,8 +125,17 @@ export default function Study() {
     // Deep links: /Study?tab=spaced_repetition etc. — duel shortcuts land on
     // the exact technique that scores their yardstick.
     useEffect(() => {
-        const t = new URLSearchParams(window.location.search).get('tab');
+        const params = new URLSearchParams(window.location.search);
+        const t = params.get('tab');
         if (t && TECHNIQUES.some(x => x.id === t)) setActiveTab(t);
+        // A LINK THAT NAMES A SUBJECT HAS TO OPEN ON IT. The brief's slipping
+        // card says "42 of your Chemistry cards are past reliable recall" and
+        // then sends them here; landing on an empty subject picker makes them
+        // answer a question the link already answered. Read once, on arrival —
+        // `rankedMove.test.mjs`'s rule that every query a link emits is read by
+        // the page it points at.
+        const sub = params.get("subject");
+        if (sub) setDeepSubject(sub);
     }, []);
     const [isLoading, setIsLoading] = useState(true);
     const [authError, setAuthError] = useState(false);
@@ -288,6 +294,7 @@ export default function Study() {
                     active_recall: 'active_recall',
                     blurting: 'blurting',
                     mind_map: 'mind_map',
+                    feynman: 'feynman',
                 };
                 const source = sourceMap[technique] || 'study_session';
                 const eventKey = `${source}_${user.email}_${Date.now()}`;
@@ -336,6 +343,16 @@ export default function Study() {
         exam: (
             <ExamMode
                 userSubjects={userSubjects}
+            />
+        ),
+        feynman: (
+            <Feynman
+                initialSubject={deepSubject}
+                onSessionComplete={handleSessionComplete}
+                userSubjects={userSubjects}
+                flashcards={flashcards}
+                assessments={assessments}
+                techniques={recentSessions}
             />
         ),
         mind_map: (
@@ -569,6 +586,7 @@ export default function Study() {
             case "active_recall":     return "Quiz yourself — beats re-reading.";
             case "blurting":          return "Brain-dump a topic, spot the gaps.";
             case "exam":              return nextDeadline && nextDeadline.days <= 14 ? `Exam in ${nextDeadline.days}d — run a timed mock.` : "Practice under exam conditions.";
+            case "feynman":           return "Say it in your own words, then answer what you could not.";
             case "mind_map":          return "Map a topic blind, find the gaps.";
             default:                  return "";
         }

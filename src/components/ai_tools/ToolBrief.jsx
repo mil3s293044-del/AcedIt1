@@ -38,8 +38,19 @@ import { toolById } from "@/components/ai_tools/chatTools";
 import { createPageUrl } from "@/utils";
 import { toolQuery } from "@/lib/toolBrief";
 
-/** The link a card opens. The seed rides in the query string, unsent. */
+/**
+ * The link a card opens.
+ *
+ * A card carrying `to` goes somewhere ELSE in the app — the slipping card opens
+ * the Feynman technique rather than a chat, because the app's own argument for
+ * teaching it back deserves the session rather than a text box. Everything else
+ * opens the tool with its seed in the composer, unsent.
+ */
 export function briefHref(card) {
+    if (card?.to?.page) {
+        const q = new URLSearchParams(card.to.query || {}).toString();
+        return `${createPageUrl(card.to.page)}${q ? `?${q}` : ""}`;
+    }
     return `${createPageUrl("AITools")}?${toolQuery(card)}`;
 }
 
@@ -90,6 +101,11 @@ function Card({ card, index, locked, onOpen }) {
                 tools that this screen can make. */}
             {locked ? (
                 <Link to={createPageUrl("Subscription")} className={className}>{body}</Link>
+            ) : card.to ? (
+                // A LINK, not a button: this one leaves the page, so it has to
+                // be something a student can open in a new tab and something a
+                // screen reader announces as a destination.
+                <Link to={briefHref(card)} className={className}>{body}</Link>
             ) : (
                 <button type="button" className={className} onClick={() => onOpen(card)}>{body}</button>
             )}
