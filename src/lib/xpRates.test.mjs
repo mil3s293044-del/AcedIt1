@@ -220,17 +220,21 @@ check("MIND MAPS LOG A SESSION, which is what makes the time count at all", () =
 
     const MAPS = read("src/components/study/MindMaps.jsx");
     assert.match(MAPS, /technique_name: "mind_map"/, "the session row names no technique");
-    // THE CLOCK RESTARTS ON EACH CHECK, or a second gap check on one map pays
-    // the whole sitting twice.
-    assert.match(MAPS, /sessionStart\.current = Date\.now\(\);[\s\S]{0,200}onSessionComplete/,
-        "the session clock is not restarted at the check — two checks pay one sitting twice");
-    // And it is CLAMPED, because a canvas can sit open overnight and the
-    // dashboard's week panel reads the raw figure.
-    // ASSERTED ON THE CLAMP, NOT ON THE SYMBOL. The first draft matched
-    // /SESSION_MAX_MINUTES/ anywhere in the file, which the IMPORT line
-    // satisfies — so swapping the clamp for a literal passed. Verified by
-    // putting exactly that back.
-    assert.match(MAPS, /Math\.min\(\s*SESSION_MAX_MINUTES/,
+    // ── IT ASSERTS THE PROPERTY, NOT THE MECHANISM ──────────────────────────
+    // This used to pin the exact wall clock it was written against —
+    // `sessionStart.current = Date.now()` beside the payout — and when that
+    // clock was REPLACED by something strictly better (active minutes with a
+    // growth floor, `mindmapXp.js`) the check failed on an improvement. That is
+    // the `mistakeBank.test.mjs` lesson: a window scan asserts WHERE a thing is
+    // written, and following the model asserts WHAT IT DOES.
+    //
+    // So this half asserts only that a sitting is decided by something testable
+    // and that it is clamped. `mindmapXp.test.mjs` owns the rules themselves,
+    // including that two boundaries cannot pay one sitting twice.
+    assert.match(MAPS, /closeSession\(/,
+        "the sitting is no longer decided by a pure function — a payout decided inside a " +
+        "handler cannot be checked until it has already paid the wrong number");
+    assert.match(MAPS, /maxMinutes: SESSION_MAX_MINUTES/,
         "the mind-map duration is unclamped — an overnight tab logs a day of study");
 });
 

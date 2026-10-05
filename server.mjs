@@ -2866,6 +2866,13 @@ const DAILY_CAPS = {
   // that punishes a normal afternoon. 960 is four hours of pomodoro.
   study_session:      960,
   active_recall:      120,
+  // 30 active minutes of mapping. It had NO ENTRY here and silently inherited
+  // the 500 default — five times blurting's and more than a full day of
+  // quizzing — which was an accident rather than a decision anybody made. The
+  // minutes it counts are active ones now (`mindmapXp.js`), so this is a
+  // ceiling on real work rather than the only thing standing between a student
+  // and an idle tab.
+  mind_map:           120,
   blurting:           80,
   streak:             100,
   weekly_streak:      75,
@@ -3035,7 +3042,6 @@ app.post("/local-ai/fn/awardXP", async (req, res) => {
       case "active_recall":
       case "blurting":
       case "mind_map":
-      case "feynman":
         rawXP = calcStudySessionXP(duration_minutes || 0);
         break;
       case "streak":
@@ -7969,7 +7975,7 @@ export function atarBand(atar) {
 
 // ── Breadth: which technique families a student's events map to ─────────────
 // Reachable families are focus, quiz, mock, flashcard, active_recall, blurting
-// mind_map and feynman — eight. `challenge` is retired and cannot be earned.
+// and mind_map — seven. `challenge` is retired and cannot be earned.
 //
 // MIND MAPS WERE UNREACHABLE AND THIS COMMENT SAID SO FOR MONTHS. `MindMaps`
 // was the one technique on the Study page never handed `onSessionComplete`, so

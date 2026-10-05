@@ -38,10 +38,6 @@ import { CardBack } from "@/components/cards/PlayingCard";
 import PrankOverlay, { prankBodyClass } from "@/components/pranks/PrankOverlay";
 import { PrankStageProvider } from "@/lib/PrankStage";
 import ToolsDashboard from "@/components/ai_tools/ToolsDashboard";
-import FeynmanBoard from "@/components/study/FeynmanBoard";
-import FeynmanGaps from "@/components/study/FeynmanGaps";
-import { readGaps } from "@/lib/feynman";
-import { keyTermsFor } from "@/lib/subjectExaminerPrompts";
 import QuestionPanel from "@/components/mistakes/QuestionPanel";
 import { toolBrief } from "@/lib/toolBrief";
 import { recentChats } from "@/lib/aiChats";
@@ -658,90 +654,6 @@ function ToolsView() {
     );
 }
 views.tools = () => <ToolsView />;
-
-/* ── ?v=feynman — the blackboard, the gaps and the close, which a real login
-   only shows one of at a time. The gaps fixture carries all four kinds AND an
-   unquotable one, because the kind whose problem is an ABSENCE is the strongest
-   there is and is exactly the one with nowhere to live if the layout assumes a
-   quote. */
-const FEYN_WORK = `The rate of reaction goes up when you heat it because the particles move faster and bump into each other more. This means more collisions happen so the reaction is quicker. Also the activation energy is lower when it is hot, which is why heating works so well for this reaction.`;
-
-const FEYN_GAPS = readGaps({
-    gaps: [
-        {
-            kind: "wrong",
-            ask: "Does heating actually change the activation energy?",
-            why: "Temperature changes how many particles clear the barrier, not how high the barrier is.",
-            quote: "the activation energy is lower when it is hot",
-        },
-        {
-            kind: "jargon",
-            ask: "What is a collision, in this context?",
-            why: "The whole explanation rests on this word and never says what has to be true for one to count.",
-            quote: "more collisions happen",
-        },
-        {
-            kind: "hollow",
-            ask: "Why does moving faster make them collide more often?",
-            why: "This is the step the explanation assumes rather than gives.",
-            quote: "the particles move faster",
-        },
-        {
-            // NO QUOTE: the problem is an absence, which is unquotable by
-            // definition and must still get a module.
-            kind: "leap",
-            ask: "What has any of this got to do with the measured rate?",
-            why: "Nothing in the explanation connects collisions to the quantity being measured.",
-            quote: "",
-        },
-    ],
-}, { work: FEYN_WORK }).gaps;
-
-function FeynmanView() {
-    const [text, setText] = React.useState(FEYN_WORK);
-    const part = FEYN_GAPS.map((g, i) => (i === 0 ? { ...g, closed: true } : g));
-    const noop = () => {};
-    return (
-        <MemoryRouter>
-        <div className="bg-background min-h-screen py-6 space-y-10">
-            <div className="px-4">
-                <p className="text-[11px] font-black uppercase tracking-widest text-muted-foreground mb-2">
-                    The blackboard, mid-rewrite — open questions pinned, terms lit
-                </p>
-                <div className="max-w-5xl mx-auto">
-                    <FeynmanBoard
-                        value={text} onChange={setText}
-                        terms={keyTermsFor("Chemistry").length
-                            ? keyTermsFor("Chemistry")
-                            : ["activation energy", "collision", "kinetic energy", "rate of reaction"]}
-                        audience="classmate" topic="Why heating speeds up a reaction"
-                        cleared={["rate of reaction"]}
-                        pinned={part} onPinnedToggle={noop}
-                        onCheck={noop} checkLabel="Check the rewrite"
-                        priceLabel="3 chips — the re-check runs on the fast model"
-                    />
-                </div>
-            </div>
-            <div className="border-t border-border pt-6 px-4">
-                <p className="text-[11px] font-black uppercase tracking-widest text-muted-foreground mb-2">
-                    The gaps — four kinds, one of them unquotable
-                </p>
-                <FeynmanGaps work={FEYN_WORK} gaps={FEYN_GAPS}
-                    onToggle={noop} onRewrite={noop} onRecheck={noop} onFinish={noop}
-                    recheckLabel="A re-check costs 3 chips and runs on the fast model — it can only tick questions off, never add new ones." />
-            </div>
-            <div className="border-t border-border pt-6 px-4">
-                <p className="text-[11px] font-black uppercase tracking-widest text-muted-foreground mb-2">
-                    It held up — the state the whole design rests on
-                </p>
-                <FeynmanGaps work={FEYN_WORK} gaps={[]}
-                    onToggle={noop} onRewrite={noop} onRecheck={noop} onFinish={noop} />
-            </div>
-        </div>
-        </MemoryRouter>
-    );
-}
-views.feynman = () => <FeynmanView />;
 
 views.backs = () => (
     <div className="p-8 bg-background min-h-screen">

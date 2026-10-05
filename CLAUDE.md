@@ -3627,14 +3627,14 @@ through all of them.
   so an hour on the canvas was missing from the dashboard's week panel, the
   ATAR's effort and consistency, the league's hours, AND the breadth component,
   whose own comment in `server.mjs` recorded the fact and was never acted on.
-  Writing a defect down is not fixing it. The gap check is now the session (the
-  boundary blurting uses), the clock restarts on each check so two checks cannot
-  pay one sitting twice, and it is clamped at `SESSION_MAX_MINUTES` because a
-  canvas sits open all day and the week panel reads the raw figure. **The
-  breadth target stayed at 5** — raising it because a family became reachable
-  would retroactively lower every student's score. `xpRates.test.mjs` now pins
-  Study.jsx's `sourceMap` against the server's own `awardXP` switch, because an
-  unknown source is a 400 the catch swallows.
+  Writing a defect down is not fixing it. What it is worth is a separate
+  question and has its own section below — the first wiring paid by the WALL
+  CLOCK, which on a canvas is not a measurement of anything. **The breadth
+  target stayed at 5**: raising it because a family became reachable would
+  retroactively lower every student's score. `xpRates.test.mjs` pins Study.jsx's
+  `sourceMap` against the server's own `awardXP` switch, because an unknown
+  source is a 400 the catch swallows — the student earns nothing and nothing
+  anywhere says so.
 - Supabase is on the FREE plan and the app now self-limits to stay inside it
   (see the storage section). If you raise any upload cap, re-read the
   arithmetic there first — the failure mode is the whole project 402ing, not a
@@ -5046,154 +5046,81 @@ conversations), a LOCKED free account, and a first-week account with nothing
 measured. That last one is the honest common case — every card builder refuses
 rather than padding — and a fixture is the only way to see it.
 
-## The Feynman technique, and the two things that made it affordable
+## A canvas is not a clock
 
-**"Make it as cost-effective as possible."** The seventh technique on the Study
-page, and the reason it is there at all is that `teaching_assistant` has been a
-chat persona for months while `toolBrief`'s `slippingCard` told students with
-fading cards to teach it back — and then opened a text box.
+**The first wiring timed the session from when the map was OPENED**, clamped at
+four hours. That is the shape every other technique on the Study page takes and
+it is the wrong shape for this one: the other six have a definite START — a
+student presses a timer, begins a recall session, submits a blurt — and a canvas
+is simply open. So the honest reading of a tab left up overnight was 240 minutes
+of study, and the only thing bounding it was that **`mind_map` had no
+`DAILY_CAPS` entry at all** and silently inherited the 500 default — five times
+blurting's and more than a full day of quizzing, which was an accident rather
+than a number anybody chose. It is 120 now, the same as Active Recall: thirty
+genuine minutes of mapping, which is what a sitting on this is.
 
-**IT IS A LOOP OF PASSES, NOT A CONVERSATION.** The obvious build is the chat:
-the model plays a confused classmate and the student teaches it. As a TECHNIQUE
-that is unshippable — a conversation is N model calls, and at `ai_chat`'s price
-a ten-turn session is ~80 chips of a 1,000-chip week, the most expensive thing
-on the Study page by a factor of ten.
-
-Feynman's actual method is four steps and exactly ONE needs a model: explain it
-simply → find the gaps → go back to the source → rewrite. Steps one, three and
-four are the student working. So:
-
-| | |
-|---|---|
-| first pass | **8 chips**, the student's own model — this is judgement |
-| a rewrite | **3 chips**, pinned to Haiku — this is classification |
-| explain → rewrite → rewrite | **14 chips**, against ~80 for the chat |
-
-**`ALWAYS_CHEAP` IS THE LEVER AND IT LIVES IN `aiModels.js`.** The mirror image
-of `SAVER_EXCLUDES`: judgement runs on the student's own model, classification
-runs cheap, and a recheck only decides whether a question that has ALREADY been
-identified is now answered. A previous release pinned one model for one feature
-inside the request handler, which was a second mechanism for deciding models
-beside the function whose whole job is deciding them. `modelFor` is read on
-every call, so there is one place to look — and vision still outranks it,
-because a downgraded transcript gets MARKED.
-
-Nothing that produces PROSE may go in there. An app that quietly downgrades the
-model and lets a student conclude it is just bad has spent their trust to save
-its own money.
-
-**THE SYSTEM BLOCK IS THE MARKER'S.** `markingSystem(subject)` is already a
-cacheable prefix carrying the subject's examiner profile, the worked marks and
-the rubric — which is exactly what a Feynman pass needs to know. Composing a
-second preamble would pay full rate for a block the marking call has already
-warmed, so the pass READS that cache entry. The `askWhyRight` move, one
-technique over. The Feynman rubric is appended to the block rather than riding
-in the user message, because it is identical for every pass in a subject.
-
-### Three things cost nothing, and they may not claim what only a pass knows
-
-`jargonUsed` reads the subject's own `keyTerms` — twenty-odd hand-written VCAA
-terms that have sat in `subjectExaminerPrompts.js` for months with no reader
-but the prompt builder — and `readingLevel` is arithmetic. Both are instant and
-free, which is `buildSpot`'s posture: a word diff, nothing generated.
-
-**THE RIBBON STATES A FACT AND MAKES NO VERDICT.** The tempting version turns a
-term GREEN once it looks "explained nearby" — a window heuristic over
-definitional cues. It would be wrong constantly and wrong in the direction that
-tells a student their hand-wave was fine, so the ribbon says only that they
-leaned on the term, and a PASS is the only thing that may call one hollow.
-Before the first check everything used is amber, which is the honest state:
-unproven. The test scans both the module and the board for a claim neither can
+**IT DISCOUNTS THE CLAIM; IT DOES NOT ACCUSE ANYBODY.** `integrity.js`'s rule,
+and the only version of this that can be wrong occasionally without doing harm.
+A student who maps for twenty minutes notices none of it. A student who leaves
+the tab open finds the time was not worth anything — a different statement from
+being told they cheated, and the only one of the two this app is entitled to
 make.
 
-**THE READING LEVEL REFUSES TWICE.** Under `WORK_MIN_WORDS` it returns null,
-because a grade off two sentences is noise and a figure that lurches on every
-keystroke teaches a student the numbers here are decoration; and a text that is
-mostly symbols returns null, because on a Methods explanation the notation is
-the content and a Flesch-Kincaid score over LaTeX is invented. It is labelled
-"reads like Year 9", never "is".
+**TWO RULES, AND THEY CLOSE DIFFERENT HOLES** (`src/lib/mindmapXp.js`):
 
-### A gap is a QUESTION, and the quote is the optional half
+- **ACTIVE MINUTES.** A minute counts only if an EDIT landed in it, bucketed so
+  a burst of six is one minute rather than six. `edit()` in MindMaps.jsx is the
+  SINGLE mutation path — every node, rename, link, note and cross-link goes
+  through it — so the stamp is one line and cannot be routed around by the next
+  feature somebody adds to the canvas.
+- **A GROWTH FLOOR.** Active minutes alone still pay a student nudging one node
+  once a minute, so a sitting pays nothing unless the map actually GREW.
+  `contentWeight` is deliberately broader than the node count — a note and a
+  labelled connection each count, because a session spent annotating and
+  marking what is shaky is real mapping work and would otherwise score a flat
+  zero. **Only MOVING and DELETING fail to move it**, which is exactly the case
+  the floor means to refuse: twenty minutes of reorganising a map while adding
+  nothing to it.
 
-The output is the questions a listener would ask next — not criticism, which is
-the guilt list /MistakeBank refused. **`ask` is required and `quote` is not**,
-which is the exact opposite of `normaliseAnnotation` and deliberate: "never
-says why it is spontaneous" is unquotable precisely in that the words are
-absent, and that is the strongest kind of gap there is. The failure
-`MarkModule` was rebuilt to end, met again one technique over.
+**NEITHER IS A NEW CURRENCY.** The payout is still `calcStudySessionXP` at the
+published 4 XP a minute; these decide how many of the minutes were real, which
+is the same job `calcFocusTimerXP`'s idle discount already does for the
+pomodoro, reached from the other direction. Nothing had to be published, and
+`xpRates.js` names mind maps in the study row rather than growing one.
 
-An invented quote therefore **loses its underline and keeps its question**.
-`annotate.js` drops an unplaceable annotation because underlining the wrong six
-words sends a student to rewrite a sentence that was fine — and that reasoning
-covers the UNDERLINE. The question is what the pass was paid for.
+**THE DECISION IS A PURE FUNCTION BECAUSE IT PAYS.** `expiredKeys` and
+`pageIndices` record the same reasoning: a payout taken inside a handler cannot
+be checked until it has already paid the wrong number. `sessionPayout` returns a
+REASON on every refusal — `idle`, `too_small`, `no_growth` — so the caller can
+say which, rather than silently writing nothing, and **every floor is written as
+a comparison rather than a truthiness test**, because `Number(null) === 0` would
+pay a sitting with nothing in it. That trap is now in its ninth module.
 
-The underlining itself is `segment()` unchanged: exact match, overlaps dropped,
-no fuzzy matching. Nothing new was written to draw it.
+**CLOSING A SITTING RESETS IT, which is what lets there be two boundaries.** A
+session banks on the AI gap check AND on leaving the map, because the check is
+the natural end of a sitting and plenty of students never press it — and
+whatever the first one banks, the second starts from nothing, so one sitting
+cannot be paid twice. The wall-clock version restarted a clock for the same
+reason and could still pay a minute for a second check landing in the same
+breath, because its floor was `Math.max(1, …)`. **And no zero row is ever
+written**: a refused session writes no `study_techniques` row at all, rather than
+one claiming a minute, which is the rule every builder in `studyQueue` keeps.
 
-**A RECHECK MAY ONLY CLOSE.** `applyRescan`'s rule, and it is what makes the
-all-clear reachable — left to append, each pass finds new or reshaped gaps and
-a student who worked for an hour sees a readout as red as when they began. The
-prompt says so too, or reporting a new one costs the model nothing and the
-student a finding they could have had. **And the student ticks it, never the
-model**: whether they can answer it now is the one judgement only they can make
-(drill.js), with the recheck as PROOF for anyone who wants it.
+The banking goes through a REF to the latest `bank`, and the unmount effect is
+keyed on `map?.id` only. Keyed on the callback it would fire on every re-render
+of the component and bank a sitting mid-edit; reading `bank` directly from the
+cleanup closure it would bank with a stale map and lose the last minute's work.
 
-**AN EMPTY PASS IS A REAL ANSWER AND HAS A REAL SCREEN.** The property the
-whole design rests on: a pass that always finds five is a horoscope, and the
-first time a student writes something good and is told it is broken, every
-later finding reads as decoration too.
-
-### The board, and two faults only the screenshot showed
-
-Feynman's iconography is a blackboard and this app already owns a blackout — a
-literal `#0A121F` with literal white ink in BOTH themes, written for the
-pomodoro and blurting. So the compose screen IS that ground. Nothing sits
-beside the writing surface; the science rail folds away on every other
-technique for exactly this reason and here there is nothing to fold.
-
-- **THE ACTION WAS IN THE TITLE'S CORNER.** "I can answer this" sat top-right of
-  each module and took ~110px off a 22rem column, wrapping *"Does heating
-  actually change the activation energy?"* onto five lines of about four words
-  — the payload of the entire screen, squeezed by a button. This file already
-  records the rule ("actions go in the gutter under the card, not its top-right
-  corner") and it was broken anyway. The column split was backwards too: the
-  REFERENCE text had 1fr and the questions 22rem.
-- **THE FOCUS RING DREW A BRIGHT GREEN BOX ROUND THE BOARD.** The global
-  `:focus-visible` is 2px of brand green, and the textarea is autofocused on
-  arrival — so a student met a validation state rather than a writing surface.
-  Softened to a chalk ring rather than removed, because deleting it would cost
-  keyboard users their only focus cue.
-
-### What it is called, and where it sits
-
-**"Feynman" on the tile, teach-it-back in the blurb.** The name is what VCE
-students half-know; the sentence under it is what they will recognise.
-
-It wears `berry`, which the mind-map node types already use — the same way
-`chart-3` and `chart-4` are reused as technique accents. The palette was full
-at six and the honest alternative was a token three degrees from an existing
-one, which is the mirror this codebase keeps deleting. The two never co-occur:
-berry on the grid is a technique, berry inside the canvas is a node type.
-
-**`slippingCard` points at the technique now.** It made the right argument —
-*"being told it again is recognition; explaining it is retrieval"* — and
-dead-ended in a chat window. `to: { page: "Study", query: { tab: "feynman" } }`
-is how a brief card says it is a LINK rather than a seed, and `ToolBrief`
-renders a real `<Link>` for one so it opens in a new tab and announces as a
-destination. **The subject it names is READ**: Study passes `initialSubject`
-through, because a link saying "42 of your Chemistry cards are slipping" that
-lands on an empty subject picker is the half-wired shape this app keeps meeting.
-
-`feynman.test.mjs` holds 20 checks and every one was verified by putting the bug
-back: a recheck that appends, the recheck unpinned from Haiku, a dropped quote
-taking its question with it, a reading level computed off two sentences, the
-source unwired from `awardXP`, the card back to a chat, and the recheck priced
-the same as a full pass.
-
-Draw it with `scripts/_floorProbe.jsx?v=feynman` — the board mid-rewrite, the
-gaps with **all four kinds and one unquotable**, and the all-clear. A fixture is
-the only way to see the last one, and the unquotable gap is the one a layout
-assuming a quote silently loses.
+**AND THE GUARD ASSERTS THE PROPERTY, NOT THE MECHANISM.** `xpRates.test.mjs`
+had pinned the exact lines of the wall clock — `sessionStart.current =
+Date.now()` and the `Math.min(SESSION_MAX_MINUTES` clamp — so replacing the wall
+clock with something strictly better made the suite RED for being out of date.
+That is the `reachable.test.mjs` lesson (a name written down in a test is one
+more copy) pointed at an algorithm: it now asserts that the sitting is decided
+by `closeSession` and clamped by `maxMinutes`, and `mindmapXp.test.mjs` owns the
+rules themselves. Every one of its 14 checks was verified by putting the bug
+back — including the two that only a scan can see: the stamp living inside
+`edit()`, and the wall clock being gone rather than merely unused.
 
 ## What the app SAYS it does, and what it does
 
@@ -5596,14 +5523,6 @@ somebody opening the pricing page and the gate in the same sitting.
   drawn with the component that draws it when it is worn. A crest at both the
   size you choose it and the size you wear it; the prank Preview plays through
   Layout's own overlay
-- `src/lib/feynman.js` + `feynmanPrompt.js` + `feynman.test.mjs`,
-  `src/components/study/Feynman.jsx`, `FeynmanBoard.jsx`, `FeynmanGaps.jsx` —
-  the seventh technique: explain it simply, get the questions your explanation
-  leaves open, rewrite. A LOOP of one-shot passes rather than a conversation,
-  which is what makes it 14 chips instead of 80; the recheck is pinned cheap by
-  `ALWAYS_CHEAP` in `aiModels.js` and the system block is the marker's, so a
-  pass reads a cache entry rather than warming one. Draw it with
-  `scripts/_floorProbe.jsx?v=feynman`
 - `src/lib/studyQueue.js` + `studyQueue.test.mjs`,
   `src/components/study/QueueRow.jsx` — everything you owe, in one ranked list:
   seven sources, four tiers, nothing stored and no zero rows. The spine is the
@@ -5622,6 +5541,11 @@ somebody opening the pricing page and the gate in the same sitting.
   published as a rule rather than a range and pinned to `server.mjs`'s own
   calculators by parsing and running them. The hand-typed table it replaced was
   wrong in four places and advertised two features the UI cannot reach
+- `src/lib/mindmapXp.js` + `mindmapXp.test.mjs` — what a sitting on the canvas
+  is worth: active minutes floored by what the map actually GREW, a pure
+  decision because it pays, and a reason on every refusal. `MindMaps.jsx` stamps
+  from its one mutation path and banks on the gap check and on leaving;
+  `mind_map` in `DAILY_CAPS` is the outer valve it had been missing entirely
 - `src/components/ranked/RankedBoard.jsx`, `BoardControls.jsx` — the board: one
   right-aligned figure column, the place as display type, the movement lane,
   the capped podium and the bar that pins your row once you scroll past it.

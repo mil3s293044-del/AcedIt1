@@ -237,38 +237,6 @@ export const TECHNIQUE_NEURO = {
             "Interleaving is well supported for maths and for categories that get confused with each other. It's less studied for essay subjects, so treat it as a strong default rather than a law.",
     },
 
-    feynman: {
-        headline: "Recognising an explanation and being able to give one are different abilities.",
-        network:
-            "Producing an explanation from nothing is retrieval plus construction: you have to pull the pieces back and then decide how they fit, out loud, in order. Reading the same material feels easier because recognition is doing the work — and recognition is exactly the signal that stops predicting anything once the question is in front of you.",
-        regions: [
-            { id: "hippocampus", tone: "primary", role: "Pulls each piece back without the page in front of you" },
-            { id: "dlpfc",       tone: "chart-3", role: "Holds the whole explanation together while you build it" },
-            { id: "temporal",    tone: "xp",      role: "Supplies the meaning and the words for it" },
-            { id: "acc",         tone: "chart-4", role: "Flags the moment you reach a step you cannot actually justify" },
-        ],
-        feelsLike:
-            "You get three sentences in and stop, because the next sentence is a word you have been using without ever unpacking it. That stop IS the finding — it is the thing re-reading would never have shown you.",
-        // MODERATE, NOT HIGH, and that grade is load-bearing. This panel's whole
-        // argument is that it reports the evidence honestly — "the two that came
-        // out HIGH are the two almost nobody uses" — so inflating the one
-        // technique the app just built would spend the credibility of every
-        // other entry here. Self-explanation was rated moderate in the same
-        // review that put practice testing and distributed practice at the top.
-        utility: "moderate",
-        // NO CHART, DELIBERATELY. The carrier is here and the figures are not,
-        // because there is no result in this literature this file can reproduce
-        // to the standard the others are held to — `schematic` still means the
-        // SHAPE is published, and inventing one would be worse than an absent
-        // panel. The same refusal `DISTRIBUTIONS` makes in examinerReports.js.
-        sources: [
-            { ref: "Dunlosky, Rawson, Marsh, Nathan & Willingham (2013), Psychological Science in the Public Interest 14(1)", note: "Rated self-explanation — explaining how new information relates to what you already know — as moderate utility, above rereading and highlighting and below practice testing." },
-            { ref: "Chi, Bassok, Lewis, Reimann & Glaser (1989), Cognitive Science 13(2)", note: "Students who spontaneously explained worked examples to themselves solved later problems better than those who did not." },
-        ],
-        caveat:
-            "The teaching-specific half of this is thinner than the retrieval literature, and it is worth saying so: most of what is measured is SELF-explanation rather than explaining to another person. What is solid is that producing the explanation beats reviewing one. Whether an audience in your head adds anything beyond that is not settled.",
-    },
-
     mind_map: {
         headline: "Drawing it from memory works. Drawing it from your notes doesn't.",
         network:

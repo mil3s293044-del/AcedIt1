@@ -436,19 +436,6 @@ export function getExaminerPrompt(subjectName) {
     return sections.join("\n");
 }
 
-/**
- * The subject's own technical terms, as a list.
- *
- * `getExaminerPrompt` already folds these into a prompt block; the Feynman
- * board needs them as DATA, to light up which ones a student has leaned on
- * while they write. Reading them back out of that string would be parsing a
- * prompt, so the accessor exists instead. Empty for an unprofiled subject,
- * which draws no ribbon rather than an empty one.
- */
-export function keyTermsFor(subjectName) {
-    return [...(PROFILES[subjectName]?.keyTerms || [])];
-}
-
 /** True if this subject typically uses heavy mathematical notation. */
 export function subjectIsMathHeavy(subjectName) {
     return !!(PROFILES[subjectName]?.mathHeavy);
@@ -467,4 +454,4 @@ export function getProfiledSubjects() {
     return Object.keys(PROFILES).filter(k => k !== "_default");
 }
 
-export default { getExaminerPrompt, keyTermsFor, subjectIsMathHeavy, getLatexRules, getProfiledSubjects };
+export default { getExaminerPrompt, subjectIsMathHeavy, getLatexRules, getProfiledSubjects };

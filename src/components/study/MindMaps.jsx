@@ -38,6 +38,7 @@ import { format } from "date-fns";
 // it had no client consumer after the Compete rebuild and this is one again,
 // which is better than a second copy of the number living here.
 import { SESSION_MAX_MINUTES } from "@/lib/integrity";
+import { newSession, noteEdit, closeSession } from "@/lib/mindmapXp";
 import {
     Network, Plus, EyeOff, Sparkles, ArrowLeft, Trash2, Check, AlertTriangle,
     Lightbulb, ListTree, Layers, TrendingUp, ChevronRight, Link2, X, Zap, Target,
@@ -263,21 +264,74 @@ export default function MindMaps({ user, subjects = [], onSessionComplete = null
     // time was missing from the dashboard's week panel, from the ATAR's effort
     // and consistency, and from the league's hours; and `techniqueFamily` could
     // never see a `mind_map` family, so the ATAR's breadth component had six
-    // reachable families and only five earnable. The server's own comment said
-    // so and nothing acted on it.
+    // reachable families and only five earnable.
     //
-    // THE CHECK IS THE SESSION, exactly as the marking is for blurting: you
-    // build it blind, then you find out what is missing. A map built and never
-    // checked is a blurt never submitted, and neither logs — there is nothing
-    // to measure until the student asks.
-    const sessionStart = useRef(null);
+    // ── AND THEN IT PAID FOR AN OPEN TAB ────────────────────────────────────
+    // The first version timed the sitting from when the map OPENED, which is
+    // the shape every other technique takes and is wrong for this one: the
+    // others have a definite start, and a canvas is simply open. Four idle
+    // hours read as 240 minutes. `mindmapXp.js` holds the two rules that fixed
+    // it — a minute counts only if an EDIT landed in it, and the sitting pays
+    // nothing unless the map actually GREW — and it is pure, because a payout
+    // decision taken inside a handler cannot be checked until it has already
+    // paid the wrong number.
+    const session = useRef(null);
+    // ── ONE BANKER, TWO BOUNDARIES ──────────────────────────────────────────
+    // The gap check and leaving the map BOTH close a sitting, and they have to
+    // go through one function or they will come to disagree about what a
+    // sitting was worth. `closeSession` resets as it reads, so whatever the
+    // first one banks the second starts from nothing and neither can pay twice.
+    //
+    // IT LOGS ON LEAVING AS WELL AS ON THE CHECK because the check costs 15
+    // chips — so a student out of chips could build maps all week and earn
+    // nothing, which is the "never score a student on a signal they can't
+    // reach" rule, pointed at the one technique it had just been applied to.
+    //
+    // A REFUSED SITTING WRITES NOTHING AND SAYS NOTHING. No zero row, because a
+    // list that reaches a respectable length by printing zeroes teaches a
+    // student the numbers here are decoration; and no toast, because "that did
+    // not count" on the way out of a screen is an accusation, which is the one
+    // thing `integrity.js` says this may never be.
+    const bank = useCallback((m, extra = "") => {
+        if (!onSessionComplete || !m) return;
+        const got = closeSession(session.current, m, { maxMinutes: SESSION_MAX_MINUTES });
+        if (!got.ok) return;
+        onSessionComplete({
+            technique_name: "mind_map",
+            session_duration: got.minutes,
+            subject: m.subject || null,
+            topic: m.topic || m.title || "Mind map",
+            notes: `Mapped ${m.nodes.length} nodes${
+                m.phase === "blind" ? " from memory" : ""
+            }, ${got.growth} added in ${got.minutes} active minute${
+                got.minutes === 1 ? "" : "s"}.${extra}`,
+            date: format(new Date(), "yyyy-MM-dd"),
+        })?.catch?.(() => {});
+    }, [onSessionComplete]);
+
+    // A REF, because the leave-handler below must not list `bank` as a
+    // dependency: that would re-run the effect whenever `onSessionComplete`'s
+    // identity changed and throw away the sitting's minutes mid-session.
+    const bankRef = useRef(bank);
+    useEffect(() => { bankRef.current = bank; }, [bank]);
+
     useEffect(() => {
-        // Opening a map starts the clock; closing it stops it. A map is a ROW
-        // that is reopened over days, so timing from `created_date` would log a
-        // fortnight for one sitting.
-        sessionStart.current = map ? Date.now() : null;
-        // Only on the identity of the open map — re-running this on every node
-        // edit would restart the clock on every keystroke.
+        // Opening a map starts a sitting; a map is a ROW reopened over days, so
+        // timing from `created_date` would log a fortnight for one afternoon.
+        // Only on the map's IDENTITY — re-running on every node edit would
+        // throw away the minutes on every keystroke.
+        const opened = map;
+        session.current = opened ? newSession(opened) : null;
+        if (!opened?.id) return undefined;
+        // Leaving this map — closing it, opening another, or navigating off the
+        // page entirely — banks whatever it earned. React runs every cleanup
+        // before any new effect, so `mapRef` still holds the map being left;
+        // the id check is what makes that an assertion rather than an
+        // assumption about effect ordering.
+        return () => {
+            const leaving = mapRef.current?.id === opened.id ? mapRef.current : opened;
+            bankRef.current?.(leaving);
+        };
     }, [map?.id]);
 
     const selected = useMemo(
@@ -344,6 +398,11 @@ export default function MindMaps({ user, subjects = [], onSessionComplete = null
     const edit = useCallback((fn) => {
         setMap(m => (m ? fn(m) : m));
         dirty.current += 1;
+        // THE SINGLE MUTATION PATH, which is the whole reason active minutes
+        // are cheap here: every node, rename, link, note and confidence change
+        // goes through this one call, so a minute cannot be marked worked
+        // without something actually changing.
+        noteEdit(session.current);
     }, []);
 
     // ── Saving ──────────────────────────────────────────────────────────────
@@ -802,34 +861,11 @@ export default function MindMaps({ user, subjects = [], onSessionComplete = null
             setReview(data);
             edit(m => ({ ...m, phase: "checked" }));
 
-            // ── The session lands HERE, and the clock restarts ──────────────
-            // Restarted rather than left running, so a second check on the same
-            // map logs only the minutes since the first one. Without that, a
-            // student who checks twice is paid twice for one sitting.
-            const started = sessionStart.current;
-            sessionStart.current = Date.now();
-            if (onSessionComplete && started) {
-                // CLAMPED, because a canvas can sit open all day. The server
-                // caps this for the boards and the ATAR already, but the
-                // dashboard's week panel reads the raw figure — so an
-                // overnight tab would print "412 minutes" at a student who
-                // studied for twenty.
-                const mins = Math.min(
-                    SESSION_MAX_MINUTES,
-                    Math.max(1, Math.floor((Date.now() - started) / 60000))
-                );
-                const gaps = Array.isArray(data?.gaps) ? data.gaps.length : null;
-                onSessionComplete({
-                    technique_name: "mind_map",
-                    session_duration: mins,
-                    subject: map.subject || null,
-                    topic: map.topic || map.title || "Mind map",
-                    notes: `Mapped ${map.nodes.length} nodes${
-                        map.phase === "blind" ? " from memory" : ""
-                    }.${gaps != null ? ` ${gaps} gap${gaps === 1 ? "" : "s"} found.` : ""}`,
-                    date: format(new Date(), "yyyy-MM-dd"),
-                }).catch(() => {});
-            }
+            // The check is a boundary too, and it goes through the same
+            // banker — the number of gaps is the only thing it adds.
+            const gaps = Array.isArray(data?.gaps) ? data.gaps.length : null;
+            bank(mapRef.current || map, gaps != null
+                ? ` ${gaps} gap${gaps === 1 ? "" : "s"} found.` : "");
         } catch (e) {
             toast({ title: "Couldn't check the map", description: e.message, variant: "destructive" });
         } finally { setBusy(false); }
