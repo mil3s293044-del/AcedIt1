@@ -263,6 +263,100 @@
     --floor-scrim:        rgba(4, 8, 15, 0.86);
   }
 
+  /* ─── THE AI TOOLS CONSOLE ────────────────────────────────────────────
+     Its own palette, scoped to `.console` (see components/ai_tools/Console.jsx).
+
+     The SECOND room in this app, and it exists for the same reason the first
+     one does: /AITools is the machine room — you arrive to find out what your
+     own work says and to pick an instrument — and nineteen identical warm
+     rounded cards is not what that feels like. So it is COOL GRAPHITE where
+     the app is warm cream, hairlines where the app has 2px borders, and small
+     radii where the app is `rounded-2xl`.
+
+     It FOLLOWS THE THEME, which is the floor's own hard-won lesson: a student
+     who set the app light must not walk into a near-black page halfway through
+     a navigation. Focus mode is a blackout and stays literal; this is not one.
+
+     ─── THREE TOKENS FOR THE ACCENT, the floor's rule ─────────────────────
+     `--console-accent` is the FILL and is the brand green on both consoles.
+     `--console-accent-ink` is TEXT and strokes and is DEEPENED on light,
+     because #58CC02 is about 2:1 on white and a label printed at 2:1 is a
+     label nobody can read. `--console-accent-rgb` is the same colour as
+     channels, because Tailwind's `/30` modifier cannot compute alpha from a
+     `var()` holding a whole colour — so a tint follows the INK rather than
+     the fill, or it is invisible on the light console.
+
+     The accent is the BRAND GREEN rather than a console cyan on purpose. It
+     is already the colour a student reads as "press this" on every other
+     screen, and a new hue three degrees from a decision nobody made is the
+     mirror this codebase keeps deleting. What makes this a different room is
+     the ground, the gauge and the type — not a different brand. */
+  .console {
+    --console-ground:      #EDEFF3;   /* the page */
+    --console-grid:        #D3D8E2;   /* the lattice line */
+    --console-panel:       #FFFFFF;   /* a card */
+    --console-panel-2:     #F4F6F9;   /* an inset, a step IN from the panel */
+    --console-line:        #CBD2DD;   /* a hairline border */
+    --console-line-soft:   #E1E5EC;   /* a divider inside a panel */
+    --console-rail:        #B6C0CF;   /* the phase rail — see below */
+
+    --console-ink:         #141921;
+    --console-ink-dim:     #4A5362;
+    --console-ink-faint:   #636B79;   /* meta: 4.9:1 on the ground */
+
+    --console-accent:      #58CC02;
+    --console-accent-ink:  #3D8F00;
+    --console-accent-rgb:  61 143 0;
+    --console-on-accent:   #0A121F;
+  }
+
+  /* `--console-rail` IS NOT `--console-line`, and the first draft used the
+     border token for both. A hairline between a white panel and the ground is
+     read as an EDGE — the fill either side does most of the work, so it can sit
+     at almost no contrast. A rail is a 1px line ALONE on the ground with
+     nothing either side of it, so at the same value it simply disappears and
+     the four phase nodes read as bullet points rather than as stops on a
+     sequence. Only the screenshot said so. */
+
+  .dark .console {
+    --console-ground:      #0B0E14;
+    --console-grid:        #1A212D;
+    --console-panel:       #12161F;
+    --console-panel-2:     #0E131B;
+    --console-line:        #2A3340;
+    --console-line-soft:   #222A36;
+    --console-rail:        #384456;
+
+    --console-ink:         #E9EDF4;
+    --console-ink-dim:     #98A2B3;
+    --console-ink-faint:   #7D8799;   /* 5.0:1 on the panel */
+
+    --console-accent:      #58CC02;
+    --console-accent-ink:  #58CC02;
+    --console-accent-rgb:  88 204 2;
+    --console-on-accent:   #0A121F;
+  }
+
+  /* THE LATTICE IS UNIFORM AND COVERS THE ROUTE, which is the whole reason it
+     is allowed. `TableGround` was deleted from the dashboard for painting two
+     radial washes and a vignette that stopped partway down the page and lined
+     up with nothing — a tinted BAND. This is the opposite: one gauge, edge to
+     edge, top to bottom, on a route that is entirely the console, so there is
+     no seam for it to fail to line up with.
+
+     The gauge is FIXED in px rather than a percentage, the lesson `CardBack`
+     records about its own weave: a lattice that scales with the box goes
+     coarse on a tall page and fine on a short one, so the same room would be
+     drawn at two different gauges depending on how much the student had. */
+  .console-lattice {
+    background-image:
+      repeating-linear-gradient(to right,
+        var(--console-grid) 0 1px, transparent 1px 32px),
+      repeating-linear-gradient(to bottom,
+        var(--console-grid) 0 1px, transparent 1px 32px);
+    opacity: 0.8;
+  }
+
   /* Pins every token back to its light value regardless of an ancestor
      `.dark` — for surfaces like the public landing page that must read the
      same to every visitor rather than following the viewer's app theme. */

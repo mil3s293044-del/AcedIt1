@@ -216,17 +216,18 @@ export default function AITools() {
         );
     }
 
+    // No wrapper: `Console` IS the ground and owns the min-height. Wrapping it
+    // in `bg-background` would put a cream page behind a graphite one — which
+    // shows wherever the console is shorter than the viewport.
     return (
-        <div className="min-h-[calc(100dvh-8rem)] md:min-h-[calc(100dvh-3rem)] bg-background">
-            <ToolsDashboard
-                cards={cards}
-                recent={recent}
-                locked={!premium}
-                loading={rows === null}
-                onOpenCard={openCard}
-                onOpenTool={openTool}
-                onOpenChat={openChat}
-            />
-        </div>
+        <ToolsDashboard
+            cards={cards}
+            recent={recent}
+            locked={!premium}
+            loading={rows === null}
+            onOpenCard={openCard}
+            onOpenTool={openTool}
+            onOpenChat={openChat}
+        />
     );
 }

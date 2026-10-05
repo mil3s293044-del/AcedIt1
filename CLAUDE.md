@@ -5046,6 +5046,139 @@ conversations), a LOCKED free account, and a first-week account with nothing
 measured. That last one is the honest common case — every card builder refuses
 rather than padding — and a fixture is the only way to see it.
 
+## /AITools is a ROOM, and the page was nineteen identical boxes
+
+**"Make the AI tools dashboard far more aesthetic — I want it to feel high
+tech."** The second half was the brief and the first half was a real defect, and
+the screenshot is what said so: **every element on the page was the same
+object.** The two direction cards, the twelve tools and the three saved
+conversations were all one `rounded-2xl border-2 bg-surface` box with a 36px
+tinted chip, a bold title, a muted blurb and a chevron. Nineteen of them. So "a
+SAC in three days, in your Chemistry" and "Line Memoriser" and "a chat you had
+on 1 Oct" carried IDENTICAL weight: nothing led, nothing was told apart, and the
+screen read as a list of divs however good the copy on it was.
+
+Two more faults came out of the same render. The brief was capped at
+`max-w-2xl` while the toolkit ran full width, so the top of the page was a
+narrow column beside a void and then a three-column grid began — **the two
+halves never shared a grid.** And the four PHASES, which are the best idea on
+the page, were drawn as four identical bold headings with a rule beside each: a
+sequence, rendered as a list.
+
+**THREE BLOCKS, THREE SHAPES.** A SIGNAL carries a coloured spine and no glyph;
+an INSTRUMENT carries a glyph plate and no spine; a saved conversation is a row
+in a divided table with fixed columns. Told apart before a word is read — the
+spine idiom Subjects, the Quizzes shelf and QueueRow already use, and the
+fixed-column lesson the Ranked board records about what makes a list read as
+something somebody designed.
+
+### It is the SECOND room, and the mechanism is the floor's
+
+`.console` scopes ~16 `--console-*` tokens (index.css) on ONE wrapper
+(`Console.jsx`), exactly as `.floor` does for Compete — custom properties
+inherit down the tree while `position: fixed` escapes layout rather than the
+cascade, so anything opened from inside the room reads the room's ink without
+being told which room it is in.
+
+**IT FOLLOWS THE THEME**, which is the floor's own hard-won lesson: a student
+who set the app light must not walk into a near-black page halfway through a
+navigation. Cool graphite on light, near-black on dark. Focus mode is a
+BLACKOUT and stays literal; this is not one.
+
+**THE ACCENT IS THE BRAND GREEN, not a console cyan.** It is already the colour
+a student reads as "press this" on every other screen, and a new hue three
+degrees from a decision nobody made is the mirror this codebase keeps deleting.
+What makes this a different room is the GROUND, the GAUGE and the TYPE. The
+floor's three-tokens-per-hue rule applies unchanged: `--console-accent` is the
+fill, `--console-accent-ink` is deepened on light because `#58CC02` is about 2:1
+on white, and `--console-accent-rgb` is channels, because Tailwind's `/30`
+cannot compute alpha from a `var()` holding a whole colour.
+
+**THE TWELVE TOOL GLYPHS KEEP THEIR OWN APP COLOURS**, deliberately. They are a
+repeated set and the glyphs are what tell them apart, which is the one case this
+app's icon rule keeps them for; re-inking all twelve to one console accent would
+delete the differentiation that justifies them existing. What went is the
+chevron — the whole card is the button, so an arrow in the corner restated the
+affordance twelve times. The lock stays, because a lock is status.
+
+**`--console-rail` IS NOT `--console-line`, and the first draft used one token
+for both.** A hairline between a white panel and the ground is read as an EDGE:
+the fill either side does most of the work, so it can sit at almost no contrast.
+The phase rail is a 1px line ALONE on the ground with nothing either side, so at
+the same value it disappears and the four nodes read as bullet points rather
+than as stops on a sequence. Only the screenshot said so.
+
+### The rail is the map, and it stops at the last node
+
+Before → while → after → test is a real sequence and it is drawn as one: a 1px
+rail down the left with a numbered node at each phase. **The last band draws no
+connector**, because a rail running past the final stop claims a step that is
+not there — the league payline's rule about a rule under the last row. The
+heading still ends in A RULE TO THE END OF THE ROW, the Quizzes-shelf idiom:
+the rail delimits the band on the left and the rule terminates it on the right,
+which is what turns a left-aligned row of fixed-width cards from a hole into a
+shelf. "After you write" holds two tools and will never fill three columns.
+
+The ordinals are `padStart`ed off the list rather than written down. A second
+copy of "01 02 03 04" beside a four-item list is the mirror this codebase keeps
+deleting: add a fifth phase to `toolLabels.js` and the rail would print four
+numbers against five stops.
+
+### A CONSOLE IS NARROWER THAN A PAGE
+
+At `max-w-5xl` a signal row was two short sentences and then six hundred pixels
+of air before its tool tag, and the instrument grid drew three cards across a
+span wide enough for four — a marketing measure on a panel. `max-w-4xl` is where
+the rows read as rows and a card still takes a two-line blurb. The HEADING keeps
+a measure of its own and the ROWS span the content, so only the prose is narrow,
+which reads as typography rather than as somewhere content failed to reach.
+
+**THE LATTICE IS UNIFORM AND COVERS THE ROUTE, which is the whole reason it is
+allowed.** `TableGround` was deleted from the dashboard for painting radial
+washes and a vignette that stopped partway down and lined up with nothing — a
+tinted BAND. This is the opposite: one gauge, edge to edge, on a route that is
+entirely the console, so there is no seam for it to fail to line up with. The
+gauge is FIXED in px, the lesson `CardBack` records about its own weave: a
+lattice in percentages scales with the box, so the same room would be drawn at
+two different gauges depending on how much the student had.
+
+**NOTHING HERE INVENTS A NUMBER.** A console is the most tempting place in the
+app to print "SYSTEM READY · 94%", and a figure with nothing behind it teaches a
+student that none of the numbers here are real — the refusal `closingFacts`
+makes on the first-run screen. The one count printed is `cards.length`, which is
+the length of the list directly beneath it. Asserted, along with the absence of
+any model call: the cards stay arithmetic.
+
+**AND THE CHAT IS UNTOUCHED.** The page has now been rebuilt three times and
+twice the lever was wrong — the bench and the scan both REPLACED the chat. The
+chat streams, saves and bills the right feature; what was wrong was arriving at
+it. The console is the lobby.
+
+### Two guards, and the second one was a rename going red
+
+`consoleInk.test.mjs` is `floorInk`'s sibling and holds the same four silent
+failures — a misspelled token resolves to nothing, a token outside `.console` is
+blank, the class going missing blanks all of them at once, and a raw hex cannot
+follow the theme — plus the one specific to this room: **an app GROUND or INK
+token surviving inside it.** `bg-surface`, `bg-background` and
+`text-muted-foreground` are the warm-cream tokens, so one left behind is a cream
+patch in a graphite room. `AITools.jsx` wrapped the whole dashboard in
+`bg-background`, which showed wherever the console was shorter than the
+viewport; `Console` owns its ground and the wrapper is gone. All thirteen checks
+were verified by putting the bug back.
+
+**`toolBrief.test.mjs` PINNED A COMPONENT'S NAME and went red for it.** It
+asserted `<RecentRow`, so turning the saved conversations into a table rather
+than three more cards failed the suite — a rename, with the behaviour identical.
+That is the `xpRates` mind-map lesson a release later, and the cost of not
+fixing it is worse than a red suite: the obvious way to green is to put the old
+name back. It asserts the PROPERTY now — the list is iterated, and reopening is
+wired — and both halves were verified by breaking each.
+
+Draw it with `scripts/_floorProbe.jsx?v=tools`, in BOTH themes, and at 390. The
+probe does not follow `colorScheme`, so a dark screenshot needs
+`documentElement.classList.add("dark")` or it silently renders light twice.
+
 ## A canvas is not a clock
 
 **The first wiring timed the session from when the map was OPENED**, clamped at
@@ -5509,6 +5642,11 @@ somebody opening the pricing page and the gate in the same sitting.
   uses the page's own name and carries a real number, and no nav entry points
   at a route that is not there. Draw the bar with
   `scripts/_floorProbe.jsx?v=reach`
+- `src/components/ai_tools/Console.jsx` + `src/index.css` `.console` /
+  `.dark .console` + `src/lib/consoleInk.test.mjs` — the app's SECOND room: ~16
+  scoped tokens, a fixed-gauge lattice, and the five silent ways to break a
+  scoped palette. The one specific to this room is an app ground/ink token
+  surviving inside it, which is a cream patch in a graphite page
 - `src/lib/toolBrief.js` + `toolBrief.test.mjs`,
   `src/components/ai_tools/ToolBrief.jsx`,
   `src/components/ai_tools/ToolsDashboard.jsx`, `src/lib/toolLabels.js`,
