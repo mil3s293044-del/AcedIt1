@@ -4,6 +4,7 @@ import { useBusy, BUSY } from "@/lib/LiveContext";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Field, Segmented } from "@/components/shared/SetupControls";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
@@ -104,6 +105,27 @@ export default function BlurtingMethod({ onSessionComplete }) {
     const [sessionHistory, setSessionHistory] = useState([]);
     const [selectedHistorySession, setSelectedHistorySession] = useState(null);
     const [sessionDuration, setSessionDuration] = useState(10);
+    /**
+     * WHAT TO BLURT, AND HOW HARD IT IS MARKED.
+     *
+     * A blurt was always "everything on the topic, marked one way". Both of
+     * those are real choices and the technique is better for making them: a
+     * student revising for a SAC next week wants breadth, and one who can list
+     * the facts and cannot explain them wants the opposite — which the marking
+     * prompt already asks about in its own words ("Can the student EXPLAIN
+     * relationships, not just STATE facts?") without ever being told which the
+     * student was going for.
+     *
+     * STRICTNESS IS RECORDED WITH THE RESULT. The completeness percentage is
+     * the figure this screen is built around, and a percentage marked three
+     * ways that does not say which is three numbers a student cannot compare
+     * with each other — the "two surfaces, one question" failure this codebase
+     * keeps finding. The feedback carries `marked_at` and the panel prints it,
+     * beside the "marked against" line that is already there for the same
+     * reason.
+     */
+    const [focus, setFocus] = useState("all");
+    const [strictness, setStrictness] = useState("standard");
     const { toast } = useToast();
     const focusModeRef = useRef(null);
     const textareaRef = useRef(null);
@@ -179,6 +201,32 @@ export default function BlurtingMethod({ onSessionComplete }) {
             enterFullscreen();
         }
         setTimeout(() => textareaRef.current?.focus(), 100);
+    };
+
+    /**
+     * What each focus asks FOR, as a brief rather than a label — one line for
+     * the student on the writing screen, one for the marker.
+     */
+    const FOCUS_BRIEF = {
+        all:      { ask: "everything you can recall",
+                    mark: "Weigh BREADTH: how much of the topic did they reach at all?" },
+        links:    { ask: "how it all connects — causes, consequences, mechanisms",
+                    mark: "Weigh EXPLANATION over coverage: credit reasoning and causal links, and treat a correct fact stated with no link behind it as only partly there." },
+        terms:    { ask: "the key terms and definitions, precisely",
+                    mark: "Weigh TERMINOLOGY: credit correct VCAA terms used accurately, and name the ones they reached for and got slightly wrong." },
+        evidence: { ask: "the evidence — cases, studies, data, examples",
+                    mark: "Weigh EVIDENCE: credit named cases, studies, figures and worked examples. A claim with nothing behind it is not covered." },
+    };
+
+    /**
+     * How hard. It moves the BAR, never the honesty: every level still names
+     * what was missed, because softening that would make the gentle setting a
+     * screen that tells a student they are fine.
+     */
+    const STRICT_BRIEF = {
+        gentle:   "Mark generously. Credit a point they clearly knew even if the wording was loose. This is a first pass at a topic.",
+        standard: "Mark as a teacher would on a practice task: the point has to be recognisably made, but phrasing is not penalised.",
+        examiner: "Mark as a VCAA assessor would on a SAC: a point counts only if it is stated with the precision and the terminology the Study Design expects. Name every point that was close but would not have scored.",
     };
 
     /**
@@ -259,6 +307,14 @@ ${task}
 Student's Blurted Text:
 ${blurtedText}
 ${documentContext}
+=== WHAT THEY WERE ASKED FOR ===
+They were asked to write ${FOCUS_BRIEF[focus]?.ask || FOCUS_BRIEF.all.ask}.
+${FOCUS_BRIEF[focus]?.mark || FOCUS_BRIEF.all.mark}
+
+=== HOW HARD TO MARK ===
+${STRICT_BRIEF[strictness] || STRICT_BRIEF.standard}
+Whatever the level, still name everything they missed — a marking that goes soft on the gaps is a screen telling a student they are fine.
+
 Assess according to VCAA standards:
 1. Overall Assessment: Completeness percentage - Can the student EXPLAIN relationships (not just STATE facts)?
 2. Key Points Covered: Which Study Design dot points did they recall?
@@ -281,7 +337,7 @@ Reference Study Design requirements in your feedback.`,
                     required: ["completeness_percentage", "overall_assessment", "points_covered", "points_missed", "suggestions"]
                 }
             });
-            setAiFeedback({ ...response, marked_against: hasNotes ? "notes" : "study_design" });
+            setAiFeedback({ ...response, marked_against: hasNotes ? "notes" : "study_design", marked_at: strictness });
             // Real XP arrives via onSessionComplete → awardXP; no cosmetic
             // popups here (they'd show amounts the engine never granted).
             toast({ title: "Feedback ready!" });
@@ -481,24 +537,36 @@ Reference Study Design requirements in your feedback.`,
                     </div>
                 </div>
 
-                <div className="space-y-1.5 mt-4">
-                    <Label className="text-sm font-medium text-muted-foreground">How long</Label>
-                    <div className="flex gap-1.5">
-                        {[5, 10, 15, 20].map(min => (
-                            <button
-                                key={min}
-                                onClick={() => setSessionDuration(min)}
-                                aria-pressed={sessionDuration === min}
-                                className={`flex-1 rounded-xl border-2 py-2 text-sm font-bold transition-colors ${
-                                    sessionDuration === min
-                                        ? 'border-xp bg-xp/10 text-foreground'
-                                        : 'border-border text-muted-foreground hover:text-foreground'
-                                }`}
-                            >
-                                {min}m
-                            </button>
-                        ))}
-                    </div>
+                {/* The row is the shared control now — this and Active
+                    Recall's question-count row were two copies of one button
+                    sitting on two sibling screens. */}
+                <div className="mt-4 space-y-4">
+                    <Field label="How long" tone="xp">
+                        <Segmented tone="xp" value={sessionDuration} onChange={setSessionDuration}
+                            options={[5, 10, 15, 20].map(m => ({ value: m, label: `${m}m` }))} />
+                    </Field>
+
+                    <Field label="What to write" tone="xp"
+                        hint={`Ace asks for ${FOCUS_BRIEF[focus].ask}, and marks it that way.`}>
+                        <Segmented tone="xp" size="sm" value={focus} onChange={setFocus}
+                            options={[
+                                { value: "all",      label: "Everything", sub: "breadth" },
+                                { value: "links",    label: "The links",  sub: "why and how" },
+                                { value: "terms",    label: "Key terms",  sub: "precision" },
+                                { value: "evidence", label: "Evidence",   sub: "cases, data" },
+                            ]} />
+                    </Field>
+
+                    {/* The level rides with the result, so two blurts marked
+                        differently cannot be read as one score going up. */}
+                    <Field label="How hard to mark" tone="xp">
+                        <Segmented tone="xp" size="sm" value={strictness} onChange={setStrictness}
+                            options={[
+                                { value: "gentle",   label: "Gentle",   sub: "first pass" },
+                                { value: "standard", label: "Standard", sub: "practice task" },
+                                { value: "examiner", label: "Examiner", sub: "SAC marking" },
+                            ]} />
+                    </Field>
                 </div>
 
                 {/* ── Working from ─────────────────────────────────────────
@@ -665,7 +733,7 @@ Reference Study Design requirements in your feedback.`,
                             <Brain className="w-3.5 h-3.5 text-xp" />
                         </div>
                         <p className="text-sm text-foreground font-medium leading-relaxed">
-                            Write <strong>everything</strong> you can recall about <strong>{topic || selectedSubject}</strong> from memory. Don't stop, don't look at notes — just brain dump!
+                            Write <strong>{FOCUS_BRIEF[focus].ask}</strong> about <strong>{topic || selectedSubject}</strong> from memory — no notes, no editing, keep going until the clock stops.
                         </p>
                     </div>
 
@@ -768,8 +836,10 @@ Reference Study Design requirements in your feedback.`,
                                 <p className="text-sm text-muted-foreground leading-relaxed">{aiFeedback.overall_assessment}</p>
                                 <p className="text-xs text-muted-foreground/70 mt-2">
                                     {aiFeedback.marked_against === "notes"
-                                        ? "Marked against the notes you uploaded."
-                                        : `Marked against the VCE Study Design for ${selectedSubject || "this subject"} — not against your class notes.`}
+                                        ? "Marked against the notes you uploaded"
+                                        : `Marked against the VCE Study Design for ${selectedSubject || "this subject"} — not against your class notes`}
+                                    {aiFeedback.marked_at && aiFeedback.marked_at !== "standard"
+                                        && `, at the ${aiFeedback.marked_at} bar`}.
                                 </p>
                             </div>
                         </div>

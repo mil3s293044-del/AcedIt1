@@ -233,7 +233,7 @@ export const CHAT_TOOLS = [
         icon: Calculator,
         accentText: "text-chart-3", accentBg: "bg-chart-3/10", accentSolid: "bg-chart-3",
         feature: "ai_chat",
-        blurb: "Step-by-step working, hints before answers.",
+        blurb: "Works it through with you, one hint at a time — the answer comes last.",
         supportsFiles: true,
         options: [
             { key: "strand", label: "Strand", default: "methods", choices: Object.entries(MATH_STRANDS).map(([value, label]) => ({ value, label })) },
@@ -247,7 +247,7 @@ export const CHAT_TOOLS = [
         icon: PenTool,
         accentText: "text-chart-4", accentBg: "bg-chart-4/10", accentSolid: "bg-chart-4",
         feature: "ai_chat",
-        blurb: "Marked to VCAA criteria, section by section.",
+        blurb: "Your essay, read against the VCAA criteria section by section.",
         supportsFiles: true,
         options: [
             { key: "section", label: "Section", default: "section_a", choices: Object.entries(ENGLISH_SECTIONS).map(([value, v]) => ({ value, label: v.label })) },
@@ -268,7 +268,7 @@ export const CHAT_TOOLS = [
         icon: FileQuestion,
         accentText: "text-streak", accentBg: "bg-streak/10", accentSolid: "bg-streak",
         feature: "ai_tool",
-        blurb: "VCAA-style questions with marking guides.",
+        blurb: "Exam-shaped questions, and the guide they are marked against.",
         supportsFiles: true,
         options: [
             { key: "difficulty", label: "Difficulty", default: "exam", choices: [{ value: "easy", label: "Easy" }, { value: "medium", label: "Medium" }, { value: "hard", label: "Hard" }, { value: "exam", label: "VCE Exam" }] },
@@ -287,7 +287,7 @@ export const CHAT_TOOLS = [
         icon: Lightbulb,
         accentText: "text-xp", accentBg: "bg-xp/10", accentSolid: "bg-xp",
         feature: "ai_tool",
-        blurb: "Plain-English explanations that stick.",
+        blurb: "The idea in plain English.",
         supportsFiles: true,
         options: [
             { key: "depth", label: "Depth", default: "standard", choices: [{ value: "quick", label: "Quick take" }, { value: "standard", label: "Standard" }, { value: "deep", label: "Deep dive" }] },
@@ -301,7 +301,7 @@ export const CHAT_TOOLS = [
         icon: FileText,
         accentText: "text-primary", accentBg: "bg-primary/10", accentSolid: "bg-primary",
         feature: "ai_tool",
-        blurb: "Contentions, structure, evidence plans.",
+        blurb: "Contention, structure, and what you will use as evidence.",
         supportsFiles: true,
         options: [
             { key: "type", label: "Essay type", default: "analytical", choices: [{ value: "analytical", label: "Text response" }, { value: "comparative", label: "Comparative" }, { value: "argument", label: "Argument analysis" }, { value: "creative", label: "Creative" }] },
@@ -316,7 +316,7 @@ export const CHAT_TOOLS = [
         icon: Drama,
         accentText: "text-chart-3", accentBg: "bg-chart-3/10", accentSolid: "bg-chart-3",
         feature: "ai_chat",
-        blurb: "You teach, the AI plays curious student.",
+        blurb: "You explain it; it plays the student who keeps asking why.",
         supportsFiles: false,
         options: [],
         system: (s) => `${subjectBlock(s)}\n\n${COACH_TONE}\n\nROLE: You play a curious, slightly confused classmate. The VCE student teaches YOU. Ask genuine beginner questions, get things subtly wrong so they correct you, push on gaps.\n\nFORMAT SIGNATURE: short, casual, conversational — no headings, no bullet lists, no lecturing, 2-5 sentences per reply, always ending with a question back. If their explanation contains an actual error, get "confused" about exactly that point until they find it themselves.`,
@@ -330,7 +330,7 @@ export const CHAT_TOOLS = [
         icon: Sparkles,
         accentText: "text-chart-4", accentBg: "bg-chart-4/10", accentSolid: "bg-chart-4",
         feature: "ai_tool",
-        blurb: "Notes and files into revision summaries.",
+        blurb: "A folder of notes, turned into something you can revise from.",
         supportsFiles: true,
         options: [
             { key: "format", label: "Output", default: "summary", choices: [{ value: "summary", label: "Summary" }, { value: "cheat_sheet", label: "Cheat sheet" }, { value: "qa", label: "Q&A recall" }] },
@@ -346,7 +346,7 @@ export const CHAT_TOOLS = [
         icon: Repeat,
         accentText: "text-streak", accentBg: "bg-streak/10", accentSolid: "bg-streak",
         feature: "ai_tool",
-        blurb: "Quotes and passages, locked in line by line.",
+        blurb: "Quotes, locked in line by line.",
         supportsFiles: true,
         options: [
             {
@@ -376,7 +376,7 @@ export const CHAT_TOOLS = [
         feature: "ai_chat",
         // The single largest avoidable mark loss in VCE, and the table that
         // settles it was sitting two imports away from every surface.
-        blurb: "What the question actually asked you to do.",
+        blurb: "What \u201Cevaluate\u201D is actually asking for.",
         supportsFiles: false,
         options: [],
         system: (s) => `${subjectBlock(s)}\n\n${COACH_TONE}\n\nROLE: Command term analyst. The student has answered a question as though it asked something else — the commonest avoidable mark loss in VCE.\n\nWork from the VCAA command term table above. Name the term the question used, state the behaviour it demands, name the behaviour the answer actually performs, and show the difference on ONE of their own sentences — rewritten to do what was asked, same content.\n\nNever rewrite the whole answer. The student is learning to read the verb, and handing them a finished response teaches nothing.\n\nFORMAT SIGNATURE: **The term** (one line on what it demands), **What this does instead**, **The same sentence, doing it** — their words, minimally changed.`,
@@ -387,7 +387,7 @@ export const CHAT_TOOLS = [
         icon: Crosshair,
         accentText: "text-chart-4", accentBg: "bg-chart-4/10", accentSolid: "bg-chart-4",
         feature: "ai_chat",
-        blurb: "Everyday wording swapped for the terms that score.",
+        blurb: "Your everyday wording, swapped for the terms that earn marks.",
         supportsFiles: false,
         options: [],
         system: (s) => `${subjectBlock(s)}\n\n${COACH_TONE}\n\nROLE: Terminology pass. VCAA pays for the study design's own vocabulary; "goes up" does not earn what "increases exponentially" earns, and "the thing that carries it" does not earn what "the carrier protein" earns.\n\nWork from the key terminology and the common mistakes listed above. Find the places where the student has written around a term rather than using it, and give the swap — their sentence, one word or phrase changed, so they can see it is an edit rather than a rewrite.\n\nONLY flag wording the study design actually prices. Style preferences are not marks, and a list of them buries the three swaps that are.\n\nFORMAT SIGNATURE: a short table — **What you wrote** / **What scores** / **Why** — at most five rows, worst first. Then one line on the pattern, if there is one.`,
@@ -398,7 +398,7 @@ export const CHAT_TOOLS = [
         icon: Scale,
         accentText: "text-xp", accentBg: "bg-xp/10", accentSolid: "bg-xp",
         feature: "ai_chat",
-        blurb: "Whether the answer is the right size for the marks.",
+        blurb: "Is this the right size answer for four marks?",
         supportsFiles: false,
         options: [],
         system: (s) => `${subjectBlock(s)}\n\n${COACH_TONE}\n\nROLE: Mark allocation check. A VCAA mark is a piece of content, so the number of marks tells the student how many distinct points the answer needs. Two marks is two points; eight marks is not "write more", it is eight things.\n\nState how many scoring points the allocation implies, list the points the answer actually makes, and name what is missing or what is padding. Three paragraphs on a 2-mark question is time the student did not have in the exam, and that is worth saying as plainly as a gap is.\n\nIf the marks available are not stated, ASK for them in one line rather than guessing — an allocation check against an invented denominator is worse than none.\n\nFORMAT SIGNATURE: **Marks on offer / points needed**, then a checklist of the points with a tick or a cross, then **The gap** or **The padding** in one line.`,
@@ -416,7 +416,7 @@ export const CHAT_TOOLS = [
         // what to do" is the exact question the first screen is for — and the
         // direction cards above answer it with arithmetic, so this one is the
         // follow-up conversation rather than the only answer.
-        blurb: "Strategy, technique and what to do next.",
+        blurb: "Stuck? Start here.",
         supportsFiles: false,
         options: [],
         system: (s) => `${subjectBlock(s)}\n\n${COACH_TONE}\n\nROLE: VCE study coach — technique, SAC/exam strategy, time management, motivation. Specific to their actual situation, never generic productivity fluff.\n\nFORMAT SIGNATURE: short and punchy. Open with the one-line real talk, then at most three concrete moves as bullets, then **Tonight:** — the single next action. No essays.`,

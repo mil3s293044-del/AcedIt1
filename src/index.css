@@ -298,7 +298,6 @@
     --console-panel-2:     #F4F6F9;   /* an inset, a step IN from the panel */
     --console-line:        #CBD2DD;   /* a hairline border */
     --console-line-soft:   #E1E5EC;   /* a divider inside a panel */
-    --console-rail:        #B6C0CF;   /* the phase rail — see below */
 
     --console-ink:         #141921;
     --console-ink-dim:     #4A5362;
@@ -310,14 +309,6 @@
     --console-on-accent:   #0A121F;
   }
 
-  /* `--console-rail` IS NOT `--console-line`, and the first draft used the
-     border token for both. A hairline between a white panel and the ground is
-     read as an EDGE — the fill either side does most of the work, so it can sit
-     at almost no contrast. A rail is a 1px line ALONE on the ground with
-     nothing either side of it, so at the same value it simply disappears and
-     the four phase nodes read as bullet points rather than as stops on a
-     sequence. Only the screenshot said so. */
-
   .dark .console {
     --console-ground:      #0B0E14;
     --console-grid:        #1A212D;
@@ -325,7 +316,6 @@
     --console-panel-2:     #0E131B;
     --console-line:        #2A3340;
     --console-line-soft:   #222A36;
-    --console-rail:        #384456;
 
     --console-ink:         #E9EDF4;
     --console-ink-dim:     #98A2B3;
@@ -347,13 +337,41 @@
      The gauge is FIXED in px rather than a percentage, the lesson `CardBack`
      records about its own weave: a lattice that scales with the box goes
      coarse on a tall page and fine on a short one, so the same room would be
-     drawn at two different gauges depending on how much the student had. */
+     drawn at two different gauges depending on how much the student had.
+
+     ─── AND IT IS ORIGINED AT THE CONTENT, NOT AT THE VIEWPORT ──────────────
+     It used to tile from x=0, so at 1280 the nearest lines fell at 192 and 224
+     with the content column starting at 208 — SIXTEEN PIXELS OFF ON BOTH
+     SIDES, at every width, by an amount that moved as the window did. That is
+     what makes a grid read as wallpaper laid behind the work rather than as the
+     sheet the work is set out on, and it is the first thing the eye catches
+     once anything on the page has a straight edge.
+
+     `--lattice-x` is the content column's own left edge: half the viewport,
+     back by half the container, forward by its padding — clamped at the padding
+     alone once the viewport is narrower than the container, which is exactly
+     where the container stops being centred and starts being full width.
+
+     THE ARITHMETIC is what makes it land rather than merely start in the right
+     place: at full width the column is 864px of content (896 − 2×16) and
+     864 = 27 × 32, so a line falls on BOTH edges with twenty-seven cells
+     between them. Below that the container is full-bleed and only the LEFT
+     edge lands, which is the honest limit of this — a right edge that tracks
+     the viewport cannot sit on a fixed gauge, and the left edge is the one
+     every row, rule and heading on the page is aligned to anyway.
+
+     Change the gauge or the container width and the twenty-seven stops being
+     true silently, which is why `consoleInk.test.mjs` does the division rather
+     than trusting this comment. */
   .console-lattice {
+    --lattice-gauge: 32px;
+    --lattice-x: max(16px, calc(50% - 432px));
     background-image:
       repeating-linear-gradient(to right,
-        var(--console-grid) 0 1px, transparent 1px 32px),
+        var(--console-grid) 0 1px, transparent 1px var(--lattice-gauge)),
       repeating-linear-gradient(to bottom,
-        var(--console-grid) 0 1px, transparent 1px 32px);
+        var(--console-grid) 0 1px, transparent 1px var(--lattice-gauge));
+    background-position: var(--lattice-x) 0;
     opacity: 0.8;
   }
 
