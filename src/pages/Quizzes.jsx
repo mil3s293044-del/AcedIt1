@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect, useMemo, useCallback } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { base44 } from "@/api/base44Client";
 import { acceptFiles, STUDY_ACCEPT, STUDY_ACCEPT_LABEL } from "@/lib/pickFiles";
@@ -55,6 +55,10 @@ import MarkdownMath from "@/components/shared/MarkdownMath";
 import QuizModePicker from "../components/quizzes/QuizModePicker";
 import { subjectColor } from "@/components/cards/cardIdentity";
 import AceShuffle from "@/components/ace/AceShuffle";
+import { PaperFields, EmphasisFields } from "@/components/quizzes/QuizSetupFields";
+import { MINUTES_PER_MARK, MCQ_SHARE_DEFAULT,
+    paperShape, markRule, stimulusAsk } from "@/lib/quizSetup";
+import { commandTermRule } from "@/lib/subjectExaminerPrompts";
 
 // ─── Coach voice helpers (chill + motivational) ──────────────────────────────
 function getCoachLine({ name, hour, totalQuizzes, recentAttempts, avgScore, lowScore }) {
@@ -88,6 +92,37 @@ const FOCUS_THEME = {
     "chart-4": { bg: "bg-chart-4/10",  border: "border-chart-4/25",  iconBg: "bg-chart-4/15",  iconText: "text-chart-4"  },
 };
 
+
+/**
+ * The generator's settings, in ONE place.
+ *
+ * This literal was written out three times — the initial state, the reset after
+ * a successful generate, and the reset when the dialog closes — so a field
+ * added to one of them was a field the other two silently dropped. Exactly the
+ * mirror this codebase keeps deleting, two feet from the control that sets it.
+ */
+const DEFAULT_AI_SETTINGS = {
+    subject: "",
+    customSubject: "",
+    topic: "",
+    difficulty: "Medium",
+    num_questions: 10,
+    question_types: "mixed",
+    focus_areas: "",
+    quiz_style: "standard",
+    ai_instructions: "",
+    include_explanations: true,
+    include_stimulus: false,
+    command_terms: [],
+    // A RANGE, not one figure. See quizSetup.js — a flat allocation makes a
+    // one-line definition worth the same as a four-mark explain, on a screen
+    // whose score is a percentage of marks available.
+    mark_lo: 2,
+    mark_hi: 6,
+    // What "Mixed" means. It was a hard-coded 0.6 inside the prompt string.
+    mcq_share: MCQ_SHARE_DEFAULT,
+};
+
 export default function Quizzes() {
     const navigate = useNavigate();
     const [user, setUser] = useState(null);
@@ -119,19 +154,28 @@ export default function Quizzes() {
     const [isLoading, setIsLoading] = useState(true);
     const { toast } = useToast();
 
-    const [aiSettings, setAiSettings] = useState({
-        subject: "",
-        customSubject: "",
-        topic: "",
-        difficulty: "Medium",
-        num_questions: 10,
-        question_types: "mixed",
-        focus_areas: "",
-        quiz_style: "standard",
-        ai_instructions: "",
-        include_explanations: true,
-        marks_per_short: "5"
-    });
+    const [aiSettings, setAiSettings] = useState(DEFAULT_AI_SETTINGS);
+
+    /**
+     * What the student is about to get — arithmetic off the settings, and the
+     * SAME model `handleGenerateQuiz` builds its prompt from, so the strip
+     * under the button and the paper that arrives cannot disagree about how
+     * many of each there are. No model call: it costs nothing and it is on
+     * screen before a chip is spent, which is megaUpload's rule.
+     */
+    const paper = useMemo(() => paperShape({
+        types: aiSettings.question_types,
+        count: aiSettings.num_questions,
+        mcqShare: aiSettings.mcq_share,
+        markLo: aiSettings.mark_lo,
+        markHi: aiSettings.mark_hi,
+    }), [aiSettings.question_types, aiSettings.num_questions, aiSettings.mcq_share,
+         aiSettings.mark_lo, aiSettings.mark_hi]);
+
+    /* One patch, so a control cannot drop the rest of the settings by spreading
+       a stale copy — the shape every `setAiSettings({ ...aiSettings, x })` in
+       this file used to take. */
+    const patchAi = useCallback((p) => setAiSettings(prev => ({ ...prev, ...p })), []);
 
     const [manualQuiz, setManualQuiz] = useState({
         title: "",
@@ -369,18 +413,26 @@ export default function Quizzes() {
                 throw new Error(`All file uploads failed: ${errMsg}`);
             }
 
-            // Determine question type mix — strict counts
+            // The paper's shape, from the ONE model the summary strip under
+            // the button prints from — so the counts in the prompt and the
+            // counts on screen cannot disagree. `mixed` used to be a hard-coded
+            // 0.6 here AND restated in the preview, with nobody ever asked.
+            const shape = paperShape({
+                types: aiSettings.question_types,
+                count: aiSettings.num_questions,
+                mcqShare: aiSettings.mcq_share,
+                markLo: aiSettings.mark_lo,
+                markHi: aiSettings.mark_hi,
+            });
+
             let questionTypeInstruction = "";
-            let mcqTarget = 0;
-            let shortTarget = 0;
+            const mcqTarget = shape.mcq;
+            const shortTarget = shape.short;
             if (aiSettings.question_types === "mcq_only") {
-                mcqTarget = aiSettings.num_questions;
                 questionTypeInstruction = `You MUST generate EXACTLY ${mcqTarget} multiple choice questions and 0 short answer questions. Every single question must be type "mcq". Total questions: ${mcqTarget}.`;
             } else if (aiSettings.question_types === "short_only") {
-                shortTarget = aiSettings.num_questions;
                 questionTypeInstruction = `You MUST generate EXACTLY ${shortTarget} short answer questions and 0 multiple choice questions. Every single question must be type "short_answer". Total questions: ${shortTarget}.`;
             } else if (aiSettings.question_types === "multipart") {
-                shortTarget = aiSettings.num_questions;
                 questionTypeInstruction = `You MUST generate EXACTLY ${shortTarget} EXTENDED RESPONSE questions, VCAA style. Total questions: ${shortTarget}.
 
 Each one is a STEM followed by two to four PARTS:
@@ -392,8 +444,10 @@ Each one is a STEM followed by two to four PARTS:
   - Parts get progressively harder, the way a real paper builds: recall or a
     single calculation first, then application, then an evaluation or a
     multi-step derivation.
-  - Mark allocations differ by part and match the work: 1-2 marks to state or
-    identify, 3-6 to explain, justify or derive.
+  - Mark allocations differ by part and match the work, and the WHOLE question
+    — every part summed — is worth between ${shape.markLo} and ${shape.markHi}
+    marks. Vary that across the paper rather than writing every question to the
+    same total.
   - Set "type": "multipart", put the stem in "question", and put the parts in
     the "parts" array — each with its own "prompt", "marks" and "model_answer".
     A part may be an MCQ, in which case give it "options" and "correct_answer"
@@ -401,8 +455,6 @@ Each one is a STEM followed by two to four PARTS:
 
 Do NOT write the parts into the stem as prose. They go in the array.`;
             } else {
-                mcqTarget = Math.ceil(aiSettings.num_questions * 0.6);
-                shortTarget = aiSettings.num_questions - mcqTarget;
                 questionTypeInstruction = `You MUST generate EXACTLY ${mcqTarget} multiple choice questions (type "mcq") followed by EXACTLY ${shortTarget} short answer questions (type "short_answer"). Total questions: ${aiSettings.num_questions}. Do not deviate from these counts.`;
             }
 
@@ -435,7 +487,12 @@ Do NOT write the parts into the stem as prose. They go in the array.`;
                 }
             }
 
-            const marksValue = parseInt(aiSettings.marks_per_short) || 5;
+            // The fallback allocation for a question the model returned with
+            // no "marks" of its own. It is the LOW end of the range rather than
+            // its middle: marks are the denominator a score is a percentage of,
+            // so crediting an unstated question with more than the student
+            // asked for quietly deflates every score on the paper.
+            const marksValue = shape.markLo;
 
             // Only pass PDF/TXT files directly to Gemini (it can't natively read DOCX/PPTX).
             // DOCX/PPTX content is already extracted as text in documentContentPrompt above.
@@ -473,12 +530,16 @@ STYLE: ${styleDesc}
 - correct_answer = index (0, 1, 2 or 3) of the correct option
 ${aiSettings.include_explanations ? '- Include a brief explanation of why the answer is correct' : '- Skip explanations to keep it concise'}
 
+${markRule({ markLo: aiSettings.mark_lo, markHi: aiSettings.mark_hi, short: shortTarget })}
+
 === SHORT ANSWER RULES ===
-- Each short answer question is worth ${marksValue} marks
-- Provide a model answer with ${marksValue} key points/dot points
-- Model answer should be detailed enough to mark against
+- Provide a model answer detailed enough to mark against, with one distinct creditable point per mark that question is worth.
+
+${commandTermRule(aiSettings.command_terms)}
 
 ${STIMULUS_RULE}
+
+${stimulusAsk(aiSettings.include_stimulus)}
 
 Base ALL questions on the provided material. If files are attached, read ALL content including images, charts, tables, and figures carefully.`,
                 file_urls: quizFileUrls(geminiCompatibleUrls),
@@ -623,19 +684,7 @@ Base ALL questions on the provided material. If files are attached, read ALL con
 
             // Reset form
             setUploadedFiles([]);
-            setAiSettings({
-                subject: "",
-                customSubject: "",
-                topic: "",
-                difficulty: "Medium",
-                num_questions: 10,
-                question_types: "mixed",
-                focus_areas: "",
-                quiz_style: "standard",
-                ai_instructions: "",
-                include_explanations: true,
-                marks_per_short: "5"
-            });
+            setAiSettings(DEFAULT_AI_SETTINGS);
             setIsGenerating(false);
             setShowAIDialog(false);
             await loadData();
@@ -1787,19 +1836,7 @@ Return valid JSON only.`,
                         setShowAIDialog(false);
                         setIsGenerating(false);
                         setUploadedFiles([]);
-                        setAiSettings({
-                            subject: "",
-                            customSubject: "",
-                            topic: "",
-                            difficulty: "Medium",
-                            num_questions: 10,
-                            question_types: "mixed",
-                            focus_areas: "",
-                            quiz_style: "standard",
-                            ai_instructions: "",
-                            include_explanations: true,
-                            marks_per_short: "5"
-                        });
+                        setAiSettings(DEFAULT_AI_SETTINGS);
                     }
                 }}>
                     <DialogContent className="max-w-2xl max-h-[90vh] overflow-hidden flex flex-col p-0">
@@ -1940,151 +1977,47 @@ Return valid JSON only.`,
                                         />
                                     </div>
 
-                                    <div className="grid grid-cols-2 gap-4">
-                                        <div className="space-y-2">
-                                            <Label>Number of Questions</Label>
-                                            <Select
-                                                value={aiSettings.num_questions.toString()}
-                                                onValueChange={(val) => setAiSettings({...aiSettings, num_questions: parseInt(val)})}
-                                            >
-                                                <SelectTrigger>
-                                                    <SelectValue />
-                                                </SelectTrigger>
-                                                <SelectContent>
-                                                    {[5, 8, 10, 12, 15, 20, 25, 30].map(n => (
-                                                        <SelectItem key={n} value={n.toString()}>{n} questions</SelectItem>
-                                                    ))}
-                                                </SelectContent>
-                                            </Select>
-                                        </div>
-
-                                        <div className="space-y-2">
-                                            <Label>Question Types</Label>
-                                            <Select
-                                                value={aiSettings.question_types}
-                                                onValueChange={(val) => setAiSettings({...aiSettings, question_types: val})}
-                                            >
-                                                <SelectTrigger>
-                                                    <SelectValue />
-                                                </SelectTrigger>
-                                                <SelectContent>
-                                                    <SelectItem value="mixed">Mixed (MCQ + Short Answer)</SelectItem>
-                                                    <SelectItem value="mcq_only">MCQ Only</SelectItem>
-                                                    <SelectItem value="short_only">Short Answer Only</SelectItem>
-                                                    <SelectItem value="multipart">Extended response (a, b, c)</SelectItem>
-                                                </SelectContent>
-                                            </Select>
-                                        </div>
-
-                                        <div className="space-y-2">
-                                            <Label>Difficulty</Label>
-                                            <Select
-                                                value={aiSettings.difficulty}
-                                                onValueChange={(val) => setAiSettings({...aiSettings, difficulty: val})}
-                                            >
-                                                <SelectTrigger>
-                                                    <SelectValue />
-                                                </SelectTrigger>
-                                                <SelectContent>
-                                                    <SelectItem value="Easy">Easy — Basic recall</SelectItem>
-                                                    <SelectItem value="Medium">Medium — Application</SelectItem>
-                                                    <SelectItem value="Hard">Hard — Exam level</SelectItem>
-                                                </SelectContent>
-                                            </Select>
-                                        </div>
-
-                                        <div className="space-y-2">
-                                            <Label>Quiz Style</Label>
-                                            <Select
-                                                value={aiSettings.quiz_style}
-                                                onValueChange={(val) => setAiSettings({...aiSettings, quiz_style: val})}
-                                            >
-                                                <SelectTrigger>
-                                                    <SelectValue />
-                                                </SelectTrigger>
-                                                <SelectContent>
-                                                    <SelectItem value="standard">Standard VCE Style</SelectItem>
-                                                    <SelectItem value="exam_practice">Past Paper Exam Practice</SelectItem>
-                                                    <SelectItem value="revision">Quick Revision</SelectItem>
-                                                    <SelectItem value="challenge">Challenge / Stretch</SelectItem>
-                                                </SelectContent>
-                                            </Select>
-                                        </div>
-
-                                        {(aiSettings.question_types === "short_only" || aiSettings.question_types === "mixed") && (
-                                            <div className="space-y-2">
-                                                <Label>Marks per Short Answer</Label>
-                                                <Select
-                                                    value={aiSettings.marks_per_short}
-                                                    onValueChange={(val) => setAiSettings({...aiSettings, marks_per_short: val})}
-                                                >
-                                                    <SelectTrigger>
-                                                        <SelectValue />
-                                                    </SelectTrigger>
-                                                    <SelectContent>
-                                                        <SelectItem value="3">3 marks</SelectItem>
-                                                        <SelectItem value="5">5 marks</SelectItem>
-                                                        <SelectItem value="8">8 marks</SelectItem>
-                                                    </SelectContent>
-                                                </Select>
-                                            </div>
-                                        )}
-
-                                        <div className="space-y-2 flex items-center gap-3 pt-6">
-                                            <Checkbox
-                                                id="include_exp"
-                                                checked={aiSettings.include_explanations}
-                                                onCheckedChange={(v) => setAiSettings({...aiSettings, include_explanations: !!v})}
-                                            />
-                                            <label htmlFor="include_exp" className="text-sm font-medium cursor-pointer">Include answer explanations</label>
-                                        </div>
-                                    </div>
-
-                                    <div className="space-y-2">
-                                        <Label>Focus Areas (Optional)</Label>
-                                        <Input
-                                            value={aiSettings.focus_areas}
-                                            onChange={(e) => setAiSettings({...aiSettings, focus_areas: e.target.value})}
-                                            placeholder="e.g., mitosis, genetics, cell division — separate with commas"
-                                        />
-                                        <p className="text-xs text-muted-foreground/60">Tell the AI which specific areas of the document to focus on</p>
-                                    </div>
-
-                                    <div className="space-y-2">
-                                        <Label>Custom Instructions to AI (Optional)</Label>
-                                        <Textarea
-                                            value={aiSettings.ai_instructions}
-                                            onChange={(e) => setAiSettings({...aiSettings, ai_instructions: e.target.value})}
-                                            placeholder="e.g., 'Make the MCQ options tricky', 'Include diagram-based questions', 'Focus on definitions and formulas', 'Use the same style as my teacher's tests'"
-                                            rows={3}
-                                        />
-                                        <p className="text-xs text-muted-foreground/60">Any specific requests for how you want the quiz made</p>
-                                    </div>
+                                    <PaperFields settings={aiSettings} paper={paper} onChange={patchAi} />
                                 </div>
 
-                                {/* Preview */}
-                                {uploadedFiles.length > 0 && aiSettings.customSubject && (
-                                    <div className="card-soft bg-chart-4/5 border-chart-4/20 p-4">
-                                        <div className="flex items-start gap-3">
-                                            <Sparkles className="w-5 h-5 text-chart-4 mt-0.5" />
-                                            <div className="flex-1">
-                                                <h4 className="font-semibold text-foreground mb-2">Ready to Generate</h4>
-                                                <div className="text-sm text-muted-foreground space-y-1">
-                                                    <p>• {aiSettings.num_questions} questions ({aiSettings.difficulty})</p>
-                                                    <p>• {aiSettings.question_types === "mcq_only" ? "Multiple choice only" : aiSettings.question_types === "short_only" ? `Short answer only (${aiSettings.marks_per_short} marks each)` : `Mixed: ${Math.ceil(aiSettings.num_questions * 0.6)} MCQ + ${aiSettings.num_questions - Math.ceil(aiSettings.num_questions * 0.6)} short answer`}</p>
-                                                    <p>• Style: {aiSettings.quiz_style.replace('_', ' ')}</p>
-                                                    {aiSettings.focus_areas && <p>• Focus: {aiSettings.focus_areas}</p>}
-                                                    {aiSettings.ai_instructions && <p>• Custom: {aiSettings.ai_instructions.slice(0, 60)}{aiSettings.ai_instructions.length > 60 ? '…' : ''}</p>}
-                                                </div>
-                                            </div>
-                                        </div>
-                                    </div>
-                                )}
+                                <EmphasisFields settings={aiSettings} paper={paper} onChange={patchAi} />
                                 </div>
                             )}
                                 </div>
 
-                        <DialogFooter className="flex-shrink-0 border-t border-border p-6 bg-secondary/50">
+                        <DialogFooter className="flex-shrink-0 border-t border-border p-6 bg-secondary/50
+                            flex-col sm:flex-row sm:justify-between sm:items-center gap-3">
+                            {/* ── THE PAPER, STATED ───────────────────────────
+                                The old preview was a bullet list that only
+                                appeared once a file was attached AND a subject
+                                typed — so the two figures a student actually
+                                sits against, the total MARKS and the time, were
+                                never on screen while they were choosing. It is
+                                in the footer because the footer never scrolls
+                                away.
+
+                                A RANGE IS PRINTED AS A RANGE. With allocations
+                                varying, the total is not knowable in advance,
+                                and a midpoint printed as "38 marks" over a
+                                44-mark paper is the invented figure this app
+                                refuses everywhere else. When both handles sit
+                                on one value the two ends are equal and it reads
+                                as one number, because then it is one. */}
+                            <div className="min-w-0 text-left">
+                                <p className="font-display font-extrabold text-foreground text-sm tabular-nums">
+                                    {paper.total} question{paper.total === 1 ? "" : "s"}
+                                    <span className="text-muted-foreground font-bold"> · </span>
+                                    {paper.varied ? `${paper.marksLo}–${paper.marksHi} marks` : `${paper.marksLo} marks`}
+                                    <span className="text-muted-foreground font-bold"> · </span>
+                                    {paper.varied ? `~${paper.minutesLo}–${paper.minutesHi} min` : `~${paper.minutesLo} min`}
+                                </p>
+                                <p className="text-[11px] leading-snug text-muted-foreground">
+                                    {paper.mcq > 0 && `${paper.mcq} multiple choice`}
+                                    {paper.mcq > 0 && paper.short > 0 && " · "}
+                                    {paper.short > 0 && `${paper.short} written`}
+                                    {" — at "}{MINUTES_PER_MARK} min a mark
+                                </p>
+                            </div>
                             {(() => {
                                 // Priced WITH the pages, so the footer button and
                                 // the gate behind it agree about affordability.

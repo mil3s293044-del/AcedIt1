@@ -5,6 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Field, Segmented } from "@/components/shared/SetupControls";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { Brain, Play, Clock, CheckCircle, Upload, Wand2, Maximize, ArrowRight, ArrowLeft, RotateCcw, X, FolderOpen, Trash2, Sparkles, ChevronDown, ChevronUp, Zap } from "lucide-react";
 import { format } from "date-fns";
@@ -250,6 +251,22 @@ export default function ActiveRecall({ onSessionComplete, userSubjects: initialU
     // How many questions the student wants. Was hardcoded to whatever the
     // generator happened to return.
     const [questionCount, setQuestionCount] = useState(6);
+    /**
+     * HOW HARD, and HOW LONG EACH ONE GETS.
+     *
+     * `depth` closes a "collect nothing you don't use" inversion: the
+     * generation schema has declared `difficulty: basic|intermediate|advanced`
+     * since this file was written, and nothing anywhere ever set it — so the
+     * model picked for itself and a student who wanted to be stretched had no
+     * way to ask. It now reaches the prompt as well as the schema.
+     *
+     * `pace` deletes a mirror. Three minutes a question was written down
+     * TWICE — as `* 180` where the session clock is set and as `* 3` in the
+     * line under the buttons — so the estimate and the actual timer were two
+     * copies of one number that nobody could change.
+     */
+    const [depth, setDepth] = useState("intermediate");
+    const [pace, setPace] = useState(3);
     const [ownFlashcards, setOwnFlashcards] = useState([]);
     const [ownMaps, setOwnMaps] = useState([]);
     const [ownAssessments, setOwnAssessments] = useState([]);
@@ -368,6 +385,17 @@ export default function ActiveRecall({ onSessionComplete, userSubjects: initialU
         return urls.length ? urls : undefined;
     };
 
+    /**
+     * What each depth asks of the student. It is a BRIEF rather than an
+     * adjective: "make it harder" moves a model's wording and not its demand,
+     * so each one names the behaviour the question has to require.
+     */
+    const DEPTH_BRIEF = {
+        basic: "recall and recognition — name it, state it, define it. One retrieved fact per question.",
+        intermediate: "application — explain how or why, link two ideas, apply a principle to a case. The answer has to be reasoned rather than remembered.",
+        advanced: "evaluation and synthesis — weigh, justify, compare across topics, or work a multi-step problem. Exam-level demand.",
+    };
+
     const handleGenerateQuestions = async () => {
         // A chapter is source material too — requiring an UPLOAD would make the
         // book picker a control that cannot be used on its own.
@@ -413,7 +441,10 @@ export default function ActiveRecall({ onSessionComplete, userSubjects: initialU
                 feature: "active_recall",
                 prompt: `${getExaminerPrompt(selectedSubject)}
 
-Based on the uploaded study material (${sourceFiles.length} file(s)), create 8-12 active recall questions for ${selectedSubject}${topic ? ` focusing on ${topic}` : ''} that align with VCE Study Design and VCAA assessment criteria.${documentContext}
+Based on the uploaded study material (${sourceFiles.length} file(s)), create EXACTLY ${questionCount} active recall questions for ${selectedSubject}${topic ? ` focusing on ${topic}` : ''} that align with VCE Study Design and VCAA assessment criteria.${documentContext}
+
+DEPTH: ${DEPTH_BRIEF[depth] || DEPTH_BRIEF.intermediate}
+Set "difficulty" on every question to "${depth}".
 
 CRITICAL - Use proper VCE command terms:
 - IDENTIFY/STATE questions (require brief facts only)
@@ -514,7 +545,7 @@ ${STIMULUS_RULE_INLINE}`,
         setUserAnswers(new Array(questionsToUse.length).fill(""));
         setCurrentQuestionIndex(0);
         setSessionStartTime(Date.now());
-        setTimeLeft(questionsToUse.length * 180);
+        setTimeLeft(questionsToUse.length * pace * 60);
         setPhase("active");
         setShowFocusPrompt(false);
         recordStudyAndGetStreak().catch(() => {});
@@ -797,24 +828,41 @@ For each answer:
                 </div>
 
                 {/* How many questions. The session used to be however many the
-                    generator happened to return. */}
-                <div className="space-y-1.5 mt-4">
-                    <Label className="text-sm font-medium text-muted-foreground">How many questions</Label>
-                    <div className="flex gap-1.5" data-question-count>
-                        {[4, 6, 8, 12].map(n => (
-                            <button key={n} onClick={() => setQuestionCount(n)}
-                                aria-pressed={questionCount === n}
-                                className={`flex-1 rounded-xl border-2 py-2 text-sm font-bold transition-colors ${
-                                    questionCount === n
-                                        ? "border-chart-4 bg-chart-4/10 text-foreground"
-                                        : "border-border text-muted-foreground hover:text-foreground"}`}>
-                                {n}
-                            </button>
-                        ))}
+                    generator happened to return. The row is the shared control
+                    now — this and Blurting's duration row were two copies of
+                    one button, and the quiz dialog had neither. */}
+                <div className="mt-4 space-y-4">
+                    <div data-question-count>
+                        <Field label="How many questions" tone="chart4">
+                            <Segmented tone="chart4" value={questionCount} onChange={setQuestionCount}
+                                options={[4, 6, 8, 12].map(n => ({ value: n, label: String(n) }))} />
+                        </Field>
                     </div>
-                    <p className="text-[11px] text-muted-foreground">
-                        About {Math.round(questionCount * 3)} minutes at three minutes a question.
-                    </p>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        {/* ── HOW HARD ────────────────────────────────────
+                            The schema has carried `basic|intermediate|advanced`
+                            the whole time and nothing set it, so the model
+                            chose and nobody could ask to be stretched. */}
+                        <Field label="How hard" tone="chart4">
+                            <Segmented tone="chart4" size="sm" value={depth} onChange={setDepth}
+                                options={[
+                                    { value: "basic",        label: "Recall",  sub: "name and state" },
+                                    { value: "intermediate", label: "Apply",   sub: "explain and link" },
+                                    { value: "advanced",     label: "Stretch", sub: "evaluate" },
+                                ]} />
+                        </Field>
+                        {/* The clock and this estimate are ONE number now. */}
+                        <Field label="Time per question" tone="chart4"
+                            hint={`About ${questionCount * pace} minutes for the session.`}>
+                            <Segmented tone="chart4" size="sm" value={pace} onChange={setPace}
+                                options={[
+                                    { value: 2, label: "2 min", sub: "quick" },
+                                    { value: 3, label: "3 min", sub: "normal" },
+                                    { value: 5, label: "5 min", sub: "written" },
+                                ]} />
+                        </Field>
+                    </div>
                 </div>
 
                 {/* ── Working from ─────────────────────────────────────────

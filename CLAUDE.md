@@ -5423,6 +5423,214 @@ Draw it with `scripts/_floorProbe.jsx?v=tools`, in BOTH themes, and at 390. The
 probe does not follow `colorScheme`, so a dark screenshot needs
 `documentElement.classList.add("dark")` or it silently renders light twice.
 
+## The setup screens asked for one paper and offered one mark
+
+**"Make the quiz set-up more comprehensive, to build quizzes that are more
+diverse and more effective. Like when it asks marks per short answer, it should
+be flexible, not just one option per quiz. Maybe add some sliders. Also for the
+active recall and blurting set-up."**
+
+### ONE FIGURE FOR A WHOLE PAPER IS THE `q.marks || 5` BUG, ASKED FOR
+
+The generator offered **Marks per Short Answer: 3 / 5 / 8** — one allocation for
+every written question on the paper. That is the same shape this file already
+records fixing three times in the MARKING half, where a hand-rolled
+`q.type === "mcq" ? 1 : (q.marks || 5)` read 5 for a question worth nine: a
+single number standing in for a paper. It matters more here than there, because
+**marks are the currency** — a score is a percentage of marks AVAILABLE — so a
+flat 5 made a one-line definition count exactly what a four-mark explain
+counted, and no real paper has ever been set that way.
+
+`mark_lo`/`mark_hi` is a RANGE (`src/lib/quizSetup.js`) and the generator is
+told to vary inside it. **Nothing downstream had to change**: the player, the
+marker, `questionMark` and `normaliseQuestion` have read a per-question
+allocation the whole time — the dialog was the one place pretending there was
+only one. Both handles on one value still works, because a control that cannot
+express the setting it replaced is a downgrade.
+
+**`markRule` asks for a SPREAD and weights it.** A model handed "2 to 6" with no
+further instruction returns a uniform scatter, and one told "average 4" writes
+twelve four-mark questions. It names both ends, says more questions sit at the
+low end than the high, and states the thing that makes an allocation real: the
+model answer has to hold exactly that many creditable points, because *a 6-mark
+answer is not a 2-mark answer written at greater length*.
+
+### A TOTAL THAT CANNOT BE KNOWN IS NEVER PRINTED AS ONE NUMBER
+
+The old preview was a bullet list that appeared only once a file was attached
+AND a subject typed, so **the two figures a student actually sits against — the
+total marks and the time — were never on screen while they were choosing.** The
+footer prints them now, and the footer never scrolls away.
+
+With allocations varying, the total is a RANGE, and `paperShape` returns both
+ends: every written question lands inside [lo, hi], so the paper cannot fall
+outside them. Printing a midpoint as "38 marks" over a 44-mark paper is the
+invented figure `closingFacts` refuses on the first-run screen and the console
+refuses on its own lattice. `varied` is what the strip reads to choose between
+"38 marks" and "17–37 marks"; when both handles sit on one value the two ends
+are equal and it reads as one number, because then it IS one.
+
+The time is a RULE rather than a range — `MINUTES_PER_MARK` is VCAA's own rough
+working rate and the strip PRINTS it ("at 1.5 min a mark"), so a student can
+multiply it out and check us. That is the `xpRates` lesson: a published figure
+nobody can verify is decoration.
+
+### "MIXED" WAS A HARD-CODED 0.6 IN TWO PLACES AND A QUESTION NOBODY WAS ASKED
+
+`Math.ceil(num_questions * 0.6)` lived inside the prompt string AND was restated
+in the preview — two copies of a number the student never chose and could not
+move. It is a slider now and `splitFor` is the only place it is applied, so the
+counts in the prompt and the counts under the button come off one call. A mixed
+paper also always holds at least one of each: 95% of two questions is two, which
+is the control saying "mixed" and the paper arriving all multiple choice.
+
+### THE COMMAND TERMS WERE IN THE REPO AND THE GENERATOR HAD NEVER SEEN THEM
+
+`subjectExaminerPrompts.js` carries the VCAA command-term table and six surfaces
+import it. The thing that WRITES the questions was not one of them — **the exact
+gap that was closed on the MARKER one release ago, still open one file over.**
+So a student could not ask for "explain and evaluate" rather than "define and
+state", which is most of the difference between a paper that stretches them and
+a paper that does not.
+
+The table was PROSE, so offering it as a control meant typing fifteen terms out
+a second time. `COMMAND_TERMS` is the data now and `COMMAND_TERMS_BLOCK` is
+derived from it: the string every examiner prompt sends is **character-for-
+character what it always was**, verified by diffing a built prompt either side
+of the change. `commandTermRule` drops an unknown id rather than passing a bare
+word through to a model, and it ASKS rather than forces — a paper made only of
+"evaluate" is not a paper. Capped at `TERM_MAX`, because leaning on all fifteen
+is no emphasis at all.
+
+### THE STIMULUS TOGGLE MAY NEVER TURN THE STIMULUS *RULE* OFF
+
+`STIMULUS_RULE` exists because the app once asked about Source B, never showed
+it, and then **marked the student down for the gap**. A checkbox reading
+"include source material" is one careless edit from gating that rule behind it
+and reopening the whole failure. So `stimulusAsk` only ever ADDS a request, it
+repeats the refusal rather than relaxing it ("still never invent a source"), and
+the test asserts that EVERY `${STIMULUS_RULE}` in Quizzes.jsx is a bare
+interpolation alone on its line — which matters, because the rule is
+interpolated into two prompts and the first draft of that check stopped at the
+first match and passed with the reshuffle one wrapped in a ternary.
+
+### SIX DROPDOWNS ARE A FORM, AND THE SAME ROW WAS WRITTEN TWICE ELSEWHERE
+
+A dropdown hides its options until you open it, so for a closed set of three or
+four it is strictly worse than a row that shows all of them — and six of them
+stacked is the "grid of those is precisely what makes an app look generated"
+shape this file already names about the old quiz list. Meanwhile Active Recall
+had a hand-rolled `[4, 6, 8, 12]` row and Blurting had the same button for
+`[5, 10, 15, 20]`: one control, two copies, and the richest setup screen in the
+app had neither.
+
+`src/components/shared/SetupControls.jsx` is the one set — `Field`, `Segmented`,
+`StepSlider`, `RangeSlider`, `ChipToggle` — and all three screens draw it. The
+subject picker keeps its `<Select>`, because that list is long.
+
+- **A SLIDER PRINTS ITS VALUE ON THE LABEL ROW**, never under the track: the
+  value is what is being set, so it sits at full weight where the eye already
+  is. It is also what makes the two-handle range readable — "2 to 6 marks" is a
+  sentence; two numbers floating under two handles is a puzzle.
+- **A SEGMENTED ROW PRINTS NOTHING**, because which cell is lit already says it.
+  The question-count field briefly carried both and printed "6" beside a row
+  with 6 highlighted.
+- **`ui/slider.jsx` RENDERED ONE THUMB WHATEVER IT WAS HANDED.** The shadcn
+  default has a single `<Thumb>`, so a two-value range drew one handle and the
+  second end could never be dragged — it renders perfectly and is simply the
+  wrong control. It maps over the value now. It had zero consumers, which is why
+  fixing it was safe and why adding a second slider beside it would have been
+  the mirror this codebase keeps deleting.
+- **`tone` is a NAMED PRESET** (`AceShuffle`'s ink rule): track, fill and thumbs
+  are one decision, and splitting them across three props is how half of it gets
+  made.
+
+**FOUR CELLS OF WORDS DO NOT FIT A PHONE, and only the screenshot said so.** At
+390 a four-option row gives each cell about 75px, and "Written", "Extended",
+"Standard" and "Revision" all came back **clipped mid-word** — which reads as a
+rendering fault rather than a choice, the same complaint the mistake bank's cut
+questions drew. Shortening the labels would make the control cryptic, so the ROW
+wraps: two columns below `sm`, one row from `sm` up, and only for four or more
+(three in a 2-up grid leaves an orphan). Difficulty and Style also came OUT of a
+two-column row for the same reason — side by side, Style's four cells got a
+quarter of half a dialog, about 55px of text each, and clipped at `sm` too.
+
+### `QuizSetupFields` EXISTS SO THE CONTROLS CAN BE LOOKED AT
+
+They were 200 lines inline in a 2,200-line auth-gated page, so the one thing
+that settles a layout — opening it — needed a login. As a component,
+`scripts/_floorProbe.jsx?v=quizsetup` mounts the REAL `PaperFields` /
+`EmphasisFields` with the real `paperShape` behind them and the footer strip
+drawn underneath, at both themes and at 390. Two exports rather than one,
+because the two blocks answer different questions: everything in `PaperFields`
+changes the arithmetic under the button, and everything in `EmphasisFields`
+changes the PROMPT and nothing else.
+
+`DEFAULT_AI_SETTINGS` is also one literal now. It was written out three times —
+initial state, the reset after a generate, the reset on close — so a field added
+to one was a field the other two silently dropped, two feet from the control
+that sets it.
+
+### Active Recall: a depth the schema had declared and nothing ever set
+
+- **`difficulty: basic|intermediate|advanced` has been in the generation schema
+  since this file was written and nothing in the app ever set it.** The model
+  picked for itself and a student who wanted stretching had no way to ask —
+  "collect nothing you don't use", inverted, for the sixth recorded time. It is
+  a control now and reaches the prompt as a BRIEF rather than an adjective:
+  "make it harder" moves a model's wording and not its demand, so each level
+  names the behaviour the question has to require.
+- **THE COUNT NEVER REACHED THE GENERATOR AT ALL.** The prompt asked for "8-12
+  active recall questions" whatever the student had picked, and the result was
+  sliced afterwards — so choosing 4 paid for twelve and choosing 12 could come
+  back with eight.
+- **THREE MINUTES A QUESTION WAS WRITTEN DOWN TWICE** — as `* 180` where the
+  session clock is set and as `* 3` in the estimate under the buttons. Two
+  copies of one number, neither of which anybody could change. `pace` is the one
+  number and both read it.
+
+### Blurting: what to write, and how hard it is marked
+
+A blurt was always "everything on the topic, marked one way", and both halves
+are real choices the technique is better for making. The marking prompt already
+asked "can the student EXPLAIN relationships, not just STATE facts?" without
+ever being told which the student was going for.
+
+`focus` picks the lens — everything / the links / key terms / evidence — and it
+is what the WRITING screen asks for as well as what the marking weighs, because
+a student told to brain-dump everything and then marked on evidence has been
+graded on a question nobody asked them.
+
+**STRICTNESS IS RECORDED WITH THE RESULT.** The completeness percentage is the
+figure this screen is built around, and a percentage marked three ways that does
+not say which is three numbers a student cannot compare — the "two surfaces, one
+question" failure, inside a single panel. The feedback carries `marked_at` and
+the panel prints it beside the "marked against" line that is already there for
+exactly the same reason. **No level goes soft on the gaps**: every one still
+names what was missed, or the gentle setting becomes a screen telling a student
+they are fine.
+
+One thing fell out by accident: the writing screen said *"Don't stop, don't look
+at notes"* — a banned word, twice, on a screen in the product.
+
+### The guards, and the one that passed with the bug in
+
+`quizSetup.test.mjs` is 30 checks and **21 of 22 injections bit on the first
+pass.** The one that did not is the one that mattered most: the stimulus check
+matched a bare `${STIMULUS_RULE}` anywhere in the file, and the rule is
+interpolated TWICE, so wrapping the second one in a ternary left the first to
+satisfy the regex. It walks every line carrying the name now and requires each
+to be the bare interpolation. That is the "a scan that matches somewhere in a
+large span is not a scan" lesson for the fourth time, and the only way to find
+it was to break the second site specifically.
+
+**And `git checkout --` is not an undo in a session with new files.** The first
+injection sweep restored each file with `git checkout`, which reverted
+`Quizzes.jsx` to HEAD and took every edit of this release with it — then crashed
+on `quizSetup.js`, which git had never heard of, leaving one injected line
+behind in it. Snapshot the files to a scratch copy and restore from that; the
+test suite then catches the leftover, which it did.
+
 ## A canvas is not a clock
 
 **The first wiring timed the session from when the map was OPENED**, clamped at
@@ -5931,6 +6139,17 @@ somebody opening the pricing page and the gate in the same sitting.
   published as a rule rather than a range and pinned to `server.mjs`'s own
   calculators by parsing and running them. The hand-typed table it replaced was
   wrong in four places and advertised two features the UI cannot reach
+- `src/lib/quizSetup.js` + `quizSetup.test.mjs`,
+  `src/components/quizzes/QuizSetupFields.jsx`,
+  `src/components/shared/SetupControls.jsx` — what the generator is ASKED for:
+  marks as a range the paper varies inside rather than one figure for every
+  written question, the MCQ/written balance that used to be a hard-coded 0.6 in
+  two places, the command-term emphasis the generator had never been shown, and
+  the live "12 questions · 17–37 marks · ~25–55 min" strip the prompt is built
+  from. `SetupControls` is the one segmented row and slider all three setup
+  screens draw; `ui/slider.jsx` renders a thumb per value, which it did not.
+  Draw it with `scripts/_floorProbe.jsx?v=quizsetup`, both themes and at 390 —
+  four cells of words do not fit a phone and only the screenshot says so
 - `src/lib/mindmapXp.js` + `mindmapXp.test.mjs` — what a sitting on the canvas
   is worth: active minutes floored by what the map actually GREW, a pure
   decision because it pays, and a reason on every refusal. `MindMaps.jsx` stamps

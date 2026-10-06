@@ -8,6 +8,8 @@ import { Swords as ReachSwords, ListChecks as ReachList,
     Trophy as ReachTrophy, GraduationCap as ReachCap } from "lucide-react";
 import React from "react";
 import ReactDOM from "react-dom/client";
+import { PaperFields, EmphasisFields } from "@/components/quizzes/QuizSetupFields";
+import { paperShape, MINUTES_PER_MARK } from "@/lib/quizSetup";
 import "@/index.css";
 import AceDeal from "@/components/market/AceDeal";
 import TakeSide from "@/components/market/TakeSide";
@@ -1096,6 +1098,71 @@ views.setup = () => (
         </div>
     </div>
 );
+
+/* ── ?v=quizsetup — the REAL quiz setup controls, live ──────────────────────
+ *
+ * The generator's dialog is 200 lines inside a 2,200-line auth-gated page, so
+ * the one thing that settles a layout — looking at it — needed a login. These
+ * are the actual `PaperFields` / `EmphasisFields` with the actual
+ * `paperShape` behind them, in a container the width of the dialog, with the
+ * footer strip drawn underneath exactly as the dialog draws it.
+ *
+ * Drag the handles: the summary has to move with them, and at 390 the four
+ * segmented cells and the fifteen command-term chips are the two things that
+ * can wrap badly. Both themes — the probe does not follow `colorScheme`.
+ */
+function QuizSetupProbe() {
+    const [s, setS] = React.useState({
+        difficulty: "Medium", num_questions: 12, question_types: "mixed",
+        focus_areas: "", quiz_style: "standard", ai_instructions: "",
+        include_explanations: true, include_stimulus: true,
+        command_terms: ["explain", "evaluate"], mark_lo: 2, mark_hi: 6, mcq_share: 60,
+    });
+    const patch = (p) => setS(prev => ({ ...prev, ...p }));
+    const paper = paperShape({
+        types: s.question_types, count: s.num_questions, mcqShare: s.mcq_share,
+        markLo: s.mark_lo, markHi: s.mark_hi,
+    });
+    return (
+        <div className="min-h-screen bg-background p-4 sm:p-6">
+            <div className="max-w-2xl mx-auto card-soft overflow-hidden">
+                <div className="px-6 py-4 border-b border-border bg-chart-4/5">
+                    <p className="font-display font-extrabold text-2xl text-foreground">AI Quiz Generator</p>
+                </div>
+                <div className="p-6 space-y-6">
+                    <div className="space-y-4">
+                        <span className="text-base font-semibold text-foreground">2. Configure Quiz</span>
+                        <PaperFields settings={s} paper={paper} onChange={patch} />
+                    </div>
+                    <EmphasisFields settings={s} paper={paper} onChange={patch} />
+                </div>
+                {/* The strip, exactly as the dialog footer draws it. */}
+                <div className="border-t border-border p-6 bg-secondary/50 flex flex-col sm:flex-row
+                    sm:justify-between sm:items-center gap-3">
+                    <div className="min-w-0 text-left">
+                        <p className="font-display font-extrabold text-foreground text-sm tabular-nums">
+                            {paper.total} question{paper.total === 1 ? "" : "s"}
+                            <span className="text-muted-foreground font-bold"> · </span>
+                            {paper.varied ? `${paper.marksLo}–${paper.marksHi} marks` : `${paper.marksLo} marks`}
+                            <span className="text-muted-foreground font-bold"> · </span>
+                            {paper.varied ? `~${paper.minutesLo}–${paper.minutesHi} min` : `~${paper.minutesLo} min`}
+                        </p>
+                        <p className="text-[11px] leading-snug text-muted-foreground">
+                            {paper.mcq > 0 && `${paper.mcq} multiple choice`}
+                            {paper.mcq > 0 && paper.short > 0 && " · "}
+                            {paper.short > 0 && `${paper.short} written`}
+                            {" — at "}{MINUTES_PER_MARK} min a mark
+                        </p>
+                    </div>
+                    <span className="h-11 px-5 inline-flex items-center rounded-xl bg-chart-4 text-white font-bold text-sm">
+                        Make the quiz
+                    </span>
+                </div>
+            </div>
+        </div>
+    );
+}
+views.quizsetup = () => <QuizSetupProbe />;
 
 /* ── ?v=ranked — the five ATAR components, each with a door ─────────────────
  *

@@ -25,22 +25,53 @@ const SHARED_LATEX_RULES = `MATHEMATICAL NOTATION (REQUIRED):
 
 const VCAA_FRAMING = `You are a senior VCAA assessor. Write exactly as you would for a real VCE study design and exam paper. Use the exact terminology, mark allocation conventions, and command terms from VCAA examiner's reports. Be precise, formal, and technically correct. Never add disclaimers, hedge, or use casual language. Treat the student as a Year 12 candidate aiming for an A+ grade.`;
 
-const COMMAND_TERMS = `VCAA COMMAND TERMS — match the exact behaviour expected:
-- DEFINE: give a precise meaning, no examples needed.
-- DESCRIBE: state the features/characteristics with relevant detail.
-- EXPLAIN: give reasons why or how something happens, showing causation.
-- ANALYSE: identify components and the relationships between them.
-- COMPARE: identify similarities AND differences.
-- DISTINGUISH: identify the differences only.
-- EVALUATE: weigh evidence for and against, then make a judgement.
-- JUSTIFY: support a position with reasoned argument and evidence.
-- DISCUSS: present multiple perspectives, then synthesise a view.
-- OUTLINE: give the main features in brief.
-- IDENTIFY: name or recognise.
-- STATE: give without elaboration.
-- CALCULATE: work out using mathematics, showing all steps.
-- DETERMINE: arrive at a final answer through reasoning or calculation.
-- HENCE: use the previous result to derive the next.`;
+/**
+ * The command terms, as DATA — and the prompt block derived from them.
+ *
+ * This was a prose string and nothing could read it back, so the quiz
+ * generator could not offer a student "lean on explain and evaluate" without
+ * typing the fifteen terms out a second time. A list written down twice is the
+ * mirror this codebase keeps deleting, so the list is the source and
+ * `COMMAND_TERMS_BLOCK` is built from it: the string every examiner prompt
+ * sends is character-for-character what it always was.
+ */
+export const COMMAND_TERMS = [
+    { id: "define", term: "Define", behaviour: "give a precise meaning, no examples needed." },
+    { id: "describe", term: "Describe", behaviour: "state the features/characteristics with relevant detail." },
+    { id: "explain", term: "Explain", behaviour: "give reasons why or how something happens, showing causation." },
+    { id: "analyse", term: "Analyse", behaviour: "identify components and the relationships between them." },
+    { id: "compare", term: "Compare", behaviour: "identify similarities AND differences." },
+    { id: "distinguish", term: "Distinguish", behaviour: "identify the differences only." },
+    { id: "evaluate", term: "Evaluate", behaviour: "weigh evidence for and against, then make a judgement." },
+    { id: "justify", term: "Justify", behaviour: "support a position with reasoned argument and evidence." },
+    { id: "discuss", term: "Discuss", behaviour: "present multiple perspectives, then synthesise a view." },
+    { id: "outline", term: "Outline", behaviour: "give the main features in brief." },
+    { id: "identify", term: "Identify", behaviour: "name or recognise." },
+    { id: "state", term: "State", behaviour: "give without elaboration." },
+    { id: "calculate", term: "Calculate", behaviour: "work out using mathematics, showing all steps." },
+    { id: "determine", term: "Determine", behaviour: "arrive at a final answer through reasoning or calculation." },
+    { id: "hence", term: "Hence", behaviour: "use the previous result to derive the next." },
+];
+
+const COMMAND_TERMS_BLOCK = "VCAA COMMAND TERMS — match the exact behaviour expected:\n"
+    + COMMAND_TERMS.map(t => `- ${t.term.toUpperCase()}: ${t.behaviour}`).join("\n");
+
+/**
+ * The emphasis a generator is given when a student picks terms to lean on.
+ *
+ * It ASKS rather than forces: a paper made only of "evaluate" is not a paper,
+ * and a subject's material will not always support every term somebody taps.
+ * Unknown ids are dropped rather than passed through, so a renamed term cannot
+ * reach a model as a bare word with no behaviour attached to it.
+ */
+export function commandTermRule(ids = []) {
+    const want = COMMAND_TERMS.filter(t => ids.includes(t.id));
+    if (!want.length) return "";
+    return `=== COMMAND TERMS TO LEAN ON ===
+Build most of the written questions around these, using the term itself in the question:
+${want.map(t => `- ${t.term.toUpperCase()}: ${t.behaviour}`).join("\n")}
+Use other command terms where the material calls for them — the point is the balance of the paper, not a ban on the rest.`;
+}
 
 // ─── Subject-specific examiner profiles ───────────────────────────────────────
 const PROFILES = {
@@ -430,7 +461,7 @@ export function getExaminerPrompt(subjectName) {
         profile.keyTerms?.length ? `\nKEY VCAA TERMINOLOGY (use these accurately): ${profile.keyTerms.join(", ")}` : "",
         profile.examplePromptStyle ? `\nQUESTION STYLE: ${profile.examplePromptStyle}` : "",
         profile.commonMistakes ? `\nCOMMON STUDENT ERRORS TO AVOID/CALL OUT: ${profile.commonMistakes}` : "",
-        `\n${COMMAND_TERMS}`,
+        `\n${COMMAND_TERMS_BLOCK}`,
         profile.mathHeavy ? `\n${SHARED_LATEX_RULES}` : "",
     ].filter(Boolean);
     return sections.join("\n");
@@ -454,4 +485,4 @@ export function getProfiledSubjects() {
     return Object.keys(PROFILES).filter(k => k !== "_default");
 }
 
-export default { getExaminerPrompt, subjectIsMathHeavy, getLatexRules, getProfiledSubjects };
+export default { getExaminerPrompt, subjectIsMathHeavy, getLatexRules, getProfiledSubjects, COMMAND_TERMS, commandTermRule };
