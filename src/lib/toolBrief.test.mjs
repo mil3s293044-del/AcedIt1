@@ -516,7 +516,16 @@ ok("the dashboard draws all three blocks", () => {
     assert.ok(src.includes("<ToolBrief"), "the direction cards lead");
     assert.ok(src.includes("toolsByPhase(CHAT_TOOLS)"), "the toolkit is the real catalogue, grouped");
     assert.ok(/recent\.length > 0/.test(src), "an empty Recent band must not be drawn");
-    assert.ok(src.includes("<RecentRow"), "the conversations are drawn");
+    // THE PROPERTY, NOT THE COMPONENT'S NAME. This asserted `<RecentRow` and
+    // went red when the saved conversations became a divided table rather than
+    // three more cards — a rename, with the behaviour identical. A guard that
+    // pins a symbol makes the suite fail for being out of date rather than for
+    // a real defect, and the obvious way to green is to put the old name back:
+    // the lesson `xpRates.test.mjs` learned when it pinned the mind-map wall
+    // clock and `reachable.test.mjs` learned about writing a page's name down.
+    // What matters is that the list is iterated and that reopening is wired.
+    assert.ok(/recent\.map\(|items=\{recent\}/.test(src), "the conversations are never drawn");
+    assert.ok(/onOpen(Chat)?=\{onOpenChat\}/.test(src), "a conversation cannot be reopened");
     const page = stripped("../pages/AITools.jsx");
     assert.ok(/import \{ recentChats \} from "@\/lib\/aiChats"/.test(page));
     assert.ok(/import \{ toolBrief \} from "@\/lib\/toolBrief"/.test(page));
