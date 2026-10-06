@@ -37,7 +37,7 @@ import ToolsDashboard from "@/components/ai_tools/ToolsDashboard";
 import AceShuffle from "@/components/ace/AceShuffle";
 import { isPremium } from "@/lib/tierAccess";
 import { toolBrief } from "@/lib/toolBrief";
-import { recentChats } from "@/lib/aiChats";
+import { recentChats, toolUsage } from "@/lib/aiChats";
 import { loadSavedResults } from "@/lib/saveResult";
 import { deckCards, isBankCard } from "@/lib/mistakeBank";
 import { isReady, todayISO } from "@/lib/due";
@@ -113,6 +113,9 @@ export default function AITools() {
     }, [rows]);
 
     const recent = useMemo(() => recentChats(convs), [convs]);
+    // UNCAPPED, unlike `recent`: four is the length of a list, not the most
+    // anybody has ever used a tool. Same rows, same predicate.
+    const usage = useMemo(() => toolUsage(convs), [convs]);
 
     /* ── Opening the chat ───────────────────────────────────────────────── */
 
@@ -223,6 +226,7 @@ export default function AITools() {
         <ToolsDashboard
             cards={cards}
             recent={recent}
+            usage={usage}
             locked={!premium}
             loading={rows === null}
             onOpenCard={openCard}

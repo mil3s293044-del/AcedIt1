@@ -40,7 +40,7 @@ import { PrankStageProvider } from "@/lib/PrankStage";
 import ToolsDashboard from "@/components/ai_tools/ToolsDashboard";
 import QuestionPanel from "@/components/mistakes/QuestionPanel";
 import { toolBrief } from "@/lib/toolBrief";
-import { recentChats } from "@/lib/aiChats";
+import { recentChats, toolUsage } from "@/lib/aiChats";
 
 /** A real ISO day N days out, so the assessment card has a date to count to. */
 const inDaysISO = (n) => {
@@ -602,7 +602,7 @@ const TOOLS_ROWS = {
 
 const TOOLS_CARDS = toolBrief({ ...TOOLS_ROWS, isReady: () => true });
 
-const TOOLS_RECENT = recentChats([
+const TOOLS_CONVS = [
     {
         id: "c1", tool_type: "concept_explainer", title: "Explain why graphite conducts electricity",
         subject_name: "Chemistry", created_date: "2026-10-01T09:00:00.000Z",
@@ -627,7 +627,16 @@ const TOOLS_RECENT = recentChats([
     },
     // Opened and never sent: not a conversation, and it must not take a slot.
     { id: "c4", tool_type: "essay_planner", input_data: { messages: [] } },
-]);
+    // A SECOND thread on one tool, so the usage tally has something to count
+    // past one — "1 chat" everywhere would hide an off-by-one completely.
+    {
+        id: "c5", tool_type: "concept_explainer", title: "Le Chatelier, again",
+        subject_name: "Chemistry", created_date: "2026-09-20T08:00:00.000Z",
+        input_data: { messages: [{ role: "user", content: "shift the equilibrium" }] },
+    },
+];
+const TOOLS_RECENT = recentChats(TOOLS_CONVS);
+const TOOLS_USAGE = toolUsage(TOOLS_CONVS);
 
 function ToolsView() {
     const noop = () => {};
@@ -635,7 +644,8 @@ function ToolsView() {
         <MemoryRouter>
         <div className="bg-background min-h-screen">
             {[
-                ["An account with work behind it", { cards: TOOLS_CARDS, recent: TOOLS_RECENT, locked: false }],
+                ["An account with work behind it",
+                    { cards: TOOLS_CARDS, recent: TOOLS_RECENT, usage: TOOLS_USAGE, locked: false }],
                 ["Locked — a free account reads the same diagnosis", { cards: TOOLS_CARDS, recent: [], locked: true }],
                 ["Nothing measured yet — the first week", { cards: [], recent: [], locked: false }],
             ].map(([title, props]) => (

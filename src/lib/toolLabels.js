@@ -64,21 +64,25 @@ export const PHASES = [
         id: "start",
         label: "Before you start",
         blurb: "Understand the material, and work out what to write.",
+        spine: "bg-chart-3", ink: "text-chart-3",
     },
     {
         id: "work",
         label: "While you work",
         blurb: "Stuck in the middle of a question, or unsure what it is asking.",
+        spine: "bg-xp", ink: "text-xp",
     },
     {
         id: "after",
         label: "After you write",
         blurb: "Your answer, read the way an assessor reads it.",
+        spine: "bg-chart-4", ink: "text-chart-4",
     },
     {
         id: "test",
         label: "To test yourself",
         blurb: "Find out whether it has actually stuck.",
+        spine: "bg-primary", ink: "text-primary",
     },
 ];
 
@@ -113,6 +117,29 @@ export const isLiveTool = (id) =>
 export const phaseOf = (id) => TOOL_PHASE[String(id || "")] || "";
 
 /**
+ * The colour a tool is drawn in, which is its PHASE and never its own accent.
+ *
+ * ─── ONE DEVICE MAY NOT MEAN TWO THINGS ON ONE SCREEN ───────────────────────
+ * `chatTools.js` gives every tool an `accentSolid`/`accentText` of its own, and
+ * the dashboard used both: the direction rows took the TOOL's hue as a spine
+ * while the toolkit grouped the same tools into four phases. So "Teach It Back"
+ * was blue at the top of the page and sat in a band organised by something else
+ * below it — twelve hues against four, with nothing saying which mattered.
+ *
+ * Colour means WHEN YOU REACH FOR IT, everywhere here. A tool has exactly one
+ * on this page, a run of rows sharing a spine reads as a BAND (the way
+ * QueueRow's tiers do) rather than as twelve identities, and the glyphs still
+ * tell a repeated set apart by SHAPE, which is the stronger channel anyway.
+ *
+ * The per-tool accents are untouched and still used by the chat.
+ */
+const PHASE_BY_ID = Object.fromEntries(PHASES.map((p) => [p.id, p]));
+
+/** `{ spine, ink }` for a tool, or the neutral pair for one with no phase. */
+export const toneForTool = (id) =>
+    PHASE_BY_ID[phaseOf(id)] || { spine: "bg-muted", ink: "text-muted-foreground" };
+
+/**
  * Tools grouped into the phases, in `PHASES` order.
  *
  * Takes the catalogue rather than reading it, because the catalogue is a `.jsx`
@@ -131,5 +158,5 @@ export function toolsByPhase(tools = []) {
 
 export default {
     TOOL_LABELS, RETIRED_TOOLS, PHASES, TOOL_PHASE,
-    labelForTool, isLiveTool, phaseOf, toolsByPhase,
+    labelForTool, isLiveTool, phaseOf, toneForTool, toolsByPhase,
 };

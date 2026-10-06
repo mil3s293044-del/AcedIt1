@@ -5202,16 +5202,17 @@ halves never shared a grid.** And the four PHASES, which are the best idea on
 the page, were drawn as four identical bold headings with a rule beside each: a
 sequence, rendered as a list.
 
-**THREE BLOCKS, THREE SHAPES.** A SIGNAL carries a coloured spine and no glyph;
-an INSTRUMENT carries a glyph plate and no spine; a saved conversation is a row
-in a divided table with fixed columns. Told apart before a word is read — the
-spine idiom Subjects, the Quizzes shelf and QueueRow already use, and the
-fixed-column lesson the Ranked board records about what makes a list read as
-something somebody designed.
+**THREE BLOCKS, THREE SHAPES.** A SIGNAL is a full-measure row leading with the
+fact at 15px; an INSTRUMENT is a compact row on fixed columns with its usage
+printed on the right; a saved conversation is a row in a divided table. All
+three carry a coloured SPINE and that colour is the phase — the idiom Subjects,
+the Quizzes shelf and QueueRow already use — and the fixed columns are the
+lesson the Ranked board records about what makes a list read as something
+somebody designed rather than as a stack of divs.
 
 ### It is the SECOND room, and the mechanism is the floor's
 
-`.console` scopes ~16 `--console-*` tokens (index.css) on ONE wrapper
+`.console` scopes ~12 `--console-*` tokens (index.css) on ONE wrapper
 (`Console.jsx`), exactly as `.floor` does for Compete — custom properties
 inherit down the tree while `position: fixed` escapes layout rather than the
 cascade, so anything opened from inside the room reads the room's ink without
@@ -5238,28 +5239,93 @@ delete the differentiation that justifies them existing. What went is the
 chevron — the whole card is the button, so an arrow in the corner restated the
 affordance twelve times. The lock stays, because a lock is status.
 
-**`--console-rail` IS NOT `--console-line`, and the first draft used one token
-for both.** A hairline between a white panel and the ground is read as an EDGE:
-the fill either side does most of the work, so it can sit at almost no contrast.
-The phase rail is a 1px line ALONE on the ground with nothing either side, so at
-the same value it disappears and the four nodes read as bullet points rather
-than as stops on a sequence. Only the screenshot said so.
+**`--console-rail` EXISTED FOR ONE ELEMENT AND WENT WITH IT.** It was split off
+from `--console-line` because a hairline between a white panel and the ground is
+read as an EDGE — the fill either side does most of the work, so it can sit at
+almost no contrast — while the phase rail was a 1px line ALONE on the ground
+with nothing either side, and at the same value it disappeared. That reasoning
+was right and the rail is now deleted (below), so the token is too: a scoped
+palette carrying a value nothing reads is the same dead weight as a column
+nobody writes to.
 
-### The rail is the map, and it stops at the last node
+### ONE LEFT EDGE, and the rail is what cost it
 
-Before → while → after → test is a real sequence and it is drawn as one: a 1px
-rail down the left with a numbered node at each phase. **The last band draws no
-connector**, because a rail running past the final stop claims a step that is
-not there — the league payline's rule about a rule under the last row. The
-heading still ends in A RULE TO THE END OF THE ROW, the Quizzes-shelf idiom:
-the rail delimits the band on the left and the rule terminates it on the right,
-which is what turns a left-aligned row of fixed-width cards from a hole into a
-shelf. "After you write" holds two tools and will never fill three columns.
+**"Can you make all the lines line up with the box."** Measured rather than
+eyeballed, and the number is why the screenshot reads as it does: the heading,
+the signal rows and the saved conversations all began at **x = 208**, and the
+twelve tool cards began at **244**. Thirty-six pixels, on the one block that
+takes two thirds of the page — so the page had two left margins and the bigger
+half was the indented one.
 
-The ordinals are `padStart`ed off the list rather than written down. A second
-copy of "01 02 03 04" beside a four-item list is the mirror this codebase keeps
-deleting: add a fifth phase to `toolLabels.js` and the rail would print four
-numbers against five stops.
+The rail is what took them. A 1px line with numbered nodes down the left needs
+its own gutter, so every band's content was pushed in to clear it, and nothing
+else on the screen was. It was the best idea on the page and it was paying for
+itself in the one thing this screen had been rebuilt to get right.
+
+**THE BAND IS ALREADY MARKED BY ITS ROWS.** Every tool in a phase carries that
+phase's spine, so a run of four same-coloured spines IS the band — QueueRow's
+rule, where the tier is the colour and nothing else has to say so. The rail was
+a second, larger statement of a grouping the rows were already making, and the
+ordinals were a third. All of it is gone, the heading keeps its rule to the end
+of the row, and the content has one left edge: measured at 1280, 1440, 900 and
+390, exactly one distinct x per width.
+
+**A COLOUR DASH BEFORE THE HEADING MADE A THIRD EDGE.** The first draft replaced
+the rail with a short coloured dash before each band's title, which put the `h3`
+at 238 against rows at 208 — reintroducing the fault one element smaller. A
+heading that needs a mark to say which band it belongs to is a heading whose
+rows are not saying it.
+
+### THE GRID OF CARDS WAS THE GENERATED-APP SHAPE, VERBATIM
+
+**"Think of how to make this seem less AI generated."** This file already names
+the shape, about the quiz list: *"an icon in a rounded square, a title, two
+pills and three grey stat tiles — and a grid of those is precisely what makes
+an app look generated."* The toolkit was that, twelve times, in three columns.
+
+Four things were doing it, and each had a smaller replacement:
+
+- **The twelve tinted glyph plates.** A 28px rounded square behind every icon,
+  twelve times in a grid, is the ornament the quiz list was rebuilt to lose. The
+  glyph alone, inked in its phase, says the same thing and leaves the row flat.
+- **The mono caps.** `WORTH A TOOL TODAY` sat in capitals directly above an `h1`
+  reading "Here is what your own work says is worth a tool" — the same words
+  twice, the second time shouted, with a count chip over a list two rows long.
+  Mono is KEPT where it is doing work (the figures and dates in the tables,
+  where `tabular-nums` is the point) and dropped everywhere it was decoration.
+- **The uniform blurbs.** Twelve descriptions of 9–11 words each, every one a
+  noun phrase, is the fastest tell there is — nothing written by a person comes
+  out that even. They are rewritten to the length the thought takes: *"Stuck?
+  Start here."* is three words and *"Works it through with you, one hint at a
+  time — the answer comes last."* is fifteen. `toolBrief.test.mjs` asserts the
+  SPREAD rather than any wording, which is the only part of this a test can
+  hold.
+- **The three-column grid.** Twelve cards became twelve ROWS — name, blurb and
+  usage on fixed columns, the lesson the Ranked board records about what makes a
+  list read as designed rather than as a stack of divs.
+
+**COLOUR MEANS PHASE, AND ONLY PHASE.** Each tool used to carry its own accent,
+so the brief printed twelve hues while the toolkit organised the same twelve
+tools by four others — "Teach It Back" was blue at the top of the page and sat
+in a band coloured something else two inches down. `toneForTool` is the one
+lookup and the phase owns the colour, so a tool is one colour on the screen.
+
+**AND THE USAGE COLUMN IS COUNTED OFF THEIR OWN CHATS.** A row that says "2
+chats · 1 Oct" is the only thing on this screen that could not be printed for
+a stranger, which is the same argument the brief makes one block up. `toolUsage`
+reads the rows the Recent list already loaded, through the SAME predicate
+(`chatRows`), so the tally and the list cannot disagree about what a
+conversation is — and it is UNCAPPED, because `RECENT_MAX` is the length of a
+list rather than the most anybody has ever used a tool.
+
+**A TOOL NEVER OPENED PRINTS NOTHING, never "0 chats".** A zero row is the
+padding every builder in `studyQueue` and `toolBrief` refuses, and on a
+first-week account it would be twelve of them. Asserted.
+
+**THE COLUMN IS TWO FIXED CELLS, not a flex row.** With the date dropped when a
+row has none, the count slid to the page edge on some rows and sat 50px short on
+others — ragged, which is the exact fault the fixed figure columns were adopted
+to fix. The date cell is drawn EMPTY instead.
 
 ### A CONSOLE IS NARROWER THAN A PAGE
 
@@ -5278,6 +5344,18 @@ entirely the console, so there is no seam for it to fail to line up with. The
 gauge is FIXED in px, the lesson `CardBack` records about its own weave: a
 lattice in percentages scales with the box, so the same room would be drawn at
 two different gauges depending on how much the student had.
+
+**AND IT IS ORIGINATED AT THE CONTENT COLUMN, WHICH IS ARITHMETIC.** Tiled from
+the viewport it landed wherever the window happened to be wide — 16px either
+side of the content at most widths, which is a grid visibly ignoring the box
+drawn on top of it. `--lattice-x: max(16px, calc(50% - 432px))` puts a line on
+the content's own left edge at every width, and the right edge comes free:
+`max-w-4xl` is 896 and `px-4` is 16, so the content is **864 = 27 × 32**, an
+exact number of cells. The padding and the measure therefore cannot be changed
+independently of the gauge, and `consoleInk.test.mjs` does that division rather
+than trusting it — it reads the three numbers out of the component and the
+stylesheet and asserts the offset, the floor and the remainder. The vertical
+rhythm follows: `py-8 sm:py-16` is 32 and 64, whole cells both.
 
 **NOTHING HERE INVENTS A NUMBER.** A console is the most tempting place in the
 app to print "SYSTEM READY · 94%", and a figure with nothing behind it teaches a
@@ -5311,6 +5389,35 @@ That is the `xpRates` mind-map lesson a release later, and the cost of not
 fixing it is worse than a red suite: the obvious way to green is to put the old
 name back. It asserts the PROPERTY now — the list is iterated, and reopening is
 wired — and both halves were verified by breaking each.
+
+### THE SAME LESSON THREE MORE TIMES, AND ONE NEW ONE
+
+Deleting the rail turned the suite red in four places, and **not one of them was
+a behaviour that broke.** Each was a guard that had written down a MECHANISM:
+
+- **Three `consoleInk` checks pinned the rail itself** — the connector stopping
+  at the last node, the `padStart`ed ordinals, `--console-rail` being distinct
+  from `--console-line`. All three described how the bands were grouped. The
+  property they were protecting is **one left edge**, which is now what is
+  asserted: the scan refuses `pl-`/`px-`/`pr-` on the bands, exempting the row's
+  own inner padding by name.
+- **The `--console-*` token floor was a second copy of the palette.** It
+  asserted `>= 14`, so retiring one token failed a check about counting. A
+  number that has to be edited whenever the palette changes is the mirror this
+  codebase keeps deleting; it is a floor at 12 with a note saying why it is not
+  tighter.
+- **`toolBrief.test.mjs` pinned an exact import LINE** — `import { recentChats }
+  from "@/lib/aiChats"` — so adding `toolUsage` beside it broke a test about
+  nothing. That is the THIRD name-pinned assertion in two releases, after
+  `<RecentRow` above and `xpRates`' wall clock. It matches the name inside the
+  braces now.
+
+**AND A SINGLE-ITEM INJECTION CANNOT PROVE A SET-LEVEL GUARD.** Two of the
+thirteen injections did not bite, and both were the blurb-cadence check: editing
+ONE blurb cannot flatten a spread computed over twelve, so the guard was right
+not to fire and the injection was testing the wrong thing. Rewriting all twelve
+to seven-word fragments bit immediately. Checking a property of a SET means
+breaking the set.
 
 Draw it with `scripts/_floorProbe.jsx?v=tools`, in BOTH themes, and at 390. The
 probe does not follow `colorScheme`, so a dark screenshot needs
@@ -5785,7 +5892,7 @@ somebody opening the pricing page and the gate in the same sitting.
   at a route that is not there. Draw the bar with
   `scripts/_floorProbe.jsx?v=reach`
 - `src/components/ai_tools/Console.jsx` + `src/index.css` `.console` /
-  `.dark .console` + `src/lib/consoleInk.test.mjs` — the app's SECOND room: ~16
+  `.dark .console` + `src/lib/consoleInk.test.mjs` — the app's SECOND room: ~12
   scoped tokens, a fixed-gauge lattice, and the five silent ways to break a
   scoped palette. The one specific to this room is an app ground/ink token
   surviving inside it, which is a cream patch in a graphite page
@@ -5794,10 +5901,13 @@ somebody opening the pricing page and the gate in the same sitting.
   `src/components/ai_tools/ToolsDashboard.jsx`, `src/lib/toolLabels.js`,
   `src/lib/aiChats.js` — the screen /AITools opens on, in front of the
   unchanged chat: what your own work says is worth a tool (counted off rows the
-  page already loaded, so every line is checkable), the twelve tools grouped by
-  WHEN you reach for one, and the conversations you can carry on. No model call
-  and nothing stored. `toolQuery` is the one builder every screen hands a
-  problem over with, and `?tool=` still goes straight to the chat. Draw it with
+  page already loaded, so every line is checkable), the twelve tools as ROWS
+  grouped by WHEN you reach for one, and the conversations you can carry on. No
+  model call and nothing stored. `toneForTool` is the one colour lookup, so a
+  tool is one colour on the screen; `toolUsage` is the per-tool tally, uncapped
+  and through the same `chatRows` predicate the Recent list uses. `toolQuery` is
+  the one builder every screen hands a problem over with, and `?tool=` still
+  goes straight to the chat. Draw it with
   `scripts/_floorProbe.jsx?v=tools`, which carries the locked and empty states
 - `src/components/market/StorePreview.jsx` — the thing you are about to buy,
   drawn with the component that draws it when it is worn. A crest at both the

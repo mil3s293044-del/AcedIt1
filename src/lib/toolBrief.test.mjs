@@ -526,9 +526,18 @@ ok("the dashboard draws all three blocks", () => {
     // What matters is that the list is iterated and that reopening is wired.
     assert.ok(/recent\.map\(|items=\{recent\}/.test(src), "the conversations are never drawn");
     assert.ok(/onOpen(Chat)?=\{onOpenChat\}/.test(src), "a conversation cannot be reopened");
+    // THE NAMES, NOT THE WHOLE IMPORT LINE. This pinned `import { recentChats }`
+    // exactly, so adding `toolUsage` beside it failed the suite for a reason
+    // that was not a defect — the third time in two releases a guard here has
+    // pinned a spelling rather than a property.
     const page = stripped("../pages/AITools.jsx");
-    assert.ok(/import \{ recentChats \} from "@\/lib\/aiChats"/.test(page));
-    assert.ok(/import \{ toolBrief \} from "@\/lib\/toolBrief"/.test(page));
+    assert.match(page, /import \{[^}]*\brecentChats\b[^}]*\} from "@\/lib\/aiChats"/);
+    assert.match(page, /import \{[^}]*\btoolBrief\b[^}]*\} from "@\/lib\/toolBrief"/);
+    // The usage tally is UNCAPPED and the Recent list is not: both come off the
+    // same rows, and counting off a capped list would report four as the most
+    // anybody had ever used anything.
+    assert.match(page, /toolUsage\(convs\)/, "the toolkit no longer says what has been used");
+    assert.match(src, /usage\[t\.id\]/, "the dashboard is handed a tally it never reads");
 });
 
 ok("ARRIVING COSTS NOTHING, asserted as an absence", () => {
@@ -595,6 +604,30 @@ ok("the BENCH and SCAN vocabulary is gone from what a student reads", () => {
             assert.ok(!banned.test(line), `${rel} still says: ${line.trim().slice(0, 80)}`);
         }
     }
+});
+
+ok("TWELVE BLURBS OF ONE CADENCE IS THE FASTEST TELL THERE IS", () => {
+    // They were twelve noun fragments of five to nine words, each ending in a
+    // full stop: "Step-by-step working, hints before answers." / "Contentions,
+    // structure, evidence plans." / "Plain-English explanations that stick."
+    // Nothing reads as machine-made faster than twelve lines of identical
+    // metre, and it is the one thing on a catalogue screen a scan can check.
+    //
+    // This does NOT police the words — it polices the SHAPE, which is what
+    // regresses when somebody tidies them back into a column.
+    const src = readFileSync("src/components/ai_tools/chatTools.js", "utf8");
+    const blurbs = [...src.matchAll(/^\s{8}blurb: "([^"]+)"/gm)].map((m) => m[1]);
+    assert.ok(blurbs.length >= 12, `only ${blurbs.length} blurbs found`);
+
+    const words = blurbs.map((b) => b.split(/\s+/).length);
+    assert.ok(Math.max(...words) - Math.min(...words) >= 6,
+        `every blurb is ${Math.min(...words)}\u2013${Math.max(...words)} words — they all read the same`);
+
+    // And not every one is the same grammatical shape. A question, a two-clause
+    // sentence or an imperative among them is what a person writing twelve
+    // lines produces and a template does not.
+    const varied = blurbs.filter((b) => /[?;—]|^[A-Z][a-z]+\?/.test(b)).length;
+    assert.ok(varied >= 2, "every blurb is the same kind of sentence");
 });
 
 console.log(`\ntoolBrief: ${n} checks passed`);

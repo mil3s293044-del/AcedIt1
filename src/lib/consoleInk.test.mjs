@@ -69,9 +69,13 @@ const ROOM = ["components/ai_tools/Console.jsx",
     "components/ai_tools/ToolBrief.jsx"];
 
 check("the palette is actually declared, light and dark", () => {
-    assert.ok(DEFINED.size >= 14, `only ${DEFINED.size} --console-* tokens found`);
+    // A FLOOR, not a census. It was 14 and went red when `--console-rail`
+    // retired with the rail — a count that has to be edited every time the
+    // palette changes is a second copy of the palette. The named list below is
+    // what actually guards it; this only catches the block vanishing.
+    assert.ok(DEFINED.size >= 12, `only ${DEFINED.size} --console-* tokens found`);
     for (const t of ["--console-ground", "--console-panel", "--console-panel-2", "--console-line",
-        "--console-line-soft", "--console-rail", "--console-ink", "--console-ink-dim",
+        "--console-line-soft", "--console-ink", "--console-ink-dim",
         "--console-ink-faint", "--console-accent", "--console-accent-ink",
         "--console-accent-rgb", "--console-on-accent"]) {
         assert.ok(DEFINED.has(t), `${t} is never defined`);
@@ -171,40 +175,91 @@ check("no raw hex survives in the room", () => {
     assert.deepEqual(bad, []);
 });
 
-check("THE RAIL IS NOT THE BORDER TOKEN", () => {
-    // A hairline between a white panel and the ground is read as an EDGE — the
-    // fill either side does most of the work, so it can sit at almost no
-    // contrast. The phase rail is a 1px line ALONE on the ground, so at the
-    // same value it disappears and the four nodes read as bullet points rather
-    // than as stops on a sequence. Only the screenshot said so, which is why it
-    // is an assertion.
+/* ══ THE RAIL IS GONE, AND SO ARE THE THREE GUARDS THAT PINNED IT ═══════════
+   They asserted that the connector used `--console-rail`, that the last band
+   drew none, and that the ordinals were `padStart`ed off the list. Every one
+   was true and every one described a MECHANISM — a 1px rail with 01–04 at its
+   nodes — which turned out to be the most generated-looking thing on the page.
+   A guard that pins a mechanism goes red the day the mechanism improves, which
+   is the lesson `xpRates.test.mjs` learned about the mind-map wall clock and
+   `toolBrief.test.mjs` learned one release ago about a component's name.
+
+   What replaces them are the PROPERTIES the rail was in the way of. */
+
+check("ONE LEFT EDGE, which is what the rail cost", () => {
+    // The bands carried `pl-7 sm:pl-9` to clear the rail, and nothing else on
+    // the page moved with them: measured at 1280, the headline, the direction
+    // rows and the section headings began at x=208 and the twelve tool cards
+    // began at 244. Thirty-six pixels, on the screen whose whole argument is
+    // that it was laid out on a grid.
     const dash = code(read("components/ai_tools/ToolsDashboard.jsx"));
-    assert.match(dash, /bottom-0 w-px bg-\[var\(--console-rail\)\]/,
-        "the rail connector must use --console-rail, not --console-line");
-    assert.notEqual(
-        (CSS.match(/--console-rail:\s*(#[0-9A-Fa-f]{6})/) || [])[1],
-        (CSS.match(/--console-line:\s*(#[0-9A-Fa-f]{6})/) || [])[1],
-        "--console-rail and --console-line are the same value, so the rail is invisible again");
+    const bad = [...dash.matchAll(/className="[^"]*?\b((?:sm:|md:|lg:)?p[lxr]-\d[^\s"]*)/g)]
+        .map((m) => m[1])
+        // The row's own inner padding is not an indent: it is inside the box,
+        // which still starts at the container's edge.
+        .filter((c) => !/^p[lxr]-3\.5$|^p[lxr]-3$|^p[lxr]-4$/.test(c));
+    assert.deepEqual(bad, [],
+        "something in the toolkit is indented from the container again");
 });
 
-check("THE RAIL STOPS AT THE LAST NODE", () => {
-    // A rail running past the final stop claims a step that is not there — the
-    // league payline's rule about a rule drawn under the last row. The
-    // connector belongs to the GAP between two nodes, so the last band has
-    // none, and the flag has to reach the component rather than being computed
-    // and thrown away.
+check("THE LATTICE LANDS ON THE CONTENT COLUMN, and the arithmetic says so", () => {
+    // Originating it is half the job; the GAUGE has to divide the column or the
+    // line sits on the left edge and misses the right one. Both numbers live in
+    // two different files, so this does the division rather than trusting a
+    // comment — change the container, the padding or the gauge and it fails.
+    const TW = { "max-w-4xl": 896, "max-w-3xl": 768, "max-w-5xl": 1024, "px-4": 16, "px-6": 24 };
     const dash = code(read("components/ai_tools/ToolsDashboard.jsx"));
-    assert.match(dash, /\{!last && \(/, "every band draws a connector, including the last");
-    assert.match(dash, /last=\{i === groups\.length - 1\}/, "nothing tells a band it is the last");
+    const row = dash.split("\n").find((l) => l.includes("mx-auto") && l.includes("max-w-"));
+    assert.ok(row, "the content container is gone");
+    const maxW = TW[(row.match(/\bmax-w-[\w]+/) || [])[0]];
+    const pad = TW[(row.match(/\bpx-\d+/) || [])[0]];
+    assert.ok(maxW && pad, `unrecognised container classes in: ${row.trim()}`);
+
+    const block = (CSS.match(/\.console-lattice\s*\{[\s\S]*?\}/) || [])[0] || "";
+    const gauge = Number((block.match(/--lattice-gauge:\s*(\d+)px/) || [])[1]);
+    const off = Number((block.match(/calc\(50% - (\d+)px\)/) || [])[1]);
+    const floor = Number((block.match(/max\((\d+)px/) || [])[1]);
+    assert.ok(gauge && off && floor, "the lattice no longer declares a gauge and an origin");
+
+    assert.equal(off, maxW / 2 - pad,
+        `the origin is ${off}px back from centre; the content edge is ${maxW / 2 - pad}px`);
+    assert.equal(floor, pad,
+        "the clamp floor is not the container's padding, so a narrow viewport misses");
+    assert.equal((maxW - 2 * pad) % gauge, 0,
+        `the column is ${maxW - 2 * pad}px and the gauge ${gauge}px — a line cannot land on both edges`);
+    assert.match(block, /background-position:\s*var\(--lattice-x\)/,
+        "the origin is declared and never applied");
 });
 
-check("the four phases are numbered from the list, not written down", () => {
-    // A second copy of "01 02 03 04" beside a four-item list is the mirror this
-    // codebase keeps deleting: add a fifth phase to toolLabels.js and the rail
-    // would print four numbers against five stops.
+check("COLOUR MEANS PHASE, and only phase", () => {
+    // The direction rows took the TOOL's own accent as a spine while the
+    // toolkit grouped the same tools by four phases, so one tool was two
+    // colours on one screen and neither said which mattered. `toneForTool` is
+    // the one lookup; `accentSolid`/`accentBg` belong to the chat.
+    for (const f of ["components/ai_tools/ToolsDashboard.jsx",
+        "components/ai_tools/ToolBrief.jsx"]) {
+        const src = code(read(f));
+        assert.ok(!/accentSolid|accentBg/.test(src),
+            `${f} inks something with the tool's own accent rather than its phase`);
+    }
+    assert.match(code(read("components/ai_tools/ToolBrief.jsx")), /toneForTool\(/);
+    assert.match(code(read("components/ai_tools/ToolsDashboard.jsx")), /phase\.spine/);
+    // And the phases carry their own colour, so a fifth added later gets one.
+    const labels = read("lib/toolLabels.js");
+    const phases = (labels.match(/export const PHASES = \[[\s\S]*?\n\];/) || [""])[0];
+    const ids = (phases.match(/id: "/g) || []).length;
+    assert.ok(ids >= 4, "the phase list is gone");
+    assert.equal((phases.match(/spine: "/g) || []).length, ids, "a phase has no spine colour");
+    assert.equal((phases.match(/ink: "/g) || []).length, ids, "a phase has no ink colour");
+});
+
+check("A TOOL NEVER OPENED PRINTS NOTHING, never zero", () => {
+    // `studyQueue`'s rule: a list that reaches a respectable length by printing
+    // "0 chats" teaches a student the numbers here are decoration.
     const dash = code(read("components/ai_tools/ToolsDashboard.jsx"));
-    assert.match(dash, /padStart\(2, "0"\)/);
-    assert.ok(!/"01"|'01'/.test(dash), "a hand-written ordinal is a second copy of the phase list");
+    assert.match(dash, /if \(!use\?\.count\) return null;/,
+        "the usage cell renders for a tool with no conversations");
+    assert.ok(!/0 chat/.test(dash), "a literal zero is printed somewhere");
 });
 
 check("nothing on the console invents a number", () => {
@@ -220,7 +275,12 @@ check("nothing on the console invents a number", () => {
         assert.ok(!/invokeLLM|streamAI|base44\.functions/.test(src),
             `${name} calls a model — the cards are arithmetic and must stay so`);
     }
-    assert.match(brief, /\{cards\.length\}/, "the only count printed must be the list's own length");
+    // The one figure this screen prints about itself is the usage tally, and
+    // that is counted off rows the page already holds. The count chip that used
+    // to sit in the brief's eyebrow went with the eyebrow — it labelled a list
+    // two rows long, above an `h1` that said the same thing in words.
+    assert.ok(!/font-mono[^"]*uppercase/.test(brief),
+        "the brief is shouting a mono label again");
 });
 
 check("the scanner recognises the shapes it is looking for", () => {

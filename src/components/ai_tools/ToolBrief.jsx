@@ -30,10 +30,11 @@
  * SAC in three days" and "Line Memoriser" carried identical weight, nothing
  * led, and the page read as nineteen boxes rather than as three kinds of thing.
  *
- * These rows carry a SPINE in the tool's own colour and no glyph plate; the
- * tools below carry a glyph plate and no spine; the conversations are a divided
- * list inside one panel. Three blocks, three shapes, told apart before a word
- * is read — the spine idiom Subjects, the Quizzes shelf and QueueRow all use.
+ * These rows lead with the fact at full measure; the tools below are compact
+ * rows on fixed columns with their usage on the right; the conversations are a
+ * divided list inside one panel. All three carry a spine and the colour is the
+ * PHASE — the idiom Subjects, the Quizzes shelf and QueueRow all use — so a
+ * tool is one colour wherever it appears on this screen.
  *
  * ─── THE BRIEF IS NOT A QUEUE ───────────────────────────────────────────────
  * /Review owns the full ranked list of everything outstanding. This is capped
@@ -48,6 +49,7 @@ import { ArrowRight, Lock } from "lucide-react";
 import { toolById } from "@/components/ai_tools/chatTools";
 import { createPageUrl } from "@/utils";
 import { toolQuery } from "@/lib/toolBrief";
+import { toneForTool } from "@/lib/toolLabels";
 
 /** The link a card opens. The seed rides in the query string, unsent. */
 export function briefHref(card) {
@@ -58,11 +60,15 @@ function Signal({ card, index, locked, onOpen }) {
     const tool = toolById(card.tool);
     const body = (
         <>
-            {/* THE SPINE IS THE TOOL, which is also what the tag under it says.
-                Colour and word rather than colour alone: the floor's CVD rule —
-                anything encoding an identity in hue needs a second channel. */}
+            {/* THE SPINE IS THE PHASE, and the tag beside it names the tool.
+                It used to be the tool's OWN accent, which meant this page drew
+                twelve hues at the top and organised the twelve tools by four
+                different ones below — so "Teach It Back" was blue up here and
+                sat in a band coloured something else two inches down. Colour
+                means WHEN YOU REACH FOR IT everywhere on this screen now; the
+                word is the second channel the floor's CVD rule asks for. */}
             <span
-                className={`absolute left-0 top-0 bottom-0 w-[3px] ${tool?.accentSolid || "bg-[var(--console-accent)]"}`}
+                className={`absolute left-0 top-0 bottom-0 w-[3px] ${toneForTool(card.tool).spine}`}
                 aria-hidden="true"
             />
             <span className="block pl-4 pr-3 py-3">
@@ -75,9 +81,13 @@ function Signal({ card, index, locked, onOpen }) {
                     <span className="text-[13px] leading-snug text-[var(--console-ink-dim)] min-w-0 flex-1">
                         {card.offer}
                     </span>
+                    {/* SENTENCE CASE. Mono uppercase is the most recognisable
+                        mark of a generated dashboard and this screen carried
+                        four of them at once; it is kept where it is doing work
+                        — the figures and dates in the tables — and a tool's
+                        name is a name. */}
                     {tool?.label && (
-                        <span className="font-mono text-[10px] uppercase tracking-wider whitespace-nowrap
-                            text-[var(--console-ink-faint)]">
+                        <span className="text-[12px] whitespace-nowrap text-[var(--console-ink-faint)]">
                             {tool.label}
                         </span>
                     )}
@@ -135,23 +145,11 @@ export default function ToolBrief({ cards = [], locked = false, onOpen, loading 
                 of the list directly below — rather than a status readout with
                 nothing behind it, which is the invented number this codebase
                 deletes on sight. */}
-            <div className="flex items-center gap-2.5 mb-2">
-                {/* NOT "Your toolkit" IN THE EMPTY CASE: that is the heading of
-                    the block directly below, so a first-week account got the same
-                    label twice on one screen with different content under each. */}
-                <span className="font-mono text-[10px] font-bold uppercase tracking-[0.18em]
-                    text-[var(--console-ink-faint)]">
-                    {cards.length ? "Worth a tool today" : "AI tools"}
-                </span>
-                {cards.length > 0 && (
-                    <span className="font-mono text-[10px] font-bold leading-none px-1.5 py-1 rounded
-                        bg-[rgb(var(--console-accent-rgb)/0.14)] text-[var(--console-accent-ink)]">
-                        {cards.length}
-                    </span>
-                )}
-                <span className="h-px flex-1 bg-[var(--console-line)]" aria-hidden="true" />
-            </div>
-
+            {/* NO EYEBROW. It read "WORTH A TOOL TODAY" in mono capitals
+                directly above an `h1` reading "Here is what your own work says
+                is worth a tool" — the same words twice, the second time
+                shouted, with a count chip over a list two rows long. A heading
+                does not need a label saying what the heading is about. */}
             {/* THE HEADING FRAMES; IT DOES NOT RESTATE. It used to print the
                 first card's fact, which the first card then printed again in
                 bold two inches below — one sentence twice, caught only by

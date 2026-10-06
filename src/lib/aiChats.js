@@ -112,4 +112,46 @@ export function recentChats(rows = [], max = RECENT_MAX) {
     return items.slice(0, Math.max(0, max));
 }
 
-export default { chatRows, recentChats, RECENT_MAX };
+/**
+ * How much each tool has actually been used, off the rows already loaded.
+ *
+ * ─── A CATALOGUE OF TWELVE IDENTICAL ENTRIES IS WHAT READS AS GENERATED ─────
+ * The toolkit was twelve cards carrying a name and a blurb and nothing else —
+ * the same shape whoever you are, which is exactly what a machine-made layout
+ * looks like. Every saved conversation already names its tool, so "4 chats ·
+ * 2 Oct" is a real fact about THEM, counted rather than fetched, on the page
+ * whose own rule is that every line should be checkable.
+ *
+ * ─── A TOOL NEVER OPENED RETURNS NOTHING, NEVER ZERO ────────────────────────
+ * `studyQueue`'s rule: a list that reaches a respectable length by printing
+ * "0 chats" teaches a student that the numbers here are decoration. An absent
+ * key is the honest answer and the row simply draws nothing.
+ *
+ * It reads through `chatRows`, so a thread opened and never sent does not count
+ * — the same predicate the Recent list and the chat's own sidebar read. And it
+ * is UNCAPPED, unlike `recentChats`: the four most recent are a list, this is a
+ * tally, and counting off a capped list would report four as the most anybody
+ * has ever used anything.
+ */
+export function toolUsage(rows = []) {
+    const out = {};
+    // `chatRows` hands back the RAW rows it kept rather than shaped items — the
+    // first draft read `r.tool` and `r.at` off them and tallied nothing at all,
+    // silently, because an absent key is indistinguishable from a tool nobody
+    // has opened. It is the SAME derivation `recentChats` does, including the
+    // "no student message is not a conversation" rule, or the tally and the
+    // list beneath it would disagree about one table.
+    for (const row of chatRows(rows)) {
+        const msgs = row.input_data?.messages || [];
+        if (!msgs.some((m) => m?.role === "user" && String(m.content || "").trim())) continue;
+        const id = String(row.tool_type || row.input_data?.tool || "");
+        if (!id) continue;
+        const seen = out[id] || (out[id] = { count: 0, at: 0 });
+        seen.count += 1;
+        const at = timeOf(row);
+        if (at && at > seen.at) seen.at = at;
+    }
+    return out;
+}
+
+export default { chatRows, recentChats, toolUsage, RECENT_MAX };
