@@ -33,10 +33,10 @@
  */
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion } from "framer-motion";
 import { X, ArrowRight } from "lucide-react";
 import { base44 } from "@/api/base44Client";
-import AceWalker, { AceBubble } from "@/components/ace/AceWalker";
+import AceWalker, { AceBubble, AceSay, AceLine } from "@/components/ace/AceWalker";
 import { claimAce } from "@/components/ace/useAceYield";
 import {
     STOPS, CONTENT_STOPS, stopAt, tourState, tourStatus, withTourPatch,
@@ -137,10 +137,16 @@ export default function AceTour({ page, userProfile, onLiveChange }) {
             <AceWalker trip={stop.id} pose={stop.final ? "happy" : "point"}
                 size="w-20 sm:w-24" className="justify-end">
                 <AceBubble className="pointer-events-auto w-[min(19rem,calc(100vw-8.5rem))]">
-                    <AnimatePresence mode="wait">
-                        <motion.div key={stop.id}
-                            initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }}
-                            exit={{ opacity: 0 }}>
+                    {/* ── A STOP ARRIVES A LINE AT A TIME, AND NEVER EMPTIES ──
+                        `AnimatePresence mode="wait"` faded the old stop out to
+                        nothing BEFORE the new one began, so the bubble went
+                        blank between stops — and the heading, the progress, the
+                        lead and the buttons all landed on one frame, which is a
+                        wall of text that changed before it was read. Nothing
+                        times out here either: Next and Skip are the only ways
+                        on, both of them the student's. */}
+                    <AceSay beat={stop.id}>
+                        <AceLine>
                             <div className="flex items-start gap-2.5">
                                 <div className="min-w-0 flex-1">
                                     <p className="stat-label truncate">
@@ -157,8 +163,9 @@ export default function AceTour({ page, userProfile, onLiveChange }) {
                                     <X className="w-4 h-4" />
                                 </button>
                             </div>
+                        </AceLine>
 
-                            {!stop.final && (
+                        <AceLine>{!stop.final && (
                                 <div className="flex items-center gap-2.5 mt-2.5">
                                     <div className="flex items-center gap-1.5 flex-1">
                                         {STOPS.filter((s) => !s.final).map((s, i) => (
@@ -172,10 +179,13 @@ export default function AceTour({ page, userProfile, onLiveChange }) {
                                         {index + 1}/{CONTENT_STOPS}
                                     </span>
                                 </div>
-                            )}
+                            )}</AceLine>
 
+                        <AceLine>
                             <p className="text-sm text-foreground leading-snug mt-2.5">{stop.lead}</p>
+                        </AceLine>
 
+                        <AceLine>
                             <div className="flex items-center gap-3 mt-3.5">
                                 {!stop.final && (
                                     <button onClick={() => finish("skipped")}
@@ -192,8 +202,8 @@ export default function AceTour({ page, userProfile, onLiveChange }) {
                                     {stop.final ? "Start studying" : <>Next <ArrowRight className="w-3 h-3" /></>}
                                 </button>
                             </div>
-                        </motion.div>
-                    </AnimatePresence>
+                        </AceLine>
+                    </AceSay>
                 </AceBubble>
             </AceWalker>
         </motion.aside>

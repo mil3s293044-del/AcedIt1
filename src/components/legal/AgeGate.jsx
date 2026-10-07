@@ -1,13 +1,17 @@
 /**
  * AgeGate — the birthday question, asked once, of everybody.
  *
- * ─── WHY A GATE AND NOT A WIZARD STEP ───────────────────────────────────────
+ * ─── IT IS THE OTHER HALF OF THE WIZARD'S QUESTION, NOT A SECOND ONE ────────
  * A step in the signup wizard only ever catches NEW accounts. There are ~130
  * existing ones whose age has never been asked, and every claim the published
  * policies make about guardian consent is untrue of them too. So this renders
  * whenever the loaded profile's band is UNKNOWN, which is exactly the set of
- * people who have not answered — new and old alike — and disappears for good
- * once they have.
+ * people who have not answered — and since the wizard now asks as well, a new
+ * account has already answered by the time it gets here and never sees this at
+ * all. Between them it is asked ONCE, of everybody. The control itself is
+ * `AgeAnswer`, shared with the wizard: two copies of a legal-facing field is
+ * the mirror this codebase keeps deleting, and the copy that drifts would be
+ * the one that stops asking for consent.
  *
  * ─── IT BLOCKS, AND THAT IS THE POINT ───────────────────────────────────────
  * Every other prompt in this app can be dismissed. This one cannot, because the
@@ -32,12 +36,11 @@
  * build and a question for a lawyer; what this closes is the gap between a
  * policy promising consent was sought and a product that never asked at all.
  */
-import React, { useMemo, useState } from "react";
+import React, { useCallback, useState } from "react";
 import { motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { ShieldCheck } from "lucide-react";
-import { ageBand, BAND, MIN_AGE, needsGuardian } from "@/lib/compliance";
+import AgeAnswer, { ageAnswerReady, ageAnswerPatch, ageAnswerHint } from "@/components/legal/AgeAnswer";
 
 export default function AgeGate({ onSave }) {
     const [dob, setDob] = useState("");
@@ -45,27 +48,22 @@ export default function AgeGate({ onSave }) {
     const [saving, setSaving] = useState(false);
     const [error, setError] = useState(null);
 
-    const band = useMemo(() => (dob ? ageBand(dob) : BAND.UNKNOWN), [dob]);
-    const tooYoung = band === BAND.UNDER_MIN;
-    const wantsGuardian = needsGuardian(band);
-    // A valid date that is not a refusal, plus the guardian tick where one is
-    // required. `BAND.UNKNOWN` covers an empty box and a half-typed date.
-    const canSave = band !== BAND.UNKNOWN && !tooYoung && (!wantsGuardian || guardian);
+    const canSave = ageAnswerReady(dob, guardian);
+    const hint = ageAnswerHint(dob, guardian);
+    const patch = useCallback((p) => {
+        if ("dob" in p) setDob(p.dob);
+        if ("guardian" in p) setGuardian(p.guardian);
+    }, []);
 
     const save = async () => {
         if (!canSave || saving) return;
         setSaving(true);
         setError(null);
         try {
-            await onSave({
-                date_of_birth: dob,
-                // Recorded as a declaration with its own timestamp, so it is
-                // legible later as "they said so on this date" and never as
-                // "we verified this".
-                ...(wantsGuardian
-                    ? { guardian_ack: { declared_at: new Date().toISOString() } }
-                    : {}),
-            });
+            // Recorded as a declaration with its own timestamp, so it is
+            // legible later as "they said so on this date" and never as
+            // "we verified this".
+            await onSave(ageAnswerPatch(dob, guardian));
         } catch (e) {
             // The gate must never strand somebody on a failed write with no way
             // back — it stays open and says what happened.
@@ -96,50 +94,9 @@ export default function AgeGate({ onSave }) {
                     allowed to use analytics on your account. We ask once.
                 </p>
 
-                <label htmlFor="acedit-dob" className="block text-xs font-bold text-foreground mb-1.5">
-                    Date of birth
-                </label>
-                <Input
-                    id="acedit-dob"
-                    type="date"
-                    value={dob}
-                    max={new Date().toISOString().slice(0, 10)}
-                    onChange={(e) => { setDob(e.target.value); setGuardian(false); }}
-                    className="mb-4"
-                />
+                <AgeAnswer dob={dob} guardian={guardian} onChange={patch} />
 
-                {tooYoung && (
-                    <div className="rounded-xl bg-secondary p-3.5 mb-4">
-                        <p className="text-sm font-bold text-foreground mb-1">
-                            AcedIt is built for VCE students
-                        </p>
-                        <p className="text-sm text-muted-foreground">
-                            You need to be at least {MIN_AGE} to have an account. Nothing has been
-                            deleted &mdash; if that date was a slip, correct it above. Otherwise
-                            email{" "}
-                            <a href="mailto:support@acedit.au" className="text-primary underline">
-                                support@acedit.au
-                            </a>{" "}
-                            and we&rsquo;ll sort it out.
-                        </p>
-                    </div>
-                )}
-
-                {wantsGuardian && (
-                    <label className="flex gap-3 items-start rounded-xl bg-secondary p-3.5 mb-4 cursor-pointer">
-                        <input
-                            type="checkbox"
-                            checked={guardian}
-                            onChange={(e) => setGuardian(e.target.checked)}
-                            className="mt-0.5 w-4 h-4 accent-primary flex-shrink-0"
-                        />
-                        <span className="text-sm text-muted-foreground">
-                            A parent or guardian knows I use AcedIt and agrees to the{" "}
-                            <a href="/Terms" className="text-primary underline">Terms</a> and{" "}
-                            <a href="/Privacy" className="text-primary underline">Privacy Policy</a>.
-                        </span>
-                    </label>
-                )}
+                <div className="h-4" />
 
                 {error && <p className="text-sm text-streak font-semibold mb-3">{error}</p>}
 
@@ -149,12 +106,8 @@ export default function AgeGate({ onSave }) {
 
                 {/* A disabled button that does not say why is the paper-cut this
                     codebase already records about Active Recall's generate. */}
-                {!canSave && !tooYoung && (
-                    <p className="text-xs text-muted-foreground mt-2.5 text-center">
-                        {!dob || band === BAND.UNKNOWN
-                            ? "Enter your date of birth to continue."
-                            : "Tick the box above to continue."}
-                    </p>
+                {!canSave && hint && (
+                    <p className="text-xs text-muted-foreground mt-2.5 text-center">{hint}</p>
                 )}
             </motion.div>
         </div>

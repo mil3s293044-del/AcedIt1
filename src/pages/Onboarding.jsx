@@ -54,6 +54,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { VCE_SUBJECTS } from "@/data/vceSubjects";
+import AgeAnswer, { ageAnswerReady, ageAnswerHint } from "@/components/legal/AgeAnswer";
 import { supabase } from "@/api/supabaseClient";
 import { useAuth, applyOnboardingUpdateForCurrentUser } from "@/lib/AuthContext";
 import HandOfAnswers from "@/components/onboarding/wizard/HandOfAnswers";
@@ -123,6 +124,10 @@ function useBarHeight(node) {
 // ─── Wizard state ────────────────────────────────────────────────────────────
 const DEFAULT_ANSWERS = {
     yearLevel:       null,
+    // The birthday and the guardian tick ride with the other answers, so a
+    // refresh mid-wizard keeps them like everything else on this screen.
+    dob:             "",
+    guardian:        false,
     subjects:        [],         // [{ name, code, id }]
     goalAtar:        null,
     goalCourseName:  "",
@@ -218,6 +223,8 @@ export default function Onboarding({ existingUser = false }) {
                 setAnswers({
                     ...DEFAULT_ANSWERS,
                     yearLevel: profile?.extra?.year_level || null,
+                    dob: profile?.extra?.date_of_birth || "",
+                    guardian: !!profile?.extra?.guardian_ack,
                     goalAtar: profile?.goal_atar || null,
                     goalCourseName: profile?.goal_course_name || "",
                     goalUniversity: profile?.goal_university || "",
@@ -250,7 +257,7 @@ export default function Onboarding({ existingUser = false }) {
     const goBack = () => setStep((s) => Math.max(1, s - 1));
 
     const canContinueByStep = {
-        1: !!answers.yearLevel,
+        1: !!answers.yearLevel && ageAnswerReady(answers.dob || "", !!answers.guardian),
         2: answers.subjects.length > 0,
         3: true,
         4: true,
@@ -429,6 +436,22 @@ function SkipLink({ onClick }) {
 // its flight into the hand, and short enough that nobody taps twice. Advancing
 // on the same frame as the tap would deal a card the student never sees.
 function Step1Year({ answers, update, onNext }) {
+    /* ── THE BIRTHDAY IS ASKED HERE, NOT BY A MODAL TWO SCREENS LATER ──────
+       `AgeGate` blocks the whole app for anybody whose band is UNKNOWN, which
+       used to include every account that had just finished this wizard — so a
+       new student answered "what year are you in" and was immediately stopped
+       and asked their date of birth. Two age-shaped questions back to back.
+
+       It is asked once, here, beside the year level it belongs with. The gate
+       stays mounted and is still the ONLY thing that reaches the ~130 existing
+       accounts; it simply never fires for anybody who answered on this screen.
+
+       A YEAR LEVEL IS NOT AN AGE. "Year 11" spans fifteen, sixteen and
+       seventeen and the thresholds are 13, 16 and 18, so nothing here derives
+       one from the other — that guess would put a fifteen-year-old on a public
+       board. */
+    const ageReady = ageAnswerReady(answers.dob || "", !!answers.guardian);
+    const ageHint = ageAnswerHint(answers.dob || "", !!answers.guardian);
     // The pick no longer auto-advances. It used to, on a 340ms timer, and that
     // was right when the screen had nothing to say back; now it pays out a
     // fact and jumping to the next question would show it for a third of a
@@ -444,15 +467,40 @@ function Step1Year({ answers, update, onNext }) {
             title="What year are you in?"
             subtitle="Pick a card. This one sets the level everything is written at."
             footer={picked ? (
-                <PrimaryCTA onClick={onNext}>
-                    Continue <ArrowRight className="w-4 h-4 ml-1" />
-                </PrimaryCTA>
+                <>
+                    <PrimaryCTA onClick={onNext} disabled={!ageReady}>
+                        Continue <ArrowRight className="w-4 h-4 ml-1" />
+                    </PrimaryCTA>
+                    {/* A disabled button that will not say why is the paper-cut
+                        this codebase already records about Active Recall. */}
+                    {!ageReady && ageHint && (
+                        <p className="text-xs text-muted-foreground mt-2 text-center">{ageHint}</p>
+                    )}
+                </>
             ) : null}
         >
             <YearCards
                 value={answers.yearLevel}
                 onPick={(v) => update({ yearLevel: v })}
             />
+
+            {/* Only once a year is picked: two questions on a cold screen is a
+                form, and the birthday is the quieter of the two. */}
+            {picked && (
+                <div className="mt-6 pt-6 border-t border-border">
+                    <AgeAnswer
+                        idPrefix="acedit-wizard"
+                        dob={answers.dob || ""}
+                        guardian={!!answers.guardian}
+                        onChange={update}
+                    />
+                    <p className="text-[11px] leading-snug text-muted-foreground mt-2.5">
+                        This decides which parts of AcedIt switch on &mdash; whether you appear
+                        on the Compete board, and whether analytics may run on your account.
+                        We ask once.
+                    </p>
+                </div>
+            )}
 
             <Payout show={picked}>
                 <p className="font-display font-extrabold text-foreground text-lg leading-snug">

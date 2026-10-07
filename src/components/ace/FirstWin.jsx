@@ -34,10 +34,10 @@
  */
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion } from "framer-motion";
 import { X, ArrowRight, Sparkles } from "lucide-react";
 import { base44 } from "@/api/base44Client";
-import AceWalker, { AceBubble } from "@/components/ace/AceWalker";
+import AceWalker, { AceBubble, AceSay, AceLine } from "@/components/ace/AceWalker";
 import AceShuffle from "@/components/ace/AceShuffle";
 import { claimAce } from "@/components/ace/useAceYield";
 import { createPageUrl } from "@/utils";
@@ -285,11 +285,16 @@ ${STIMULUS_RULE}`,
             <AceWalker trip={beat} pose={beat === "close" ? "proud" : "point"}
                 size="w-20 sm:w-24" className="justify-end">
                 <AceBubble className="pointer-events-auto w-[min(21rem,calc(100vw-8.5rem))]">
-                    <AnimatePresence mode="wait">
-                        <motion.div key={beat}
-                            initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }}
-                            exit={{ opacity: 0 }}>
-
+                    {/* ── HE SAYS IT A LINE AT A TIME, AND NEVER EMPTIES ──────
+                        This was an `AnimatePresence mode="wait"`, which fades
+                        the OLD beat out to nothing before the new one starts —
+                        so the bubble genuinely went blank between beats. There
+                        is no exit now, and the arriving beat reveals as lines.
+                        Nothing times out: the close button is the only way out,
+                        because a question withdrawn before it is read is worse
+                        than one left on screen. */}
+                    <AceSay beat={beat}>
+                        <AceLine>
                             <div className="flex items-start gap-2.5">
                                 <div className="min-w-0 flex-1">
                                     <p className="stat-label truncate">
@@ -309,7 +314,9 @@ ${STIMULUS_RULE}`,
                                     <X className="w-4 h-4" />
                                 </button>
                             </div>
+                        </AceLine>
 
+                        <AceLine>
                             {/* ── Pick a subject: their OWN, never a demo one ── */}
                             {beat === "subject" && (
                                 <>
@@ -335,9 +342,21 @@ ${STIMULUS_RULE}`,
                                 </>
                             )}
 
-                            {/* ── The problem, in their words. The technique is the ANSWER. ── */}
+                            {/* ── The problem, in their words. The technique is the ANSWER. ──
+                                EVERY OTHER BEAT SAYS WHAT TO DO AND THIS ONE DID NOT. It went
+                                from a question straight to three buttons, so the one beat whose
+                                options are deliberately vague — they are the STUDENT's words,
+                                not ours — was also the one with nothing saying how to choose
+                                between them or what choosing does. That is the "no direction"
+                                this screen was reported for. The lead says there is no wrong
+                                answer and names what the pick actually buys them. */}
                             {beat === "problem" && (
-                                <div className="mt-2.5 space-y-1.5">
+                                <>
+                                <p className="text-sm text-foreground leading-snug mt-2.5">
+                                    Whichever sounds most like you — there is no wrong answer here.
+                                    It decides which technique I point you at afterwards.
+                                </p>
+                                <div className="mt-3 space-y-1.5">
                                     {PROBLEMS.map((p) => (
                                         <button key={p.id}
                                             onClick={() => patch({ problem: p.id, beat: "build" })}
@@ -348,6 +367,7 @@ ${STIMULUS_RULE}`,
                                         </button>
                                     ))}
                                 </div>
+                                </>
                             )}
 
                             {/* ── The build. The price is on screen BEFORE the button. ── */}
@@ -462,8 +482,8 @@ ${STIMULUS_RULE}`,
                                     </div>
                                 </>
                             )}
-                        </motion.div>
-                    </AnimatePresence>
+                        </AceLine>
+                    </AceSay>
                 </AceBubble>
             </AceWalker>
         </motion.aside>

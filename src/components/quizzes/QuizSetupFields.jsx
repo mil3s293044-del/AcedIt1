@@ -29,24 +29,40 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Textarea } from "@/components/ui/textarea";
-import { Field, Segmented, StepSlider, RangeSlider, ChipToggle } from "@/components/shared/SetupControls";
-import { COUNT_MIN, COUNT_MAX, MARK_MIN, MARK_MAX,
-    MCQ_SHARE_MIN, MCQ_SHARE_MAX, TERM_MAX } from "@/lib/quizSetup";
+import { Field, Segmented, StepSlider, RangeSlider, ChipToggle, Stepper } from "@/components/shared/SetupControls";
+import { COUNT_MIN, COUNT_MAX, MARK_MIN, MARK_MAX, TERM_MAX,
+    QUESTION_KINDS, pickedKinds, maxFor } from "@/lib/quizSetup";
 import { COMMAND_TERMS } from "@/lib/subjectExaminerPrompts";
 
 /** The shape of the paper. `paper` is the live `paperShape` the footer prints. */
 export function PaperFields({ settings, paper, onChange }) {
+    /* Catalogue order, not tap order — the LAST kind absorbs the remainder, so
+       "last" has to mean the same thing on every render. */
+    const picked = pickedKinds(settings.kinds);
     return (
         <>
-            <Field label="Question types" tone="chart4">
-                <Segmented tone="chart4" value={settings.question_types}
-                    onChange={(v) => onChange({ question_types: v })}
-                    options={[
-                        { value: "mixed",      label: "Mixed",    sub: "MCQ + written" },
-                        { value: "mcq_only",   label: "MCQ",      sub: "multiple choice" },
-                        { value: "short_only", label: "Written",  sub: "short answer" },
-                        { value: "multipart",  label: "Extended", sub: "(a) (b) (c)" },
-                    ]} />
+            {/* ── THE KINDS ARE A SET ──────────────────────────────────────
+                Not a one-of-four row with "Mixed" pretending to be a fourth
+                kind. Tap any combination; the counts below say how many of
+                each. The last kind cannot be untapped, because a paper of no
+                questions is not a paper and a disabled chip says why better
+                than a toast after the fact. */}
+            <Field label="Question types" tone="chart4"
+                hint="Any combination. Tap one to add it to the paper.">
+                <div className="flex flex-wrap gap-1.5">
+                    {QUESTION_KINDS.map(k => {
+                        const on = picked.includes(k.id);
+                        return (
+                            <ChipToggle key={k.id} tone="chart4" active={on}
+                                disabled={on && picked.length === 1}
+                                onClick={() => onChange({
+                                    kinds: on ? picked.filter(x => x !== k.id) : [...picked, k.id],
+                                })}>
+                                {k.label}
+                            </ChipToggle>
+                        );
+                    })}
+                </div>
             </Field>
 
             <Field label="How many questions" tone="chart4" value={`${settings.num_questions}`}>
@@ -55,15 +71,49 @@ export function PaperFields({ settings, paper, onChange }) {
                     onChange={(v) => onChange({ num_questions: v })} />
             </Field>
 
-            {/* Only on a MIXED paper, because it is the only shape with two
-                kinds in it to balance. "Mixed" meant a hard-coded 60/40 the
-                student was never shown and could not move. */}
-            {settings.question_types === "mixed" && (
-                <Field label="Balance" tone="chart4"
-                    value={`${paper.mcq} MCQ · ${paper.short} written`}>
-                    <StepSlider tone="chart4" min={MCQ_SHARE_MIN} max={MCQ_SHARE_MAX} step={5}
-                        value={settings.mcq_share}
-                        onChange={(v) => onChange({ mcq_share: v })} />
+            {/* ── HOW MANY OF EACH ─────────────────────────────────────────
+                One row per picked kind. THE LAST ROW IS THE REMAINDER and has
+                no stepper: the counts have to sum to the total, and letting
+                all three be set by hand means either a sum that disagrees with
+                the slider above it or a silent correction the student did not
+                make. The word "the rest" is what says which one gives way. */}
+            {picked.length > 1 && (
+                <Field label="How many of each" tone="chart4"
+                    hint="The last one takes whatever is left, so these always add up to the total.">
+                    <div className="rounded-xl border-2 border-border divide-y divide-border">
+                        {picked.map((id, i) => {
+                            const kind = QUESTION_KINDS.find(k => k.id === id);
+                            const last = i === picked.length - 1;
+                            const n = paper.alloc[id] || 0;
+                            return (
+                                <div key={id} className="flex items-center gap-3 px-3 py-2">
+                                    <span className="min-w-0 flex-1">
+                                        <span className="block text-sm font-bold text-foreground truncate">
+                                            {kind.label}
+                                        </span>
+                                        <span className="block text-[11px] text-muted-foreground">
+                                            {last ? "the rest" : kind.sub}
+                                        </span>
+                                    </span>
+                                    {last ? (
+                                        <span className="w-[86px] text-center font-display font-extrabold
+                                            tabular-nums text-chart-4">{n}</span>
+                                    ) : (
+                                        <Stepper tone="chart4" value={n} label={kind.label}
+                                            min={1}
+                                            max={maxFor(id, {
+                                                kinds: picked,
+                                                counts: settings.kind_counts,
+                                                count: settings.num_questions,
+                                            })}
+                                            onChange={(v) => onChange({
+                                                kind_counts: { ...settings.kind_counts, [id]: v },
+                                            })} />
+                                    )}
+                                </div>
+                            );
+                        })}
+                    </div>
                 </Field>
             )}
 
@@ -75,7 +125,7 @@ export function PaperFields({ settings, paper, onChange }) {
                 that cannot express what it replaced is a downgrade. */}
             {paper.short > 0 && (
                 <Field tone="chart4"
-                    label={settings.question_types === "multipart"
+                    label={picked.length === 1 && picked[0] === "multipart"
                         ? "Marks per extended question" : "Marks per written question"}
                     value={paper.markLo === paper.markHi
                         ? `${paper.markLo} mark${paper.markLo === 1 ? "" : "s"}`

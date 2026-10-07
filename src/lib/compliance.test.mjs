@@ -232,4 +232,58 @@ check("every pixel loader is behind the consent gate", () => {
     }
 });
 
+/* ─── THE AGE IS ASKED ONCE, OF EVERYBODY ───────────────────────────────────
+   Reported as "never have it ask for age twice". It was asked twice because
+   the two asks were built for different populations and neither knew about
+   the other: the wizard catches NEW accounts, and `AgeGate` exists precisely
+   because a wizard step can never reach the ~130 that already exist. So a new
+   student answered in the wizard and then met a blocking modal asking again.
+
+   The fix is one CONTROL and one STORED ANSWER, not one screen. The gate
+   renders on an UNKNOWN band, so a wizard that writes `date_of_birth` closes
+   the gate by making the band known — and the two can only agree about what
+   "answered" means while they share `ageAnswerReady` and `ageAnswerPatch`.
+   A second copy of either is how one of them starts asking again. */
+const strip = (t) => t.replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/[^\n]*/g, "");
+
+check("ONE control, imported by both asks — never two copies of the question", () => {
+    const shared = "src/components/legal/AgeAnswer.jsx";
+    assert.ok(fs.existsSync(shared), "the shared age control is gone, so the two asks have drifted apart");
+    for (const f of ["src/components/legal/AgeGate.jsx", "src/pages/Onboarding.jsx"]) {
+        const src = strip(fs.readFileSync(f, "utf8"));
+        assert.ok(/from\s+["']@\/components\/legal\/AgeAnswer["']/.test(src),
+            `${f} asks for a birthday without the shared control — that is the second ask`);
+        // REQUIRE THE CALL, NOT THE IMPORT. The first draft matched the bare
+        // name, which the `import { ageAnswerReady, … }` line satisfies on its
+        // own — so replacing the call with a hand-rolled test left the guard
+        // green. Found by injection; the same "a scan that matches somewhere
+        // in a large span is not a scan" lesson this file keeps meeting.
+        assert.ok(/ageAnswerReady\s*\(/.test(src),
+            `${f} decides "answered" for itself, so the gate and the wizard can disagree`);
+    }
+});
+
+check("THE WIZARD ACTUALLY STORES IT, or the gate fires straight afterwards", () => {
+    // The gate renders on an UNKNOWN band. A wizard that collects a birthday
+    // and never writes `date_of_birth` leaves the band unknown, so the student
+    // answers and is asked again one screen later — which is the exact report,
+    // and it renders perfectly either way.
+    const src = strip(fs.readFileSync("src/lib/AuthContext.jsx", "utf8"));
+    assert.ok(/date_of_birth/.test(src),
+        "signup never writes date_of_birth, so answering the wizard leaves the band unknown");
+    assert.ok(/ageExtra/.test(src),
+        "the wizard's answer is no longer threaded into the profile patch");
+});
+
+check("A REDO NEVER CLEARS A STORED BIRTHDAY", () => {
+    // `ageExtra` returns {} with no answer rather than a patch full of
+    // undefined — spreading the second would blank a date already on file and
+    // reopen the gate for somebody who had answered.
+    const src = strip(fs.readFileSync("src/lib/AuthContext.jsx", "utf8"));
+    const i = src.indexOf("ageExtra");
+    const body = src.slice(i, i + 500);
+    assert.ok(/return\s*\{\s*\}/.test(body),
+        "ageExtra has no empty-answer branch, so a redo can clear a stored birthday");
+});
+
 console.log(`\ncompliance: ${passed} checks passed`);

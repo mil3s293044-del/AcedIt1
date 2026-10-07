@@ -150,4 +150,37 @@ export function ChipToggle({ active, onClick, disabled = false, tone = "primary"
     );
 }
 
-export default { Field, Segmented, StepSlider, RangeSlider, ChipToggle, TONE };
+/**
+ * A number with a minus and a plus, for a figure that is small and exact.
+ *
+ * A slider is right for "how many questions" — a sweep across a wide range
+ * where the exact landing hardly matters. It is wrong for "how many of these
+ * are multiple choice", which is a handful, has to be exact, and sits beside
+ * two other figures that have to sum to a total: on a phone a two-pixel drag
+ * is a different paper. `max` is the CEILING the other kinds leave, so the
+ * control cannot be pushed into a state the model would have to clamp out of
+ * — a stepper that accepts a value and then shows a different one is worse
+ * than one that stops.
+ */
+export function Stepper({ value, onChange, min = 1, max = 99, tone = "primary", label }) {
+    const ink = inkFor(tone);
+    const at = (v) => onChange?.(Math.min(max, Math.max(min, v)));
+    const btn = `w-8 h-8 rounded-lg border-2 font-bold text-base leading-none
+        flex items-center justify-center transition-colors
+        disabled:opacity-30 disabled:cursor-not-allowed`;
+    return (
+        <div className="flex items-center gap-1.5">
+            <button type="button" onClick={() => at(value - 1)} disabled={value <= min}
+                aria-label={label ? `One fewer ${label}` : "One fewer"}
+                className={`${btn} ${OFF}`}>−</button>
+            <span className={`w-9 text-center font-display font-extrabold tabular-nums ${ink.value}`}>
+                {value}
+            </span>
+            <button type="button" onClick={() => at(value + 1)} disabled={value >= max}
+                aria-label={label ? `One more ${label}` : "One more"}
+                className={`${btn} ${OFF}`}>+</button>
+        </div>
+    );
+}
+
+export default { Field, Segmented, StepSlider, RangeSlider, ChipToggle, Stepper, TONE };

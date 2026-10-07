@@ -9,6 +9,29 @@ import { createAxiosClient } from '@base44/sdk/dist/utils/axios-client';
 // Supabase imports
 import { supabase } from '@/api/supabaseClient';
 import { getAttribution } from '@/lib/attribution';
+
+/**
+ * The age answer the wizard collected, as the patch `extra` carries.
+ *
+ * It is asked during signup so a new account never meets `AgeGate` — which
+ * used to block the app two screens later with a second age question. The gate
+ * is what reaches the ~130 accounts that predate this, and `bandOfProfile` is
+ * UNKNOWN only while `date_of_birth` is missing, so writing it here is exactly
+ * what stops the second ask.
+ *
+ * AN EMPTY ANSWER WRITES NOTHING. A student redoing the wizard without
+ * retyping their birthday must not have the date on file cleared, which would
+ * put the gate back in front of them.
+ */
+function ageExtra(answers) {
+  if (!answers?.dob) return {};
+  return {
+    date_of_birth: answers.dob,
+    // A declaration with its own timestamp — "they said so on this date",
+    // never "we verified this".
+    ...(answers.guardian ? { guardian_ack: { declared_at: new Date().toISOString() } } : {}),
+  };
+}
 import { trackSignup, setTrackingBand } from '@/lib/analytics';
 import { colorFor } from '@/components/cards/cardIdentity';
 
@@ -125,8 +148,10 @@ async function applyOnboardingFromStorage(userEmail) {
   // so we know which campaign pillar drove this signup (no migration needed).
   const attribution = getAttribution();
   const hasAttribution = !!attribution.pillar || Object.keys(attribution.utm || {}).length > 0;
-  if (answers.yearLevel || hasAttribution) {
+  const age = ageExtra(answers);
+  if (answers.yearLevel || hasAttribution || Object.keys(age).length) {
     updates.extra = {
+      ...age,
       ...(answers.yearLevel ? { year_level: answers.yearLevel } : {}),
       ...(hasAttribution
         ? { attribution: { pillar: attribution.pillar, utm: attribution.utm, landing_path: attribution.landing_path } }
@@ -244,6 +269,7 @@ export async function applyOnboardingUpdateForCurrentUser(userEmail, answers) {
 
   updates.extra = {
     ...(profile.extra || {}),
+    ...ageExtra(answers),
     ...(answers.yearLevel ? { year_level: answers.yearLevel } : {}),
   };
 
