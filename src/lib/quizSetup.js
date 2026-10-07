@@ -44,38 +44,93 @@ export const MARK_MAX = 10;
 /** VCAA papers run at roughly this. Printed on screen so the estimate is checkable. */
 export const MINUTES_PER_MARK = 1.5;
 
-/** How many of a mixed paper are multiple choice, as a percentage. */
-export const MCQ_SHARE_MIN = 10;
-export const MCQ_SHARE_MAX = 90;
-export const MCQ_SHARE_DEFAULT = 60;   // what "Mixed" silently meant before it was a control
+/**
+ * THE KINDS OF QUESTION A PAPER MAY HOLD, and a paper may hold any of them.
+ *
+ * "Mixed" used to be a FOURTH TYPE in a one-of-four row, which made it a type
+ * that secretly meant "MCQ plus written, at whatever that slider says" — two
+ * different questions (which kinds, and how many of each) wearing one control.
+ * A real paper is a SET of kinds with a count against each, so that is what is
+ * asked for: tap the kinds, then say how many of each.
+ *
+ * Catalogue ORDER is load-bearing. The last kind a student picks absorbs the
+ * remainder, so "last" has to be the same thing on every render — the order
+ * they happened to tap in is not, and a stepper whose neighbour moves because
+ * of tap order is a control nobody can predict.
+ */
+export const QUESTION_KINDS = [
+    { id: "mcq",       label: "Multiple choice",   short: "MCQ",      sub: "four options",  written: false },
+    { id: "short",     label: "Short answer",      short: "Written",  sub: "a few marks",   written: true },
+    { id: "multipart", label: "Extended response", short: "Extended", sub: "(a) (b) (c)",   written: true },
+];
+
+const KIND_IDS = QUESTION_KINDS.map(k => k.id);
 
 /** More than this many emphasised command terms is no emphasis at all. */
 export const TERM_MAX = 4;
 
 const clamp = (n, lo, hi) => Math.min(hi, Math.max(lo, n));
 
+/** The picked kinds, in CATALOGUE order, with anything unrecognised dropped. */
+export const pickedKinds = (kinds = []) => KIND_IDS.filter(id => kinds.includes(id));
+
 /** Round a minute figure to the nearest 5, never below 5. */
 export const roundMinutes = (m) => Math.max(5, Math.round(m / 5) * 5);
 
 /**
- * How many of each kind a paper of `count` questions holds.
+ * How many of each picked kind a paper of `count` questions holds.
  *
- * `mixed` used to be a hard-coded 0.6 inside the prompt string AND restated in
- * the dialog's preview — two copies of a number the student never chose. It is
- * `mcqShare` now and this is the only place it is applied.
+ * THE COUNTS ALWAYS SUM TO THE TOTAL, and the LAST picked kind is what makes
+ * that true: it takes whatever is left. Ratios normalised to a total produce a
+ * rounding the student did not choose — ask for a third of twelve across three
+ * kinds and one of them silently comes back with five — so what is stored and
+ * what is shown are counts, and the only derived figure is the remainder.
+ *
+ * EVERY PICKED KIND KEEPS AT LEAST ONE. A paper that says it holds three kinds
+ * and arrives with two is the control saying one thing and the paper another,
+ * which is the failure the old "mixed" slider could produce at 95%. Each
+ * stepper is therefore clamped so the kinds after it still have one each.
+ *
+ * A kind with no stored count takes an even share rather than zero — a newly
+ * ticked kind that lands on nought looks like the tick did not register.
  */
-export function splitFor({ types = "mixed", count = 10, mcqShare = MCQ_SHARE_DEFAULT } = {}) {
+export function allocate({ kinds = [], counts = {}, count = 10 } = {}) {
+    const picked = pickedKinds(kinds);
     const n = clamp(Math.round(Number(count) || 0), 0, COUNT_MAX);
-    if (types === "mcq_only") return { mcq: n, short: 0 };
-    if (types === "short_only" || types === "multipart") return { mcq: 0, short: n };
+    const out = {};
+    if (!picked.length || n <= 0) return out;
+    if (picked.length === 1) { out[picked[0]] = n; return out; }
 
-    // Mixed. At least one of each whenever there are two or more questions —
-    // a "mixed" paper that came out all MCQ is the control saying one thing
-    // and the paper being another.
-    const share = clamp(Number(mcqShare) || 0, 0, 100);
-    let mcq = Math.round((n * share) / 100);
-    if (n >= 2) mcq = clamp(mcq, 1, n - 1);
-    return { mcq, short: n - mcq };
+    // Fewer questions than kinds cannot give every kind one. Defensive:
+    // COUNT_MIN is above the number of kinds, so the picker cannot reach it.
+    if (n <= picked.length) {
+        picked.forEach((id, i) => { out[id] = i < n ? 1 : 0; });
+        return out;
+    }
+
+    let left = n;
+    picked.forEach((id, i) => {
+        const rest = picked.length - i - 1;
+        if (!rest) { out[id] = left; return; }      // the last one takes what is left
+        const stored = Number(counts[id]);
+        const want = Number.isFinite(stored) && stored > 0
+            ? Math.round(stored)
+            : Math.max(1, Math.round(n / picked.length));
+        out[id] = clamp(want, 1, left - rest);
+        left -= out[id];
+    });
+    return out;
+}
+
+/** The ceiling a stepper may be dragged to, given what the kinds after it need. */
+export function maxFor(id, { kinds = [], counts = {}, count = 10 } = {}) {
+    const picked = pickedKinds(kinds);
+    const i = picked.indexOf(id);
+    if (i < 0 || i === picked.length - 1) return 0;   // the remainder is not set by hand
+    const alloc = allocate({ kinds, counts, count });
+    const after = picked.slice(i + 1).length;
+    const others = picked.slice(0, i).reduce((t, k) => t + (alloc[k] || 0), 0);
+    return Math.max(1, clamp(Math.round(Number(count) || 0), 0, COUNT_MAX) - others - after);
 }
 
 /**
@@ -86,10 +141,15 @@ export function splitFor({ types = "mixed", count = 10, mcqShare = MCQ_SHARE_DEF
  * the caller reads to decide between "38 marks" and "32–48 marks".
  */
 export function paperShape({
-    types = "mixed", count = 10, mcqShare = MCQ_SHARE_DEFAULT,
+    kinds = ["mcq", "short"], counts = {}, count = 10,
     markLo = 2, markHi = 6,
 } = {}) {
-    const { mcq, short } = splitFor({ types, count, mcqShare });
+    const alloc = allocate({ kinds, counts, count });
+    const mcq = alloc.mcq || 0;
+    // SHORT AND MULTIPART ARE BOTH WRITTEN, and both carry an allocation out of
+    // the mark range — an extended question's range is the sum of its parts.
+    // Only an MCQ is fixed at one mark, which is what `questionMark` scores.
+    const short = (alloc.short || 0) + (alloc.multipart || 0);
     // A reversed pair is the handles crossed, not an empty paper.
     const lo = clamp(Math.round(Number(markLo) || MARK_MIN), MARK_MIN, MARK_MAX);
     const hi = clamp(Math.round(Number(markHi) || MARK_MIN), MARK_MIN, MARK_MAX);
@@ -100,6 +160,7 @@ export function paperShape({
     const marksHi = base + short * b;
 
     return {
+        alloc, kinds: pickedKinds(kinds),
         mcq, short,
         total: mcq + short,
         markLo: a, markHi: b,
@@ -152,6 +213,6 @@ Still never invent a source, and still omit "stimulus" on every question that do
 
 export default {
     MCQ_MARKS, COUNT_MIN, COUNT_MAX, MARK_MIN, MARK_MAX, MINUTES_PER_MARK,
-    MCQ_SHARE_MIN, MCQ_SHARE_MAX, MCQ_SHARE_DEFAULT, TERM_MAX,
-    roundMinutes, splitFor, paperShape, markRule, stimulusAsk,
+    QUESTION_KINDS, TERM_MAX,
+    roundMinutes, pickedKinds, allocate, maxFor, paperShape, markRule, stimulusAsk,
 };

@@ -1,11 +1,11 @@
 import React, { useEffect, useState } from "react";
-import { motion } from "framer-motion";
 import { Card, CardContent } from "@/components/ui/card";
-import { CheckCircle, Sparkles , AlertCircle} from "lucide-react";
+import { AlertCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { base44 } from "@/api/base44Client";
 import { trackPurchase } from "@/lib/analytics";
 import AceShuffle from "@/components/ace/AceShuffle";
+import PremiumReveal from "@/components/subscription/PremiumReveal";
 
 export default function PaymentSuccess() {
     const [status, setStatus] = useState("verifying"); // verifying | success | error
@@ -66,11 +66,15 @@ export default function PaymentSuccess() {
                 const purchaseValue = result.amount_total ? result.amount_total / 100 : (result.amount || 0);
                 trackPurchase(purchaseValue, result.currency ? result.currency.toUpperCase() : "AUD");
 
-                // 5. Show success briefly, then hard-redirect so entire app re-initialises fresh
+                // 5. THE REVEAL IS NOT CUT OFF. This used to hard-redirect at
+                //    2,500ms, which is less than the deal takes to play — a
+                //    celebration snatched away mid-animation on the one screen
+                //    that exists to be a celebration. Leaving is a tap now,
+                //    with a long fallback inside PremiumReveal so an abandoned
+                //    tab still lands. The navigation stays a full href,
+                //    because the whole app has to re-initialise against a
+                //    profile that became premium ten seconds ago.
                 setStatus("success");
-                setTimeout(() => {
-                    window.location.href = "/Dashboard";
-                }, 2500);
             } catch (err) {
                 console.error("[PaymentSuccess] Error:", err);
                 setErrorMsg(err.message || "An unexpected error occurred.");
@@ -83,7 +87,7 @@ export default function PaymentSuccess() {
 
     if (status === "verifying") {
         return (
-            <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-green-50 via-blue-50 to-purple-50 p-4">
+            <div className="min-h-screen flex items-center justify-center bg-background p-4">
                 <Card className="max-w-md w-full">
                     <CardContent className="p-8 text-center">
                         <AceShuffle size="lg" className="mb-4 mx-auto" />
@@ -97,9 +101,15 @@ export default function PaymentSuccess() {
 
     if (status === "error") {
         const paid = !!paidButPending;
+        /* ── ON TOKENS, IN BOTH THEMES ─────────────────────────────────────
+           Every ground here was a literal `-50` gradient and every ink a
+           literal `-900`, so in the dark this was a bright slab on a near-black
+           page — the failure /Paywall records about the one screen that asks
+           for money. The tone is carried by `xp` (money taken, nothing
+           delivered yet) and `streak` (it failed), which are the two colours
+           the student already reads that way. */
         return (
-            <div className={`min-h-screen flex items-center justify-center p-4 bg-gradient-to-br ${
-                paid ? "from-amber-50 via-yellow-50 to-orange-50" : "from-red-50 via-orange-50 to-yellow-50"}`}>
+            <div className="min-h-screen flex items-center justify-center p-4 bg-background">
                 <Card className="max-w-md w-full">
                     <CardContent className="p-8 text-center">
                         {/* A STATUS DISC HOLDS A GLYPH, and the deck is not one.
@@ -117,12 +127,12 @@ export default function PaymentSuccess() {
                                 <AlertCircle className="w-8 h-8 text-streak" />
                             </div>
                         )}
-                        <h2 className={`text-xl font-bold mb-2 ${paid ? "text-amber-900" : "text-red-900"}`}>
-                            {paid ? "Payment received — activating" : "Payment Verification Failed"}
+                        <h2 className="text-xl font-bold mb-2 text-foreground">
+                            {paid ? "Payment received — activating" : "That payment did not go through"}
                         </h2>
-                        <div className={`rounded-lg p-4 mb-4 border ${
-                            paid ? "bg-amber-50 border-amber-200" : "bg-red-50 border-red-200"}`}>
-                            <p className={`text-sm break-words ${paid ? "text-amber-900" : "font-mono text-red-800"}`}>
+                        <div className={`rounded-xl p-4 mb-4 border-2 ${
+                            paid ? "bg-xp/10 border-xp/30" : "bg-streak/10 border-streak/30"}`}>
+                            <p className={`text-sm break-words text-foreground ${paid ? "" : "font-mono"}`}>
                                 {errorMsg}
                             </p>
                         </div>
@@ -147,36 +157,6 @@ export default function PaymentSuccess() {
     }
 
     return (
-        <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-green-50 via-blue-50 to-purple-50 p-4">
-            <motion.div
-                initial={{ opacity: 0, scale: 0.9 }}
-                animate={{ opacity: 1, scale: 1 }}
-                transition={{ duration: 0.5 }}
-                className="max-w-lg w-full"
-            >
-                <Card className="border-0 shadow-2xl overflow-hidden">
-                    <div className="bg-gradient-to-br from-green-600 to-emerald-600 p-8 text-center">
-                        <motion.div
-                            initial={{ scale: 0 }}
-                            animate={{ scale: 1 }}
-                            transition={{ delay: 0.2, type: "spring", stiffness: 200 }}
-                            className="w-24 h-24 bg-surface rounded-full flex items-center justify-center mx-auto mb-6 shadow-xl"
-                        >
-                            <CheckCircle className="w-16 h-16 text-green-600" />
-                        </motion.div>
-                        <h1 className="text-4xl font-black text-white mb-3">Success!</h1>
-                        <p className="text-xl text-green-50">Welcome to Premium!</p>
-                    </div>
-                    <CardContent className="p-8 text-center space-y-4">
-                        <div className="bg-gradient-to-br from-purple-50 to-blue-50 rounded-xl p-6 border-2 border-purple-200">
-                            <Sparkles className="w-10 h-10 text-purple-600 mx-auto mb-3" />
-                            <h3 className="text-lg font-bold text-foreground mb-1">You now have full premium access!</h3>
-                            <p className="text-muted-foreground text-sm">Redirecting you to your subscription page...</p>
-                        </div>
-                        <AceShuffle size="md" label="Redirecting" className="mx-auto" />
-                    </CardContent>
-                </Card>
-            </motion.div>
-        </div>
+        <PremiumReveal onContinue={() => { window.location.href = "/Dashboard"; }} />
     );
 }

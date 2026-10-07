@@ -14,9 +14,9 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
 import {
-    splitFor, paperShape, markRule, stimulusAsk, roundMinutes,
+    allocate, maxFor, pickedKinds, paperShape, markRule, stimulusAsk, roundMinutes,
     MARK_MIN, MARK_MAX, COUNT_MIN, COUNT_MAX, MINUTES_PER_MARK,
-    MCQ_SHARE_DEFAULT, TERM_MAX, MCQ_MARKS,
+    QUESTION_KINDS, TERM_MAX, MCQ_MARKS,
 } from "@/lib/quizSetup";
 import { COMMAND_TERMS, commandTermRule, getExaminerPrompt } from "@/lib/subjectExaminerPrompts";
 
@@ -37,7 +37,7 @@ const FIELDS = "src/components/quizzes/QuizSetupFields.jsx";
 /* ── A PAPER IS A SPREAD, NOT ONE NUMBER ─────────────────────────────────── */
 
 ok("a range gives a RANGE of totals, and says it is one", () => {
-    const p = paperShape({ types: "mixed", count: 12, mcqShare: 60, markLo: 2, markHi: 6 });
+    const p = paperShape({ kinds: ["mcq", "short"], counts: { mcq: 7 }, count: 12, markLo: 2, markHi: 6 });
     assert.equal(p.mcq + p.short, 12);
     assert.ok(p.varied, "a 2-to-6 paper reported a single total");
     assert.ok(p.marksLo < p.marksHi);
@@ -48,7 +48,7 @@ ok("a range gives a RANGE of totals, and says it is one", () => {
 });
 
 ok("both handles on one value is ONE number, not a range of width zero", () => {
-    const p = paperShape({ types: "short_only", count: 10, markLo: 4, markHi: 4 });
+    const p = paperShape({ kinds: ["short"], count: 10, markLo: 4, markHi: 4 });
     assert.equal(p.varied, false);
     assert.equal(p.marksLo, p.marksHi);
     assert.equal(p.marksLo, 40);
@@ -63,43 +63,108 @@ ok("NOTHING AVERAGES THE RANGE INTO A TOTAL", () => {
 });
 
 ok("crossed handles are swapped, never read as an empty paper", () => {
-    const a = paperShape({ types: "short_only", count: 5, markLo: 7, markHi: 2 });
-    const b = paperShape({ types: "short_only", count: 5, markLo: 2, markHi: 7 });
+    const a = paperShape({ kinds: ["short"], count: 5, markLo: 7, markHi: 2 });
+    const b = paperShape({ kinds: ["short"], count: 5, markLo: 2, markHi: 7 });
     assert.deepEqual(a, b);
     assert.ok(a.marksLo > 0, "a reversed pair produced a paper worth nothing");
 });
 
 ok("every figure is clamped to the control's own ends", () => {
-    const p = paperShape({ types: "short_only", count: 999, markLo: -4, markHi: 90 });
+    const p = paperShape({ kinds: ["short"], count: 999, markLo: -4, markHi: 90 });
     assert.ok(p.total <= COUNT_MAX);
     assert.equal(p.markLo, MARK_MIN);
     assert.equal(p.markHi, MARK_MAX);
     assert.ok(Number.isFinite(p.marksHi) && p.marksHi > 0);
 });
 
-/* ── THE SPLIT IS ONE ANSWER ─────────────────────────────────────────────── */
+/* ── THE KINDS ARE A SET, AND THE COUNTS SUM TO THE TOTAL ────────────────── */
 
-ok("a MIXED paper always holds both kinds", () => {
-    // 95% MCQ of two questions is 2 and 0, which is the control saying "mixed"
-    // and the paper arriving all multiple choice.
-    assert.deepEqual(splitFor({ types: "mixed", count: 2, mcqShare: 95 }), { mcq: 1, short: 1 });
-    assert.deepEqual(splitFor({ types: "mixed", count: 2, mcqShare: 5 }), { mcq: 1, short: 1 });
+ok("the counts always add up to the total, whatever is stored", () => {
+    for (const kinds of [["mcq"], ["mcq", "short"], ["short", "multipart"],
+                         ["mcq", "short", "multipart"]]) {
+        for (const n of [COUNT_MIN, 7, 12, 30]) {
+            for (const counts of [{}, { mcq: 99 }, { mcq: 0, short: -4 }, { short: 3 }]) {
+                const a = allocate({ kinds, counts, count: n });
+                const sum = Object.values(a).reduce((t, v) => t + v, 0);
+                assert.equal(sum, n, `${kinds} at ${n} summed to ${sum}`);
+            }
+        }
+    }
 });
 
-ok("the single-kind shapes put everything on one side", () => {
-    assert.deepEqual(splitFor({ types: "mcq_only", count: 9 }), { mcq: 9, short: 0 });
-    assert.deepEqual(splitFor({ types: "short_only", count: 9 }), { mcq: 0, short: 9 });
-    assert.deepEqual(splitFor({ types: "multipart", count: 9 }), { mcq: 0, short: 9 });
+ok("EVERY PICKED KIND KEEPS AT LEAST ONE", () => {
+    // The old slider could put 95% of two questions on MCQ and return a "mixed"
+    // paper with nothing written on it. A kind on the chip row and absent from
+    // the paper is the control saying one thing and the quiz being another.
+    const a = allocate({ kinds: ["mcq", "short", "multipart"], counts: { mcq: 999 }, count: 12 });
+    for (const id of ["mcq", "short", "multipart"]) assert.ok(a[id] >= 1, `${id} came back ${a[id]}`);
 });
 
-ok("THE 0.6 IS GONE FROM THE PAGE, in the prompt AND in the summary", () => {
-    // It was hard-coded in the prompt string and restated in the preview — two
-    // copies of a number the student was never asked about and could not move.
+ok("the LAST kind is catalogue order, never tap order", () => {
+    // It absorbs the remainder, so which one it is has to be the same on every
+    // render — a stepper whose neighbour moves because of the order somebody
+    // tapped in is a control nobody can predict.
+    assert.deepEqual(pickedKinds(["multipart", "mcq"]), ["mcq", "multipart"]);
+    assert.deepEqual(allocate({ kinds: ["multipart", "mcq"], counts: { mcq: 4 }, count: 10 }),
+                     allocate({ kinds: ["mcq", "multipart"], counts: { mcq: 4 }, count: 10 }));
+});
+
+ok("the remainder is not set by hand, and a stepper stops where it must", () => {
+    const at = { kinds: ["mcq", "short", "multipart"], counts: {}, count: 12 };
+    assert.equal(maxFor("multipart", at), 0, "the last kind grew a stepper");
+    // Ten leaves one each for the two kinds after it, and no more.
+    assert.equal(maxFor("mcq", at), 10);
+    assert.equal(maxFor("nonsense", at), 0);
+});
+
+ok("an unknown kind is dropped rather than carried", () => {
+    assert.deepEqual(pickedKinds(["mcq", "jellyfish"]), ["mcq"]);
+    assert.deepEqual(allocate({ kinds: ["jellyfish"], count: 10 }), {});
+});
+
+ok("MULTIPART COUNTS AS WRITTEN, because it carries an allocation", () => {
+    // Only an MCQ is fixed at one mark. An extended question's range is the sum
+    // of its parts, so it has to be inside the mark range like any other.
+    const p = paperShape({ kinds: ["mcq", "multipart"], counts: { mcq: 6 },
+        count: 10, markLo: 3, markHi: 9 });
+    assert.equal(p.mcq, 6);
+    assert.equal(p.short, 4, "extended questions fell out of the written count");
+    assert.equal(p.marksLo, 6 * MCQ_MARKS + 4 * 3);
+});
+
+ok("THE 0.6 AND THE FOURTH 'TYPE' ARE BOTH GONE", () => {
+    // The split was hard-coded in the prompt AND restated in the preview, and
+    // "Mixed" was a type that secretly meant two types at that ratio.
     const src = code(QUIZZES);
     assert.ok(!/num_questions\s*\*\s*0\.6/.test(src), "the 60/40 split is back in Quizzes.jsx");
+    assert.ok(!/mcq_share/.test(src + code(FIELDS)), "the balance slider is back");
+    assert.ok(!/question_types/.test(src + code(FIELDS)), "the one-of-four type row is back");
     assert.ok(src.includes("paperShape("), "the page stopped reading the one model");
-    assert.ok(/mcq_share/.test(src) && /mcq_share/.test(code(FIELDS)),
-        "the balance control is not wired to anything");
+    assert.ok(/kind_counts/.test(src) && /kind_counts/.test(code(FIELDS)),
+        "the per-kind counts are not wired to anything");
+});
+
+ok("A KIND NOBODY PICKED IS COERCED TO ONE THEY DID", () => {
+    const src = code(QUIZZES);
+    assert.ok(/if \(!shape\.alloc\.mcq\) forcedType = "short_answer";/.test(src),
+        "a written-only paper can come back half multiple choice");
+    assert.ok(/if \(!shape\.alloc\.short && !shape\.alloc\.multipart\) forcedType = "mcq";/.test(src),
+        "an MCQ-only paper can come back half written");
+});
+
+ok("the prompt states a line per kind, and the total again", () => {
+    const src = code(QUIZZES);
+    assert.ok(/kindLines\.push/.test(src), "the counts stopped being stated per kind");
+    assert.ok(/Total questions: \$\{shape\.total\}/.test(src),
+        "a model given three counts and no sum rounds one of them out");
+    assert.ok(/if \(multipartTarget\) \{/.test(src),
+        "the extended-response brief is sent whether or not any were asked for");
+});
+
+ok("the chip row cannot empty the paper", () => {
+    const src = code(FIELDS);
+    assert.ok(/disabled=\{on && picked\.length === 1\}/.test(src),
+        "the last kind can be untapped, which is a paper of no questions");
 });
 
 ok("the prompt and the strip are built from the SAME shape", () => {
@@ -108,7 +173,7 @@ ok("the prompt and the strip are built from the SAME shape", () => {
     // third answer to "how many of each", which is how this went wrong before.
     assert.equal((src.match(/paperShape\(\{/g) || []).length, 2,
         "a second derivation of the paper's shape appeared");
-    assert.ok(/shape\.mcq/.test(src) && /shape\.short/.test(src),
+    assert.ok(/shape\.alloc\./.test(src) && /shape\.total/.test(src),
         "the prompt stopped taking its counts from the shape");
 });
 
@@ -317,7 +382,9 @@ ok("the scanner recognises the shapes it is looking for", () => {
         assert.ok(read(f).length > 400, `${f} is missing or empty`);
     }
     assert.ok(COUNT_MIN < COUNT_MAX && MARK_MIN < MARK_MAX);
-    assert.equal(MCQ_SHARE_DEFAULT, 60, "the old hard-coded 60/40 is the default it replaced");
+    assert.ok(QUESTION_KINDS.length >= 3 && QUESTION_KINDS[0].id === "mcq");
+    // Exactly one kind is fixed at one mark; the rest carry an allocation.
+    assert.equal(QUESTION_KINDS.filter(k => !k.written).length, 1);
 });
 
 console.log(`\nquizSetup: ${n} checks passed`);

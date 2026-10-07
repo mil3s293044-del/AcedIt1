@@ -5631,6 +5631,143 @@ on `quizSetup.js`, which git had never heard of, leaving one injected line
 behind in it. Snapshot the files to a scratch copy and restore from that; the
 test suite then catches the leftover, which it did.
 
+## Four screens that each asked something twice, or said nothing at all
+
+**"Never have it ask for age twice. Also the subscription animation clashes
+with dark mode... make the animation cooler and feel more rewarding. Also when
+choosing question types in quizzes have them be able to select multiple and
+then the ratio. Also on the onboarding when Ace asks what we are doing, he
+talks way too quickly and the bubble disappears and still has no direction."**
+
+Four reports, four different screens, and three of them are the same shape:
+**the app had the answer already and asked anyway, or had the thing already and
+drew it blank.**
+
+### THE AGE WAS ASKED TWICE BECAUSE THE TWO ASKS WERE BUILT FOR DIFFERENT PEOPLE
+
+`AgeGate`'s own header says why it exists: a step in the signup wizard only
+ever catches NEW accounts, and there are ~130 existing ones the published
+policies were already making promises about. That reasoning is correct and it
+is exactly what produced the bug — the gate was written to cover everybody
+INCLUDING the people the wizard had just asked, because nothing connected the
+two. A new student answered in the wizard and then met a blocking modal asking
+for the same date.
+
+**THE FIX IS ONE CONTROL AND ONE STORED ANSWER, NOT ONE SCREEN.** Both asks
+have to stay: delete the wizard step and new accounts meet a modal on their
+first screen, delete the gate and the existing ~130 are never asked at all.
+What was missing was that **the gate renders on an UNKNOWN band**, so a wizard
+that writes `date_of_birth` closes the gate by making the band known. The
+wizard was not writing it.
+
+`AgeAnswer` is the shared control — the field, `ageAnswerReady`,
+`ageAnswerPatch` and `ageAnswerHint` — and both screens import it. Two copies
+of a legal-facing field is the mirror this codebase keeps deleting, and the
+copy that drifted would be the one that stops asking for consent. The gate
+keeps its own framing and its own refusal; only the question is shared.
+
+**`ageExtra` RETURNS `{}` WITH NO ANSWER, never a patch full of `undefined`.**
+Spreading the second into the profile would blank a date already on file and
+reopen the gate for somebody who had answered — the ask-twice bug coming back
+through the write rather than through the screen.
+
+`compliance.test.mjs` holds all three, and **the first draft of the shared-
+control check was vacuous**: it matched the bare name `ageAnswerReady`, which
+the `import { ageAnswerReady, … }` line satisfies on its own, so replacing the
+call with a hand-rolled test left the guard green. It requires the CALL now.
+That is this file's own "a scan that matches somewhere in a large span is not a
+scan" rule, met again and found only by injection.
+
+### THE ACE ON THE PAYMENT SCREEN PRINTED BLANK, IN BOTH THEMES
+
+The old screen was a `CheckCircle` scaling in over `from-green-50 via-blue-50
+to-purple-50` — three literal light palettes, so in the dark it was bright
+slabs on a near-black page, the failure /Paywall already records. It is on
+tokens now and `PremiumReveal` makes the moment out of the vocabulary the app
+already owns: Ace deals three backs and the middle one turns over as the ace of
+spades, which `cardIdentity` has always reserved for something earned.
+
+**AND THE ACE CAME OUT INVISIBLE, which only a screenshot said.** Two causes,
+both of them a default:
+
+- **`PlayingCard`'s middle is `watermark` unless you ask for `pips`** — one
+  ghost suit at 3.5%. So the one card the headline is about printed as empty
+  stock. `pips` is what prints the real centred mark, and it inks
+  `fill-foreground`, so it reads near-black on light and near-white on dark
+  with nothing to configure.
+- **Card stock is `--surface` and so is the panel it was dealt onto.** All
+  three cards were drawn in the colour of the thing behind them: white on white
+  in the light, a black hole between two bright green backs in the dark. The
+  deal sits in a recessed well now, which is the inset-well idiom SourcePanel
+  already uses, and it separates them in both themes with one token.
+
+`tone` was the wrong lever and was tried first — it only ever tints the printed
+frame, which is why the fix produced a card with a green outline and nothing
+inside it.
+
+**AND IT IS NOT SNATCHED AWAY.** The old page hard-redirected after 2,500ms,
+which is less than the reveal takes to play — a celebration cut off mid-deal.
+Leaving is the student's tap, with a long fallback so an abandoned tab still
+lands somewhere. `premiumReveal.test.mjs` pins the fallback at a floor rather
+than a number, because the bug is specifically a timer SHORTER than the
+animation it interrupts.
+
+### A QUESTION TYPE WAS ONE CHOICE WHERE A PAPER HAS THREE
+
+The generator offered multiple choice OR short answer OR extended response, one
+per paper — the same shape as the flat `marks_per_short` the release before
+this one deleted, and wrong for the same reason: **no real paper is set that
+way.** `kinds` is a multi-select and `counts` is how many of each.
+
+**THE LAST KIND TAKES THE REMAINDER, and that is what makes the control
+honest.** `allocate` gives every picked kind its stored count except the last,
+which gets whatever is left, so the per-kind numbers ALWAYS add up to the total
+the slider above them says. The alternative — three independent steppers and a
+total that disagrees with them — is the "two surfaces answer one question" bug
+built on purpose. `maxFor` is what stops a stepper pushing the remainder below
+one, and the remainder row prints as plain text rather than a disabled stepper,
+because a control that cannot be moved is not a control.
+
+The prompt emits **exact counts per kind** (`EXACTLY 6 multiple choice…`) rather
+than a ratio, and the footer strip states the same three numbers it was built
+from, so what the student read is what the generator was asked for.
+
+### HE TALKED TOO QUICKLY, THE BUBBLE EMPTIED, AND ONE BEAT SAID NOTHING
+
+Three faults with one visible symptom, and none of them throws.
+
+- **`AnimatePresence mode="wait"` FADES THE OLD CHILD FULLY OUT BEFORE THE NEW
+  ONE STARTS**, so between two beats the bubble genuinely held nothing — on the
+  screen that is in the middle of asking somebody a question. `AceSay` replaces
+  it and carries **no exit**, so a beat change swaps the content in place.
+- **The lines arrived as one block.** `AceLine` staggers them, slow enough to
+  read and short enough that four are on screen inside half a second. A
+  typewriter would be worse: a character-by-character reveal of a paragraph on
+  a phone is slower than reading it and cannot be skipped. Reduced motion
+  arrives WHOLE rather than slowly — somebody who asked for less motion is not
+  asking to be made to wait.
+- **NOTHING AUTO-DISMISSES A BEAT.** A timer added here later would look like a
+  kindness and is not: the student is being asked a question, and a question
+  that times out has no answer.
+
+**AND THE "NO DIRECTION" HALF WAS LITERAL.** Every beat has a lead line saying
+what to do — except the one that asks what is going wrong, which went from a
+heading straight to three buttons. So the single beat whose options are
+deliberately vague (they are the STUDENT's words, never ours) was also the only
+one with nothing saying how to choose between them or what choosing bought
+them. It now says there is no wrong answer and names what the pick decides.
+Copy cannot be wrong at runtime, so a scan is the only thing that catches it.
+
+**`aceStage.test.mjs` HIT THE BRACE-WALK TRAP AGAIN.** The no-exit check walked
+from the first `{` after `export function AceSay` — which is the DESTRUCTURED
+PARAMETER, so it opened and closed on the parameter list and never read the
+body at all. The guard passed with an `exit` sitting in it. That is exactly
+what `xpRates.test.mjs` records about its own calculators; it counts from after
+the signature's closing paren now. Found by injection, which is the only way
+any of this is found: **of thirteen new assertions, four passed with the bug in
+place on the first attempt**, and two of those four were the guard's fault
+rather than the injection's.
+
 ## A canvas is not a clock
 
 **The first wiring timed the session from when the map was OPENED**, clamped at
@@ -6150,6 +6287,25 @@ somebody opening the pricing page and the gate in the same sitting.
   screens draw; `ui/slider.jsx` renders a thumb per value, which it did not.
   Draw it with `scripts/_floorProbe.jsx?v=quizsetup`, both themes and at 390 —
   four cells of words do not fit a phone and only the screenshot says so
+- `src/components/legal/AgeAnswer.jsx` — the birthday asked ONCE: the one
+  control the signup wizard and `AgeGate` both import, with `ageAnswerReady` /
+  `ageAnswerPatch` so the two cannot disagree about what "answered" means. The
+  gate renders on an UNKNOWN band, so the wizard closes it by writing
+  `date_of_birth` — which it was not doing. `compliance.test.mjs` holds it, and
+  requires the CALL rather than the import, which is how the first draft passed
+- `src/components/subscription/PremiumReveal.jsx` + `premiumReveal.test.mjs` —
+  the moment somebody has just paid. Ace deals three backs and the middle one
+  turns over as the ace; `pips` is what makes it print an ace at all, and the
+  deal needs a well under it because card stock and the panel are both
+  `--surface`. The 2,500ms redirect that cut the reveal off is gone
+- `src/components/shared/Confetti.jsx` — the cannon, lifted out of
+  `PrankOverlay` so the payment screen and a prank throw the same paper
+- `src/components/ace/AceWalker.jsx` `AceSay` / `AceLine` — he says a beat at a
+  pace and the bubble never empties between them. `AnimatePresence
+  mode="wait"` fades the old child fully out BEFORE the new one starts, so the
+  bubble genuinely held nothing mid-question; `AceSay` carries no exit.
+  `aceStage.test.mjs` pins that, the stagger, the absence of any auto-dismiss
+  timer, and that every beat offering a choice says what choosing does
 - `src/lib/mindmapXp.js` + `mindmapXp.test.mjs` — what a sitting on the canvas
   is worth: active minutes floored by what the map actually GREW, a pure
   decision because it pays, and a reason on every refusal. `MindMaps.jsx` stamps

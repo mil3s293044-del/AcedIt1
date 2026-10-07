@@ -131,4 +131,66 @@ export function AceBubble({ children, className = "" }) {
     );
 }
 
+/**
+ * ─── HE TALKED TOO FAST, AND THE BUBBLE EMPTIED BETWEEN BEATS ───────────────
+ * Both the first run and the tour swapped their content inside an
+ * `AnimatePresence mode="wait"` whose exit was a bare `opacity: 0`. `wait`
+ * means exactly that: the OLD content animates out to nothing, and only then
+ * does the new content start. So between two beats the bubble sat there empty
+ * for a beat of its own — which reads as the bubble disappearing, because for
+ * a moment it had. And nothing paced what arrived: a label, a headline, a
+ * paragraph and a row of buttons all appeared on the same frame, which at the
+ * speed the beats move is a wall of text that changed before it was read.
+ *
+ * `AceSay` replaces it. There is no exit at all — React swaps the children,
+ * the bubble never empties — and the new beat reveals as LINES, in order, the
+ * way somebody says them. `key` is the beat, so the reveal replays per beat
+ * rather than once per mount.
+ *
+ * NOTHING HERE DISMISSES ITSELF. There is no timer, and that is deliberate
+ * rather than an omission: he is answering a question the student has to act
+ * on, and a bubble that times out is a question withdrawn before it was read.
+ * The only way out is the close button, which is the student's.
+ *
+ * `STAGGER` is deliberately slow enough to read and short enough that four
+ * lines are all on screen inside half a second — a typewriter would be worse,
+ * because a character-by-character reveal of a paragraph on a phone is slower
+ * than reading it and cannot be skipped.
+ */
+const STAGGER = 0.11;
+
+const SAY = {
+    hidden: {},
+    shown: { transition: { staggerChildren: STAGGER, delayChildren: 0.06 } },
+};
+const LINE = {
+    hidden: { opacity: 0, y: 6 },
+    shown: { opacity: 1, y: 0, transition: { duration: 0.3, ease: "easeOut" } },
+};
+
+export function AceSay({ beat, children, className = "" }) {
+    const reduce = useReducedMotion();
+    return (
+        <motion.div
+            key={beat}
+            variants={SAY}
+            /* REDUCED MOTION ARRIVES WHOLE rather than slowly: the point of the
+               stagger is pacing, and somebody who has asked for less motion is
+               not asking to be made to wait. */
+            initial={reduce ? false : "hidden"}
+            animate="shown"
+            className={className}
+        >
+            {children}
+        </motion.div>
+    );
+}
+
+/** One line of what he is saying. Reveals in the order it is written. */
+export function AceLine({ children, className = "" }) {
+    return (
+        <motion.div variants={LINE} className={className}>{children}</motion.div>
+    );
+}
+
 export { AnimatePresence };

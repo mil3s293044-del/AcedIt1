@@ -9,7 +9,8 @@ import { Swords as ReachSwords, ListChecks as ReachList,
 import React from "react";
 import ReactDOM from "react-dom/client";
 import { PaperFields, EmphasisFields } from "@/components/quizzes/QuizSetupFields";
-import { paperShape, MINUTES_PER_MARK } from "@/lib/quizSetup";
+import { paperShape, MINUTES_PER_MARK, QUESTION_KINDS } from "@/lib/quizSetup";
+import PremiumReveal from "@/components/subscription/PremiumReveal";
 import "@/index.css";
 import AceDeal from "@/components/market/AceDeal";
 import TakeSide from "@/components/market/TakeSide";
@@ -1113,14 +1114,17 @@ views.setup = () => (
  */
 function QuizSetupProbe() {
     const [s, setS] = React.useState({
-        difficulty: "Medium", num_questions: 12, question_types: "mixed",
+        difficulty: "Medium", num_questions: 12,
+        // All three kinds, which is the layout's worst case: three stepper rows
+        // and the remainder row under them.
+        kinds: ["mcq", "short", "multipart"], kind_counts: { mcq: 6, short: 4 },
         focus_areas: "", quiz_style: "standard", ai_instructions: "",
         include_explanations: true, include_stimulus: true,
-        command_terms: ["explain", "evaluate"], mark_lo: 2, mark_hi: 6, mcq_share: 60,
+        command_terms: ["explain", "evaluate"], mark_lo: 2, mark_hi: 6,
     });
     const patch = (p) => setS(prev => ({ ...prev, ...p }));
     const paper = paperShape({
-        types: s.question_types, count: s.num_questions, mcqShare: s.mcq_share,
+        kinds: s.kinds, counts: s.kind_counts, count: s.num_questions,
         markLo: s.mark_lo, markHi: s.mark_hi,
     });
     return (
@@ -1148,9 +1152,9 @@ function QuizSetupProbe() {
                             {paper.varied ? `~${paper.minutesLo}–${paper.minutesHi} min` : `~${paper.minutesLo} min`}
                         </p>
                         <p className="text-[11px] leading-snug text-muted-foreground">
-                            {paper.mcq > 0 && `${paper.mcq} multiple choice`}
-                            {paper.mcq > 0 && paper.short > 0 && " · "}
-                            {paper.short > 0 && `${paper.short} written`}
+                            {QUESTION_KINDS.filter(k => paper.alloc[k.id] > 0)
+                                .map(k => `${paper.alloc[k.id]} ${k.label.toLowerCase()}`)
+                                .join(" · ")}
                             {" — at "}{MINUTES_PER_MARK} min a mark
                         </p>
                     </div>
@@ -1163,6 +1167,14 @@ function QuizSetupProbe() {
     );
 }
 views.quizsetup = () => <QuizSetupProbe />;
+
+/* ── ?v=premium — the moment somebody has just paid ─────────────────────────
+ *
+ * The real screen is behind Stripe, so this is the only way to look at it. It
+ * is a CLOCK rather than a frame: the deal, the turn, the headline and the
+ * four unlock rows are four different screens. Both themes — it replaced three
+ * literal light gradients, which is the whole first half of the fix. */
+views.premium = () => <PremiumReveal onContinue={() => {}} fallbackMs={10 ** 7} />;
 
 /* ── ?v=ranked — the five ATAR components, each with a door ─────────────────
  *

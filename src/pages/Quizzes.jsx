@@ -56,8 +56,8 @@ import QuizModePicker from "../components/quizzes/QuizModePicker";
 import { subjectColor } from "@/components/cards/cardIdentity";
 import AceShuffle from "@/components/ace/AceShuffle";
 import { PaperFields, EmphasisFields } from "@/components/quizzes/QuizSetupFields";
-import { MINUTES_PER_MARK, MCQ_SHARE_DEFAULT,
-    paperShape, markRule, stimulusAsk } from "@/lib/quizSetup";
+import { QUESTION_KINDS } from "@/lib/quizSetup";
+import { MINUTES_PER_MARK, paperShape, markRule, stimulusAsk } from "@/lib/quizSetup";
 import { commandTermRule } from "@/lib/subjectExaminerPrompts";
 
 // ─── Coach voice helpers (chill + motivational) ──────────────────────────────
@@ -107,7 +107,11 @@ const DEFAULT_AI_SETTINGS = {
     topic: "",
     difficulty: "Medium",
     num_questions: 10,
-    question_types: "mixed",
+    // THE KINDS ARE A SET, and the counts say how many of each. "Mixed" used
+    // to be a fourth TYPE in a one-of-four row, which made it a type that
+    // secretly meant "MCQ plus written at whatever the slider says".
+    kinds: ["mcq", "short"],
+    kind_counts: {},
     focus_areas: "",
     quiz_style: "standard",
     ai_instructions: "",
@@ -119,8 +123,6 @@ const DEFAULT_AI_SETTINGS = {
     // whose score is a percentage of marks available.
     mark_lo: 2,
     mark_hi: 6,
-    // What "Mixed" means. It was a hard-coded 0.6 inside the prompt string.
-    mcq_share: MCQ_SHARE_DEFAULT,
 };
 
 export default function Quizzes() {
@@ -164,12 +166,12 @@ export default function Quizzes() {
      * screen before a chip is spent, which is megaUpload's rule.
      */
     const paper = useMemo(() => paperShape({
-        types: aiSettings.question_types,
+        kinds: aiSettings.kinds,
+        counts: aiSettings.kind_counts,
         count: aiSettings.num_questions,
-        mcqShare: aiSettings.mcq_share,
         markLo: aiSettings.mark_lo,
         markHi: aiSettings.mark_hi,
-    }), [aiSettings.question_types, aiSettings.num_questions, aiSettings.mcq_share,
+    }), [aiSettings.kinds, aiSettings.kind_counts, aiSettings.num_questions,
          aiSettings.mark_lo, aiSettings.mark_hi]);
 
     /* One patch, so a control cannot drop the rest of the settings by spreading
@@ -415,47 +417,56 @@ export default function Quizzes() {
 
             // The paper's shape, from the ONE model the summary strip under
             // the button prints from — so the counts in the prompt and the
-            // counts on screen cannot disagree. `mixed` used to be a hard-coded
-            // 0.6 here AND restated in the preview, with nobody ever asked.
+            // counts on screen cannot disagree.
             const shape = paperShape({
-                types: aiSettings.question_types,
+                kinds: aiSettings.kinds,
+                counts: aiSettings.kind_counts,
                 count: aiSettings.num_questions,
-                mcqShare: aiSettings.mcq_share,
                 markLo: aiSettings.mark_lo,
                 markHi: aiSettings.mark_hi,
             });
 
-            let questionTypeInstruction = "";
-            const mcqTarget = shape.mcq;
-            const shortTarget = shape.short;
-            if (aiSettings.question_types === "mcq_only") {
-                questionTypeInstruction = `You MUST generate EXACTLY ${mcqTarget} multiple choice questions and 0 short answer questions. Every single question must be type "mcq". Total questions: ${mcqTarget}.`;
-            } else if (aiSettings.question_types === "short_only") {
-                questionTypeInstruction = `You MUST generate EXACTLY ${shortTarget} short answer questions and 0 multiple choice questions. Every single question must be type "short_answer". Total questions: ${shortTarget}.`;
-            } else if (aiSettings.question_types === "multipart") {
-                questionTypeInstruction = `You MUST generate EXACTLY ${shortTarget} EXTENDED RESPONSE questions, VCAA style. Total questions: ${shortTarget}.
+            const mcqTarget = shape.alloc.mcq || 0;
+            const shortTarget = shape.short;                 // short + multipart, both written
+            const multipartTarget = shape.alloc.multipart || 0;
 
-Each one is a STEM followed by two to four PARTS:
-  - The stem sets up ONE situation — a scenario, a data set, an experiment, a
-    passage — and asks nothing by itself.
-  - Each part asks a separate thing ABOUT that stem, and every part must be
-    answerable from it. A part that could stand alone as its own question means
-    the stem is doing no work and you have written two questions instead of one.
-  - Parts get progressively harder, the way a real paper builds: recall or a
-    single calculation first, then application, then an evaluation or a
-    multi-step derivation.
-  - Mark allocations differ by part and match the work, and the WHOLE question
-    — every part summed — is worth between ${shape.markLo} and ${shape.markHi}
-    marks. Vary that across the paper rather than writing every question to the
-    same total.
-  - Set "type": "multipart", put the stem in "question", and put the parts in
-    the "parts" array — each with its own "prompt", "marks" and "model_answer".
-    A part may be an MCQ, in which case give it "options" and "correct_answer"
-    instead of a model answer.
+            /* ── THE COUNTS ARE STATED PER KIND, AND THE TOTAL IS STATED AGAIN ──
+               One line per kind the student actually picked, rather than a
+               four-way branch on a "type" that had to pretend a mixed paper was
+               its own kind. The total is repeated at the end because a model
+               given three counts and no sum will occasionally return four of
+               something to round it out. */
+            const kindLines = [];
+            if (mcqTarget) kindLines.push(`- EXACTLY ${mcqTarget} multiple choice questions, type "mcq".`);
+            if (shape.alloc.short) kindLines.push(`- EXACTLY ${shape.alloc.short} short answer questions, type "short_answer".`);
+            if (multipartTarget) kindLines.push(`- EXACTLY ${multipartTarget} extended response questions, type "multipart".`);
 
-Do NOT write the parts into the stem as prose. They go in the array.`;
-            } else {
-                questionTypeInstruction = `You MUST generate EXACTLY ${mcqTarget} multiple choice questions (type "mcq") followed by EXACTLY ${shortTarget} short answer questions (type "short_answer"). Total questions: ${aiSettings.num_questions}. Do not deviate from these counts.`;
+            let questionTypeInstruction = `You MUST generate these counts and no others:
+            ${kindLines.join("\n")}
+            Total questions: ${shape.total}. Do not deviate from these counts, and order them MCQ first, then short answer, then extended response.`;
+
+            if (multipartTarget) {
+                questionTypeInstruction += `
+
+            An EXTENDED RESPONSE question is a STEM followed by two to four PARTS:
+              - The stem sets up ONE situation — a scenario, a data set, an experiment, a
+                passage — and asks nothing by itself.
+              - Each part asks a separate thing ABOUT that stem, and every part must be
+                answerable from it. A part that could stand alone as its own question means
+                the stem is doing no work and you have written two questions instead of one.
+              - Parts get progressively harder, the way a real paper builds: recall or a
+                single calculation first, then application, then an evaluation or a
+                multi-step derivation.
+              - Mark allocations differ by part and match the work, and the WHOLE question
+                — every part summed — is worth between ${shape.markLo} and ${shape.markHi}
+                marks. Vary that across the paper rather than writing every question to the
+                same total.
+              - Set "type": "multipart", put the stem in "question", and put the parts in
+                the "parts" array — each with its own "prompt", "marks" and "model_answer".
+                A part may be an MCQ, in which case give it "options" and "correct_answer"
+                instead of a model answer.
+
+            Do NOT write the parts into the stem as prose. They go in the array.`;
             }
 
             const difficultyDesc = {
@@ -595,10 +606,15 @@ Base ALL questions on the provided material. If files are attached, read ALL con
                     // Forcing it to "mcq" would strand the parts on a shape
                     // that never renders them.
                     if (Array.isArray(q.parts) && q.parts.length > 0) return { ...q, type: "multipart" };
-                    // Force type based on user setting
+                    // A KIND THE STUDENT DID NOT PICK IS COERCED TO ONE THEY
+                    // DID. A paper asked for as written-only that comes back
+                    // half multiple choice is the control saying one thing and
+                    // the quiz being another — and a model that returns an MCQ
+                    // without options is dropped by the filter below, so the
+                    // coercion has to come first or the paper arrives short.
                     let forcedType = q.type === "short_answer" ? "short_answer" : "mcq";
-                    if (aiSettings.question_types === "mcq_only") forcedType = "mcq";
-                    if (aiSettings.question_types === "short_only") forcedType = "short_answer";
+                    if (!shape.alloc.mcq) forcedType = "short_answer";
+                    if (!shape.alloc.short && !shape.alloc.multipart) forcedType = "mcq";
                     return { ...q, type: forcedType };
                 })
                 .filter(q => {
@@ -2012,9 +2028,9 @@ Return valid JSON only.`,
                                     {paper.varied ? `~${paper.minutesLo}–${paper.minutesHi} min` : `~${paper.minutesLo} min`}
                                 </p>
                                 <p className="text-[11px] leading-snug text-muted-foreground">
-                                    {paper.mcq > 0 && `${paper.mcq} multiple choice`}
-                                    {paper.mcq > 0 && paper.short > 0 && " · "}
-                                    {paper.short > 0 && `${paper.short} written`}
+                                    {QUESTION_KINDS.filter(k => paper.alloc[k.id] > 0)
+                                        .map(k => `${paper.alloc[k.id]} ${k.label.toLowerCase()}`)
+                                        .join(" · ")}
                                     {" — at "}{MINUTES_PER_MARK} min a mark
                                 </p>
                             </div>
