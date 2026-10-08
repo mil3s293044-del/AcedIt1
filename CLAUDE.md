@@ -5423,6 +5423,118 @@ Draw it with `scripts/_floorProbe.jsx?v=tools`, in BOTH themes, and at 390. The
 probe does not follow `colorScheme`, so a dark screenshot needs
 `documentElement.classList.add("dark")` or it silently renders light twice.
 
+## The lobby is deleted. The chat IS /AITools
+
+**"Revert the AI tools back to the chatbot format, but brainstorm how to make
+it more aesthetic, more effective and user friendly."**
+
+Five shapes now: a persona dropdown over an empty thread, a BENCH of verbs over
+a workpiece, a SCAN that diagnosed a pasted paragraph, a DASHBOARD in front of
+the chat, and this. **Four of the five put something in front of the chat or in
+place of it, and the chat outlasted all four.** The section above argued the
+lever was wrong when the bench and the scan REPLACED it, and then built a lobby
+— which is the same lever at lower force: a screen a student has to get through
+before reaching the thing that works.
+
+**WHAT THE LOBBY WAS FOR WAS REAL AND IS KEPT.** A blank box does ask for the
+two hardest parts of the job at once. The answer is not a screen before the
+chat, it is the chat's own EMPTY STATE — which is where every chatbot worth
+copying puts it, and which costs no navigation at all because it is already
+where the student is typing.
+
+`ChatWelcome` is that empty state and it carries everything the dashboard had:
+
+- **The direction cards became suggestion chips.** `toolBrief.js` is untouched —
+  the arithmetic, the refusals and the `Number(null)` guards are all still its
+  own. A chip prints the FACT then the OFFER, separately and in that order, for
+  the reason the dashboard's rows did: the fact is the half a student checks us
+  on, and collapsed into one sentence the checkable half stops being checkable.
+  ChatGPT's starter chips are written by its authors and are the same for
+  everybody; these are counted off rows this student owns, which is the one
+  thing on the screen a generic chatbot cannot print.
+- **The twelve tools stayed grouped by WHEN YOU REACH FOR ONE.** `PHASES` is
+  still the only axis a student can place themselves on without knowing a
+  single tool's name.
+- **The room survived.** `.console` scopes the graphite palette and the chat
+  renders INSIDE it now rather than beside it.
+
+**THE PAGE COUNTS AND THE CHAT DRAWS.** The page was already reading five
+tables for the dashboard; it keeps doing that and hands the result down as
+props. A second read inside the chat would be five more round trips before the
+composer painted, for rows already in memory.
+
+### Sixty tokens, and every one of them fails quietly
+
+The chat was a themed app screen and is now inside a scoped room, so every
+`bg-surface`, `text-muted-foreground` and `border-border` in it had to become a
+`--console-*`. Sixty occurrences in one file. **None of them throws and none of
+them is blank** — an app ink inside the console is perfectly legible, just
+cream, so the failure is a warm patch in a graphite page that renders correctly
+and is simply the wrong colour. `consoleInk.test.mjs`'s `ROOM` list is what
+makes that a red suite rather than a screenshot somebody eventually takes, and
+the list now names the chat.
+
+**THE LATTICE WAS ORIGINED ON THE WRONG BOX, and the division is what said so.**
+It is pinned to the column the content is SET IN, and when the dashboard went
+that column changed twice in one sitting: from the dashboard's `max-w-4xl`, to
+the chat's outer `max-w-7xl` shell (which I pointed it at first, and which
+nothing on the page is aligned to — it put a line 16px from the viewport edge
+while every heading and row sat in a 768px column centred inside it, half a cell
+out), to the welcome's own `max-w-3xl`. **736 = 23 × 32**, so a line lands on
+both edges. The measure and its padding are deliberately on ONE element: split
+across two, the gutter stops being part of the column and the arithmetic
+silently stops being true.
+
+### Four affordances, and the first one simply did not exist
+
+- **Copy on every message.** Zero of them before this — the single most-used
+  control in any chat app. `navigator.clipboard` is unavailable on an insecure
+  origin and throws when the document is not focused, so a failure is REPORTED;
+  a tick that never appears reads as a dead button.
+- **Regenerate the last reply**, and **edit and resend** a message. Both are the
+  SAME `send()`, which now takes an explicit prompt and history — a second copy
+  of that function would carry the artifact branch, the file re-attachment, the
+  streaming loop and the save, and is how one path quietly stops attaching
+  documents. A regenerate never eats a typed draft (the composer is only cleared
+  when the send came from it), and an edit says the replies after it are
+  replaced BEFORE the press rather than after.
+- **Search the history**, on the title and the tool's name only. The rows are
+  loaded so it could search message bodies, and a hit buried in turn nine would
+  show a title that does not contain the word — a result nobody can see the
+  reason for. The box appears only past `HISTORY_SEARCH_AT`, because a filter
+  over three chats is a control with nothing to do taking the list's space. A
+  query that matches nothing SAYS SO: an empty drawer reads as "you have no
+  chats", which is a different and much more alarming claim.
+
+**A USER MESSAGE IS NO LONGER A BRAND SLAB.** Every one was `tool.accentSolid`
+with a hard-coded `text-white` — a saturated fill per turn, and an ink that
+cannot follow a theme. It is the room's quiet panel with ordinary ink now;
+alignment and the assistant's glyph are what separate the two speakers, which
+is what ChatGPT and Claude both do. **Colour still means the TOOL in the
+thread** — there it says who is speaking — and means the PHASE in the welcome,
+which lists all twelve at once. One device, one meaning per screen.
+
+### The guards moved with the files, and six "passed" against a broken build
+
+`ToolsDashboard.jsx` and `ToolBrief.jsx` are deleted, so every assertion
+pinned to them had to be repointed rather than dropped — a guard deleted with
+its subject takes the property with it. Two were narrowed on the way, both
+because the old form was a false positive waiting:
+
+- **`pr-` CANNOT MOVE A LEFT EDGE.** The one-left-edge scan matched `p[lxr]`
+  and would have reported a row's own right padding as the fault, whose obvious
+  fix is deleting good padding.
+- **The phase-colour rule is scoped to the WELCOME.** Applied to the whole room
+  it would refuse the thread's accent, which is correct there.
+
+**AND SIX INJECTIONS REPORTED "SILENT" AGAINST A GUARD THAT WAS FINE.**
+`consoleInk.test.mjs` prints `FAIL` and continues; `toolBrief.test.mjs` uses a
+bare `ok()` that THROWS. A sweep grepping for `^FAIL` sees nothing from the
+second and calls every assertion in it vacuous. The sweep checks the exit code
+as well now. That is the injection-harness twin of the lesson this file keeps
+recording about scans: **a sweep that cannot observe the failure proves
+nothing**, and it fails in the direction that quietly deletes guards.
+
 ## The setup screens asked for one paper and offered one mark
 
 **"Make the quiz set-up more comprehensive, to build quizzes that are more
@@ -6240,20 +6352,32 @@ somebody opening the pricing page and the gate in the same sitting.
   `.dark .console` + `src/lib/consoleInk.test.mjs` — the app's SECOND room: ~12
   scoped tokens, a fixed-gauge lattice, and the five silent ways to break a
   scoped palette. The one specific to this room is an app ground/ink token
-  surviving inside it, which is a cream patch in a graphite page
+  surviving inside it, which is a cream patch in a graphite page — and the
+  CHAT is inside the room now, which was sixty of those tokens in one file.
+  `--lattice-x` is origined on the column the content is SET IN (the welcome's
+  `max-w-3xl`, 736 = 23 × 32), never the chat's outer shell; the test does the
+  division because the column has already moved twice
+- `src/components/ai_tools/UnifiedChat.jsx` — the chat, which is the page. Copy
+  on every message (there was none at all), regenerate and edit-and-resend
+  through ONE `send()` that takes an explicit prompt and history, and a history
+  search over titles. A user message is the room's quiet panel rather than a
+  brand slab with hard-coded white ink
 - `src/lib/toolBrief.js` + `toolBrief.test.mjs`,
-  `src/components/ai_tools/ToolBrief.jsx`,
-  `src/components/ai_tools/ToolsDashboard.jsx`, `src/lib/toolLabels.js`,
-  `src/lib/aiChats.js` — the screen /AITools opens on, in front of the
-  unchanged chat: what your own work says is worth a tool (counted off rows the
+  `src/components/ai_tools/ChatWelcome.jsx`, `src/lib/toolLabels.js`,
+  `src/lib/aiChats.js` — the chat's EMPTY STATE, which is what /AITools opens
+  on now that the lobby is deleted (`ToolsDashboard.jsx` and `ToolBrief.jsx`
+  are gone; the chat is the page). The composer is passed in as `children` so
+  there is exactly one of it. What it carries: what your own work says is worth a tool (counted off rows the
   page already loaded, so every line is checkable), the twelve tools as ROWS
   grouped by WHEN you reach for one, and the conversations you can carry on. No
   model call and nothing stored. `toneForTool` is the one colour lookup, so a
   tool is one colour on the screen; `toolUsage` is the per-tool tally, uncapped
   and through the same `chatRows` predicate the Recent list uses. `toolQuery` is
-  the one builder every screen hands a problem over with, and `?tool=` still
-  goes straight to the chat. Draw it with
-  `scripts/_floorProbe.jsx?v=tools`, which carries the locked and empty states
+  the one builder every screen hands a problem over with, and `?tool=` is read
+  by the CHAT rather than the page — consuming it either side would be a race.
+  Draw it with `scripts/_floorProbe.jsx?v=tools`, which carries the locked and
+  empty states, and which wraps the welcome in `<Console>` because its tokens
+  are blank outside the room
 - `src/components/market/StorePreview.jsx` — the thing you are about to buy,
   drawn with the component that draws it when it is worn. A crest at both the
   size you choose it and the size you wear it; the prank Preview plays through
