@@ -75,6 +75,7 @@ import RankedBoard from "@/components/ranked/RankedBoard";
 import QueueRow from "@/components/study/QueueRow";
 import { ClearedStrip, ClearedRow } from "@/components/study/Cleared";
 import PeriodSwitch from "@/components/progress/PeriodSwitch";
+import SubjectSwitch from "@/components/progress/SubjectSwitch";
 import ProgressTabs from "@/components/progress/ProgressTabs";
 import Panel from "@/components/progress/Panel";
 import { CardsTab, QuizzesTab, MistakesTab, HoursTab } from "@/components/progress/FeatureTabs";
@@ -1490,7 +1491,7 @@ views.queue = () => {
     return (
         <MemoryRouter>
             <div className="min-h-screen bg-background p-4 sm:p-6 lg:p-8">
-                <div className="max-w-5xl mx-auto space-y-5">
+                <div className="max-w-5xl mx-auto space-y-5 [&_>*:nth-child(-n+3)]:relative">
                     <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider">Progress</span>
                     <h1 className="font-display text-2xl sm:text-3xl font-extrabold tracking-tight text-foreground leading-[1.15]">
                         {lead ? lead.line : "You're all caught up."}
@@ -1647,7 +1648,11 @@ views.report = () => {
         easiness_factor: 2.1 + (i % 4) * 0.2,
         review_count_good: i % 4, review_count_easy: i % 3, review_count_hard: i % 2,
         review_count_again: i % 5 === 0 ? 2 : 0,
-        last_reviewed_date: i < 14 ? D(i % 4) : D(prev + (i % 3)),
+        // A REAL WEEK HAS A SHAPE. Spread uniformly across four days the
+        // sparkline draws a flat line, which judges the component against data
+        // nobody has — the lesson the Quizzes shelf learned twice. This is a
+        // quiet Monday, a heavy Tuesday, a rest and a recovery.
+        last_reviewed_date: i < 14 ? D([0, 1, 1, 1, 3, 3][i % 6]) : D(prev + (i % 3)),
         next_review_date: D(-(i % 6)),
     }));
 
@@ -1757,11 +1762,22 @@ views.report = () => {
 
     return (
         <MemoryRouter>
-            <div className="min-h-screen bg-background p-4 sm:p-6 lg:p-8">
-                <div className="max-w-5xl mx-auto space-y-5">
-                    <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider">Progress</span>
-                    <Bar live="cards" />
-                    <PeriodSwitch value="week" onChange={() => {}} />
+            <div className="min-h-screen bg-background">
+                {/* THE BAND, drawn exactly as /Review draws it — the chrome on
+                    `--secondary` with a rule under it, so the probe can judge
+                    the one thing that gives this page an identity. */}
+                <div className="bg-secondary/50 border-b border-border">
+                    <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 pt-4 sm:pt-6 pb-4 space-y-4">
+                        <span className="block text-xs font-bold text-muted-foreground uppercase tracking-wider">Progress</span>
+                        <Bar live="cards" />
+                        <div className="flex items-center flex-wrap gap-x-3 gap-y-2">
+                            <PeriodSwitch value="week" onChange={() => {}} />
+                            <SubjectSwitch subjects={["Chemistry", "Legal Studies", "Mathematical Methods"]}
+                                value="__all__" onChange={() => {}} />
+                        </div>
+                    </div>
+                </div>
+                <div className="max-w-5xl mx-auto p-4 sm:p-6 lg:p-8 space-y-5">
                     <CardsTab report={reports.cards} range={range} cards={cards} techniques={techniques}
                         work={workFor(queue, "cards")}
                         pile={<Panel title={`Where your ${cards.length} cards stand`}

@@ -24,7 +24,9 @@ import {
     PERIODS, MONTH_DAYS, SIT_FLOOR, DAY_FLOOR,
     periodRange, within, deltaOf, cardsReport, quizzesReport, mistakesReport,
     hoursReport, verdictFor, hhmm, measurable, TAB_KINDS, workFor,
+    dailySeries, subjectsIn, sliceBySubject, ALL_SUBJECTS,
 } from "@/lib/progressReport";
+import { spanOf, runsOf, MIN_POINTS, MIN_SPAN } from "@/lib/spark";
 
 let passed = 0;
 const check = (name, fn) => {
@@ -526,6 +528,195 @@ check("the methodology half is behind ONE named fold", () => {
     assert.ok(!/<MoreDetail\s+label="(More|Detail|More detail)"/i.test(TABS_SRC),
         "the fold is labelled 'more' rather than named — a chevron on nothing is " +
         "a control nobody presses, which is the call the science rail already makes");
+});
+
+
+// ═══ THE LINE UNDER THE FIGURE ══════════════════════════════════════════════
+
+check("A COUNT HAS REAL ZEROES AND AN AVERAGE HAS GAPS", () => {
+    // The whole reason `aggregate` is a separate argument. A day with no sit
+    // is a day with no information — plotted at the floor it draws a rest day
+    // as having scored nothing, which is `Number(null) === 0` pointed at a
+    // chart.
+    const r = periodRange("week", THU);
+    const rows = [{ d: r.from, v: 80 }, { d: r.from, v: 60 }];
+    const count = dailySeries(r, rows, (x) => x.d);
+    assert.equal(count[0].value, 2, "a count does not count");
+    assert.equal(count[1].value, 0, "an empty day in a COUNT must be a real zero, not a gap");
+
+    const avg = dailySeries(r, rows, (x) => x.d, (hit) => Math.round(
+        hit.reduce((a, b) => a + b.v, 0) / hit.length));
+    assert.equal(avg[0].value, 70, "the aggregate was not applied");
+    assert.equal(avg[1].value, null,
+        "an empty day in an AVERAGE was plotted as zero — a rest day drawn as having scored nothing");
+});
+
+check("the series is bounded, and `all` draws none", () => {
+    const r = periodRange("all", THU);
+    assert.deepEqual(dailySeries(r, [{ d: "2026-10-05" }], (x) => x.d), [],
+        "an unbounded window emitted a series — an x-axis as long as the account");
+    const m = periodRange("month", THU);
+    assert.ok(dailySeries(m, [], () => null).length <= 60, "the series is not bounded");
+
+    // AND A ROW OUTSIDE THE WINDOW IS NOT IN IT — the property, rather than
+    // the line that happens to enforce it. `dailySeries` skips out-of-range
+    // rows when bucketing AND only emits days from `from` to `to`, so
+    // deleting the first is unobservable: the injection against it stays
+    // silent and the guard is still right. An injection that cannot change
+    // behaviour tests nothing, which is the set-level lesson pointed at
+    // defence in depth.
+    const w = periodRange("week", THU);
+    const far = dailySeries(w, [{ d: "2020-01-01" }, { d: w.from }], (x) => x.d);
+    assert.equal(far.reduce((n, p) => n + (p.value || 0), 0), 1,
+        "a row outside the window reached the line under a figure that excludes it");
+});
+
+check("each tab's line plots ITS OWN headline quantity", () => {
+    const r = periodRange("week", THU);
+    const day = r.from;
+    const cards = cardsReport([{ last_reviewed_date: day, review_count_good: 1 }], r);
+    assert.equal(cards.series[0].value, 1, "the cards line does not count cards reviewed");
+
+    const hours = hoursReport([{ day, subject: "X", minutes: 40 }], [], r);
+    assert.equal(hours.series[0].value, 40, "the hours line does not plot minutes");
+});
+
+check("MISTAKES CARRIES NO LINE, AND THAT IS THE REFUSAL", () => {
+    // Nothing records WHEN a mistake became fixed — the state is derived from
+    // the ladder and a later sit. A rising line under "3/9 fixed" would be
+    // describing a different number from the one it sits under, which is
+    // exactly why that headline carries no delta either.
+    const r = periodRange("week", THU);
+    const rep = mistakesReport([{ id: "m", topic: "Mistake bank", created_date: r.from }], [], () => true, r);
+    assert.equal(rep.series, undefined,
+        "the mistakes report grew a series — nothing timestamps a fix, so any line here is invented");
+    const tabs = strip(read("src/components/progress/FeatureTabs.jsx"));
+    const at = tabs.indexOf("export function MistakesTab");
+    const body = tabs.slice(at, tabs.indexOf("export function", at + 10));
+    assert.ok(!/series=/.test(body), "the Mistakes tab passes a series to its strip");
+});
+
+check("THE SPARKLINE'S TWO DECISIONS ARE ASSERTED AS BEHAVIOUR", () => {
+    // Pinned as SOURCE these all passed with the bug in: `if (false) { …
+    // MIN_SPAN … }` still contains the name, and `runs.push(run)` survives
+    // after the loop even with the gap-break deleted. Mechanism-pinning, which
+    // this codebase keeps having to delete — so the two decisions are pure
+    // functions and this reads what they return.
+    const flat = spanOf([71, 71, 72], true);
+    assert.ok(flat.hi - flat.lo >= MIN_SPAN,
+        "a flat series auto-scaled to itself — a wander of one point draws as a mountain range");
+    // A WIDE count, or the MIN_SPAN branch masks it: with [4, 9] the span is
+    // 5, so the floor fires and sets lo to 0 whatever the line above did. The
+    // injection that drops `percent ? … : 0` passed on exactly that.
+    assert.equal(spanOf([40, 90]).lo, 0,
+        "a COUNT window no longer includes its zero — four hours draws level with nine");
+    assert.ok(spanOf([40, 90], true).lo > 0,
+        "a PERCENTAGE window includes zero, so an average of 70 draws as a flat line near the top");
+
+    const runs = runsOf([{ value: 1 }, { value: 2 }, { value: null }, { value: 5 }]);
+    assert.equal(runs.length, 2, "the line is joined across a gap, inventing the days either side");
+    assert.deepEqual(runs[1], [[3, 5]], "the run after a gap is wrong");
+
+    assert.ok(MIN_POINTS >= 3,
+        "the sparkline would draw a direction from two points — the refusal TREND_MIN " +
+        "and CALIBRATION_MIN each make");
+    const sp = strip(read("src/components/progress/Spark.jsx"));
+    assert.ok(/real\.length < MIN_POINTS/.test(sp), "the floor is no longer applied");
+});
+
+// ═══ ONE SUBJECT, ACROSS EVERY TAB ══════════════════════════════════════════
+
+check("subjectsIn reads every table's own name for a subject", () => {
+    const got = subjectsIn({
+        cards: [{ subject_name: "Chemistry" }],
+        bankCards: [{ subject_name: "Legal" }],
+        events: [{ subject: "Methods" }],
+        quizzes: [{ id: "q", subject: "Biology" }],
+        attempts: [{ quiz_id: "q" }],
+    });
+    assert.deepEqual(got, ["Biology", "Chemistry", "Legal", "Methods"],
+        "a subject was missed, or the list is not sorted by name");
+});
+
+check("THE SLICE NARROWS THE INPUTS, and an attempt is reached through its quiz", () => {
+    const bag = {
+        cards: [{ subject_name: "Chemistry" }, { subject_name: "Methods" }],
+        bankCards: [{ subject_name: "Chemistry" }],
+        events: [{ subject: "Methods" }],
+        quizzes: [{ id: "a", subject: "Chemistry" }, { id: "b", subject: "Methods" }],
+        attempts: [{ quiz_id: "a" }, { quiz_id: "b" }, { quiz_id: "deleted" }],
+    };
+    const chem = sliceBySubject(bag, "Chemistry");
+    assert.equal(chem.cards.length, 1);
+    assert.equal(chem.bankCards.length, 1);
+    assert.equal(chem.events.length, 0);
+    assert.equal(chem.attempts.length, 1, "an attempt was not matched through its own quiz");
+    assert.equal(sliceBySubject(bag, ALL_SUBJECTS), bag, "ALL must pass the bag straight through");
+    assert.equal(sliceBySubject(bag, null), bag, "no subject must pass the bag straight through");
+});
+
+check("THE WORK AND THE FIGURES COME OFF THE SAME SLICE", () => {
+    // A subject threaded into the four report builders alone would leave the
+    // outstanding rows at the top of the tab talking about the whole account,
+    // three inches above a figure that is not — the "two surfaces answer one
+    // question" failure, built in.
+    const page = strip(read("src/pages/Review.jsx"));
+    assert.ok(/sliceBySubject\(/.test(page), "the page no longer slices its inputs");
+    assert.ok(/cardsReport\(slice\.cards/.test(page) && /hoursReport\(slice\.events/.test(page),
+        "a report is built from the unsliced rows");
+    // EVERY tab, not "at least one" — the first draft found one sliced call
+    // and passed with the Cards tab reverted to the whole-account queue.
+    assert.ok(!/workFor\(queue,/.test(page),
+        "a feature tab reads the whole-account queue while its figures read the slice");
+    assert.equal((page.match(/workFor\(tabQueue,/g) || []).length, 3,
+        "the three work-taking tabs do not all read the sliced queue");
+});
+
+check("TODAY IS NEVER FILTERED BY SUBJECT", () => {
+    // It ranks all seven kinds against each other; narrowing it would hide a
+    // SAC on Friday because somebody was looking at Legal.
+    const page = strip(read("src/pages/Review.jsx"));
+    const at = page.indexOf('tab === "today" ? (');
+    assert.ok(at > -1, "the Today branch was not found — this scan would pass forever");
+    // THE SPAN IS THE TERNARY'S OWN CONSEQUENT, found by walking parens. The
+    // first draft sliced to the next `</div>`, which runs straight past the
+    // `:` into the branch that SHOULD carry the filter — so it reported a
+    // defect on correct code, which is the direction that gets a guard
+    // deleted. Sixth recorded time for "a span match is not a scan".
+    const open = page.indexOf("(", at + 'tab === "today" ?'.length);
+    let d = 0, close = -1;
+    for (let i = open; i < page.length; i += 1) {
+        if (page[i] === "(") d += 1;
+        else if (page[i] === ")") { d -= 1; if (d === 0) { close = i; break; } }
+    }
+    assert.ok(close > open, "the Today branch does not close");
+    const yes = page.slice(open, close);
+    assert.ok(!/SubjectSwitch/.test(yes), "Today was given the subject filter");
+    // And the OTHER branch must have it, or the control shipped nowhere.
+    assert.ok(/SubjectSwitch/.test(page.slice(close)),
+        "no feature tab offers the subject filter at all");
+});
+
+// ═══ CARDS ARE FOR ACTIONS ══════════════════════════════════════════════════
+
+check("A PANEL IS NOT A CARD, AND THE WORK ROWS STILL ARE", () => {
+    // One rule carries the whole hierarchy: a bordered, elevated box is
+    // something you DO. Six identical card-soft boxes per tab is the
+    // "nineteen identical boxes" failure the console section records.
+    const panel = strip(read("src/components/progress/Panel.jsx"));
+    assert.ok(!/card-soft/.test(panel),
+        "Panel is a card again — nothing on the tab then says which boxes can be pressed");
+    const strip_ = strip(read("src/components/progress/ReportStrip.jsx"));
+    assert.ok(!/card-soft/.test(strip_), "the figure strip is a card again");
+    const work = strip(read("src/components/progress/FeatureWork.jsx"));
+    assert.ok(/card-soft/.test(work),
+        "the outstanding-work rows lost their card — the one thing that must keep it");
+});
+
+check("the page has its own ground behind the chrome", () => {
+    const page = strip(read("src/pages/Review.jsx"));
+    assert.ok(/bg-secondary\/50[^"]*border-b/.test(page),
+        "the header band is gone — the tabs and controls sit on the same surface as the report");
 });
 
 console.log(`\nprogressReport: ${passed} checks passed`);

@@ -85,17 +85,23 @@ export default function UpcomingAssessments({ user }) {
         return { bg: "bg-blue-50", text: "text-blue-700", border: "border-blue-200", badgeBg: "bg-blue-100", badgeText: "text-blue-800" };
     };
 
-    const handleFlashcardClick = (deckId) => {
-        // Navigate to Study page and automatically start review for this deck
-        navigate(createPageUrl("Study"));
-        
-        // Use setTimeout to ensure the page has loaded before triggering the deck review
-        setTimeout(() => {
-            const event = new CustomEvent('startFlashcardReview', {
-                detail: { deckId }
-            });
-            window.dispatchEvent(event);
-        }, 500);
+    /**
+     * ─── A LINK, NOT A THREE-HOP EVENT RACE ─────────────────────────────────
+     * This used to navigate to /Study, wait 500ms, and fire
+     * `startFlashcardReview`; Study heard it, switched tab, waited another
+     * 300ms and fired `triggerDeckReview` — and NOTHING LISTENED for that
+     * last one, so the deck never opened. Three hops, two timer races, and
+     * the final link unconnected: the button worked and the destination did
+     * not, which is the same class as the `?tab=spaced` deep links.
+     *
+     * `SpacedRepetition` already reads `?subject=` and its own comment states
+     * the rule this keeps: a deep link lands in the filter the student can
+     * SEE and clear, rather than silently starting a session for them. One
+     * navigation, no timers, nothing to miss.
+     */
+    const handleFlashcardClick = (deck) => {
+        const q = deck?.subject ? `&subject=${encodeURIComponent(deck.subject)}` : "";
+        navigate(`${createPageUrl("Study")}?tab=spaced_repetition${q}`);
     };
 
     if (isLoading) {
@@ -155,7 +161,7 @@ export default function UpcomingAssessments({ user }) {
                         initial={{ opacity: 0, x: -10 }}
                         animate={{ opacity: 1, x: 0 }}
                         transition={{ delay: index * 0.05 }}
-                        onClick={() => handleFlashcardClick(deck.deck_id)}
+                        onClick={() => handleFlashcardClick(deck)}
                         className="flex items-center gap-3 p-3 bg-surface/80 backdrop-blur-sm rounded-lg border border-purple-200 cursor-pointer hover:shadow-md hover:border-purple-300 transition-all group"
                     >
                         <div className="w-10 h-10 bg-gradient-to-br from-purple-100 to-blue-100 rounded-lg flex items-center justify-center flex-shrink-0 group-hover:scale-110 transition-transform">

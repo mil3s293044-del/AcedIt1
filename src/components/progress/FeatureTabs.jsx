@@ -107,7 +107,7 @@ export function CardsTab({ report, range, cards, techniques, work = [], pile = n
             <FeatureWork items={work} />
             <ReportStrip
                 value={report.reviewed.toLocaleString()} label={`cards reviewed ${range.blurb}`}
-                delta={report.delta}
+                delta={report.delta} series={report.series}
                 note={range.comparable ? null : "All-time has no period before it to compare against."}
                 verdict={verdictFor(report, range)} stats={stats}
                 action={work.length ? null : <Door to={studyTab("spaced_repetition")}>Review now</Door>}
@@ -167,6 +167,7 @@ export function QuizzesTab({ report, range, work = [] }) {
             <ReportStrip
                 value={report.avg} suffix="%" label={`average ${range.blurb}`}
                 delta={report.delta} deltaSuffix=" pts"
+                series={report.series} percent tone="chart-3"
                 note={!range.comparable
                     ? "All-time has no period before it to compare against."
                     : report.need > 0
@@ -233,13 +234,15 @@ export function MistakesTab({ report, range, work = [] }) {
     return (
         <div className="space-y-4">
             <FeatureWork items={work} />
-            {/* NO DELTA ON THIS HEADLINE, and that is a correctness call rather
-                than a gap. Nothing records WHEN a mistake became fixed — the
-                state is derived from the ladder and a later sit — so the only
-                period figure available is how many were DRILLED, and a "+3"
-                chip beside "0/9 fixed" says three more are fixed. A movement
-                chip that describes a different number from the one it sits on
-                is worse than no chip. Drilled is a stat, where it is labelled. */}
+            {/* NO DELTA AND NO LINE ON THIS HEADLINE, and both are correctness
+                calls rather than gaps. Nothing records WHEN a mistake became
+                fixed — the state is derived from the ladder and a later sit —
+                so there is no series to plot and the only period figure
+                available is how many were DRILLED. A "+3" chip beside "0/9
+                fixed" says three more are fixed, and a rising line under it
+                would say the same thing louder. A movement signal that
+                describes a different number from the one it sits on is worse
+                than none. Drilled is a stat, where it is labelled. */}
             <ReportStrip
                 value={`${report.fixed}/${report.total}`} label="mistakes fixed"
                 delta={null} note={null}
@@ -321,6 +324,7 @@ export function HoursTab({ report, range, events, quizzes, attempts, cards, tech
             <ReportStrip
                 value={hhmm(report.minutes) || "0m"} label={`studied ${range.blurb}`}
                 delta={report.delta} deltaDisplay={hhmm(Math.abs(report.delta?.value || 0)) || "0m"}
+                series={report.series}
                 note={!range.comparable
                     ? "All-time has no period before it to compare against."
                     : "One more day logged and this compares you against the period before."}

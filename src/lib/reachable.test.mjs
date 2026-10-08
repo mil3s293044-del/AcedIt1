@@ -353,4 +353,39 @@ check("every ?tab= link into Study or MistakeBank names a value that page honour
     assert.ok(found >= 8, `the deep-link scan matched only ${found} links — it is not reading the tree`);
 });
 
+// ─── AN EVENT NOBODY HEARS IS A LINK WITH NO FAR END ───────────────────────
+//
+// The same class as a dead deep link, reached through the event bus instead
+// of the router, and three of them were live:
+//
+//   startFlashcardReview → triggerDeckReview   A RELAY WITH NOTHING ON THE
+//     FAR END. The dashboard's deck reminders navigated to /Study, waited
+//     500ms and fired the first; Study heard it, switched tab, waited
+//     another 300ms and fired the second — which no component in the tree
+//     ever listened for. So the deck never opened. Three hops, two timer
+//     races, last link unconnected.
+//   studyTechniqueChanged   fired on EVERY Study tab change, no listener.
+//   studySessionSaved       fired on every saved pomodoro, with a comment
+//     claiming the Goals page would pick it up. Goals never listened.
+//
+// A dispatch with no listener throws nothing, costs nothing, and renders
+// nothing — so it survives lint, the build and every other check here.
+
+check("every CustomEvent fired is one something listens for", () => {
+    const fired = new Map();
+    for (const f of SOURCES) {
+        for (const m of strip(read(f)).matchAll(/new CustomEvent\(\s*["'`]([A-Za-z:_-]+)["'`]/g)) {
+            if (!fired.has(m[1])) fired.set(m[1], new Set());
+            fired.get(m[1]).add(f);
+        }
+    }
+    assert.ok(fired.size > 0, "the CustomEvent scan matched nothing — it would pass forever");
+    const whole = SOURCES.map((f) => strip(read(f))).join("\n");
+    for (const [ev, froms] of fired) {
+        assert.ok(new RegExp(`addEventListener\\(\\s*["'\`]${ev}["'\`]`).test(whole),
+            `"${ev}" is dispatched from ${[...froms].join(", ")} and nothing listens for it — ` +
+            `a relay with no far end, which is a dead deep link reached through the event bus`);
+    }
+});
+
 console.log(`\nreachable: ${passed} checks passed`);

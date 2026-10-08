@@ -93,10 +93,12 @@ import { studyEvents } from "@/lib/studyLog";
 import { SECONDS_PER_CARD } from "@/lib/retention";
 import AceShuffle from "@/components/ace/AceShuffle";
 import PeriodSwitch from "@/components/progress/PeriodSwitch";
+import SubjectSwitch from "@/components/progress/SubjectSwitch";
 import ProgressTabs from "@/components/progress/ProgressTabs";
 import { CardsTab, QuizzesTab, MistakesTab, HoursTab } from "@/components/progress/FeatureTabs";
 import {
     PERIODS, periodRange, cardsReport, quizzesReport, mistakesReport, hoursReport, workFor,
+    subjectsIn, sliceBySubject, ALL_SUBJECTS,
 } from "@/lib/progressReport";
 
 /** How long "not this week" actually is. */
@@ -178,6 +180,11 @@ export default function Review() {
     const [tab, setTab] = useState(() =>
         resolveTab(new URLSearchParams(location.search).get("tab")));
     const [period, setPeriod] = useState(PERIODS[0].id);
+    /**
+     * ONE SUBJECT, ACROSS EVERY FEATURE TAB — and never on Today, which is the
+     * cross-feature queue ranking all seven kinds against each other.
+     */
+    const [subject, setSubject] = useState(ALL_SUBJECTS);
 
     const pickTab = useCallback((next) => {
         setTab(next);
@@ -305,15 +312,48 @@ export default function Review() {
      */
     const range = useMemo(() => periodRange(period), [period]);
 
+    /** Every subject the student has rows in, for the filter. */
+    const subjects = useMemo(() => (data ? subjectsIn({
+        cards, attempts: data.attempts, quizzes: data.quizzes,
+        bankCards: data.bankCards, events,
+    }) : []), [data, cards, events]);
+
+    /**
+     * ─── THE SLICE IS THE INPUTS, NOT THE REPORTS ───────────────────────────
+     * Narrowing the rows once means the figure, the line, every panel AND the
+     * outstanding work at the top of the tab are all about the same subject.
+     * A subject threaded into the four builders alone would leave the action
+     * rows talking about the whole account three inches above a figure that
+     * is not — the "two surfaces answer one question" failure, built in.
+     */
+    const slice = useMemo(() => (data ? sliceBySubject({
+        cards, bankCards: data.bankCards, quizzes: data.quizzes,
+        attempts: data.attempts, assessments: data.assessments,
+        events, techniques: data.techniques, sessions: data.sessions,
+    }, subject) : null), [data, cards, events, subject]);
+
+    /** The queue again, over the slice — so a tab's rows match its figures. */
+    const tabQueue = useMemo(() => {
+        if (!slice) return [];
+        if (subject === ALL_SUBJECTS) return queue;
+        return studyQueue({
+            cards: slice.cards, bankCards: slice.bankCards, quizzes: slice.quizzes,
+            attempts: slice.attempts, assessments: slice.assessments, events: slice.events,
+            piles: auditPiles(slice.cards, today),
+            isReady: (c) => isReady(c, today),
+            today,
+        });
+    }, [slice, subject, queue, today]);
+
     const reports = useMemo(() => {
-        if (!data) return null;
+        if (!slice) return null;
         return {
-            cards: cardsReport(cards, range),
-            quizzes: quizzesReport(data.attempts, data.quizzes, range),
-            mistakes: mistakesReport(data.bankCards, data.attempts, (c) => isReady(c, today), range),
-            hours: hoursReport(events, data.techniques, range),
+            cards: cardsReport(slice.cards, range),
+            quizzes: quizzesReport(slice.attempts, slice.quizzes, range),
+            mistakes: mistakesReport(slice.bankCards, slice.attempts, (c) => isReady(c, today), range),
+            hours: hoursReport(slice.events, slice.techniques, range),
         };
-    }, [data, cards, events, range, today]);
+    }, [slice, range, today]);
 
     /** This week's done pile, off the same rows the queue is built from. */
     const cleared = useMemo(() => (data ? clearedThisWeek({
@@ -533,30 +573,52 @@ export default function Review() {
     );
 
     return (
-        <div className="min-h-screen p-4 sm:p-6 lg:p-8">
-            <div className="max-w-5xl mx-auto space-y-5">
+        <div className="min-h-screen">
+            {/* ══ THE BAND ══════════════════════════════════════════════════
+                Progress is a core screen a student passes through rather than
+                a destination, so it gets no scoped palette the way `.floor`
+                and `.console` do — a third palette is a third set of silent
+                failures to guard. What it gets is a GROUND: the eyebrow, the
+                tab bar and the controls sit on `--secondary` with a rule under
+                them, so the chrome is visibly chrome and the report below it
+                starts on the page's own surface. Identity for one token and
+                nothing to keep in sync. */}
+            <div className="bg-secondary/50 border-b border-border">
+                <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 pt-4 sm:pt-6 pb-4 space-y-4">
+                    <div className="flex items-center justify-between">
+                        <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider">Progress</span>
+                        <HelpButton page="Review" />
+                    </div>
 
-                <div className="flex items-center justify-between">
-                    <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider">Progress</span>
-                    <HelpButton page="Review" />
+                    {/* One cell per FEATURE, which is what makes this
+                        navigation rather than two words nobody can place
+                        themselves in. A component so the probe can draw the
+                        REAL one at 360. */}
+                    <ProgressTabs tabs={TABS} value={tab} onChange={pickTab} />
+
+                    {/* THE WINDOW IS ALWAYS STATED, and on a feature tab the
+                        SUBJECT is too. On Today it is a sentence rather than
+                        either control: that queue is about right now and ranks
+                        all seven kinds against each other, so a period switch
+                        would change nothing and a subject filter would hide a
+                        SAC on Friday because somebody was looking at Legal.
+                        The row stays either way so the layout does not jump. */}
+                    <div className="min-h-[2.25rem] flex items-center flex-wrap gap-x-3 gap-y-2">
+                        {tab === "today" ? (
+                            <p className="text-xs text-muted-foreground">
+                                Everything outstanding right now, and what you have cleared since Monday.
+                            </p>
+                        ) : (
+                            <>
+                                <PeriodSwitch value={period} onChange={setPeriod} />
+                                <SubjectSwitch subjects={subjects} value={subject} onChange={setSubject} />
+                            </>
+                        )}
+                    </div>
                 </div>
+            </div>
 
-                {/* ══ THE BAR ═══════════════════════════════════════════════
-                    One cell per FEATURE, which is what makes this navigation
-                    rather than two words nobody can place themselves in. It is
-                    a component so the probe can draw the REAL one at 360. */}
-                <ProgressTabs tabs={TABS} value={tab} onChange={pickTab} />
-
-                {/* THE WINDOW IS ALWAYS STATED. On Today it is a sentence
-                    rather than a switch, because the queue is about right now
-                    and a control that changes nothing is worse than none — the
-                    rule `BoardSwitch` keeps about being handed one board. The
-                    row stays either way so the layout does not jump. */}
-                <div className="min-h-[2.25rem] flex items-center">
-                    {tab === "today"
-                        ? <p className="text-xs text-muted-foreground">Everything outstanding right now, and what you have cleared since Monday.</p>
-                        : <PeriodSwitch value={period} onChange={setPeriod} />}
-                </div>
+            <div className="max-w-5xl mx-auto p-4 sm:p-6 lg:p-8 space-y-5">
 
                 {/* ══ TODAY ═════════════════════════════════════════════ */}
                 <div className={tab === "today" ? "space-y-5" : "hidden"}>
@@ -676,15 +738,15 @@ export default function Review() {
                 {tab === "cards" && (
                     <CardsTab report={reports?.cards} range={range} cards={cards}
                         techniques={data?.techniques || []}
-                        work={workFor(queue, "cards")} pile={pileSummary} audit={auditSection} />
+                        work={workFor(tabQueue, "cards")} pile={pileSummary} audit={auditSection} />
                 )}
                 {tab === "quizzes" && (
                     <QuizzesTab report={reports?.quizzes} range={range}
-                        work={workFor(queue, "quizzes")} />
+                        work={workFor(tabQueue, "quizzes")} />
                 )}
                 {tab === "mistakes" && (
                     <MistakesTab report={reports?.mistakes} range={range}
-                        work={workFor(queue, "mistakes")} />
+                        work={workFor(tabQueue, "mistakes")} />
                 )}
                 {tab === "hours" && (
                     <HoursTab report={reports?.hours} range={range} events={events}

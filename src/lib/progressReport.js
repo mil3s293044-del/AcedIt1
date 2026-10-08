@@ -151,6 +151,43 @@ export const within = (value, from, to) => {
 const dayOfRow = (r) => isDay(r?.date) || isDay(r?.created_date);
 
 /**
+ * ─── THE LINE UNDER THE FIGURE ──────────────────────────────────────────────
+ * One point per day in the window, from rows the report already has — no new
+ * query, nothing stored, and it cannot disagree with the headline because it
+ * is built from the same array.
+ *
+ * TWO KINDS OF QUANTITY, and conflating them is the bug this signature
+ * exists to prevent. A COUNT (cards reviewed, minutes studied) has a real
+ * zero: a day with nothing in it is a day you did nothing, so it plots at the
+ * floor. An AVERAGE (a quiz score) does NOT: a day with no sit is a day with
+ * no information, and plotting it as zero draws a rest day as having scored
+ * nothing — the `Number(null) === 0` family, pointed at a chart. So an
+ * aggregate is only emitted for days that HAVE rows, and `value` is null
+ * everywhere else for the renderer to break the line on.
+ *
+ * `all` is unbounded, so it draws nothing rather than a line whose x-axis is
+ * however long the account has existed.
+ */
+export function dailySeries(range, rows = [], dayOfRow_, aggregate = null) {
+    if (!range?.from || range.id === "all") return [];
+    const buckets = new Map();
+    for (const r of (Array.isArray(rows) ? rows : [])) {
+        const d = dayOfRow_(r);
+        if (!d || d < range.from || d > range.to) continue;
+        if (!buckets.has(d)) buckets.set(d, []);
+        buckets.get(d).push(r);
+    }
+    const out = [];
+    for (let d = range.from; d <= range.to; d = shiftDays(d, 1)) {
+        const hit = buckets.get(d);
+        if (aggregate) out.push({ day: d, value: hit ? aggregate(hit) : null });
+        else out.push({ day: d, value: hit ? hit.length : 0 });
+        if (out.length > 60) break;
+    }
+    return out;
+}
+
+/**
  * A movement, or null.
  *
  * NULL rather than 0 under the floor, and null when the period has no
@@ -223,6 +260,7 @@ export function cardsReport(cards = [], range, now = Date.now()) {
         total: live.length,
         reviewed,
         prior,
+        series: dailySeries(range, live, (c) => isDay(c?.last_reviewed_date)),
         delta: prior == null ? null : deltaOf(reviewed, prior),
         accuracy,
         ratings: total,
@@ -289,6 +327,11 @@ export function quizzesReport(attempts = [], quizzes = [], range) {
     return {
         kind: "quizzes",
         sits: now.length,
+        // THE LINE PLOTS WHAT THE HEADLINE SAYS, which here is an average and
+        // not a count — so a day with no sit has NO POINT rather than a zero.
+        // Plotted as zero, a rest day reads as having scored nothing.
+        series: dailySeries(range, inWindow, (a) => dayOfRow(a),
+            (rows) => Math.round(mean(rows.map(effectiveScore)))),
         avg: avg == null ? null : Math.round(avg),
         prevSits: prev.length,
         prevAvg: prevAvg == null ? null : Math.round(prevAvg),
@@ -401,6 +444,7 @@ export function hoursReport(events = [], techniques = [], range) {
     return {
         kind: "hours",
         minutes: now.total,
+        series: (range.id === "all" ? [] : bars).map((b) => ({ day: b.day, value: b.minutes })),
         prevMinutes: before ? before.total : null,
         delta,
         activeDays,
@@ -537,3 +581,78 @@ export function workFor(queue = [], tab) {
     if (!kinds?.length) return [];
     return (Array.isArray(queue) ? queue : []).filter((it) => kinds.includes(it?.kind));
 }
+
+// ═══ ONE SUBJECT, ACROSS EVERY TAB ══════════════════════════════════════════
+//
+// Every figure on this page was whole-account, and the question a student
+// actually has in the week before a SAC is about ONE subject: how are my
+// Chemistry cards, my Chemistry sits, my Chemistry mistakes, my Chemistry
+// hours. All four reports already group by subject internally — this is what
+// exposes it, and it does so by slicing the INPUTS rather than by threading a
+// subject argument through four builders.
+//
+// SLICING THE INPUTS IS WHAT KEEPS THE TAB COHERENT. The action rows at the
+// top of each tab come out of `studyQueue`, which takes the same arrays — so
+// filtering once means the work, the figure, the line and every panel are all
+// about the same subject and cannot disagree. A subject threaded into the
+// reports alone would leave the rows above them talking about the whole
+// account, which is the "two surfaces answer one question" failure.
+//
+// TODAY IS NEVER FILTERED. It is the cross-feature queue that ranks all seven
+// kinds against each other, so narrowing it to one subject would hide a SAC
+// on Friday because the student happened to be looking at Legal.
+
+/** A row's subject, under whichever of the three names its table uses. */
+const subjectOf = (row) =>
+    (row?.subject_name || row?.subject || row?.quiz_category || "").trim() || null;
+
+/**
+ * Subjects with something in them, A to Z.
+ *
+ * Off the rows rather than off `user_subjects`: a student who dropped a
+ * subject still has its cards and its marks, and a filter that cannot reach
+ * them is a filter that hides their own work. Sorted by NAME and not by
+ * volume, because a control whose options move between visits is one nobody
+ * can learn.
+ */
+export function subjectsIn({ cards = [], attempts = [], quizzes = [], bankCards = [], events = [] } = {}) {
+    const seen = new Set();
+    const add = (n) => { if (n) seen.add(n); };
+    for (const c of cards) add(subjectOf(c));
+    for (const c of bankCards) add(subjectOf(c));
+    for (const e of events) add(subjectOf(e));
+    const byId = new Map(quizzes.map((q) => [String(q?.id), q]));
+    for (const a of attempts) add(subjectOf(byId.get(String(a?.quiz_id))) || subjectOf(a));
+    return [...seen].sort((a, b) => a.localeCompare(b));
+}
+
+/**
+ * The same bag of rows, narrowed to one subject.
+ *
+ * An ATTEMPT carries no subject of its own — it is reached through its quiz,
+ * which is why `quizzes` is sliced first and the attempts are matched against
+ * what survives. An attempt whose quiz has been DELETED is dropped from a
+ * subject view and kept by "All subjects": deleting a quiz does not delete
+ * its attempts, so the account-wide average still counts it (the rule
+ * `quizDeck` keeps), but there is no honest way to say which subject it was.
+ */
+export function sliceBySubject(bag, subject) {
+    if (!subject || subject === ALL_SUBJECTS) return bag;
+    const keep = (r) => subjectOf(r) === subject;
+    const quizzes = (bag.quizzes || []).filter(keep);
+    const ids = new Set(quizzes.map((q) => String(q?.id)));
+    return {
+        ...bag,
+        cards: (bag.cards || []).filter(keep),
+        bankCards: (bag.bankCards || []).filter(keep),
+        events: (bag.events || []).filter(keep),
+        techniques: (bag.techniques || []).filter(keep),
+        sessions: (bag.sessions || []).filter(keep),
+        assessments: (bag.assessments || []).filter(keep),
+        quizzes,
+        attempts: (bag.attempts || []).filter((a) => ids.has(String(a?.quiz_id))),
+    };
+}
+
+/** The "no filter" value, so the control and the slice cannot disagree. */
+export const ALL_SUBJECTS = "__all__";

@@ -205,29 +205,20 @@ export default function Study() {
         init();
     }, [loadData]);
 
-    useEffect(() => {
-        const handleStartReview = (event) => {
-            if (event.detail && event.detail.deckId) {
-                setActiveTab("spaced_repetition");
-                setTimeout(() => {
-                    const reviewEvent = new CustomEvent('triggerDeckReview', {
-                        detail: { deckId: event.detail.deckId }
-                    });
-                    window.dispatchEvent(reviewEvent);
-                }, 300);
-            }
-        };
-
-        window.addEventListener('startFlashcardReview', handleStartReview);
-        return () => window.removeEventListener('startFlashcardReview', handleStartReview);
-    }, []);
-
-    useEffect(() => {
-        const event = new CustomEvent('studyTechniqueChanged', {
-            detail: { technique: activeTab }
-        });
-        window.dispatchEvent(event);
-    }, [activeTab]);
+    /**
+     * ─── TWO DEAD BROADCASTS LIVED HERE ─────────────────────────────────────
+     * `startFlashcardReview` → `triggerDeckReview` was a relay with nothing
+     * on the far end: this page heard the first, switched tab, waited 300ms
+     * and fired the second, and no component in the tree ever listened for
+     * it. Its one caller (the dashboard's deck reminders) links with
+     * `?tab=spaced_repetition&subject=` now, which `SpacedRepetition` has
+     * read the whole time.
+     *
+     * `studyTechniqueChanged` fired on EVERY tab change and had no listener
+     * either — "collect nothing you don't use", pointed at a broadcast.
+     * `reachable.test.mjs` scans for both shapes now, because an event
+     * nobody hears throws nothing and costs nothing to keep writing.
+     */
 
     // Real-time updates
     useEffect(() => {

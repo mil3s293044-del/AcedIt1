@@ -270,10 +270,12 @@ export default function PomodoroTimer({ onSessionComplete, userSubjects: initial
             awayCountRef.current = 0;
             awayMsRef.current = 0;
             hiddenAtRef.current = null;
-            // Dispatch event so goals page can pick up new study time instantly
-            window.dispatchEvent(new CustomEvent('studySessionSaved', {
-                detail: { subject, duration_minutes: Math.round(durationMinutes) }
-            }));
+            // A `studySessionSaved` broadcast stood here, with a comment saying
+            // the Goals page would "pick up new study time instantly". Goals
+            // never listened, and nothing else in the tree did either — it had
+            // fired on every saved session for as long as the timer has
+            // existed. `liveRefresh` is the real mechanism for that and needs
+            // no event of its own.
         } catch (error) {
             console.error("Error saving session:", error);
             toast({
