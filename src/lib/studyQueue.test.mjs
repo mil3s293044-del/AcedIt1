@@ -23,6 +23,7 @@ import path from "node:path";
 import {
     studyQueue, assessmentItems, unmarkedItem, resitItem, mistakeItem,
     decayItem, cardsItem, queueLead, queueMinutes, daysUntil, whenLabel,
+    clearedThisWeek, hoursLabel,
     TIERS, SOON_DAYS, PREP_STALE_DAYS,
 } from "@/lib/studyQueue";
 
@@ -318,6 +319,180 @@ check("THE SPINE IS THE TIER, which is what makes the ranking visible", () => {
     assert.match(row, /const ink = tier\?\.ink/,
         "the label ink no longer follows the spine, so the row carries two colours saying " +
         "different things");
+});
+
+
+// ═══ THE DONE PILE ══════════════════════════════════════════════════════════
+// The queue gets SHORTER the better a student does, so a page that only draws
+// it rewards a good week with a shorter list of failings. Everything below is
+// about the other half being counted off the SAME rows, and about it refusing
+// to claim a week that did not happen.
+
+/** Monday of the week `d` falls in, as "YYYY-MM-DD". */
+const mondayOf = (d) => {
+    const s = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+    s.setDate(s.getDate() - ((s.getDay() + 6) % 7));
+    return `${s.getFullYear()}-${String(s.getMonth() + 1).padStart(2, "0")}-${String(s.getDate()).padStart(2, "0")}`;
+};
+// A Thursday, so the week has days either side of "now" inside it.
+const THU = new Date(2026, 9, 8, 14, 0, 0);
+const MON = mondayOf(THU);
+const dayBefore = (iso, n) => {
+    const d = new Date(`${iso}T00:00:00`);
+    d.setDate(d.getDate() - n);
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+};
+const LAST_WEEK = dayBefore(MON, 3);
+
+check("clearedThisWeek counts reviews, drills and sits off the rows already loaded", () => {
+    const c = clearedThisWeek({
+        cards: [
+            { id: "a", last_reviewed_date: `${MON}T09:00:00Z` },
+            { id: "b", last_reviewed_date: MON },
+            { id: "c", last_reviewed_date: LAST_WEEK },
+        ],
+        bankCards: [{ id: "m", last_reviewed_date: `${MON}T10:00:00Z` }],
+        attempts: [
+            { id: "q1", created_date: `${MON}T11:00:00Z` },
+            { id: "q2", created_date: LAST_WEEK },
+        ],
+        events: [{ day: MON, minutes: 45 }, { day: LAST_WEEK, minutes: 600 }],
+        now: THU,
+    });
+    const by = Object.fromEntries(c.items.map((i) => [i.kind, i.n]));
+    assert.equal(by.cards, 2, "last week's review was counted into this week");
+    assert.equal(by.mistakes, 1);
+    assert.equal(by.resit, 1);
+    assert.equal(c.minutes, 45, "last week's minutes leaked into this week's total");
+    assert.ok(c.any);
+});
+
+check("THE WEEK IS MONDAY, which is studyLog's and not date-fns' default", () => {
+    // date-fns defaults startOfWeek to SUNDAY, which put five surfaces a full
+    // week out of step with nine others — one day in seven, which is exactly
+    // why a comment would not have held. On a Monday the week starts TODAY, so
+    // the Sunday before it is last week's work and must not be counted.
+    const mon = new Date(2026, 9, 5, 9, 0, 0);          // Monday
+    const sun = "2026-10-04";
+    const c = clearedThisWeek({ cards: [{ last_reviewed_date: sun }], now: mon });
+    assert.equal(c.items.length, 0, "the Sunday before Monday counted as this week");
+    assert.equal(c.from, "2026-10-05");
+});
+
+check("A ROW WITH NO DATE IS NEVER COUNTED, in either direction", () => {
+    // `Number(null)` is 0 and "" slices LOW, so a coerced comparison files
+    // every undated row outside the window and the obvious "fix" — defaulting
+    // to today — files every one of them inside it. Both are wrong and only
+    // one is visible. This is the ninth module that trap has reached.
+    const c = clearedThisWeek({
+        cards: [{ last_reviewed_date: null }, { last_reviewed_date: "" }, {}],
+        bankCards: [{ last_reviewed_date: undefined }],
+        attempts: [{ created_date: null }, { id: "x" }],
+        events: [{ day: null, minutes: 300 }, { minutes: 90 }],
+        now: THU,
+    });
+    assert.equal(c.items.length, 0, "an undated row was counted as this week's work");
+    assert.equal(c.minutes, 0);
+    assert.equal(c.any, false);
+});
+
+check("NO ZERO ROWS, and a quiet week draws nothing at all", () => {
+    const c = clearedThisWeek({ now: THU });
+    assert.deepEqual(c.items, [], "a kind with nothing in it was still listed");
+    assert.equal(c.any, false,
+        "`any` is true on an empty week, so the strip prints \"0 cards reviewed\" at " +
+        "somebody on a Monday morning — the zero row every builder here refuses");
+});
+
+check("minutes alone is still a week", () => {
+    const c = clearedThisWeek({ events: [{ day: MON, minutes: 30 }], now: THU });
+    assert.equal(c.items.length, 0);
+    assert.equal(c.any, true, "half an hour of real study read as a week with nothing in it");
+});
+
+check("EVERY CLEARED KIND CARRIES A TIER, and it is one the queue knows", () => {
+    // Without it the strip needs its own kind -> tier table, which is the
+    // second copy this codebase keeps deleting — and the copy that drifted
+    // would print "quizzes sat" in a colour the queue uses for something else.
+    const c = clearedThisWeek({
+        cards: [{ last_reviewed_date: MON }],
+        bankCards: [{ last_reviewed_date: MON }],
+        attempts: [{ created_date: MON }],
+        now: THU,
+    });
+    assert.equal(c.items.length, 3);
+    for (const i of c.items) {
+        assert.ok(TIERS.includes(i.tier), `cleared kind "${i.kind}" has a tier the queue does not rank`);
+        const meta = read("src/components/study/QueueRow.jsx");
+        assert.ok(meta.includes(`${i.kind}:`), `cleared kind "${i.kind}" has no glyph on QueueRow`);
+    }
+});
+
+check("hoursLabel is null under a minute rather than \"0m\"", () => {
+    assert.equal(hoursLabel(0), null);
+    assert.equal(hoursLabel(null), null);
+    assert.equal(hoursLabel(-5), null);
+    assert.equal(hoursLabel(NaN), null);
+    assert.equal(hoursLabel(35), "35m");
+    assert.equal(hoursLabel(60), "1h");
+    assert.equal(hoursLabel(260), "4h 20m");
+});
+
+// ═══ THE PAGE ═══════════════════════════════════════════════════════════════
+
+check("THE CHARTS ARE NOT BEHIND A TAB", () => {
+    const page = strip(read("src/pages/Review.jsx"));
+    assert.ok(!/<TabsList/.test(page) && !/<TabsTrigger/.test(page),
+        "Insights is behind a tab again — a screen nobody presses into is a screen " +
+        "nobody has, which is what /League and /Review were both rebuilt out of");
+    assert.match(page, /<InsightsTab/, "the charts are not rendered at all");
+});
+
+check("AND /Analytics STILL LANDS ON THEM", () => {
+    // The redirect has outlived two rebuilds of this page. Dropping you at the
+    // top of a long scroll is the half-wired shape this codebase keeps meeting:
+    // the right page, and the thing it promised to open does not open.
+    const page = strip(read("src/pages/Review.jsx"));
+    assert.match(page, /get\("tab"\) === "insights"/, "the param is no longer read");
+    assert.match(page, /insightsRef\.current\?\.scrollIntoView/,
+        "?tab=insights no longer scrolls to the charts");
+});
+
+check("NOTHING IS TICKED OFF THAT WAS NOT ACTUALLY DONE", () => {
+    const page = strip(read("src/pages/Review.jsx"));
+    // No "dismissed" flag: the queue is derived and a tick that WROTE one
+    // would let somebody clear a SAC that is still on Friday.
+    assert.ok(!/dismiss/i.test(page),
+        "something on this page dismisses a queue item — the queue stores nothing, " +
+        "so a tick has to be the work rather than a control");
+    assert.match(page, /if \(!prev\) return;/,
+        "the first settle no longer announces nothing, so opening the page ticks off " +
+        "everything the student ever cleared");
+    assert.match(page, /if \(!loadOk\.current\) \{ seen\.current = null; return; \}/,
+        "a FAILED read hands back six empty arrays, so without this guard an outage " +
+        "empties the queue and every item on it is announced as done");
+});
+
+check("THE DONE PILE IS DRAWN, and only when there is one", () => {
+    const page = strip(read("src/pages/Review.jsx"));
+    assert.match(page, /<ClearedStrip cleared=\{cleared\}/, "the strip is not mounted");
+    assert.match(page, /clearedThisWeek\(\{/, "the strip is not derived from the model");
+    // The strip is a real component so the probe can draw it — /Review is
+    // auth-gated and the one thing that settles a layout is opening it.
+    const strip_ = strip(read("src/components/study/Cleared.jsx"));
+    assert.match(strip_, /if \(!cleared\?\.any\) return null;/,
+        "the strip draws on something other than `any`, so a quiet week prints an " +
+        "empty row of figures");
+    assert.match(strip_, /TIER_INK\[i\.tier\]/,
+        "the strip inks itself rather than reading the queue's own tier ink, which is " +
+        "the second colour table this release exists to avoid");
+});
+
+check("THE EMPTY QUEUE CLAIMS A WIN ONLY WHEN THERE WAS ONE", () => {
+    const page = strip(read("src/pages/Review.jsx"));
+    assert.match(page, /cleared\?\.any \? "You cleared it\." :/,
+        "the caught-up card congratulates an account that did nothing this week, which " +
+        "is the same card somebody who has never opened the app would get");
 });
 
 console.log(`\nstudyQueue: ${passed} checks passed`);

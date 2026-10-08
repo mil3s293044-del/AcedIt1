@@ -546,7 +546,7 @@ export default function Layout({ children }) {
                 }} />
             )}
             <SideRail />
-            <TopNav />
+            <TopNav profile={userProfile} />
 
             <AnimatePresence>
                 {showFloatingTimer && (

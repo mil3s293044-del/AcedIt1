@@ -11,14 +11,37 @@
  * the mastery grid were all true and none of them changed what a student did
  * next.
  *
- * One page, two tabs, and the split is what you can DO about it:
+ * One page, ONE SCROLL, in the order the questions get asked:
  *
- *   QUEUE     everything outstanding, ranked by what it costs to skip today,
- *             each row carrying the reason it is there and the button that
- *             answers it. `studyQueue.js` is the model.
- *   INSIGHTS  the panels that end in an action — is it sticking, where are the
- *             marks going, where do the hours go. A chart earns its place here
- *             by changing what somebody does.
+ *   WHAT YOU OWE      everything outstanding, ranked by what it costs to skip
+ *                     today, each row carrying the reason it is there and the
+ *                     button that answers it. `studyQueue.js` is the model.
+ *   WHAT YOU CLEARED  the same rows, counted the other way — `clearedThisWeek`.
+ *   IS IT STICKING    the panels that end in an action: where the marks are
+ *                     going, where the hours went. A chart earns its place
+ *                     here by changing what somebody does.
+ *
+ * ─── THE FIRST TWO WERE TABS, AND THE SECOND ONE DID NOT EXIST ──────────────
+ * Queue and Insights were two tabs, so the half of the page answering "is any
+ * of this working" was behind a control a student had to know to press — and a
+ * screen nobody presses into is a screen nobody has, which is exactly what
+ * /League and /Review were BOTH rebuilt out of one release ago. They stack now
+ * and `?tab=insights` scrolls rather than selects, so every existing bookmark
+ * still lands on the charts.
+ *
+ * And the queue on its own is a list of failings: it gets SHORTER the better
+ * somebody does, so the page's reward for a week of real work was a shorter
+ * list of things they had not done. The done pile is the counterweight, and it
+ * is derived off the same rows — so "12 cards ready" shrinking by eight and
+ * "8 cards reviewed" appearing cannot contradict each other.
+ *
+ * ─── AND NOTHING IS TICKED THAT WAS NOT ACTUALLY DONE ───────────────────────
+ * There is no checkbox and there cannot be one: the queue stores nothing, so a
+ * tick would need a "dismissed" flag — the one thing `studyQueue.js`'s header
+ * rules out, and a flag would let somebody tick away a SAC that is still on
+ * Friday. THE WORK ticks the row. The page re-reads when the student comes
+ * back to the tab, and anything that was on the list and is not any more is
+ * held for a moment with a line through it before it goes.
  *
  * ─── Why the queue is first, and why the cards survive under it ─────────────
  * The queue answers "what now" and the audit answers "why is it asking". Both
@@ -42,8 +65,8 @@
  * keeps the card and is one button to undo — which is the only reason it is
  * safe to use casually, which is the only way an audit screen gets used.
  */
-import React, { useState, useEffect, useMemo, useCallback } from "react";
-import { motion } from "framer-motion";
+import React, { useState, useEffect, useMemo, useCallback, useRef } from "react";
+import { motion, AnimatePresence } from "framer-motion";
 import { Link, useNavigate, useLocation } from "react-router-dom";
 import { base44 } from "@/api/base44Client";
 import { createPageUrl } from "@/utils";
@@ -51,16 +74,17 @@ import { Button } from "@/components/ui/button";
 import { useToast } from "@/components/ui/use-toast";
 import { deckCards, isBankCard } from "@/lib/mistakeBank";
 import { ToastAction } from "@/components/ui/toast";
-import { Layers, Play, Sparkles, Inbox, ChevronDown, ListChecks, LineChart, CheckCircle2 } from "lucide-react";
+import { Layers, Play, Sparkles, Inbox, ChevronDown, CheckCircle2 } from "lucide-react";
 import AuditPile from "@/components/study/AuditPile";
 import QueueRow from "@/components/study/QueueRow";
+import { ClearedStrip, ClearedRow } from "@/components/study/Cleared";
 import HelpButton from "@/components/shared/HelpButton";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
     auditPiles, tally, dueQueue, todayISO, isReady,
     markKnown, markUnknown, snoozeFor,
 } from "@/lib/due";
-import { studyQueue, queueLead } from "@/lib/studyQueue";
+import { studyQueue, queueLead, clearedThisWeek } from "@/lib/studyQueue";
+import { globalBusy, MIN_GAP_MS } from "@/lib/liveRefresh";
 import { studyEvents } from "@/lib/studyLog";
 import { SECONDS_PER_CARD } from "@/lib/retention";
 import AceShuffle from "@/components/ace/AceShuffle";
@@ -68,6 +92,10 @@ import InsightsTab from "@/components/analytics/InsightsTab";
 
 /** How long "not this week" actually is. */
 const SNOOZE_DAYS = 7;
+
+/** How long a ticked-off row stays on screen, and how many may stack. */
+const CLEARED_LINGER_MS = 7000;
+const CLEARED_SHOWN = 3;
 
 const minutesFor = (n) => Math.max(1, Math.round((n * SECONDS_PER_CARD) / 60));
 
@@ -82,23 +110,38 @@ function Figure({ value, label, tone = "text-foreground", hint }) {
     );
 }
 
-const TABS = [["queue", "Queue", ListChecks], ["insights", "Insights", LineChart]];
-
 export default function Review() {
     const [data, setData] = useState(null);
     const [isLoading, setIsLoading] = useState(true);
     const [busy, setBusy] = useState(false);
     const [showKnown, setShowKnown] = useState(false);
     const [showAudit, setShowAudit] = useState(false);
+    /** Rows that were on the list a moment ago and are not any more. */
+    const [justCleared, setJustCleared] = useState([]);
+    const seen = useRef(null);
+    const loadOk = useRef(true);
+    const lastLoad = useRef(Date.now());
     const { toast } = useToast();
     const navigate = useNavigate();
     const location = useLocation();
 
-    // `/Analytics` redirects here with ?tab=insights, so the one route that
-    // existed for the charts still lands on them rather than on a queue the
-    // student did not ask for.
-    const [tab, setTab] = useState(() =>
-        new URLSearchParams(location.search).get("tab") === "insights" ? "insights" : "queue");
+    /**
+     * ─── THE CHARTS ARE NOT BEHIND A TAB ANY MORE ───────────────────────────
+     * Queue and Insights were two tabs, which meant the half of this page that
+     * answers "is any of it sticking" was behind a control a student had to
+     * know to press — and a tab nobody presses is the shape `/League` and
+     * `/Review` were BOTH rebuilt out of two releases ago. They are one scroll
+     * now, in the order the questions get asked: what do I owe, what did I
+     * clear, and is it working.
+     *
+     * `/Analytics` still redirects here with `?tab=insights`, so the param is
+     * still read — it scrolls to the charts rather than selecting them, which
+     * is what makes every existing bookmark and in-app link still land on the
+     * thing it promised. A redirect that drops you at the top of a long page is
+     * the half-wired shape this codebase keeps meeting.
+     */
+    const insightsRef = useRef(null);
+    const wantsInsights = new URLSearchParams(location.search).get("tab") === "insights";
 
     // Computed once per render rather than per card, so a four-hundred-card
     // audit does not build four hundred Date objects to ask the same question.
@@ -121,6 +164,7 @@ export default function Review() {
                     base44.entities.StudyTechnique.filter({ created_by: email }),
                 ].map(p => p.catch(() => [])));
 
+            loadOk.current = true;
             setData({
                 // The deck half and the bank half, split once. `deckCards` is
                 // the filter every DECK surface reads through; the bank reviews
@@ -135,6 +179,11 @@ export default function Review() {
             });
         } catch (err) {
             console.error("Review load error:", err);
+            // A FAILED READ MUST NEVER READ AS "YOU FINISHED EVERYTHING". The
+            // catch hands back six empty arrays, so without this the queue
+            // empties and every item on it would be announced as cleared —
+            // congratulating a student for an outage.
+            loadOk.current = false;
             toast({ title: "Couldn't load your work", description: "Refresh and try again.", variant: "destructive" });
             setData({ cards: [], bankCards: [], quizzes: [], attempts: [], assessments: [], sessions: [], techniques: [] });
         } finally {
@@ -143,6 +192,42 @@ export default function Review() {
     }, [toast]);
 
     useEffect(() => { load(); }, [load]);
+
+    /**
+     * ─── COMING BACK IS WHAT TICKS SOMETHING OFF ────────────────────────────
+     * The obvious build for "check items off" is a checkbox, and it cannot be
+     * done here: the queue is DERIVED and stores nothing, so a tick would need
+     * a "dismissed" flag — the one thing `studyQueue.js`'s own header rules
+     * out, and a flag would let somebody tick away a SAC that is still on
+     * Friday. So THE WORK is what ticks the row, and this is the half that was
+     * missing: every row leaves to another page, and nothing re-read the data
+     * when the student came back, so the list they returned to was the list
+     * they left and the thing they had just done was still on it.
+     *
+     * It fires on becoming visible rather than on a timer. A poll would be a
+     * query per student per interval to answer a question that only changes
+     * when they go and do something, and `MIN_GAP_MS` keeps an alt-tabbing
+     * student from re-reading six tables every few seconds.
+     *
+     * It also HOLDS while anything in the app has declared itself busy — the
+     * same registry `liveRefresh` already keeps, rather than a second opinion
+     * about what must not be interrupted.
+     */
+    useEffect(() => {
+        const onVisible = () => {
+            if (document.visibilityState !== "visible") return;
+            if (globalBusy.reasons().length) return;
+            if (Date.now() - lastLoad.current < MIN_GAP_MS) return;
+            lastLoad.current = Date.now();
+            load();
+        };
+        document.addEventListener("visibilitychange", onVisible);
+        window.addEventListener("focus", onVisible);
+        return () => {
+            document.removeEventListener("visibilitychange", onVisible);
+            window.removeEventListener("focus", onVisible);
+        };
+    }, [load]);
 
     const cards = data?.cards || [];
     const counts = useMemo(() => tally(cards, today), [cards, today]);
@@ -166,6 +251,54 @@ export default function Review() {
     }) : []), [data, cards, events, piles, today]);
 
     const lead = useMemo(() => queueLead(queue), [queue]);
+
+    /** This week's done pile, off the same rows the queue is built from. */
+    const cleared = useMemo(() => (data ? clearedThisWeek({
+        cards, bankCards: data.bankCards, attempts: data.attempts, events,
+    }) : null), [data, cards, events]);
+
+    /**
+     * ─── WHAT LEFT THE LIST SINCE LAST TIME ─────────────────────────────────
+     * Nothing is claimed that did not happen: an item is announced as done
+     * because the fact behind it stopped being true, which is the same reason
+     * it was on the list at all.
+     *
+     * The FIRST settle announces nothing. Without that guard, opening the page
+     * would tick off everything the student had cleared at any point in the
+     * past — and a failed read is treated as a first settle for the same
+     * reason, which is what `loadOk` is for.
+     */
+    useEffect(() => {
+        if (!data) return;
+        if (!loadOk.current) { seen.current = null; return; }
+        const now = new Map(queue.map((q) => [q.key, q]));
+        const prev = seen.current;
+        seen.current = now;
+        if (!prev) return;
+        const gone = [...prev.values()].filter((it) => !now.has(it.key));
+        if (!gone.length) return;
+        // Newest first, and capped: six rows ticking at once is a list of
+        // things that are no longer there, which is not what the student came
+        // back to see.
+        setJustCleared((prevGone) => [...gone, ...prevGone].slice(0, CLEARED_SHOWN));
+    }, [data, queue]);
+
+    // `?tab=insights` SCROLLS rather than selects, now that there is nothing
+    // to select. It waits for the data, because the charts have no height
+    // until they have something to draw and scrolling to an empty section
+    // lands at the bottom of the page.
+    useEffect(() => {
+        if (!wantsInsights || !data) return;
+        insightsRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }, [wantsInsights, data]);
+
+    // They go on their own. A tick that stays is a row, and the queue would
+    // slowly fill with work the student finished days ago.
+    useEffect(() => {
+        if (!justCleared.length) return undefined;
+        const t = setTimeout(() => setJustCleared([]), CLEARED_LINGER_MS);
+        return () => clearTimeout(t);
+    }, [justCleared]);
 
     /**
      * Apply a patch to a set of cards.
@@ -261,18 +394,8 @@ export default function Review() {
                     <HelpButton page="Review" />
                 </div>
 
-                <Tabs value={tab} onValueChange={setTab} className="space-y-5">
-                    <TabsList className="grid w-full sm:w-auto sm:inline-grid grid-cols-2 h-auto p-1.5 rounded-2xl bg-surface border-2 border-border shadow-soft">
-                        {TABS.map(([v, label, Icon]) => (
-                            <TabsTrigger key={v} value={v}
-                                className="flex items-center justify-center gap-1.5 py-2.5 px-4 sm:px-6 rounded-xl text-sm font-bold whitespace-nowrap text-muted-foreground data-[state=active]:bg-foreground data-[state=active]:text-background transition-all">
-                                <Icon className="hidden sm:block w-4 h-4" /> {label}
-                            </TabsTrigger>
-                        ))}
-                    </TabsList>
-
-                    {/* ══ QUEUE ═════════════════════════════════════════════ */}
-                    <TabsContent value="queue" className="mt-0 space-y-5">
+                {/* ══ WHAT YOU OWE ══════════════════════════════════════ */}
+                <div className="space-y-5">
 
                         {/* THE LEAD NAMES THE FIRST THING, not a total. "You
                             have 6 things outstanding" is a number; "your
@@ -283,10 +406,28 @@ export default function Review() {
                             {lead ? lead.line : "You're all caught up."}
                         </motion.h1>
 
-                        {queue.length > 0 ? (
+                        {/* THE DONE PILE, directly under the lead. It is the
+                            counterweight to everything below it: the list of
+                            what you owe gets shorter the better you do, so
+                            without this the reward for a good week was a
+                            shorter list of failings. */}
+                        <ClearedStrip cleared={cleared} />
+
+                        {(queue.length > 0 || justCleared.length > 0) ? (
                             <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}
                                 transition={{ delay: 0.04 }}
                                 className="card-soft on-table overflow-hidden">
+                                {/* Ticked rows sit ABOVE the remaining work and
+                                    leave on their own. They are in the same
+                                    panel rather than a toast, because what a
+                                    student wants to see on coming back is the
+                                    thing they did leaving the list they left
+                                    it on. */}
+                                <AnimatePresence initial={false}>
+                                    {justCleared.map((item) => (
+                                        <ClearedRow key={`done:${item.key}`} item={item} />
+                                    ))}
+                                </AnimatePresence>
                                 {queue.map((item, i) => (
                                     <QueueRow key={item.key} item={item} index={i} lead={i === 0}
                                         href={createPageUrl(item.page) + (item.query || "")} />
@@ -305,12 +446,26 @@ export default function Review() {
                                 </Link>
                             </div>
                         ) : (
-                            <div className="card-soft on-table p-8 text-center">
-                                <CheckCircle2 className="w-9 h-9 text-primary mx-auto mb-3" />
-                                <h2 className="font-display font-extrabold text-foreground">Nothing is asking for you</h2>
-                                <p className="text-sm text-muted-foreground mt-1">
-                                    No cards due, no mistakes waiting, nothing with a date on it this
-                                    fortnight. Have the evening off.
+                            /* ─── AN EMPTY QUEUE IS A RESULT, NOT A VOID ─────
+                               It used to be a grey tick over "nothing is
+                               asking for you", which is the same card an
+                               account that has never done anything would get —
+                               the page's one moment of success drawn as an
+                               absence. It says WHY the list is empty now, and
+                               the why is the student's own week, counted off
+                               their rows. With a quiet week behind it the
+                               claim is dropped rather than invented: an empty
+                               queue on a Monday morning is a real caught-up
+                               and is not an achievement. */
+                            <div className="rounded-2xl bg-primary/5 border border-primary/15 on-table p-8 text-center">
+                                <CheckCircle2 className="w-10 h-10 text-primary mx-auto mb-3" />
+                                <h2 className="font-display font-extrabold text-xl text-foreground">
+                                    {cleared?.any ? "You cleared it." : "Nothing is asking for you"}
+                                </h2>
+                                <p className="text-sm text-muted-foreground mt-1.5 max-w-sm mx-auto">
+                                    {cleared?.any
+                                        ? "Nothing is due, nothing is waiting to be marked and nothing has a date on it this fortnight. That is this week's work, done."
+                                        : "No cards due, no mistakes waiting, nothing with a date on it this fortnight. Have the evening off."}
                                 </p>
                             </div>
                         )}
@@ -449,13 +604,19 @@ export default function Review() {
                                 )}
                             </section>
                         )}
-                    </TabsContent>
+                </div>
 
-                    {/* ══ INSIGHTS ══════════════════════════════════════════ */}
-                    <TabsContent value="insights" className="mt-0">
-                        <InsightsTab data={data} today={today} />
-                    </TabsContent>
-                </Tabs>
+                {/* ══ IS ANY OF IT STICKING ═════════════════════════════════
+                    No longer behind a tab. The queue above answers "what now"
+                    and this answers "is it working", and the second question
+                    is the one that was invisible — a tab nobody presses is a
+                    page nobody has, which is the shape /League and /Review
+                    were both rebuilt out of. `scroll-mt` clears the 48px
+                    sticky header, or `?tab=insights` lands with the heading
+                    underneath it. */}
+                <section ref={insightsRef} className="pt-3 scroll-mt-16">
+                    <InsightsTab data={data} today={today} />
+                </section>
             </div>
         </div>
     );

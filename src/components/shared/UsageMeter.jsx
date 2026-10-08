@@ -142,13 +142,19 @@ export default function UsageMeter() {
                 <button
                     type="button"
                     aria-label={premium ? `${stack.remaining} chips left this week` : "View your AI usage"}
-                    className="pill bg-muted text-foreground gap-1.5 hover:bg-muted/80 transition-colors"
+                    // NO FILL. This is the one control in the strip that was
+                    // tinted without being one of the student's own numbers, so
+                    // in a row of four filled chips it read as a fifth stat. It
+                    // keeps its figure and loses its ground: chrome, drawn as
+                    // chrome, at the same gauge as the theme toggle beside it.
+                    className="inline-flex items-center gap-1.5 h-8 px-2 rounded-full
+                        text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
                 >
-                    <Layers className="w-3.5 h-3.5" />
+                    <Layers className="w-3.5 h-3.5" aria-hidden="true" />
                     {/* The number IS the label. A pill reading "Usage" told
                         nobody anything they could act on; a pill reading 640
                         is the whole state of their week at a glance. */}
-                    <span className="font-bold">{premium ? stack.remaining : "AI"}</span>
+                    <span className="text-xs font-bold tabular-nums">{premium ? stack.remaining : "AI"}</span>
                 </button>
             </PopoverTrigger>
             <PopoverContent align="end" sideOffset={8}
