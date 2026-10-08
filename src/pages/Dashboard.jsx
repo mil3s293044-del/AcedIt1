@@ -2,8 +2,8 @@ import React, { useState, useEffect, useCallback, useMemo, useRef } from "react"
 import { base44 } from "@/api/base44Client";
 import { motion } from "framer-motion";
 import { Target, ArrowRight,
-    GraduationCap, Zap, Brain, FileQuestion,
-    Sparkles, Trophy, Play, Layers, Timer,
+    Zap, Brain, FileQuestion,
+    Sparkles, Play, Layers, Timer,
     Map, BarChart3, CheckCircle2, AlertTriangle, Shield, Sprout
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -42,7 +42,6 @@ const fmtTime = (m) => {
     return `${h}h ${mm}m`;
 };
 
-const fmtXP = (n) => (n || 0).toLocaleString();
 
 // Mirrors the real ladder in streakHelpers/server — what's shown is exactly
 // what awardXP applies (capped at 2.0×).
@@ -449,14 +448,13 @@ export default function Dashboard() {
     const [flashcardReminders, setFlashcardReminders] = useState([]);
     const [flashcards, setFlashcards] = useState([]);
     const [plannerReminders, setPlannerReminders] = useState([]);
-    const [leaderboard, setLeaderboard] = useState([]);
     const [isLoading, setIsLoading] = useState(true);
 
     const loadData = useCallback(async (userEmail) => {
         try {
             const today = format(new Date(), 'yyyy-MM-dd');
             const in14 = format(new Date(Date.now() + 14 * 24 * 60 * 60 * 1000), 'yyyy-MM-dd');
-            const [profileData, sessionsData, techniquesData, quizData, assessmentData, flashcardData, plannerData, lbData] = await Promise.all([
+            const [profileData, sessionsData, techniquesData, quizData, assessmentData, flashcardData, plannerData] = await Promise.all([
                 base44.entities.UserProfile.filter({ created_by: userEmail }).catch(() => []),
                 // 400, not 30. WeekPace compares this week against the same weekday
                 // in up to eight prior weeks, and a thirty-row window is about
@@ -468,7 +466,6 @@ export default function Dashboard() {
                 base44.entities.SubjectAssessment.filter({ created_by: userEmail, is_completed: false }, "due_date", 10).catch(() => []),
                 base44.entities.Flashcard.filter({ created_by: userEmail, is_active: true }, "next_review_date").catch(() => []),
                 base44.entities.StudyPlan.filter({ created_by: userEmail, is_completed: false, date: { $gte: today, $lte: in14 } }, "date", 8).catch(() => []),
-                base44.entities.Leaderboard.list('-total_xp', 200).catch(() => []),
             ]);
 
             let profile = profileData[0] || null;
@@ -501,7 +498,6 @@ export default function Dashboard() {
             setStudySessions(sessionsData || []);
             setStudyTechniques(techniquesData || []);
             setQuizAttempts(quizData || []);
-            setLeaderboard((lbData || []).filter(e => (e.total_xp || 0) > 0));
 
             const upcoming = (assessmentData || []).filter(a => {
                 const days = differenceInDays(parseISO(a.due_date), new Date());
@@ -599,39 +595,6 @@ export default function Dashboard() {
         return all[0] || null;
     }, [assessments, plannerReminders]);
 
-    // Rank computation: find position + 3 rivals above + 1 below for context
-    const rankInfo = useMemo(() => {
-        if (!leaderboard.length || !user) return null;
-        const myIdx = leaderboard.findIndex(e => e.user_email === user.email);
-        const myRank = myIdx >= 0 ? myIdx + 1 : null;
-        const myEntry = myIdx >= 0 ? leaderboard[myIdx] : null;
-        const myXP = myEntry?.total_xp || userProfile?.total_xp || 0;
-
-        // Rivals above (closest 3)
-        let rivals = [];
-        if (myIdx > 0) {
-            const start = Math.max(0, myIdx - 3);
-            rivals = leaderboard.slice(start, myIdx).map((e, i) => ({
-                ...e,
-                rank: start + i + 1,
-                gap: (e.total_xp || 0) - myXP,
-            }));
-        } else if (myIdx === -1 || myIdx >= 50) {
-            // Not ranked or way down — show top 3 as aspirational
-            rivals = leaderboard.slice(0, 3).map((e, i) => ({
-                ...e,
-                rank: i + 1,
-                gap: (e.total_xp || 0) - myXP,
-            }));
-        }
-
-        // One below for context
-        const below = myIdx >= 0 && myIdx < leaderboard.length - 1
-            ? { ...leaderboard[myIdx + 1], rank: myIdx + 2, gap: (leaderboard[myIdx + 1].total_xp || 0) - myXP }
-            : null;
-
-        return { myRank, myXP, myEntry, rivals, below, total: leaderboard.length };
-    }, [leaderboard, user, userProfile]);
 
     const streakDays = userProfile?.streak_days || 0;
     const firstName = userProfile?.username || user?.full_name?.split(' ')[0] || 'friend';
@@ -863,23 +826,6 @@ export default function Dashboard() {
         return { target, done, pct: Math.min(100, Math.round((done / target) * 100)), met: done >= target };
     }, [todayIntentPlan, todaysStudyTime]);
 
-    /**
-     * How far off the person immediately above you, as one phrase.
-     *
-     * This is what survives of the rank panel. That panel resolved four rows
-     * of names, handled anonymity for each and drew a card per row; the only
-     * thing a student ever took from it was whether they were close to passing
-     * someone. Anonymity still has to be honoured, but for one name instead of
-     * four.
-     */
-    const rankGap = useMemo(() => {
-        const rival = rankInfo?.rivals?.[rankInfo.rivals.length - 1];
-        if (!rival || !rankInfo?.myRank || rankInfo.myRank > 50) return null;
-        const name = rival.is_anonymous && rival.user_email !== user?.email
-            ? `Anon #${(rival.id || "").slice(-4)}`
-            : (rival.username || rival.user_name || "Student");
-        return `${fmtXP(rival.gap)} XP off ${name}`;
-    }, [rankInfo, user]);
 
     /**
      * Your subjects, ranked. Built from the flashcards this page already
@@ -938,30 +884,19 @@ export default function Dashboard() {
                                 in it, and printing the number twice on one
                                 screen makes the second one look like a
                                 different statistic. */}
-                            {userProfile?.acedit_atar != null && (
-                                <>
-                                    <span className="text-muted-foreground/40">·</span>
-                                    <span className="inline-flex items-center gap-1 font-extrabold text-chart-4">
-                                        <GraduationCap className="w-3.5 h-3.5" /> {Number(userProfile.acedit_atar).toFixed(2)} ATAR
-                                    </span>
-                                </>
-                            )}
-                            {/* What the Ranked panel was actually for. */}
-                            {rankInfo?.myRank && (
-                                <>
-                                    <span className="text-muted-foreground/40">·</span>
-                                    <Link to={createPageUrl("Ranked")}
-                                        className="inline-flex items-center gap-1 font-extrabold
-                                            text-xp hover:underline">
-                                        <Trophy className="w-3.5 h-3.5" /> #{rankInfo.myRank}
-                                        {rankGap && (
-                                            <span className="text-muted-foreground font-bold">
-                                                · {rankGap}
-                                            </span>
-                                        )}
-                                    </Link>
-                                </>
-                            )}
+                            {/* THE ATAR, THE RANK AND THE GAP ARE GONE FROM HERE.
+                                Three figures about other people, in 11px type,
+                                above a headline that makes ONE case — and the
+                                page's own rule is that progress belongs on
+                                Ranked and Progress, which exist to show it
+                                properly. The distance-to-target block was
+                                removed for exactly this reason and this strip
+                                was the same thing one line higher.
+
+                                It was also the ONLY reader of `rankInfo`, which
+                                was the only reader of a `Leaderboard.list(200)`
+                                fired on every paint — so a 200-row read went
+                                with it. Reaching Ranked is the nav's job. */}
                         </div>
                         <HelpButton page="Dashboard" />
                     </div>

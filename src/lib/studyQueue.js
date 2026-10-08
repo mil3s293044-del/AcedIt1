@@ -49,6 +49,7 @@ import { tally } from "@/lib/due";
 import { retentionOutlook } from "@/lib/retention";
 import { bankSummary } from "@/lib/mistakeBank";
 import { redoQueue } from "@/lib/quizInsight";
+import { dayKey, weekStart } from "@/lib/studyLog";
 
 /** How close a deadline has to be before it is this week's problem. */
 export const SOON_DAYS = 14;
@@ -395,4 +396,98 @@ export function queueMinutes(items = [], minutesFor = () => null) {
     // NULL rather than 0 when nothing could be estimated. A "0 min" badge over
     // six real tasks is worse than no badge.
     return known ? { minutes: total, from: known, of: items.length } : null;
+}
+
+// ─── WHAT YOU ALREADY CLEARED ───────────────────────────────────────────────
+
+/**
+ * This week's work, counted off the same rows the queue is built from.
+ *
+ * ─── A TO-DO LIST WITH NO DONE PILE IS A LIST OF FAILINGS ───────────────────
+ * Everything above answers what a student OWES, and the better they do the
+ * shorter it gets — so the page's reward for a good week is a smaller list of
+ * things they have not done. A student who cleared eighty cards and sat three
+ * quizzes arrived at the same screen as one who opened nothing, and the only
+ * difference was that theirs was shorter. This is the other half.
+ *
+ * ─── NOTHING IS STORED, AND NOTHING IS A SECOND NUMBER ──────────────────────
+ * It is the same rule the queue keeps: every figure is counted off rows the
+ * page has already loaded, so there is no "completed" table, nothing to
+ * backfill, and nothing that can disagree with the list beside it. It is also
+ * the same ROWS, so "12 cards ready" shrinking by eight and "8 cards reviewed"
+ * appearing cannot contradict each other.
+ *
+ * ─── THE WEEK IS `studyLog`'s MONDAY, NEVER A SECOND COPY OF IT ─────────────
+ * `date-fns` defaults `startOfWeek` to SUNDAY, which put five surfaces a full
+ * week out of step with nine others one day in seven. Rolling the Monday maths
+ * again here would be the tenth.
+ *
+ * ─── AND A ROW WITH NO DATE IS NEVER COUNTED ────────────────────────────────
+ * `Number(null)` is 0 and an empty date string slices to "", which compares
+ * LOW against any real day — so a coerced comparison would file every undated
+ * row outside the window, and the obvious "fix" of defaulting it to today
+ * would file every one of them INSIDE it. Both are wrong and only one is
+ * visible, so an undated row is simply not counted, which is the rule
+ * `expiredKeys` keeps about a file with no timestamp.
+ */
+export function clearedThisWeek({
+    cards = [], bankCards = [], attempts = [], events = [], now = new Date(),
+} = {}) {
+    const from = dayKey(weekStart(now instanceof Date ? now : new Date(now)));
+
+    // A day string, or "" — never a guess. Both halves matter: `last_reviewed_date`
+    // is a timestamp on some rows and a bare day on others, and slicing to ten
+    // characters is what makes the two comparable without parsing either.
+    const dayOf = (v) => String(v || "").slice(0, 10);
+    const inWeek = (v) => {
+        const d = dayOf(v);
+        return d.length === 10 && d >= from;
+    };
+
+    const reviewed = (list) => (Array.isArray(list) ? list : [])
+        .filter((c) => inWeek(c?.last_reviewed_date)).length;
+
+    const sat = (Array.isArray(attempts) ? attempts : [])
+        .filter((a) => inWeek(a?.created_date || a?.date)).length;
+
+    const minutes = (Array.isArray(events) ? events : [])
+        .reduce((sum, e) => (inWeek(e?.day) ? sum + (Number(e?.minutes) || 0) : sum), 0);
+
+    // The KIND is the queue's own, so a cleared figure and the row it came
+    // from carry the same glyph and the same ink. Nothing invents a seventh.
+    // THE TIER RIDES ALONG so a cleared figure and the row it came off are
+    // drawn in the same ink. Without it the strip would need its own kind→tier
+    // table, which is the second copy this codebase keeps deleting — and the
+    // copy that drifted would put "quizzes sat" in a colour the queue uses for
+    // something else.
+    const items = [
+        { kind: "cards", tier: "routine", n: reviewed(cards), label: "cards reviewed" },
+        { kind: "mistakes", tier: "dropped", n: reviewed(bankCards), label: "mistakes drilled" },
+        { kind: "resit", tier: "dropped", n: sat, label: sat === 1 ? "quiz sat" : "quizzes sat" },
+    ].filter((i) => i.n > 0);
+
+    return {
+        from,
+        items,
+        minutes: Math.round(minutes),
+        // ANY, not "all" — a week with one quiz in it is still a week with
+        // something in it, and the strip is drawn on this rather than on a
+        // count, so the caller cannot accidentally print an empty one.
+        any: items.length > 0 || minutes > 0,
+    };
+}
+
+/**
+ * Minutes as a student would say them. "4h 20m", "35m", "2h".
+ *
+ * Null under a minute rather than "0m": a strip reading "0m studied" beside a
+ * real card count is the zero row every builder above refuses.
+ */
+export function hoursLabel(mins) {
+    const n = Number(mins);
+    if (!Number.isFinite(n) || n < 1) return null;
+    const h = Math.floor(n / 60);
+    const m = Math.round(n % 60);
+    if (!h) return `${m}m`;
+    return m ? `${h}h ${m}m` : `${h}h`;
 }

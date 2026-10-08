@@ -2359,6 +2359,146 @@ the index scales with the card now (see the cards section above), so it clears
 the pip field at any width, and 92 is simply where nine marks still read as
 nine across a two-column row.
 
+## Three figures about other people, and a to-do list with no done pile
+
+**"Get rid of this off of the dashboard. Also let's keep improving yet making
+progress even more user friendly. Also I feel like the top bar attached can be
+more aesthetic."** Three surfaces, and all three were the same fault in
+different clothes: **weight going to the thing that was not the point.**
+
+### THE DASHBOARD STRIP WAS THREE NUMBERS ABOUT OTHER PEOPLE
+
+`🎓 91.20 ATAR · 🏆 #2 · 6,998 XP off Michael Zander`, in 11px type, directly
+above a hero whose whole design is that it **makes ONE case**. That page's own
+section above says it: progress belongs on Ranked and Analytics, the
+distance-to-target block was removed for exactly this reason, and Today's Play
+lost its footer strip for it too. The strip was the fourth attempt at the same
+thing, and the worst of the four, because it was not even about the student —
+two of its three figures are a comparison with somebody else, which is the
+BOARD's job and sits on a page one tap away that draws all of it properly.
+
+**AND IT WAS THE ONLY READER OF A 200-ROW QUERY.** `rankInfo` existed for the
+strip, `rankGap` existed for `rankInfo`, and both existed for a
+`Leaderboard.list('-total_xp', 200)` fired on every paint of the app's busiest
+screen. Deleting the strip deleted the query, which is the better half of the
+change and was invisible from the screenshot.
+
+### THE TOP BAR WAS FIVE FILLED CHIPS ON ONE LINE
+
+A theme toggle, a grey AI pill, a RED streak pill, an ORANGE XP pill and a
+GREEN "Premium" pill. Nothing led, because everything was tinted at the same
+strength — the "six bordered chips on one line is a toolbar" shape the Ranked
+header was rebuilt out of, in the one strip that is on EVERY screen.
+
+- **ONE STAT GROUP, AND THE HUES SURVIVE ONLY ON THE GLYPHS.** Streak and XP
+  are two readings of one question and **already pointed at the same
+  destination**, so two pills were one control drawn twice. They are one quiet
+  pill with a hairline between the halves; the flame stays streak-red and the
+  bolt stays XP-amber, because those are what a student reads them BY. What
+  goes is the tinted ground behind each, which is what made them shout. A half
+  with nothing in it is not drawn, the divider exists only BETWEEN two present
+  halves (a leading rule with nothing to its left reads as a clipped element),
+  and with neither there is no pill at all.
+- **THE CHROME IS CHROME.** The theme toggle and the AI meter are plain icon
+  buttons with no fill, which is what they always were underneath. The meter
+  KEEPS its figure — "the number IS the label" is its own rule and still right
+  — and loses its ground.
+- **PREMIUM IS STATUS, SO IT IS NOT DRAWN AS A COUNTER.** A filled green pill
+  reading "Premium" sat beside two numbers that move every session, spending a
+  figure's worth of weight on the one fact that never changes. It is a bare
+  crown. **Drawn in the brand green it was still the brightest thing in the
+  group** — only the screenshot said so — so it is MUTED, with the colour on
+  the hover, which is also what says it opens something.
+
+**THE PROFILE IS HANDED DOWN NOW, NOT FETCHED AGAIN.** TopNav ran its own
+`auth.me()` + `UserProfile.filter()` on mount while Layout, which renders it,
+already held that row and already passed it to five other components. It is
+also strictly MORE correct: Layout downgrades an expired premium and a lapsed
+trial BEFORE it publishes the profile, so the raw read meant a subscription
+that ran out last week still drew the crown. That is also what made the bar
+drawable in the probe at all — `scripts/_floorProbe.jsx?v=topnav` deals a full
+account, a first-week one, and a streak with no XP, which is the only way to
+see that the divider rule holds.
+
+### /REVIEW: A TO-DO LIST WITH NO DONE PILE IS A LIST OF FAILINGS
+
+The page answered what a student OWES and nothing else — and **that list gets
+SHORTER the better they do**, so its reward for a week of real work was a
+shorter list of things they had not done. Somebody who cleared eighty cards and
+sat three quizzes arrived at the same screen as somebody who opened nothing.
+
+**`clearedThisWeek` is the other half, and it is counted off the SAME ROWS.**
+Cards and mistakes with a review inside this week, attempts sat inside it, and
+the minutes `studyEvents` already reports. Nothing is stored — the rule
+`studyQueue` and `redoQueue` already keep — so there is no "completed" table,
+nothing to backfill, and "12 cards ready" shrinking by eight cannot contradict
+"8 cards reviewed" appearing, because they are one array read twice.
+
+- **THE WEEK IS `studyLog`'s MONDAY.** `date-fns` defaults `startOfWeek` to
+  SUNDAY, which put five surfaces a full week out of step with nine others one
+  day in seven. Rolling the Monday maths again here would be the tenth copy.
+- **A ROW WITH NO DATE IS NEVER COUNTED.** `Number(null)` is 0 and an empty
+  date slices to `""`, which compares LOW against any real day — so a coerced
+  comparison files every undated row OUTSIDE the window and the obvious "fix",
+  defaulting it to today, files every one of them INSIDE it. Both are wrong and
+  only one is visible. **That trap is now in its tenth module.**
+- **NO ZERO ROWS, and a quiet week draws nothing at all.** `any` is what the
+  strip renders on, so "0 cards reviewed this week" cannot be printed at
+  somebody on a Monday morning — the padding every builder in `studyQueue.js`
+  refuses, pointed at the half that congratulates.
+- **THE TIER RIDES ON EACH CLEARED ITEM**, so a figure and the queue row it
+  came off share an ink. Without it the strip needs its own kind→tier table,
+  and the copy that drifted would print "quizzes sat" in a colour the queue
+  uses for something else.
+- **A strip, not a row of tiles.** Four bordered stat tiles is the shape this
+  codebase keeps deleting. These are three or four small figures read together
+  as one sentence, so they are set as one.
+
+**THERE IS NO CHECKBOX, AND THERE CANNOT BE ONE.** The obvious build for
+"check items off" needs a `dismissed` flag — the one thing `studyQueue.js`'s
+own header rules out, and a flag would let a student tick away a SAC that is
+still on Friday. **THE WORK ticks the row.** What was actually missing is that
+every row leaves to another page and **nothing re-read the data when the
+student came back**, so the list they returned to was the list they left, with
+the thing they had just done still on it. The page refetches on becoming
+visible — not on a timer, which would be a query per student per interval to
+answer a question that only changes when they go and do something — and holds
+while `globalBusy` says anything in the app is mid-flight, which is
+`liveRefresh`'s own registry rather than a second opinion.
+
+Anything that was on the list and is not any more is held for seven seconds
+with a line through it and a tick, above the rest, then goes. Two guards, both
+verified by putting the bug back:
+
+- **THE FIRST SETTLE ANNOUNCES NOTHING**, or opening the page ticks off
+  everything the student ever cleared.
+- **A FAILED READ IS NOT FINISHING.** The catch hands back six empty arrays, so
+  without `loadOk` an outage empties the queue and every item on it is
+  announced as done — congratulating somebody for a 500.
+
+**THE CHARTS CAME OUT FROM BEHIND A TAB.** Queue and Insights were two tabs, so
+the half of the page answering "is any of this working" sat behind a control a
+student had to know to press — and a screen nobody presses into is a screen
+nobody has, which is what **/League and /Review were BOTH rebuilt out of one
+release ago**. They stack now, in the order the questions get asked.
+`?tab=insights` still exists and SCROLLS rather than selects, because
+`/Analytics` redirects to it and dropping somebody at the top of a long page is
+the half-wired shape this app keeps meeting: the right page, and the thing it
+promised to open does not open.
+
+**AND THE EMPTY QUEUE IS A RESULT RATHER THAN A VOID.** It was a grey tick over
+"nothing is asking for you" — the same card an account that has never done
+anything would get, which made the page's one moment of success an absence. It
+says WHY the list is empty, and the why is their own week. **With a quiet week
+behind it the claim is DROPPED rather than invented**: an empty queue on a
+Monday morning is a real caught-up and is not an achievement.
+
+`ClearedStrip` and `ClearedRow` are in `components/study/` rather than inside
+the page, because /Review is auth-gated and the one thing that settles a layout
+is opening it. Draw the lot with `scripts/_floorProbe.jsx?v=queue`, which deals
+the strip, a ticking row, **both** caught-up states and the charts under them —
+a loaded account can only ever show one of the three at a time.
+
 ## The dashboard answers one question
 
 **THE TABLE IS GONE, AND THE GROUND IS FLAT.** `TableGround` painted two radial
@@ -6383,9 +6523,14 @@ somebody opening the pricing page and the gate in the same sitting.
   size you choose it and the size you wear it; the prank Preview plays through
   Layout's own overlay
 - `src/lib/studyQueue.js` + `studyQueue.test.mjs`,
-  `src/components/study/QueueRow.jsx` — everything you owe, in one ranked list:
-  seven sources, four tiers, nothing stored and no zero rows. The spine is the
-  TIER, which is what makes the ranking readable before a word is
+  `src/components/study/QueueRow.jsx`, `src/components/study/Cleared.jsx` —
+  everything you owe, in one ranked list: seven sources, four tiers, nothing
+  stored and no zero rows. The spine is the TIER, which is what makes the
+  ranking readable before a word is read. `clearedThisWeek` is the other half —
+  the DONE pile, off the same rows, Monday-anchored on `studyLog`'s own week,
+  with each cleared kind carrying the queue's own tier so the two cannot be
+  inked apart. A to-do list with no done pile gets shorter the better somebody
+  does, which made a good week look like a shorter list of failings
 - `src/pages/Review.jsx`, `src/components/analytics/InsightsTab.jsx`,
   `SubjectSplit.jsx` — the merged page. Queue is what you owe, Insights is the
   half of the old /Analytics that ended in something to do; the rest was cut
@@ -6445,6 +6590,13 @@ somebody opening the pricing page and the gate in the same sitting.
   it points at; draw the panel with `scripts/_floorProbe.jsx?v=ranked`
 - `src/components/ranked/AchievementUnlock.jsx`, `CrestRow.jsx` — the moment,
   and the badges beside somebody's name
+- `src/components/layout/TopNav.jsx` — the strip on every screen. One quiet
+  stat pill (the hues only on the glyphs), plain icon buttons for the chrome,
+  and a bare muted crown for premium — five separately-filled chips before,
+  with nothing leading. It TAKES the profile now rather than fetching its own:
+  Layout already held that row, and Layout's copy is the one with an expired
+  subscription already downgraded. Draw it with
+  `scripts/_floorProbe.jsx?v=topnav`
 - `src/components/shared/MarkdownMath.jsx`, `LatexRenderer.jsx` — KaTeX
 - `supabase/migrations/0001…0006_*.sql` — applied schema
 - `base44/entities/*.jsonc`, `base44/functions/*/` — Base44 reference, kept until cutover

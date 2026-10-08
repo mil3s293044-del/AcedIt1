@@ -31,6 +31,7 @@ import AceShuffle, { AceLoading } from "@/components/ace/AceShuffle";
 import { Button } from "@/components/ui/button";
 import { base44 } from "@/api/base44Client";
 import { MemoryRouter } from "react-router-dom";
+import ProbeTopNav from "@/components/layout/TopNav";
 import ConsentBanner from "@/components/legal/ConsentBanner";
 import AgeGate from "@/components/legal/AgeGate";
 import CredStore from "@/components/market/CredStore";
@@ -67,12 +68,14 @@ import { Flag, Plus, Scale } from "lucide-react";
 import ActiveRecall from "@/components/study/ActiveRecall";
 import BlurtingMethod from "@/components/study/BlurtingMethod";
 import { ArrowRight, Target } from "lucide-react";
+import { CheckCircle2 as QCheck } from "lucide-react";
 import { COMPONENT_MOVE, boardById, titlesFor, standing } from "@/lib/ranked";
 import { XPSources } from "@/components/ranked/XPLevelCard";
 import RankedBoard from "@/components/ranked/RankedBoard";
 import QueueRow from "@/components/study/QueueRow";
+import { ClearedStrip, ClearedRow } from "@/components/study/Cleared";
 import SubjectSplit from "@/components/analytics/SubjectSplit";
-import { studyQueue, queueLead } from "@/lib/studyQueue";
+import { studyQueue, queueLead, clearedThisWeek } from "@/lib/studyQueue";
 import StandingRail from "@/components/ranked/StandingRail";
 import { ScopeSwitch, BoardSwitch } from "@/components/ranked/BoardControls";
 import { movementMap } from "@/lib/boardMovement";
@@ -151,6 +154,38 @@ const quiet = readMarket({
 }, [], "me@x.com");
 
 const views = {
+    // ── THE TOP BAR, which is on every screen and was five filled chips ──
+    // Drawable at all only because TopNav now TAKES the profile rather than
+    // fetching it — Layout already held that row. The three cases are the ones
+    // that change the row's shape: a full account, a first-week one with
+    // neither number (so no pill at all rather than "0d · 0"), and a student
+    // with a streak and no XP, which is the only way the divider's
+    // between-two-halves rule can be seen to hold.
+    //
+    // The nested UsageMeter still reads base44 for itself, so its trigger draws
+    // the free "AI" state here. The shape is what is being judged; the figure
+    // it carries when somebody pays is a number in the same cell.
+    topnav: () => (
+        <div className="min-h-screen bg-background">
+            {[
+                ["A full account", { streak_days: 8, total_xp: 20722, subscription_tier: "premium" }],
+                ["First week — no numbers, no pill", { streak_days: 0, total_xp: 0 }],
+                ["A streak and no XP yet", { streak_days: 3, total_xp: 0 }],
+            ].map(([label, profile]) => (
+                <div key={label} className="mb-8">
+                    <p className="px-4 pt-4 pb-2 text-xs font-bold text-muted-foreground">{label}</p>
+                    <MemoryRouter initialEntries={["/Dashboard"]}>
+                        {/* `md:pl-16` clears the SideRail, which is not here — so
+                            the bar is shown as it sits in the app rather than
+                            re-padded, or the right-hand group would be judged
+                            against a left edge it never has. */}
+                        <ProbeTopNav profile={profile} />
+                    </MemoryRouter>
+                    <div className="h-10 bg-gradient-to-b from-foreground/5 to-transparent" />
+                </div>
+            ))}
+        </div>
+    ),
     deal: () => <Room><AceDeal /></Room>,
     take: () => (
         <Room>
@@ -1436,6 +1471,17 @@ views.queue = () => {
     });
     const lead = queueLead(items);
 
+    // THE DONE PILE, off the same rows. The fixture's reviews are dated inside
+    // this week deliberately: with QDAY(-20) everywhere the strip is correctly
+    // absent, which is the one state a probe cannot be used to judge it in.
+    const clearedCards = [...Array(23)].map((_, i) => ({ id: `rc${i}`, last_reviewed_date: QDAY(-(i % 4)) }));
+    const cleared = clearedThisWeek({
+        cards: clearedCards,
+        bankCards: [{ last_reviewed_date: QDAY(-1) }, { last_reviewed_date: QDAY(-2) }],
+        attempts: [{ created_date: QDAY(-1) }, { created_date: QDAY(-3) }, { created_date: QDAY(-3) }],
+        events,
+    });
+
     return (
         <MemoryRouter>
             <div className="min-h-screen bg-background p-4 sm:p-6 lg:p-8">
@@ -1444,12 +1490,50 @@ views.queue = () => {
                     <h1 className="font-display text-2xl sm:text-3xl font-extrabold tracking-tight text-foreground leading-[1.15]">
                         {lead ? lead.line : "You're all caught up."}
                     </h1>
+                    <ClearedStrip cleared={cleared} />
+                    <p className="stat-label">
+                        A row ticking off — drawn here beside the live list, which the app never
+                        does: there the item has gone, and this is the seven seconds before it does
+                    </p>
                     <div className="card-soft on-table overflow-hidden">
+                        {/* A row that has just stopped being true, held above the
+                            rest for a moment. Drawn here because the only way to
+                            see it on a real login is to go and finish something,
+                            come back, and catch the seven seconds it lasts. */}
+                        <ClearedRow item={{ key: "done", kind: "mistakes", title: "3 mistakes ready to drill" }} />
                         {items.map((it, i) => (
                             <QueueRow key={it.key} item={it} index={i} lead={i === 0}
                                 href={`/${it.page}${it.query || ""}`} />
                         ))}
                     </div>
+
+                    {/* THE OTHER TWO STATES, which a loaded account cannot show.
+                        An empty queue after a real week is the page's one moment
+                        of success and used to be a grey tick; an empty queue
+                        after a quiet one is a plain caught-up and must NOT claim
+                        anything, which is the half that is easy to get wrong. */}
+                    <p className="stat-label pt-4">Caught up, after a week of work</p>
+                    <div className="rounded-2xl bg-primary/5 border border-primary/15 on-table p-8 text-center">
+                        <QCheck className="w-10 h-10 text-primary mx-auto mb-3" />
+                        <h2 className="font-display font-extrabold text-xl text-foreground">You cleared it.</h2>
+                        <p className="text-sm text-muted-foreground mt-1.5 max-w-sm mx-auto">
+                            Nothing is due, nothing is waiting to be marked and nothing has a date on it
+                            this fortnight. That is this week&apos;s work, done.
+                        </p>
+                    </div>
+                    <ClearedStrip cleared={cleared} />
+
+                    <p className="stat-label pt-4">Caught up, on a quiet week — no claim made</p>
+                    <div className="rounded-2xl bg-primary/5 border border-primary/15 on-table p-8 text-center">
+                        <QCheck className="w-10 h-10 text-primary mx-auto mb-3" />
+                        <h2 className="font-display font-extrabold text-xl text-foreground">Nothing is asking for you</h2>
+                        <p className="text-sm text-muted-foreground mt-1.5 max-w-sm mx-auto">
+                            No cards due, no mistakes waiting, nothing with a date on it this fortnight.
+                            Have the evening off.
+                        </p>
+                    </div>
+
+                    <p className="stat-label pt-4">And the charts, no longer behind a tab</p>
                     <SubjectSplit events={events} quizzes={quizzes} attempts={attempts}
                         cards={cards} today={today} />
                 </div>
