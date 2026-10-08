@@ -445,8 +445,7 @@ ok("every brief card names a LIVE tool", () => {
 
 const SRC_FILES = [
     "../pages/AITools.jsx",
-    "../components/ai_tools/ToolsDashboard.jsx",
-    "../components/ai_tools/ToolBrief.jsx",
+    "../components/ai_tools/ChatWelcome.jsx",
     "../components/ai_tools/UnifiedChat.jsx",
 ];
 const read = (rel) => readFileSync(new URL(rel, import.meta.url), "utf8");
@@ -488,56 +487,65 @@ ok("ONE chat-row predicate, and the sidebar reads it", () => {
     );
 });
 
-ok("a `?tool=` DEEP LINK still opens the chat, not the dashboard", () => {
+ok("a `?tool=` DEEP LINK still opens a tool in the chat", () => {
     // Every `toolQuery` link in the app builds one — MistakeBank's repeat rows,
-    // SubjectHub's course gap. Landing them on a dashboard is the half-wired
-    // shape this app keeps meeting: the right page, and the thing it promised
-    // to open does not open.
+    // SubjectHub's course gap. Landing them on a page that ignores the query is
+    // the half-wired shape this app keeps meeting: the right page, and the
+    // thing it promised to open does not open.
+    //
+    // THE CHAT READS IT, NOT THE PAGE. There is one screen now, so the page has
+    // no branch to decide and consuming the query here would race the chat's
+    // own read — which happens inside an async effect, after the profile
+    // resolves. A prop still beats the URL there, which is what lets a
+    // suggestion override a link somebody arrived on.
+    const chat = stripped("../components/ai_tools/UnifiedChat.jsx");
+    assert.ok(/URLSearchParams\(window\.location\.search\)/.test(chat),
+        "the chat no longer reads the deep link");
+    assert.ok(/params\.get\("tool"\)/.test(chat), "the tool param is no longer read");
+
     const src = stripped("../pages/AITools.jsx");
-    assert.ok(/URLSearchParams\(window\.location\.search\)\.get\("tool"\)/.test(src));
     assert.ok(src.includes("<UnifiedChat"), "the chat is still rendered");
-    assert.ok(src.includes("<ToolsDashboard"), "the dashboard is still rendered");
+    assert.ok(!src.includes("<ToolsDashboard"), "the lobby is back in front of the chat");
     // EACH PROP IS CHECKED FOR A VALUE, not for its own name. The first draft
     // asserted the string was present, and `startConversation={null}` contains
     // it — so dropping the wiring and keeping the attribute passed. Verified by
     // putting exactly that back.
-    for (const prop of ["startTool", "startSubject", "startSeed", "startConversation", "onExit"]) {
-        const m = new RegExp(`${prop}=\\{\\s*(null|undefined|""|'')\\s*\\}`);
+    for (const prop of ["startTool", "startSubject", "startSeed", "startConversation",
+        "cards", "usage", "onOpenCard"]) {
+        const m = new RegExp(`${prop}=\\{\\s*(null|undefined|""|''|\\[\\]|\\{\\})\\s*\\}`);
         assert.ok(src.includes(`${prop}=`), `the chat is opened without ${prop}`);
         assert.ok(!m.test(src), `${prop} is wired to a literal nothing`);
     }
-    // And a Recent row carries the row itself, or reopening it starts a second
-    // thread about the same thing instead of continuing the first.
-    assert.ok(/conv: item\.row/.test(src), "a reopened conversation must carry its row");
+    // A SUGGESTION OPENS A NEW THREAD. The start props are read once on mount,
+    // so without a changing key the second card pressed would re-point the
+    // conversation already on screen at a different persona rather than
+    // starting a second one.
+    assert.ok(/key=\{session\.key\}/.test(src), "the chat is not re-keyed per session");
 });
 
-ok("the dashboard draws all three blocks", () => {
-    const src = stripped("../components/ai_tools/ToolsDashboard.jsx");
-    assert.ok(src.includes("<ToolBrief"), "the direction cards lead");
-    assert.ok(src.includes("toolsByPhase(CHAT_TOOLS)"), "the toolkit is the real catalogue, grouped");
-    assert.ok(/recent\.length > 0/.test(src), "an empty Recent band must not be drawn");
-    // THE PROPERTY, NOT THE COMPONENT'S NAME. This asserted `<RecentRow` and
-    // went red when the saved conversations became a divided table rather than
-    // three more cards — a rename, with the behaviour identical. A guard that
-    // pins a symbol makes the suite fail for being out of date rather than for
-    // a real defect, and the obvious way to green is to put the old name back:
-    // the lesson `xpRates.test.mjs` learned when it pinned the mind-map wall
-    // clock and `reachable.test.mjs` learned about writing a page's name down.
-    // What matters is that the list is iterated and that reopening is wired.
-    assert.ok(/recent\.map\(|items=\{recent\}/.test(src), "the conversations are never drawn");
-    assert.ok(/onOpen(Chat)?=\{onOpenChat\}/.test(src), "a conversation cannot be reopened");
-    // THE NAMES, NOT THE WHOLE IMPORT LINE. This pinned `import { recentChats }`
-    // exactly, so adding `toolUsage` beside it failed the suite for a reason
-    // that was not a defect — the third time in two releases a guard here has
-    // pinned a spelling rather than a property.
+ok("the welcome draws what the lobby did", () => {
+    // The dashboard is deleted and the chat is the page, so everything it was
+    // FOR has to be in the chat's empty state or it is simply gone: the
+    // suggestions counted off the student's own rows, and the catalogue grouped
+    // by when you reach for one rather than as twelve cards in a grid.
+    const src = stripped("../components/ai_tools/ChatWelcome.jsx");
+    assert.ok(/toolsByPhase\(tools\)/.test(src), "the toolkit is no longer grouped by phase");
+    assert.ok(/cards\.map\(/.test(src), "the suggestions are never drawn");
+    assert.ok(/onOpenCard/.test(src), "a suggestion cannot be opened");
+    assert.ok(/usage\?\.\[t\.id\]/.test(src), "the welcome is handed a tally it never reads");
+
+    // THE COMPOSER IS PASSED IN, never rebuilt. Two composers is two places a
+    // tool or a subject can be chosen and one of them drifting is invisible.
+    assert.ok(/\{children\}/.test(src), "the welcome no longer takes the real composer");
+    assert.ok(!/<Textarea|<textarea/.test(src), "the welcome builds a composer of its own");
+
     const page = stripped("../pages/AITools.jsx");
-    assert.match(page, /import \{[^}]*\brecentChats\b[^}]*\} from "@\/lib\/aiChats"/);
+    assert.match(page, /import \{[^}]*\btoolUsage\b[^}]*\} from "@\/lib\/aiChats"/);
     assert.match(page, /import \{[^}]*\btoolBrief\b[^}]*\} from "@\/lib\/toolBrief"/);
-    // The usage tally is UNCAPPED and the Recent list is not: both come off the
-    // same rows, and counting off a capped list would report four as the most
-    // anybody had ever used anything.
+    // The usage tally is UNCAPPED: it comes off the same rows a capped Recent
+    // list would, and counting off that would report four as the most anybody
+    // had ever used anything.
     assert.match(page, /toolUsage\(convs\)/, "the toolkit no longer says what has been used");
-    assert.match(src, /usage\[t\.id\]/, "the dashboard is handed a tally it never reads");
 });
 
 ok("ARRIVING COSTS NOTHING, asserted as an absence", () => {
@@ -545,8 +553,7 @@ ok("ARRIVING COSTS NOTHING, asserted as an absence", () => {
     // of conversations that already save. A model call here would be a charge
     // for walking onto the screen, and the seed is put in the composer rather
     // than sent for the same reason.
-    for (const rel of ["../pages/AITools.jsx", "../components/ai_tools/ToolsDashboard.jsx",
-        "../components/ai_tools/ToolBrief.jsx"]) {
+    for (const rel of ["../pages/AITools.jsx", "../components/ai_tools/ChatWelcome.jsx"]) {
         const src = stripped(rel);
         for (const bad of ["InvokeLLM", "invokeLLMStream", "streamingAI"]) {
             assert.ok(!src.includes(bad), `${rel} must not call a model`);
@@ -571,14 +578,21 @@ ok("the SAVED ROW IS MERGED, never refetched on every turn", () => {
     assert.ok(src.includes("setConvs("), "the handler must merge into the list it owns");
 });
 
-ok("the empty state does not point at a composer that is not there", () => {
-    // "Pick a tool below, or just start typing" was written when the brief sat
-    // directly above a chat box. On a dashboard there is nothing to type into,
-    // so the sentence pointed at a control that does not exist — the class of
-    // failure that cannot be wrong at runtime and only a scan catches.
-    const src = stripped("../components/ai_tools/ToolBrief.jsx");
-    assert.ok(!/start typing/i.test(src), "the empty state still offers a composer");
-    assert.ok(!/<textarea|<input/i.test(src), "the dashboard has no composer to offer");
+ok("the welcome points at a composer that IS there", () => {
+    // The mirror image of the bug this used to hold. "Pick a tool below, or
+    // just start typing" was written when the brief sat above a chat box, and
+    // became false the moment the brief moved to a dashboard with nothing to
+    // type into — copy that cannot be wrong at runtime, caught only by a scan.
+    //
+    // The chat is the page again, so there IS a composer and the welcome is
+    // what renders it. What must stay true is that it renders the REAL one
+    // rather than describing it: the composer arrives as `children`, so the
+    // sentence and the control cannot come apart again.
+    const src = stripped("../components/ai_tools/ChatWelcome.jsx");
+    assert.ok(/\{children\}/.test(src), "the composer is no longer passed into the welcome");
+    const chat = stripped("../components/ai_tools/UnifiedChat.jsx");
+    assert.ok(/<ChatWelcome[\s\S]{0,900}\{locked \? upgradeBox : composerBox\}/.test(chat),
+        "the chat no longer hands its own composer to the welcome");
 });
 
 ok("the BENCH and SCAN vocabulary is gone from what a student reads", () => {

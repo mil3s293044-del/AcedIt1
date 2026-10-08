@@ -63,10 +63,18 @@ const code = (text) => text
 const CSS = fs.readFileSync(path.join(SRC, "index.css"), "utf8");
 const DEFINED = new Set([...CSS.matchAll(/(--console-[\w-]+)\s*:/g)].map((m) => m[1]));
 
-/** The room: every file that renders inside `<Console>`. */
+/**
+ * The room: every file that renders inside `<Console>`.
+ *
+ * THE CHAT IS IN HERE NOW. The lobby that used to hold the room (a dashboard
+ * and its brief) is deleted — the chat is the page — so `UnifiedChat` and its
+ * empty state draw in `--console-*` and are subject to every rule below. That
+ * conversion was sixty tokens in one file and the ones that matter most are
+ * silently survivable: an app ink left behind is legible, just cream.
+ */
 const ROOM = ["components/ai_tools/Console.jsx",
-    "components/ai_tools/ToolsDashboard.jsx",
-    "components/ai_tools/ToolBrief.jsx"];
+    "components/ai_tools/UnifiedChat.jsx",
+    "components/ai_tools/ChatWelcome.jsx"];
 
 check("the palette is actually declared, light and dark", () => {
     // A FLOOR, not a census. It was 14 and went red when `--console-rail`
@@ -153,15 +161,22 @@ check("NO APP GROUND OR INK TOKEN SURVIVES IN THE ROOM", () => {
 
 check("…and neither does the page that mounts it", () => {
     // AITools.jsx used to wrap the dashboard in `bg-background`, which paints
-    // the app's cream BEHIND the room. The chat half of that page is a themed
-    // app screen and legitimately keeps its own ground, so this checks the one
-    // thing that matters: the dashboard is returned without a wrapper.
+    // the app's cream BEHIND the room and shows wherever the console is shorter
+    // than the viewport. `Console` owns its own ground; the page adds none.
+    //
+    // THE CHAT IS NOW INSIDE THE ROOM rather than beside it. The page used to
+    // be two screens — a graphite dashboard and a cream chat — so a themed app
+    // ground here was legitimate for half of it. It is one screen now, and an
+    // app ground anywhere on it is a cream hole.
     const page = code(read("pages/AITools.jsx"));
-    const m = page.match(/<ToolsDashboard[\s\S]*?\/>/);
-    assert.ok(m, "AITools.jsx no longer renders ToolsDashboard");
-    const before = page.slice(0, page.indexOf(m[0])).slice(-400);
-    assert.ok(!/bg-background[\s\S]*$/.test(before.split("return")[1] || ""),
-        "the dashboard is wrapped in an app ground again — Console owns its own");
+    assert.match(page, /<Console>/, "the page no longer mounts the room");
+    assert.match(page, /<UnifiedChat/, "the page no longer renders the chat");
+    assert.ok(!/<ToolsDashboard|ToolBrief/.test(page),
+        "the lobby is back in front of the chat");
+    for (const token of ["bg-background", "bg-surface", "text-foreground", "text-muted-foreground"]) {
+        assert.ok(!new RegExp(`(^|[\\s"'\`:])${token}(?![\\w-])`).test(page),
+            `the page paints an app ${token} around the room`);
+    }
 });
 
 check("no raw hex survives in the room", () => {
@@ -192,14 +207,18 @@ check("ONE LEFT EDGE, which is what the rail cost", () => {
     // rows and the section headings began at x=208 and the twelve tool cards
     // began at 244. Thirty-six pixels, on the screen whose whole argument is
     // that it was laid out on a grid.
-    const dash = code(read("components/ai_tools/ToolsDashboard.jsx"));
-    const bad = [...dash.matchAll(/className="[^"]*?\b((?:sm:|md:|lg:)?p[lxr]-\d[^\s"]*)/g)]
+    // `pr-` CANNOT MOVE A LEFT EDGE, so it is not read as an indent — the
+    // first version of this matched `p[lxr]` and reported a row's own right
+    // padding as the fault, which is a false positive whose obvious fix is
+    // deleting the padding.
+    const src = code(read("components/ai_tools/ChatWelcome.jsx"));
+    const bad = [...src.matchAll(/className=(?:"|{`)[^"`]*?\b((?:sm:|md:|lg:)?p[lx]-\d[^\s"`]*)/g)]
         .map((m) => m[1])
         // The row's own inner padding is not an indent: it is inside the box,
         // which still starts at the container's edge.
-        .filter((c) => !/^p[lxr]-3\.5$|^p[lxr]-3$|^p[lxr]-4$/.test(c));
+        .filter((c) => !/^p[lx]-3\.5$|^p[lx]-3$|^p[lx]-4$/.test(c));
     assert.deepEqual(bad, [],
-        "something in the toolkit is indented from the container again");
+        "something in the welcome is indented from the container again");
 });
 
 check("THE LATTICE LANDS ON THE CONTENT COLUMN, and the arithmetic says so", () => {
@@ -207,8 +226,13 @@ check("THE LATTICE LANDS ON THE CONTENT COLUMN, and the arithmetic says so", () 
     // line sits on the left edge and misses the right one. Both numbers live in
     // two different files, so this does the division rather than trusting a
     // comment — change the container, the padding or the gauge and it fails.
-    const TW = { "max-w-4xl": 896, "max-w-3xl": 768, "max-w-5xl": 1024, "px-4": 16, "px-6": 24 };
-    const dash = code(read("components/ai_tools/ToolsDashboard.jsx"));
+    const TW = { "max-w-4xl": 896, "max-w-3xl": 768, "max-w-5xl": 1024,
+        "max-w-6xl": 1152, "max-w-7xl": 1280, "px-4": 16, "px-6": 24 };
+    // THE COLUMN IS THE ONE THE CONTENT IS SET IN. It was the dashboard's
+    // `max-w-4xl`; it is the welcome's `max-w-3xl` now, and for one commit it
+    // was pointed at the chat's outer `max-w-7xl` shell — which is a box
+    // nothing on the page is aligned to. Only this division said so.
+    const dash = code(read("components/ai_tools/ChatWelcome.jsx"));
     const row = dash.split("\n").find((l) => l.includes("mx-auto") && l.includes("max-w-"));
     assert.ok(row, "the content container is gone");
     const maxW = TW[(row.match(/\bmax-w-[\w]+/) || [])[0]];
@@ -236,14 +260,15 @@ check("COLOUR MEANS PHASE, and only phase", () => {
     // toolkit grouped the same tools by four phases, so one tool was two
     // colours on one screen and neither said which mattered. `toneForTool` is
     // the one lookup; `accentSolid`/`accentBg` belong to the chat.
-    for (const f of ["components/ai_tools/ToolsDashboard.jsx",
-        "components/ai_tools/ToolBrief.jsx"]) {
-        const src = code(read(f));
-        assert.ok(!/accentSolid|accentBg/.test(src),
-            `${f} inks something with the tool's own accent rather than its phase`);
-    }
-    assert.match(code(read("components/ai_tools/ToolBrief.jsx")), /toneForTool\(/);
-    assert.match(code(read("components/ai_tools/ToolsDashboard.jsx")), /phase\.spine/);
+    // SCOPED TO THE WELCOME. The chat THREAD still uses the tool's own accent
+    // and should: there it says who is speaking, which is one meaning and not
+    // two. The rule is about the screen that lists all twelve at once.
+    const welcome = code(read("components/ai_tools/ChatWelcome.jsx"));
+    assert.ok(!/accentSolid|accentBg|accentText/.test(welcome),
+        "the welcome inks something with the tool's own accent rather than its phase");
+    assert.match(welcome, /toneForTool\(/);
+    assert.match(welcome, /band\.ink|tone\.spine/,
+        "the phase's own colour is no longer drawn");
     // And the phases carry their own colour, so a fifth added later gets one.
     const labels = read("lib/toolLabels.js");
     const phases = (labels.match(/export const PHASES = \[[\s\S]*?\n\];/) || [""])[0];
@@ -256,10 +281,10 @@ check("COLOUR MEANS PHASE, and only phase", () => {
 check("A TOOL NEVER OPENED PRINTS NOTHING, never zero", () => {
     // `studyQueue`'s rule: a list that reaches a respectable length by printing
     // "0 chats" teaches a student the numbers here are decoration.
-    const dash = code(read("components/ai_tools/ToolsDashboard.jsx"));
-    assert.match(dash, /if \(!use\?\.count\) return null;/,
-        "the usage cell renders for a tool with no conversations");
-    assert.ok(!/0 chat/.test(dash), "a literal zero is printed somewhere");
+    const welcome = code(read("components/ai_tools/ChatWelcome.jsx"));
+    assert.match(welcome, /if \(!stat \|\| !stat\.count\) return "";/,
+        "the usage cell prints something for a tool with no conversations");
+    assert.ok(!/0 chat/.test(welcome), "a literal zero is printed somewhere");
 });
 
 check("nothing on the console invents a number", () => {
@@ -268,19 +293,14 @@ check("nothing on the console invents a number", () => {
     // are real — the refusal `closingFacts` makes on the first-run screen. The
     // one figure printed is `cards.length`, which is the length of the list
     // directly beneath it.
-    const brief = code(read("components/ai_tools/ToolBrief.jsx"));
-    const dash = code(read("components/ai_tools/ToolsDashboard.jsx"));
-    for (const [name, src] of [["ToolBrief", brief], ["ToolsDashboard", dash]]) {
-        assert.ok(!/\b(\d{1,3})%/.test(src), `${name} prints a hard-coded percentage`);
-        assert.ok(!/invokeLLM|streamAI|base44\.functions/.test(src),
-            `${name} calls a model — the cards are arithmetic and must stay so`);
-    }
-    // The one figure this screen prints about itself is the usage tally, and
-    // that is counted off rows the page already holds. The count chip that used
-    // to sit in the brief's eyebrow went with the eyebrow — it labelled a list
-    // two rows long, above an `h1` that said the same thing in words.
-    assert.ok(!/font-mono[^"]*uppercase/.test(brief),
-        "the brief is shouting a mono label again");
+    const welcome = code(read("components/ai_tools/ChatWelcome.jsx"));
+    assert.ok(!/\b(\d{1,3})%/.test(welcome), "the welcome prints a hard-coded percentage");
+    // IT READS WHAT IT IS GIVEN. The suggestions are counted by the page, so a
+    // model call HERE would be a second answer to a question already answered
+    // with arithmetic — the generated advice deleted from Insights, returning
+    // one screen along.
+    assert.ok(!/invokeLLM|streamAI|base44\./.test(welcome),
+        "the welcome reaches for data of its own — the cards are arithmetic and must stay so");
 });
 
 check("the scanner recognises the shapes it is looking for", () => {

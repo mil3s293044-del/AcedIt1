@@ -14,12 +14,14 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
     Plus, Send, Square, Trash2, ChevronDown, ChevronRight, Paperclip,
-    History, X, Archive, Wand2, Lock, ArrowLeft
+    History, X, Archive, Wand2, Lock, ArrowLeft, Copy, Check, RotateCcw, Pencil, Search
 } from "lucide-react";
 import { createPageUrl } from "@/utils";
 import { base44 } from "@/api/base44Client";
 import { saveResult, deleteResult, loadSavedResults } from "@/lib/saveResult";
 import { chatRows } from "@/lib/aiChats";
+import { labelForTool } from "@/lib/toolLabels";
+import ChatWelcome from "./ChatWelcome";
 import { invokeLLMStream } from "@/lib/streamingAI";
 import { useToast } from "@/components/ui/use-toast";
 import { recordStudyAndGetStreak } from "@/components/shared/streakHelpers";
@@ -34,6 +36,37 @@ import { fmtDate } from "@/lib/safeDate";
 import AceShuffle from "@/components/ace/AceShuffle";
 
 const MAX_TURNS_IN_PROMPT = 12;
+/** Chats before the history search box is worth the space it takes. */
+const HISTORY_SEARCH_AT = 6;
+
+/**
+ * One control under a message.
+ *
+ * ICON PLUS LABEL, not an icon alone. A bare glyph under a paragraph is a
+ * guess — this app's own rule is that an icon earns its place by carrying
+ * something the text does not, and here the text is what says what happens.
+ * The label is `sr-only` at the smallest width only because three words beside
+ * two glyphs wrap the row on a phone; the `aria-label` carries it either way.
+ */
+function RowAction({ label, icon: Icon, onClick, disabled = false, done = false }) {
+    return (
+        <button
+            type="button"
+            onClick={onClick}
+            disabled={disabled}
+            aria-label={label}
+            title={label}
+            className={`inline-flex items-center gap-1.5 rounded-lg px-1.5 py-1 text-[11px] font-bold
+                transition-colors disabled:opacity-40
+                ${done
+                    ? "text-[var(--console-accent-ink)]"
+                    : "text-[var(--console-ink-faint)] hover:text-[var(--console-ink)] hover:bg-[var(--console-panel-2)]"}`}
+        >
+            <Icon className="w-3.5 h-3.5" aria-hidden="true" />
+            <span className="hidden sm:inline">{done ? "Copied" : label}</span>
+        </button>
+    );
+}
 
 function agoLabel(iso) {
     if (!iso) return "";
@@ -79,6 +112,15 @@ export default function UnifiedChat({
     onSaved = null,
     onExit = null,
     exitLabel = "",
+    // ── WHAT THE EMPTY STATE SHOWS ──────────────────────────────────────────
+    // The direction cards are counted by the PAGE, which already loads the rows
+    // for them — the chat is handed the result rather than reading five tables
+    // of its own, which would be the second copy of a read this codebase keeps
+    // deleting. Empty is a real answer and the commonest one on a new account.
+    cards = [],
+    usage = {},
+    briefLoading = false,
+    onOpenCard = null,
 } = {}) {
     const { toast } = useToast();
     const [user, setUser] = useState(null);
@@ -86,6 +128,7 @@ export default function UnifiedChat({
     const [conversations, setConversations] = useState([]);
     const [openFolders, setOpenFolders] = useState({});
     const [sidebarOpen, setSidebarOpen] = useState(false);
+    const [historyQuery, setHistoryQuery] = useState("");
 
     const [activeConvId, setActiveConvId] = useState(null);
     const [activeTool, setActiveTool] = useState(CHAT_TOOLS[0].id);
@@ -355,9 +398,21 @@ export default function UnifiedChat({
         } finally { setUploading(false); }
     };
 
-    const send = async () => {
-        const text = input.trim();
-        const pending = attachment;
+    /**
+     * Send a turn.
+     *
+     * ─── REGENERATE AND EDIT ARE THE SAME SEND ──────────────────────────────
+     * Both rewind the thread and run a turn again, so neither gets a second
+     * copy of this function — which carries the artifact branch, the file
+     * re-attachment, the streaming loop and the save. A second copy is how one
+     * path quietly stops attaching documents, or stops saving.
+     *
+     * `forced` is the prompt text and `forcedHistory` the thread it runs
+     * against. With neither, it is an ordinary send off the composer.
+     */
+    const send = async ({ text: forced = null, history: forcedHistory = null } = {}) => {
+        const text = forced != null ? String(forced).trim() : input.trim();
+        const pending = forced != null ? null : attachment;
         // A document on its own is a valid message — no typed text required.
         if ((!text && !pending) || streaming) return;
         const usedTool = tool;
@@ -366,13 +421,19 @@ export default function UnifiedChat({
         // Every request carries ALL of this conversation's documents, so the
         // AI can keep answering questions about them on later turns.
         const files = pending ? [...convFiles, { url: pending.url, name: pending.name }] : convFiles;
-        setInput(""); setAttachment(null);
+        // A REGENERATE MUST NOT EAT A DRAFT. The composer is only cleared when
+        // the send came from it; pressing regenerate while half a follow-up is
+        // typed would otherwise delete it with nothing to undo.
+        if (forced == null) { setInput(""); setAttachment(null); }
         if (pending) setConvFiles(files);
 
         const promptText = text || `I've attached "${pending.name}". Please read it and help me with it.`;
         const userMsg = { role: "user", content: pending ? `${text ? `${text}\n\n` : ""} ${pending.name}` : text };
-        const history = messages;
-        setMessages(prev => [...prev, userMsg, { role: "assistant", content: "", streaming: true }]);
+        const history = forcedHistory || messages;
+        // Set from `history` rather than `prev`: a regenerate has already
+        // decided what the thread is, and appending to `prev` would leave the
+        // reply it is replacing sitting above the new one.
+        setMessages([...history, userMsg, { role: "assistant", content: "", streaming: true }]);
         setStreaming(true);
         recordStudyAndGetStreak().catch(() => {});
 
@@ -443,6 +504,65 @@ export default function UnifiedChat({
 
     const stop = () => abortRef.current?.abort();
 
+    /* ── Copy ──────────────────────────────────────────────────────────────
+       The single most-used control in any chat and this one had none at all.
+       `navigator.clipboard` is unavailable on an insecure origin and throws
+       when the document is not focused, so the failure is REPORTED rather than
+       swallowed — a tick that never appears reads as a dead button. */
+    const [copiedAt, setCopiedAt] = useState(-1);
+    const copyTimer = useRef(null);
+    useEffect(() => () => clearTimeout(copyTimer.current), []);
+
+    const copyMessage = useCallback(async (index, text) => {
+        try {
+            await navigator.clipboard.writeText(String(text || ""));
+            setCopiedAt(index);
+            clearTimeout(copyTimer.current);
+            copyTimer.current = setTimeout(() => setCopiedAt(-1), 1600);
+        } catch {
+            toast({ title: "Could not copy", description: "Your browser blocked it — select the text and copy it instead." });
+        }
+    }, [toast]);
+
+    /* ── Regenerate ────────────────────────────────────────────────────────
+       Runs the LAST user turn again against the thread that preceded it. It
+       costs a chip like any other send, which is why it is a labelled control
+       rather than an icon: the price has to be legible before the press, the
+       rule megaUpload keeps about the one action whose cost is not fixed. */
+    const lastUserIndex = useCallback((list) => {
+        for (let i = list.length - 1; i >= 0; i -= 1) if (list[i]?.role === "user") return i;
+        return -1;
+    }, []);
+
+    const regenerate = useCallback(() => {
+        if (streaming) return;
+        const i = lastUserIndex(messages);
+        if (i < 0) return;
+        send({ text: messages[i].content, history: messages.slice(0, i) });
+    }, [messages, streaming, lastUserIndex]);
+
+    /* ── Edit and resend ───────────────────────────────────────────────────
+       Truncates to before that turn and runs it again, the way ChatGPT does —
+       so the thread stays a single line of reasoning rather than growing a
+       correction the model has already read. The draft lives in its own state
+       and NEVER in `input`, or cancelling an edit would leave the composer
+       holding a message already in the thread. */
+    const [editing, setEditing] = useState(-1);
+    const [editDraft, setEditDraft] = useState("");
+
+    const beginEdit = useCallback((index, text) => {
+        setEditing(index);
+        setEditDraft(String(text || ""));
+    }, []);
+
+    const commitEdit = useCallback(() => {
+        const text = editDraft.trim();
+        const i = editing;
+        setEditing(-1); setEditDraft("");
+        if (i < 0 || !text || streaming) return;
+        send({ text, history: messages.slice(0, i) });
+    }, [editDraft, editing, messages, streaming]);
+
     // ── Follow-up actions ────────────────────────────────────────────────────
     // The standalone tools didn't just render — several finished by writing
     // something into the rest of the app (a Quiz you could sit, Flashcards for
@@ -473,8 +593,26 @@ export default function UnifiedChat({
     };
 
     // ── History drawer content ───────────────────────────────────────────────
+    /* ── SEARCHING THE HISTORY ─────────────────────────────────────────────
+       It matches the TITLE and the tool's NAME, which are the two things a
+       student actually remembers about a chat they want back. It does NOT
+       search message bodies: the rows are already loaded so it could, and a
+       hit buried in turn nine would show a title that does not contain the
+       word — a result the student cannot see the reason for.
+
+       A query that matches nothing says so rather than rendering an empty
+       drawer that reads as "you have no chats", which is a different and
+       much more alarming claim. */
+    const query = historyQuery.trim().toLowerCase();
     const folders = CHAT_TOOLS
-        .map(t => ({ tool: t, convs: conversations.filter(c => c.tool_type === t.id) }))
+        .map(t => ({
+            tool: t,
+            convs: conversations.filter(c => {
+                if (c.tool_type !== t.id) return false;
+                if (!query) return true;
+                return `${c.title || ""} ${t.label}`.toLowerCase().includes(query);
+            }),
+        }))
         .filter(f => f.convs.length > 0);
 
     const SidebarInner = (
@@ -482,10 +620,34 @@ export default function UnifiedChat({
             <Button onClick={newChat} className="w-full gap-1.5 mb-3 rounded-xl font-bold">
                 <Plus className="w-4 h-4" /> New chat
             </Button>
+
+            {/* The box appears only once there is enough history to need it —
+                a search field over three chats is a control with nothing to do,
+                and it takes the space the list wants. */}
+            {conversations.length >= HISTORY_SEARCH_AT && (
+                <div className="relative mb-2">
+                    <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2
+                        text-[var(--console-ink-faint)]" aria-hidden="true" />
+                    <input
+                        type="search"
+                        value={historyQuery}
+                        onChange={(e) => setHistoryQuery(e.target.value)}
+                        placeholder="Search your chats"
+                        aria-label="Search your chats"
+                        className="w-full rounded-lg border border-[var(--console-line)] bg-[var(--console-panel-2)]
+                            py-1.5 pl-8 pr-2 text-xs text-[var(--console-ink)]
+                            placeholder:text-[var(--console-ink-faint)]
+                            focus:border-[var(--console-accent-ink)] focus:outline-none"
+                    />
+                </div>
+            )}
+
             <div className="flex-1 overflow-y-auto space-y-1 pr-1">
                 {folders.length === 0 && (
-                    <p className="text-xs text-muted-foreground/60 text-center py-6 px-2">
-                        Your chats will collect here, sorted by tool.
+                    <p className="text-xs text-[var(--console-ink-faint)] text-center py-6 px-2">
+                        {query
+                            ? `Nothing matches “${historyQuery.trim()}”.`
+                            : "Your chats will collect here, sorted by tool."}
                     </p>
                 )}
                 {folders.map(({ tool: t, convs }) => {
@@ -494,24 +656,24 @@ export default function UnifiedChat({
                     return (
                         <div key={t.id}>
                             <button onClick={() => setOpenFolders(p => ({ ...p, [t.id]: !open }))}
-                                className="w-full flex items-center gap-1.5 px-2 py-1.5 rounded-lg text-xs font-black uppercase tracking-wide text-muted-foreground hover:bg-secondary/60 transition-colors">
+                                className="w-full flex items-center gap-1.5 px-2 py-1.5 rounded-lg text-xs font-black uppercase tracking-wide text-[var(--console-ink-faint)] hover:bg-[var(--console-panel-2)] transition-colors">
                                 {open ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
                                 <Icon className={`w-3.5 h-3.5 ${t.accentText}`} />
                                 {t.label}
-                                <span className="ml-auto font-bold text-muted-foreground/50">{convs.length}</span>
+                                <span className="ml-auto font-bold text-[var(--console-ink-faint)]">{convs.length}</span>
                             </button>
                             {open && convs.map(c => (
                                 <div key={c.id}
                                     className={`group flex items-center gap-1.5 rounded-lg pl-7 pr-1.5 py-1.5 cursor-pointer transition-colors ${
-                                        c.id === activeConvId ? "bg-secondary" : "hover:bg-secondary/60"
+                                        c.id === activeConvId ? "bg-[var(--console-panel-2)]" : "hover:bg-[var(--console-panel-2)]"
                                     }`}
                                     onClick={() => openConversation(c)}>
                                     <div className="flex-1 min-w-0">
-                                        <p className="text-xs font-bold text-foreground truncate">{c.title || "Chat"}</p>
-                                        <p className="text-[10px] text-muted-foreground/60">{agoLabel(c.created_date)}{c.subject_name ? ` · ${c.subject_name}` : ""}</p>
+                                        <p className="text-xs font-bold text-[var(--console-ink)] truncate">{c.title || "Chat"}</p>
+                                        <p className="text-[10px] text-[var(--console-ink-faint)]">{agoLabel(c.created_date)}{c.subject_name ? ` · ${c.subject_name}` : ""}</p>
                                     </div>
                                     <button onClick={(e) => { e.stopPropagation(); deleteConversation(c); }} aria-label="Delete chat"
-                                        className="opacity-0 group-hover:opacity-100 w-6 h-6 rounded-md flex items-center justify-center text-muted-foreground/40 hover:text-streak hover:bg-streak/10 transition-all flex-shrink-0">
+                                        className="opacity-0 group-hover:opacity-100 w-6 h-6 rounded-md flex items-center justify-center text-[var(--console-ink-faint)] hover:text-streak hover:bg-streak/10 transition-all flex-shrink-0">
                                         <Trash2 className="w-3 h-3" />
                                     </button>
                                 </div>
@@ -530,7 +692,7 @@ export default function UnifiedChat({
         <div className="flex flex-wrap items-center justify-center gap-x-3 gap-y-1.5">
             {(tool.options || []).map(group => (
                 <div key={group.key} className="flex items-center gap-1.5">
-                    <span className="text-[10px] font-black uppercase tracking-wide text-muted-foreground/60">{group.label}</span>
+                    <span className="text-[10px] font-black uppercase tracking-wide text-[var(--console-ink-faint)]">{group.label}</span>
                     {resolveChoices(group, toolOptions).map(c => (
                         <button key={c.value}
                             onClick={() => setToolOptions(prev => {
@@ -541,7 +703,7 @@ export default function UnifiedChat({
                             className={`px-2 py-1 rounded-lg text-[11px] font-bold border transition-all ${
                                 toolOptions[group.key] === c.value
                                     ? `${tool.accentBg} ${tool.accentText} border-current`
-                                    : "bg-surface border-border text-muted-foreground hover:text-foreground"
+                                    : "bg-[var(--console-panel)] border-[var(--console-line)] text-[var(--console-ink-faint)] hover:text-[var(--console-ink)]"
                             }`}>
                             {c.label}
                         </button>
@@ -563,9 +725,9 @@ export default function UnifiedChat({
                 </div>
             ))}
             {attachment && (
-                <div className="inline-flex items-center gap-1.5 pill bg-secondary text-foreground">
+                <div className="inline-flex items-center gap-1.5 pill bg-[var(--console-panel-2)] text-[var(--console-ink)]">
                     <Paperclip className="w-3 h-3" /> {attachment.name}
-                    <span className="text-[10px] text-muted-foreground">sends with next message</span>
+                    <span className="text-[10px] text-[var(--console-ink-faint)]">sends with next message</span>
                     <button onClick={() => setAttachment(null)} aria-label="Remove attachment"><X className="w-3 h-3" /></button>
                 </div>
             )}
@@ -586,11 +748,11 @@ export default function UnifiedChat({
             className="block rounded-3xl border-2 border-primary/30 bg-primary/5 px-4 py-4
                 text-left transition-colors hover:border-primary/50"
         >
-            <p className="font-bold text-foreground text-sm inline-flex items-center gap-2">
+            <p className="font-bold text-[var(--console-ink)] text-sm inline-flex items-center gap-2">
                 <Lock className="w-3.5 h-3.5 text-primary" aria-hidden="true" />
                 The tools are Premium
             </p>
-            <p className="text-[13px] text-muted-foreground mt-1 leading-snug">
+            <p className="text-[13px] text-[var(--console-ink-faint)] mt-1 leading-snug">
                 What is above is yours either way &mdash; it is counted off your own
                 work. $5 a week unlocks the {CHAT_TOOLS.length} tools that act on it.
             </p>
@@ -598,7 +760,7 @@ export default function UnifiedChat({
     );
 
     const composerBox = (
-        <div className="rounded-3xl border-2 border-border bg-background shadow-soft px-4 pt-3 pb-2 transition-colors focus-within:border-primary/50">
+        <div className="rounded-3xl border-2 border-[var(--console-line)] bg-[var(--console-ground)] shadow-soft px-4 pt-3 pb-2 transition-colors focus-within:border-primary/50">
             <Textarea
                 value={input}
                 onChange={e => {
@@ -613,7 +775,7 @@ export default function UnifiedChat({
             />
             <div className="flex items-center gap-1.5 pt-1.5">
                 <Select value={activeTool} onValueChange={selectTool} disabled={toolLocked}>
-                    <SelectTrigger className="h-8 w-auto gap-1 rounded-lg border-0 bg-secondary/60 px-2.5 text-xs font-bold shadow-none focus:ring-0"
+                    <SelectTrigger className="h-8 w-auto gap-1 rounded-lg border-0 bg-[var(--console-panel-2)] px-2.5 text-xs font-bold shadow-none focus:ring-0"
                         title={toolLocked ? "This chat belongs to one tool — start a New chat to switch" : "Choose your tool"}>
                         <SelectValue />
                     </SelectTrigger>
@@ -624,7 +786,7 @@ export default function UnifiedChat({
                     </SelectContent>
                 </Select>
                 <Select value={subjectName || "none"} onValueChange={(v) => setSubjectName(v === "none" ? "" : v)}>
-                    <SelectTrigger className="h-8 w-auto gap-1 rounded-lg border-0 bg-secondary/60 px-2.5 text-xs font-bold shadow-none focus:ring-0 max-w-[130px] sm:max-w-none">
+                    <SelectTrigger className="h-8 w-auto gap-1 rounded-lg border-0 bg-[var(--console-panel-2)] px-2.5 text-xs font-bold shadow-none focus:ring-0 max-w-[130px] sm:max-w-none">
                         <SelectValue placeholder="Subject" />
                     </SelectTrigger>
                     <SelectContent>
@@ -638,7 +800,7 @@ export default function UnifiedChat({
                             <input ref={fileRef} type="file" className="hidden" accept=".pdf,.docx,.pptx,.png,.jpg,.jpeg,.txt"
                                 onChange={e => attachFile(e.target.files?.[0])} />
                             <button onClick={() => fileRef.current?.click()} disabled={uploading} aria-label="Attach a file"
-                                className="w-8 h-8 rounded-lg flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors">
+                                className="w-8 h-8 rounded-lg flex items-center justify-center text-[var(--console-ink-faint)] hover:text-[var(--console-ink)] hover:bg-[var(--console-panel-2)] transition-colors">
                                 {uploading ? <AceShuffle size="sm" /> : <Paperclip className="w-4 h-4" />}
                             </button>
                         </>
@@ -649,7 +811,7 @@ export default function UnifiedChat({
                             <Square className="w-4 h-4" />
                         </Button>
                     ) : (
-                        <Button onClick={send} disabled={!input.trim() && !attachment} size="icon" aria-label="Send message"
+                        <Button onClick={() => send()} disabled={!input.trim() && !attachment} size="icon" aria-label="Send message"
                             className="w-9 h-9 rounded-full flex-shrink-0">
                             <Send className="w-4 h-4" />
                         </Button>
@@ -660,12 +822,12 @@ export default function UnifiedChat({
     );
 
     return (
-        <div className="flex h-full min-h-0 rounded-3xl border border-border bg-surface shadow-soft overflow-hidden">
+        <div className="flex h-full min-h-0 rounded-3xl border border-[var(--console-line)] bg-[var(--console-panel)] shadow-soft overflow-hidden">
             {/* ── Permanent history rail (desktop) — tinted, part of the panel ── */}
-            <aside className="hidden md:flex flex-col w-64 flex-shrink-0 bg-secondary/30 border-r border-border p-3 min-h-0">
+            <aside className="hidden md:flex flex-col w-64 flex-shrink-0 bg-[var(--console-panel-2)] border-r border-[var(--console-line)] p-3 min-h-0">
                 {SidebarInner}
                 <Link to="/AIToolsHistory"
-                    className="mt-2 pt-2.5 border-t border-border inline-flex items-center gap-1.5 px-2 py-1.5 rounded-lg text-xs font-bold text-muted-foreground hover:text-foreground hover:bg-secondary/60 transition-colors">
+                    className="mt-2 pt-2.5 border-t border-[var(--console-line)] inline-flex items-center gap-1.5 px-2 py-1.5 rounded-lg text-xs font-bold text-[var(--console-ink-faint)] hover:text-[var(--console-ink)] hover:bg-[var(--console-panel-2)] transition-colors">
                     <Archive className="w-3.5 h-3.5" /> Saved results
                 </Link>
             </aside>
@@ -683,32 +845,32 @@ export default function UnifiedChat({
                     <button
                         type="button"
                         onClick={onExit}
-                        className="inline-flex items-center gap-1.5 text-xs font-bold text-muted-foreground
-                            hover:text-foreground transition-colors min-w-0"
+                        className="inline-flex items-center gap-1.5 text-xs font-bold text-[var(--console-ink-faint)]
+                            hover:text-[var(--console-ink)] transition-colors min-w-0"
                     >
                         <ArrowLeft className="w-3.5 h-3.5 flex-shrink-0" />
                         <span className="truncate">{exitLabel || "AI Tools"}</span>
                     </button>
                 </div>
             )}
-            <div className={`flex items-center gap-2 px-3 sm:px-4 py-2 border-b border-border flex-shrink-0 ${messages.length === 0 && !onExit ? "md:hidden" : ""}`}>
+            <div className={`flex items-center gap-2 px-3 sm:px-4 py-2 border-b border-[var(--console-line)] flex-shrink-0 ${messages.length === 0 && !onExit ? "md:hidden" : ""}`}>
                 <button onClick={() => setSidebarOpen(true)}
-                    className="md:hidden inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-surface border border-border text-xs font-bold text-muted-foreground hover:text-foreground hover:shadow-soft transition-all">
+                    className="md:hidden inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[var(--console-panel)] border border-[var(--console-line)] text-xs font-bold text-[var(--console-ink-faint)] hover:text-[var(--console-ink)] hover:shadow-soft transition-all">
                     <History className="w-3.5 h-3.5" /> View chats
                 </button>
                 <Link to="/AIToolsHistory"
-                    className="md:hidden inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-surface border border-border text-xs font-bold text-muted-foreground hover:text-foreground hover:shadow-soft transition-all">
+                    className="md:hidden inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[var(--console-panel)] border border-[var(--console-line)] text-xs font-bold text-[var(--console-ink-faint)] hover:text-[var(--console-ink)] hover:shadow-soft transition-all">
                     <Archive className="w-3.5 h-3.5" /> Saved results
                 </Link>
                 {messages.length > 0 && (
                     <>
                         <div className="hidden sm:flex items-center gap-1.5 mx-auto min-w-0">
                             <tool.icon className={`w-3.5 h-3.5 flex-shrink-0 ${tool.accentText}`} />
-                            <p className="text-xs font-bold text-foreground truncate">{tool.label}</p>
-                            {subjectName && <span className="text-xs text-muted-foreground truncate">· {subjectName}</span>}
+                            <p className="text-xs font-bold text-[var(--console-ink)] truncate">{tool.label}</p>
+                            {subjectName && <span className="text-xs text-[var(--console-ink-faint)] truncate">· {subjectName}</span>}
                         </div>
                         <button onClick={newChat}
-                            className="ml-auto sm:ml-0 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-surface border border-border text-xs font-bold text-muted-foreground hover:text-foreground hover:shadow-soft transition-all">
+                            className="ml-auto sm:ml-0 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[var(--console-panel)] border border-[var(--console-line)] text-xs font-bold text-[var(--console-ink-faint)] hover:text-[var(--console-ink)] hover:shadow-soft transition-all">
                             <Plus className="w-3.5 h-3.5" /> New chat
                         </button>
                     </>
@@ -721,7 +883,7 @@ export default function UnifiedChat({
                     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
                         className="fixed inset-0 z-50 bg-foreground/40 md:hidden" onClick={() => setSidebarOpen(false)}>
                         <motion.div initial={{ x: -320 }} animate={{ x: 0 }} exit={{ x: -320 }} transition={{ type: "spring", stiffness: 300, damping: 30 }}
-                            className="w-80 max-w-[85vw] h-full bg-surface p-3 shadow-soft-lg" onClick={e => e.stopPropagation()}>
+                            className="w-80 max-w-[85vw] h-full bg-[var(--console-panel)] p-3 shadow-soft-lg" onClick={e => e.stopPropagation()}>
                             {SidebarInner}
                         </motion.div>
                     </motion.div>
@@ -731,54 +893,96 @@ export default function UnifiedChat({
             {/* ── Thread — the conversation IS the page ── */}
             <div className="flex-1 min-h-0 overflow-y-auto">
                 {messages.length === 0 ? (
-                    <div className="min-h-full flex flex-col items-center justify-center text-center px-4 py-8">
-                        <div className={`w-16 h-16 rounded-2xl ${tool.accentBg} flex items-center justify-center mb-4`}>
-                            <tool.icon className={`w-8 h-8 ${tool.accentText}`} />
-                        </div>
-                        <h2 className="font-display font-extrabold text-foreground text-2xl sm:text-3xl mb-1.5">
-                            What are we working on?
-                        </h2>
-                        <p className="text-sm text-muted-foreground max-w-sm mb-6">{tool.blurb}</p>
-
-                        {/* The composer IS the call to action — centre stage on a new chat */}
-                        <div className="w-full max-w-2xl text-left">
-                            {fileChipsRow}
-                            {locked ? upgradeBox : composerBox}
-                            {!locked && optionsRow && <div className="pt-2.5">{optionsRow}</div>}
-                        </div>
-
-                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 w-full max-w-2xl mt-7">
-                            {CHAT_TOOLS.map(t => {
-                                const Icon = t.icon;
-                                return (
-                                    <button key={t.id} onClick={() => selectTool(t.id)}
-                                        className={`flex flex-col items-start gap-1.5 rounded-xl border-2 p-3 text-left transition-all ${
-                                            t.id === activeTool ? `${t.accentBg} border-current ${t.accentText}` : "bg-surface border-border hover:border-muted-foreground/40"
-                                        }`}>
-                                        <Icon className={`w-4 h-4 ${t.accentText}`} />
-                                        <span className={`text-xs font-bold ${t.id === activeTool ? t.accentText : "text-foreground"}`}>{t.label}</span>
-                                    </button>
-                                );
-                            })}
-                        </div>
-                    </div>
+                    /* THE WELCOME IS THE OLD DASHBOARD'S JOB, INSIDE THE CHAT.
+                       The composer is passed down rather than rebuilt, so there
+                       is exactly one of it and the empty state cannot drift
+                       from the one a student types into on every later turn. */
+                    <ChatWelcome
+                        tool={tool}
+                        tools={CHAT_TOOLS}
+                        cards={cards}
+                        usage={usage}
+                        locked={locked}
+                        loading={briefLoading}
+                        labelFor={labelForTool}
+                        onOpenCard={onOpenCard}
+                        onPickTool={selectTool}
+                    >
+                        {fileChipsRow}
+                        {locked ? upgradeBox : composerBox}
+                        {!locked && optionsRow && <div className="pt-2.5">{optionsRow}</div>}
+                    </ChatWelcome>
                 ) : (
                     <div className="max-w-3xl mx-auto px-3 sm:px-5 py-5 space-y-5">
                         {messages.map((m, i) => (
                             <div key={i} className={`flex ${m.role === "user" ? "justify-end" : "justify-start"}`}>
                                 {m.role === "user" ? (
-                                    <div className={`max-w-[85%] sm:max-w-[70%] rounded-2xl rounded-br-md px-4 py-2.5 ${tool.accentSolid} text-white text-sm whitespace-pre-wrap`}>
-                                        {m.content}
+                                    editing === i ? (
+                                        /* ── Editing this turn ───────────────
+                                           Full measure rather than the bubble's
+                                           70%: a box you are typing into needs
+                                           the width, and the thread below is
+                                           about to be replaced anyway. */
+                                        <div className="w-full max-w-[85%] rounded-2xl border border-[var(--console-accent-ink)]
+                                            bg-[var(--console-panel)] p-2.5">
+                                            <Textarea
+                                                value={editDraft}
+                                                autoFocus
+                                                onChange={(e) => setEditDraft(e.target.value)}
+                                                onKeyDown={(e) => {
+                                                    if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); commitEdit(); }
+                                                    if (e.key === "Escape") { setEditing(-1); setEditDraft(""); }
+                                                }}
+                                                rows={2}
+                                                className="w-full resize-none border-0 bg-transparent p-0 text-sm shadow-none
+                                                    text-[var(--console-ink)] focus-visible:ring-0 focus-visible:ring-offset-0"
+                                            />
+                                            <div className="mt-2 flex items-center justify-end gap-2">
+                                                <button type="button"
+                                                    onClick={() => { setEditing(-1); setEditDraft(""); }}
+                                                    className="rounded-lg px-2.5 py-1 text-xs font-bold
+                                                        text-[var(--console-ink-faint)] hover:text-[var(--console-ink)]">
+                                                    Cancel
+                                                </button>
+                                                <button type="button"
+                                                    onClick={commitEdit}
+                                                    disabled={!editDraft.trim() || streaming}
+                                                    className="rounded-lg bg-[var(--console-accent)] px-3 py-1 text-xs font-bold
+                                                        text-[var(--console-on-accent)] disabled:opacity-50">
+                                                    Send again
+                                                </button>
+                                            </div>
+                                            {/* THE REST OF THE THREAD GOES. Said
+                                                before the press, not after. */}
+                                            <p className="mt-1.5 text-right text-[10px] text-[var(--console-ink-faint)]">
+                                                Replies after this one are replaced.
+                                            </p>
+                                        </div>
+                                    ) : (
+                                    <div className="group max-w-[85%] sm:max-w-[70%]">
+                                        <div className="rounded-2xl rounded-br-md border border-[var(--console-line)] bg-[var(--console-panel-2)] px-4 py-2.5 text-sm text-[var(--console-ink)] whitespace-pre-wrap">
+                                            {m.content}
+                                        </div>
+                                        {!locked && !streaming && (
+                                            <div className="mt-1 flex justify-end gap-0.5 opacity-0 transition-opacity
+                                                group-hover:opacity-100 focus-within:opacity-100">
+                                                <RowAction label="Copy" onClick={() => copyMessage(i, m.content)}
+                                                    icon={copiedAt === i ? Check : Copy} done={copiedAt === i} />
+                                                <RowAction label="Edit" icon={Pencil}
+                                                    onClick={() => beginEdit(i, m.content)} />
+                                            </div>
+                                        )}
                                     </div>
+                                    )
                                 ) : (
-                                    <div className="max-w-[95%] sm:max-w-[85%] flex gap-2.5">
+                                    <div className="group max-w-[95%] sm:max-w-[85%] flex gap-2.5">
                                         <div className={`w-7 h-7 rounded-lg ${tool.accentBg} flex items-center justify-center flex-shrink-0 mt-0.5`}>
                                             <tool.icon className={`w-3.5 h-3.5 ${tool.accentText}`} />
                                         </div>
-                                        <div className="min-w-0 text-sm text-foreground leading-relaxed prose-sm">
+                                        <div className="min-w-0 text-sm text-[var(--console-ink)] leading-relaxed prose-sm">
                                             {m.content
                                                 ? <MarkdownMath isStreaming={!!m.streaming}>{m.content}</MarkdownMath>
-                                                : <span className="inline-flex items-center gap-1.5 text-muted-foreground"><AceShuffle size="sm" /> Thinking…</span>}
+                                                : <span className="inline-flex items-center gap-1.5 text-[var(--console-ink-faint)]"><AceShuffle size="sm" /> Thinking…</span>}
                                             {m.artifact?.kind === "cheat_sheet" && (
                                                 <CheatSheetArtifact
                                                     initialItems={m.artifact.data}
@@ -800,6 +1004,26 @@ export default function UnifiedChat({
                                                     title={m.artifact.title}
                                                 />
                                             )}
+                                            {/* ── Copy, and run it again ──────────────────
+                                                Appear on hover so a finished thread reads as
+                                                prose rather than as a column of toolbars, and
+                                                `focus-within` keeps them reachable by keyboard,
+                                                which hover alone never is. Regenerate is on the
+                                                LAST reply only: re-running a turn from the
+                                                middle would silently discard everything after
+                                                it, which is what Edit is for and says so. */}
+                                            {!m.streaming && m.content && !locked && (
+                                                <div className="mt-2 flex items-center gap-0.5 opacity-0 transition-opacity
+                                                    group-hover:opacity-100 focus-within:opacity-100">
+                                                    <RowAction label="Copy" onClick={() => copyMessage(i, m.content)}
+                                                        icon={copiedAt === i ? Check : Copy} done={copiedAt === i} />
+                                                    {i === messages.length - 1 && (
+                                                        <RowAction label="Try again" icon={RotateCcw}
+                                                            onClick={regenerate} disabled={streaming} />
+                                                    )}
+                                                </div>
+                                            )}
+
                                             {/* Follow-ups the old standalone tools ended with —
                                                 offered on the latest reply only. */}
                                             {!m.streaming && m.role === "assistant" && i === messages.length - 1 && toolActions.length > 0 && (
@@ -840,7 +1064,7 @@ export default function UnifiedChat({
                             stack now, and a line describing the limit a student
                             is NOT subject to is the copy drift this codebase
                             keeps finding. */}
-                        <p className="text-[10px] text-muted-foreground/50 text-center pt-1.5">
+                        <p className="text-[10px] text-[var(--console-ink-faint)] text-center pt-1.5">
                             Chats save automatically — each send spends from this week&apos;s chips.
                         </p>
                     </div>

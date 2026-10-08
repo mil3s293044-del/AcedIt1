@@ -353,19 +353,28 @@
      where the container stops being centred and starts being full width.
 
      THE ARITHMETIC is what makes it land rather than merely start in the right
-     place: at full width the column is 864px of content (896 − 2×16) and
-     864 = 27 × 32, so a line falls on BOTH edges with twenty-seven cells
+     place: at full width the column is 736px of content (768 − 2×16) and
+     736 = 23 × 32, so a line falls on BOTH edges with twenty-three cells
      between them. Below that the container is full-bleed and only the LEFT
      edge lands, which is the honest limit of this — a right edge that tracks
      the viewport cannot sit on a fixed gauge, and the left edge is the one
      every row, rule and heading on the page is aligned to anyway.
 
-     Change the gauge or the container width and the twenty-seven stops being
-     true silently, which is why `consoleInk.test.mjs` does the division rather
-     than trusting this comment. */
+     IT IS THE COLUMN THE CONTENT IS SET IN, not the page's outer shell. The
+     chat's own wrapper is `max-w-7xl` and originating on THAT put a line 16px
+     from the viewport edge while every heading, row and rule on the page was
+     set in the 768px column centred inside it — half a cell out, which is
+     exactly the "grid visibly ignoring the box drawn on top of it" this whole
+     note exists about, reintroduced by aligning to the wrong box.
+
+     Change the gauge or the column and the twenty-three stops being true
+     silently, which is why `consoleInk.test.mjs` does the division rather than
+     trusting this comment. The column has moved twice — a `max-w-4xl`
+     dashboard, then briefly the chat's outer shell — and only the division
+     said so either time. */
   .console-lattice {
     --lattice-gauge: 32px;
-    --lattice-x: max(16px, calc(50% - 432px));
+    --lattice-x: max(16px, calc(50% - 368px));
     background-image:
       repeating-linear-gradient(to right,
         var(--console-grid) 0 1px, transparent 1px var(--lattice-gauge)),

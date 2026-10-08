@@ -40,7 +40,10 @@ import BottomNav from "@/components/layout/BottomNav";
 import { CardBack } from "@/components/cards/PlayingCard";
 import PrankOverlay, { prankBodyClass } from "@/components/pranks/PrankOverlay";
 import { PrankStageProvider } from "@/lib/PrankStage";
-import ToolsDashboard from "@/components/ai_tools/ToolsDashboard";
+import ChatWelcome from "@/components/ai_tools/ChatWelcome";
+import Console from "@/components/ai_tools/Console";
+import { CHAT_TOOLS } from "@/components/ai_tools/chatTools";
+import { labelForTool } from "@/lib/toolLabels";
 import QuestionPanel from "@/components/mistakes/QuestionPanel";
 import { toolBrief } from "@/lib/toolBrief";
 import { recentChats, toolUsage } from "@/lib/aiChats";
@@ -656,10 +659,32 @@ function ToolsView() {
                     <p className="px-4 pt-6 text-[11px] font-black uppercase tracking-widest text-muted-foreground">
                         {title}
                     </p>
-                    <ToolsDashboard
-                        {...props}
-                        onOpenCard={noop} onOpenTool={noop} onOpenChat={noop}
-                    />
+                    {/* IN THE ROOM. `ChatWelcome` draws entirely in `--console-*`
+                        tokens, which are blank outside `.console` — rendered
+                        bare it is an unstyled page, which is the exact failure
+                        `consoleInk.test.mjs` exists for and would make the
+                        probe useless for judging it. */}
+                    <Console>
+                        <ChatWelcome
+                            tool={CHAT_TOOLS[0]}
+                            tools={CHAT_TOOLS}
+                            cards={props.cards}
+                            usage={props.usage || {}}
+                            locked={props.locked}
+                            labelFor={labelForTool}
+                            onOpenCard={noop}
+                            onPickTool={noop}
+                        >
+                            {/* The composer is UnifiedChat's and is passed in
+                                as a child, so the probe stands one in for it
+                                rather than importing a chat that would try to
+                                authenticate. */}
+                            <div className="rounded-3xl border-2 border-[var(--console-line)]
+                                bg-[var(--console-panel)] px-4 py-3 text-sm text-[var(--console-ink-faint)]">
+                                Message Math Tutor…
+                            </div>
+                        </ChatWelcome>
+                    </Console>
                 </div>
             ))}
         </div>

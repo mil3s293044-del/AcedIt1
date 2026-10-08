@@ -1,46 +1,59 @@
 /**
- * AI Tools — a dashboard in front of the chat.
+ * AI Tools — the chat, and nothing in front of it.
  *
- * ─── THE CHAT IS THE SURFACE; IT IS A POOR LANDING ──────────────────────────
- * This page has been a persona dropdown over an empty thread, then a "bench" of
- * verbs over a workpiece, then a scan that diagnosed a pasted paragraph. The
- * last two replaced the chat, and that was the wrong lever: the chat streams,
- * saves, bills the right feature and is what a student actually wants from an
- * AI tool. What was wrong was arriving at it with nothing on screen, which asks
- * for the two hardest parts of the job at once — which tool solves this, and
- * what exactly is wrong.
+ * ─── FOUR SHAPES, AND THE CHAT OUTLASTED ALL OF THEM ────────────────────────
+ * This page has been a persona dropdown over an empty thread, a BENCH of verbs
+ * over a workpiece, a SCAN that diagnosed a pasted paragraph, and a DASHBOARD
+ * in front of the chat. Three of those four replaced or fronted the chat, and
+ * every time the chat was the half that turned out to be right: it streams, it
+ * saves, it bills the right feature through `chatTools.js`, and a conversation
+ * is what a student actually wants from an AI tool.
  *
- * So the chat is back exactly as it was, and `ToolsDashboard` is what the page
- * opens on: what their own work says is worth a tool, the twelve tools grouped
- * by when you reach for one, and the conversations they can carry on.
+ * So the page IS the chat. What the dashboard was for has not been thrown away
+ * — a blank box really does ask for the two hardest parts of the job at once —
+ * it has moved into the chat's own empty state (`ChatWelcome`), which is where
+ * every chatbot worth copying puts it: composer in the middle, suggestions
+ * under it, catalogue below. One screen rather than a lobby and a room, and
+ * nothing to navigate back out of.
  *
- * ─── TWO STATES, AND A DEEP LINK SKIPS THE FIRST ────────────────────────────
- * `?tool=` goes straight to the chat, which is what MistakeBank, SubjectHub and
- * every `toolQuery` link already build. Landing them on a dashboard would be
- * the half-wired shape this app keeps meeting: the link arrives on the right
- * page and the thing it promised to open does not open.
+ * ─── THE PAGE COUNTS, THE CHAT DRAWS ────────────────────────────────────────
+ * The direction cards are arithmetic over five tables, and this page was
+ * already reading all five for the dashboard. It keeps doing that and hands the
+ * RESULT down, so the chat makes no query of its own — a second read of the
+ * same rows is the mirror this codebase keeps deleting, and it would be five
+ * more round trips before the composer painted.
  *
- * ─── THE DASHBOARD IS FREE AND THE TOOLS ARE NOT ────────────────────────────
+ * ─── IT IS A ROOM, AND THE ROOM SURVIVED THE REVERT ─────────────────────────
+ * `Console` scopes ~15 `--console-*` tokens, which is what makes this page a
+ * distinct graphite surface in both themes rather than the dashboard with the
+ * chat stuck on it. The chat now renders INSIDE it, so every token it draws
+ * with is the room's — see `consoleInk.test.mjs`, which refuses an app
+ * ground/ink token anywhere in here because one left behind is a cream patch in
+ * a graphite page and renders perfectly until somebody opens it.
+ *
+ * ─── THE WELCOME IS FREE AND THE TOOLS ARE NOT ──────────────────────────────
  * The whole page used to sit behind a route-level `RequirePremium`, so a free
  * student met a locked door and nothing else. The two halves cost different
- * things: the direction cards are arithmetic over rows the student already
- * owns — no model call, no chips, no money — and they are the most convincing
- * argument this app can make for the tools, because they are about them. The
- * TOOLS are an Anthropic bill. So the page renders for everybody and the
- * COMPOSER is what locks, with every card and every tool going to
- * /Subscription rather than nowhere.
+ * things: the direction cards are counted off rows the student already owns —
+ * no model call, no chips, no money — and they are the most convincing argument
+ * this app can make for the tools, because they are about them. The TOOLS are
+ * an Anthropic bill. So the page renders for everybody and the COMPOSER is what
+ * locks, with every suggestion and every tool going to /Subscription.
  */
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { base44 } from "@/api/base44Client";
 import UnifiedChat from "@/components/ai_tools/UnifiedChat";
-import ToolsDashboard from "@/components/ai_tools/ToolsDashboard";
+import Console from "@/components/ai_tools/Console";
 import AceShuffle from "@/components/ace/AceShuffle";
 import { isPremium } from "@/lib/tierAccess";
 import { toolBrief } from "@/lib/toolBrief";
-import { recentChats, toolUsage } from "@/lib/aiChats";
+import { toolUsage } from "@/lib/aiChats";
 import { loadSavedResults } from "@/lib/saveResult";
 import { deckCards, isBankCard } from "@/lib/mistakeBank";
 import { isReady, todayISO } from "@/lib/due";
+
+/** A fresh thread, opened on nothing in particular. */
+const BLANK = { key: "new", tool: null, subject: "", seed: "", conv: null };
 
 export default function AITools() {
     // `undefined` while it loads, so nothing decides before the profile lands.
@@ -51,18 +64,21 @@ export default function AITools() {
     const [rows, setRows] = useState(null);
     const [convs, setConvs] = useState([]);
 
-    // What the chat is open ON, or null for the dashboard. A deep link decides
-    // this before the first paint: `?tool=` is read here as well as inside
-    // `UnifiedChat`, because the page has to know which of two screens to draw
-    // and the chat has to know which tool to open.
-    const [open, setOpen] = useState(() => {
-        try {
-            const tool = new URLSearchParams(window.location.search).get("tool");
-            return tool ? { key: `link:${tool}`, tool, subject: "", seed: "", conv: null } : null;
-        } catch {
-            return null;
-        }
-    });
+    /**
+     * What the chat is currently opened on.
+     *
+     * A SUGGESTION OPENS A NEW THREAD, which is why this carries a `key` and
+     * the chat is re-keyed on it: the tool, the subject and the seeded prompt
+     * are read once on mount, and pressing a second suggestion mid-conversation
+     * has to start the second conversation rather than quietly re-pointing the
+     * one already on screen at a different persona.
+     *
+     * `?tool=` is NOT consumed here. `UnifiedChat` reads it inside its own
+     * async setup, after the profile resolves, so stripping it from this side
+     * would be a race with nothing deciding the winner — and a prop beats the
+     * URL there anyway, which is what makes a suggestion override a deep link.
+     */
+    const [session, setSession] = useState(BLANK);
 
     useEffect(() => {
         let alive = true;
@@ -70,7 +86,7 @@ export default function AITools() {
             try {
                 const u = await base44.auth.me();
                 // Each read catches for itself: one unreadable table must not
-                // discard the other four and leave the dashboard looking like
+                // discard the other four and leave the welcome looking like
                 // an account with no history at all.
                 const [profiles, flashcards, attempts, assessments, saved] = await Promise.all([
                     base44.entities.UserProfile.filter({ created_by: u.email }).catch(() => []),
@@ -112,55 +128,21 @@ export default function AITools() {
         return toolBrief({ ...rows, isReady: (c) => isReady(c, today) });
     }, [rows]);
 
-    const recent = useMemo(() => recentChats(convs), [convs]);
-    // UNCAPPED, unlike `recent`: four is the length of a list, not the most
-    // anybody has ever used a tool. Same rows, same predicate.
+    // UNCAPPED, unlike `recentChats`: four is the length of a list, not the
+    // most anybody has ever used a tool. Same rows, same predicate.
     const usage = useMemo(() => toolUsage(convs), [convs]);
 
-    /* ── Opening the chat ───────────────────────────────────────────────── */
-
     const openCard = useCallback((card) => {
-        setOpen({
+        setSession({
             key: `card:${card.key}`,
             tool: card.tool,
             subject: card.subject || "",
-            // THE SEED IS PUT IN THE COMPOSER, NOT SENT. A card that spent a
-            // chip on one tap would be the only action in the app that costs a
-            // student something they had not read.
+            // THE SEED IS PUT IN THE COMPOSER, NOT SENT. A suggestion that
+            // spent a chip on one tap would be the only action in the app that
+            // costs a student something they had not read.
             seed: card.seed || "",
             conv: null,
         });
-    }, []);
-
-    const openTool = useCallback((tool) => {
-        setOpen({ key: `tool:${tool.id}`, tool: tool.id, subject: "", seed: "", conv: null });
-    }, []);
-
-    const openChat = useCallback((item) => {
-        setOpen({
-            key: `conv:${item.id}`,
-            tool: item.tool || null,
-            subject: item.subject || "",
-            seed: "",
-            conv: item.row,
-        });
-    }, []);
-
-    const leave = useCallback(() => {
-        setOpen(null);
-        // The link's `?tool=` would otherwise re-open the chat on every return,
-        // so the way out of a deep-linked chat would lead straight back into
-        // it. Dropped from the URL rather than from state, because a refresh
-        // reads the URL again.
-        try {
-            const url = new URL(window.location.href);
-            if (url.searchParams.has("tool") || url.searchParams.has("q") || url.searchParams.has("subject")) {
-                url.searchParams.delete("tool");
-                url.searchParams.delete("q");
-                url.searchParams.delete("subject");
-                window.history.replaceState({}, "", url.pathname + (url.search || "") + url.hash);
-            }
-        } catch { /* a browser without history.replaceState keeps the query */ }
     }, []);
 
     /**
@@ -168,10 +150,9 @@ export default function AITools() {
      *
      * MERGED, NOT REFETCHED. `UnifiedChat` persists after every completed
      * reply, so re-reading five tables on each turn would be five round trips
-     * per message to update one list the student cannot currently see. The row
-     * it hands over is the row it just wrote, so the Recent list is correct the
-     * moment they come back out — and `{ ...prev, ...row }` keeps the stored
-     * timestamp an UPDATE does not carry, which is what the list sorts on.
+     * per message to keep a usage count current. The row it hands over is the
+     * row it just wrote — and `{ ...prev, ...row }` keeps the stored timestamp
+     * an UPDATE does not carry, which is what `recentChats` sorts on.
      */
     const noteSaved = useCallback((row) => {
         if (!row?.id) return;
@@ -187,51 +168,47 @@ export default function AITools() {
         });
     }, []);
 
+    // Nothing is decided until the tier is known — see `premium` above. The
+    // loader sits inside the room, or the wait is a cream screen that turns
+    // graphite, which is a worse arrival than a slightly longer one.
     if (premium === undefined) {
         return (
-            <div className="h-[calc(100dvh-8rem)] md:h-[calc(100dvh-3rem)] flex items-center justify-center">
-                <AceShuffle size="lg" />
-            </div>
+            <Console>
+                <div className="h-[calc(100dvh-8rem)] md:h-[calc(100dvh-3rem)] flex items-center justify-center">
+                    <AceShuffle size="lg" />
+                </div>
+            </Console>
         );
     }
 
-    // ── THE CHAT TAKES THE WHOLE SCREEN ─────────────────────────────────────
-    // Fixed viewport column: 100dvh minus the 48px top nav (desktop) and the
-    // additional ~80px bottom tab bar on mobile. This is what kills the dead
-    // space below the thread — the chat always fills exactly the screen.
-    if (open) {
-        return (
-            <div className="h-[calc(100dvh-8rem)] md:h-[calc(100dvh-3rem)] bg-background">
-                <div className="h-full max-w-7xl mx-auto px-2 lg:px-4 py-3 flex flex-col min-h-0">
+    // A FIXED VIEWPORT COLUMN: 100dvh less the 48px top nav, and the ~80px
+    // bottom tab bar as well on a phone. That is what lets the thread scroll
+    // inside the page rather than the page scrolling under a composer that has
+    // left the screen.
+    return (
+        <Console>
+            <div className="h-[calc(100dvh-8rem)] md:h-[calc(100dvh-3rem)]">
+                {/* `px-4` AT EVERY WIDTH, because the lattice behind this is origined
+                    at this column's own left edge and a gutter that changes at
+                    `lg` would move the grid out from under the content at one
+                    breakpoint. See `--lattice-x` in index.css: the two numbers
+                    are one decision. */}
+                <div className="h-full max-w-7xl mx-auto px-4 py-3 flex flex-col min-h-0">
                     <UnifiedChat
-                        key={open.key}
+                        key={session.key}
                         locked={!premium}
-                        startTool={open.tool}
-                        startSubject={open.subject}
-                        startSeed={open.seed}
-                        startConversation={open.conv}
+                        startTool={session.tool}
+                        startSubject={session.subject}
+                        startSeed={session.seed}
+                        startConversation={session.conv}
+                        cards={cards}
+                        usage={usage}
+                        briefLoading={rows === null}
+                        onOpenCard={openCard}
                         onSaved={noteSaved}
-                        onExit={leave}
-                        exitLabel="AI Tools"
                     />
                 </div>
             </div>
-        );
-    }
-
-    // No wrapper: `Console` IS the ground and owns the min-height. Wrapping it
-    // in `bg-background` would put a cream page behind a graphite one — which
-    // shows wherever the console is shorter than the viewport.
-    return (
-        <ToolsDashboard
-            cards={cards}
-            recent={recent}
-            usage={usage}
-            locked={!premium}
-            loading={rows === null}
-            onOpenCard={openCard}
-            onOpenTool={openTool}
-            onOpenChat={openChat}
-        />
+        </Console>
     );
 }
