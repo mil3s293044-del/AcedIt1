@@ -2518,6 +2518,206 @@ rows on only one side makes every delta correctly absent, and the one state the
 layout has to survive is the one with a movement chip in it. Both themes, and
 at 390.
 
+## Progress: the action outranks the analytics, and two doors were dead
+
+**"In the progress there is a bunch of dead space, useless info and I still
+feel like it takes the user too much effort to find the cards to sift through
+and to find info. The analytics should be more aesthetic and more interactive.
+The page needs to feel more integrated rather than isolated stats. Also the
+action items like to check off flashcards are more important than the random
+analytics."**
+
+Every claim was measurable and every one of them was true. Measured rather
+than eyeballed, which is what turned "dead space" into a list:
+
+| | before | after |
+|---|---|---|
+| the page, at 1100 | **6,000px** | 3,556 |
+| the page, at 390 | **7,408px** | 5,011 |
+| `ReportHead`, per tab, ×4 | **252px** | 131 |
+| the Cards tab | **1,491px** | ~650 |
+| the Hours tab | **1,962px** | ~730 |
+| panels saying nothing | three, 560px | none |
+| pressable rows | **zero** | every row with an exact destination |
+
+### THE BUTTON WORKED AND THE DESTINATION DID NOT
+
+Found while mapping which rows could honestly become doors, and it is the
+headline of this release rather than a side-effect of it.
+
+**`?tab=spaced` IS NOT A TECHNIQUE ID.** Study's deep link is
+`TECHNIQUES.some(x => x.id === t)` and the id is `spaced_repetition`, so that
+value matched nothing and `activeTab` stayed at its `"pomodoro"` default.
+**FIVE call sites sent it**: the queue's two card rows, `startReview` (which
+is the pile audit's own Review button AND the "N cards for today → Start"
+panel), and both doors on the Cards tab. So **every single way into the
+flashcard review from the Progress page landed a student on a Pomodoro
+timer** — which is literally "it takes too much effort to find the cards",
+arrived at from the one direction nobody would look: the entrance was there,
+it was labelled correctly, and it went somewhere else.
+
+**AND `?tab=resit` WAS WORSE, because MistakeBank did not read the query at
+all.** A bare `useState("fix")`, and its ids are `fix`/`redo` — so the
+"questions to sit again" row, which exists to open the Sit again tab, opened
+Fix. Both halves wrong, independently.
+
+Nothing throws, nothing renders wrong, and the destination looks exactly as it
+does when somebody navigates there by hand. This is the same silent class as
+the missing columns `dbColumns.test.mjs` exists for and the `@/` alias
+`serverBoot.test.mjs` exists for: it builds, it lints, it passes every check,
+and it is simply a different screen from the one the link promised.
+
+`reachable.test.mjs` now asserts the property `rankedMove.test.mjs` already
+keeps about the ATAR component moves, generalised: **every `?tab=` a link
+emits must be a value the destination page honours**, with the honoured list
+read OFF each page rather than restated here. Plus the other half the scan
+cannot see — that each page still READS the query and applies it, because
+with the effect deleted rather than wrong every link in the tree stays valid
+and every one of them silently stops working.
+
+**ITS FIRST DRAFT PRODUCED A FALSE POSITIVE ON THE FIRST RUN.** The builder
+pass took "the first `query:` within 400 characters of a `page:`", and
+`COMPONENT_MOVE` lists MistakeBank with no query and Study with
+`?tab=pomodoro` on the next line — so the scan reported MistakeBank as linking
+to a technique. That is "a scan that matches somewhere in a large span is not
+a scan" for the fifth recorded time, in the direction that gets a good guard
+DELETED rather than merely ignored. The window is the enclosing object
+literal, found by brace depth.
+
+### ACT, THEN READ
+
+Every feature tab opened with a 252px figure and carried its one action in the
+top-right corner as a small outlined button. So the thing a student can DO was
+the smallest element on a screen of numbers about what they had already done.
+
+**Each tab now leads with ITS OWN outstanding rows**, out of the one queue the
+Today tab draws, with the button on the row — `workFor(queue, tab)` over
+`TAB_KINDS`, drawn with the same `QueueRow`. Nothing is stored and nothing is
+recomputed, so a count here cannot disagree with the same row one tab over,
+which is why the filter is one exported map rather than a list of kinds
+written out at each call site.
+
+- **`TAB_KINDS.hours` IS DELIBERATELY EMPTY, and the test asserts it.** There
+  is no such thing as an overdue hour — nothing in `studyQueue` is about time
+  — so that tab leads with its figure and a door. Inventing a row to make the
+  four tabs symmetrical is the padding every builder in `studyQueue.js`
+  refuses, and an empty constant is exactly the thing a later session
+  "fixes".
+- **`assessment` belongs to no feature.** A SAC is the whole term, not a
+  flashcard or a quiz, so it stays on Today, which is the tab that ranks all
+  seven kinds against each other.
+- **NO KIND REACHES TWO TABS**, or the same work is offered twice.
+- **The strip's corner door is drawn ONLY when there is no work to lead
+  with.** Two ways to the same place, one above the other, is the duplication
+  this codebase keeps deleting — and the corner button is the weaker of the
+  two.
+
+`ReportStrip` replaces `ReportHead` and the height was the point: the figure,
+the movement chip and the label share a baseline instead of stacking, and the
+supporting figures are an inline run rather than a bordered four-column grid
+that went 2-up and grew on a phone. 252 → 131, four times over.
+
+### EVERY BAR IS A DOOR — WHERE THE DESTINATION IS EXACT
+
+A bar with no way through is a diagnosis, which is Ranked's own lesson about
+its ATAR components, met on the page that carries more bars than any other.
+Not one row was pressable, so a student reading "Evaluate 71%" had to work out
+for themselves which of twenty-four screens moves it.
+
+A subject row opens that subject's hub. A command-term row seeds THAT term's
+tool through `toolQuery`, the builder every other screen hands a problem over
+with — it used to be flat text beside one shared "Work on these" link, which
+is a door to the tool and not to the problem. A technique row opens THAT
+technique on /Study, checked against Study's own ids by the scan above.
+Stability-by-subject opens that subject's review session.
+
+**AND THE ROWS WITH NO EXACT DESTINATION STAY FLAT.** There is no review
+session filtered to one strength band, so "Shaky · 7 cards" is not a link —
+sending somebody to the whole deck under that row is the half-wired shape this
+app keeps meeting, and the refusal is what keeps the other doors worth
+pressing. The test asserts the absence, because the obvious "improvement" is
+to give every row something.
+
+The reasoning lives in a comment and NOT in the panel's note. The first draft
+printed "so these rows do not pretend to be links" on screen — a student does
+not need to be told what a panel decided not to do.
+
+### WHAT WAS CUT, AND THE RULE THAT REPLACED THE REST
+
+- **`CognitiveProfilePanel`, 599px** — the single biggest block on the page, a
+  radar over five axes of which three read "not measured yet" on a real
+  account. Deleted. `cognitiveProfile.js` stays: `aceTerms.js` reads `AXES`.
+- **"Retrieval vs review", 334px** — a percentage, a two-colour bar, a legend,
+  a technique list and a paragraph, printing **0%** on a real account because
+  the figure is a share of LOGGED technique minutes and most students log
+  against quizzes. The techniques breakdown it was built on survives on the
+  HOURS tab where the hours live, with every row a door.
+- **"How long it holds up", 205px** — its own copy called it "the only
+  subjective signal in here". That was the argument FOR it and it is the
+  argument against: both axes come from the same self-report, so it cannot
+  tell a student anything they did not type in. `lengthCurve` is kept with a
+  note at its definition — decide, do not re-audit.
+- **A PANEL WITH NOTHING TO SAY IS NOT DRAWN.** `WeakTopicsPanel` (94px of
+  "nothing is standing out yet"), `AttentionPanel` (132px of "no timed
+  sessions") and `MemoryPanel` (two boxes explaining what would fill them) all
+  return null now. On a first-week account that was ~560px of apology, stacked.
+
+**The empty-panel guard's first draft matched ANY `return null` in the file
+and MemoryPanel has one inside `ForecastChart`** — so the thing being checked
+was a helper forty lines above the component that matters, and the injection
+passed. It reads the default export's own head now.
+
+### DENSITY, AND THE VIEWPORT-IS-NOT-ELEMENT TRAP AGAIN
+
+The two-column split was `xl:grid-cols-2`. Tailwind breakpoints are
+VIEWPORT-based and the page is `max-w-5xl`, so a 1100px laptop fell to one
+column inside a 1024px container — **a bar a thousand pixels wide to say "7
+cards"**. At `lg` the container is already at its measure, so the split fires
+exactly when there is room for it. Same trap the streak panel and `WeekPace`
+each record.
+
+**THE PILE SPLIT CAME OUT OF THE FOLD AND FILLS THE SECOND COLUMN.** This page
+was built around one sentence — "the website always thinks a bunch of
+flashcards are due" — and the answer to it is the three figures saying most of
+the pile is material nobody has opened. Folding THAT away would hide the
+page's own reason for existing, so it sits beside the strength bands as the
+complementary cut of one deck: how strong the cards are, against how many are
+asking. What stays folded is the per-subject list under it, which is long, has
+three buttons a row, and is what somebody opens once a fortnight.
+
+**The audit lost its own fold at the same time.** Two chevrons, one inside the
+other, is the nested-control failure `BoardSwitch` and `PeriodSwitch` each
+record about tab bars.
+
+`MoreDetail` is the one fold, keyed `acedit.progress.detail` across every tab
+— a student who folded the methodology away on Cards has said what they think
+of a methodology rail, and asking again on Hours is the app not listening. It
+**NAMES what is behind it** ("How it is holding, and every pile"), because a
+chevron on nothing is a control nobody presses, which is the call the science
+rail already makes. It defaults CLOSED, since this is the half that was making
+the page long. The test refuses a fold labelled "More detail".
+
+### The sweep: 27 injections, three silent, and two of those were the guard
+
+Baseline green first, both `^FAIL` and the exit code observed — the two
+lessons the last two releases each cost one sweep to learn.
+
+Of the three that did not bite, only one was a weak injection. The
+command-term guard asserted that `toolQuery` is CALLED, not that its result is
+a row's `to`, so renaming the key passed; the empty-panel guard is the
+`ForecastChart` false match above. The third — making Study's deep link
+permissive rather than deleting it — correctly does not bite: a page honouring
+MORE values does not break "every link names a value the page honours", and
+the deletion case, which is the real risk, bites.
+
+Draw it with `scripts/_floorProbe.jsx?v=report`, which now builds the REAL
+`studyQueue` behind the fixture and slices it per tab — a fixture handing the
+tabs an empty `work` array would draw the one thing this release moved to the
+top as nothing at all, which is the lesson the Quizzes shelf learned about
+checking a layout against the shape of the data somebody actually has. It
+carries an unmarked answer for the same reason: without one the Quizzes tab's
+lead is invisible. Both themes, and at 390.
+
 ## Three figures about other people, and a to-do list with no done pile
 
 **"Get rid of this off of the dashboard. Also let's keep improving yet making
@@ -6645,7 +6845,12 @@ somebody opening the pricing page and the gate in the same sitting.
 - `src/lib/reachable.test.mjs` — the guard on a page nobody can find: the
   Review queue is in both navs, the League is a tab on Ranked, every entrance
   uses the page's own name and carries a real number, and no nav entry points
-  at a route that is not there. Draw the bar with
+  at a route that is not there. **AND EVERY `?tab=` A LINK EMITS IS A VALUE
+  THE DESTINATION HONOURS**, read off that page rather than restated here,
+  plus the other half a link scan cannot see — that the page still reads the
+  query and applies it. `?tab=spaced` was not a technique id and `?tab=resit`
+  was not a MistakeBank tab, so six links went somewhere plausible and wrong
+  with nothing anywhere reporting it. Draw the bar with
   `scripts/_floorProbe.jsx?v=reach`
 - `src/components/ai_tools/Console.jsx` + `src/index.css` `.console` /
   `.dark .console` + `src/lib/consoleInk.test.mjs` — the app's SECOND room: ~12
@@ -6691,8 +6896,9 @@ somebody opening the pricing page and the gate in the same sitting.
   inked apart. A to-do list with no done pile gets shorter the better somebody
   does, which made a good week look like a shorter list of failings
 - `src/lib/progressReport.js` + `progressReport.test.mjs`,
-  `src/components/progress/` (`ProgressTabs`, `PeriodSwitch`, `ReportHead`,
-  `FeatureTabs`, `BarList`, `Panel`), `src/pages/Review.jsx` — Progress as a
+  `src/components/progress/` (`ProgressTabs`, `PeriodSwitch`, `ReportStrip`,
+  `FeatureWork`, `MoreDetail`, `FeatureTabs`, `BarList`, `Panel`),
+  `src/pages/Review.jsx` — Progress as a
   REPORT in five tabs, one per feature: Today · Cards · Quizzes · Mistakes ·
   Hours. Every tab is one headline, its movement against the student's OWN
   previous period, one sentence, then the breakdown — and every figure is
@@ -6700,7 +6906,12 @@ somebody opening the pricing page and the gate in the same sitting.
   (the ATAR is the one number this app standardises on). The week's previous
   window is cut to the SAME NUMBER OF DAYS, or every Wednesday reads as a
   collapse. `InsightsTab.jsx` is deleted; its five panels moved to the tabs
-  they are about. Draw it with `scripts/_floorProbe.jsx?v=report`, which is also
+  they are about. Every tab now LEADS WITH ITS OWN OUTSTANDING ROWS
+  (`workFor` over `TAB_KINDS`, the same items Today draws) before its figure,
+  because the action outranks the analytics; every bar with an exact
+  destination is a LINK and the ones without stay flat; and the methodology
+  half is behind `MoreDetail`. `ReportHead` is deleted — `ReportStrip` is 131px
+  against its 252. Draw it with `scripts/_floorProbe.jsx?v=report`, which is also
   the only place the tab bar can be measured at 360 — "Mistakes" clipped there
 - `src/lib/ranked.js` `BOARDS` / `boardsFor` + `src/lib/boardMovement.js` +
   `rankedBoards.test.mjs` — the three boards, the ERA that decides which tab

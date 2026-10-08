@@ -222,4 +222,135 @@ check("every nav entry is a real route", () => {
     }
 });
 
+// ─── A DEEP LINK MUST NAME SOMETHING THE PAGE HONOURS ──────────────────────
+//
+// THE BUTTON WORKED AND THE DESTINATION DID NOT, which is strictly worse than
+// no entrance at all: a student presses the one thing on the screen that says
+// "review your cards", arrives somewhere plausible, and concludes the feature
+// is hard to find. Both instances were live and both were silent.
+//
+//   ?tab=spaced        Study's deep link is `TECHNIQUES.some(x => x.id === t)`
+//                      and the id is `spaced_repetition`, so this matched
+//                      nothing and `activeTab` stayed at its "pomodoro"
+//                      default. FIVE call sites sent it: the queue's two card
+//                      rows, `startReview` (the pile's own button AND "N cards
+//                      for today → Start"), and both doors on the Cards tab.
+//                      Every way into the flashcard review from Progress
+//                      landed on a Pomodoro timer.
+//   ?tab=resit         MistakeBank's tabs are `fix` and `redo`, and it did not
+//                      read the query AT ALL — a bare `useState("fix")`. So
+//                      the "questions to sit again" row, which exists to open
+//                      the Sit again tab, opened Fix.
+//
+// Nothing throws, nothing renders wrong, and the destination page looks
+// exactly as it does when somebody navigates there by hand. This is the
+// property `rankedMove.test.mjs` already keeps about the ATAR component moves,
+// generalised to the two pages the queue and the report link into with a tab.
+
+const STUDY = read("src/pages/Study.jsx");
+const BANK = read("src/pages/MistakeBank.jsx");
+
+const walk = (dir, out = []) => {
+    for (const e of fs.readdirSync(path.join(root, dir), { withFileTypes: true })) {
+        if (e.name === "node_modules" || e.name.startsWith(".")) continue;
+        const rel = `${dir}/${e.name}`;
+        if (e.isDirectory()) walk(rel, out);
+        else if (/\.(js|jsx)$/.test(e.name) && !e.name.endsWith(".test.mjs")) out.push(rel);
+    }
+    return out;
+};
+const SOURCES = [...walk("src"), ...walk("scripts")];
+
+/**
+ * The values a page will act on. Read off the page rather than written down
+ * here — a list restated in a test is one more copy, and the first rename
+ * would make the suite red for being out of date rather than for a real
+ * split. `reachable`'s own rule about the Review queue's name.
+ */
+const STUDY_TABS = [...strip(STUDY).matchAll(/\{\s*id:\s*"([a-z_]+)"/g)].map((m) => m[1]);
+const BANK_RETURN = strip(BANK).match(/get\("tab"\);\s*return ([^;]+);/);
+const BANK_TABS = BANK_RETURN
+    ? [...BANK_RETURN[1].matchAll(/"([a-z]+)"/g)].map((m) => m[1]) : [];
+
+/**
+ * The object literal containing `at`, by brace depth in both directions.
+ * Null if the braces do not balance, which is safer than guessing a window.
+ */
+const objectAround = (src, at) => {
+    let depth = 0, open = -1;
+    for (let i = at; i >= 0; i -= 1) {
+        const c = src[i];
+        if (c === "}") depth += 1;
+        else if (c === "{") { if (depth === 0) { open = i; break; } depth -= 1; }
+    }
+    if (open === -1) return null;
+    depth = 0;
+    for (let i = open; i < src.length; i += 1) {
+        const c = src[i];
+        if (c === "{") depth += 1;
+        else if (c === "}") { depth -= 1; if (depth === 0) return src.slice(open, i + 1); }
+    }
+    return null;
+};
+
+check("the destination pages declare the tab values this scan checks against", () => {
+    assert.ok(STUDY_TABS.includes("spaced_repetition") && STUDY_TABS.length >= 6,
+        "Study's technique ids were not found — the scan below would pass forever");
+    assert.ok(BANK_TABS.includes("fix") && BANK_TABS.includes("redo"),
+        "MistakeBank no longer reads ?tab= — the deep link into Sit again is dead again");
+});
+
+check("AND EACH ONE ACTUALLY READS THE QUERY IT IS SENT", () => {
+    // The other half, and the scan below cannot see it: with the deep-link
+    // effect DELETED rather than wrong, every link in the tree still names a
+    // valid id and every one of them silently stops working. This is
+    // `rankedMove.test.mjs`'s own property — every query a link emits is read
+    // by the page that has to honour it — on the two pages the queue and the
+    // report link into with a tab.
+    const study = strip(STUDY);
+    assert.ok(/get\(['"]tab['"]\)/.test(study) && /setActiveTab\(t\)/.test(study),
+        "Study no longer reads ?tab= and applies it — every technique deep link " +
+        "in the app lands on the \"pomodoro\" default and nothing says so");
+    const bank = strip(BANK);
+    assert.ok(/get\(['"]tab['"]\)/.test(bank),
+        "MistakeBank no longer reads ?tab= — the Sit again deep link opens Fix");
+});
+
+check("every ?tab= link into Study or MistakeBank names a value that page honours", () => {
+    const HONOURS = { Study: STUDY_TABS, MistakeBank: BANK_TABS };
+    let found = 0;
+    for (const f of SOURCES) {
+        const src = strip(read(f));
+        // Shapes 1-4: "/Study?tab=x", createPageUrl("Study?tab=x"),
+        // createPageUrl("Study") + "?tab=x", `${createPageUrl("Study")}?tab=x`.
+        for (const [page, ids] of Object.entries(HONOURS)) {
+            for (const m of src.matchAll(new RegExp(`${page}[^\\n]{0,30}?\\?tab=([A-Za-z_]+)`, "g"))) {
+                found += 1;
+                assert.ok(ids.includes(m[1]),
+                    `${f} links to ${page}?tab=${m[1]}, which that page does not honour — ` +
+                    `it lands on the default and the thing the link promised does not open`);
+            }
+        }
+        // Shape 5: a builder object carrying `page:` and its own `query:`.
+        // THE WINDOW IS THE OBJECT LITERAL, found by brace depth — the
+        // `dbColumns` idiom. A fixed character window is not a scan, and this
+        // one proved it on the first run: `COMPONENT_MOVE` lists MistakeBank
+        // with no query and Study with `?tab=pomodoro` on the NEXT line, so a
+        // 400-character slice reported MistakeBank as linking to a technique.
+        // That is a false positive, which is the direction that gets a good
+        // guard deleted rather than merely ignored.
+        for (const m of src.matchAll(/page:\s*"([A-Za-z]+)"/g)) {
+            const ids = HONOURS[m[1]];
+            if (!ids) continue;
+            const lit = objectAround(src, m.index);
+            const t = lit && lit.match(/\?tab=([A-Za-z_]+)/);
+            if (!t) continue;
+            found += 1;
+            assert.ok(ids.includes(t[1]),
+                `${f} builds ${m[1]}?tab=${t[1]}, which that page does not honour`);
+        }
+    }
+    assert.ok(found >= 8, `the deep-link scan matched only ${found} links — it is not reading the tree`);
+});
+
 console.log(`\nreachable: ${passed} checks passed`);

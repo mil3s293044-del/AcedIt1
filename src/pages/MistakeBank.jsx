@@ -424,7 +424,18 @@ export default function MistakeBank() {
     const [quizzes, setQuizzes] = useState([]);
     const [loading, setLoading] = useState(true);
     const [filter, setFilter] = useState("all");
-    const [tab, setTab] = useState("fix");
+    /**
+     * Fix, or Sit again. A DEEP LINK MAY CHOOSE, and until now it could not:
+     * this was a bare `useState("fix")` and nothing read the query, so the
+     * queue's "questions to sit again" row — which exists to put somebody on
+     * the Sit again tab — landed them on Fix. The right page, and the thing it
+     * promised to open does not open, which is the shape this app keeps
+     * meeting. `reachable.test.mjs` pins the ids against what is linked.
+     */
+    const [tab, setTab] = useState(() => {
+        const t = new URLSearchParams(window.location.search).get("tab");
+        return t === "redo" || t === "fix" ? t : "fix";
+    });
     const [queue, setQueue] = useState(null);
     const [redoing, setRedoing] = useState(null);
     const [result, setResult] = useState(null);

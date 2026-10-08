@@ -6,18 +6,31 @@
  * next. The scheduler already had an opinion about how long each memory would
  * last; nothing ever showed that opinion to the student.
  *
- * Three things, in the order they matter:
- *   1. Retrieval share — the highest-return change available, and the one the
- *      Study page already teaches without ever measuring.
- *   2. Stability per subject — the comparison that tells you which subject is
- *      actually in trouble, as opposed to which one you've spent least time on.
- *   3. The forecast — what stopping costs.
+ * Two things now, and the third was cut:
+ *   1. Stability per subject — the comparison that tells you which subject is
+ *      actually in trouble, as opposed to which one you've spent least time
+ *      on. Every row is a link into that subject's own review session.
+ *   2. The forecast — what stopping costs.
+ *
+ * ─── RETRIEVAL VS REVIEW IS GONE ────────────────────────────────────────────
+ * It was 334 measured pixels: a percentage, a two-colour bar, a legend, a list
+ * of techniques by minutes, and a paragraph. On a real account it printed 0%
+ * over a long explainer, because the figure is a share of LOGGED technique
+ * minutes and most students log their time against quizzes. The techniques
+ * breakdown it was built on is still drawn, on the HOURS tab where the hours
+ * live, with every row a door into that technique — so what was useful about
+ * it survives and the apology does not.
+ *
+ * ─── AND A PANEL WITH NOTHING TO SAY IS NOT DRAWN AT ALL ────────────────────
+ * Both halves used to render a box explaining what would fill them, which on a
+ * first-week account is 600px of apology above a report. Same refusal every
+ * builder in `studyQueue.js` makes about a zero row.
  */
 import React, { useMemo } from "react";
 import { motion } from "framer-motion";
 import { Link } from "react-router-dom";
 import { createPageUrl } from "@/utils";
-import { Repeat, Info, TrendingDown, ArrowRight } from "lucide-react";
+import { ChevronRight, Info, TrendingDown, ArrowRight } from "lucide-react";
 import {
     retrievalShare, stabilityBySubject, lapseProfile, retentionForecast, memoryVerdict,
 } from "@/lib/memoryAnalytics";
@@ -65,73 +78,20 @@ export default function MemoryPanel({ techniques = [], cards = [] }) {
     const forecast = useMemo(() => retentionForecast(cards, { days: 30 }), [cards]);
     const verdict = useMemo(() => memoryVerdict({ share, stability, lapse }), [share, stability, lapse]);
 
-    const pct = share.share == null ? null : Math.round(share.share * 100);
+    /**
+     * ─── A PANEL WITH NOTHING TO SAY IS NOT DRAWN ───────────────────────────
+     * It used to render two boxes explaining what WOULD fill them, which on a
+     * first-week account is 600px of apology above a report. The strip at the
+     * top of the tab already names the one thing that fills this, so the
+     * refusal is the same one every builder in `studyQueue.js` makes about a
+     * zero row.
+     */
+    if (!stability.hasData && !forecast.hasData) return null;
 
     return (
         <div className="space-y-5">
-            {/* ── Retrieval vs encoding ── */}
-            <div className="card-soft p-6">
-                <div className="flex items-center gap-3 mb-5">
-                    <div className="w-10 h-10 rounded-xl bg-chart-4/10 flex items-center justify-center flex-shrink-0">
-                        <Repeat className="w-5 h-5 text-chart-4" />
-                    </div>
-                    <div className="min-w-0">
-                        <h2 className="font-display font-extrabold text-foreground text-base">Retrieval vs review</h2>
-                        <p className="text-xs text-muted-foreground mt-0.5">
-                            Time pulling it back out, against time spent with the material
-                        </p>
-                    </div>
-                </div>
-
-                {!share.hasData ? (
-                    <p className="text-sm text-muted-foreground">
-                        Nothing logged in this range. This fills in as soon as you run any study session.
-                    </p>
-                ) : (
-                    <>
-                        <div className="flex items-baseline gap-2 mb-2">
-                            <span className="font-display font-extrabold text-foreground text-3xl tabular-nums">{pct}%</span>
-                            <span className="text-sm text-muted-foreground">retrieval practice</span>
-                        </div>
-                        <div className="flex h-2.5 rounded-full overflow-hidden bg-secondary" data-retrieval-bar>
-                            <motion.div initial={{ width: 0 }} animate={{ width: `${pct}%` }}
-                                transition={{ duration: 0.7 }} className="bg-chart-4"
-                                title={`${share.retrievalMinutes} minutes retrieving`} />
-                            <motion.div initial={{ width: 0 }} animate={{ width: `${100 - pct}%` }}
-                                transition={{ duration: 0.7 }} className="bg-foreground/15"
-                                title={`${share.encodingMinutes} minutes reviewing`} />
-                        </div>
-                        <div className="flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-muted-foreground mt-2">
-                            <span className="flex items-center gap-1.5">
-                                <span className="w-1.5 h-1.5 rounded-full bg-chart-4" />
-                                <span className="font-bold text-foreground tabular-nums">{share.retrievalMinutes}m</span> retrieving
-                            </span>
-                            <span className="flex items-center gap-1.5">
-                                <span className="w-1.5 h-1.5 rounded-full bg-foreground/25" />
-                                <span className="font-bold text-foreground tabular-nums">{share.encodingMinutes}m</span> reviewing
-                            </span>
-                        </div>
-
-                        <ul className="mt-4 space-y-1.5">
-                            {share.byTechnique.map(t => (
-                                <li key={t.id} className="flex items-center gap-2">
-                                    <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${t.isRetrieval ? "bg-chart-4" : "bg-foreground/25"}`} />
-                                    <span className="text-xs text-foreground truncate flex-1 min-w-0">{t.label}</span>
-                                    <span className="text-xs font-bold text-foreground tabular-nums flex-shrink-0">{t.minutes}m</span>
-                                </li>
-                            ))}
-                        </ul>
-
-                        {verdict[0] && (
-                            <p className="text-xs text-muted-foreground leading-snug mt-4 pt-3 border-t border-border">
-                                {verdict[0]}
-                            </p>
-                        )}
-                    </>
-                )}
-            </div>
-
             {/* ── Stability by subject ── */}
+            {stability.hasData && (
             <div className="card-soft p-6">
                 <div className="flex items-center gap-3 mb-5">
                     <div className="w-10 h-10 rounded-xl bg-map/10 flex items-center justify-center flex-shrink-0">
@@ -151,20 +111,25 @@ export default function MemoryPanel({ techniques = [], cards = [] }) {
                     )}
                 </div>
 
-                {!stability.hasData ? (
-                    <p className="text-sm text-muted-foreground">
-                        No cards have been reviewed yet. Two rounds through a deck and this fills in,
-                        it's built from the schedule your reviews earn, not from anything you have to enter.
-                    </p>
-                ) : (
-                    <>
+                <>
                         <ul className="space-y-2.5">
                             {stability.subjects.map(s => {
                                 const w = Math.max(3, Math.min(100, (s.medianInterval / 30) * 100));
                                 return (
                                     <li key={s.subject}>
+                                        {/* A ROW IS A DOOR, and this one is exact:
+                                            /Study honours `subject`, so the link
+                                            opens the review session for the subject
+                                            the row is about rather than for the
+                                            whole deck. */}
+                                        <Link to={`${createPageUrl("Study")}?tab=spaced_repetition&subject=${encodeURIComponent(s.subject)}`}
+                                            className="group block rounded-lg px-2 py-1.5 -mx-2 hover:bg-secondary/60 transition-colors">
                                         <div className="flex items-baseline justify-between gap-3 mb-1">
-                                            <span className="text-sm font-bold text-foreground truncate">{s.subject}</span>
+                                            <span className="text-sm font-bold text-foreground truncate flex items-center gap-1">
+                                                {s.subject}
+                                                <ChevronRight className="w-3.5 h-3.5 text-muted-foreground flex-shrink-0
+                                                    opacity-0 group-hover:opacity-100 transition-opacity" aria-hidden="true" />
+                                            </span>
                                             <span className="text-xs text-muted-foreground flex-shrink-0">
                                                 <span className="font-bold text-foreground tabular-nums">{s.medianInterval}d</span> between reviews
                                                 <span className="mx-1.5 text-muted-foreground/50">·</span>
@@ -176,6 +141,7 @@ export default function MemoryPanel({ techniques = [], cards = [] }) {
                                                 transition={{ duration: 0.7 }}
                                                 className="h-full rounded-full bg-map" />
                                         </div>
+                                        </Link>
                                     </li>
                                 );
                             })}
@@ -185,9 +151,9 @@ export default function MemoryPanel({ techniques = [], cards = [] }) {
                                 {line}
                             </p>
                         ))}
-                    </>
-                )}
+                </>
             </div>
+            )}
 
             {/* ── The forecast ── */}
             {forecast.hasData && (

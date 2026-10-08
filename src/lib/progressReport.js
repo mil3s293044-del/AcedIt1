@@ -506,3 +506,34 @@ export function hhmm(mins) {
     if (!h) return `${m}m`;
     return m ? `${h}h ${m}m` : `${h}h`;
 }
+
+/**
+ * ─── WHICH OUTSTANDING WORK BELONGS TO WHICH TAB ────────────────────────────
+ * The action outranks the analytics, so every feature tab leads with ITS OWN
+ * rows out of the one queue the Today tab draws — the same items, the same
+ * order, the same model. One map rather than a list of kinds written out at
+ * each call site, because a tab and its filter disagreeing is a tab that
+ * silently drops a student's work.
+ *
+ * HOURS IS DELIBERATELY EMPTY. There is no such thing as an overdue hour:
+ * nothing in `studyQueue` is about time, so that tab leads with its figure and
+ * a door instead. Inventing a row to make the four tabs symmetrical is the
+ * padding every builder in `studyQueue.js` already refuses.
+ *
+ * `assessment` belongs to no feature — a SAC is the whole term, not a
+ * flashcard or a quiz — so it stays on Today, which is the tab that ranks all
+ * seven kinds against each other.
+ */
+export const TAB_KINDS = {
+    cards: ["decay", "cards"],
+    quizzes: ["unmarked", "resit"],
+    mistakes: ["mistakes"],
+    hours: [],
+};
+
+/** This tab's slice of the queue, in the queue's own order. */
+export function workFor(queue = [], tab) {
+    const kinds = TAB_KINDS[tab];
+    if (!kinds?.length) return [];
+    return (Array.isArray(queue) ? queue : []).filter((it) => kinds.includes(it?.kind));
+}

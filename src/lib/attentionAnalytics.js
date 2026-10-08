@@ -92,6 +92,16 @@ export const LENGTH_BANDS = [
     { id: "75plus",  label: "75m+",      from: 75, to: Infinity },
 ];
 
+/**
+ * ─── NO DRAWN CONSUMER SINCE THE PROGRESS REWORK ────────────────────────────
+ * `AttentionPanel`'s "How long it holds up" card drew this and was cut: both
+ * axes come from the student's own self-report, so it cannot tell them
+ * anything they did not type in. Kept rather than deleted under this
+ * codebase's own rule that twice an "unused" symbol here marked a half-wired
+ * feature rather than dead code — and `attentionVerdict` still reads a `curve`
+ * if one is handed to it, so rehoming this is a render away. Decide; do not
+ * re-audit.
+ */
 export function lengthCurve(sessions = []) {
     const bands = LENGTH_BANDS.map(b => ({ ...b, sessions: 0, rated: 0, ratingSum: 0, minutes: 0 }));
     let rated = 0;

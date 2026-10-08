@@ -82,6 +82,7 @@ import AuditPile from "@/components/study/AuditPile";
 import QueueRow from "@/components/study/QueueRow";
 import { ClearedStrip, ClearedRow } from "@/components/study/Cleared";
 import HelpButton from "@/components/shared/HelpButton";
+import Panel from "@/components/progress/Panel";
 import {
     auditPiles, tally, dueQueue, todayISO, isReady,
     markKnown, markUnknown, snoozeFor,
@@ -95,7 +96,7 @@ import PeriodSwitch from "@/components/progress/PeriodSwitch";
 import ProgressTabs from "@/components/progress/ProgressTabs";
 import { CardsTab, QuizzesTab, MistakesTab, HoursTab } from "@/components/progress/FeatureTabs";
 import {
-    PERIODS, periodRange, cardsReport, quizzesReport, mistakesReport, hoursReport,
+    PERIODS, periodRange, cardsReport, quizzesReport, mistakesReport, hoursReport, workFor,
 } from "@/lib/progressReport";
 
 /** How long "not this week" actually is. */
@@ -156,7 +157,6 @@ export default function Review() {
     const [isLoading, setIsLoading] = useState(true);
     const [busy, setBusy] = useState(false);
     const [showKnown, setShowKnown] = useState(false);
-    const [showAudit, setShowAudit] = useState(false);
     /** Rows that were on the list a moment ago and are not any more. */
     const [justCleared, setJustCleared] = useState([]);
     const seen = useRef(null);
@@ -423,7 +423,7 @@ export default function Review() {
     const startReview = useCallback((pile) => {
         // Study owns the review session. The subject rides along so it opens on
         // the deck the student was just looking at rather than on the list.
-        navigate(`${createPageUrl("Study")}?tab=spaced${pile ? `&subject=${encodeURIComponent(pile.subject)}` : ""}`);
+        navigate(`${createPageUrl("Study")}?tab=spaced_repetition${pile ? `&subject=${encodeURIComponent(pile.subject)}` : ""}`);
     }, [navigate]);
 
     if (isLoading) {
@@ -449,111 +449,87 @@ export default function Review() {
      * number looks wrong, and it still NAMES what is behind it rather than
      * being a chevron on nothing.
      */
+    /**
+     * ─── THE SPLIT IS ON SCREEN; THE PILES ARE BEHIND THE FOLD ──────────────
+     * This page was built around one sentence — "the website always thinks a
+     * bunch of flashcards are due" — and the answer to it is these three
+     * figures, which say that most of the pile is material nobody has opened
+     * rather than review debt. Folding THAT away would hide the page's own
+     * reason for existing, so it rides beside the strength bands where it
+     * fills the second column with the complementary cut of the same deck:
+     * how strong the cards are, against how many are asking.
+     *
+     * What stays folded is the per-subject list under it, which is long, has
+     * three buttons per row, and is what a student opens once a fortnight when
+     * the number looks wrong.
+     */
+    const pileSummary = cards.length > 0 ? (
+        <Panel title={`Where your ${counts.total} cards stand`}
+            note="The honest split. Most queues are mostly material nobody has opened yet, which is not a backlog.">
+            <div className="grid grid-cols-3 gap-4">
+                <Figure value={counts.active} label="Asking for you"
+                    tone={counts.active > 0 ? "text-chart-3" : "text-muted-foreground"}
+                    hint={counts.overdue > 0 ? `${counts.overdue} well past due` : null} />
+                <Figure value={counts.new} label="Never opened" tone="text-muted-foreground"
+                    hint={counts.new > 0 ? "New material" : null} />
+                <Figure value={counts.known} label="Put away" tone="text-primary"
+                    hint={counts.known > 0 ? "You know these" : null} />
+            </div>
+        </Panel>
+    ) : null;
+
     const auditSection = (
-        <>
-                    {/* ── THE AUDIT, FOLDED ───────────────────────────────
-                        The detail behind the card row: the honest split and
-                        the three ways to answer each pile. It is what a
-                        student opens when the number looks wrong, which is
-                        once a fortnight — so it is not the thing everybody
-                        scrolls past every day. It NAMES what is behind it
-                        rather than being a chevron on nothing, which is the
-                        call the science rail already makes. */}
-                    {cards.length > 0 && (
-                        <section className="space-y-3">
-                            <button type="button" onClick={() => setShowAudit((v) => !v)}
-                                aria-expanded={showAudit}
-                                className="w-full card-soft on-table p-4 flex items-center gap-3 text-left
-                                    hover:bg-secondary/40 transition-colors">
-                                <div className="flex-1 min-w-0">
-                                    <h2 className="font-display font-extrabold text-foreground text-sm">
-                                        Where your {counts.total} cards actually stand
-                                    </h2>
-                                    <p className="text-xs text-muted-foreground mt-0.5">
-                                        {counts.active} asking for you · {counts.new} never opened · {counts.known} put away
-                                    </p>
-                                </div>
-                                <ChevronDown className={`w-4 h-4 text-muted-foreground flex-shrink-0 transition-transform ${showAudit ? "rotate-180" : ""}`} />
-                            </button>
+        <section className="space-y-3">
+            {active.length > 0 && (
+                <section className="space-y-3">
+                    <h3 className="stat-label px-1">Claiming your attention</h3>
+                    {active.map((p) => (
+                        <AuditPile key={p.subject} pile={p} today={today} busy={busy}
+                            onKnown={onKnown} onSnooze={onSnooze} onRestore={onRestore}
+                            onReview={startReview} />
+                    ))}
+                </section>
+            )}
 
-                            {showAudit && (
-                                <>
-                                    <div className="card-soft on-table p-5">
-                                        <div className="grid grid-cols-3 gap-4">
-                                            <Figure value={counts.active} label="Asking for you"
-                                                tone={counts.active > 0 ? "text-chart-3" : "text-muted-foreground"}
-                                                hint={counts.overdue > 0 ? `${counts.overdue} of them well past due` : null} />
-                                            <Figure value={counts.new} label="Never opened" tone="text-muted-foreground"
-                                                hint={counts.new > 0 ? "New material, not a backlog" : null} />
-                                            <Figure value={counts.known} label="Put away" tone="text-primary"
-                                                hint={counts.known > 0 ? "You said you know these" : null} />
-                                        </div>
+            {fresh.length > 0 && (
+                <section className="space-y-3">
+                    <h3 className="stat-label px-1">Not started yet</h3>
+                    <p className="text-xs text-muted-foreground px-1 -mt-1">
+                        These have never been reviewed, so nothing here is overdue. They join the
+                        queue a few at a time once your due pile is clear.
+                    </p>
+                    {fresh.map((p) => (
+                        <AuditPile key={p.subject} pile={p} today={today} busy={busy}
+                            onKnown={onKnown} onSnooze={onSnooze} onRestore={onRestore}
+                            onReview={startReview} />
+                    ))}
+                </section>
+            )}
 
-                                        {/* The reframe, said out loud. For most students this
-                                            line is the entire fix: the alarming number was
-                                            never review debt. */}
-                                        {counts.new > counts.active && counts.new > 0 && (
-                                            <p className="mt-4 text-sm text-muted-foreground border-t border-border pt-3">
-                                                Most of your queue is material you have not started yet. That is not you
-                                                falling behind, and nothing here is counting it against you.
-                                            </p>
-                                        )}
-                                    </div>
-
-                                    {active.length > 0 && (
-                                        <section className="space-y-3">
-                                            <h3 className="stat-label px-1">Claiming your attention</h3>
-                                            {active.map((p) => (
-                                                <AuditPile key={p.subject} pile={p} today={today} busy={busy}
-                                                    onKnown={onKnown} onSnooze={onSnooze} onRestore={onRestore}
-                                                    onReview={startReview} />
-                                            ))}
-                                        </section>
-                                    )}
-
-                                    {fresh.length > 0 && (
-                                        <section className="space-y-3">
-                                            <h3 className="stat-label px-1">Not started yet</h3>
-                                            <p className="text-xs text-muted-foreground px-1 -mt-1">
-                                                These have never been reviewed, so nothing here is overdue. They join the
-                                                queue a few at a time once your due pile is clear.
-                                            </p>
-                                            {fresh.map((p) => (
-                                                <AuditPile key={p.subject} pile={p} today={today} busy={busy}
-                                                    onKnown={onKnown} onSnooze={onSnooze} onRestore={onRestore}
-                                                    onReview={startReview} />
-                                            ))}
-                                        </section>
-                                    )}
-
-                                    {known.length > 0 && (
-                                        <section className="space-y-3">
-                                            <button type="button" onClick={() => setShowKnown((v) => !v)}
-                                                aria-expanded={showKnown}
-                                                className="flex items-center gap-2 stat-label px-1 hover:text-foreground">
-                                                Put away ({counts.known})
-                                                <ChevronDown className={`w-3.5 h-3.5 transition-transform ${showKnown ? "rotate-180" : ""}`} />
-                                            </button>
-                                            {showKnown && (
-                                                <>
-                                                    <p className="text-xs text-muted-foreground px-1 -mt-1">
-                                                        Cards you have said you know. They are still yours, still in the deck,
-                                                        and one button away from coming back.
-                                                    </p>
-                                                    {known.map((p) => (
-                                                        <AuditPile key={p.subject} pile={p} today={today} busy={busy}
-                                                            onKnown={onKnown} onSnooze={onSnooze} onRestore={onRestore}
-                                                            onReview={null} />
-                                                    ))}
-                                                </>
-                                            )}
-                                        </section>
-                                    )}
-                                </>
-                            )}
-                        </section>
+            {known.length > 0 && (
+                <section className="space-y-3">
+                    <button type="button" onClick={() => setShowKnown((v) => !v)}
+                        aria-expanded={showKnown}
+                        className="flex items-center gap-2 stat-label px-1 hover:text-foreground">
+                        Put away ({counts.known})
+                        <ChevronDown className={`w-3.5 h-3.5 transition-transform ${showKnown ? "rotate-180" : ""}`} />
+                    </button>
+                    {showKnown && (
+                        <>
+                            <p className="text-xs text-muted-foreground px-1 -mt-1">
+                                Cards you have said you know. They are still yours, still in the deck,
+                                and one button away from coming back.
+                            </p>
+                            {known.map((p) => (
+                                <AuditPile key={p.subject} pile={p} today={today} busy={busy}
+                                    onKnown={onKnown} onSnooze={onSnooze} onRestore={onRestore}
+                                    onReview={null} />
+                            ))}
+                        </>
                     )}
-        </>
+                </section>
+            )}
+        </section>
     );
 
     return (
@@ -698,19 +674,22 @@ export default function Review() {
                     four charts mounted off screen is four `ResizeObserver`s and
                     four recharts trees paid for on a tab nobody opened. */}
                 {tab === "cards" && (
-                    <div className="space-y-4">
-                        <CardsTab report={reports?.cards} range={range} cards={cards}
-                            techniques={data?.techniques || []} />
-                        {auditSection}
-                    </div>
+                    <CardsTab report={reports?.cards} range={range} cards={cards}
+                        techniques={data?.techniques || []}
+                        work={workFor(queue, "cards")} pile={pileSummary} audit={auditSection} />
                 )}
-                {tab === "quizzes" && <QuizzesTab report={reports?.quizzes} range={range} />}
-                {tab === "mistakes" && <MistakesTab report={reports?.mistakes} range={range} />}
+                {tab === "quizzes" && (
+                    <QuizzesTab report={reports?.quizzes} range={range}
+                        work={workFor(queue, "quizzes")} />
+                )}
+                {tab === "mistakes" && (
+                    <MistakesTab report={reports?.mistakes} range={range}
+                        work={workFor(queue, "mistakes")} />
+                )}
                 {tab === "hours" && (
                     <HoursTab report={reports?.hours} range={range} events={events}
                         quizzes={data?.quizzes || []} attempts={data?.attempts || []}
-                        cards={cards} sessions={data?.sessions || []}
-                        techniques={data?.techniques || []} today={today} />
+                        cards={cards} techniques={data?.techniques || []} today={today} />
                 )}
             </div>
         </div>

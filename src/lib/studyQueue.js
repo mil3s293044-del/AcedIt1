@@ -231,7 +231,7 @@ export function resitItem(quizzes = [], attempts = [], bankCards = []) {
         count: rows.length,
         cta: "Sit them",
         page: "MistakeBank",
-        query: "?tab=resit",
+        query: "?tab=redo",
         urgency: rows.length,
     };
 }
@@ -284,7 +284,7 @@ export function decayItem(cards = [], now = Date.now()) {
         count: slipping,
         cta: "Shore them up",
         page: "Study",
-        query: `?tab=spaced${worst?.subject ? `&subject=${encodeURIComponent(worst.subject)}` : ""}`,
+        query: `?tab=spaced_repetition${worst?.subject ? `&subject=${encodeURIComponent(worst.subject)}` : ""}`,
         urgency: slipping,
     };
 }
@@ -320,7 +320,7 @@ export function cardsItem(cards = [], today, piles = []) {
         count: t.ready,
         cta: "Review them",
         page: "Study",
-        query: "?tab=spaced",
+        query: "?tab=spaced_repetition",
         urgency: t.active || t.ready,
     };
 }

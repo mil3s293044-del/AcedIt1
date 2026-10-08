@@ -12,26 +12,21 @@
 import React from "react";
 import { Link } from "react-router-dom";
 import { createPageUrl } from "@/utils";
-import { TrendingDown, ArrowRight, ShieldCheck } from "lucide-react";
+import { TrendingDown, ArrowRight } from "lucide-react";
 import { weakTopicsFrom } from "@/lib/weakTopics";
 
 export default function WeakTopicsPanel({ flashcards = [] }) {
     const topics = weakTopicsFrom(flashcards);
 
-    if (!topics.length) {
-        return (
-            <div className="card-soft p-6">
-                <p className="stat-label mb-1">Weak topics</p>
-                <div className="flex items-start gap-2 mt-2">
-                    <ShieldCheck className="w-4 h-4 text-primary flex-shrink-0 mt-0.5" />
-                    <p className="text-sm text-muted-foreground">
-                        Nothing is standing out yet. Topics show up here once you've reviewed them
-                        enough for the misses to mean something.
-                    </p>
-                </div>
-            </div>
-        );
-    }
+    /**
+     * ─── NOTHING STANDING OUT IS NOT A PANEL ────────────────────────────────
+     * This used to draw a bordered card reading "Nothing is standing out yet"
+     * — 94 measured pixels of a panel saying it has nothing to say, which on
+     * a first-week account is one of four such boxes in a row. A panel whose
+     * content is an absence is not drawn at all now, the refusal every builder
+     * in `studyQueue.js` makes about a zero row.
+     */
+    if (!topics.length) return null;
 
     return (
         <div className="card-soft overflow-hidden">

@@ -20,7 +20,7 @@ import Room from "@/components/market/Room";
 import MarkEntry from "@/components/planner/MarkEntry";
 import DeckStack from "@/components/cards/DeckStack";
 import SourcePanel from "@/components/quizzes/SourcePanel";
-import { isReady } from "@/lib/due";
+import { isReady, auditPiles } from "@/lib/due";
 import { normaliseQuestion } from "@/lib/quizSchema";
 import { PROBLEMS, GENERATE_PRICE, closingFacts } from "@/lib/firstWin";
 import { LineDialog } from "@/pages/Competitions";
@@ -76,8 +76,9 @@ import QueueRow from "@/components/study/QueueRow";
 import { ClearedStrip, ClearedRow } from "@/components/study/Cleared";
 import PeriodSwitch from "@/components/progress/PeriodSwitch";
 import ProgressTabs from "@/components/progress/ProgressTabs";
+import Panel from "@/components/progress/Panel";
 import { CardsTab, QuizzesTab, MistakesTab, HoursTab } from "@/components/progress/FeatureTabs";
-import { periodRange, cardsReport, quizzesReport, mistakesReport, hoursReport } from "@/lib/progressReport";
+import { periodRange, cardsReport, quizzesReport, mistakesReport, hoursReport, workFor } from "@/lib/progressReport";
 import SubjectSplit from "@/components/analytics/SubjectSplit";
 import { studyQueue, queueLead, clearedThisWeek } from "@/lib/studyQueue";
 import StandingRail from "@/components/ranked/StandingRail";
@@ -1701,7 +1702,14 @@ views.report = () => {
               command_term: { term: "state", tier: "recall", tierLabel: "Recall", tone: "chart-3" } },
         ] },
     });
+    // ONE UNMARKED ANSWER, so the Quizzes tab's action row is drawable. A
+    // fixture where every result carries a mark renders that lead as nothing.
+    const unmarked = { ...mk("a5", "q2", 0, 70) };
+    unmarked.extra = { question_results: [
+        { q_index: 0, marks: null, marks_max: 4, question: "Discuss the 1962 reform in full." },
+    ] };
     const attempts = [
+        unmarked,
         mk("a1", "q1", 1, 78), mk("a2", "q2", 2, 64), mk("a3", "q3", 3, 71), mk("a4", "q1", 0, 83),
         mk("p1", "q1", prev, 58), mk("p2", "q2", prev + 1, 61), mk("p3", "q3", prev + 2, 55),
     ];
@@ -1727,6 +1735,19 @@ views.report = () => {
         hours: hoursReport(events, techniques, range),
     };
 
+    // THE ACTION ROWS ARE THE NEW LEAD, so the probe builds the REAL queue and
+    // slices it the way the page does. A fixture that fed the tabs an empty
+    // `work` array would draw the one thing this release moved to the top as
+    // nothing at all — the lesson the Quizzes shelf learned about checking a
+    // layout against the shape of the data somebody actually has.
+    const today = QDAY(0);
+    const queue = studyQueue({
+        cards, bankCards: bank, quizzes, attempts,
+        assessments: [{ id: "sa1", subject: "Chemistry", title: "Unit 4 AOS 1 SAC",
+            assessment_date: QDAY(-5), assessment_type: "SAC" }],
+        events, piles: auditPiles(cards, today), isReady: ready, today,
+    });
+
     // THE REAL BAR, not a copy of its class list. /Review is auth-gated, so this
     // is the only place the bar can be measured at 360 — and a stand-in would
     // be measuring itself, which is the mirror this codebase keeps deleting.
@@ -1741,18 +1762,33 @@ views.report = () => {
                     <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider">Progress</span>
                     <Bar live="cards" />
                     <PeriodSwitch value="week" onChange={() => {}} />
-                    <CardsTab report={reports.cards} range={range} cards={cards} techniques={techniques} />
+                    <CardsTab report={reports.cards} range={range} cards={cards} techniques={techniques}
+                        work={workFor(queue, "cards")}
+                        pile={<Panel title={`Where your ${cards.length} cards stand`}
+                            note="The honest split. Most queues are mostly material nobody has opened yet, which is not a backlog.">
+                            <div className="grid grid-cols-3 gap-4">
+                                {[["Asking for you", 10, "text-chart-3", "4 well past due"],
+                                  ["Never opened", 6, "text-muted-foreground", "New material"],
+                                  ["Put away", 10, "text-primary", "You know these"]].map(([l, v, tone, hint]) => (
+                                    <div key={l} className="min-w-0">
+                                        <p className={`font-display font-extrabold text-2xl sm:text-3xl leading-none ${tone}`}>{v}</p>
+                                        <p className="stat-label mt-1">{l}</p>
+                                        <p className="text-[11px] text-muted-foreground mt-0.5 leading-snug">{hint}</p>
+                                    </div>
+                                ))}
+                            </div>
+                        </Panel>} />
 
                     <div className="pt-6"><Bar live="quizzes" /></div>
-                    <QuizzesTab report={reports.quizzes} range={range} />
+                    <QuizzesTab report={reports.quizzes} range={range} work={workFor(queue, "quizzes")} />
 
                     <div className="pt-6"><Bar live="mistakes" /></div>
-                    <MistakesTab report={reports.mistakes} range={range} />
+                    <MistakesTab report={reports.mistakes} range={range} work={workFor(queue, "mistakes")} />
 
                     <div className="pt-6"><Bar live="hours" /></div>
                     <HoursTab report={reports.hours} range={range} events={events} quizzes={quizzes}
-                        attempts={attempts} cards={cards} sessions={sessions} techniques={techniques}
-                        today={QDAY(0)} />
+                        attempts={attempts} cards={cards} techniques={techniques}
+                        today={today} />
 
                     {/* THE EMPTY CASE, which a loaded account cannot show and which
                         is the honest first week: every tab is still offered and
