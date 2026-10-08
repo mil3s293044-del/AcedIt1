@@ -1,39 +1,50 @@
 /**
- * Review — what you owe, and whether any of it is sticking.
+ * Progress — a REPORT, in five tabs, one per feature.
  *
- * ─── The two pages this is ──────────────────────────────────────────────────
- * It was two routes. /Review was an audit of FLASHCARDS whose own subtitle
- * read "Everything the app is keeping track of" — a claim it could not meet,
- * because six other things the app genuinely tracks and already has an action
- * for were on other screens or surfaced nowhere. And /Analytics was 1,271
- * lines of chart answering "how much did I do", which is a question nobody
- * acts on: the daily-minutes bars, the technique pie, the rating histogram and
- * the mastery grid were all true and none of them changed what a student did
- * next.
+ * ─── A WAVE OF TRUE NUMBERS IS NOT A REPORT ─────────────────────────────────
+ * This page has been two routes, then two tabs, then ONE LONG SCROLL carrying
+ * everything the app knows in a single column. Every figure on it was real and
+ * a student met all of them at once with nothing saying which feature each was
+ * about or whether any of it was good. The answer is not fewer numbers — it is
+ * that each feature gets its own screen, and each screen opens with a VERDICT
+ * rather than a chart.
  *
- * One page, ONE SCROLL, in the order the questions get asked:
+ *   TODAY     what is outstanding and what you have already cleared. The only
+ *             tab with an action on every row; `studyQueue.js` is the model.
+ *   CARDS     recall, the deck's strength bands, what is slipping, the pile.
+ *   QUIZZES   your average against the period before it, by subject, and the
+ *             command terms costing you marks.
+ *   MISTAKES  how many you have actually fixed, and which criterion repeats.
+ *   HOURS     where the time went, capped the way every ranked board caps it.
  *
- *   WHAT YOU OWE      everything outstanding, ranked by what it costs to skip
- *                     today, each row carrying the reason it is there and the
- *                     button that answers it. `studyQueue.js` is the model.
- *   WHAT YOU CLEARED  the same rows, counted the other way — `clearedThisWeek`.
- *   IS IT STICKING    the panels that end in an action: where the marks are
- *                     going, where the hours went. A chart earns its place
- *                     here by changing what somebody does.
+ * ─── EVERY TAB IS THE SAME FOUR THINGS ──────────────────────────────────────
+ * One headline figure, how it moved against the student's own previous period,
+ * one sentence saying what that means, then the breakdown. Learned once on the
+ * first tab and read at a glance on the other three — which is most of why a
+ * report reads faster than a dashboard carrying identical data.
  *
- * ─── THE FIRST TWO WERE TABS, AND THE SECOND ONE DID NOT EXIST ──────────────
- * Queue and Insights were two tabs, so the half of the page answering "is any
- * of this working" was behind a control a student had to know to press — and a
- * screen nobody presses into is a screen nobody has, which is exactly what
- * /League and /Review were BOTH rebuilt out of one release ago. They stack now
- * and `?tab=insights` scrolls rather than selects, so every existing bookmark
- * still lands on the charts.
+ * ─── AND THE TABS ARE NOT WHAT THEY WERE ────────────────────────────────────
+ * Queue and Insights were once two tabs and that WAS wrong: Insights was the
+ * half answering "is any of this working" and nothing on screen said it was
+ * there, which is the "a screen nobody presses into is a screen nobody has"
+ * failure /League and /Review were both rebuilt out of. What makes these
+ * different is that the bar NAMES A FEATURE each, so a student who has just
+ * done twenty minutes of flashcards can see which tab is about to tell them
+ * something. A tab bar whose labels are the things you do is navigation; one
+ * whose labels are "Queue" and "Insights" is two words nobody can place
+ * themselves in.
  *
- * And the queue on its own is a list of failings: it gets SHORTER the better
- * somebody does, so the page's reward for a week of real work was a shorter
- * list of things they had not done. The done pile is the counterweight, and it
- * is derived off the same rows — so "12 cards ready" shrinking by eight and
- * "8 cards reviewed" appearing cannot contradict each other.
+ * ─── A TAB WITH NOTHING IN IT IS STILL OFFERED ──────────────────────────────
+ * It says what would fill it and links there. Hiding it would change the shape
+ * of the bar between visits, so a student who has never sat a quiz would find
+ * a tab appear where a different one used to be.
+ *
+ * ─── NOTHING IS STORED AND NOTHING IS A COMPOSITE ───────────────────────────
+ * Every figure is derived from rows this page already loads, so none of it can
+ * go stale or disagree with the screen it came from. There is deliberately no
+ * "progress score out of 100": the app already has one number everything is
+ * standardised around and a second invented scale beside it would be a figure
+ * nobody can argue with competing with the one they can.
  *
  * ─── AND NOTHING IS TICKED THAT WAS NOT ACTUALLY DONE ───────────────────────
  * There is no checkbox and there cannot be one: the queue stores nothing, so a
@@ -43,21 +54,13 @@
  * back to the tab, and anything that was on the list and is not any more is
  * held for a moment with a line through it before it goes.
  *
- * ─── Why the queue is first, and why the cards survive under it ─────────────
- * The queue answers "what now" and the audit answers "why is it asking". Both
- * are needed and only one is needed FIRST: the pile detail — the honest split
- * into due, never-opened and put-away, with the three ways to answer each —
- * is the thing a student opens once a fortnight when the number looks wrong,
- * and the thing nobody should have to scroll past every day.
- *
  * ─── The old page's reasoning, which still holds ────────────────────────────
  * "The website always thinks a bunch of flashcards are due." It did, and it
  * was mostly wrong: a card is created with next_review_date set to today, so a
- * sixty-card deck reported sixty due before anybody opened one, and
- * `next_review_date <= today` never stops being true, so a fortnight off left
- * every card permanently overdue with the number only climbing. A count that
+ * sixty-card deck reported sixty due before anybody opened one. A count that
  * only goes up is not information; people stop reading it, and then they stop
- * reading the numbers next to it.
+ * reading the numbers next to it. The audit that takes that pile apart lives
+ * on CARDS now, which is the tab it is about.
  *
  * And "I know this" is not a delete. The only exit from the queue used to be
  * is_active: false, so somebody who has a definition cold had to destroy the
@@ -74,7 +77,7 @@ import { Button } from "@/components/ui/button";
 import { useToast } from "@/components/ui/use-toast";
 import { deckCards, isBankCard } from "@/lib/mistakeBank";
 import { ToastAction } from "@/components/ui/toast";
-import { Layers, Play, Sparkles, Inbox, ChevronDown, CheckCircle2 } from "lucide-react";
+import { Layers, Play, Sparkles, Inbox, ChevronDown, CheckCircle2, ListChecks, Target, Clock, FileText } from "lucide-react";
 import AuditPile from "@/components/study/AuditPile";
 import QueueRow from "@/components/study/QueueRow";
 import { ClearedStrip, ClearedRow } from "@/components/study/Cleared";
@@ -88,10 +91,48 @@ import { globalBusy, MIN_GAP_MS } from "@/lib/liveRefresh";
 import { studyEvents } from "@/lib/studyLog";
 import { SECONDS_PER_CARD } from "@/lib/retention";
 import AceShuffle from "@/components/ace/AceShuffle";
-import InsightsTab from "@/components/analytics/InsightsTab";
+import PeriodSwitch from "@/components/progress/PeriodSwitch";
+import ProgressTabs from "@/components/progress/ProgressTabs";
+import { CardsTab, QuizzesTab, MistakesTab, HoursTab } from "@/components/progress/FeatureTabs";
+import {
+    PERIODS, periodRange, cardsReport, quizzesReport, mistakesReport, hoursReport,
+} from "@/lib/progressReport";
 
 /** How long "not this week" actually is. */
 const SNOOZE_DAYS = 7;
+
+/**
+ * The five tabs, in the order the questions get asked.
+ *
+ * ONE WORD EACH, measured at 360 where the bar is `grid-cols-5` and each cell
+ * is about 66px: the icons are HIDDEN below `sm` for the reason the Ranked bar
+ * hides its own — a glyph beside "Quizzes" restates the word next to it, which
+ * is decoration exactly where width is the binding constraint, and "Mistakes"
+ * is the label that clips first.
+ */
+const TABS = [
+    ["today", "Today", ListChecks],
+    ["cards", "Cards", Layers],
+    ["quizzes", "Quizzes", FileText],
+    ["mistakes", "Mistakes", Target],
+    ["hours", "Hours", Clock],
+];
+const TAB_IDS = TABS.map(([id]) => id);
+
+/**
+ * `/Analytics` has redirected to `?tab=insights` since the merge, and there is
+ * no tab by that name any more. It lands on CARDS, because "is any of this
+ * sticking" was the lead question of the old Insights tab and the panels that
+ * answered it — the memory panel and the weak topics — are the ones that moved
+ * here. A redirect that drops somebody on a tab that does not exist is the
+ * half-wired shape this app keeps meeting.
+ */
+const TAB_ALIAS = { insights: "cards", queue: "today", progress: "today" };
+const resolveTab = (raw) => {
+    const id = String(raw || "").toLowerCase();
+    if (TAB_IDS.includes(id)) return id;
+    return TAB_ALIAS[id] || "today";
+};
 
 /** How long a ticked-off row stays on screen, and how many may stack. */
 const CLEARED_LINGER_MS = 7000;
@@ -126,22 +167,24 @@ export default function Review() {
     const location = useLocation();
 
     /**
-     * ─── THE CHARTS ARE NOT BEHIND A TAB ANY MORE ───────────────────────────
-     * Queue and Insights were two tabs, which meant the half of this page that
-     * answers "is any of it sticking" was behind a control a student had to
-     * know to press — and a tab nobody presses is the shape `/League` and
-     * `/Review` were BOTH rebuilt out of two releases ago. They are one scroll
-     * now, in the order the questions get asked: what do I owe, what did I
-     * clear, and is it working.
+     * Which tab, and over what window.
      *
-     * `/Analytics` still redirects here with `?tab=insights`, so the param is
-     * still read — it scrolls to the charts rather than selecting them, which
-     * is what makes every existing bookmark and in-app link still land on the
-     * thing it promised. A redirect that drops you at the top of a long page is
-     * the half-wired shape this codebase keeps meeting.
+     * The tab is read from the query so every existing link still lands — and
+     * it is WRITTEN back on a change, so a student can send somebody the tab
+     * they are looking at. `replace` rather than `push`, or four taps along the
+     * bar put four entries in the back stack and leaving the page takes five
+     * presses.
      */
-    const insightsRef = useRef(null);
-    const wantsInsights = new URLSearchParams(location.search).get("tab") === "insights";
+    const [tab, setTab] = useState(() =>
+        resolveTab(new URLSearchParams(location.search).get("tab")));
+    const [period, setPeriod] = useState(PERIODS[0].id);
+
+    const pickTab = useCallback((next) => {
+        setTab(next);
+        const q = new URLSearchParams(location.search);
+        q.set("tab", next);
+        navigate({ search: `?${q.toString()}` }, { replace: true });
+    }, [location.search, navigate]);
 
     // Computed once per render rather than per card, so a four-hundred-card
     // audit does not build four hundred Date objects to ask the same question.
@@ -252,6 +295,26 @@ export default function Review() {
 
     const lead = useMemo(() => queueLead(queue), [queue]);
 
+    /**
+     * The window, and the four feature reports read off it.
+     *
+     * All four are computed on every render of the page rather than per tab.
+     * They are arithmetic over rows already in memory — no query, no model call
+     * — and computing only the live one would mean the tab bar could not carry
+     * a figure, which is what stops a label being a word with nothing behind it.
+     */
+    const range = useMemo(() => periodRange(period), [period]);
+
+    const reports = useMemo(() => {
+        if (!data) return null;
+        return {
+            cards: cardsReport(cards, range),
+            quizzes: quizzesReport(data.attempts, data.quizzes, range),
+            mistakes: mistakesReport(data.bankCards, data.attempts, (c) => isReady(c, today), range),
+            hours: hoursReport(events, data.techniques, range),
+        };
+    }, [data, cards, events, range, today]);
+
     /** This week's done pile, off the same rows the queue is built from. */
     const cleared = useMemo(() => (data ? clearedThisWeek({
         cards, bankCards: data.bankCards, attempts: data.attempts, events,
@@ -282,15 +345,6 @@ export default function Review() {
         // back to see.
         setJustCleared((prevGone) => [...gone, ...prevGone].slice(0, CLEARED_SHOWN));
     }, [data, queue]);
-
-    // `?tab=insights` SCROLLS rather than selects, now that there is nothing
-    // to select. It waits for the data, because the charts have no height
-    // until they have something to draw and scrolling to an empty section
-    // lands at the bottom of the page.
-    useEffect(() => {
-        if (!wantsInsights || !data) return;
-        insightsRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
-    }, [wantsInsights, data]);
 
     // They go on their own. A tick that stays is a row, and the queue would
     // slowly fill with work the student finished days ago.
@@ -385,6 +439,123 @@ export default function Review() {
     const known = piles.filter((p) => p.known > 0);
     const nothingAtAll = cards.length === 0 && !queue.length;
 
+    /**
+     * THE PILE, TAKEN APART — and it lives on CARDS now.
+     *
+     * It answers "why is it asking me for these" about flashcards specifically,
+     * so a tab about flashcards is where it belongs; under the queue it was a
+     * block about one feature sitting on the screen that ranks all seven. Still
+     * folded, because it is what a student opens once a fortnight when the
+     * number looks wrong, and it still NAMES what is behind it rather than
+     * being a chevron on nothing.
+     */
+    const auditSection = (
+        <>
+                    {/* ── THE AUDIT, FOLDED ───────────────────────────────
+                        The detail behind the card row: the honest split and
+                        the three ways to answer each pile. It is what a
+                        student opens when the number looks wrong, which is
+                        once a fortnight — so it is not the thing everybody
+                        scrolls past every day. It NAMES what is behind it
+                        rather than being a chevron on nothing, which is the
+                        call the science rail already makes. */}
+                    {cards.length > 0 && (
+                        <section className="space-y-3">
+                            <button type="button" onClick={() => setShowAudit((v) => !v)}
+                                aria-expanded={showAudit}
+                                className="w-full card-soft on-table p-4 flex items-center gap-3 text-left
+                                    hover:bg-secondary/40 transition-colors">
+                                <div className="flex-1 min-w-0">
+                                    <h2 className="font-display font-extrabold text-foreground text-sm">
+                                        Where your {counts.total} cards actually stand
+                                    </h2>
+                                    <p className="text-xs text-muted-foreground mt-0.5">
+                                        {counts.active} asking for you · {counts.new} never opened · {counts.known} put away
+                                    </p>
+                                </div>
+                                <ChevronDown className={`w-4 h-4 text-muted-foreground flex-shrink-0 transition-transform ${showAudit ? "rotate-180" : ""}`} />
+                            </button>
+
+                            {showAudit && (
+                                <>
+                                    <div className="card-soft on-table p-5">
+                                        <div className="grid grid-cols-3 gap-4">
+                                            <Figure value={counts.active} label="Asking for you"
+                                                tone={counts.active > 0 ? "text-chart-3" : "text-muted-foreground"}
+                                                hint={counts.overdue > 0 ? `${counts.overdue} of them well past due` : null} />
+                                            <Figure value={counts.new} label="Never opened" tone="text-muted-foreground"
+                                                hint={counts.new > 0 ? "New material, not a backlog" : null} />
+                                            <Figure value={counts.known} label="Put away" tone="text-primary"
+                                                hint={counts.known > 0 ? "You said you know these" : null} />
+                                        </div>
+
+                                        {/* The reframe, said out loud. For most students this
+                                            line is the entire fix: the alarming number was
+                                            never review debt. */}
+                                        {counts.new > counts.active && counts.new > 0 && (
+                                            <p className="mt-4 text-sm text-muted-foreground border-t border-border pt-3">
+                                                Most of your queue is material you have not started yet. That is not you
+                                                falling behind, and nothing here is counting it against you.
+                                            </p>
+                                        )}
+                                    </div>
+
+                                    {active.length > 0 && (
+                                        <section className="space-y-3">
+                                            <h3 className="stat-label px-1">Claiming your attention</h3>
+                                            {active.map((p) => (
+                                                <AuditPile key={p.subject} pile={p} today={today} busy={busy}
+                                                    onKnown={onKnown} onSnooze={onSnooze} onRestore={onRestore}
+                                                    onReview={startReview} />
+                                            ))}
+                                        </section>
+                                    )}
+
+                                    {fresh.length > 0 && (
+                                        <section className="space-y-3">
+                                            <h3 className="stat-label px-1">Not started yet</h3>
+                                            <p className="text-xs text-muted-foreground px-1 -mt-1">
+                                                These have never been reviewed, so nothing here is overdue. They join the
+                                                queue a few at a time once your due pile is clear.
+                                            </p>
+                                            {fresh.map((p) => (
+                                                <AuditPile key={p.subject} pile={p} today={today} busy={busy}
+                                                    onKnown={onKnown} onSnooze={onSnooze} onRestore={onRestore}
+                                                    onReview={startReview} />
+                                            ))}
+                                        </section>
+                                    )}
+
+                                    {known.length > 0 && (
+                                        <section className="space-y-3">
+                                            <button type="button" onClick={() => setShowKnown((v) => !v)}
+                                                aria-expanded={showKnown}
+                                                className="flex items-center gap-2 stat-label px-1 hover:text-foreground">
+                                                Put away ({counts.known})
+                                                <ChevronDown className={`w-3.5 h-3.5 transition-transform ${showKnown ? "rotate-180" : ""}`} />
+                                            </button>
+                                            {showKnown && (
+                                                <>
+                                                    <p className="text-xs text-muted-foreground px-1 -mt-1">
+                                                        Cards you have said you know. They are still yours, still in the deck,
+                                                        and one button away from coming back.
+                                                    </p>
+                                                    {known.map((p) => (
+                                                        <AuditPile key={p.subject} pile={p} today={today} busy={busy}
+                                                            onKnown={onKnown} onSnooze={onSnooze} onRestore={onRestore}
+                                                            onReview={null} />
+                                                    ))}
+                                                </>
+                                            )}
+                                        </section>
+                                    )}
+                                </>
+                            )}
+                        </section>
+                    )}
+        </>
+    );
+
     return (
         <div className="min-h-screen p-4 sm:p-6 lg:p-8">
             <div className="max-w-5xl mx-auto space-y-5">
@@ -394,8 +565,25 @@ export default function Review() {
                     <HelpButton page="Review" />
                 </div>
 
-                {/* ══ WHAT YOU OWE ══════════════════════════════════════ */}
-                <div className="space-y-5">
+                {/* ══ THE BAR ═══════════════════════════════════════════════
+                    One cell per FEATURE, which is what makes this navigation
+                    rather than two words nobody can place themselves in. It is
+                    a component so the probe can draw the REAL one at 360. */}
+                <ProgressTabs tabs={TABS} value={tab} onChange={pickTab} />
+
+                {/* THE WINDOW IS ALWAYS STATED. On Today it is a sentence
+                    rather than a switch, because the queue is about right now
+                    and a control that changes nothing is worse than none — the
+                    rule `BoardSwitch` keeps about being handed one board. The
+                    row stays either way so the layout does not jump. */}
+                <div className="min-h-[2.25rem] flex items-center">
+                    {tab === "today"
+                        ? <p className="text-xs text-muted-foreground">Everything outstanding right now, and what you have cleared since Monday.</p>
+                        : <PeriodSwitch value={period} onChange={setPeriod} />}
+                </div>
+
+                {/* ══ TODAY ═════════════════════════════════════════════ */}
+                <div className={tab === "today" ? "space-y-5" : "hidden"}>
 
                         {/* THE LEAD NAMES THE FIRST THING, not a total. "You
                             have 6 things outstanding" is a number; "your
@@ -502,121 +690,28 @@ export default function Review() {
                             </motion.div>
                         )}
 
-                        {/* ── THE AUDIT, FOLDED ───────────────────────────────
-                            The detail behind the card row: the honest split and
-                            the three ways to answer each pile. It is what a
-                            student opens when the number looks wrong, which is
-                            once a fortnight — so it is not the thing everybody
-                            scrolls past every day. It NAMES what is behind it
-                            rather than being a chevron on nothing, which is the
-                            call the science rail already makes. */}
-                        {cards.length > 0 && (
-                            <section className="space-y-3">
-                                <button type="button" onClick={() => setShowAudit((v) => !v)}
-                                    aria-expanded={showAudit}
-                                    className="w-full card-soft on-table p-4 flex items-center gap-3 text-left
-                                        hover:bg-secondary/40 transition-colors">
-                                    <div className="flex-1 min-w-0">
-                                        <h2 className="font-display font-extrabold text-foreground text-sm">
-                                            Where your {counts.total} cards actually stand
-                                        </h2>
-                                        <p className="text-xs text-muted-foreground mt-0.5">
-                                            {counts.active} asking for you · {counts.new} never opened · {counts.known} put away
-                                        </p>
-                                    </div>
-                                    <ChevronDown className={`w-4 h-4 text-muted-foreground flex-shrink-0 transition-transform ${showAudit ? "rotate-180" : ""}`} />
-                                </button>
-
-                                {showAudit && (
-                                    <>
-                                        <div className="card-soft on-table p-5">
-                                            <div className="grid grid-cols-3 gap-4">
-                                                <Figure value={counts.active} label="Asking for you"
-                                                    tone={counts.active > 0 ? "text-chart-3" : "text-muted-foreground"}
-                                                    hint={counts.overdue > 0 ? `${counts.overdue} of them well past due` : null} />
-                                                <Figure value={counts.new} label="Never opened" tone="text-muted-foreground"
-                                                    hint={counts.new > 0 ? "New material, not a backlog" : null} />
-                                                <Figure value={counts.known} label="Put away" tone="text-primary"
-                                                    hint={counts.known > 0 ? "You said you know these" : null} />
-                                            </div>
-
-                                            {/* The reframe, said out loud. For most students this
-                                                line is the entire fix: the alarming number was
-                                                never review debt. */}
-                                            {counts.new > counts.active && counts.new > 0 && (
-                                                <p className="mt-4 text-sm text-muted-foreground border-t border-border pt-3">
-                                                    Most of your queue is material you have not started yet. That is not you
-                                                    falling behind, and nothing here is counting it against you.
-                                                </p>
-                                            )}
-                                        </div>
-
-                                        {active.length > 0 && (
-                                            <section className="space-y-3">
-                                                <h3 className="stat-label px-1">Claiming your attention</h3>
-                                                {active.map((p) => (
-                                                    <AuditPile key={p.subject} pile={p} today={today} busy={busy}
-                                                        onKnown={onKnown} onSnooze={onSnooze} onRestore={onRestore}
-                                                        onReview={startReview} />
-                                                ))}
-                                            </section>
-                                        )}
-
-                                        {fresh.length > 0 && (
-                                            <section className="space-y-3">
-                                                <h3 className="stat-label px-1">Not started yet</h3>
-                                                <p className="text-xs text-muted-foreground px-1 -mt-1">
-                                                    These have never been reviewed, so nothing here is overdue. They join the
-                                                    queue a few at a time once your due pile is clear.
-                                                </p>
-                                                {fresh.map((p) => (
-                                                    <AuditPile key={p.subject} pile={p} today={today} busy={busy}
-                                                        onKnown={onKnown} onSnooze={onSnooze} onRestore={onRestore}
-                                                        onReview={startReview} />
-                                                ))}
-                                            </section>
-                                        )}
-
-                                        {known.length > 0 && (
-                                            <section className="space-y-3">
-                                                <button type="button" onClick={() => setShowKnown((v) => !v)}
-                                                    aria-expanded={showKnown}
-                                                    className="flex items-center gap-2 stat-label px-1 hover:text-foreground">
-                                                    Put away ({counts.known})
-                                                    <ChevronDown className={`w-3.5 h-3.5 transition-transform ${showKnown ? "rotate-180" : ""}`} />
-                                                </button>
-                                                {showKnown && (
-                                                    <>
-                                                        <p className="text-xs text-muted-foreground px-1 -mt-1">
-                                                            Cards you have said you know. They are still yours, still in the deck,
-                                                            and one button away from coming back.
-                                                        </p>
-                                                        {known.map((p) => (
-                                                            <AuditPile key={p.subject} pile={p} today={today} busy={busy}
-                                                                onKnown={onKnown} onSnooze={onSnooze} onRestore={onRestore}
-                                                                onReview={null} />
-                                                        ))}
-                                                    </>
-                                                )}
-                                            </section>
-                                        )}
-                                    </>
-                                )}
-                            </section>
-                        )}
                 </div>
 
-                {/* ══ IS ANY OF IT STICKING ═════════════════════════════════
-                    No longer behind a tab. The queue above answers "what now"
-                    and this answers "is it working", and the second question
-                    is the one that was invisible — a tab nobody presses is a
-                    page nobody has, which is the shape /League and /Review
-                    were both rebuilt out of. `scroll-mt` clears the 48px
-                    sticky header, or `?tab=insights` lands with the heading
-                    underneath it. */}
-                <section ref={insightsRef} className="pt-3 scroll-mt-16">
-                    <InsightsTab data={data} today={today} />
-                </section>
+                {/* ══ THE FOUR FEATURE REPORTS ══════════════════════════════
+                    Rendered only when live. They are cheap — arithmetic over
+                    rows already in memory — but the panels under them are not:
+                    four charts mounted off screen is four `ResizeObserver`s and
+                    four recharts trees paid for on a tab nobody opened. */}
+                {tab === "cards" && (
+                    <div className="space-y-4">
+                        <CardsTab report={reports?.cards} range={range} cards={cards}
+                            techniques={data?.techniques || []} />
+                        {auditSection}
+                    </div>
+                )}
+                {tab === "quizzes" && <QuizzesTab report={reports?.quizzes} range={range} />}
+                {tab === "mistakes" && <MistakesTab report={reports?.mistakes} range={range} />}
+                {tab === "hours" && (
+                    <HoursTab report={reports?.hours} range={range} events={events}
+                        quizzes={data?.quizzes || []} attempts={data?.attempts || []}
+                        cards={cards} sessions={data?.sessions || []}
+                        techniques={data?.techniques || []} today={today} />
+                )}
             </div>
         </div>
     );

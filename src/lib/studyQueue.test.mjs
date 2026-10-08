@@ -440,22 +440,17 @@ check("hoursLabel is null under a minute rather than \"0m\"", () => {
 
 // ═══ THE PAGE ═══════════════════════════════════════════════════════════════
 
-check("THE CHARTS ARE NOT BEHIND A TAB", () => {
+check("THE QUEUE IS STILL THE FIRST THING THE PAGE OPENS ON", () => {
+    // It is tab one, and it is the only tab with an action on every row. This
+    // used to assert that nothing was behind a tab at all, which pinned a
+    // MECHANISM rather than a property — the charts being reachable and named
+    // is the thing that matters, and `progressReport.test.mjs` holds it.
     const page = strip(read("src/pages/Review.jsx"));
-    assert.ok(!/<TabsList/.test(page) && !/<TabsTrigger/.test(page),
-        "Insights is behind a tab again — a screen nobody presses into is a screen " +
-        "nobody has, which is what /League and /Review were both rebuilt out of");
-    assert.match(page, /<InsightsTab/, "the charts are not rendered at all");
-});
-
-check("AND /Analytics STILL LANDS ON THEM", () => {
-    // The redirect has outlived two rebuilds of this page. Dropping you at the
-    // top of a long scroll is the half-wired shape this codebase keeps meeting:
-    // the right page, and the thing it promised to open does not open.
-    const page = strip(read("src/pages/Review.jsx"));
-    assert.match(page, /get\("tab"\) === "insights"/, "the param is no longer read");
-    assert.match(page, /insightsRef\.current\?\.scrollIntoView/,
-        "?tab=insights no longer scrolls to the charts");
+    const tabs = page.slice(page.indexOf("const TABS = ["), page.indexOf("];", page.indexOf("const TABS = [")));
+    assert.match(tabs, /^\s*\[\s*"today"/m,
+        "the queue is no longer the first tab, so the page opens on a report rather " +
+        "than on the one screen that has something to do on it");
+    assert.match(page, /<QueueRow/, "the queue is not rendered at all");
 });
 
 check("NOTHING IS TICKED OFF THAT WAS NOT ACTUALLY DONE", () => {

@@ -2359,6 +2359,165 @@ the index scales with the card now (see the cards section above), so it clears
 the pip field at any width, and 92 is simply where nine marks still read as
 nine across a two-column row.
 
+## Progress is a REPORT in five tabs, one per feature
+
+**"The notion of progress is good but it needs a rework. Don't just blurt all
+the info out onto a page — it needs tabs for each feature so every user can
+understand it far easier instead of being met with a wave of info. The report
+needs to feel much more statistical and evaluative rather than just a coloured
+box."**
+
+**ONE RELEASE EARLIER THIS PAGE'S TABS WERE DELETED, and both calls were
+right about different things.** Queue and Insights were two tabs and that WAS
+wrong: "Insights" is not a thing a student does, so nothing on the bar said
+what was behind it, which is the "a screen nobody presses into is a screen
+nobody has" failure /League and /Review were each rebuilt out of. Stacking them
+fixed the invisibility and bought the other failure — one column carrying every
+number the app knows, with nothing saying which feature each was about.
+
+**A TAB BAR WHOSE LABELS ARE THE THINGS YOU DO IS NAVIGATION.** Today · Cards ·
+Quizzes · Mistakes · Hours. A student who has just spent twenty minutes on
+flashcards can see which tab is about to tell them something, which is the
+thing "Queue / Insights" could never do.
+
+### EVERY TAB IS THE SAME FOUR THINGS
+
+One headline figure · how it moved against the student's OWN previous period ·
+one sentence saying what that means · then the breakdown. Learned once on the
+first tab and read at a glance on the other three, which is most of why a
+report reads faster than a dashboard carrying identical data.
+
+That shape is also what "evaluative" turned out to mean. **There is
+deliberately NO progress score out of 100**: the app already has one number
+everything is standardised around, and a second invented scale on the page
+beside it would be a figure nobody can argue with competing with the one they
+can — the refusal `closingFacts` makes on the first-run screen and the console
+makes about its own lattice. `progressReport.test.mjs` asserts the absence.
+
+### THE COMPUTATION WAS ALREADY THERE AND NOBODY HAD DRAWN IT
+
+Nothing new is tracked. `commandTermStats`, `retentionOutlook`, `cardMastery`,
+`repeatOffenders`, `fixState`, `countableByDay` and `bankSummary` were all
+written, all derived, and most of them read by nothing. **The command-term
+table is the clearest case**: which command terms a student loses marks on is
+the most examiner-like statistic this app can produce, QuizPlayer has been
+writing `command_term` onto every question result, and only the MARKER had ever
+been shown them. "Collect nothing you don't use", inverted, for the seventh
+recorded time.
+
+### A COMPARISON NEEDS LIKE FOR LIKE, AND THE WEEK IS THE TRAP
+
+Trailing-28 against the 28 before it is fair by construction. "This week" is
+NOT: it is Monday-to-now, so comparing it against a WHOLE previous week tells
+every student they are behind until Sunday — the trap `weekPace` was written to
+close, met again one module over and with every opportunity to reopen it. The
+previous window is cut to the SAME NUMBER OF DAYS, so Wednesday is measured
+against Wednesday.
+
+**AND IT REFUSES RATHER THAN SCORING SOMEBODY ON TWO DATA POINTS.** Every delta
+has a floor on BOTH sides and is NULL under it — never 0, which means "holding
+steady" and must not double as "I do not know yet" — with a note saying how
+many more are needed. "All" has no predecessor at all, so every delta on it is
+absent and the note says why. The rule `TREND_MIN`, `CALIBRATION_MIN`,
+`MARK_MIN_OBS` and `MIN_BASELINE_WEEKS` each already keep.
+
+**A VERDICT IS ALLOWED TO SAY NOTHING.** Padding it to always produce a
+sentence is how a page teaches a student its words are decoration, which is the
+same rule the dashboard rail keeps about its own figures.
+
+### FOUR SHAPE ASSUMPTIONS, ALL FOUND BY READING THE HELPER
+
+Each of these renders perfectly and is simply a different number, or nothing:
+
+- **`cardMastery` ALREADY RETURNS 0–100.** The obvious normalise
+  (`m <= 1 ? m * 100 : m`) reads a card sitting at a mastery of 1 as a card at
+  100% — the worst card in the deck drawn as the best.
+- **`countableByDay` yields `{ claimed, counted, capped }` per day, not a
+  number.** Read as a scalar every day is NaN and the report prints zero
+  minutes at somebody who studied all week.
+- **`retentionOutlook().slipping` is a COUNT, not an array.** `?.length` on it
+  is undefined, coerces to 0, and reports every deck as holding.
+- **`commandTermStats` returns `{ rows, weakest, strongest }`, not an array**,
+  and a row is keyed `id`/`label`, never `term`. Read as a list it is empty
+  every time and the panel silently never draws.
+
+### AND `isDay` ACCEPTED ANYTHING TEN CHARACTERS LONG
+
+The obvious implementation takes the first ten characters of a value and
+accepts it if that is ten long. `String({})` slices to `"[object Ob"`, which is
+ten characters, passes, and then compares as a string against every real day —
+it sorts ABOVE "2026-…", so on an unbounded window (which is what "All" passes)
+a junk value counts as a row that happened. **The shape is checked now, not the
+length.** Its own test found it; nothing on screen would have.
+
+### WHAT THE SCREENSHOTS AND THE MEASUREMENTS CAUGHT
+
+- **Six headings read "CARDS REVIEWED UNDEFINED".** `periodRange` returned the
+  bounds and not the WORDS, so every `{range.blurb}` interpolated the literal
+  string. It throws nothing and passes every test that does not look at the
+  screen. The range carries its own label now.
+- **"MISTAKES CLIPPED INSIDE ITS OWN PILL AT 360."** The identical fault the
+  Ranked bar hit, found the identical way — comparing each button's
+  `scrollWidth` against its `clientWidth` rather than by looking. `text-xs
+  px-0.5` below `sm` clears it; renaming the tab was the other option and is not
+  available, because "Mistakes" is what /MistakeBank is called everywhere else.
+- **A "+3" chip sat beside "0/9 mistakes fixed".** Nothing records WHEN a
+  mistake became fixed — the state is derived from the ladder and a later sit —
+  so the only period figure available was how many were DRILLED, and a movement
+  chip that describes a different number from the one it sits on is worse than
+  no chip. Drilled is a stat, where it is labelled.
+- **"3h 10m" with "+125 min" beside it** is two units for one quantity.
+- **"Methods is the one pulling hardest"** reads as the subject carrying you.
+  `subjects` is sorted WEAKEST FIRST, so that sentence sent a student to revise
+  the thing they were already best at.
+- **Four green blocks are not a week.** The day strip grew weekday initials,
+  and only while there are few enough to read.
+
+### THE AUDIT MOVED, AND `InsightsTab` IS DELETED
+
+The pile audit — the honest split into due, never-opened and put-away — is
+about FLASHCARDS, so it lives on the Cards tab rather than under a queue that
+ranks all seven kinds. `InsightsTab` had one job, which was to be the other
+half of a two-tab page; its five panels are distributed to the tabs they are
+about and the wrapper has no importers left.
+
+### THE PROBE DRAWS THE REAL BAR, AND TWO FIXTURES WERE WRONG
+
+`ProgressTabs` is a component so `scripts/_floorProbe.jsx?v=report` can measure
+the REAL bar at 360 — a stand-in would have been measuring itself, which is the
+mirror this codebase keeps deleting. Two fixture faults had to be fixed before
+anything could be judged, and both are the lesson about checking a layout
+against the shape of real data: the attempts carried no `command_term`, so the
+command-term panel was absent rather than empty; and the bank cards carried
+`repetitions` but no review counts, and **`fixState` keys on the review counts
+and `interval_days`**, so every mistake sat in "Not started" and the ladder
+panel drew one grey bar.
+
+### THE SWEEP RAN AGAINST A RED BASELINE, WHICH PROVES NOTHING
+
+Twenty injections reported BIT on the first pass and the suite was already
+failing one check, so every one of them "bit" trivially. **Check the baseline is
+green before sweeping.** That is the injection-harness twin of the exit-code
+lesson one release ago, and it fails in the same direction: it tells you the
+guards are fine when nothing has been tested.
+
+Of the three that were genuinely silent once the baseline was green, two were
+weak GUARDS rather than weak injections:
+
+- **`measurable` was only asserted through the report.** `sitScores` already
+  drops retries, so the headline average is right either way — but the
+  per-subject table and the command terms walk the predicate DIRECTLY, so
+  dropping its filter feeds a retry into both of those silently.
+- **`/^\s*\["today"/m` passes with "today" ANYWHERE in the list**, because `m`
+  makes `^` match at every line start. The queue could be moved to the end and
+  the guard said nothing. It reads the first entry now.
+
+Draw it with `scripts/_floorProbe.jsx?v=report`, which deals all four feature
+tabs one under the other with a previous period behind them — a fixture with
+rows on only one side makes every delta correctly absent, and the one state the
+layout has to survive is the one with a movement chip in it. Both themes, and
+at 390.
+
 ## Three figures about other people, and a to-do list with no done pile
 
 **"Get rid of this off of the dashboard. Also let's keep improving yet making
@@ -6531,10 +6690,18 @@ somebody opening the pricing page and the gate in the same sitting.
   with each cleared kind carrying the queue's own tier so the two cannot be
   inked apart. A to-do list with no done pile gets shorter the better somebody
   does, which made a good week look like a shorter list of failings
-- `src/pages/Review.jsx`, `src/components/analytics/InsightsTab.jsx`,
-  `SubjectSplit.jsx` — the merged page. Queue is what you owe, Insights is the
-  half of the old /Analytics that ended in something to do; the rest was cut
-  and the reasons are above
+- `src/lib/progressReport.js` + `progressReport.test.mjs`,
+  `src/components/progress/` (`ProgressTabs`, `PeriodSwitch`, `ReportHead`,
+  `FeatureTabs`, `BarList`, `Panel`), `src/pages/Review.jsx` — Progress as a
+  REPORT in five tabs, one per feature: Today · Cards · Quizzes · Mistakes ·
+  Hours. Every tab is one headline, its movement against the student's OWN
+  previous period, one sentence, then the breakdown — and every figure is
+  derived from rows the page already loads, with no composite score anywhere
+  (the ATAR is the one number this app standardises on). The week's previous
+  window is cut to the SAME NUMBER OF DAYS, or every Wednesday reads as a
+  collapse. `InsightsTab.jsx` is deleted; its five panels moved to the tabs
+  they are about. Draw it with `scripts/_floorProbe.jsx?v=report`, which is also
+  the only place the tab bar can be measured at 360 — "Mistakes" clipped there
 - `src/lib/ranked.js` `BOARDS` / `boardsFor` + `src/lib/boardMovement.js` +
   `rankedBoards.test.mjs` — the three boards, the ERA that decides which tab
   each sits on, and which way every row has gone since Monday. The movement

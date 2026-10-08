@@ -164,10 +164,20 @@ check("ANALYTICS MERGED IN, and its old link still lands somewhere", () => {
         "of charts is the mirror this codebase keeps deleting");
     assert.match(read("src/App.jsx"), /path="\/Analytics" element=\{<Navigate to="\/Review\?tab=insights"/,
         "nothing redirects /Analytics, so every existing link to it 404s");
-    // And the page honours the query it is sent.
-    assert.match(read("src/pages/Review.jsx"), /get\("tab"\) === "insights"/,
-        "the redirect names a tab the page does not read, which lands on the queue instead " +
-        "of the charts somebody asked for");
+    // AND THE PAGE RESOLVES WHATEVER IT IS SENT TO A REAL TAB. This used to
+    // assert the literal `get("tab") === "insights"`, which pinned a MECHANISM:
+    // the moment the page grew a tab per feature and "insights" stopped being
+    // one of their names, a correct alias made the suite red. What matters is
+    // that the target of the redirect resolves to a tab that exists.
+    const page = read("src/pages/Review.jsx");
+    const target = /to="\/Review\?tab=([a-z]+)"/.exec(read("src/App.jsx"))?.[1];
+    assert.ok(target, "the redirect no longer names a tab at all");
+    const ids = [...page.slice(page.indexOf("const TABS = ["), page.indexOf("];", page.indexOf("const TABS = [")))
+        .matchAll(/\[\s*"([a-z]+)"/g)].map((m) => m[1]);
+    const alias = page.slice(page.indexOf("const TAB_ALIAS"), page.indexOf("};", page.indexOf("const TAB_ALIAS")));
+    assert.ok(ids.includes(target) || new RegExp(`\\b${target}:`).test(alias),
+        `/Analytics redirects to ?tab=${target}, which is neither a tab nor aliased to one — ` +
+        "so every bookmark to it lands on the default screen instead of the charts");
 });
 
 // ─── The entrance states the stake ─────────────────────────────────────────

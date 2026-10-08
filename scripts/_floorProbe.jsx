@@ -74,6 +74,10 @@ import { XPSources } from "@/components/ranked/XPLevelCard";
 import RankedBoard from "@/components/ranked/RankedBoard";
 import QueueRow from "@/components/study/QueueRow";
 import { ClearedStrip, ClearedRow } from "@/components/study/Cleared";
+import PeriodSwitch from "@/components/progress/PeriodSwitch";
+import ProgressTabs from "@/components/progress/ProgressTabs";
+import { CardsTab, QuizzesTab, MistakesTab, HoursTab } from "@/components/progress/FeatureTabs";
+import { periodRange, cardsReport, quizzesReport, mistakesReport, hoursReport } from "@/lib/progressReport";
 import SubjectSplit from "@/components/analytics/SubjectSplit";
 import { studyQueue, queueLead, clearedThisWeek } from "@/lib/studyQueue";
 import StandingRail from "@/components/ranked/StandingRail";
@@ -1621,6 +1625,145 @@ views.reach = () => (
     </MemoryRouter>
 );
 
+
+// ── THE PROGRESS REPORT, all five tabs at once ─────────────────────────────
+// A real login shows ONE tab at a time, and the thing that has to be judged is
+// whether the four feature tabs read as the SAME object — one headline, one
+// delta, one sentence, then the breakdown. Drawn one under the other with the
+// bar above them, which is the only way to see that.
+//
+// The fixture carries a previous period on purpose: without rows on BOTH sides
+// every delta is correctly absent, and the one state the layout has to survive
+// is the one with a movement chip in it.
+views.report = () => {
+    const D = (n) => QDAY(-n);
+    const range = periodRange("week");
+    const prev = 9;        // comfortably inside last week's window
+
+    const cards = [...Array(26)].map((_, i) => ({
+        id: `c${i}`, subject_name: ["Chemistry", "Methods", "Legal"][i % 3], topic: "Topic",
+        is_active: true, repetitions: (i % 5), interval_days: [1, 4, 12, 30, 60][i % 5],
+        easiness_factor: 2.1 + (i % 4) * 0.2,
+        review_count_good: i % 4, review_count_easy: i % 3, review_count_hard: i % 2,
+        review_count_again: i % 5 === 0 ? 2 : 0,
+        last_reviewed_date: i < 14 ? D(i % 4) : D(prev + (i % 3)),
+        next_review_date: D(-(i % 6)),
+    }));
+
+    // `fixState` keys on the REVIEW COUNTS and `interval_days`, never on
+    // `repetitions` alone — a fixture carrying only repetitions puts every card
+    // in "Not started" and the ladder panel draws one grey bar, which is what
+    // the first draw of this probe showed. Five shapes, one per state.
+    const SHAPES = [
+        { reps: 0 },                                                        // new
+        { reps: 2, good: 2, lq: 4 },                                        // working
+        { reps: 2, good: 1, again: 2, lq: 1 },                              // slipping
+        { reps: 6, good: 5, lq: 4, iv: 40, src: true },                     // drilled
+        { reps: 6, good: 6, lq: 5, iv: 45 },                                // fixed
+    ];
+    const bank = [...Array(9)].map((_, i) => {
+        const sh = SHAPES[i % SHAPES.length];
+        return {
+            id: `m${i}`, topic: "Mistake bank", subject_name: "Legal", unit: "Unit 3",
+            is_active: true, repetitions: sh.reps, interval_days: sh.iv || 1,
+            last_quality: sh.lq ?? null,
+            review_count_good: sh.good || 0, review_count_again: sh.again || 0,
+            created_date: i < 4 ? D(i) : D(prev + i),
+            last_reviewed_date: i < 6 ? D(i % 3) : D(prev + 1),
+            next_review_date: D(1),
+            extra: { mistake: {
+                criterion: i % 3 === 0 ? "names the transfer of risk" : `criterion ${i}`,
+                topic: "Contracts",
+                ...(sh.src ? { question: "Explain the transfer of risk on delivery." } : {}),
+            } },
+        };
+    });
+
+    const quizzes = [
+        { id: "q1", title: "Redox practice", subject: "Chemistry" },
+        { id: "q2", title: "Differentiation", subject: "Methods" },
+        { id: "q3", title: "Contract law", subject: "Legal Studies" },
+    ];
+    const mk = (id, quiz, dayAgo, score) => ({
+        id, quiz_id: quiz, created_date: D(dayAgo), score,
+        // `command_term` is written by QuizPlayer onto every result — the stats
+        // read THAT, never the question text, so a fixture without it draws no
+        // command-term panel at all and the probe silently cannot show it.
+        extra: { question_results: [
+            { q_index: 0, marks: Math.round(score / 25), marks_max: 4, is_correct: score > 60,
+              question: "Explain the oxidation half-equation and justify each step.",
+              command_term: { term: "explain", tier: "explain", tierLabel: "Explain", tone: "xp" } },
+            { q_index: 1, marks: Math.round(score / 50), marks_max: 2, is_correct: score > 75,
+              question: "Evaluate the impact of the 1962 reform.",
+              command_term: { term: "evaluate", tier: "evaluate", tierLabel: "Evaluate", tone: "streak" } },
+            { q_index: 2, marks: score > 70 ? 2 : 1, marks_max: 2, is_correct: score > 70,
+              question: "State the oxidation number of chlorine.",
+              command_term: { term: "state", tier: "recall", tierLabel: "Recall", tone: "chart-3" } },
+        ] },
+    });
+    const attempts = [
+        mk("a1", "q1", 1, 78), mk("a2", "q2", 2, 64), mk("a3", "q3", 3, 71), mk("a4", "q1", 0, 83),
+        mk("p1", "q1", prev, 58), mk("p2", "q2", prev + 1, 61), mk("p3", "q3", prev + 2, 55),
+    ];
+
+    const events = [
+        { day: D(0), subject: "Methods", minutes: 55 }, { day: D(1), subject: "Chemistry", minutes: 40 },
+        { day: D(2), subject: "Methods", minutes: 70 }, { day: D(3), subject: "Legal", minutes: 25 },
+        { day: D(prev), subject: "Methods", minutes: 30 }, { day: D(prev + 1), subject: "Chemistry", minutes: 35 },
+    ];
+    const techniques = [
+        { id: "t1", technique_name: "Pomodoro", session_duration: 50, date: D(0), subject: "Methods" },
+        { id: "t2", technique_name: "Active Recall", session_duration: 45, date: D(2), subject: "Methods" },
+        { id: "t3", technique_name: "Blurting", session_duration: 25, date: D(3), subject: "Legal" },
+        { id: "t4", technique_name: "Spaced Repetition", session_duration: 40, date: D(1), subject: "Chemistry" },
+    ];
+    const sessions = [{ id: "s1", date: D(1), duration_minutes: 30, subject: "Chemistry" }];
+
+    const ready = () => true;
+    const reports = {
+        cards: cardsReport(cards, range),
+        quizzes: quizzesReport(attempts, quizzes, range),
+        mistakes: mistakesReport(bank, attempts, ready, range),
+        hours: hoursReport(events, techniques, range),
+    };
+
+    // THE REAL BAR, not a copy of its class list. /Review is auth-gated, so this
+    // is the only place the bar can be measured at 360 — and a stand-in would
+    // be measuring itself, which is the mirror this codebase keeps deleting.
+    const REPORT_TABS = [["today", "Today"], ["cards", "Cards"], ["quizzes", "Quizzes"],
+        ["mistakes", "Mistakes"], ["hours", "Hours"]];
+    const Bar = ({ live }) => <ProgressTabs tabs={REPORT_TABS} value={live} onChange={() => {}} />;
+
+    return (
+        <MemoryRouter>
+            <div className="min-h-screen bg-background p-4 sm:p-6 lg:p-8">
+                <div className="max-w-5xl mx-auto space-y-5">
+                    <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider">Progress</span>
+                    <Bar live="cards" />
+                    <PeriodSwitch value="week" onChange={() => {}} />
+                    <CardsTab report={reports.cards} range={range} cards={cards} techniques={techniques} />
+
+                    <div className="pt-6"><Bar live="quizzes" /></div>
+                    <QuizzesTab report={reports.quizzes} range={range} />
+
+                    <div className="pt-6"><Bar live="mistakes" /></div>
+                    <MistakesTab report={reports.mistakes} range={range} />
+
+                    <div className="pt-6"><Bar live="hours" /></div>
+                    <HoursTab report={reports.hours} range={range} events={events} quizzes={quizzes}
+                        attempts={attempts} cards={cards} sessions={sessions} techniques={techniques}
+                        today={QDAY(0)} />
+
+                    {/* THE EMPTY CASE, which a loaded account cannot show and which
+                        is the honest first week: every tab is still offered and
+                        says what would fill it. */}
+                    <div className="pt-8"><Bar live="quizzes" /></div>
+                    <QuizzesTab report={quizzesReport([], [], range)} range={range} />
+                </div>
+            </div>
+        </MemoryRouter>
+    );
+};
+
 ReactDOM.createRoot(document.getElementById("root")).render(
     React.createElement(views[which] || views.deal));
-
