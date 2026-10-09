@@ -1,3 +1,14 @@
+/**
+ * ─── MOUNTED NOWHERE, AND ITS ONE LINK WAS DEAD ─────────────────────────────
+ * No file imports this. Kept under this codebase's rule that twice an
+ * "unused" symbol marked a half-wired feature rather than dead code — but
+ * recorded here so the next session decides rather than re-auditing.
+ *
+ * Both buttons linked to `Goals?tab=planner`. Goals reads `?plan=` and has
+ * never read `?tab=`, so had this ever been mounted the two schedule buttons
+ * would have landed on the Goals default view. Repointed at `?plan=week`,
+ * which opens the plan dialog they were asking for.
+ */
 import React, { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -113,7 +124,7 @@ export default function TodaysTimetable({ user }) {
                             <Calendar className="w-5 h-5 text-blue-600" />
                             Today's Schedule
                         </CardTitle>
-                        <Link to={createPageUrl("Goals?tab=planner")}>
+                        <Link to={createPageUrl("Goals?plan=week")}>
                             <Button variant="outline" size="sm">
                                 Edit Schedule
                             </Button>
@@ -125,7 +136,7 @@ export default function TodaysTimetable({ user }) {
                         <div className="text-center py-8 text-muted-foreground">
                             <Clock className="w-12 h-12 mx-auto mb-4 opacity-50" />
                             <p className="mb-2">No schedule set for today</p>
-                            <Link to={createPageUrl("Goals?tab=planner")}>
+                            <Link to={createPageUrl("Goals?plan=week")}>
                                 <Button variant="outline" size="sm">
                                     Create Schedule
                                 </Button>

@@ -2518,6 +2518,169 @@ rows on only one side makes every delta correctly absent, and the one state the
 layout has to survive is the one with a movement chip in it. Both themes, and
 at 390.
 
+## Four more dead links, three of them on the event bus
+
+**"Check the whole site for other dead deep links."** The `?tab=spaced` class
+generalises two ways — any param a link emits that the destination never
+reads, and any *event* fired that nothing listens for — so both were swept
+tree-wide rather than by reading the files that looked likely.
+
+**THE QUERY SWEEP CAME BACK ALMOST CLEAN**, which is worth recording because
+it is the answer. All eight `?tool=` ids `aceKnowledge` links to are real;
+`Study?subject=` and `?topic=` are read by `SpacedRepetition` and `ExamMode`,
+which are the components the page renders; every `createPageUrl` names a real
+page; `/forgot-password` is routed. One genuine hit — `Goals?tab=planner`,
+where Goals reads `?plan=` and has never read `?tab=` — and it is in
+`TodaysTimetable`, which **has no importers**. Repointed anyway, and the file
+now says at the top that nothing mounts it, so the next session decides rather
+than re-auditing.
+
+**THE EVENT BUS IS WHERE THEY WERE.** A `dispatchEvent` with no listener is
+the same failure reached through a different mechanism, and it is quieter:
+there is no URL to look at, no page to land on wrong, and nothing to notice.
+
+- **`startFlashcardReview` → `triggerDeckReview` WAS A RELAY WITH NOTHING ON
+  THE FAR END.** The dashboard's deck reminders navigated to /Study, waited
+  **500ms** and fired the first; Study heard it, switched tab, waited another
+  **300ms** and fired the second — which no component in the tree has ever
+  listened for. So "review this deck" opened the Study page and the deck never
+  opened. Three hops, two timer races, and the last link unconnected.
+- **`studyTechniqueChanged`** fired on every Study tab change. No listener.
+- **`studySessionSaved`** fired on every saved pomodoro, with a comment saying
+  the Goals page would "pick up new study time instantly". Goals never
+  listened, and neither did anything else.
+
+The relay is replaced by a LINK: `?tab=spaced_repetition&subject=`, which
+`SpacedRepetition` has read the whole time and whose own comment states the
+rule the events broke — *"a deep link that filters invisibly is a page that
+looks like it has lost half your decks."* One navigation, no timers, and it
+lands in the control the student can see and clear. The other two are deleted.
+
+`reachable.test.mjs` scans for the shape now: every `CustomEvent` dispatched
+must be one something listens for. Verified by putting one back.
+
+## Progress: a trajectory, a subject, and cards only where you press
+
+**"Make Progress more aesthetic and feel more high utility."** Four changes,
+and the first two are the ones that matter.
+
+### A PAGE ABOUT MOVEMENT HAD NO TRAJECTORY
+
+Every figure was a point reading with one movement chip beside it. `Spark`
+draws the headline's own quantity across the window, from `dailySeries` over
+rows the report already holds — no query, nothing stored, and it cannot
+disagree with the number beside it because it is built from the same array.
+
+**IT SITS BESIDE THE FIGURE, NOT UNDER IT**, in the air the strip already had
+to the right of a four-character number, so it costs no height. `self-start`
+and not `self-center`: the column beside it is the figure, the verdict AND the
+stats run, so centring put the line **seventy measured pixels** below the
+number it belongs to — level with the sentence, reading as a chart of the
+prose.
+
+**A COUNT HAS REAL ZEROES. AN AVERAGE HAS GAPS.** Cards reviewed and minutes
+studied have a meaningful zero: a day with nothing in it is a day you did
+nothing. A quiz average does NOT — a day with no sit is a day with no
+information, and plotting it at the floor draws a rest day as having scored
+nothing. That is `Number(null) === 0` pointed at a chart, so `dailySeries`
+takes an `aggregate` argument and emits `null` for an empty day when there is
+one, and `Spark` BREAKS the path there rather than joining across it.
+
+**MISTAKES CARRIES NO LINE, AND THAT IS THE REFUSAL.** Nothing records WHEN a
+mistake became fixed — the state is derived from the ladder and a later sit —
+which is already why that headline carries no delta. A rising line under "3/9
+fixed" would be the same invented claim drawn larger. Asserted as an absence,
+because the obvious improvement is to give every tab one.
+
+It is a sparkline and must not become a chart: no axes, no gridlines, no
+tooltip, no legend. recharts is already in the bundle and is the wrong tool at
+28px — it mounts a ResizeObserver and a component tree to draw one polyline.
+
+### CARDS ARE FOR ACTIONS. EVERYTHING ELSE IS A RULED SECTION
+
+Measured on the render: **six `card-soft` boxes per tab** — the outstanding-work
+rows, the figure strip and every panel, all the same object at the same weight.
+So nothing on screen said which of them could be PRESSED, which is the
+"nineteen identical boxes" failure the console section records, on the page
+whose own rework had just established that the action outranks the analytics.
+
+One rule now carries the hierarchy: **a bordered, elevated box is something
+you do; a heading with a rule under it is something you read.** The queue rows
+keep `card-soft on-table` and are the only thing on a tab that has it, so they
+lead by construction rather than by being bigger. The rule does the job the
+border was doing — it TERMINATES the band, so the space beside a two-row list
+is margin somebody chose, which is the Quizzes-shelf idiom.
+
+### A BAND, NOT A THIRD ROOM
+
+`.floor` and `.console` scope their own palettes, and Progress deliberately
+does not get one: it is a core screen a student passes through rather than a
+destination, and a third palette is a third set of silent failures to guard —
+a misspelled token inherits, a token used outside its class is blank, the
+class going missing blanks all of them. What it gets is a GROUND. The eyebrow,
+the tab bar and the controls sit on `--secondary` with a rule under them, so
+the chrome is visibly chrome and the report starts on the page's own surface.
+Identity for one token and nothing to keep in sync.
+
+### ONE SUBJECT, ACROSS EVERY TAB
+
+Every figure was whole-account, and the question a student has in the week
+before a SAC is about ONE subject. All four reports already group by subject
+internally; `sliceBySubject` is what exposes it.
+
+**IT SLICES THE INPUTS, NOT THE REPORTS**, and that is what keeps a tab
+coherent. The action rows come out of `studyQueue`, which takes the same
+arrays — so filtering once means the work, the figure, the line and every
+panel are about the same subject and cannot disagree. A subject threaded into
+the four builders alone would leave the rows at the top talking about the
+whole account three inches above a figure that is not: the "two surfaces
+answer one question" failure, built in on purpose.
+
+- **An ATTEMPT carries no subject of its own.** It is reached through its quiz,
+  so the quizzes are sliced first and the attempts matched against what
+  survives. An attempt whose quiz was DELETED is dropped from a subject view
+  and kept by "All subjects" — the account-wide average still counts it, which
+  is the rule `quizDeck` keeps, and there is no honest way to say which
+  subject it was.
+- **The list is off the ROWS, not off `user_subjects`.** A student who dropped
+  a subject still has its cards and its marks, and a filter that cannot reach
+  them hides their own work. Sorted by NAME rather than volume: a control
+  whose options move between visits is one nobody can learn.
+- **TODAY IS NEVER FILTERED.** It ranks all seven kinds against each other, so
+  narrowing it would hide a SAC on Friday because somebody was looking at
+  Legal. The control is not drawn there at all.
+- **Nor for one subject.** A filter with a single option is the single-tab
+  `Tabs` rule: nothing can be switched to.
+
+### THE SWEEP, AND WHAT IT SAID ABOUT THE GUARDS
+
+6000 → 3556 → **3297px** at 1100, and 3 sparklines where Mistakes correctly
+draws none. 22 injections against a green baseline, both `^FAIL` and the exit
+code observed.
+
+**THREE GUARDS PASSED WITH THE BUG IN, AND ALL THREE WERE PINNED TO SOURCE.**
+`if (false) { … MIN_SPAN … }` still contains the name; `runs.push(run)`
+survives after the loop with the gap-break deleted; and `workFor(tabQueue,`
+was found on one tab while another had reverted. That is mechanism-pinning
+again, so **the sparkline's two decisions are pure functions now**
+(`src/lib/spark.js`) and the test reads what they RETURN. In a `.js` and not
+inside `Spark.jsx`, because the test loader will not resolve a `.jsx` — the
+trap `xpRanks.js` was extracted out of `xpSystem.jsx` for, met again.
+
+**AND ONE GUARD REPORTED A DEFECT ON CORRECT CODE.** The "Today is never
+filtered" check sliced from `tab === "today"` to the next `</div>`, which runs
+straight past the ternary's `:` into the branch that SHOULD carry the filter.
+A false positive is the direction that gets a good guard deleted; it walks the
+ternary's own parens now. Sixth recorded time for *a span match is not a
+scan*.
+
+Two injections stayed silent and both were the test's fault, not the guard's:
+a COUNT window dropping its zero is masked by the `MIN_SPAN` branch unless the
+fixture is wide enough, and `dailySeries` skipping out-of-range rows is
+genuinely unobservable because the emit loop only walks `from…to` anyway —
+defence in depth, where an injection cannot change behaviour and therefore
+tests nothing.
+
 ## Progress: the action outranks the analytics, and two doors were dead
 
 **"In the progress there is a bunch of dead space, useless info and I still
@@ -6850,7 +7013,11 @@ somebody opening the pricing page and the gate in the same sitting.
   plus the other half a link scan cannot see — that the page still reads the
   query and applies it. `?tab=spaced` was not a technique id and `?tab=resit`
   was not a MistakeBank tab, so six links went somewhere plausible and wrong
-  with nothing anywhere reporting it. Draw the bar with
+  with nothing anywhere reporting it. **AND EVERY `CustomEvent` DISPATCHED IS
+  ONE SOMETHING LISTENS FOR** — the same failure on the event bus, where there
+  is no URL to look at: `startFlashcardReview` → `triggerDeckReview` was a
+  three-hop relay with two timer races and nothing on the far end, so "review
+  this deck" never opened one. Draw the bar with
   `scripts/_floorProbe.jsx?v=reach`
 - `src/components/ai_tools/Console.jsx` + `src/index.css` `.console` /
   `.dark .console` + `src/lib/consoleInk.test.mjs` — the app's SECOND room: ~12
@@ -6896,8 +7063,9 @@ somebody opening the pricing page and the gate in the same sitting.
   inked apart. A to-do list with no done pile gets shorter the better somebody
   does, which made a good week look like a shorter list of failings
 - `src/lib/progressReport.js` + `progressReport.test.mjs`,
-  `src/components/progress/` (`ProgressTabs`, `PeriodSwitch`, `ReportStrip`,
-  `FeatureWork`, `MoreDetail`, `FeatureTabs`, `BarList`, `Panel`),
+  `src/components/progress/` (`ProgressTabs`, `PeriodSwitch`, `SubjectSwitch`,
+  `ReportStrip`, `Spark`, `FeatureWork`, `MoreDetail`, `FeatureTabs`,
+  `BarList`, `Panel`) + `src/lib/spark.js`,
   `src/pages/Review.jsx` — Progress as a
   REPORT in five tabs, one per feature: Today · Cards · Quizzes · Mistakes ·
   Hours. Every tab is one headline, its movement against the student's OWN
@@ -6911,7 +7079,18 @@ somebody opening the pricing page and the gate in the same sitting.
   because the action outranks the analytics; every bar with an exact
   destination is a LINK and the ones without stay flat; and the methodology
   half is behind `MoreDetail`. `ReportHead` is deleted — `ReportStrip` is 131px
-  against its 252. Draw it with `scripts/_floorProbe.jsx?v=report`, which is also
+  against its 252. **A CARD MEANS SOMETHING YOU PRESS**: the work rows keep
+  `card-soft` and are the only thing on a tab that does, so `Panel` and the
+  strip are ruled sections on the page ground with a `--secondary` band behind
+  the chrome. `Spark` draws the headline's own quantity (`dailySeries`), beside
+  the figure rather than under it, and BREAKS the line on a gap rather than
+  plotting a rest day as a zero — Mistakes carries none, because nothing
+  timestamps a fix. `src/lib/spark.js` holds its two decisions as pure
+  functions, in a `.js` because the test loader cannot resolve a `.jsx` and
+  because a source scan passed with both bugs in. `subjectsIn` /
+  `sliceBySubject` narrow the INPUTS, so a tab's rows, figure, line and panels
+  are one subject and cannot disagree; Today is never filtered. Draw it with
+  `scripts/_floorProbe.jsx?v=report`, which is also
   the only place the tab bar can be measured at 360 — "Mistakes" clipped there
 - `src/lib/ranked.js` `BOARDS` / `boardsFor` + `src/lib/boardMovement.js` +
   `rankedBoards.test.mjs` — the three boards, the ERA that decides which tab

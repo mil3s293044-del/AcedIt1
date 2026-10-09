@@ -11,6 +11,19 @@
  * 2-up and it grew. The figure, the chip and the label share a baseline now
  * and the stats are an inline run, which is about 110px for the same content.
  *
+ * ─── AND IT IS NO LONGER A CARD ─────────────────────────────────────────────
+ * A bordered, elevated box on this page now means ONE thing: something you
+ * press. The strip is the headline reading, so it sits on the page ground
+ * with the band behind it doing the separating — see `Panel`, which made the
+ * same move for the same reason.
+ *
+ * ─── THE LINE IS THE HEADLINE'S OWN QUANTITY ────────────────────────────────
+ * `series` plots exactly the figure printed beside it, out of `dailySeries`,
+ * so the two cannot disagree. `percent` is what tells the sparkline the value
+ * is an AVERAGE rather than a count — which decides whether a day with no
+ * rows is a zero or a gap. Mistakes passes neither: nothing records WHEN a
+ * mistake became fixed, so that tab has no honest line and draws none.
+ *
  * ─── THE ACTION IS NOT IN HERE ANY MORE ─────────────────────────────────────
  * It used to carry a `Door` in its top-right corner, which is the smallest and
  * least pressable form a primary action can take. The work this feature is
@@ -34,6 +47,7 @@
 import React from "react";
 import { motion } from "framer-motion";
 import { ArrowDownRight, ArrowUpRight, Minus } from "lucide-react";
+import Spark from "@/components/progress/Spark";
 
 const TONE = {
     good: "text-primary",
@@ -62,10 +76,11 @@ export function Delta({ delta, suffix = "", display, invert = false }) {
 
 export default function ReportStrip({
     value, suffix = "", label, delta, deltaSuffix = "", deltaDisplay, note, verdict, stats = [], action,
+    series = null, percent = false, tone = "primary",
 }) {
     return (
         <motion.section initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }}
-            className="card-soft on-table px-5 py-4">
+            className="pb-1">
 
             <div className="flex items-start justify-between gap-4">
                 <div className="min-w-0 flex-1">
@@ -98,7 +113,7 @@ export default function ReportStrip({
                         them; read left to right they are the one line that says
                         what the headline is made of. */}
                     {stats.length > 0 && (
-                        <p className="mt-2.5 flex flex-wrap items-baseline gap-x-3.5 gap-y-1
+                        <p className="mt-3 flex flex-wrap items-baseline gap-x-3.5 gap-y-1
                             text-xs text-muted-foreground">
                             {stats.map((s) => (
                                 <span key={s.label}>
@@ -112,6 +127,19 @@ export default function ReportStrip({
                         </p>
                     )}
                 </div>
+                {/* ─── THE LINE SITS BESIDE THE FIGURE ───────────────────
+                    Not under it: a sparkline below the number reads as a
+                    second row of content and pushes the supporting figures
+                    down, and the whole point of this strip is that it is 131px
+                    rather than 252. Beside, it uses the air the old card had
+                    to the right of a four-character number, so it costs no
+                    height at all. Hidden below `sm`, where a phone column has
+                    no air to spend and the figure has to lead alone. */}
+                {series?.length > 0 && (
+                    <div className="hidden sm:block flex-shrink-0 w-32 lg:w-44 self-start mt-1.5">
+                        <Spark series={series} percent={percent} tone={tone} />
+                    </div>
+                )}
                 {action && <div className="flex-shrink-0">{action}</div>}
             </div>
         </motion.section>
