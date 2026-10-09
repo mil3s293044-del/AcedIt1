@@ -8,8 +8,13 @@
  */
 import assert from "node:assert/strict";
 import {
-    markSplit, coverage, subjectStats, subjectLead, SOON_DAYS,
+    markSplit, coverage, subjectStats, subjectLead,
 } from "@/lib/subjectHub";
+// SOON_DAYS comes from its owner now. It was declared in BOTH modules at the
+// same value with nothing importing either, and the queue and this shelf are
+// the two surfaces meant to print the SAME lead — so a drift would have one
+// calling a SAC soon while the other did not.
+import { SOON_DAYS } from "@/lib/studyQueue";
 
 let passed = 0;
 const check = (name, fn) => {

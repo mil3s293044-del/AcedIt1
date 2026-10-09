@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from "react";
+import { priceLabel } from "@/lib/pricing";
 import { base44 } from "@/api/base44Client";
 import { motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
@@ -38,7 +39,7 @@ const pricingPlans = [
     {
         tier: "premium",
         name: "Premium",
-        price: "$5",
+        price: priceLabel(),
         priceId: import.meta.env.VITE_STRIPE_PRICE_PREMIUM,
         description: "Everything unlocked — for serious VCE study.",
         icon: Crown,
@@ -76,7 +77,7 @@ const COMPARISON = [
 const FAQS = [
     { q: "Can I cancel anytime?", a: "Yes — cancel any time from the Manage Subscription portal. Your access stays active until the end of your billing period." },
     { q: "What happens to my credits if I upgrade?", a: "You get daily AI access immediately, so you never have to wait for credits to reset." },
-    { q: "Is there a student discount?", a: "The price is already set for students — $5/week for full access to every AI study tool." },
+    { q: "Is there a student discount?", a: `The price is already set for students — ${priceLabel()}/week for full access to every AI study tool.` },
     { q: "What payment methods do you accept?", a: "All major credit and debit cards, plus digital wallets, through our secure Stripe checkout." },
 ];
 

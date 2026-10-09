@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+import { priceLabel, TRIAL_DAYS } from "@/lib/pricing";
 import { base44 } from "@/api/base44Client";
 import { useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
@@ -98,7 +99,7 @@ export default function Checkout() {
                                     <div>
                                         <p className="text-muted-foreground text-sm mb-1">Weekly Subscription</p>
                                         <div className="flex items-baseline gap-2">
-                                            <span className="text-5xl font-display font-extrabold text-foreground">$5</span>
+                                            <span className="text-5xl font-display font-extrabold text-foreground">{priceLabel()}</span>
                                             <span className="text-xl text-muted-foreground">AUD</span>
                                         </div>
                                         <p className="text-sm text-muted-foreground mt-1">per week</p>
@@ -125,7 +126,7 @@ export default function Checkout() {
                                 <div className="pt-4 border-t border-border space-y-2">
                                     <div className="flex justify-between text-sm">
                                         <span className="text-muted-foreground">Subtotal</span>
-                                        <span className="font-semibold text-foreground">$5.00 AUD</span>
+                                        <span className="font-semibold text-foreground">{priceLabel({ cents: true, currency: true })}</span>
                                     </div>
                                     <div className="flex justify-between text-sm">
                                         <span className="text-muted-foreground">Tax (GST)</span>
@@ -133,7 +134,7 @@ export default function Checkout() {
                                     </div>
                                     <div className="flex justify-between text-lg font-bold pt-2 border-t border-border">
                                         <span className="text-foreground">Total due today</span>
-                                        <span className="text-primary">$5.00 AUD</span>
+                                        <span className="text-primary">{priceLabel({ cents: true, currency: true })}</span>
                                     </div>
                                 </div>
                             </CardContent>
@@ -146,7 +147,7 @@ export default function Checkout() {
                                 <div>
                                     <h4 className="font-bold text-foreground mb-1">Money-Back Guarantee</h4>
                                     <p className="text-sm text-muted-foreground">
-                                        Cancel anytime within 7 days for a full refund. No questions asked.
+                                        Cancel anytime within {TRIAL_DAYS} days for a full refund. No questions asked.
                                     </p>
                                 </div>
                             </div>

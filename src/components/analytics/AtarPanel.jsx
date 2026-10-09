@@ -15,6 +15,7 @@ import React from "react";
 import { motion } from "framer-motion";
 import { GraduationCap, Info, TrendingUp, TrendingDown, Minus } from "lucide-react";
 import { atarBandOf, planningEvidence } from "@/lib/atarBands";
+import { ATAR_TARGETS } from "@/lib/atarLift";
 
 const fmtMins = (m) => {
     if (!m) return "0m";
@@ -33,9 +34,9 @@ const COMPONENTS = [
             return bits.join(" · ") || "no quizzes or cards yet";
         },
     },
-    { key: "consistency", short: "c", label: "Consistency", bar: "bg-streak", evidence: (c) => `${c.study_days ?? 0} of 20 days` },
-    { key: "effort", short: "e", label: "Effort", bar: "bg-xp", evidence: (c) => `${fmtMins(c.minutes)} of ~20h` },
-    { key: "breadth", short: "b", label: "Breadth", bar: "bg-chart-3", evidence: (c) => `${Math.min(c.technique_families ?? 0, c.technique_target ?? 5)} of ${c.technique_target ?? 5} techniques` },
+    { key: "consistency", short: "c", label: "Consistency", bar: "bg-streak", evidence: (c) => `${c.study_days ?? 0} of ${c.consistency_target ?? ATAR_TARGETS.consistency_days} days` },
+    { key: "effort", short: "e", label: "Effort", bar: "bg-xp", evidence: (c) => `${fmtMins(c.minutes)} of ~${fmtMins(c.effort_target ?? ATAR_TARGETS.effort_minutes)}` },
+    { key: "breadth", short: "b", label: "Breadth", bar: "bg-chart-3", evidence: (c) => `${Math.min(c.technique_families ?? 0, c.technique_target ?? ATAR_TARGETS.technique_families)} of ${c.technique_target ?? ATAR_TARGETS.technique_families} techniques` },
     {
         key: "planning", short: "p", label: "Planning", bar: "bg-primary",
         evidence: (c) => planningEvidence(c),
@@ -62,6 +63,9 @@ export default function AtarPanel({ atar, band, components, history = [], goalAt
     // `ranked === false` means the score is live but still provisional.
     const ranked = comps.ranked !== false;
     const daysNeeded = Math.max(0, Number(comps.days_needed) || 0);
+    // Days actually studied, read rather than reconstructed. A real 0 and an
+    // absent field both render honestly here as 0 of the target.
+    const daysDone = Math.max(0, Number(comps.study_days) || 0);
     const series = Array.isArray(history) ? history.filter((h) => h && typeof h.a === "number") : [];
     const first = series[0];
     const prev = series.length > 1 ? series[series.length - 2] : null;
@@ -110,12 +114,18 @@ export default function AtarPanel({ atar, band, components, history = [], goalAt
                             ? ` once you've studied on ${daysNeeded} more day${daysNeeded === 1 ? "" : "s"}.`
                             : " from your next session."}
                     </p>
+                    {/* The ranking floor is the SERVER's (ATAR_MIN_STUDY_DAYS) and
+                        this printed a literal 3 for it, three times on two lines,
+                        while reconstructing the days done as `3 - daysNeeded`. Both
+                        halves are already in the payload: `study_days` is the count
+                        and `days_needed` is the shortfall, so the target is their
+                        sum and nothing here has to know the number. */}
                     <div className="flex items-center gap-1.5 mt-3">
-                        {[0, 1, 2].map(i => (
+                        {Array.from({ length: Math.max(1, daysDone + daysNeeded) }, (_, i) => (
                             <span key={i} className={`h-1.5 flex-1 rounded-full ${
-                                i < (3 - daysNeeded) ? "bg-chart-4" : "bg-chart-4/20"}`} />
+                                i < daysDone ? "bg-chart-4" : "bg-chart-4/20"}`} />
                         ))}
-                        <span className="text-[11px] font-bold text-chart-4 ml-1 tabular-nums">{3 - daysNeeded}/3 days</span>
+                        <span className="text-[11px] font-bold text-chart-4 ml-1 tabular-nums">{daysDone}/{Math.max(1, daysDone + daysNeeded)} days</span>
                     </div>
                 </div>
             )}

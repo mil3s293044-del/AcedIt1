@@ -23,11 +23,15 @@
  * is wrong can see what they would change.
  */
 import React from "react";
+import { PREMIUM_WEEKLY_AUD, TUTOR_HOURLY_AUD } from "@/lib/pricing";
 import { motion, useReducedMotion } from "framer-motion";
 
 const WEEKS = 40;
-const TUTOR_HOURLY = 90;
-const ACEDIT_WEEKLY = 5;
+// Both figures come from @/lib/pricing. They were declared here AND in
+// Onboarding.jsx at the same values, with nothing importing either — two
+// copies of a price, on the two screens that print it side by side.
+const TUTOR_HOURLY = TUTOR_HOURLY_AUD;
+const ACEDIT_WEEKLY = PREMIUM_WEEKLY_AUD;
 
 const W = 320, H = 168, PAD_L = 40, PAD_R = 12, PAD_T = 14, PAD_B = 26;
 const plotW = W - PAD_L - PAD_R;

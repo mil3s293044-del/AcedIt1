@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from "react";
+import { TUTOR_HOURLY_AUD, TRIAL_DAYS, priceLabel } from "@/lib/pricing";
 import { motion, useScroll, useReducedMotion } from "framer-motion";
 import { trackStartTrial } from "@/lib/analytics";
 import BrandMark from "@/components/shared/BrandMark";
@@ -76,7 +77,7 @@ const SUBJECTS = [
  */
 const STATS = [
   { num: "Every", label: "VCE subject, not just the big ones" },
-  { num: "$5", label: "a week, not $90 an hour" },
+  { num: priceLabel(), label: `a week, not $${TUTOR_HOURLY_AUD} an hour` },
   { num: "2am", label: "open when you actually study" },
 ];
 
@@ -312,7 +313,7 @@ export default function Landing() {
             transition={{ duration: 0.7, delay: 0.6 }}
             className="mt-7 text-xs text-[#0D1626]/45 tracking-wide"
           >
-            7 days free  ·  No card required  ·  Built for Year 10 to 12
+            {TRIAL_DAYS} days free  ·  No card required  ·  Built for Year 10 to 12
           </motion.p>
 
         </div>
@@ -860,7 +861,7 @@ export default function Landing() {
             className="text-white/60 text-lg max-w-xl mx-auto mb-12"
           >
             Full access to every tool, every subject, every feature. Cancel
-            before day 7 and you pay nothing.
+            before day {TRIAL_DAYS} and you pay nothing.
           </motion.p>
 
           <motion.div
@@ -880,7 +881,7 @@ export default function Landing() {
             <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-6 mb-8">
               <div>
                 <div className="inline-block text-[10px] font-bold tracking-wide uppercase text-primary bg-primary/15 border border-primary/30 px-2.5 py-1 rounded-full mb-4">
-                  7-day free trial
+                  {TRIAL_DAYS}-day free trial
                 </div>
                 <h3 className="font-display font-extrabold text-3xl tracking-tight mb-1">
                   AcedIt Premium
@@ -892,7 +893,7 @@ export default function Landing() {
                   Free
                 </div>
                 <div className="text-white/55 text-sm mt-2">
-                  then $5 / week
+                  then {priceLabel()} / week
                 </div>
               </div>
             </div>
@@ -950,7 +951,7 @@ export default function Landing() {
             transition={{ ...fadeUp.transition, delay: 0.2 }}
             className="mt-8 text-xs text-white/45"
           >
-            Melbourne tutors charge $60 to $120 an hour. AcedIt is $5 a week.
+            Melbourne tutors charge $60 to $120 an hour. AcedIt is {priceLabel()} a week.
           </motion.p>
         </div>
       </section>
@@ -990,7 +991,7 @@ export default function Landing() {
                 },
                 {
                   q: "Is this worth it for my kid? (the parent question)",
-                  a: "Most Melbourne tutors charge $60 to $120 an hour. AcedIt is $5 a week, so a whole month costs less than one session, and it is there on the Sunday night before a SAC when a tutor is not.",
+                  a: `Most Melbourne tutors charge $60 to $120 an hour. AcedIt is ${priceLabel()} a week, so a whole month costs less than one session, and it is there on the Sunday night before a SAC when a tutor is not.`,
                 },
                 {
                   q: "How do I cancel?",

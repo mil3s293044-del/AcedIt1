@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from "react";
+import { priceLabel } from "@/lib/pricing";
 import { base44 } from "@/api/base44Client";
 import { motion } from "framer-motion";
 import { Card, CardContent } from "@/components/ui/card";
@@ -167,7 +168,7 @@ export default function Premium() {
                                         <Crown className="w-8 h-8 text-white" />
                                     </div>
                                     <div className="text-left">
-                                        <h3 className="text-3xl font-bold text-foreground">$5 AUD</h3>
+                                        <h3 className="text-3xl font-bold text-foreground">{priceLabel({ currency: true })}</h3>
                                         <p className="text-muted-foreground">per week</p>
                                     </div>
                                 </div>

@@ -42,6 +42,7 @@
 // ════════════════════════════════════════════════════════════════════════════
 
 import React, { useState, useEffect, useMemo } from "react";
+import { TUTOR_HOURLY_AUD, priceLabel, weeksPerTutorHour } from "@/lib/pricing";
 import { createPortal } from "react-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { useNavigate } from "react-router-dom";
@@ -83,8 +84,11 @@ function isPreVceYear(yearLevel) {
 // now rather than on a screen of its own. A Melbourne VCE tutor is $80 to $90
 // an hour; the number is stated as the anchor it is, next to the plan picker,
 // at the moment someone is choosing.
-const TUTOR_HOURLY = 90;
-const ACEDIT_WEEKLY = 5;
+// Both figures live in @/lib/pricing — they were declared here AND in
+// CostGap.jsx at the same values with nothing importing either, which is two
+// copies of a price on the two screens that print it. The weeks-per-hour
+// ratio is derived there too rather than divided again here.
+const TUTOR_HOURLY = TUTOR_HOURLY_AUD;
 
 /**
  * Where a step's actions get rendered.
@@ -1147,7 +1151,7 @@ function Step6Signin({ answers, update }) {
                 <p className="font-display font-extrabold text-foreground text-base lg:text-lg leading-snug">
                     One hour with a tutor pays for{" "}
                     <span className="text-primary">
-                        {Math.round(TUTOR_HOURLY / ACEDIT_WEEKLY)} weeks
+                        {weeksPerTutorHour()} weeks
                     </span>{" "}
                     of AcedIt.
                 </p>
@@ -1186,7 +1190,7 @@ function Step6Signin({ answers, update }) {
                             </span>
                         </div>
                         <p className="font-display font-extrabold text-foreground text-2xl leading-none">
-                            $5<span className="text-sm text-muted-foreground font-bold">/wk</span>
+                            {priceLabel()}<span className="text-sm text-muted-foreground font-bold">/wk</span>
                         </p>
                         <p className="text-[11px] text-muted-foreground mt-1.5 leading-snug">All AI tools, every subject</p>
                     </button>

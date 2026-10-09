@@ -36,6 +36,7 @@
  * see the difference without going back. They are the summary, not the pitch.
  */
 import React from "react";
+import { priceLabel } from "@/lib/pricing";
 import { motion, useReducedMotion } from "framer-motion";
 import { Check, Crown } from "lucide-react";
 import { handFrom, FanCard } from "./HandOfAnswers";
@@ -225,7 +226,7 @@ export default function TheReveal({ answers }) {
                         </span>
                         <p className="stat-label text-primary mb-1">Premium</p>
                         <p className="font-display font-extrabold text-foreground text-2xl leading-none mb-3">
-                            $5<span className="text-sm text-muted-foreground font-bold">/wk</span>
+                            {priceLabel()}<span className="text-sm text-muted-foreground font-bold">/wk</span>
                         </p>
                         <ul className="space-y-1.5 text-[12px] text-foreground leading-snug font-medium">
                             <li>Everything free, without the caps</li>

@@ -6704,6 +6704,173 @@ the banned-words list at the top of this file.
 Nothing here needed a test, because a test cannot read. What it needed was
 somebody opening the pricing page and the gate in the same sitting.
 
+## Where the numbers disagreed, the second sweep
+
+**"Now check the whole site for other inconsistent numbers."** The first sweep
+found five surfaces answering one question differently. This one swept the
+other shape — **a quantity written down twice with nothing importing either** —
+and the worst thing it found is not a disagreement between two screens. It is a
+disagreement between the copy and the CHARGE.
+
+### THE FREE TRIAL IS ADVERTISED EVERYWHERE AND IMPLEMENTED NOWHERE
+
+**`trial_active` and `trial_ends_at` are real columns, READ in four places and
+WRITTEN BY NOTHING.** `isPremium` treats a future `trial_ends_at` as premium,
+Layout expires it, /Paywall reads it. Nothing in the client or the server ever
+sets one. That is the `goal_study_score` shape — a column shipped since
+migration 0002 that nothing filled in — and the `SPACED_REP` shape — declared,
+labelled, checked nowhere — pointed at a PRICE.
+
+**AND THE ONE SCREEN THAT ASKS STRIPE FOR A TRIAL HAS NO INBOUND LINKS.**
+`stripeCheckout` passes `trial_period_days` only when a caller sends
+`trial_days`. Exactly one does: `/Paywall`. `grep -rn Paywall src/` finds the
+route, the lazy import, a TopNav label and two comments — **no link, no
+navigate, no button anywhere in the app.** Every reachable path to paying goes
+TopNav / TierUsagePill / UsageMeter / ChatWelcome / UnifiedChat → `/Subscription`
+→ `/Checkout`, and `/Premium` → `/Checkout`; `/Checkout` sends no `trial_days`,
+so `mode: "subscription"` with `payment_method_types: ["card"]` charges on the
+spot.
+
+So the same subscription is sold at two prices for week one — **$0 on a screen
+nobody can reach and $5 on the only one they can** — while the marketing site
+prints *"7 days free · No card required"*, a *"7-DAY FREE TRIAL"* badge, a
+*"Start free week"* button, *"Free — then $5 / week"* and *"Cancel before day 7
+and you pay nothing."* `/Checkout` adds *"Cancel anytime within 7 days for a
+full refund"*, and there is no refund path in the code at all.
+
+**THIS IS RECORDED AND NOT CLOSED, because which way to close it is a pricing
+decision rather than a bug fix.** Two coherent answers — `/Checkout` sends
+`trial_days: TRIAL_DAYS` like `/Paywall` does (one line, and what every surface
+already promises), or the trial copy comes down. The precedent in this file
+points hard at the first: the privacy section's own words are *"The fix was
+never to soften the policy. It was to make the product do what the policy
+claimed"*, and a published claim the product does not honour is misleading
+conduct under the ACL whatever else is true. **`pricing.test.mjs` pins all of
+it** — exactly one screen requests a trial and names which, the server still
+passes a requested trial through, checkout still collects a card, and
+`trial_ends_at` still has no writer. The day somebody closes it the suite says
+which half they closed.
+
+### `$5` WAS TYPED IN SEVENTEEN PLACES
+
+Across eleven files, with `TUTOR_HOURLY = 90` and `ACEDIT_WEEKLY = 5` each
+DECLARED TWICE at the same value and nothing importing either — CostGap.jsx and
+Onboarding.jsx, the two screens that print the comparison side by side. That is
+the AI tool count's own shape ("hand-written as three different numbers across
+five screens"), on the number a sixteen-year-old is CHARGED.
+
+`src/lib/pricing.js` is the one copy and `priceLabel()` is the one printer,
+because the two formats in use are a decision about a RECEIPT versus a HEADLINE
+and not something each page should re-make — a total due has to show the cents
+or it does not read as a charge. `weeksPerTutorHour()` replaces a division done
+inline. **The Stripe price id is deliberately NOT here**: Stripe is what
+actually charges, so this module states what the COPY must say and cannot
+promise the two agree.
+
+Two false positives the price scan had to learn, both found by running it:
+
+- **`$5$` IS KATEX, NOT MONEY.** LoadingQuiz answers "Solve $2x = 10$" with the
+  option `"$5$"`. A trailing `$` is the tell.
+- **A SEVEN-DAY STREAK IS NOT A SEVEN-DAY TRIAL.** The first trial scan matched
+  `\b7[- ]day` and reported five files, FOUR of them correct code about
+  something else — a 7-day streak achievement, a 7-day onboarding staleness
+  window, cards falling out of reach within 7 days, the dashboard's run of
+  seven. A false positive is the direction that gets a good guard deleted, and
+  the noise is exactly what hides the fifth file, which really did still carry
+  four trial figures. It matches trial PHRASINGS now, "day 7" among them.
+
+### `atarLift.js` SAID "THE SERVER'S CURVE, EXACTLY" AND WAS NOT
+
+The flagship number, and the drift was one line. The server quantises:
+
+```js
+const raw  = 30 + 69.95 * Math.pow(clamp(composite), 0.8);
+const atar = Math.min(99.95, Math.round(raw / 0.05) * 0.05);   // ← the step
+return { atar: Number(atar.toFixed(2)), … };
+```
+
+The client returned the raw curve. **The score moves in steps of 0.05 and the
+client's model was continuous**, so every "+0.0x ATAR" the app offers as a
+reason to do something — Today's Play's payoff rail, `StandingRail`'s
+`bestLever`, Ranked's five component doors — was differenced off a curve the
+stored score does not follow. A student told ten points of consistency is worth
++0.03 does the work and watches the score move 0.05 or not at all. **That is
+the whole argument for using this differenced model over XP: `liftFor`'s own
+note says the payoff is ATAR points "so it is checkable", and it was not.**
+
+Quantising both ends also makes `liftFor`'s existing rule true rather than
+aspirational — a gain that cannot move the stored score now returns 0.00, and
+the rail already drops a row whose figure is not real.
+
+`mirrors.test.mjs` pinned the level curve and the ATAR BANDS and not the thing
+they band. It now lifts the curve out of `computeAcedItATAR` and RUNS it across
+a thousand composites plus the out-of-range clamps, asserts every value the
+client can return is a multiple of 0.05, and asserts the same of every
+published lift.
+
+### THE SCORE'S OWN DENOMINATORS WERE TYPED INTO THE COPY
+
+Breadth already shipped its target in the payload (`technique_target`) and both
+panels read it. Consistency and effort did not, so `AtarPanel.jsx` AND
+`Ranked.jsx` each printed **"of 20 days"** and **"of ~20h"** — four hard figures
+about the one number the whole app is standardised around, against a bare
+`/ 20` and a bare `1200` inside the server's arithmetic. They are
+`CONSISTENCY_TARGET_DAYS` and `EFFORT_TARGET_MINUTES` now, published as
+`consistency_target` / `effort_target`, and `ATAR_TARGETS` in atarLift.js is the
+fallback for a components blob written before they existed — a copy, but a
+PINNED one, which is the difference.
+
+**AND THE RANKING FLOOR WAS A LITERAL 3, THREE TIMES ON TWO LINES.** The
+provisional strip drew `[0, 1, 2]` dots, filled `3 - daysNeeded` of them and
+printed `{3 - daysNeeded}/3 days` — reconstructing the days studied from a
+constant, while the payload carries `study_days` outright beside
+`days_needed`. The target is their sum, so nothing on the client has to know
+the server's `ATAR_MIN_STUDY_DAYS` at all.
+
+`scripts/_floorProbe.jsx?v=atar` mounts the REAL panel in both states, because
+`?v=ranked` beside it restates the bars rather than drawing them — a stand-in
+measuring itself, which is the lesson `ProgressTabs` records. A real account is
+only ever in one of the two states at a time.
+
+### TWO MORE MIRRORS, AND THE DRIFT COLUMN WAS ALL FALSE POSITIVES
+
+- **`SOON_DAYS = 14`** in `studyQueue.js` AND `subjectHub.js`. Those are the two
+  surfaces this file already requires to print the SAME lead ("two surfaces
+  answering 'what next' with different sentences is how a student stops
+  believing either"), so a drift would have one calling a SAC soon while the
+  other did not. `toolBrief` already read the queue's copy; subjectHub does now.
+- **`ITEMS_PER_PAGE = 22`** in CheatSheetMaker (which SIZES THE ASK) and
+  CheatSheetArtifact (which PAGINATES THE ANSWER). `src/lib/cheatSheet.js` owns
+  it with `fitCount`/`pagesFor`, so the generator cannot ask for a sheet's worth
+  of items the renderer then lays out differently.
+- **`server.mjs` said free users get "3 lifetime each" and named two of three
+  features**, directly above `TIER_FREE_CAPS = { quiz_ai_gen: 5, quiz_ai_mark:
+  5, flashcard_ai_gen: 5 }`. A comment, so nothing could catch it.
+
+Nine names came back with DIFFERENT values and **every one is a false
+positive** — `STEP`, `DROP`, `LEAN`, `HOLD_MS`, `SETTLE_MS`, `QUIET_MS`,
+`BLINK_MIN`, `CONFIDENT`, `MIN_SPAN`: generic local animation timings and
+geometry in unrelated components, sharing a name and nothing else. `MIN_SPAN`
+is the clearest — a price-probability span in PriceChart and a count span in
+spark.js. **The signal was never in the names that disagree. It was in the ones
+that AGREE and are written down twice**, because those are the pairs that have
+not drifted YET.
+
+### Checked and clean
+
+Worth recording so the next sweep does not redo it: the trial length is 7
+everywhere; the free caps (5/5/5) match `TIER_FREE_CAPS` and the Subscription
+page's "5 lifetime" rows; the chip prices quoted in `tierAccess.js`'s header
+match `chips.js`; the weekly cost ceiling mirror is already annotated and
+correct; `TOOL_COUNT` derives; the catalogue is 33 subjects and the examiner
+profiles are 35, which are two different things and both right.
+
+**`git checkout --` IS NOT AN UNDO, FOR THE SECOND SWEEP RUNNING.** One
+injection restored a file that way and silently took this release's edits to it
+with it — the baseline then reported red and the cause was the harness, not the
+code. Snapshot to a scratch copy and restore from that. Sixteen injections, all
+of them verified to bite, with the baseline green either side.
+
 ## Voice / UX guardrails (from prior decisions)
 
 - **Tone**: chill motivational coach. Never cocky.
@@ -6943,8 +7110,22 @@ somebody opening the pricing page and the gate in the same sitting.
   against what NODE can resolve rather than what vite can. An `@/` alias in a
   shared module builds, lints, tests green and crashes the deploy on boot
 - `src/lib/mirrors.test.mjs` — the client/server copies nothing was checking:
-  the level curve (`xpSystem.jsx` vs server.mjs) and the ATAR bands. Both sides
-  are parsed as text and RUN, so it compares behaviour rather than source
+  the level curve (`xpSystem.jsx` vs server.mjs), the ATAR bands, and **the
+  ATAR CURVE ITSELF**, which said "the server's curve, exactly" and had left
+  out the 0.05 step — so every "+0.0x ATAR" the app publishes as checkable was
+  off a curve the stored score does not follow. Also the three component
+  targets, after two of them turned out to be typed into the copy as "of 20
+  days" and "of ~20h" in both ATAR panels. Both sides are parsed as text and
+  RUN, so it compares behaviour rather than source
+- `src/lib/pricing.js` + `pricing.test.mjs` — the price, once. `$5` was typed in
+  seventeen places across eleven files and `TUTOR_HOURLY`/`ACEDIT_WEEKLY` were
+  each declared twice; `priceLabel()` is the one printer. It also PINS the
+  trial finding rather than closing it: `trial_ends_at` has no writer anywhere,
+  /Paywall is the only screen that asks Stripe for one and has no inbound
+  links, and every reachable route to paying charges on the spot — so the week
+  the marketing site gives away is sold at $5
+- `src/lib/cheatSheet.js` — how much fits on a printed sheet. The Maker sizes
+  its ask off it and the Artifact paginates off it; they had a copy each
 - `src/lib/quizDeck.js` — `sitScores` / `averageScore`: the ONE quiz average,
   with the three corrections that were each applied by a different subset of
   seven surfaces. The test scans for a fourth hand-rolled mean

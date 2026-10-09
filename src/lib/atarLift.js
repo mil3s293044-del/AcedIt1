@@ -26,13 +26,49 @@ export const ATAR_WEIGHTS = {
 
 export const COMPONENT_KEYS = Object.keys(ATAR_WEIGHTS);
 
+/**
+ * What full marks on a component takes, for the rows that print "N of M".
+ *
+ * The server SENDS these on `atar_components` (`consistency_target`,
+ * `effort_target`, `technique_target`) and that is what a panel should read.
+ * This is the fallback for a components blob computed before it did — the shape
+ * breadth already used (`c.technique_target ?? 5`), extended to the two that
+ * had their denominators typed straight into the copy instead: "of 20 days" and
+ * "of ~20h", in AtarPanel.jsx AND Ranked.jsx, four hard figures about the one
+ * number the whole app is standardised around. `mirrors.test.mjs` pins all
+ * three against the server's own constants, so the fallback cannot go stale
+ * quietly — which is the difference between a copy and a mirror.
+ */
+export const ATAR_TARGETS = {
+    consistency_days: 20,
+    effort_minutes: 1200,
+    technique_families: 5,
+};
+
 const FLOOR = 30, SPAN = 69.95, CURVE = 0.8, CAP = 99.95;
+
+// THE SCORE MOVES IN STEPS OF 0.05, and this file said "the server's curve,
+// exactly" while leaving that out. The server quantises (`Math.round(raw /
+// 0.05) * 0.05`, then two decimal places) because that is the increment the
+// real scale uses; the client returned the raw curve. So every "+0.0x ATAR"
+// the app publishes — Today's Play's payoff rail, StandingRail's bestLever,
+// Ranked's five component doors — was differenced off a continuous curve while
+// the stored number it claims to predict is a stepped one. A student told ten
+// points of consistency is worth +0.03 did the work and watched the score move
+// 0.05 or not at all, which is the whole argument for using this differenced
+// model over XP in the first place: it is meant to be CHECKABLE.
+//
+// Quantising both ends also makes `liftFor`'s own rule true rather than
+// aspirational — a gain that cannot move the stored score now returns 0.00 and
+// the row is dropped, instead of printing a figure nothing can confirm.
+const STEP = 0.05;
 
 const clamp01 = (n) => Math.max(0, Math.min(1, n));
 
-/** The server's curve, exactly. */
+/** The server's curve, exactly — `mirrors.test.mjs` runs both and compares. */
 export function atarFromComposite(composite) {
-    return Math.min(CAP, FLOOR + SPAN * Math.pow(clamp01(composite), CURVE));
+    const raw = FLOOR + SPAN * Math.pow(clamp01(composite), CURVE);
+    return Number(Math.min(CAP, Math.round(raw / STEP) * STEP).toFixed(2));
 }
 
 /**

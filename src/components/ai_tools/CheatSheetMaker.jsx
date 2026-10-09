@@ -16,11 +16,13 @@ import LoadingQuiz from "@/components/shared/LoadingQuiz";
 import MarkdownMath from "@/components/shared/MarkdownMath";
 import { getExaminerPrompt } from "@/lib/subjectExaminerPrompts";
 import AceShuffle from "@/components/ace/AceShuffle";
+import { ITEMS_PER_PAGE, fitCount, pagesFor } from "@/lib/cheatSheet";
 
 // A tight A4 two-column cheat sheet holds ~22 short lines per page. The page
 // selector multiplies this to set how many items fill the sheet; the AI is
 // asked for a larger ranked pool so excluded items can be swapped for free.
-const ITEMS_PER_PAGE = 22;
+// The figure itself lives in @/lib/cheatSheet — the renderer paginates off the
+// same one, and two copies meant the ask and the layout could disagree.
 
 // Static class strings (Tailwind JIT-safe — literals live here, not built from
 // template variables).
@@ -122,11 +124,11 @@ export default function CheatSheetMaker() {
         try {
             const { directUrls, extracted } = await prepareSources();
 
-            const fitCount = pages * ITEMS_PER_PAGE;
+            const fits = fitCount(pages);
             // Generate a modest buffer of alternates beyond what fits, so there
             // are suggestions to swap in. A 2.2× pool meant up to ~144 items for
             // 3 pages — that huge JSON is what made generation crawl. Keep it tight.
-            const poolCount = fitCount + 12;
+            const poolCount = fits + 12;
             // Cap how much source text we send so a big upload doesn't balloon
             // the input (and latency/cost). Claude still reads attached PDFs.
             const sourceText = extracted ? extracted.slice(0, 12000) : "";
@@ -177,11 +179,11 @@ ${sourceText ? `\nEXTRACTED CONTENT:${sourceText}` : ""}`;
                 toast({ title: "Couldn't build a cheat sheet", description: "Try different or clearer material.", variant: "destructive" });
                 return;
             }
-            // Sort by importance (desc); top `fitCount` are on the sheet, rest pooled.
+            // Sort by importance (desc); the top `fit` are on the sheet, rest pooled.
             const sorted = raw
                 .map((it, i) => ({ ...it, id: `i-${i}`, importance: Number(it.importance) || 1, userExcluded: false }))
                 .sort((a, b) => b.importance - a.importance);
-            const fit = pages * ITEMS_PER_PAGE;
+            const fit = fitCount(pages);
             setItems(sorted.map((it, idx) => ({ ...it, status: idx < fit ? "in" : "out" })));
             setHasGenerated(true);
             recordStudyAndGetStreak().catch(() => {});
@@ -269,7 +271,7 @@ ${sourceText ? `\nEXTRACTED CONTENT:${sourceText}` : ""}`;
     const included = items.filter((it) => it.status === "in");
     const pool = items.filter((it) => it.status === "out");
     const sections = groupBySection(included);
-    const estPages = Math.max(1, Math.ceil(included.length / ITEMS_PER_PAGE));
+    const estPages = pagesFor(included.length);
     const overBudget = estPages > pages;
 
     return (

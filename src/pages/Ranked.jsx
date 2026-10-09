@@ -55,7 +55,7 @@ import {
     COMPONENT_MOVE, moveHref, boardsFor, boardById, fmtMins,
 } from "@/lib/ranked";
 import { movementMap } from "@/lib/boardMovement";
-import { liftFor } from "@/lib/atarLift";
+import { liftFor, ATAR_TARGETS } from "@/lib/atarLift";
 import AceTip from "@/components/ace/AceTip";
 import { planningEvidence } from "@/lib/atarBands";
 import { AceLoading } from "@/components/ace/AceShuffle";
@@ -81,11 +81,11 @@ const COMPONENT_META = [
           return bits.length ? bits.join(" · ") : "no quizzes or cards yet";
       } },
     { key: "consistency", label: "Consistency", hint: "Days showing up", bar: "bg-streak",
-      evidence: (c) => `${c.study_days ?? 0} of 20 days` },
+      evidence: (c) => `${c.study_days ?? 0} of ${c.consistency_target ?? ATAR_TARGETS.consistency_days} days` },
     { key: "effort", label: "Effort", hint: "Focused minutes", bar: "bg-xp",
-      evidence: (c) => `${fmtMins(c.minutes)} of ~20h` },
+      evidence: (c) => `${fmtMins(c.minutes)} of ~${fmtMins(c.effort_target ?? ATAR_TARGETS.effort_minutes)}` },
     { key: "breadth", label: "Breadth", hint: "Technique variety", bar: "bg-chart-3",
-      evidence: (c) => `${Math.min(c.technique_families ?? 0, c.technique_target ?? 5)} of ${c.technique_target ?? 5} techniques` },
+      evidence: (c) => `${Math.min(c.technique_families ?? 0, c.technique_target ?? ATAR_TARGETS.technique_families)} of ${c.technique_target ?? ATAR_TARGETS.technique_families} techniques` },
     { key: "planning", label: "Planning", hint: "Goals, blocks, prep and intents kept", bar: "bg-primary",
       evidence: (c) => planningEvidence(c) },
 ];

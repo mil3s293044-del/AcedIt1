@@ -87,6 +87,7 @@ import { ScopeSwitch, BoardSwitch } from "@/components/ranked/BoardControls";
 import { movementMap } from "@/lib/boardMovement";
 import { boardsFor } from "@/lib/ranked";
 import { liftFor } from "@/lib/atarLift";
+import AtarPanel from "@/components/analytics/AtarPanel";
 
 const which = new URLSearchParams(location.search).get("v") || "deal";
 
@@ -1350,6 +1351,48 @@ const BOARD_ROWS = BOARD_NAMES.map((n, i) => ({
     crests: i === 0 ? [{ code: "a", name: "Centurion", icon: "Flame", rarity: "legendary" }]
         : i === 6 ? [{ code: "b", name: "Marked", icon: "Target", rarity: "rare" }] : [],
 }));
+
+/* ── ?v=atar — the REAL AtarPanel, provisional and ranked ───────────────────
+ *
+ * `views.ranked` above restates the panel's bars rather than mounting it, so
+ * it cannot see the panel's own rendering — a stand-in measuring itself, the
+ * lesson `ProgressTabs` records. This mounts the component, against the two
+ * states a real account can only ever be in one of at a time.
+ *
+ * The provisional one is the point: the "N/3 days" strip used to print a
+ * literal 3 three times and reconstruct the days done as `3 - daysNeeded`,
+ * while the payload carries `study_days` and `days_needed` outright. The dots
+ * are drawn from their sum now, so a fixture short of the floor is the only
+ * way to look at it.
+ */
+const ATAR_BASE = {
+    mastery: 68, consistency: 72, effort: 41, breadth: 55, planning: 34,
+    quiz_marks: 124, cards_reviewed: 88, minutes: 247,
+    technique_families: 3, technique_target: 5,
+    consistency_target: 20, effort_target: 1200,
+    goals_set: 4, goals_met: 3, blocks_planned: 5, blocks_kept: 4,
+};
+
+views.atar = () => (
+    <div className="min-h-screen bg-background p-4 sm:p-6 space-y-6">
+        <div className="max-w-3xl mx-auto">
+            <p className="stat-label mb-2">Provisional — under the ranking floor</p>
+            <AtarPanel
+                atar={41.25}
+                band="Building"
+                components={{ ...ATAR_BASE, study_days: 1, days_needed: 2, ranked: false }}
+            />
+        </div>
+        <div className="max-w-3xl mx-auto">
+            <p className="stat-label mb-2">Ranked</p>
+            <AtarPanel
+                atar={68.4}
+                band="Consistent"
+                components={{ ...ATAR_BASE, study_days: 14, days_needed: 0, ranked: true }}
+            />
+        </div>
+    </div>
+);
 
 views.board = () => {
     const [scope, setScope] = React.useState("global");
