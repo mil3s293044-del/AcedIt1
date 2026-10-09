@@ -6856,10 +6856,80 @@ spark.js. **The signal was never in the names that disagree. It was in the ones
 that AGREE and are written down twice**, because those are the pairs that have
 not drifted YET.
 
+### THE ANTI-CHEAT CAPS CLAIMED A GUARD THAT DID NOT EXIST
+
+Swept last, and the worst of the mirrors. `server.mjs` says in its own words
+above the caps: *"Mirrors countableByDay() in src/lib/integrity.js — the
+client's copy DRAWS the number, this one RANKS on it, and only this one is
+trusted. **Change one, change both.**"* `integrity.js`'s header makes the same
+claim, and this file says of it: *"the server implements the same caps and its
+test is the guard on them."*
+
+**`integrity.test.mjs` never reads `server.mjs`.** It exercises the client copy
+and nothing else, so the "guard" is on one half of a pair. Five constants
+(`TAB_AWAY_MINUTES`, `SESSION_MAX_MINUTES`, `DAILY_MINUTE_CAP`,
+`BOARD_MIN_QUESTIONS`, `BOARD_MIN_MARKS`) and a whole algorithm, deciding the
+hours leaderboard, with the Progress Hours tab printing **"Capped the way every
+ranked board caps them, so this figure is the one the league counts"** directly
+under the result.
+
+**AND FUZZING THEM FOUND THEY HAD ALREADY DRIFTED.** Not in a constant — in the
+rounding. The server accumulates unrounded and rounds ONCE at the end;
+`countableByDay` rounded EVERY ROW before summing, so the two disagreed by up
+to two minutes. Invisible on whole minutes and on every hand-written fixture:
+it needs fractional idle ratios spread across several rows, which is why 4000
+random cases found it and eight careful ones did not. The client is aligned —
+`focusQuality` gained `exact`, `countableByDay` carries both (`counted` to DRAW
+a day, `exact` to SUM), and `countableMinutes` is now the server's function to
+the digit.
+
+Rounding per DAY instead would have been worse, not better: half a minute a day
+over a 28-day window is a quarter of an hour. The server is the source of truth
+and the honest arithmetic, so the client moved.
+
+`mirrors.test.mjs` now lifts `countableStudyMinutes` and its two helpers out of
+server.mjs and RUNS them against 1,200 random row sets, plus the three caps
+stated explicitly.
+
+**AND THE FIXTURE'S CLOCK WAS HIDING A BRANCH.** Today's ceiling is
+`min(DAILY_MINUTE_CAP, minutes since midnight)` — so after midday the elapsed
+half can NEVER bite: 20:00 is 1200 minutes against a flat cap of 720, and the
+whole check collapses to the cap. Deleting the elapsed check entirely passed
+silently against an evening-only fixture. It runs at 09:30 as well now, where
+570 minutes have passed and the check is the thing deciding. **An injection
+that cannot reach the branch tests nothing** — the same lesson as an injection
+that cannot change behaviour, arrived at from the clock.
+
+### SEVEN PAYOUT CONSTANTS WITH NO READER
+
+`arenaMeta.js` exports `ANTE_OPTIONS`, `SIDE_BET_OPTIONS`, `STUDY_BET_MULT`,
+`SIDE_BET_MULT`, `STUDY_BET_LADDER`, `WINDOW_SCALE` and `STUDY_BET_MIN_TARGET`
+— a client copy of the server's stake bounds and payout arithmetic, under a
+header reading "keep in sync with the server's ... stake bounds" — and
+**nothing in the tree reads one of them.** That is the Compete rebuild working
+as designed (the wagering UI is gone, its endpoints deliberately stay so
+in-flight battles can settle), but an unread copy of a payout multiplier is the
+one shape that drifts invisibly and is then wrong the moment a screen is wired
+to it. Kept under this file's unused-symbol rule, with a note saying to import
+the server's values or delete them rather than trust a number nothing has
+exercised.
+
+### The payout economy itself is clean
+
+Worth recording so it is not re-audited: `league.js`, `credStore.js`,
+`cosmetics.js`, `market.js`, `chips.js`, `pranks.js`, `quests.js`,
+`compliance.js`, `achievements.js`, `xpRanks.js`, `wagerStatus.js`, `aiCost.js`
+and `aiModels.js` are all IMPORTED by `server.mjs` rather than mirrored, so
+every figure the floor, the league, the store and the chip meter print is the
+one that pays. The mirrors that exist are `uploadPrep`, `megaUpload`,
+`storageBudget`, `holdings`, the level curve, the ATAR bands, the ATAR curve,
+the ATAR targets and the integrity caps — and all nine are pinned now.
+
 ### Checked and clean
 
 Worth recording so the next sweep does not redo it: the trial length is 7
-everywhere; the free caps (5/5/5) match `TIER_FREE_CAPS` and the Subscription
+everywhere it is PRINTED (whether a student gets one is the open question
+above); the free caps (5/5/5) match `TIER_FREE_CAPS` and the Subscription
 page's "5 lifetime" rows; the chip prices quoted in `tierAccess.js`'s header
 match `chips.js`; the weekly cost ceiling mirror is already annotated and
 correct; `TOOL_COUNT` derives; the catalogue is 33 subjects and the examiner
@@ -7162,7 +7232,11 @@ of them verified to bite, with the baseline green either side.
   for a release with no renderer at all
 - `src/lib/integrity.js` — the caps, the idle discount, the quiz floors and the
   verified/claimed split. Mirrored server-side by `countableStudyMinutes`,
-  `verifiedStudyMinutes` and `boardQuizScores`; change one, change both
+  `verifiedStudyMinutes` and `boardQuizScores`; change one, change both — and
+  `mirrors.test.mjs` is what finally enforces that, since `integrity.test.mjs`
+  exercises the client half alone. `counted` DRAWS a day and `exact` SUMS,
+  because rounding every row before summing put this up to two minutes off the
+  board the Hours tab claims to agree with
 - `src/lib/liveRefresh.js`, `src/lib/LiveContext.jsx`, `src/api/realtime.js` —
   when the app may refetch, who can hold it still, and the push path
 - `src/components/shared/LiveNumber.jsx` — rolling figures. `LiveDot.jsx` is

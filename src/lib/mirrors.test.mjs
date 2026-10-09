@@ -21,6 +21,14 @@
  *   ranked.js and `atarBand()` in server.mjs. `ranked.js` now derives from
  *   atarBands.js, so this asserts the one remaining pair.
  *
+ *   THE INTEGRITY CAPS. server.mjs says in its own words "Mirrors
+ *   countableByDay() in src/lib/integrity.js — the client's copy DRAWS the
+ *   number, this one RANKS on it ... Change one, change both", and
+ *   `integrity.test.mjs` never reads server.mjs at all. Five constants and one
+ *   algorithm, on the anti-cheat caps that decide the hours board, with the
+ *   Progress Hours tab printing "the figure the league counts" under the
+ *   result. Fuzzing the two found they already disagreed by up to two minutes.
+ *
  *   THE ATAR CURVE ITSELF, which is a worse one than the bands and was found
  *   by sweeping for constants defined twice. `atarLift.js` carried the floor,
  *   the span, the exponent and the cap under a comment reading "the server's
@@ -45,6 +53,7 @@ import path from "node:path";
 import { ATAR_BANDS, atarBandOf } from "@/lib/atarBands";
 import { BANDS } from "@/lib/ranked";
 import { atarFromComposite, ATAR_WEIGHTS, liftFor, ATAR_TARGETS } from "@/lib/atarLift";
+import { countableMinutes } from "@/lib/integrity";
 
 let passed = 0;
 const check = (name, fn) => {
@@ -309,6 +318,109 @@ check("the ranked-at floor is read from the payload, not typed in", () => {
     assert.match(code, /comps\.study_days/, "the panel must read study_days, not reconstruct it");
     assert.ok(!/3 - daysNeeded/.test(code), "the panel still reconstructs the days done from a literal 3");
     assert.ok(!/\/3 days/.test(code), "the panel still prints a literal ranking floor");
+});
+
+/* ── The integrity caps ───────────────────────────────────────────────────
+ *
+ * These decide the hours leaderboard, and the client copy is what the Progress
+ * Hours tab DRAWS — under a note reading "Capped the way every ranked board
+ * caps them, so this figure is the one the league counts." That sentence is a
+ * claim about this pair, and nothing was checking it.
+ */
+
+const CAP_PAIRS = [
+    "TAB_AWAY_MINUTES", "SESSION_MAX_MINUTES", "DAILY_MINUTE_CAP",
+    "BOARD_MIN_QUESTIONS", "BOARD_MIN_MARKS",
+];
+
+check("every integrity cap is the same number on both sides", async () => {
+    const client = await import("@/lib/integrity");
+    for (const name of CAP_PAIRS) {
+        const m = SERVER.match(new RegExp(`^const ${name}\\s*=\\s*([\\d.]+)`, "m"));
+        assert.ok(m, `server.mjs has no ${name} to mirror`);
+        assert.ok(client[name] !== undefined, `integrity.js no longer exports ${name}`);
+        assert.equal(client[name], Number(m[1]), `${name} differs: client ${client[name]}, server ${m[1]}`);
+    }
+});
+
+/** countableStudyMinutes and its two helpers, lifted out of server.mjs. */
+function serverCountable() {
+    const parts = ["countedFocusMinutes", "dayKeyOf", "countableStudyMinutes"]
+        .map((n) => {
+            const at = SERVER.search(new RegExp(`(const|function) ${n}\\b`));
+            assert.notEqual(at, -1, `server.mjs has no ${n}`);
+            const body = SERVER.slice(at);
+            return body.slice(0, body.indexOf("\n}") + 2);
+        });
+    const caps = CAP_PAIRS.map((n) => {
+        const m = SERVER.match(new RegExp(`^const ${n}\\s*=\\s*([\\d.]+)`, "m"));
+        return `const ${n} = ${m[1]};`;
+    }).join("\n");
+    return new Function(`${caps}\n${parts.join("\n")}\nreturn countableStudyMinutes;`)();
+}
+
+// TWO CLOCKS, AND THE EARLY ONE IS THE POINT. Today's ceiling is
+// `min(DAILY_MINUTE_CAP, minutes since midnight)`, so after midday the elapsed
+// half can never bite — 20:00 is 1200 minutes and the flat cap is 720, so the
+// whole check collapses to the cap and deleting it changes nothing. A morning
+// clock is the only one that reaches the branch, which an injection proved by
+// passing silently against an evening-only fixture.
+const EVENING = new Date("2026-03-12T20:00:00");
+const MORNING = new Date("2026-03-12T09:30:00");   // 570 min elapsed, under the cap
+
+check("the client counts the same minutes the board ranks on", () => {
+    const server = serverCountable();
+    // A deterministic walk rather than a handful of cases: the drift this
+    // found was a ROUNDING one, invisible on whole minutes and on every
+    // hand-written fixture, and only a spread of fractional idle ratios and
+    // tab-aways across capped and uncapped days reaches it.
+    let seed = 7;
+    const rnd = () => (seed = (seed * 1103515245 + 12345) % 2147483648) / 2147483648;
+    for (const NOW of [EVENING, MORNING]) {
+        for (let t = 0; t < 600; t++) {
+            const rows = Array.from({ length: 1 + Math.floor(rnd() * 6) }, () => ({
+                day: ["2026-03-09", "2026-03-10", "2026-03-12"][Math.floor(rnd() * 3)],
+                minutes: Math.round(rnd() * 300 * 10) / 10,
+                idle_ratio: Math.round(rnd() * 0.6 * 100) / 100,
+                tab_away_count: Math.floor(rnd() * 5),
+            }));
+            const a = server(rows.map((r) => ({ ...r, at: r.day })), NOW);
+            const b = countableMinutes(rows.map((r) => ({
+                day: r.day, duration_minutes: r.minutes,
+                idle_ratio: r.idle_ratio, tab_away_count: r.tab_away_count,
+            })), NOW);
+            assert.equal(b, a, `countable minutes differ at ${NOW.toISOString()} on ${JSON.stringify(rows)}`);
+        }
+    }
+});
+
+check("the three caps that bite still bite, on both sides", () => {
+    const server = serverCountable();
+    const one = (rows, NOW) => [
+        server(rows.map((r) => ({ ...r, at: r.day })), NOW),
+        countableMinutes(rows.map((r) => ({ day: r.day, duration_minutes: r.minutes })), NOW),
+    ];
+    const allDay = (day) => Array.from({ length: 9 }, () => ({ day, minutes: 240 }));
+
+    // One row is at most one sitting.
+    assert.deepEqual(one([{ day: "2026-03-10", minutes: 9000 }], EVENING), [240, 240]);
+    // One past day is at most the flat cap.
+    assert.deepEqual(one(allDay("2026-03-10"), EVENING), [720, 720]);
+    // AND TODAY IS CAPPED BY THE MINUTES THAT HAVE ACTUALLY PASSED. Asserted at
+    // 09:30 — 570 elapsed, under the flat cap — because that is the only time
+    // of day where this differs from the line above. At 20:00 both answer 720
+    // whether the elapsed check exists or not.
+    assert.deepEqual(one(allDay("2026-03-12"), MORNING), [570, 570]);
+    assert.deepEqual(one(allDay("2026-03-12"), EVENING), [720, 720]);
+});
+
+check("the Hours tab sums the unrounded figure, not the per-day rounded one", () => {
+    // The claim printed under that number is that it is the league's figure.
+    const src = fs.readFileSync(path.join(ROOT, "src/lib/progressReport.js"), "utf8");
+    const code = src.replace(/\/\*[\s\S]*?\*\//g, "")
+        .split("\n").filter((l) => !l.trim().startsWith("//")).join("\n");
+    assert.match(code, /rec\?\.exact/, "minutesIn no longer reads the unrounded per-day figure");
+    assert.match(code, /total \+= exact/, "minutesIn is summing something other than the exact figure");
 });
 
 console.log(`\nmirrors: ${passed} checks passed`);

@@ -400,8 +400,13 @@ function minutesIn(events, from, to) {
     const entries = byDay instanceof Map ? [...byDay.entries()] : Object.entries(byDay || {});
     for (const [day, rec] of entries) {
         const n = Number(rec?.counted) || 0;
-        if (n <= 0) continue;
-        total += n;
+        // SUM THE UNROUNDED FIGURE and round once, which is what the server
+        // does — summing the per-day rounded ones drifted this page up to two
+        // minutes off the board it claims to agree with. The DAY still draws
+        // its rounded value; only the total changes.
+        const exact = Number(rec?.exact ?? n) || 0;
+        if (n <= 0 && exact <= 0) continue;
+        total += exact;
         days.set(day, n);
     }
     return { total: Math.round(total), days };
