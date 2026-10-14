@@ -1,5 +1,22 @@
 // Shared arena metadata — keep in sync with the server's ARENA_METRICS,
 // DUEL_WINDOWS and stake bounds in server.mjs.
+//
+// ─── SEVEN OF THESE EXPORTS HAVE NO READER, and all seven are MONEY ─────────
+// `ANTE_OPTIONS`, `SIDE_BET_OPTIONS`, `STUDY_BET_MULT`, `SIDE_BET_MULT`,
+// `STUDY_BET_LADDER`, `WINDOW_SCALE` and `STUDY_BET_MIN_TARGET` are a client
+// copy of the server's stake bounds and payout arithmetic, and nothing in the
+// tree reads one. That is the Compete rebuild: the wagering layer is gone from
+// the UI while its server endpoints deliberately stay, so battles and duels
+// with real XP in them can still settle.
+//
+// They are KEPT rather than deleted, under this codebase's own rule that twice
+// an "unused" symbol here marked a half-wired feature rather than dead code —
+// but an unread copy of a payout multiplier is the one shape that can drift
+// INVISIBLY and then be wrong the moment somebody wires a screen to it. So:
+// **if the arena UI is ever rebuilt, import these from the server's own values
+// or delete them. Do not trust a number here that nothing has exercised.**
+// `METRICS`, `WINDOWS`, `timeLeft`, `firstName`, `studyBetMultiplier` and
+// `multiplierLabel` are the live half (Layout, the nav, Study, StakesPill).
 import { Zap, FileText, Layers, Clock } from "lucide-react";
 
 export const METRICS = {

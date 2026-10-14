@@ -71,6 +71,9 @@ export function focusQuality(row = {}) {
     return {
         claimed,
         counted: Math.round(counted),
+        // The same figure without the rounding, so a SUM can round once the way
+        // the server does rather than once per row.
+        exact: counted,
         // Null rather than an empty string: "nothing was discounted" and "we
         // have no telemetry" both produce no reason, and only the first should
         // read as a clean session.
@@ -92,7 +95,15 @@ export function focusQuality(row = {}) {
  * really earned once the day is over, and a cap is the honest limit of what it
  * can assert.
  *
- * Returns a Map of dayKey → { claimed, counted, capped }.
+ * Returns a Map of dayKey → { claimed, counted, exact, capped }.
+ *
+ * `counted` IS ROUNDED AND `exact` IS NOT, and the pair is not a nicety. The
+ * server rounds ONCE, at the very end of the whole window; this rounded every
+ * row before summing, so the two drifted by up to two minutes — measured by
+ * fuzzing them against each other. Small, and this page prints "the figure the
+ * league counts" directly under the number, so a figure that is not it is the
+ * claim being false rather than a rounding nicety. Draw a day with `counted`;
+ * SUM with `exact` and round once, which is what `countableMinutes` does.
  */
 export function countableByDay(rows = [], now = new Date()) {
     const byDay = new Map();
@@ -103,8 +114,10 @@ export function countableByDay(rows = [], now = new Date()) {
         const q = focusQuality(row);
         // One row can never be more than one sitting.
         const counted = Math.min(q.counted, SESSION_MAX_MINUTES);
-        const cur = byDay.get(day) || { claimed: 0, counted: 0, capped: false };
+        const cur = byDay.get(day) || { claimed: 0, counted: 0, exact: 0, capped: false };
         cur.claimed += q.claimed;
+        // `q.exact` rather than `q.counted`: the rounding happens once, later.
+        cur.exact += Math.min(q.exact, SESSION_MAX_MINUTES);
         cur.counted += counted;
         byDay.set(day, cur);
     });
@@ -118,22 +131,25 @@ export function countableByDay(rows = [], now = new Date()) {
         const ceiling = day === today
             ? Math.min(DAILY_MINUTE_CAP, elapsedToday)
             : DAILY_MINUTE_CAP;
-        if (v.counted > ceiling) {
+        if (v.exact > ceiling) {
             v.capped = true;
-            v.counted = Math.round(ceiling);
-        } else {
-            v.counted = Math.round(v.counted);
+            v.exact = ceiling;
         }
+        v.counted = Math.round(Math.min(v.counted, ceiling));
     });
 
     return byDay;
 }
 
-/** Total countable minutes across a set of rows. What a board may sum. */
+/**
+ * Total countable minutes across a set of rows. What a board may sum, and
+ * EXACTLY what `countableStudyMinutes` in server.mjs returns — accumulate
+ * unrounded, round once at the end. `mirrors.test.mjs` runs both and compares.
+ */
 export function countableMinutes(rows = [], now = new Date()) {
     let total = 0;
-    countableByDay(rows, now).forEach((v) => { total += v.counted; });
-    return total;
+    countableByDay(rows, now).forEach((v) => { total += v.exact; });
+    return Math.round(total);
 }
 
 // ─── Quizzes ────────────────────────────────────────────────────────────────

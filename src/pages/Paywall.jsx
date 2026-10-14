@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from "react";
+import { priceLabel, TRIAL_DAYS } from "@/lib/pricing";
 import { Button } from "@/components/ui/button";
 import { Check } from "lucide-react";
 import BrandMark from "@/components/shared/BrandMark";
@@ -42,7 +43,7 @@ export default function Paywall() {
                 priceId: import.meta.env.VITE_STRIPE_PRICE_PREMIUM,
                 successUrl: `${window.location.origin}/PaymentSuccess?session_id={CHECKOUT_SESSION_ID}`,
                 cancelUrl: `${window.location.origin}/Paywall`,
-                trial_days: 7,
+                trial_days: TRIAL_DAYS,
             });
             const url = res?.data?.checkoutUrl || res?.data?.url || res?.checkoutUrl;
             if (url) window.location.href = url;
@@ -61,21 +62,21 @@ export default function Paywall() {
             </div>
 
             <h1 className="text-3xl font-extrabold text-foreground text-center mb-2">{heading}</h1>
-            <p className="text-muted-foreground text-sm text-center mb-8">7 days completely free. Then $5/week. Cancel anytime before the trial ends and you won't be charged.</p>
+            <p className="text-muted-foreground text-sm text-center mb-8">{TRIAL_DAYS} days completely free. Then {priceLabel()}/week. Cancel anytime before the trial ends and you won't be charged.</p>
 
             {/* Plan card */}
             <div className="w-full max-w-md bg-surface border-2 border-chart-4 rounded-2xl p-6 mb-6">
                 <div className="inline-block text-xs font-bold px-3 py-1 rounded-full mb-3 bg-chart-4 text-white">
-                    7-day free trial
+                    {TRIAL_DAYS}-day free trial
                 </div>
                 <p className="font-bold text-xl text-foreground mb-1">AcedIt Premium</p>
-                <p className="text-3xl font-extrabold text-foreground mb-0.5">Free for 7 days</p>
-                <p className="text-sm text-muted-foreground mb-1">then $5/week</p>
-                <p className="text-xs text-muted-foreground/60 mb-4">Cancel before day 7 and pay nothing.</p>
+                <p className="text-3xl font-extrabold text-foreground mb-0.5">Free for {TRIAL_DAYS} days</p>
+                <p className="text-sm text-muted-foreground mb-1">then {priceLabel()}/week</p>
+                <p className="text-xs text-muted-foreground/60 mb-4">Cancel before day {TRIAL_DAYS} and pay nothing.</p>
 
                 <div className="rounded-xl p-3 mb-5 bg-chart-4/10 border border-chart-4/20">
                     <p className="text-xs text-foreground/80 leading-relaxed">
-                        Melbourne private tutors charge <strong>$60–$120 per hour</strong> (Learnmate Australia, 2025). AcedIt gives you AI-powered study support for <strong>$5/week</strong> — available at 2am the night before your SAC.
+                        Melbourne private tutors charge <strong>$60–$120 per hour</strong> (Learnmate Australia, 2025). AcedIt gives you AI-powered study support for <strong>{priceLabel()}/week</strong> — available at 2am the night before your SAC.
                     </p>
                 </div>
 
@@ -93,13 +94,13 @@ export default function Paywall() {
                     disabled={loading}
                     className="w-full h-12 text-base font-semibold bg-chart-4 hover:bg-chart-4/90 text-white"
                 >
-                    {loading ? <><AceShuffle size="sm" className="mr-2" />Redirecting...</> : "Start my free 7-day trial →"}
+                    {loading ? <><AceShuffle size="sm" className="mr-2" />Redirecting...</> : `Start my free ${TRIAL_DAYS}-day trial →`}
                 </Button>
             </div>
 
             {/* Trust signals */}
             <div className="grid grid-cols-2 gap-2 mb-6 text-xs text-muted-foreground w-full max-w-md">
-                {["No charge for 7 days", "Cancel anytime", "No lock-in contract", "Secure checkout"].map((t, i) => (
+                {[`No charge for ${TRIAL_DAYS} days`, "Cancel anytime", "No lock-in contract", "Secure checkout"].map((t, i) => (
                     <div key={i} className="flex items-center gap-1"><Check className="w-3 h-3 text-primary" /> {t}</div>
                 ))}
             </div>

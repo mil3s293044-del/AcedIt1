@@ -1,117 +1,118 @@
 /**
  * YearCards — the first question, dealt instead of listed.
  *
- * This is the first screen after the landing page, and the landing page ends
- * with several hundred cards forming a brain. What used to be here was six
- * grey tiles with the same graduation-cap icon repeated six times, which is a
- * settings panel wearing the clothes of a welcome.
+ * THE RANKS DO WORK. Years seven to ten are number cards, eleven a jack and
+ * twelve a queen: seniority, read off the rank, so the very first answer
+ * teaches how the rest of the app reads a card. The table they come from is
+ * `YEARS` in onboardingFlow.js — the hand used to keep its own copy of it.
  *
- * THE RANKS DO WORK. Years seven through ten are number cards; year eleven is
- * a jack and year twelve is a queen. It is the correct shape for the fact
- * being asked about, seniority, and it means the answer to the very first
- * question already teaches the reader how to read the rest of the app, where
- * a rank always means "how far up this is".
+ * THE NAME SITS ON A BAND, NOT OVER THE PIPS. The year used to be printed in
+ * the middle of the card on top of the pip field and the court figure, so
+ * "Year 10" read through ten ghosted clubs. The pips go to the top two thirds
+ * (`compact`) and the name takes the bottom edge, which is how the hand prints
+ * a subject and so how every card in this flow prints its name.
  *
- * It stops short of giving year twelve the Ace. The Ace is the target on the
- * next screen but one, and it is the mastery ceiling in the review deck. Handing
- * it out for ticking a box would spend the only card the product has left to
- * give.
+ * A CARD LEANS TOWARD THE POINTER. It is the cheapest thing that makes a grid
+ * of six read as six objects on a table rather than six tiles in a form, and
+ * it is the hover a real card has when a finger is about to pick it up. The
+ * tilt is on an inner element so the button's own box never moves under the
+ * pointer — the hover-on-a-rotating-element trap MovePreview records.
  *
- * THE DEAL IS STAGGERED AND SHORT. Six cards at 55ms apart is over in a third
- * of a second, which is under the threshold where a person waiting to click
- * something starts to resent the animation. The deal exists to say "this is a
- * table"; it is not a performance and it is not allowed to be in the way. The
- * cards are clickable from the first frame, because they are laid out by the
- * grid and only transformed by the animation.
+ * CARD STOCK IS WHITE IN BOTH THEMES, here as on the table. A card picked in
+ * the dark used to be a dark card that left the page and landed white on the
+ * felt — the one thing a flight must never do is change what it is carrying.
+ *
+ * `onPick(value, el)` hands back the card's element so the page can fly it to
+ * the table.
  */
-import React from "react";
-import { motion, useReducedMotion } from "framer-motion";
+import React, { useRef } from "react";
+import { motion, useMotionValue, useSpring, useReducedMotion } from "framer-motion";
+import { Check } from "lucide-react";
 import PlayingCard from "@/components/cards/PlayingCard";
+import { YEARS } from "@/lib/onboardingFlow";
 
-// Each card carries a tone as well as a rank, so six of these on a table read
-// as a spread and not as six copies of the same white rectangle. The tones run
-// cool to warm up the years, which is not meaningful and is not pretending to
-// be: it is what stops the grid being monochrome.
-export const YEAR_CARDS = [
-    { value: "Year 7",            rank: "7",  suit: "club",    tone: "#0EA5E9", label: "Year 7",  sub: "Junior secondary" },
-    { value: "Year 8",            rank: "8",  suit: "diamond", tone: "#14B8A6", label: "Year 8",  sub: "Junior secondary" },
-    { value: "Year 9",            rank: "9",  suit: "heart",   tone: "#8B5CF6", label: "Year 9",  sub: "Junior secondary" },
-    { value: "Year 10",           rank: "10", suit: "club",    tone: "#3B82F6", label: "Year 10", sub: "Senior foundation" },
-    { value: "Year 11 Units 1&2", rank: "J",  suit: "diamond", tone: "#F97316", label: "Year 11", sub: "VCE Units 1 & 2" },
-    { value: "Year 12 Units 3&4", rank: "Q",  suit: "spade",   tone: "#F0B429", label: "Year 12", sub: "Units 3 & 4, counts toward your ATAR" },
-];
+function TiltCard({ y, on, onPick, i, reduce }) {
+    const ref = useRef(null);
+    const rx = useMotionValue(0);
+    const ry = useMotionValue(0);
+    const sx = useSpring(rx, { stiffness: 220, damping: 18 });
+    const sy = useSpring(ry, { stiffness: 220, damping: 18 });
+
+    const onMove = (e) => {
+        if (reduce || e.pointerType !== "mouse") return;
+        const r = e.currentTarget.getBoundingClientRect();
+        const px = (e.clientX - r.left) / r.width - 0.5;
+        const py = (e.clientY - r.top) / r.height - 0.5;
+        ry.set(px * 16);
+        rx.set(-py * 14);
+    };
+    const onLeave = () => { rx.set(0); ry.set(0); };
+
+    return (
+        <motion.div
+            initial={reduce ? { opacity: 0 } : { opacity: 0, y: -60, x: 30, rotate: -10, scale: 0.88 }}
+            animate={{ opacity: 1, y: 0, x: 0, rotate: 0, scale: 1 }}
+            transition={reduce ? { duration: 0.2 } : { type: "spring", stiffness: 230, damping: 21, delay: 0.12 + i * 0.06 }}
+            style={{ perspective: 800 }}
+        >
+            <button
+                ref={ref}
+                type="button"
+                data-year={y.value}
+                aria-pressed={on}
+                aria-label={`${y.label}, ${y.sub}`}
+                onClick={() => onPick(y.value, ref.current)}
+                onPointerMove={onMove}
+                onPointerLeave={onLeave}
+                className="group relative block w-full text-left focus-visible:outline-none"
+            >
+                <motion.div
+                    style={{ rotateX: sx, rotateY: sy, transformStyle: "preserve-3d" }}
+                    whileHover={reduce ? undefined : { y: -6 }}
+                    whileTap={reduce ? undefined : { scale: 0.96 }}
+                    animate={on && !reduce ? { y: -8, scale: 1.03 } : { y: 0, scale: 1 }}
+                    transition={{ type: "spring", stiffness: 300, damping: 22 }}
+                    className={`rounded-[0.95rem] transition-shadow duration-300 ${on
+                        ? "shadow-[0_0_0_3px_hsl(var(--primary)),0_22px_40px_-16px_hsl(var(--primary)/0.55)]"
+                        : "shadow-[0_2px_4px_rgba(13,22,38,0.08),0_18px_34px_-22px_rgba(13,22,38,0.45)] group-hover:shadow-[0_2px_4px_rgba(13,22,38,0.1),0_28px_46px_-20px_rgba(13,22,38,0.5)] group-focus-visible:shadow-[0_0_0_3px_hsl(var(--primary)/0.5)]"}`}
+                >
+                    <PlayingCard rank={y.rank} suit={y.suit} smallIndices pips="compact"
+                        tone={on ? "#58CC02" : y.tone} className="theme-locked-light w-full aspect-[2.5/3.5]">
+                        <span className="absolute inset-x-0 bottom-0 px-2 pt-2 pb-2.5 text-center
+                            bg-gradient-to-t from-surface via-surface to-surface/0"
+                            style={{ paddingRight: "var(--card-index-w)", paddingLeft: "var(--card-index-w)" }}>
+                            <span className={`block font-display font-extrabold leading-none text-[15px] sm:text-xl
+                                ${on ? "text-primary" : "text-foreground"}`}>
+                                {y.label}
+                            </span>
+                            <span className="block mt-1 text-[9px] sm:text-[10px] leading-tight text-muted-foreground font-semibold">
+                                {y.sub}
+                            </span>
+                        </span>
+                    </PlayingCard>
+                    {on && (
+                        <motion.span
+                            initial={reduce ? false : { scale: 0, rotate: -40 }}
+                            animate={{ scale: 1, rotate: 0 }}
+                            transition={{ type: "spring", stiffness: 420, damping: 18 }}
+                            className="absolute -top-2 -right-2 w-7 h-7 rounded-full bg-primary text-primary-foreground
+                                flex items-center justify-center shadow-md">
+                            <Check className="w-4 h-4" strokeWidth={3.5} />
+                        </motion.span>
+                    )}
+                </motion.div>
+            </button>
+        </motion.div>
+    );
+}
 
 export default function YearCards({ value, onPick }) {
     const reduce = useReducedMotion();
-
     return (
-        // Capped width, because the card ratio is driven off the column and a
-        // three-column grid in a 42rem shell gives 13rem cards: a playing card
-        // the size of a paperback, mostly empty in the middle. The cap keeps
-        // them at about the size of the real thing.
-        <div data-year-cards
-            className="grid grid-cols-3 gap-2.5 sm:gap-4 max-w-[30rem] mx-auto">
-            {YEAR_CARDS.map((y, i) => {
-                const on = value === y.value;
-                return (
-                    <motion.div
-                        key={y.value}
-                        initial={reduce
-                            ? { opacity: 0 }
-                            : { opacity: 0, y: -70, x: 24, rotate: -9, scale: 0.9 }}
-                        animate={{ opacity: 1, y: 0, x: 0, rotate: 0, scale: 1 }}
-                        transition={reduce
-                            ? { duration: 0.2 }
-                            : { type: "spring", stiffness: 240, damping: 22, delay: i * 0.055 }}
-                    >
-                        {/* The button is the whole card and carries the press.
-                            Hover lift lives on a transform so nothing reflows,
-                            and the aspect comes off the card ratio rather than
-                            a fixed height, so a phone gets a smaller card and
-                            not a squashed one. */}
-                        <button
-                            type="button"
-                            data-year={y.value}
-                            aria-pressed={on}
-                            onClick={() => onPick(y.value)}
-                            className="group w-full text-left transition-transform duration-200
-                                hover:-translate-y-1.5 focus-visible:-translate-y-1.5
-                                focus-visible:outline-none active:translate-y-0"
-                        >
-                            <PlayingCard
-                                rank={y.rank}
-                                suit={y.suit}
-                                smallIndices
-                                // The real layout, at printing strength, behind
-                                // the year. Seven club pips arranged the way
-                                // sevens are arranged still say "seven" at 13%
-                                // opacity; the single giant ghost suit the
-                                // watermark used to draw said nothing at any
-                                // opacity and read as a smudge on the print.
-                                pips="faint"
-                                tone={on ? "#58CC02" : y.tone}
-                                className={`w-full aspect-[2.5/3.5] transition-shadow ${
-                                    on
-                                        ? "ring-2 ring-primary ring-offset-2 ring-offset-background"
-                                        : "group-hover:shadow-[0_2px_4px_rgba(13,22,38,0.12),0_26px_44px_-20px_rgba(13,22,38,0.5)]"
-                                }`}
-                            >
-                                <span className="absolute inset-0 flex flex-col items-center
-                                    justify-center px-2 pt-4 text-center">
-                                    <span className={`font-display font-extrabold leading-none
-                                        text-lg sm:text-2xl ${on ? "text-primary" : "text-foreground"}`}>
-                                        {y.label}
-                                    </span>
-                                    <span className="mt-1.5 text-[9px] sm:text-[10px] leading-tight
-                                        text-muted-foreground font-semibold">
-                                        {y.sub}
-                                    </span>
-                                </span>
-                            </PlayingCard>
-                        </button>
-                    </motion.div>
-                );
-            })}
+        <div data-year-cards className="grid grid-cols-3 gap-3 sm:gap-4 max-w-[30rem]">
+            {YEARS.map((y, i) => (
+                <TiltCard key={y.value} y={y} i={i} on={value === y.value} onPick={onPick} reduce={reduce} />
+            ))}
         </div>
     );
 }

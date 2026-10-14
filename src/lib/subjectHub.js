@@ -26,6 +26,7 @@ import { effectiveScore } from "@/lib/quizDeck";
 import { isRetryAttempt } from "@/lib/quizInsight";
 import { fixState } from "@/lib/mistakeBank";
 import { dayKey, weekStart } from "@/lib/studyLog";
+import { SOON_DAYS } from "@/lib/studyQueue";
 
 const norm = (s) => String(s || "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
 
@@ -226,7 +227,12 @@ export function subjectStats(subjectName, {
  * returns null rather than a placeholder when its number is not real — the
  * same rule Today's Play keeps about its rail.
  */
-export const SOON_DAYS = 14;
+// SOON_DAYS comes from studyQueue, which owns it — it was declared here too,
+// at the same value, with nothing importing either. The queue and this shelf
+// are the two surfaces that answer "what next", and the rule above is that
+// they print the SAME lead; a drift would have one calling a SAC soon while
+// the other did not, which is exactly the disagreement that rule exists to
+// stop. `toolBrief` already reads the queue's copy.
 
 export function subjectLead(stats, cov, split) {
     if (!stats) return null;

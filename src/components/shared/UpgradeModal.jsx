@@ -1,4 +1,5 @@
 import React from 'react';
+import { priceLabel } from "@/lib/pricing";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import {
@@ -173,7 +174,7 @@ export default function UpgradeModal({ isOpen, onClose, feature, requiredTier, u
                     {/* Pricing Info */}
                     <div className="text-center text-sm text-muted-foreground">
                         <p>
-                            {requiredTier === 'premium' && 'Only $5 AUD/week for full access'}
+                            {requiredTier === 'premium' && `Only ${priceLabel({ currency: true })}/week for full access`}
                         </p>
                     </div>
                 </div>

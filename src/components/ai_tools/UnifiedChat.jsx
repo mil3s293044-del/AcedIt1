@@ -7,6 +7,7 @@
  * tool's feature tag, so all tier caps apply unchanged.
  */
 import React, { useState, useEffect, useRef, useCallback } from "react";
+import { priceLabel } from "@/lib/pricing";
 import { Link } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { Button } from "@/components/ui/button";
@@ -754,7 +755,7 @@ export default function UnifiedChat({
             </p>
             <p className="text-[13px] text-[var(--console-ink-faint)] mt-1 leading-snug">
                 What is above is yours either way &mdash; it is counted off your own
-                work. $5 a week unlocks the {CHAT_TOOLS.length} tools that act on it.
+                work. {priceLabel()} a week unlocks the {CHAT_TOOLS.length} tools that act on it.
             </p>
         </Link>
     );

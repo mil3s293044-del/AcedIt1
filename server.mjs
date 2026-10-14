@@ -325,7 +325,9 @@ async function callInvokeAI({ prompt, response_json_schema, feature, req }) {
 // Frontend gate is UX; THIS is the security boundary that protects API spend.
 //
 // Free tier:
-//   • quiz_ai_gen / flashcard_ai_gen → 3 lifetime each.
+//   • quiz_ai_gen / quiz_ai_mark / flashcard_ai_gen → 5 lifetime each,
+//     which is what TIER_FREE_CAPS below actually says. This comment read
+//     "3 lifetime each" and named two of the three.
 //   • Everything else → blocked.
 //
 // Premium tier ($5 AUD/week):
@@ -7989,6 +7991,13 @@ export function atarBand(atar) {
 // LOWER the breadth score of every student on the site — a retroactive cut to
 // the number the whole app is standardised around, in exchange for nothing.
 const BREADTH_TARGET_FAMILIES = 5;
+// The other two targets, which were bare numbers inside the arithmetic and
+// hard-typed a SECOND and THIRD time as "of 20 days" and "of ~20h" in both
+// AtarPanel.jsx and Ranked.jsx. Breadth already shipped its target in the
+// payload (`technique_target`) and the two panels already read it, so this is
+// the same design applied to the two components that had been left out.
+const CONSISTENCY_TARGET_DAYS = 20;
+const EFFORT_TARGET_MINUTES = 1200;   // ≈43 min/day over the 28-day window
 function techniqueFamily(source) {
   if (source === "study_session" || source === "focus_session") return "focus";
   if (source === "quiz" || source === "practice_questions" || source === "loading_quiz") return "quiz";
@@ -8230,7 +8239,7 @@ async function computeAcedItATAR(email) {
   // do about it. Compute everything regardless and flag it as provisional —
   // the UI shows the working and exactly what's still needed.
   const ranked = days.size >= ATAR_MIN_STUDY_DAYS;
-  const consistency = Math.min(1, days.size / 20);
+  const consistency = Math.min(1, days.size / CONSISTENCY_TARGET_DAYS);
 
   // ── Effort (22%): study minutes, log-scaled diminishing returns ─────────
   // Minutes are totalled per day and clamped, because duration_minutes is a
@@ -8249,8 +8258,8 @@ async function computeAcedItATAR(email) {
   for (const dayMinutes of minutesByDay.values()) {
     minutes += Math.min(dayMinutes, EFFORT_DAILY_MINUTE_CAP);
   }
-  // ~1200 min in 28 days (≈43 min/day) earns full effort marks.
-  const effort = Math.min(1, Math.log1p(minutes) / Math.log1p(1200));
+  // EFFORT_TARGET_MINUTES over the window earns full effort marks.
+  const effort = Math.min(1, Math.log1p(minutes) / Math.log1p(EFFORT_TARGET_MINUTES));
 
   // ── Mastery (28%): quiz accuracy + flashcard retention ──────────────────
   let quizWeighted = 0, quizWeight = 0;
@@ -8330,6 +8339,8 @@ async function computeAcedItATAR(email) {
       cards_reviewed: cardsTotal,
       technique_families: families.size,
       technique_target: BREADTH_TARGET_FAMILIES,
+      consistency_target: CONSISTENCY_TARGET_DAYS,
+      effort_target: EFFORT_TARGET_MINUTES,
       ranked,
       days_needed: Math.max(0, ATAR_MIN_STUDY_DAYS - days.size),
       ...planningDetail,

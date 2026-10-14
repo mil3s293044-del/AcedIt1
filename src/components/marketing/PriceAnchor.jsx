@@ -12,6 +12,7 @@
  * honest difference and the only one worth drawing.
  */
 import React from "react";
+import { priceLabel } from "@/lib/pricing";
 import { motion, useReducedMotion } from "framer-motion";
 import { Check, X } from "lucide-react";
 import PlayingCard from "@/components/cards/PlayingCard";
@@ -85,7 +86,7 @@ export default function PriceAnchor() {
             <Side
                 rank="A" suit="spade" tone="#58CC02" delay={0.12}
                 eyebrow="AcedIt"
-                price="$5" unit="a week"
+                price={priceLabel()} unit="a week"
                 note="A whole month costs less than one session."
                 pick={(r) => r.acedit}
             />

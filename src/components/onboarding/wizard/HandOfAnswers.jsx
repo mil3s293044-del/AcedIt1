@@ -33,14 +33,9 @@
  */
 import React from "react";
 import { motion, AnimatePresence, useReducedMotion } from "framer-motion";
-import PlayingCard, { alpha } from "@/components/cards/PlayingCard";
-import { suitFor, colorFor } from "@/components/cards/cardIdentity";
-
-/** Face cards for the years that count, so seniority reads off the rank. */
-const YEAR_RANK = {
-    "Year 7": "7", "Year 8": "8", "Year 9": "9", "Year 10": "10",
-    "Year 11 Units 1&2": "J", "Year 12 Units 3&4": "Q",
-};
+import FanCard from "@/components/onboarding/FanCard";
+import { handFrom } from "@/lib/onboardingFlow";
+import { useFlight } from "@/components/onboarding/DealFlight";
 
 const CARD_W = 62;
 const CARD_H = 88;
@@ -48,137 +43,25 @@ const STEP_WIDE = 46;
 const STEP_TIGHT = 34;
 const MAX_FANNED = 7;
 
-/**
- * FanCard — a card as seen in a hand, where only its left edge is showing.
- *
- * This exists because the first two attempts at the hand got the same thing
- * wrong twice, once in the rail and once in the spread. A fanned card is
- * overlapped by the card in front of it: the visible part is a strip as wide
- * as the fan's step, not the whole card. Anything centred on the CARD is
- * therefore centred under its neighbour, and every label in the hand came out
- * as "Mathema", "Chen", "Eng", "Phy" — clipped, and clipped differently on
- * every card, which reads as a rendering fault rather than as a full hand.
- *
- * So the label is laid out in the strip. It is left-anchored, `step` wide, and
- * the last card in the fan gets the full width because nothing covers it.
- *
- * BOTH CORNER INDICES, as a real card is printed. This used to print only the
- * top-left, on the reasoning that a card held in a fan shows only that corner
- * — true of the cards that ARE overlapped, and the last card in the fan is not
- * overlapped by anything, so it sat there with one index and read as a card
- * with a corner missing.
- *
- * What made the single index look necessary was the label, which ran under the
- * bottom-right mark. So the LABEL gives way, not the index: on the last card
- * its band reserves the corner. On every other card the band is only as wide
- * as the visible strip and the index is out under the next card, where it
- * costs nothing.
- */
-export function FanCard({ card, strip, labelSize }) {
-    const tone = card.tone || (card.gold ? "#F0B429" : undefined);
-    // Only the card whose whole face is showing has to make room for its own
-    // bottom-right index; on an overlapped card that corner is behind the next
-    // card, and stealing width from a 34px strip clips the subject name.
-    const clearsIndex = strip >= CARD_W - 2;
-    return (
-        <PlayingCard
-            rank={card.rank}
-            suit={card.suit}
-            smallIndices
-            // The real face: two marks for a two, a framed panel for a court
-            // card, one big mark for the ace. Compact, so the layout sits in
-            // the top two thirds and leaves the bottom edge for the name.
-            // Printing a rank in a corner and nothing else is what made every
-            // card in this hand read as unused stock.
-            pips="compact"
-            tone={tone}
-            className="w-full h-full"
-        >
-            {/* The name sits on a band in the subject's own colour, opaque so
-                the pips above cannot show through it. That colour is not
-                decoration: it is what this subject looks like everywhere in
-                the app from the moment the account exists. */}
-            <span className="absolute bottom-0 left-0 pt-1 pb-1.5 pl-1 text-center"
-                style={{
-                    width: strip,
-                    // The card publishes how much room its index actually
-                    // takes, so the reserve follows the mark instead of
-                    // guessing at it. It used to be a flat 18px — 29% of a
-                    // 62px card, reserved for a mark that is nothing like
-                    // that wide once it scales with the card it is on.
-                    paddingRight: clearsIndex ? "var(--card-index-w)" : 4,
-                    background: tone ? alpha(tone, 0.16) : "hsl(var(--muted))",
-                }}>
-                <span className="block font-bold leading-[1.15] text-foreground/75
-                    line-clamp-2 break-words hyphens-auto"
-                    style={{ fontSize: labelSize }}>
-                    {card.label}
-                </span>
-            </span>
-        </PlayingCard>
-    );
-}
+// FanCard — the face of a card as held — lives in its own file, because the
+// deal flight draws it too and importing it from here made a cycle.
+export { FanCard };
 
-/**
- * The answers so far, in the order they were given, as cards.
- *
- * Kept as a pure function of the wizard's answers rather than as state that
- * the steps push into, because the wizard already persists answers to
- * localStorage on every change: a hand built from state would come back empty
- * on a refresh while the answers behind it survived, and the student would
- * watch their own hand disappear.
+/*
+ * `handFrom` lives in @/lib/onboardingFlow now, beside the one year→rank table.
+ * The year picker and this hand each kept their own map from year to rank,
+ * which is the mirror this codebase keeps deleting; and the table, the reveal
+ * and this rail all deal the same cards, so they read the same function.
  */
-export function handFrom(answers) {
-    const out = [];
-    if (answers.yearLevel) {
-        out.push({
-            key: "year",
-            rank: YEAR_RANK[answers.yearLevel] || "Q",
-            suit: "spade",
-            label: answers.yearLevel.replace(/ Units.*$/, ""),
-            title: `${answers.yearLevel} — your year, not a mastery rank`,
-        });
-    }
-    (answers.subjects || []).forEach((s) => {
-        out.push({
-            key: `sub-${s.code || s.id}`,
-            // Two, and it has to be. Rank is mastery everywhere else in the
-            // app and no card has been reviewed yet.
-            rank: "2",
-            suit: suitFor(s.name),
-            // The colour this subject will still have on the dashboard next
-            // year, derived from its name so it can be shown before there is
-            // an account to store it against.
-            tone: colorFor(s.name),
-            label: s.name,
-            title: `${s.name} — every subject starts at a two`,
-        });
-    });
-    if (answers.goalAtar) {
-        const n = answers.goalAtar;
-        out.push({
-            key: "atar",
-            rank: "A",
-            suit: "spade",
-            label: `ATAR ${n.toFixed(n % 1 === 0 ? 0 : 2)}`,
-            title: "Your target — the card you are playing for",
-            gold: true,
-        });
-    }
-    if (answers.goalCourseName) {
-        out.push({
-            key: "course",
-            rank: "K",
-            suit: "diamond",
-            label: answers.goalCourseName,
-            title: `${answers.goalCourseName}${answers.goalUniversity ? ` at ${answers.goalUniversity}` : ""}`,
-        });
-    }
-    return out;
-}
+export { handFrom };
 
 /** One card in the hand. Sized small, so the label is a strip not a paragraph. */
 function HeldCard({ card, i, n, step, reduce, last }) {
+    // A card in the air is laid out at its final place and kept invisible
+    // until the flight lands on it, so the flight has a still target.
+    const { isAirborne } = useFlight();
+    const airborne = isAirborne(card.key);
+    const [arrivedAirborne] = React.useState(airborne);
     // Fanned around the middle. The arc lifts the CENTRE rather than dropping
     // the edges, and that is a bounds fact rather than a taste one: the rail
     // is pinned to the bottom of the viewport, so any downward offset on the
@@ -194,13 +77,20 @@ function HeldCard({ card, i, n, step, reduce, last }) {
     return (
         <motion.div
             data-held={card.key}
+            data-deal-slot={card.key}
+            data-rot={lean}
+            data-label-size="7px"
             title={card.title}
-            className="absolute bottom-0"
+            // White stock in both themes, as on the table: a flight carries a
+            // white card, and it must not land as a different one.
+            className="theme-locked-light absolute bottom-0"
             style={{ width: CARD_W, height: CARD_H, left: i * step, zIndex: i }}
-            initial={reduce
-                ? { opacity: 0 }
-                : { opacity: 0, y: 90, x: 130, rotate: 26, scale: 0.86 }}
-            animate={{ opacity: 1, y: lift, x: 0, rotate: lean, scale: 1 }}
+            initial={arrivedAirborne
+                ? { opacity: 0, y: lift, x: 0, rotate: lean, scale: 1 }
+                : reduce
+                    ? { opacity: 0 }
+                    : { opacity: 0, y: 90, x: 130, rotate: 26, scale: 0.86 }}
+            animate={{ opacity: airborne ? 0 : 1, y: lift, x: 0, rotate: lean, scale: 1 }}
             exit={reduce
                 ? { opacity: 0 }
                 : { opacity: 0, y: 70, rotate: lean + 14, scale: 0.9,
@@ -209,7 +99,7 @@ function HeldCard({ card, i, n, step, reduce, last }) {
                 ? { duration: 0.2 }
                 : { type: "spring", stiffness: 260, damping: 24, mass: 0.7 }}
         >
-            <FanCard card={card} strip={last ? CARD_W : step} labelSize="7.5px" />
+            <FanCard card={card} strip={last ? CARD_W : step} labelSize="7px" />
         </motion.div>
     );
 }

@@ -12,6 +12,8 @@ import { PaperFields, EmphasisFields } from "@/components/quizzes/QuizSetupField
 import { paperShape, MINUTES_PER_MARK, QUESTION_KINDS } from "@/lib/quizSetup";
 import PremiumReveal from "@/components/subscription/PremiumReveal";
 import "@/index.css";
+import Table from "@/components/onboarding/Table";
+import { FlightProvider } from "@/components/onboarding/DealFlight";
 import AceDeal from "@/components/market/AceDeal";
 import TakeSide from "@/components/market/TakeSide";
 import MarketCard from "@/components/market/MarketCard";
@@ -87,6 +89,7 @@ import { ScopeSwitch, BoardSwitch } from "@/components/ranked/BoardControls";
 import { movementMap } from "@/lib/boardMovement";
 import { boardsFor } from "@/lib/ranked";
 import { liftFor } from "@/lib/atarLift";
+import AtarPanel from "@/components/analytics/AtarPanel";
 
 const which = new URLSearchParams(location.search).get("v") || "deal";
 
@@ -1351,6 +1354,48 @@ const BOARD_ROWS = BOARD_NAMES.map((n, i) => ({
         : i === 6 ? [{ code: "b", name: "Marked", icon: "Target", rarity: "rare" }] : [],
 }));
 
+/* ── ?v=atar — the REAL AtarPanel, provisional and ranked ───────────────────
+ *
+ * `views.ranked` above restates the panel's bars rather than mounting it, so
+ * it cannot see the panel's own rendering — a stand-in measuring itself, the
+ * lesson `ProgressTabs` records. This mounts the component, against the two
+ * states a real account can only ever be in one of at a time.
+ *
+ * The provisional one is the point: the "N/3 days" strip used to print a
+ * literal 3 three times and reconstruct the days done as `3 - daysNeeded`,
+ * while the payload carries `study_days` and `days_needed` outright. The dots
+ * are drawn from their sum now, so a fixture short of the floor is the only
+ * way to look at it.
+ */
+const ATAR_BASE = {
+    mastery: 68, consistency: 72, effort: 41, breadth: 55, planning: 34,
+    quiz_marks: 124, cards_reviewed: 88, minutes: 247,
+    technique_families: 3, technique_target: 5,
+    consistency_target: 20, effort_target: 1200,
+    goals_set: 4, goals_met: 3, blocks_planned: 5, blocks_kept: 4,
+};
+
+views.atar = () => (
+    <div className="min-h-screen bg-background p-4 sm:p-6 space-y-6">
+        <div className="max-w-3xl mx-auto">
+            <p className="stat-label mb-2">Provisional — under the ranking floor</p>
+            <AtarPanel
+                atar={41.25}
+                band="Building"
+                components={{ ...ATAR_BASE, study_days: 1, days_needed: 2, ranked: false }}
+            />
+        </div>
+        <div className="max-w-3xl mx-auto">
+            <p className="stat-label mb-2">Ranked</p>
+            <AtarPanel
+                atar={68.4}
+                band="Consistent"
+                components={{ ...ATAR_BASE, study_days: 14, days_needed: 0, ranked: true }}
+            />
+        </div>
+    </div>
+);
+
 views.board = () => {
     const [scope, setScope] = React.useState("global");
     const [boardId, setBoardId] = React.useState("atar");
@@ -1814,6 +1859,35 @@ views.report = () => {
                 </div>
             </div>
         </MemoryRouter>
+    );
+};
+
+/**
+ * The signup table, going straight from a SPREAD to the REVEAL — which is how
+ * a retake reaches it, with no build in between, and the one transition a
+ * fresh signup never shows. The cards have to turn over here too; without the
+ * flip keyed on the reveal they simply stay face up. Judge it on the clock:
+ * spread at 1s, mid-turn at ~2.4s, the Ace catching the light by ~4s.
+ */
+views.table = () => {
+    const answers = {
+        yearLevel: "Year 12 Units 3&4",
+        subjects: ["English", "Mathematical Methods", "Chemistry", "Legal Studies"].map((name, i) => ({
+            id: `s${i}`, name, code: `C${i}`, is_custom: false,
+        })),
+        goalAtar: 92.5,
+    };
+    const [mode, setMode] = React.useState("spread");
+    React.useEffect(() => { const t = setTimeout(() => setMode("reveal"), 1800); return () => clearTimeout(t); }, []);
+    return (
+        <FlightProvider>
+            <div className="min-h-screen bg-background p-6">
+                <div className="h-[600px] max-w-2xl">
+                    <Table answers={answers} mode={mode}
+                        ace={{ lines: ["Every subject starts as a two.", "You earn the rest."], beat: mode, pose: "proud" }} />
+                </div>
+            </div>
+        </FlightProvider>
     );
 };
 

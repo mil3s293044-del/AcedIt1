@@ -3893,7 +3893,7 @@ at a page that does not exist.
 
 **"A starter tutorial... effective, educational but also engaging so the user
 doesn't get bored or tabs out."** A new account already met four surfaces — the
-six-step signup wizard, `AceTour`, the dashboard setup nudge and the Help
+signup wizard, `AceTour`, the dashboard setup nudge and the Help
 manual — so the ask was not for more onboarding. It was that the onboarding
 there is PASSIVE.
 
@@ -6704,6 +6704,393 @@ the banned-words list at the top of this file.
 Nothing here needed a test, because a test cannot read. What it needed was
 somebody opening the pricing page and the gate in the same sitting.
 
+## Where the numbers disagreed, the second sweep
+
+**"Now check the whole site for other inconsistent numbers."** The first sweep
+found five surfaces answering one question differently. This one swept the
+other shape — **a quantity written down twice with nothing importing either** —
+and the worst thing it found is not a disagreement between two screens. It is a
+disagreement between the copy and the CHARGE.
+
+### THE FREE TRIAL IS ADVERTISED EVERYWHERE AND IMPLEMENTED NOWHERE
+
+**`trial_active` and `trial_ends_at` are real columns, READ in four places and
+WRITTEN BY NOTHING.** `isPremium` treats a future `trial_ends_at` as premium,
+Layout expires it, /Paywall reads it. Nothing in the client or the server ever
+sets one. That is the `goal_study_score` shape — a column shipped since
+migration 0002 that nothing filled in — and the `SPACED_REP` shape — declared,
+labelled, checked nowhere — pointed at a PRICE.
+
+**AND THE ONE SCREEN THAT ASKS STRIPE FOR A TRIAL HAS NO INBOUND LINKS.**
+`stripeCheckout` passes `trial_period_days` only when a caller sends
+`trial_days`. Exactly one does: `/Paywall`. `grep -rn Paywall src/` finds the
+route, the lazy import, a TopNav label and two comments — **no link, no
+navigate, no button anywhere in the app.** Every reachable path to paying goes
+TopNav / TierUsagePill / UsageMeter / ChatWelcome / UnifiedChat → `/Subscription`
+→ `/Checkout`, and `/Premium` → `/Checkout`; `/Checkout` sends no `trial_days`,
+so `mode: "subscription"` with `payment_method_types: ["card"]` charges on the
+spot.
+
+So the same subscription is sold at two prices for week one — **$0 on a screen
+nobody can reach and $5 on the only one they can** — while the marketing site
+prints *"7 days free · No card required"*, a *"7-DAY FREE TRIAL"* badge, a
+*"Start free week"* button, *"Free — then $5 / week"* and *"Cancel before day 7
+and you pay nothing."* `/Checkout` adds *"Cancel anytime within 7 days for a
+full refund"*, and there is no refund path in the code at all.
+
+**THIS IS RECORDED AND NOT CLOSED, because which way to close it is a pricing
+decision rather than a bug fix.** Two coherent answers — `/Checkout` sends
+`trial_days: TRIAL_DAYS` like `/Paywall` does (one line, and what every surface
+already promises), or the trial copy comes down. The precedent in this file
+points hard at the first: the privacy section's own words are *"The fix was
+never to soften the policy. It was to make the product do what the policy
+claimed"*, and a published claim the product does not honour is misleading
+conduct under the ACL whatever else is true. **`pricing.test.mjs` pins all of
+it** — exactly one screen requests a trial and names which, the server still
+passes a requested trial through, checkout still collects a card, and
+`trial_ends_at` still has no writer. The day somebody closes it the suite says
+which half they closed.
+
+### `$5` WAS TYPED IN SEVENTEEN PLACES
+
+Across eleven files, with `TUTOR_HOURLY = 90` and `ACEDIT_WEEKLY = 5` each
+DECLARED TWICE at the same value and nothing importing either — CostGap.jsx and
+Onboarding.jsx, the two screens that print the comparison side by side. That is
+the AI tool count's own shape ("hand-written as three different numbers across
+five screens"), on the number a sixteen-year-old is CHARGED.
+
+`src/lib/pricing.js` is the one copy and `priceLabel()` is the one printer,
+because the two formats in use are a decision about a RECEIPT versus a HEADLINE
+and not something each page should re-make — a total due has to show the cents
+or it does not read as a charge. `weeksPerTutorHour()` replaces a division done
+inline. **The Stripe price id is deliberately NOT here**: Stripe is what
+actually charges, so this module states what the COPY must say and cannot
+promise the two agree.
+
+Two false positives the price scan had to learn, both found by running it:
+
+- **`$5$` IS KATEX, NOT MONEY.** LoadingQuiz answers "Solve $2x = 10$" with the
+  option `"$5$"`. A trailing `$` is the tell.
+- **A SEVEN-DAY STREAK IS NOT A SEVEN-DAY TRIAL.** The first trial scan matched
+  `\b7[- ]day` and reported five files, FOUR of them correct code about
+  something else — a 7-day streak achievement, a 7-day onboarding staleness
+  window, cards falling out of reach within 7 days, the dashboard's run of
+  seven. A false positive is the direction that gets a good guard deleted, and
+  the noise is exactly what hides the fifth file, which really did still carry
+  four trial figures. It matches trial PHRASINGS now, "day 7" among them.
+
+### `atarLift.js` SAID "THE SERVER'S CURVE, EXACTLY" AND WAS NOT
+
+The flagship number, and the drift was one line. The server quantises:
+
+```js
+const raw  = 30 + 69.95 * Math.pow(clamp(composite), 0.8);
+const atar = Math.min(99.95, Math.round(raw / 0.05) * 0.05);   // ← the step
+return { atar: Number(atar.toFixed(2)), … };
+```
+
+The client returned the raw curve. **The score moves in steps of 0.05 and the
+client's model was continuous**, so every "+0.0x ATAR" the app offers as a
+reason to do something — Today's Play's payoff rail, `StandingRail`'s
+`bestLever`, Ranked's five component doors — was differenced off a curve the
+stored score does not follow. A student told ten points of consistency is worth
++0.03 does the work and watches the score move 0.05 or not at all. **That is
+the whole argument for using this differenced model over XP: `liftFor`'s own
+note says the payoff is ATAR points "so it is checkable", and it was not.**
+
+Quantising both ends also makes `liftFor`'s existing rule true rather than
+aspirational — a gain that cannot move the stored score now returns 0.00, and
+the rail already drops a row whose figure is not real.
+
+`mirrors.test.mjs` pinned the level curve and the ATAR BANDS and not the thing
+they band. It now lifts the curve out of `computeAcedItATAR` and RUNS it across
+a thousand composites plus the out-of-range clamps, asserts every value the
+client can return is a multiple of 0.05, and asserts the same of every
+published lift.
+
+### THE SCORE'S OWN DENOMINATORS WERE TYPED INTO THE COPY
+
+Breadth already shipped its target in the payload (`technique_target`) and both
+panels read it. Consistency and effort did not, so `AtarPanel.jsx` AND
+`Ranked.jsx` each printed **"of 20 days"** and **"of ~20h"** — four hard figures
+about the one number the whole app is standardised around, against a bare
+`/ 20` and a bare `1200` inside the server's arithmetic. They are
+`CONSISTENCY_TARGET_DAYS` and `EFFORT_TARGET_MINUTES` now, published as
+`consistency_target` / `effort_target`, and `ATAR_TARGETS` in atarLift.js is the
+fallback for a components blob written before they existed — a copy, but a
+PINNED one, which is the difference.
+
+**AND THE RANKING FLOOR WAS A LITERAL 3, THREE TIMES ON TWO LINES.** The
+provisional strip drew `[0, 1, 2]` dots, filled `3 - daysNeeded` of them and
+printed `{3 - daysNeeded}/3 days` — reconstructing the days studied from a
+constant, while the payload carries `study_days` outright beside
+`days_needed`. The target is their sum, so nothing on the client has to know
+the server's `ATAR_MIN_STUDY_DAYS` at all.
+
+`scripts/_floorProbe.jsx?v=atar` mounts the REAL panel in both states, because
+`?v=ranked` beside it restates the bars rather than drawing them — a stand-in
+measuring itself, which is the lesson `ProgressTabs` records. A real account is
+only ever in one of the two states at a time.
+
+### TWO MORE MIRRORS, AND THE DRIFT COLUMN WAS ALL FALSE POSITIVES
+
+- **`SOON_DAYS = 14`** in `studyQueue.js` AND `subjectHub.js`. Those are the two
+  surfaces this file already requires to print the SAME lead ("two surfaces
+  answering 'what next' with different sentences is how a student stops
+  believing either"), so a drift would have one calling a SAC soon while the
+  other did not. `toolBrief` already read the queue's copy; subjectHub does now.
+- **`ITEMS_PER_PAGE = 22`** in CheatSheetMaker (which SIZES THE ASK) and
+  CheatSheetArtifact (which PAGINATES THE ANSWER). `src/lib/cheatSheet.js` owns
+  it with `fitCount`/`pagesFor`, so the generator cannot ask for a sheet's worth
+  of items the renderer then lays out differently.
+- **`server.mjs` said free users get "3 lifetime each" and named two of three
+  features**, directly above `TIER_FREE_CAPS = { quiz_ai_gen: 5, quiz_ai_mark:
+  5, flashcard_ai_gen: 5 }`. A comment, so nothing could catch it.
+
+Nine names came back with DIFFERENT values and **every one is a false
+positive** — `STEP`, `DROP`, `LEAN`, `HOLD_MS`, `SETTLE_MS`, `QUIET_MS`,
+`BLINK_MIN`, `CONFIDENT`, `MIN_SPAN`: generic local animation timings and
+geometry in unrelated components, sharing a name and nothing else. `MIN_SPAN`
+is the clearest — a price-probability span in PriceChart and a count span in
+spark.js. **The signal was never in the names that disagree. It was in the ones
+that AGREE and are written down twice**, because those are the pairs that have
+not drifted YET.
+
+### THE ANTI-CHEAT CAPS CLAIMED A GUARD THAT DID NOT EXIST
+
+Swept last, and the worst of the mirrors. `server.mjs` says in its own words
+above the caps: *"Mirrors countableByDay() in src/lib/integrity.js — the
+client's copy DRAWS the number, this one RANKS on it, and only this one is
+trusted. **Change one, change both.**"* `integrity.js`'s header makes the same
+claim, and this file says of it: *"the server implements the same caps and its
+test is the guard on them."*
+
+**`integrity.test.mjs` never reads `server.mjs`.** It exercises the client copy
+and nothing else, so the "guard" is on one half of a pair. Five constants
+(`TAB_AWAY_MINUTES`, `SESSION_MAX_MINUTES`, `DAILY_MINUTE_CAP`,
+`BOARD_MIN_QUESTIONS`, `BOARD_MIN_MARKS`) and a whole algorithm, deciding the
+hours leaderboard, with the Progress Hours tab printing **"Capped the way every
+ranked board caps them, so this figure is the one the league counts"** directly
+under the result.
+
+**AND FUZZING THEM FOUND THEY HAD ALREADY DRIFTED.** Not in a constant — in the
+rounding. The server accumulates unrounded and rounds ONCE at the end;
+`countableByDay` rounded EVERY ROW before summing, so the two disagreed by up
+to two minutes. Invisible on whole minutes and on every hand-written fixture:
+it needs fractional idle ratios spread across several rows, which is why 4000
+random cases found it and eight careful ones did not. The client is aligned —
+`focusQuality` gained `exact`, `countableByDay` carries both (`counted` to DRAW
+a day, `exact` to SUM), and `countableMinutes` is now the server's function to
+the digit.
+
+Rounding per DAY instead would have been worse, not better: half a minute a day
+over a 28-day window is a quarter of an hour. The server is the source of truth
+and the honest arithmetic, so the client moved.
+
+`mirrors.test.mjs` now lifts `countableStudyMinutes` and its two helpers out of
+server.mjs and RUNS them against 1,200 random row sets, plus the three caps
+stated explicitly.
+
+**AND THE FIXTURE'S CLOCK WAS HIDING A BRANCH.** Today's ceiling is
+`min(DAILY_MINUTE_CAP, minutes since midnight)` — so after midday the elapsed
+half can NEVER bite: 20:00 is 1200 minutes against a flat cap of 720, and the
+whole check collapses to the cap. Deleting the elapsed check entirely passed
+silently against an evening-only fixture. It runs at 09:30 as well now, where
+570 minutes have passed and the check is the thing deciding. **An injection
+that cannot reach the branch tests nothing** — the same lesson as an injection
+that cannot change behaviour, arrived at from the clock.
+
+### SEVEN PAYOUT CONSTANTS WITH NO READER
+
+`arenaMeta.js` exports `ANTE_OPTIONS`, `SIDE_BET_OPTIONS`, `STUDY_BET_MULT`,
+`SIDE_BET_MULT`, `STUDY_BET_LADDER`, `WINDOW_SCALE` and `STUDY_BET_MIN_TARGET`
+— a client copy of the server's stake bounds and payout arithmetic, under a
+header reading "keep in sync with the server's ... stake bounds" — and
+**nothing in the tree reads one of them.** That is the Compete rebuild working
+as designed (the wagering UI is gone, its endpoints deliberately stay so
+in-flight battles can settle), but an unread copy of a payout multiplier is the
+one shape that drifts invisibly and is then wrong the moment a screen is wired
+to it. Kept under this file's unused-symbol rule, with a note saying to import
+the server's values or delete them rather than trust a number nothing has
+exercised.
+
+### The payout economy itself is clean
+
+Worth recording so it is not re-audited: `league.js`, `credStore.js`,
+`cosmetics.js`, `market.js`, `chips.js`, `pranks.js`, `quests.js`,
+`compliance.js`, `achievements.js`, `xpRanks.js`, `wagerStatus.js`, `aiCost.js`
+and `aiModels.js` are all IMPORTED by `server.mjs` rather than mirrored, so
+every figure the floor, the league, the store and the chip meter print is the
+one that pays. The mirrors that exist are `uploadPrep`, `megaUpload`,
+`storageBudget`, `holdings`, the level curve, the ATAR bands, the ATAR curve,
+the ATAR targets and the integrity caps — and all nine are pinned now.
+
+### Checked and clean
+
+Worth recording so the next sweep does not redo it: the trial length is 7
+everywhere it is PRINTED (whether a student gets one is the open question
+above); the free caps (5/5/5) match `TIER_FREE_CAPS` and the Subscription
+page's "5 lifetime" rows; the chip prices quoted in `tierAccess.js`'s header
+match `chips.js`; the weekly cost ceiling mirror is already annotated and
+correct; `TOOL_COUNT` derives; the catalogue is 33 subjects and the examiner
+profiles are 35, which are two different things and both right.
+
+**`git checkout --` IS NOT AN UNDO, FOR THE SECOND SWEEP RUNNING.** One
+injection restored a file that way and silently took this release's edits to it
+with it — the baseline then reported red and the cause was the harness, not the
+code. Snapshot to a scratch copy and restore from that. Sixteen injections, all
+of them verified to bite, with the baseline green either side.
+
+## The signup wizard is a deal, hosted
+
+**"A full rework of the onboarding — better formatted, more aesthetic, far
+cooler animations, higher converting, full premium and on brand."** It was six
+screens of a questionnaire that happened to print cards, and four things about
+it were simply wrong before any of it was ugly. The rework is
+`src/pages/Onboarding.jsx` (the conductor), `src/components/onboarding/`
+(`steps.jsx`, `StepSignin.jsx`, `Table.jsx`, `AceHost.jsx`, `DealFlight.jsx`,
+`FanCard.jsx`, `Shell.jsx`) and `src/lib/onboardingFlow.js`, which holds every
+figure the wizard prints so a test can hold them to the calendar, the scheduler
+and the catalogue.
+
+    Year → Birthday → Subjects → Target → Build → Reveal → Sign in
+
+### Four things that were wrong, not just plain
+
+- **THE CONSENT BANNER SAT ON THE PRIMARY BUTTON** for every first-time
+  visitor. Both were pinned to the bottom of the viewport and neither knew the
+  other existed, on the one screen whose job is a signup. The banner publishes
+  its MEASURED height as `--consent-h` (a ResizeObserver, reset to 0 on hide
+  and unmount) and the actions bar sits on it. The guard requires the measured
+  value specifically: its first draft matched the two `0px` resets and passed
+  with the measurement deleted.
+- **THREE PROGRESS COUNTS** — a `1/6` badge, a "Step 2 of 6" eyebrow and the
+  pips — which disagreed every time a step moved. The pips are the only count
+  now and every eyebrow is a NAME (`STEP_NAME`); the test refuses an eyebrow
+  that counts.
+- **THE REVIEW LADDER WAS INVENTED.** The brain screen promised reviews at days
+  1, 3, 8 and 14. The app's own scheduler walks 1, 4, 11 and 27 for a "good"
+  recall. `reviewLadder` RUNS `calculateNextReview` to get it, so the dates the
+  build prints are the dates the deck will actually come back, and the test
+  refuses the old literal anywhere in the flow.
+- **A SECOND SCALING PARSER AND A SECOND YEAR→RANK TABLE.** `ScalingReport`
+  parsed `scaling_factor` itself and `HandOfAnswers` kept its own year map, so
+  the picker and the hand could disagree about which card a year is. `YEARS` is
+  the one table — rank, suit and TONE — and `scalingFor` the one parser, built
+  on `scalingOf`.
+
+### A split stage
+
+On a desktop the questions sit on the app's own ground and a dark felt table
+(`.onb-felt`, literal ink, the floor's reasoning) sits beside them, sticky at
+full height. Every answer leaves the question as a card and lands on the table,
+so the thing a student is building is the largest object on the screen rather
+than a strip along the bottom. On a phone there is no beside: Ace is a row over
+the question, the hand is a rail under the button, and the build and the reveal
+put the felt in the content.
+
+**EXACTLY ONE LAYOUT IS MOUNTED, and that is why it is read rather than
+CSS-hidden.** A flight lands on whichever `[data-deal-slot]` is visible, so the
+table and the rail mounted together would race for every card. `useIsDesktop`
+decides, and `visibleSlot` additionally requires an `offsetParent`.
+
+**A FLIGHT IS A CLONE BETWEEN TWO RECTS.** `fly(fromEl, card)` measures the
+picked element, waits two frames for the slot to exist, and animates a fixed
+clone along an arc to it while the real slot renders invisible. Call `fly`
+BEFORE `update`: both batch, so the card's first render on the table already
+knows it is airborne — the other order paints it landed, then hides it, then
+flies a copy onto itself. The clone is portalled to `document.body`, because
+`position: fixed` resolves against a transformed ancestor and framer-motion
+leaves an inline transform on every animated section here.
+
+**CARD STOCK IS WHITE IN BOTH THEMES** — the picker, the rail, the table, the
+target card and the clone. In the dark the picker's cards followed the theme,
+so a dark card left the page and landed white on the felt: a flight that
+changes what it is carrying mid-air. `theme-locked-light` on all five, asserted.
+
+**A LABEL TOO WIDE FOR ITS STRIP RUNS UP THE EDGE.** A seven-card hand on a
+phone leaves each overlapped card a 34px strip, and "Chemistry" across that was
+"Chemi" — the clipped-label fault `FanCard`'s own header records. Up the edge,
+the way a spine is printed, the constraint is the card's HEIGHT, which every
+`shortSubject` label fits. The last card, which nothing overlaps, keeps its
+horizontal band.
+
+### Ace hosts, and says only what is true
+
+`AceHost` draws him on the table (light ink) or as a row over the question (app
+ink), from one component so one place claims the stage — `"onboarding"` sits
+in `ACE_ORDER` between a celebration and the first run. He TOSSES whenever a
+card lands, because a mascot standing still while cards fly past is watching
+the deal rather than dealing it. His lines come out of `aceLines` and are
+REACTIONS to the last answer — the weeks the year leaves, what VTAC does to the
+subjects just picked — never a compliment, and **never a comment on an age**,
+which the test refuses by name.
+
+### One decision per screen, and the brain left the funnel
+
+The old year screen grew a birthday form under the cards once one was picked,
+half behind the pinned button on a phone; the subjects screen was a 340px
+scroll box with its payout BELOW it; the course fields sat under the target
+card where nobody scrolled. Seven short screens, each asking one thing, with
+the payout where the eye already is — Ace says it, or the felt draws it
+(`FeltScaling`, VTAC's figures drawn around zero because scaling goes both
+ways).
+
+**THE BRAIN ASKED NOTHING** and sat between the second and third questions,
+which made it the likeliest place in the flow to lose somebody. Its argument —
+spacing beats rereading — is now one line on the build, under the student's
+own review dates, which is the version they can check.
+
+**THE BUILD IS THEATRE AND THE LINES ARE NOT.** About four seconds, skippable,
+and every line is something `buildLines` genuinely computed from the answers:
+weeks left, their subjects' scaling, their first review dates, their target
+band, the level the questions are pitched at. A missing answer DROPS its line
+rather than printing a blank. It never claims work that is not happening —
+"analysing ten thousand students like you" is the line that makes a wait feel
+valuable by lying about it, and the test refuses that family by name. An
+existing student retaking the setup skips it entirely: it is theatre for a
+first deal. **Back never lands on it** (`prevStep`), because replaying the
+shuffle to reach the target you wanted to change is a penalty for changing
+your mind.
+
+**THE REVEAL TURNS OVER, then the facts arrive.** The cards are keyed by what
+they are and never remounted between the table's three modes (spread, deck,
+reveal), so every change is the same cards MOVING. The flip is keyed on the
+reveal, which is what lets a retake — spread straight to reveal, no deck in
+between — turn the hand over at all; without the key a face-up card simply
+stays face up. `scripts/_floorProbe.jsx?v=table` draws exactly that transition,
+the one a fresh signup never shows. Nobody is handed an Ace: every subject is a
+two and only the target is gold.
+
+### Sign-in: the auth is ported, the button is pinned
+
+Every error branch in `StepSignin` is the old `Step6Signin`'s, verbatim in
+behaviour — each was written after something actually went wrong, and sign-up
+is where a clever interface costs real money. What changed is the shape:
+
+- **THE GOOGLE BUTTON IS IN THE PINNED BAR**, so it is on screen from the first
+  paint. On a phone it used to sit below two plan cards, an anchor panel and a
+  label — below the fold on the one screen where a scroll costs a signup.
+- **A PLAN CARD SELLS WHAT THE GATE ENFORCES.** The tool count is
+  `TOOL_LABELS`' own length (the plain copy `toolBrief.test.mjs` holds to the
+  catalogue's twelve, so signup does not pull every examiner prompt into its
+  chunk) and the free allowance is `FREE_LIFETIME_CAPS`. The test refuses a
+  hand-typed allowance in the plan table.
+- **NO TRIAL IS PROMISED.** Whether there is one is the open decision recorded
+  in `pricing.js`; this screen says what is true today and the test refuses any
+  trial phrasing on it.
+- The year of tutoring is on the felt as `CostGap variant="felt"` — two bars
+  off the same arrays the chart is drawn from, because the chart needs ~500px
+  the table does not have and was cut off below its own totals, which are the
+  punchline. A phone has no felt, so the full chart follows the plans.
+
+"Passwords don't match" was a banned word in an error message; it reads "Those
+two passwords are different."
+
+Draw every screen at 1280, 1024 and 390, in both themes — the dark theme is the
+only place the card-stock fault shows, and 1024 is the narrowest the split
+fires at. `scripts/_floorProbe.jsx?v=table` for the retake's reveal.
+
 ## Voice / UX guardrails (from prior decisions)
 
 - **Tone**: chill motivational coach. Never cocky.
@@ -6943,8 +7330,22 @@ somebody opening the pricing page and the gate in the same sitting.
   against what NODE can resolve rather than what vite can. An `@/` alias in a
   shared module builds, lints, tests green and crashes the deploy on boot
 - `src/lib/mirrors.test.mjs` — the client/server copies nothing was checking:
-  the level curve (`xpSystem.jsx` vs server.mjs) and the ATAR bands. Both sides
-  are parsed as text and RUN, so it compares behaviour rather than source
+  the level curve (`xpSystem.jsx` vs server.mjs), the ATAR bands, and **the
+  ATAR CURVE ITSELF**, which said "the server's curve, exactly" and had left
+  out the 0.05 step — so every "+0.0x ATAR" the app publishes as checkable was
+  off a curve the stored score does not follow. Also the three component
+  targets, after two of them turned out to be typed into the copy as "of 20
+  days" and "of ~20h" in both ATAR panels. Both sides are parsed as text and
+  RUN, so it compares behaviour rather than source
+- `src/lib/pricing.js` + `pricing.test.mjs` — the price, once. `$5` was typed in
+  seventeen places across eleven files and `TUTOR_HOURLY`/`ACEDIT_WEEKLY` were
+  each declared twice; `priceLabel()` is the one printer. It also PINS the
+  trial finding rather than closing it: `trial_ends_at` has no writer anywhere,
+  /Paywall is the only screen that asks Stripe for one and has no inbound
+  links, and every reachable route to paying charges on the spot — so the week
+  the marketing site gives away is sold at $5
+- `src/lib/cheatSheet.js` — how much fits on a printed sheet. The Maker sizes
+  its ask off it and the Artifact paginates off it; they had a copy each
 - `src/lib/quizDeck.js` — `sitScores` / `averageScore`: the ONE quiz average,
   with the three corrections that were each applied by a different subset of
   seven surfaces. The test scans for a fourth hand-rolled mean
@@ -6981,7 +7382,11 @@ somebody opening the pricing page and the gate in the same sitting.
   for a release with no renderer at all
 - `src/lib/integrity.js` — the caps, the idle discount, the quiz floors and the
   verified/claimed split. Mirrored server-side by `countableStudyMinutes`,
-  `verifiedStudyMinutes` and `boardQuizScores`; change one, change both
+  `verifiedStudyMinutes` and `boardQuizScores`; change one, change both — and
+  `mirrors.test.mjs` is what finally enforces that, since `integrity.test.mjs`
+  exercises the client half alone. `counted` DRAWS a day and `exact` SUMS,
+  because rounding every row before summing put this up to two minutes off the
+  board the Hours tab claims to agree with
 - `src/lib/liveRefresh.js`, `src/lib/LiveContext.jsx`, `src/api/realtime.js` —
   when the app may refetch, who can hold it still, and the push path
 - `src/components/shared/LiveNumber.jsx` — rolling figures. `LiveDot.jsx` is
@@ -7113,6 +7518,17 @@ somebody opening the pricing page and the gate in the same sitting.
   screens draw; `ui/slider.jsx` renders a thumb per value, which it did not.
   Draw it with `scripts/_floorProbe.jsx?v=quizsetup`, both themes and at 390 —
   four cells of words do not fit a phone and only the screenshot says so
+- `src/pages/Onboarding.jsx`, `src/components/onboarding/` +
+  `src/lib/onboardingFlow.js` + `onboardingFlow.test.mjs` — the signup wizard as
+  a deal: a split stage with the felt table beside the questions, Ace reacting
+  to each answer, cards flying from the pick to the table (`DealFlight`), a
+  build of lines the app genuinely computed, and a reveal that turns the hand
+  over. Every figure it prints — weeks left, the review ladder (run off the
+  real scheduler), scaling, the hand itself — comes out of `onboardingFlow.js`.
+  The actions bar sits on the consent banner's `--consent-h`; card stock is
+  white in both themes; the sign-in auth is the old step's, ported. Draw it at
+  1280, 1024 and 390 in both themes, and the retake's reveal with
+  `scripts/_floorProbe.jsx?v=table`
 - `src/components/legal/AgeAnswer.jsx` — the birthday asked ONCE: the one
   control the signup wizard and `AgeGate` both import, with `ageAnswerReady` /
   `ageAnswerPatch` so the two cannot disagree about what "answered" means. The

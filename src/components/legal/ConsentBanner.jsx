@@ -22,7 +22,7 @@
  * app hostage over a marketing pixel would be absurd. That is also why the
  * decline path costs nothing: measurement is ours to lose.
  */
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { motion, AnimatePresence, useReducedMotion } from "framer-motion";
 import { Link } from "react-router-dom";
 import { createPageUrl } from "@/utils";
@@ -46,6 +46,31 @@ export default function ConsentBanner() {
         setShow(false);
     };
 
+    /* ── IT PUBLISHES HOW MUCH OF THE SCREEN IT TAKES ─────────────────────────
+       The banner is fixed to the bottom of the viewport, and so is the signup
+       wizard's Continue button — so on the very first screen of the funnel the
+       banner sat directly on top of the one control the page exists for, and a
+       visitor had to answer a question about advertising before they could
+       answer what year they are in. Neither side can see the other, so the
+       banner says how tall it is (`--consent-h` on the document) and anything
+       pinned to the bottom sits above it. It is zero whenever the banner is
+       gone, so nothing has to know whether it was ever shown. */
+    const box = useRef(null);
+    useEffect(() => {
+        const root = typeof document !== "undefined" ? document.documentElement : null;
+        if (!root) return undefined;
+        if (!show || !box.current) {
+            root.style.setProperty("--consent-h", "0px");
+            return undefined;
+        }
+        const el = box.current;
+        const publish = () => root.style.setProperty("--consent-h", `${Math.ceil(el.getBoundingClientRect().height)}px`);
+        publish();
+        const ro = typeof ResizeObserver !== "undefined" ? new ResizeObserver(publish) : null;
+        ro?.observe(el);
+        return () => { ro?.disconnect(); root.style.setProperty("--consent-h", "0px"); };
+    }, [show]);
+
     return (
         <AnimatePresence>
             {show && (
@@ -54,6 +79,7 @@ export default function ConsentBanner() {
                     animate={{ y: 0, opacity: 1 }}
                     exit={{ y: 24, opacity: 0 }}
                     transition={{ type: "spring", stiffness: 260, damping: 28 }}
+                    ref={box}
                     role="dialog"
                     aria-label="Analytics and advertising cookies"
                     className="fixed inset-x-0 bottom-0 z-[60] p-3 sm:p-4"

@@ -21,9 +21,8 @@ import {
     Printer, Plus, Download, Eye, X, Sigma, BookOpen, Check, Lightbulb,
 } from "lucide-react";
 import MarkdownMath from "@/components/shared/MarkdownMath";
+import { ITEMS_PER_PAGE, pagesFor } from "@/lib/cheatSheet";
 
-// A tight A4 two-column sheet holds ~22 short lines per page.
-const ITEMS_PER_PAGE = 22;
 
 // Static class strings — Tailwind JIT can't see names built from variables.
 const TYPE_META = {
@@ -131,7 +130,7 @@ export default function CheatSheetArtifact({ initialItems, subject = "", title =
     const included = items.filter((it) => it.status === "in");
     const pool = items.filter((it) => it.status === "out");
     const sections = groupBySection(included);
-    const estPages = Math.max(1, Math.ceil(included.length / ITEMS_PER_PAGE));
+    const estPages = pagesFor(included.length);
     const overBudget = estPages > pages;
 
     if (!items.length) return null;

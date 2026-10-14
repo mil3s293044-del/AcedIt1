@@ -23,11 +23,15 @@
  * is wrong can see what they would change.
  */
 import React from "react";
+import { PREMIUM_WEEKLY_AUD, TUTOR_HOURLY_AUD } from "@/lib/pricing";
 import { motion, useReducedMotion } from "framer-motion";
 
 const WEEKS = 40;
-const TUTOR_HOURLY = 90;
-const ACEDIT_WEEKLY = 5;
+// Both figures come from @/lib/pricing. They were declared here AND in
+// Onboarding.jsx at the same values, with nothing importing either — two
+// copies of a price, on the two screens that print it side by side.
+const TUTOR_HOURLY = TUTOR_HOURLY_AUD;
+const ACEDIT_WEEKLY = PREMIUM_WEEKLY_AUD;
 
 const W = 320, H = 168, PAD_L = 40, PAD_R = 12, PAD_T = 14, PAD_B = 26;
 const plotW = W - PAD_L - PAD_R;
@@ -48,9 +52,55 @@ const path = (vals) => vals.map((v, w) => `${w === 0 ? "M" : "L"}${x(w)} ${y(v)}
 
 const money = (n) => `$${n.toLocaleString("en-AU")}`;
 
-export default function CostGap() {
+/**
+ * The same year as two bars, for the dark table on the sign-in screen. The
+ * chart needs about five hundred pixels it does not have there — beside the
+ * hand it was cut off below its own totals, which are the punchline — and the
+ * totals alone are the argument. Both variants read the same arrays, so they
+ * cannot disagree about the year.
+ */
+function FeltGap({ reduce }) {
+    const rows = [
+        { id: "tutor", who: "A tutor", how: `One hour a week at $${TUTOR_HOURLY}`, total: TOP,
+            bar: "bg-[#FF7A6B]", ink: "text-[#FFA597]" },
+        { id: "acedit", who: "AcedIt", how: "Every day, every subject", total: ACEDIT[WEEKS],
+            bar: "bg-[#7BDA2E]", ink: "text-[#9BE15D]" },
+    ];
+    return (
+        <div data-cost-gap className="rounded-2xl bg-white/[0.05] border border-white/10 p-4">
+            <p className="text-[11px] font-bold uppercase tracking-wider text-[#9BE15D] mb-3">
+                One VCE year, both ways
+            </p>
+            <div className="space-y-3">
+                {rows.map((r, i) => (
+                    <div key={r.id}>
+                        <div className="flex items-baseline justify-between gap-3 mb-1.5">
+                            <span className="text-xs font-bold text-white/85">
+                                {r.who} <span className="font-semibold text-white/45">· {r.how}</span>
+                            </span>
+                            <span className={`font-display font-extrabold text-base tabular-nums ${r.ink}`}>{money(r.total)}</span>
+                        </div>
+                        <span className="block h-2 rounded-full bg-white/[0.07] overflow-hidden">
+                            <motion.span className={`block h-full rounded-full ${r.bar}`}
+                                initial={reduce ? false : { width: 0 }}
+                                animate={{ width: `${Math.max(2, (r.total / TOP) * 100)}%` }}
+                                transition={{ duration: 0.9, delay: 0.25 + i * 0.15, ease: [0.2, 0.8, 0.2, 1] }} />
+                        </span>
+                    </div>
+                ))}
+            </div>
+            <p className="text-[11px] text-white/45 mt-3 leading-snug">
+                Across {WEEKS} school weeks. A good tutor is worth what they charge; this is
+                there at eleven on a Sunday.
+            </p>
+        </div>
+    );
+}
+
+export default function CostGap({ variant = "card" }) {
     const reduce = useReducedMotion();
     const view = { once: true, margin: "-60px" };
+    if (variant === "felt") return <FeltGap reduce={reduce} />;
 
     return (
         <div data-cost-gap className="card-soft p-5 lg:p-6">

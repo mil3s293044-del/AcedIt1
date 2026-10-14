@@ -87,7 +87,10 @@ const holders = new Set();
  * own state and returns when the stage clears, so the tour does not lose its
  * stop nor the run its beat.
  */
-export const ACE_ORDER = ["reacts", "first-win", "tour", "buddy", "intro", "roam", "launcher"];
+// "onboarding" is the signup wizard, where he hosts every screen. It renders
+// outside Layout, so nothing else can be drawing him there — it is ranked
+// rather than left off so that stays true if that ever changes.
+export const ACE_ORDER = ["reacts", "onboarding", "first-win", "tour", "buddy", "intro", "roam", "launcher"];
 
 /** An id nobody registered loses to everything, rather than winning by accident. */
 const rank = (id) => {
