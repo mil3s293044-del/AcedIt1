@@ -12,6 +12,8 @@ import { PaperFields, EmphasisFields } from "@/components/quizzes/QuizSetupField
 import { paperShape, MINUTES_PER_MARK, QUESTION_KINDS } from "@/lib/quizSetup";
 import PremiumReveal from "@/components/subscription/PremiumReveal";
 import "@/index.css";
+import Table from "@/components/onboarding/Table";
+import { FlightProvider } from "@/components/onboarding/DealFlight";
 import AceDeal from "@/components/market/AceDeal";
 import TakeSide from "@/components/market/TakeSide";
 import MarketCard from "@/components/market/MarketCard";
@@ -1857,6 +1859,35 @@ views.report = () => {
                 </div>
             </div>
         </MemoryRouter>
+    );
+};
+
+/**
+ * The signup table, going straight from a SPREAD to the REVEAL — which is how
+ * a retake reaches it, with no build in between, and the one transition a
+ * fresh signup never shows. The cards have to turn over here too; without the
+ * flip keyed on the reveal they simply stay face up. Judge it on the clock:
+ * spread at 1s, mid-turn at ~2.4s, the Ace catching the light by ~4s.
+ */
+views.table = () => {
+    const answers = {
+        yearLevel: "Year 12 Units 3&4",
+        subjects: ["English", "Mathematical Methods", "Chemistry", "Legal Studies"].map((name, i) => ({
+            id: `s${i}`, name, code: `C${i}`, is_custom: false,
+        })),
+        goalAtar: 92.5,
+    };
+    const [mode, setMode] = React.useState("spread");
+    React.useEffect(() => { const t = setTimeout(() => setMode("reveal"), 1800); return () => clearTimeout(t); }, []);
+    return (
+        <FlightProvider>
+            <div className="min-h-screen bg-background p-6">
+                <div className="h-[600px] max-w-2xl">
+                    <Table answers={answers} mode={mode}
+                        ace={{ lines: ["Every subject starts as a two.", "You earn the rest."], beat: mode, pose: "proud" }} />
+                </div>
+            </div>
+        </FlightProvider>
     );
 };
 

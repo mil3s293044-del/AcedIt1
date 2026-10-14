@@ -1,147 +1,85 @@
 // ════════════════════════════════════════════════════════════════════════════
-// Pre-signup onboarding wizard
+// Pre-signup onboarding — a deal, hosted.
 //
-// Flow: Landing → /onboarding (this) → Google OAuth → Dashboard (personalised)
+//   Year → Birthday → Subjects → Target → Build → Reveal → Sign in
 //
-// 6 steps, ~90 seconds:
-//   1. Year level          ← six cards dealt on a table, pays out weeks left
-//   2. Subjects            ← pays out their VTAC scaling report
-//   3. The brain           ← asks nothing; the evidence, interactive
-//   4. Target              ← ATAR ace and course, merged, pays out the band
-//   5. The reveal          ← the hand fans out, plus the cost gap over a year
-//   6. Sign in → trial / free
+// Flow: Landing → /onboarding (this) → Google OAuth / email → Dashboard.
 //
-// EVERY QUESTION PAYS OUT. Four of six screens used to take and give nothing
-// back, which is what makes a flow feel like a form however good it looks, and
-// it meant the entire persuasive load sat on one screen at the end where it
-// read as a pitch. Each answer now returns one true, checkable fact derived
-// from that answer: the weeks left before exams, the official scaling numbers
-// for exactly the subjects picked, the band a target falls in. None of it is a
-// claim about AcedIt, and that is why it works — a student who learns
-// something true at step two believes the graph at step five.
+// A SPLIT STAGE. On a desktop the questions sit on the app's own ground and a
+// dark felt table sits beside them; every answer leaves the question as a card
+// and lands on the table, so what the student is building is the biggest thing
+// on the screen rather than a strip along the bottom of it. Ace stands on the
+// table and says one line per screen — a REACTION to the last answer, never a
+// compliment (`aceLines`). On a phone there is no beside: Ace is a row over the
+// question, the hand is a rail under the button, and the build and the reveal
+// put the felt in the content.
 //
-// IT IS A DEAL, NOT A FORM. Every answer puts a card in a hand held at the
-// bottom of the screen (HandOfAnswers), and that hand IS the progress
-// indicator: it grows as you go, and it shows what you said rather than how
-// many screens are left. The landing page ends with several hundred cards
-// forming a brain, and the flow immediately after it used to be a grey
-// questionnaire with a segmented bar, which threw all of that away at the door.
+// ONE DECISION PER SCREEN. Seven short screens beat five long ones: the old
+// year screen grew a birthday form under the cards once one was picked, the
+// subjects screen held a scroll box with its payout below it, and the target's
+// course fields sat where nobody scrolled. See steps.jsx.
 //
-// WHY SIX AND NOT EIGHT. Steps 5, 6 and 7 used to be three consecutive selling
-// screens: plan reveal, price bars, feature stack. The landing page now anchors
-// the price against a private tutor and prints the free/premium split in full,
-// so two of the three were repeating a page the reader had just finished, and
-// the third listed four bullets identical for every student who ever saw it.
-// They collapse into one reveal built out of the actual answers. The tutor
-// anchor moves to the sign-in step, where the decision is being made rather
-// than two screens before it.
+// ONE COUNT. The header's pips are the only progress indicator. The flow once
+// carried three — a 1/6 badge, a "Step 2 of 6" eyebrow and the pips — and they
+// disagreed whenever a step was added. `onboardingFlow.test.mjs` refuses an
+// eyebrow that counts.
 //
-// Wizard answers are saved to localStorage on every change. After Google
-// OAuth completes, AuthContext reads them back and writes to user_profile
-// + user_subjects (see authPostSignupApply in AuthContext.jsx).
+// THE BRAIN LEFT THE FUNNEL, and the build replaced it: four seconds of lines
+// the app genuinely computed from the answers (weeks left, their subjects'
+// scaling, their first review dates off the real scheduler, their target band),
+// skippable, and claiming no work that is not happening.
+//
+// THE BUTTON IS NEVER UNDER ANYTHING. Actions live in a bar pinned to the
+// bottom of the question column, offset by `--consent-h`, which the consent
+// banner publishes — the banner used to sit on top of the primary button for
+// every first-time visitor, on the one screen where that costs a signup.
+//
+// Answers are saved to localStorage on every change (`acedit_onboarding_v1`).
+// After sign-in, AuthContext reads them back and writes the profile and
+// subjects (see authPostSignupApply). The answer SHAPE is that contract and is
+// unchanged by this file.
 // ════════════════════════════════════════════════════════════════════════════
 
-import React, { useState, useEffect, useMemo } from "react";
-import { TUTOR_HOURLY_AUD, priceLabel, weeksPerTutorHour } from "@/lib/pricing";
-import { createPortal } from "react-dom";
-import { motion, AnimatePresence } from "framer-motion";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
+import { motion, AnimatePresence, useReducedMotion } from "framer-motion";
 import { useNavigate } from "react-router-dom";
-import { Link } from "react-router-dom";
-import {
-    ChevronLeft, ArrowRight, Check, X, Search, Plus,
-    BookOpen, MapPin, Crown, Info,
-    Mail,
-    } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { ChevronLeft } from "lucide-react";
 import { VCE_SUBJECTS } from "@/data/vceSubjects";
-import AgeAnswer, { ageAnswerReady, ageAnswerHint } from "@/components/legal/AgeAnswer";
+import { ageAnswerReady, ageAnswerHint } from "@/components/legal/AgeAnswer";
 import { supabase } from "@/api/supabaseClient";
-import { useAuth, applyOnboardingUpdateForCurrentUser } from "@/lib/AuthContext";
-import HandOfAnswers from "@/components/onboarding/wizard/HandOfAnswers";
-import YearCards from "@/components/onboarding/wizard/YearCards";
-import AtarCut, { formatAtar } from "@/components/onboarding/wizard/AtarCut";
-import TheReveal from "@/components/onboarding/wizard/TheReveal";
-import TheBrain from "@/components/onboarding/wizard/TheBrain";
-import ScalingReport from "@/components/onboarding/wizard/ScalingReport";
-import Payout, { weeksUntilExams } from "@/components/onboarding/wizard/Payout";
-import { atarBandOf } from "@/lib/atarBands";
+import BrandMark from "@/components/shared/BrandMark";
 import AceShuffle from "@/components/ace/AceShuffle";
+import HandOfAnswers from "@/components/onboarding/wizard/HandOfAnswers";
+import CostGap from "@/components/onboarding/wizard/CostGap";
+import Table, { FeltScaling } from "@/components/onboarding/Table";
+import AceHost from "@/components/onboarding/AceHost";
+import { FlightProvider } from "@/components/onboarding/DealFlight";
+import { ActionsSlot } from "@/components/onboarding/Shell";
+import {
+    StepYear, StepBirthday, StepSubjects, StepTarget, StepBuild, StepReveal, DEFAULT_TARGET,
+} from "@/components/onboarding/steps";
+import { StepSignin, StepSaveExisting } from "@/components/onboarding/StepSignin";
+import { stepsFor, prevStep, STEP_NAME, aceLines } from "@/lib/onboardingFlow";
 
-const TOTAL_STEPS = 6;
 const STORAGE_KEY = "acedit_onboarding_v1";
-
-/** The step that shows the hand spread out in the content itself. */
-const REVEAL_STEP = 5;
-
-// Younger years (Year 7-10) won't see most of their subjects in the VCE catalog.
-// We show a hint nudging them toward the custom-subject flow.
-function isPreVceYear(yearLevel) {
-    return yearLevel && (yearLevel.startsWith("Year 7") || yearLevel.startsWith("Year 8") || yearLevel.startsWith("Year 9"));
-}
-
-// The one price comparison that survives, and it lives on the sign-in screen
-// now rather than on a screen of its own. A Melbourne VCE tutor is $80 to $90
-// an hour; the number is stated as the anchor it is, next to the plan picker,
-// at the moment someone is choosing.
-// Both figures live in @/lib/pricing — they were declared here AND in
-// CostGap.jsx at the same values with nothing importing either, which is two
-// copies of a price on the two screens that print it. The weeks-per-hour
-// ratio is derived there too rather than divided again here.
-const TUTOR_HOURLY = TUTOR_HOURLY_AUD;
-
-/**
- * Where a step's actions get rendered.
- *
- * The six steps each declare their own footer, which is right: only the step
- * knows whether it needs a skip link or a selection count. But the footer has
- * to come out inside the pinned bottom bar, which the page owns. A context
- * carrying the bar's DOM node lets StepShell portal into it without any of the
- * steps knowing that is what is happening, and without threading a render prop
- * through all six of them.
- *
- * It holds the element rather than a ref object on purpose: a ref does not
- * cause a re-render when it is populated, so on the first paint the portal
- * target would still be null and the first step would ship with no button.
- */
-const ActionsSlot = React.createContext(null);
-
-/**
- * Height of the pinned bar, so the content above it can leave exactly that
- * much room. Watched rather than measured once, because the bar's contents
- * change on every step and the hand grows a row taller the first time a card
- * lands in it.
- */
-function useBarHeight(node) {
-    const [h, setH] = useState(140);
-    useEffect(() => {
-        if (!node) return undefined;
-        const ro = new ResizeObserver(([e]) => {
-            setH(Math.ceil(e.contentRect.height));
-        });
-        ro.observe(node);
-        return () => ro.disconnect();
-    }, [node]);
-    return h;
-}
 
 // ─── Wizard state ────────────────────────────────────────────────────────────
 const DEFAULT_ANSWERS = {
     yearLevel:       null,
     // The birthday and the guardian tick ride with the other answers, so a
-    // refresh mid-wizard keeps them like everything else on this screen.
+    // refresh mid-wizard keeps them like everything else.
     dob:             "",
     guardian:        false,
-    subjects:        [],         // [{ name, code, id }]
+    subjects:        [],         // [{ name, code, id, is_custom }]
     goalAtar:        null,
     goalCourseName:  "",
     goalUniversity:  "",
     intent:          null,       // "premium" | "free" — set on the sign-in step
     completedAt:     null,
-    email:           null,       // set on email+password path only — used as
-                                 // the AuthContext email-match guard so the
-                                 // 7-day storage window can't leak to a
-                                 // different user on a shared browser.
+    email:           null,       // email+password path only — the AuthContext
+                                 // email-match guard, so the storage window
+                                 // cannot leak to another user on a shared
+                                 // browser.
 };
 
 function loadAnswers() {
@@ -159,39 +97,95 @@ function saveAnswers(answers) {
     catch { /* localStorage full or disabled — silent */ }
 }
 
+/**
+ * The split is a LAYOUT decision, not a style: exactly one place may carry
+ * the deal slots (the table, or the rail), because a card flight lands on
+ * whichever slot is visible and two would race. So it is read, not CSS-hidden.
+ */
+const DESKTOP = "(min-width: 1024px)";
+function useIsDesktop() {
+    const get = () => (typeof window !== "undefined" && window.matchMedia ? window.matchMedia(DESKTOP).matches : false);
+    const [on, setOn] = useState(get);
+    useEffect(() => {
+        if (!window.matchMedia) return undefined;
+        const mq = window.matchMedia(DESKTOP);
+        const onChange = () => setOn(mq.matches);
+        mq.addEventListener?.("change", onChange);
+        return () => mq.removeEventListener?.("change", onChange);
+    }, []);
+    return on;
+}
+
+/** The pinned bar's height, watched — it changes per step and the rail grows. */
+function useHeight(node) {
+    const [h, setH] = useState(140);
+    useEffect(() => {
+        if (!node) return undefined;
+        const ro = new ResizeObserver(([e]) => setH(Math.ceil(e.contentRect.height)));
+        ro.observe(node);
+        return () => ro.disconnect();
+    }, [node]);
+    return h;
+}
+
+/** What Ace is doing on each screen, between the tosses a landed card sets off. */
+const POSE = {
+    year: "offer", birthday: "think", subjects: "point", target: "ponder",
+    build: "shuffle", reveal: "proud", signin: "wave",
+};
+
+/** Which way the table is laid out on each screen. */
+const TABLE_MODE = { build: "deck", reveal: "reveal", signin: "reveal" };
+
+/**
+ * One pip per screen, the current one stretched. The pips ARE the count —
+ * there is no "3/7" beside them, because a second count is a second thing to
+ * disagree.
+ */
+function Pips({ steps, index }) {
+    const reduce = useReducedMotion();
+    return (
+        <div className="flex items-center gap-1.5" role="progressbar"
+            aria-valuemin={1} aria-valuemax={steps.length} aria-valuenow={index + 1}
+            aria-valuetext={STEP_NAME[steps[index]]}>
+            {steps.map((s, i) => (
+                <motion.span key={s} aria-hidden="true" layout={!reduce}
+                    className={`h-2 rounded-full ${i < index ? "bg-primary" : i === index ? "bg-primary" : "bg-border"}`}
+                    animate={{ width: i === index ? 28 : 8, opacity: i < index ? 0.55 : 1 }}
+                    transition={reduce ? { duration: 0 } : { type: "spring", stiffness: 380, damping: 30 }} />
+            ))}
+        </div>
+    );
+}
+
 // ─── Page ────────────────────────────────────────────────────────────────────
-// `existingUser`: rendered for someone who already has an account, retaking
-// the wizard on purpose from Settings → Study setup. The pre-signup path
-// (default) is unchanged below; this prop only switches two things — where
-// the starting answers come from, and what step 6 does with them.
+// `existingUser`: a retake from Settings → Study setup. Two things change —
+// where the starting answers come from, and what the last screen does with
+// them — and the build is skipped, because it is theatre for a first deal.
 export default function Onboarding({ existingUser = false }) {
-    const [step, setStep] = useState(1);
+    const steps = useMemo(() => stepsFor({ existingUser }), [existingUser]);
+    const [index, setIndex] = useState(0);
     const [answers, setAnswers] = useState(() => (existingUser ? { ...DEFAULT_ANSWERS } : loadAnswers()));
-    // Existing users start from their live profile/subjects, not localStorage
-    // (that key belongs to the pre-signup flow) — so the wizard stays blank
-    // until the fetch below lands.
     const [isPrefilling, setIsPrefilling] = useState(existingUser);
-    // Both are callback-ref state rather than refs: a ref does not re-render
-    // when it is populated, so the portal target and the measured height would
-    // both still be their initial values on the paint that matters.
+    // Callback-ref state rather than refs: a ref does not re-render when it is
+    // populated, so the portal target and the height would both still be their
+    // initial values on the paint that matters.
     const [actionsEl, setActionsEl] = useState(null);
     const [barEl, setBarEl] = useState(null);
-    const barH = useBarHeight(barEl);
+    const barH = useHeight(barEl);
+    const isDesktop = useIsDesktop();
+    const reduce = useReducedMotion();
     const navigate = useNavigate();
 
-    // Persist on every change — pre-signup flow only. An existing user's
-    // in-progress redo has nowhere to resume from anyway (it's read fresh
-    // from the DB every time), and writing it here would risk colliding with
-    // the pre-signup apply, which keys off the very same storage slot.
+    const step = steps[index];
+
     useEffect(() => {
         if (existingUser) return;
         saveAnswers(answers);
     }, [answers, existingUser]);
 
-    // Already signed in? Skip the wizard entirely — but only on the
-    // pre-signup path. An existing user reaching /onboarding did so on
-    // purpose (the Settings link), so a live session here is expected, not a
-    // stray one to bounce away from.
+    // Already signed in? The pre-signup wizard has nothing to offer. A retake
+    // reached this on purpose, so a live session there is expected.
     useEffect(() => {
         if (existingUser) return;
         (async () => {
@@ -202,10 +196,8 @@ export default function Onboarding({ existingUser = false }) {
         })();
     }, [navigate, existingUser]);
 
-    // Pull the wizard's starting point from what's actually saved, so
-    // retaking it reads as "edit your hand" rather than "start over" — a
-    // subject you don't touch stays; one you deselect on step 2 is removed
-    // on save, exactly like unchecking it in Subjects would.
+    // A retake starts from what is saved, so it reads as "edit your hand"
+    // rather than "start over".
     useEffect(() => {
         if (!existingUser) return;
         let cancelled = false;
@@ -248,6 +240,16 @@ export default function Onboarding({ existingUser = false }) {
         return () => { cancelled = true; };
     }, [existingUser]);
 
+    // A new screen starts at its top. On a phone the subjects list is long, and
+    // arriving at the target screen scrolled halfway down it is arriving lost.
+    useEffect(() => {
+        window.scrollTo({ top: 0, behavior: "instant" });
+    }, [index]);
+
+    const update = useCallback((patch) => setAnswers((a) => ({ ...a, ...patch })), []);
+    const goNext = useCallback(() => setIndex((i) => Math.min(steps.length - 1, i + 1)), [steps.length]);
+    const goBack = useCallback(() => setIndex((i) => prevStep(steps, i)), [steps]);
+
     if (isPrefilling) {
         return (
             <div className="min-h-screen bg-background flex items-center justify-center">
@@ -256,1104 +258,138 @@ export default function Onboarding({ existingUser = false }) {
         );
     }
 
-    const update = (patch) => setAnswers((a) => ({ ...a, ...patch }));
-    const goNext = () => setStep((s) => Math.min(TOTAL_STEPS, s + 1));
-    const goBack = () => setStep((s) => Math.max(1, s - 1));
-
-    const canContinueByStep = {
-        1: !!answers.yearLevel && ageAnswerReady(answers.dob || "", !!answers.guardian),
-        2: answers.subjects.length > 0,
-        3: true,
-        4: true,
-        5: true,
-        6: !!answers.intent,
+    const ready = ageAnswerReady(answers.dob || "", !!answers.guardian);
+    const ace = {
+        lines: aceLines(step, answers),
+        beat: step,
+        pose: POSE[step] || "stand",
     };
 
-    // The hand is spread out inside the reveal itself. Holding a second copy
-    // of it in the rail at the same time would be two of the same object on
-    // one screen, which reads as a bug rather than as a flourish.
-    const railVisible = step !== REVEAL_STEP;
+    const screen = (() => {
+        switch (step) {
+            case "year":
+                return <StepYear answers={answers} update={update} onNext={goNext} />;
+            case "birthday":
+                return <StepBirthday answers={answers} update={update} onNext={goNext}
+                    ready={ready} hint={ready ? null : ageAnswerHint(answers.dob || "", !!answers.guardian)} />;
+            case "subjects":
+                return <StepSubjects answers={answers} update={update} onNext={goNext} isDesktop={isDesktop} />;
+            case "target":
+                return <StepTarget answers={answers} update={update} onNext={goNext} />;
+            case "build":
+                return <StepBuild answers={answers} onNext={goNext} isDesktop={isDesktop} />;
+            case "reveal":
+                return <StepReveal answers={answers} onNext={goNext} isDesktop={isDesktop}
+                    cta={existingUser ? "Continue" : "Keep this hand"} />;
+            case "signin":
+                return existingUser
+                    ? <StepSaveExisting answers={answers} onSaved={() => navigate("/", { replace: true })} />
+                    : <StepSignin answers={answers} update={update} persist={saveAnswers} isDesktop={isDesktop} />;
+            default:
+                return null;
+        }
+    })();
+
+    // The table's payout, under the hand: what VTAC does to the line-up while
+    // it is being chosen, and the year of tutoring against the year of this at
+    // the moment the plan is.
+    const tableFooter = (step === "subjects" || step === "target") && answers.subjects.length > 0
+        ? <FeltScaling subjects={answers.subjects} />
+        : step === "signin" && !existingUser
+            ? <CostGap variant="felt" />
+            : null;
+
+    // The rail is the phone's table. The build and the reveal draw the felt
+    // in the content, so a second copy of the hand under it would be two of
+    // the same object on one screen.
+    const railVisible = !isDesktop && !["build", "reveal", "signin"].includes(step);
 
     return (
-        <div className="min-h-screen bg-background flex flex-col">
+        <FlightProvider>
         <ActionsSlot.Provider value={actionsEl}>
-            {/* Progress. Card pips rather than a segmented bar: same
-                information, and it belongs to the same object as everything
-                else on the screen. */}
-            <header className="sticky top-0 z-20 bg-background/95 backdrop-blur border-b border-border/60">
-                <div className="max-w-2xl mx-auto px-4 lg:px-6 py-3 flex items-center gap-3">
-                    {step > 1 && (
-                        <button
-                            type="button"
-                            onClick={goBack}
-                            className="w-9 h-9 -ml-2 rounded-full flex items-center justify-center hover:bg-muted transition-colors text-muted-foreground"
-                            aria-label="Back"
-                        >
-                            <ChevronLeft className="w-5 h-5" />
-                        </button>
-                    )}
-                    <div className="flex-1 flex items-center gap-1.5"
-                        role="progressbar" aria-valuenow={step} aria-valuemin={1} aria-valuemax={TOTAL_STEPS}
-                        aria-label={`Step ${step} of ${TOTAL_STEPS}`}>
-                        {Array.from({ length: TOTAL_STEPS }, (_, i) => i + 1).map((n) => (
-                            <span
-                                key={n}
-                                aria-hidden="true"
-                                className={`h-[18px] w-[13px] rounded-[3px] border transition-colors duration-300 ${
-                                    n < step  ? "bg-primary border-primary"
-                                  : n === step ? "bg-primary/20 border-primary"
-                                  :              "bg-muted border-border"}`}
-                            />
-                        ))}
-                    </div>
-                    <span className="text-xs font-bold text-muted-foreground tabular-nums w-10 text-right">{step}/{TOTAL_STEPS}</span>
-                </div>
-            </header>
+            <div className="min-h-screen bg-background lg:grid lg:grid-cols-[minmax(0,1fr)_minmax(0,1.08fr)]">
+                {/* ── The question column ─────────────────────────────── */}
+                <div className="flex flex-col min-h-screen min-w-0">
+                    <header className="sticky top-0 z-30 bg-background/90 backdrop-blur-md">
+                        <div className="h-[60px] px-4 sm:px-8 lg:px-12 xl:px-20 flex items-center gap-3">
+                            {/* On a desktop the back button hangs in the gutter, so
+                                the pips start on the same edge as the question. */}
+                            <div className="w-9 flex-shrink-0 lg:w-0 lg:-mr-3 lg:relative lg:self-stretch lg:flex lg:items-center">
+                                <AnimatePresence initial={false}>
+                                    {index > 0 && step !== "build" && (
+                                        <motion.button type="button" onClick={goBack} aria-label="Back"
+                                            initial={{ opacity: 0, x: 6 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 6 }}
+                                            className="w-9 h-9 -ml-2 lg:ml-0 lg:absolute lg:right-2 rounded-full flex items-center justify-center text-muted-foreground hover:bg-muted hover:text-foreground transition-colors">
+                                            <ChevronLeft className="w-5 h-5" />
+                                        </motion.button>
+                                    )}
+                                </AnimatePresence>
+                            </div>
+                            <div className="flex-1 flex justify-center lg:justify-start">
+                                <Pips steps={steps} index={index} />
+                            </div>
+                            <BrandMark size="sm" showWord={false} className="flex-shrink-0" />
+                        </div>
+                    </header>
 
-            {/* Step content. The bottom padding is measured off the bar rather
-                than hard-coded, because the bar's height changes per step: the
-                subjects step carries a count row above its button, two steps
-                carry a skip link below theirs, and the sign-in step has no
-                actions at all. A fixed number would clear the tallest and
-                leave a hole under the rest. */}
-            <main className="flex-1 flex flex-col"
-                style={{ paddingBottom: barH + 16 }}>
-                <AnimatePresence mode="wait">
-                    <motion.div
-                        key={step}
-                        initial={{ opacity: 0, x: 16 }}
-                        animate={{ opacity: 1, x: 0 }}
-                        exit={{ opacity: 0, x: -16 }}
-                        transition={{ duration: 0.22, ease: [0.2, 0.8, 0.2, 1] }}
-                        className="flex-1 flex flex-col"
-                    >
-                        {step === 1 && <Step1Year answers={answers} update={update} onNext={goNext} />}
-                        {step === 2 && <Step2Subjects answers={answers} update={update} onNext={goNext} canContinue={canContinueByStep[2]} />}
-                        {step === 3 && <Step3Brain onNext={goNext} />}
-                        {step === 4 && <Step4Target answers={answers} update={update} onNext={goNext} />}
-                        {step === 5 && <Step5Reveal answers={answers} onNext={goNext} />}
-                        {step === 6 && (existingUser
-                            ? <Step6SaveExisting answers={answers} onSaved={() => navigate("/", { replace: true })} />
-                            : <Step6Signin answers={answers} update={update} />)}
-                    </motion.div>
-                </AnimatePresence>
-            </main>
-
-            {/* The bottom bar: the step's actions, and the hand under them.
-                THE ACTIONS LIVE HERE AND NOT IN THE PAGE FLOW, and that is a
-                bug fix rather than a preference. With the hand fixed and the
-                button in flow, any scroll position where the button had not
-                yet reached the bottom of the document put it underneath the
-                cards: on a 390px phone the primary call to action of the
-                subjects step was behind the hand at first paint. Pinning them
-                together is the only arrangement where that cannot happen, and
-                it has the side effect that the button is always reachable
-                without scrolling.
-
-                Pointer events are off on the bar and back on for the actions,
-                so the cards can never eat a tap meant for the button. */}
-            <div ref={setBarEl} className="fixed inset-x-0 bottom-0 z-10 pointer-events-none">
-                {/* A short fade into a SOLID bar, rather than a tall gradient
-                    over everything. A gradient alone left the subjects step's
-                    count row sitting on top of the still-visible tiles behind
-                    it, which reads as two layers of the page fighting. */}
-                <span aria-hidden="true"
-                    className="block h-7 bg-gradient-to-t from-background to-transparent" />
-                <div className="bg-background pb-2">
-                <div className="max-w-2xl mx-auto px-4 lg:px-6">
-                    <div ref={setActionsEl} className="pointer-events-auto empty:hidden pt-1 mb-2" />
-                    <AnimatePresence>
-                        {railVisible && (
-                            <motion.div
-                                initial={{ opacity: 0, y: 30 }}
-                                animate={{ opacity: 1, y: 0 }}
-                                exit={{ opacity: 0, y: 30 }}
-                                transition={{ duration: 0.3 }}
-                            >
-                                <HandOfAnswers answers={answers} />
-                            </motion.div>
+                    <main className="flex-1 flex flex-col lg:justify-center lg:px-12 xl:px-20"
+                        style={isDesktop ? undefined : { paddingBottom: `calc(${barH + 12}px + var(--consent-h, 0px))` }}>
+                        {!isDesktop && (
+                            <div className="px-5 sm:px-8 pt-3">
+                                <AceHost variant="row" lines={ace.lines} beat={ace.beat} pose={ace.pose} />
+                            </div>
                         )}
-                    </AnimatePresence>
+                        <AnimatePresence mode="wait" initial={false}>
+                            <motion.div key={step}
+                                initial={reduce ? { opacity: 0 } : { opacity: 0, x: 28, filter: "blur(6px)" }}
+                                animate={{ opacity: 1, x: 0, filter: "blur(0px)" }}
+                                exit={reduce ? { opacity: 0 } : { opacity: 0, x: -28, filter: "blur(6px)" }}
+                                transition={{ duration: 0.26, ease: [0.2, 0.8, 0.2, 1] }}>
+                                {screen}
+                            </motion.div>
+                        </AnimatePresence>
+                    </main>
+
+                    {/* The actions, and on a phone the hand under them. Fixed on
+                        a phone, sticky in its column on a desktop — and in both
+                        lifted clear of the consent banner. Pointer events are
+                        off on the bar and on for the actions, so a card can
+                        never eat a tap meant for the button. */}
+                    <div ref={setBarEl}
+                        className="fixed inset-x-0 lg:sticky z-20 pointer-events-none lg:px-12 xl:px-20"
+                        style={{ bottom: "var(--consent-h, 0px)" }}>
+                        <span aria-hidden="true" className="block h-6 bg-gradient-to-t from-background to-transparent" />
+                        <div className="bg-background pb-3 lg:pb-8">
+                            <div className="w-full max-w-xl mx-auto lg:mx-0 px-5 sm:px-8 lg:px-0">
+                                <div ref={setActionsEl} className="pointer-events-auto empty:hidden" />
+                                <AnimatePresence>
+                                    {railVisible && (
+                                        <motion.div className="mt-2"
+                                            initial={{ opacity: 0, y: 30 }} animate={{ opacity: 1, y: 0 }}
+                                            exit={{ opacity: 0, y: 30 }} transition={{ duration: 0.3 }}>
+                                            <HandOfAnswers answers={answers} />
+                                        </motion.div>
+                                    )}
+                                </AnimatePresence>
+                            </div>
+                        </div>
+                    </div>
                 </div>
-                </div>
+
+                {/* ── The table ───────────────────────────────────────── */}
+                {isDesktop && (
+                    <aside className="sticky top-0 h-screen p-4 pl-0">
+                        <Table
+                            answers={answers}
+                            mode={TABLE_MODE[step] || "spread"}
+                            ace={ace}
+                            footer={tableFooter}
+                            previewAtar={step === "target" && answers.goalAtar == null ? DEFAULT_TARGET : null}
+                        />
+                    </aside>
+                )}
             </div>
         </ActionsSlot.Provider>
-        </div>
-    );
-}
-
-// ─── Shared layout helpers ───────────────────────────────────────────────────
-// The footer goes to the pinned bar at the bottom of the page, not into the
-// flow under the content. See the note on the bar itself for why. Steps
-// declare it exactly as they did before; the move is invisible to all six.
-// Until the slot exists (the very first paint, before the bar has mounted) the
-// footer renders in place, so a step is never briefly button-less.
-function StepShell({ eyebrow, title, subtitle, children, footer }) {
-    const slot = React.useContext(ActionsSlot);
-    return (
-        <div className="flex-1 flex flex-col w-full max-w-2xl mx-auto px-4 lg:px-6 py-8 lg:py-12">
-            <div className="mb-6 lg:mb-8">
-                {eyebrow && <p className="stat-label text-primary mb-2">{eyebrow}</p>}
-                <h1 className="font-display font-extrabold text-foreground text-3xl lg:text-4xl tracking-tight leading-[1.1]">
-                    {title}
-                </h1>
-                {subtitle && (
-                    <p className="text-muted-foreground text-base lg:text-lg mt-2 leading-relaxed">
-                        {subtitle}
-                    </p>
-                )}
-            </div>
-            <div className="flex-1">{children}</div>
-            {footer && (slot
-                ? createPortal(footer, slot)
-                : <div className="mt-6 lg:mt-8">{footer}</div>)}
-        </div>
-    );
-}
-
-function PrimaryCTA({ children, disabled, onClick, fullWidth = true }) {
-    return (
-        <Button
-            onClick={onClick}
-            disabled={disabled}
-            className={`btn-3d bg-primary text-primary-foreground hover:bg-primary h-12 text-base ${fullWidth ? "w-full" : ""}`}
-        >
-            {children}
-        </Button>
-    );
-}
-
-function SkipLink({ onClick }) {
-    return (
-        <button
-            onClick={onClick}
-            className="text-sm font-semibold text-muted-foreground hover:text-foreground transition-colors mx-auto block py-2"
-        >
-            Skip for now
-        </button>
-    );
-}
-
-// ═══ STEP 1 — Year level ════════════════════════════════════════════════════
-// The pause before advancing is deliberate and is tuned to the card, not to a
-// round number: 340ms is long enough to watch the pick take its ring and start
-// its flight into the hand, and short enough that nobody taps twice. Advancing
-// on the same frame as the tap would deal a card the student never sees.
-function Step1Year({ answers, update, onNext }) {
-    /* ── THE BIRTHDAY IS ASKED HERE, NOT BY A MODAL TWO SCREENS LATER ──────
-       `AgeGate` blocks the whole app for anybody whose band is UNKNOWN, which
-       used to include every account that had just finished this wizard — so a
-       new student answered "what year are you in" and was immediately stopped
-       and asked their date of birth. Two age-shaped questions back to back.
-
-       It is asked once, here, beside the year level it belongs with. The gate
-       stays mounted and is still the ONLY thing that reaches the ~130 existing
-       accounts; it simply never fires for anybody who answered on this screen.
-
-       A YEAR LEVEL IS NOT AN AGE. "Year 11" spans fifteen, sixteen and
-       seventeen and the thresholds are 13, 16 and 18, so nothing here derives
-       one from the other — that guess would put a fifteen-year-old on a public
-       board. */
-    const ageReady = ageAnswerReady(answers.dob || "", !!answers.guardian);
-    const ageHint = ageAnswerHint(answers.dob || "", !!answers.guardian);
-    // The pick no longer auto-advances. It used to, on a 340ms timer, and that
-    // was right when the screen had nothing to say back; now it pays out a
-    // fact and jumping to the next question would show it for a third of a
-    // second. Advancing is the student's move once they have read it.
-    const picked = !!answers.yearLevel;
-    const { weeks, label } = picked
-        ? weeksUntilExams(answers.yearLevel)
-        : { weeks: 0, label: "" };
-
-    return (
-        <StepShell
-            eyebrow="The deal · 1 of 3"
-            title="What year are you in?"
-            subtitle="Pick a card. This one sets the level everything is written at."
-            footer={picked ? (
-                <>
-                    <PrimaryCTA onClick={onNext} disabled={!ageReady}>
-                        Continue <ArrowRight className="w-4 h-4 ml-1" />
-                    </PrimaryCTA>
-                    {/* A disabled button that will not say why is the paper-cut
-                        this codebase already records about Active Recall. */}
-                    {!ageReady && ageHint && (
-                        <p className="text-xs text-muted-foreground mt-2 text-center">{ageHint}</p>
-                    )}
-                </>
-            ) : null}
-        >
-            <YearCards
-                value={answers.yearLevel}
-                onPick={(v) => update({ yearLevel: v })}
-            />
-
-            {/* Only once a year is picked: two questions on a cold screen is a
-                form, and the birthday is the quieter of the two. */}
-            {picked && (
-                <div className="mt-6 pt-6 border-t border-border">
-                    <AgeAnswer
-                        idPrefix="acedit-wizard"
-                        dob={answers.dob || ""}
-                        guardian={!!answers.guardian}
-                        onChange={update}
-                    />
-                    <p className="text-[11px] leading-snug text-muted-foreground mt-2.5">
-                        This decides which parts of AcedIt switch on &mdash; whether you appear
-                        on the Compete board, and whether analytics may run on your account.
-                        We ask once.
-                    </p>
-                </div>
-            )}
-
-            <Payout show={picked}>
-                <p className="font-display font-extrabold text-foreground text-lg leading-snug">
-                    <span className="text-primary tabular-nums">{weeks} weeks</span> {label}.
-                </p>
-                <p className="text-[13px] text-muted-foreground mt-1.5 leading-relaxed">
-                    That is the whole resource. Spacing only works if there are gaps left to
-                    put reviews in, which is why the first thing AcedIt does with a topic is
-                    work out when to come back to it, not how long to sit on it today.
-                </p>
-            </Payout>
-        </StepShell>
-    );
-}
-
-// ═══ STEP 2 — Subjects ══════════════════════════════════════════════════════
-function Step2Subjects({ answers, update, onNext, canContinue }) {
-    const [query, setQuery] = useState("");
-    const [showCustomForm, setShowCustomForm] = useState(false);
-    const [customName, setCustomName] = useState("");
-    const [customCode, setCustomCode] = useState("");
-
-    const filtered = useMemo(() => {
-        const q = query.toLowerCase().trim();
-        if (!q) return VCE_SUBJECTS;
-        return VCE_SUBJECTS.filter(s =>
-            s.name.toLowerCase().includes(q) || (s.code || "").toLowerCase().includes(q)
-        );
-    }, [query]);
-
-    const toggle = (sub) => {
-        const exists = answers.subjects.find(x => x.code === sub.code);
-        if (exists) {
-            update({ subjects: answers.subjects.filter(x => x.code !== sub.code) });
-        } else {
-            update({ subjects: [...answers.subjects, { id: sub.id, name: sub.name, code: sub.code, is_custom: !!sub.is_custom }] });
-        }
-    };
-
-    const addCustom = () => {
-        const name = customName.trim();
-        const code = (customCode.trim() || name.slice(0, 12).replace(/\s+/g, "_")).toUpperCase();
-        if (!name) return;
-        // Avoid duplicate codes with existing picks.
-        const exists = answers.subjects.find(x => x.code === code);
-        if (exists) {
-            setCustomName(""); setCustomCode(""); setShowCustomForm(false);
-            return;
-        }
-        update({
-            subjects: [
-                ...answers.subjects,
-                { id: `custom_${Date.now()}`, name, code, is_custom: true },
-            ],
-        });
-        setCustomName(""); setCustomCode(""); setShowCustomForm(false);
-    };
-
-    const youngerYear = isPreVceYear(answers.yearLevel);
-    const customsPicked = answers.subjects.filter(s => s.is_custom);
-
-    return (
-        <StepShell
-            eyebrow="The deal · 2 of 4"
-            title="What subjects are you taking?"
-            subtitle="Each one becomes a card. The suit is the subject, and it keeps it forever."
-            footer={
-                <div className="space-y-3">
-                    <div className="flex items-center justify-between text-sm">
-                        <span className="font-bold text-foreground">
-                            {answers.subjects.length} selected
-                            {customsPicked.length > 0 && (
-                                <span className="text-muted-foreground font-medium ml-1">· {customsPicked.length} custom</span>
-                            )}
-                        </span>
-                        {answers.subjects.length > 0 && (
-                            <button
-                                onClick={() => update({ subjects: [] })}
-                                className="text-xs font-semibold text-muted-foreground hover:text-foreground transition-colors"
-                            >
-                                Clear all
-                            </button>
-                        )}
-                    </div>
-                    <PrimaryCTA onClick={onNext} disabled={!canContinue}>
-                        Continue <ArrowRight className="w-4 h-4 ml-1" />
-                    </PrimaryCTA>
-                </div>
-            }
-        >
-            {/* Contextual hint for pre-VCE years */}
-            {youngerYear && (
-                <div className="mb-3 flex items-start gap-2 rounded-xl bg-chart-3/5 border border-chart-3/15 p-3">
-                    <Info className="w-4 h-4 text-chart-3 flex-shrink-0 mt-0.5" strokeWidth={2.5} />
-                    <p className="text-xs text-foreground leading-relaxed">
-                        Below are VCE subjects — most Year 7–10 subjects aren't here.
-                        Use <span className="font-bold">“Add your own”</span> for things like Maths, English, Science, History, Geography, etc.
-                    </p>
-                </div>
-            )}
-
-            <div className="relative mb-3">
-                <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
-                <Input
-                    value={query}
-                    onChange={(e) => setQuery(e.target.value)}
-                    // Not a subject count. AcedIt works on anything you can
-                    // write a question about, and printing the length of the
-                    // VCE catalogue here reads as the ceiling rather than as
-                    // the contents of this one search box.
-                    placeholder="Search subjects, or add your own…"
-                    className="pl-9 h-11"
-                />
-            </div>
-
-            {/* Custom subjects the user has added — pinned at top so they're visible */}
-            {customsPicked.length > 0 && (
-                <div className="mb-3 flex flex-wrap gap-2">
-                    {customsPicked.map((sub) => (
-                        <button
-                            key={sub.id}
-                            onClick={() => toggle(sub)}
-                            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-chart-4/10 border border-chart-4/20 text-chart-4 text-xs font-bold hover:bg-chart-4/15 transition-colors"
-                        >
-                            <span>{sub.name}</span>
-                            <X className="w-3 h-3" strokeWidth={3} />
-                        </button>
-                    ))}
-                </div>
-            )}
-
-            {/* Inline custom-add form */}
-            {showCustomForm && (
-                <div className="mb-3 rounded-xl bg-chart-4/5 border border-chart-4/15 p-3 space-y-2">
-                    <div className="grid grid-cols-3 gap-2">
-                        <Input
-                            value={customName}
-                            onChange={(e) => setCustomName(e.target.value)}
-                            placeholder="Subject name (e.g. Year 9 Science)"
-                            className="col-span-2 h-10 text-sm"
-                            autoFocus
-                            onKeyDown={(e) => e.key === "Enter" && addCustom()}
-                        />
-                        <Input
-                            value={customCode}
-                            onChange={(e) => setCustomCode(e.target.value.toUpperCase())}
-                            placeholder="CODE (optional)"
-                            className="h-10 text-sm uppercase"
-                            maxLength={16}
-                            onKeyDown={(e) => e.key === "Enter" && addCustom()}
-                        />
-                    </div>
-                    <div className="flex items-center gap-2">
-                        <Button
-                            type="button"
-                            onClick={addCustom}
-                            disabled={!customName.trim()}
-                            size="sm"
-                            className="bg-chart-4 hover:bg-chart-4/90 text-white"
-                        >
-                            <Plus className="w-3.5 h-3.5 mr-1" /> Add
-                        </Button>
-                        <button
-                            type="button"
-                            onClick={() => { setShowCustomForm(false); setCustomName(""); setCustomCode(""); }}
-                            className="text-xs font-semibold text-muted-foreground hover:text-foreground"
-                        >
-                            Cancel
-                        </button>
-                    </div>
-                </div>
-            )}
-
-            {/* The catalogue scrolls, and the cut has to look deliberate. Left
-                to a hard edge it lands mid-row on a row of white tiles and
-                reads as content that failed to render rather than as a list
-                with more below it. */}
-            <div className="relative">
-            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 max-h-[340px] overflow-y-auto pr-1 pb-4">
-                {/* "Add your own" tile sits first so it's discoverable */}
-                {!showCustomForm && (
-                    <button
-                        onClick={() => setShowCustomForm(true)}
-                        className="text-left p-3 rounded-xl border border-dashed border-chart-4/40 bg-chart-4/5 hover:bg-chart-4/10 transition-all flex items-center gap-2"
-                    >
-                        <div className="w-7 h-7 rounded-lg bg-chart-4/15 border border-chart-4/25 flex items-center justify-center flex-shrink-0">
-                            <Plus className="w-4 h-4 text-chart-4" strokeWidth={3} />
-                        </div>
-                        <p className="font-bold text-chart-4 text-sm leading-tight">Add your own</p>
-                    </button>
-                )}
-
-                {filtered.map((sub) => {
-                    const selected = !!answers.subjects.find(x => x.code === sub.code);
-                    return (
-                        <button
-                            key={sub.id}
-                            onClick={() => toggle(sub)}
-                            className={`text-left p-3 rounded-xl border shadow-soft transition-all ${
-                                selected
-                                    ? "bg-primary/10 border-primary/40"
-                                    : "bg-surface border-border/60 hover:border-primary/30"
-                            }`}
-                        >
-                            <div className="flex items-start justify-between gap-2">
-                                <p className="font-bold text-foreground text-sm leading-tight">{sub.name}</p>
-                                {selected && <Check className="w-4 h-4 text-primary flex-shrink-0 mt-0.5" strokeWidth={3} />}
-                            </div>
-                        </button>
-                    );
-                })}
-                {filtered.length === 0 && (
-                    <p className="col-span-full text-sm text-muted-foreground py-6 text-center">
-                        No VCE subjects match "{query}". Try <span className="font-bold text-chart-4">Add your own</span> above.
-                    </p>
-                )}
-            </div>
-            <span aria-hidden="true"
-                className="pointer-events-none absolute inset-x-0 bottom-0 h-8
-                    bg-gradient-to-t from-background to-transparent" />
-            </div>
-
-            {/* The payout. The VTAC scaling report, filtered to exactly this
-                line-up. Nothing on it is a claim about AcedIt, which is the
-                point: a student who learns something true here believes the
-                graphs three screens later. */}
-            {answers.subjects.length > 0 && (
-                <div className="mt-5">
-                    <ScalingReport subjects={answers.subjects} />
-                </div>
-            )}
-        </StepShell>
-    );
-}
-
-// ═══ STEP 3 — The brain ═════════════════════════════════════════════════════
-// The one screen that asks for nothing. See TheBrain for why it is here and
-// why it sits in the middle of the flow rather than on the marketing page
-// where it used to live alone.
-function Step3Brain({ onNext }) {
-    return (
-        <StepShell
-            eyebrow="Why any of this works"
-            title="Your brain already has a method"
-            subtitle="Four techniques, the evidence behind each one, and what they feel like. Pick one to look at."
-            footer={
-                <PrimaryCTA onClick={onNext}>
-                    Makes sense <ArrowRight className="w-4 h-4 ml-1" />
-                </PrimaryCTA>
-            }
-        >
-            <TheBrain />
-        </StepShell>
-    );
-}
-
-// ═══ STEP 4 — Target: ATAR and course ═══════════════════════════════════════
-// Two screens merged. Both were optional, both were one field's worth of
-// thinking, and splitting them meant a student who wanted to skip had to skip
-// twice. They are the same question — what are you aiming at — so they are one
-// screen with one skip.
-function Step4Target({ answers, update, onNext }) {
-    const value = answers.goalAtar ?? 85;
-    const band = atarBandOf(value);
-
-    const commit = () => { update({ goalAtar: value }); onNext(); };
-    const skip = () => {
-        update({ goalAtar: null, goalCourseName: "", goalUniversity: "" });
-        onNext();
-    };
-
-    return (
-        <StepShell
-            eyebrow="The deal · 3 of 3"
-            title="What are you playing for?"
-            subtitle="Plant a flag. You can move it whenever you want."
-            footer={
-                <div className="space-y-2">
-                    <PrimaryCTA onClick={commit}>
-                        Continue <ArrowRight className="w-4 h-4 ml-1" />
-                    </PrimaryCTA>
-                    <SkipLink onClick={skip} />
-                </div>
-            }
-        >
-            <AtarCut value={value} onChange={(v) => update({ goalAtar: v })} />
-
-            <Payout show delay={0.25}>
-                <p className="font-display font-extrabold text-foreground text-lg leading-snug">
-                    That is <span className="text-primary">{band}</span> on the AcedIt ladder.
-                </p>
-                <p className="text-[13px] text-muted-foreground mt-1.5 leading-relaxed">
-                    The same words your dashboard will use, so the target you set here is a
-                    thing inside the product rather than a number in a form. It moves as your
-                    marks move, in both directions, because a target that only ever goes up is
-                    not measuring anything.
-                </p>
-            </Payout>
-
-            {/* The course, folded in. Optional, quiet, and clearly secondary to
-                the card above it. */}
-            <div className="card-soft p-5 mt-5 space-y-4">
-                <p className="stat-label text-muted-foreground">And where it is pointed</p>
-                <div className="grid sm:grid-cols-2 gap-4">
-                    <div className="space-y-1.5">
-                        <label className="text-xs font-bold text-foreground flex items-center gap-1.5">
-                            <BookOpen className="w-3.5 h-3.5 text-primary" /> Course
-                        </label>
-                        <Input
-                            value={answers.goalCourseName}
-                            onChange={(e) => update({ goalCourseName: e.target.value })}
-                            placeholder="e.g. Bachelor of Commerce"
-                            className="h-11"
-                        />
-                    </div>
-                    <div className="space-y-1.5">
-                        <label className="text-xs font-bold text-foreground flex items-center gap-1.5">
-                            <MapPin className="w-3.5 h-3.5 text-primary" /> University
-                        </label>
-                        <Input
-                            value={answers.goalUniversity}
-                            onChange={(e) => update({ goalUniversity: e.target.value })}
-                            placeholder="e.g. University of Melbourne"
-                            className="h-11"
-                        />
-                    </div>
-                </div>
-            </div>
-        </StepShell>
-    );
-}
-
-// ═══ STEP 5 — The reveal ════════════════════════════════════════════════════
-// Was three screens: plan reveal, price comparison, premium value stack. See
-// the note at the top of the file for why they are one, and TheReveal's own
-// header for what it actually shows.
-function Step5Reveal({ answers, onNext }) {
-    const subjectsCount = answers.subjects.length;
-    const personalLine = [
-        answers.yearLevel ? answers.yearLevel.replace(/ Units.*$/, "") : "VCE",
-        `${subjectsCount} subject${subjectsCount === 1 ? "" : "s"}`,
-        answers.goalAtar ? `ATAR ${formatAtar(answers.goalAtar)}` : null,
-        answers.goalCourseName || null,
-    ].filter(Boolean).join(" · ");
-
-    return (
-        <StepShell
-            eyebrow="Your hand"
-            title="This is what you are holding"
-            subtitle={personalLine}
-            footer={
-                <PrimaryCTA onClick={onNext}>
-                    Keep this hand <ArrowRight className="w-4 h-4 ml-1" />
-                </PrimaryCTA>
-            }
-        >
-            <TheReveal answers={answers} />
-        </StepShell>
-    );
-}
-
-// ═══ STEP 6 (existing user) — Save, don't sign up ═══════════════════════════
-// Reached only via the existingUser prop. There is no plan or auth decision
-// left to make — this just writes the hand back to the account that's
-// already signed in, via applyOnboardingUpdateForCurrentUser, and returns to
-// the app.
-function Step6SaveExisting({ answers, onSaved }) {
-    const [isSaving, setIsSaving] = useState(false);
-    const [error, setError] = useState(null);
-
-    const handleSave = async () => {
-        setIsSaving(true);
-        setError(null);
-        try {
-            const { data: { user } } = await supabase.auth.getUser();
-            const email = user?.email;
-            if (!email) throw new Error("You're not signed in.");
-            const result = await applyOnboardingUpdateForCurrentUser(email, answers);
-            if (!result.ok) throw new Error(result.error || "Couldn't save. Try again.");
-            onSaved();
-        } catch (e) {
-            setError(e.message || "Something went wrong. Try again.");
-            setIsSaving(false);
-        }
-    };
-
-    return (
-        <StepShell
-            eyebrow="Update your setup"
-            title="Save this hand to your account?"
-            subtitle="This updates your subjects and goals — your plan and login stay exactly as they are."
-            footer={
-                <div className="space-y-2">
-                    {error && <p className="text-sm text-destructive font-medium">{error}</p>}
-                    <PrimaryCTA onClick={handleSave} disabled={isSaving}>
-                        {isSaving ? "Saving…" : "Save changes"}
-                        {!isSaving && <ArrowRight className="w-4 h-4 ml-1" />}
-                    </PrimaryCTA>
-                </div>
-            }
-        >
-            <TheReveal answers={answers} />
-        </StepShell>
-    );
-}
-
-// ═══ STEP 6 — Sign in ═══════════════════════════════════════════════════════
-// Two separate decisions, made in this order:
-//   1. Plan picker — Premium (default-selected, highlighted) vs Free
-//   2. Auth method — Continue with Google OR Continue with email
-// Picking the email button reveals an inline form below the choice; the plan
-// already chosen carries through, so the form has a single submit button.
-//
-// DELIBERATELY UNCHANGED MECHANICALLY. Everything else in the wizard got a
-// card treatment; this screen did not, beyond dropping a recap the hand rail
-// underneath now makes redundant. Sign-up is where a clever interface costs
-// real money, and the specific error branches below were each written after
-// something actually went wrong. The only addition is the tutor anchor, which
-// moved here from the screen it used to own, because a price comparison is
-// worth most at the moment of the decision and nothing at all two screens
-// earlier.
-function Step6Signin({ answers, update }) {
-    const { signUpWithPassword } = useAuth();
-    const [isStarting, setIsStarting] = useState(false);
-
-    // Plan: "premium" (default) | "free"
-    const [selectedPlan, setSelectedPlan] = useState(answers.intent || "premium");
-
-    // Auth method: null (chooser visible) | "email" (form visible)
-    // Google has no in-page form — clicking it redirects out, so we don't need
-    // a "google" mode state.
-    const [authMode, setAuthMode] = useState(null);
-
-    // Email path form state
-    const [email, setEmail] = useState("");
-    const [password, setPassword] = useState("");
-    const [confirmPassword, setConfirmPassword] = useState("");
-    const [fullName, setFullName] = useState("");
-    const [emailError, setEmailError] = useState(null);
-    const [emailSent, setEmailSent] = useState(false);
-    // The "send it again" affordance on the check-your-inbox screen.
-    const [resending, setResending] = useState(false);
-    const [resent, setResent] = useState(false);
-    const [resendError, setResendError] = useState("");
-
-    const personalLine = [
-        answers.yearLevel ? answers.yearLevel.replace(/ Units.*$/, "") : null,
-        answers.subjects.length > 0 ? `${answers.subjects.length} subject${answers.subjects.length === 1 ? "" : "s"}` : null,
-        answers.goalAtar ? `ATAR ${formatAtar(answers.goalAtar)}` : null,
-        answers.goalCourseName || null,
-    ].filter(Boolean).join(" · ");
-
-    // ─── Google OAuth path ──────────────────────────────────────────────────
-    const startGoogleSignIn = async () => {
-        const completedAt = new Date().toISOString();
-        update({ intent: selectedPlan, completedAt });
-        saveAnswers({ ...answers, intent: selectedPlan, completedAt });
-        setIsStarting(true);
-        try {
-            const redirectTo = `${window.location.origin}/`;
-            const { error } = await supabase.auth.signInWithOAuth({
-                provider: "google",
-                options: { redirectTo },
-            });
-            if (error) throw error;
-            // Browser navigates away — code below doesn't run.
-        } catch (e) {
-            console.error("[onboarding] OAuth error:", e);
-            setIsStarting(false);
-        }
-    };
-
-    // ─── Email + password path ──────────────────────────────────────────────
-    const submitEmailSignup = async () => {
-        setEmailError(null);
-
-        const trimmedEmail = email.trim().toLowerCase();
-        if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmedEmail)) {
-            setEmailError("Enter a valid email address.");
-            return;
-        }
-        if (password.length < 8) {
-            setEmailError("Password needs to be at least 8 characters.");
-            return;
-        }
-        if (password !== confirmPassword) {
-            setEmailError("Passwords don't match.");
-            return;
-        }
-
-        // Stash the typed email in storage so the post-verify apply only fires
-        // for THIS user (email-match guard in AuthContext).
-        const completedAt = new Date().toISOString();
-        const nextAnswers = { ...answers, intent: selectedPlan, completedAt, email: trimmedEmail };
-        update({ intent: selectedPlan, completedAt, email: trimmedEmail });
-        saveAnswers(nextAnswers);
-
-        setIsStarting(true);
-        const { ok, error } = await signUpWithPassword({
-            email: trimmedEmail,
-            password,
-            fullName: fullName.trim() || undefined,
-        });
-        setIsStarting(false);
-
-        if (!ok) {
-            const msg = error?.message || "Sign-up failed. Try again in a moment.";
-            // Be specific about which error we got. Surface Supabase's real
-            // message for anything we don't recognise — generic "try again"
-            // hides whether the SMTP / quota / email-format is actually broken.
-            if (/already registered|exists/i.test(msg)) {
-                setEmailError("This email already has an account. Try signing in instead.");
-            } else if (/too many|rate limit/i.test(msg)) {
-                // NEVER NAME THE VENDOR OR THE DEVELOPER. This branch used to
-                // read "Hit Supabase's email rate limit (3/hour on built-in
-                // SMTP). Wait an hour, or have Miles set up Resend SMTP." — an
-                // internal to-do shown to a seventeen-year-old trying to sign
-                // up, naming a person they have never heard of and a cap they
-                // cannot do anything about. Signup now goes through our own
-                // Resend sender so this should be rare, and when it does fire
-                // it says the one thing they can act on.
-                setEmailError(msg);
-            } else if (/for security purposes/i.test(msg)) {
-                setEmailError("Too soon to send another to this address — give it a minute.");
-            } else if (/invalid.*email|unable to validate/i.test(msg)) {
-                setEmailError("That email address was rejected. Try a different one.");
-            } else {
-                setEmailError(msg);
-            }
-            return;
-        }
-        setEmailSent(true);
-    };
-
-    /**
-     * Send the verification email again.
-     *
-     * The SAME call as the first send. `generateLink` regenerates the
-     * confirmation link for an account that exists but is unconfirmed, so
-     * there is no second code path to keep in step — and the password is still
-     * in state because the student never left this screen.
-     */
-    const handleResend = async () => {
-        if (resending || resent) return;
-        setResending(true);
-        setResendError("");
-        const { ok, error } = await signUpWithPassword({
-            email: email.trim().toLowerCase(),
-            password,
-            fullName: fullName.trim() || undefined,
-        });
-        setResending(false);
-        if (ok) {
-            // Latched, so a student cannot sit there pressing it and trip the
-            // rate limit that exists to protect them from exactly that.
-            setResent(true);
-            return;
-        }
-        setResendError(error?.message || "Couldn't send it just now. Try again in a minute.");
-    };
-
-    // ─── Success state: verify-email instructions ──────────────────────────
-    if (emailSent) {
-        return (
-            <StepShell
-                eyebrow="One more step"
-                title="Check your inbox"
-                subtitle={`We sent a verification link to ${email}. Click it to finish signing up and start studying.`}
-            >
-                <div className="card-soft p-6 space-y-4">
-                    <div className="flex items-start gap-3">
-                        <div className="w-10 h-10 rounded-xl bg-primary/10 border border-primary/15 flex items-center justify-center flex-shrink-0">
-                            <Mail className="w-5 h-5 text-primary" strokeWidth={2.5} />
-                        </div>
-                        <div className="text-sm text-foreground leading-relaxed">
-                            <p className="font-bold mb-1">Almost there.</p>
-                            <p className="text-muted-foreground">
-                                Open the email from AcedIt and tap the verification link.
-                                Your subjects, goals, and plan will be ready when you land back here.
-                            </p>
-                        </div>
-                    </div>
-                    <div className="rounded-xl bg-chart-3/5 border border-chart-3/15 p-3 text-xs text-foreground leading-relaxed">
-                        <p>
-                            <span className="font-bold">Already have an AcedIt account with Google?</span>{" "}
-                            You won't get an email — close this tab and{" "}
-                            <Link to="/login" className="text-primary font-bold hover:underline">sign in with Google</Link> instead.
-                        </p>
-                    </div>
-                    {/* A WAY FORWARD WHEN THE EMAIL DOESN'T ARRIVE.
-                        There wasn't one: a student whose mail was eaten could
-                        only start over with a different address, which is not
-                        a thing most people have. The same endpoint that sent
-                        the first one regenerates the link for an unconfirmed
-                        account, so this is the identical call. */}
-                    <div className="pt-1 space-y-2">
-                        <Button
-                            type="button"
-                            variant="outline"
-                            disabled={resending || resent}
-                            onClick={handleResend}
-                            className="w-full border-2 border-border rounded-xl gap-2"
-                        >
-                            {resending ? <><AceShuffle size="sm" /> Sending…</>
-                                : resent ? <><Check className="w-4 h-4 text-primary" /> Sent — check again</>
-                                : <><Mail className="w-4 h-4" /> Send it again</>}
-                        </Button>
-                        {resendError && (
-                            <p className="text-xs text-streak text-center">{resendError}</p>
-                        )}
-                        <p className="text-xs text-muted-foreground text-center">
-                            Still nothing? Check spam, or{" "}
-                            <button
-                                type="button"
-                                onClick={() => { setEmailSent(false); setResent(false); setResendError(""); }}
-                                className="font-bold text-primary hover:underline"
-                            >
-                                try a different email
-                            </button>.
-                        </p>
-                    </div>
-                </div>
-            </StepShell>
-        );
-    }
-
-    // ─── Default state: plan picker + auth method buttons ──────────────────
-    const planSubLabel = selectedPlan === "premium"
-        ? "Cancel anytime · Less than a coffee"
-        : "Limited AI use · Upgrade any time";
-
-    return (
-        <StepShell
-            eyebrow="Last step"
-            title="Keep the hand"
-            subtitle="Sign in and it is saved. Nothing you just did carries over otherwise."
-        >
-            {/* The anchor. One line, at the point of the decision, and phrased
-                so it does not sneer at tutors: a good one is genuinely worth
-                the money, and the honest difference is availability, not value.
-                The hand rail under this screen is the recap that used to sit
-                here as a line of grey text. */}
-            <div className="rounded-2xl bg-primary/5 border border-primary/15 p-4 mb-5">
-                <p className="font-display font-extrabold text-foreground text-base lg:text-lg leading-snug">
-                    One hour with a tutor pays for{" "}
-                    <span className="text-primary">
-                        {weeksPerTutorHour()} weeks
-                    </span>{" "}
-                    of AcedIt.
-                </p>
-                <p className="text-xs text-muted-foreground mt-1.5 leading-relaxed">
-                    Melbourne VCE tutoring runs about ${TUTOR_HOURLY} an hour, once a week, in term time.
-                    {personalLine ? ` Your hand: ${personalLine}.` : ""}
-                </p>
-            </div>
-
-            {/* ─── 1. Plan picker ──────────────────────────────────────────── */}
-            <div className="mb-5">
-                <p className="text-[11px] uppercase tracking-wider font-bold text-muted-foreground mb-2.5">
-                    Choose your plan
-                </p>
-                <div className="grid grid-cols-2 gap-3">
-                    {/* Premium */}
-                    <button
-                        type="button"
-                        onClick={() => setSelectedPlan("premium")}
-                        disabled={isStarting}
-                        className={`relative text-left p-4 rounded-2xl border-2 shadow-soft transition-all ${
-                            selectedPlan === "premium"
-                                ? "bg-primary/10 border-primary"
-                                : "bg-surface border-border/60 hover:border-primary/30"
-                        }`}
-                    >
-                        {selectedPlan === "premium" && (
-                            <span className="absolute -top-2 right-3 pill bg-primary text-primary-foreground text-[10px] px-2 py-0.5">
-                                <Crown className="w-3 h-3" /> PICK
-                            </span>
-                        )}
-                        <div className="flex items-center gap-1.5 mb-1.5">
-                            <Crown className={`w-3.5 h-3.5 ${selectedPlan === "premium" ? "text-primary" : "text-muted-foreground"}`} strokeWidth={2.5} />
-                            <span className={`text-[11px] uppercase tracking-wider font-bold ${selectedPlan === "premium" ? "text-primary" : "text-muted-foreground"}`}>
-                                Premium
-                            </span>
-                        </div>
-                        <p className="font-display font-extrabold text-foreground text-2xl leading-none">
-                            {priceLabel()}<span className="text-sm text-muted-foreground font-bold">/wk</span>
-                        </p>
-                        <p className="text-[11px] text-muted-foreground mt-1.5 leading-snug">All AI tools, every subject</p>
-                    </button>
-
-                    {/* Free */}
-                    <button
-                        type="button"
-                        onClick={() => setSelectedPlan("free")}
-                        disabled={isStarting}
-                        className={`text-left p-4 rounded-2xl border-2 shadow-soft transition-all ${
-                            selectedPlan === "free"
-                                ? "bg-foreground/[0.04] border-foreground/40"
-                                : "bg-surface border-border/60 hover:border-foreground/20"
-                        }`}
-                    >
-                        <div className="flex items-center gap-1.5 mb-1.5">
-                            <span className={`text-[11px] uppercase tracking-wider font-bold ${selectedPlan === "free" ? "text-foreground" : "text-muted-foreground"}`}>
-                                Free
-                            </span>
-                        </div>
-                        <p className="font-display font-extrabold text-foreground text-2xl leading-none">
-                            $0<span className="text-sm text-muted-foreground font-bold">/wk</span>
-                        </p>
-                        <p className="text-[11px] text-muted-foreground mt-1.5 leading-snug">Limited AI, basic tools</p>
-                    </button>
-                </div>
-                <p className="text-[11px] text-muted-foreground mt-2 text-center">{planSubLabel}</p>
-            </div>
-
-            {/* ─── 2. Auth method ──────────────────────────────────────────── */}
-            {authMode === null ? (
-                <div>
-                    <p className="text-[11px] uppercase tracking-wider font-bold text-muted-foreground mb-2.5">
-                        Sign in to start
-                    </p>
-                    <div className="space-y-2.5">
-                        {/* Google */}
-                        <button
-                            type="button"
-                            onClick={startGoogleSignIn}
-                            disabled={isStarting}
-                            className="w-full btn-3d bg-primary text-primary-foreground hover:bg-primary rounded-xl px-5 h-14 flex items-center justify-center gap-2.5 font-display font-extrabold text-base disabled:opacity-60"
-                        >
-                            <svg className="w-5 h-5" viewBox="0 0 24 24" aria-hidden>
-                                <path fill="#fff" opacity="0.95" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
-                                <path fill="#fff" opacity="0.95" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.99.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84A10.99 10.99 0 0 0 12 23z"/>
-                                <path fill="#fff" opacity="0.95" d="M5.84 14.09a6.6 6.6 0 0 1 0-4.18V7.07H2.18a10.99 10.99 0 0 0 0 9.86l3.66-2.84z"/>
-                                <path fill="#fff" opacity="0.95" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84C6.71 7.31 9.14 5.38 12 5.38z"/>
-                            </svg>
-                            Continue with Google
-                        </button>
-
-                        {/* Email */}
-                        <button
-                            type="button"
-                            onClick={() => { setAuthMode("email"); setEmailError(null); }}
-                            disabled={isStarting}
-                            className="w-full rounded-xl border-2 border-border bg-surface hover:bg-muted/40 px-5 h-14 flex items-center justify-center gap-2.5 font-display font-extrabold text-base text-foreground transition-colors disabled:opacity-60"
-                        >
-                            <Mail className="w-5 h-5" />
-                            Continue with email
-                        </button>
-                    </div>
-
-                    <Link
-                        to="/login"
-                        className="block mx-auto text-xs font-semibold text-muted-foreground hover:text-foreground pt-4 text-center"
-                    >
-                        Already have an account? <span className="text-primary">Sign in</span>
-                    </Link>
-                </div>
-            ) : (
-                <div>
-                    <div className="flex items-center justify-between mb-3">
-                        <p className="text-[11px] uppercase tracking-wider font-bold text-muted-foreground">
-                            Sign up with email
-                        </p>
-                        <button
-                            type="button"
-                            onClick={() => { setAuthMode(null); setEmailError(null); }}
-                            disabled={isStarting}
-                            className="text-xs font-semibold text-muted-foreground hover:text-foreground"
-                        >
-                            ← Back
-                        </button>
-                    </div>
-                    <div className="card-soft p-4 space-y-3">
-                        <div>
-                            <label className="text-xs font-bold text-foreground mb-1.5 block">Full name (optional)</label>
-                            <Input
-                                value={fullName}
-                                onChange={(e) => setFullName(e.target.value)}
-                                placeholder="e.g. Sienna L"
-                                autoComplete="name"
-                                className="h-11"
-                                disabled={isStarting}
-                            />
-                        </div>
-                        <div>
-                            <label className="text-xs font-bold text-foreground mb-1.5 block">Email</label>
-                            <Input
-                                type="email"
-                                value={email}
-                                onChange={(e) => setEmail(e.target.value)}
-                                placeholder="you@example.com"
-                                autoComplete="email"
-                                className="h-11"
-                                disabled={isStarting}
-                            />
-                        </div>
-                        <div>
-                            <label className="text-xs font-bold text-foreground mb-1.5 block">Password</label>
-                            <Input
-                                type="password"
-                                value={password}
-                                onChange={(e) => setPassword(e.target.value)}
-                                placeholder="At least 8 characters"
-                                autoComplete="new-password"
-                                className="h-11"
-                                disabled={isStarting}
-                            />
-                        </div>
-                        <div>
-                            <label className="text-xs font-bold text-foreground mb-1.5 block">Confirm password</label>
-                            <Input
-                                type="password"
-                                value={confirmPassword}
-                                onChange={(e) => setConfirmPassword(e.target.value)}
-                                placeholder="Type it again"
-                                autoComplete="new-password"
-                                className="h-11"
-                                disabled={isStarting}
-                            />
-                        </div>
-                        {emailError && (
-                            <div className="rounded-lg bg-destructive/10 border border-destructive/20 px-3 py-2 text-xs text-destructive font-medium">
-                                {emailError}
-                            </div>
-                        )}
-                    </div>
-
-                    <button
-                        type="button"
-                        onClick={submitEmailSignup}
-                        disabled={isStarting}
-                        className="w-full btn-3d bg-primary text-primary-foreground hover:bg-primary rounded-xl px-5 h-14 flex items-center justify-center gap-2.5 font-display font-extrabold text-base disabled:opacity-60 mt-4"
-                    >
-                        {isStarting ? "Creating account…" : (
-                            <>
-                                {selectedPlan === "premium" ? <Crown className="w-5 h-5" /> : <ArrowRight className="w-5 h-5" />}
-                                Create account & start {selectedPlan === "premium" ? "Premium" : "Free"}
-                            </>
-                        )}
-                    </button>
-
-                    <Link
-                        to="/login"
-                        className="block mx-auto text-xs font-semibold text-muted-foreground hover:text-foreground pt-4 text-center"
-                    >
-                        Already have an account? <span className="text-primary">Sign in</span>
-                    </Link>
-                </div>
-            )}
-        </StepShell>
+        </FlightProvider>
     );
 }

@@ -799,3 +799,83 @@
 @media (prefers-reduced-motion: reduce) {
   .prank-shake, .prank-upside, .prank-knock, .prank-glitch { animation: none; }
 }
+
+/* ── The onboarding table ─────────────────────────────────────────────────────
+   The signup wizard is a split stage: the questions on the app's own ground,
+   beside a dark table where the deck is dealt as they are answered. The table
+   is a PHYSICAL OBJECT, so its ink is literal and identical in both themes —
+   the rule a bought card back keeps, and the reason the landing page paints
+   its own CardStorm in a fixed navy. It is not a room the student lives in
+   (that is the floor's and the console's argument for following the theme);
+   it is a surface things are put down on.
+
+   The colours are the brand's own: #0D1626 is the app's foreground ink and
+   the landing's dark, and the glow is the primary green at a whisper. The
+   lattice is a FIXED gauge in px, the lesson CardBack records about its own
+   weave — a lattice in percentages scales with the box. */
+.onb-felt {
+  position: relative;
+  isolation: isolate;
+  background:
+    radial-gradient(110% 75% at 50% 42%, rgba(88, 204, 2, 0.11), transparent 62%),
+    radial-gradient(80% 60% at 92% 108%, rgba(59, 130, 246, 0.12), transparent 60%),
+    radial-gradient(70% 50% at 4% -6%, rgba(240, 180, 41, 0.07), transparent 60%),
+    linear-gradient(180deg, #121D33 0%, #0D1626 52%, #09101D 100%);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.07),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.05),
+    inset 0 -60px 140px rgba(0, 0, 0, 0.45),
+    0 30px 60px -30px rgba(13, 22, 38, 0.55);
+  color: #F4F1EA;
+}
+.onb-felt::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  border-radius: inherit;
+  background-image: radial-gradient(rgba(255, 255, 255, 0.07) 1px, transparent 1.3px);
+  background-size: 22px 22px;
+  -webkit-mask-image: radial-gradient(85% 70% at 50% 45%, #000 30%, transparent 100%);
+          mask-image: radial-gradient(85% 70% at 50% 45%, #000 30%, transparent 100%);
+  pointer-events: none;
+}
+/* A slow light moving across the felt, so the table is alive while nothing is
+   being dealt. Long and faint on purpose: noticed peripherally, never watched. */
+.onb-felt::after {
+  content: "";
+  position: absolute;
+  inset: -20%;
+  z-index: -1;
+  background: radial-gradient(40% 35% at 50% 50%, rgba(88, 204, 2, 0.08), transparent 70%);
+  animation: onb-drift 18s ease-in-out infinite alternate;
+  pointer-events: none;
+}
+@keyframes onb-drift {
+  0%   { transform: translate(-14%, -8%); }
+  100% { transform: translate(14%, 10%); }
+}
+/* The gold the target Ace wears once it is turned over. */
+@keyframes onb-sheen {
+  0%   { transform: translateX(-130%) skewX(-18deg); }
+  100% { transform: translateX(230%) skewX(-18deg); }
+}
+.onb-sheen {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  border-radius: inherit;
+  pointer-events: none;
+}
+.onb-sheen::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 45%;
+  background: linear-gradient(90deg, transparent, rgba(255, 236, 170, 0.75), transparent);
+  animation: onb-sheen 1.6s ease-out 0.2s 2 both;
+}
+@media (prefers-reduced-motion: reduce) {
+  .onb-felt::after, .onb-sheen::before { animation: none; }
+}

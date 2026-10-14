@@ -28,46 +28,14 @@
  */
 import React from "react";
 import { motion, useReducedMotion } from "framer-motion";
-import { VCE_SUBJECTS } from "@/data/vceSubjects";
-import { colorFor } from "@/components/cards/cardIdentity";
+import { scalingFor } from "@/lib/onboardingFlow";
 
-/** "+4" → 4, "-3.5" → -3.5, anything unparseable → null. */
-function factorOf(sub) {
-    const raw = sub?.scaling_info?.scaling_factor;
-    if (raw == null) return null;
-    const n = Number(String(raw).replace(/[^\d.+-]/g, ""));
-    return Number.isFinite(n) ? n : null;
-}
-
-/**
- * Join the picked subjects to the catalogue.
- *
- * Matched on code first and name second, because a custom subject the student
- * typed can collide on neither and must fall through to the unscaled list.
+/*
+ * The join and the parse live in @/lib/onboardingFlow now. This file carried
+ * its own `factorOf` beside subjectBrowse's `scalingOf` — two parsers for one
+ * number, which agree only until somebody writes a decimal into the catalogue.
+ * The wizard's felt table and this card read the same `scalingFor`.
  */
-export function scalingFor(picked = []) {
-    const scaled = [];
-    const unscaled = [];
-    picked.forEach((p) => {
-        const cat = VCE_SUBJECTS.find(
-            (v) => (p.code && v.code === p.code) || v.name === p.name);
-        const f = factorOf(cat);
-        if (cat && f != null) {
-            scaled.push({
-                name: cat.name,
-                factor: f,
-                mean: cat.scaling_info?.mean_study_score ?? null,
-                note: cat.scaling_info?.scaling_description || "",
-                color: colorFor(cat.name),
-            });
-        } else {
-            unscaled.push(p.name);
-        }
-    });
-    scaled.sort((a, b) => b.factor - a.factor);
-    return { scaled, unscaled };
-}
-
 /** A raw 30 in this subject becomes this. The number students actually want. */
 const scaled30 = (f) => Math.round(30 + f);
 

@@ -29,13 +29,14 @@ import React from "react";
 import { motion, AnimatePresence, useReducedMotion } from "framer-motion";
 import PlayingCard, { CardBack } from "@/components/cards/PlayingCard";
 import { atarBandOf } from "@/lib/atarBands";
+import { Slider } from "@/components/ui/slider";
+import { formatAtar } from "@/lib/onboardingFlow";
 
 const GOLD = "#F0B429";
 
-/** 96 → "96", 96.35 → "96.35". Trailing zeroes on an ATAR read as a typo. */
-export function formatAtar(n) {
-    return Number(n).toFixed(Number(n) % 1 === 0 ? 0 : 2);
-}
+// `formatAtar` lives in @/lib/onboardingFlow, beside everything else the
+// wizard prints; re-exported so nothing that imported it from here breaks.
+export { formatAtar };
 
 export default function AtarCut({ value, onChange }) {
     const reduce = useReducedMotion();
@@ -49,7 +50,7 @@ export default function AtarCut({ value, onChange }) {
                 always there. The backs are absolute and behind; the Ace is in
                 flow and sets the height, which keeps the whole block from
                 collapsing to zero on a browser that skips the animation. */}
-            <div className="relative w-[13rem] sm:w-[15rem]">
+            <div className="theme-locked-light relative w-[11.5rem] sm:w-[12.5rem]">
                 <CardBack tone={GOLD} aria-hidden="true"
                     className="absolute inset-0 w-full h-full -rotate-[7deg] translate-y-2 opacity-70" />
                 <CardBack tone={GOLD} aria-hidden="true"
@@ -99,16 +100,19 @@ export default function AtarCut({ value, onChange }) {
                 </motion.div>
             </div>
 
+            {/* THE APP'S OWN SLIDER, not the browser's. This was a native range
+                with `accent-color`, which paints the filled half and leaves the
+                rest to the user agent — a #3B3B3B bar across a cream page, the
+                exact fault the floor's slider records ("a designed room does not
+                leave a control to the browser"). */}
             <div className="w-full max-w-sm mt-7">
-                <input
-                    type="range"
+                <Slider
                     aria-label="Target ATAR"
                     min={50}
                     max={99.95}
                     step={0.05}
-                    value={value}
-                    onChange={(e) => onChange(parseFloat(e.target.value))}
-                    className="w-full accent-primary"
+                    value={[value]}
+                    onValueChange={([v]) => onChange(Math.round(v * 20) / 20)}
                 />
                 <div className="flex justify-between text-xs text-muted-foreground font-semibold mt-2">
                     <span>50</span>
@@ -118,7 +122,7 @@ export default function AtarCut({ value, onChange }) {
             </div>
 
             <p className="text-xs text-muted-foreground mt-5 text-center max-w-xs leading-relaxed">
-                A target is a direction, not a promise. You can move it whenever you want,
+                A target is a direction, not a promise. Change it whenever you like,
                 and nothing in AcedIt is locked behind it.
             </p>
         </div>

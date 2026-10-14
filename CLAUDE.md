@@ -3893,7 +3893,7 @@ at a page that does not exist.
 
 **"A starter tutorial... effective, educational but also engaging so the user
 doesn't get bored or tabs out."** A new account already met four surfaces — the
-six-step signup wizard, `AceTour`, the dashboard setup nudge and the Help
+signup wizard, `AceTour`, the dashboard setup nudge and the Help
 manual — so the ask was not for more onboarding. It was that the onboarding
 there is PASSIVE.
 
@@ -6941,6 +6941,156 @@ with it — the baseline then reported red and the cause was the harness, not th
 code. Snapshot to a scratch copy and restore from that. Sixteen injections, all
 of them verified to bite, with the baseline green either side.
 
+## The signup wizard is a deal, hosted
+
+**"A full rework of the onboarding — better formatted, more aesthetic, far
+cooler animations, higher converting, full premium and on brand."** It was six
+screens of a questionnaire that happened to print cards, and four things about
+it were simply wrong before any of it was ugly. The rework is
+`src/pages/Onboarding.jsx` (the conductor), `src/components/onboarding/`
+(`steps.jsx`, `StepSignin.jsx`, `Table.jsx`, `AceHost.jsx`, `DealFlight.jsx`,
+`FanCard.jsx`, `Shell.jsx`) and `src/lib/onboardingFlow.js`, which holds every
+figure the wizard prints so a test can hold them to the calendar, the scheduler
+and the catalogue.
+
+    Year → Birthday → Subjects → Target → Build → Reveal → Sign in
+
+### Four things that were wrong, not just plain
+
+- **THE CONSENT BANNER SAT ON THE PRIMARY BUTTON** for every first-time
+  visitor. Both were pinned to the bottom of the viewport and neither knew the
+  other existed, on the one screen whose job is a signup. The banner publishes
+  its MEASURED height as `--consent-h` (a ResizeObserver, reset to 0 on hide
+  and unmount) and the actions bar sits on it. The guard requires the measured
+  value specifically: its first draft matched the two `0px` resets and passed
+  with the measurement deleted.
+- **THREE PROGRESS COUNTS** — a `1/6` badge, a "Step 2 of 6" eyebrow and the
+  pips — which disagreed every time a step moved. The pips are the only count
+  now and every eyebrow is a NAME (`STEP_NAME`); the test refuses an eyebrow
+  that counts.
+- **THE REVIEW LADDER WAS INVENTED.** The brain screen promised reviews at days
+  1, 3, 8 and 14. The app's own scheduler walks 1, 4, 11 and 27 for a "good"
+  recall. `reviewLadder` RUNS `calculateNextReview` to get it, so the dates the
+  build prints are the dates the deck will actually come back, and the test
+  refuses the old literal anywhere in the flow.
+- **A SECOND SCALING PARSER AND A SECOND YEAR→RANK TABLE.** `ScalingReport`
+  parsed `scaling_factor` itself and `HandOfAnswers` kept its own year map, so
+  the picker and the hand could disagree about which card a year is. `YEARS` is
+  the one table — rank, suit and TONE — and `scalingFor` the one parser, built
+  on `scalingOf`.
+
+### A split stage
+
+On a desktop the questions sit on the app's own ground and a dark felt table
+(`.onb-felt`, literal ink, the floor's reasoning) sits beside them, sticky at
+full height. Every answer leaves the question as a card and lands on the table,
+so the thing a student is building is the largest object on the screen rather
+than a strip along the bottom. On a phone there is no beside: Ace is a row over
+the question, the hand is a rail under the button, and the build and the reveal
+put the felt in the content.
+
+**EXACTLY ONE LAYOUT IS MOUNTED, and that is why it is read rather than
+CSS-hidden.** A flight lands on whichever `[data-deal-slot]` is visible, so the
+table and the rail mounted together would race for every card. `useIsDesktop`
+decides, and `visibleSlot` additionally requires an `offsetParent`.
+
+**A FLIGHT IS A CLONE BETWEEN TWO RECTS.** `fly(fromEl, card)` measures the
+picked element, waits two frames for the slot to exist, and animates a fixed
+clone along an arc to it while the real slot renders invisible. Call `fly`
+BEFORE `update`: both batch, so the card's first render on the table already
+knows it is airborne — the other order paints it landed, then hides it, then
+flies a copy onto itself. The clone is portalled to `document.body`, because
+`position: fixed` resolves against a transformed ancestor and framer-motion
+leaves an inline transform on every animated section here.
+
+**CARD STOCK IS WHITE IN BOTH THEMES** — the picker, the rail, the table, the
+target card and the clone. In the dark the picker's cards followed the theme,
+so a dark card left the page and landed white on the felt: a flight that
+changes what it is carrying mid-air. `theme-locked-light` on all five, asserted.
+
+**A LABEL TOO WIDE FOR ITS STRIP RUNS UP THE EDGE.** A seven-card hand on a
+phone leaves each overlapped card a 34px strip, and "Chemistry" across that was
+"Chemi" — the clipped-label fault `FanCard`'s own header records. Up the edge,
+the way a spine is printed, the constraint is the card's HEIGHT, which every
+`shortSubject` label fits. The last card, which nothing overlaps, keeps its
+horizontal band.
+
+### Ace hosts, and says only what is true
+
+`AceHost` draws him on the table (light ink) or as a row over the question (app
+ink), from one component so one place claims the stage — `"onboarding"` sits
+in `ACE_ORDER` between a celebration and the first run. He TOSSES whenever a
+card lands, because a mascot standing still while cards fly past is watching
+the deal rather than dealing it. His lines come out of `aceLines` and are
+REACTIONS to the last answer — the weeks the year leaves, what VTAC does to the
+subjects just picked — never a compliment, and **never a comment on an age**,
+which the test refuses by name.
+
+### One decision per screen, and the brain left the funnel
+
+The old year screen grew a birthday form under the cards once one was picked,
+half behind the pinned button on a phone; the subjects screen was a 340px
+scroll box with its payout BELOW it; the course fields sat under the target
+card where nobody scrolled. Seven short screens, each asking one thing, with
+the payout where the eye already is — Ace says it, or the felt draws it
+(`FeltScaling`, VTAC's figures drawn around zero because scaling goes both
+ways).
+
+**THE BRAIN ASKED NOTHING** and sat between the second and third questions,
+which made it the likeliest place in the flow to lose somebody. Its argument —
+spacing beats rereading — is now one line on the build, under the student's
+own review dates, which is the version they can check.
+
+**THE BUILD IS THEATRE AND THE LINES ARE NOT.** About four seconds, skippable,
+and every line is something `buildLines` genuinely computed from the answers:
+weeks left, their subjects' scaling, their first review dates, their target
+band, the level the questions are pitched at. A missing answer DROPS its line
+rather than printing a blank. It never claims work that is not happening —
+"analysing ten thousand students like you" is the line that makes a wait feel
+valuable by lying about it, and the test refuses that family by name. An
+existing student retaking the setup skips it entirely: it is theatre for a
+first deal. **Back never lands on it** (`prevStep`), because replaying the
+shuffle to reach the target you wanted to change is a penalty for changing
+your mind.
+
+**THE REVEAL TURNS OVER, then the facts arrive.** The cards are keyed by what
+they are and never remounted between the table's three modes (spread, deck,
+reveal), so every change is the same cards MOVING. The flip is keyed on the
+reveal, which is what lets a retake — spread straight to reveal, no deck in
+between — turn the hand over at all; without the key a face-up card simply
+stays face up. `scripts/_floorProbe.jsx?v=table` draws exactly that transition,
+the one a fresh signup never shows. Nobody is handed an Ace: every subject is a
+two and only the target is gold.
+
+### Sign-in: the auth is ported, the button is pinned
+
+Every error branch in `StepSignin` is the old `Step6Signin`'s, verbatim in
+behaviour — each was written after something actually went wrong, and sign-up
+is where a clever interface costs real money. What changed is the shape:
+
+- **THE GOOGLE BUTTON IS IN THE PINNED BAR**, so it is on screen from the first
+  paint. On a phone it used to sit below two plan cards, an anchor panel and a
+  label — below the fold on the one screen where a scroll costs a signup.
+- **A PLAN CARD SELLS WHAT THE GATE ENFORCES.** The tool count is
+  `TOOL_LABELS`' own length (the plain copy `toolBrief.test.mjs` holds to the
+  catalogue's twelve, so signup does not pull every examiner prompt into its
+  chunk) and the free allowance is `FREE_LIFETIME_CAPS`. The test refuses a
+  hand-typed allowance in the plan table.
+- **NO TRIAL IS PROMISED.** Whether there is one is the open decision recorded
+  in `pricing.js`; this screen says what is true today and the test refuses any
+  trial phrasing on it.
+- The year of tutoring is on the felt as `CostGap variant="felt"` — two bars
+  off the same arrays the chart is drawn from, because the chart needs ~500px
+  the table does not have and was cut off below its own totals, which are the
+  punchline. A phone has no felt, so the full chart follows the plans.
+
+"Passwords don't match" was a banned word in an error message; it reads "Those
+two passwords are different."
+
+Draw every screen at 1280, 1024 and 390, in both themes — the dark theme is the
+only place the card-stock fault shows, and 1024 is the narrowest the split
+fires at. `scripts/_floorProbe.jsx?v=table` for the retake's reveal.
+
 ## Voice / UX guardrails (from prior decisions)
 
 - **Tone**: chill motivational coach. Never cocky.
@@ -7368,6 +7518,17 @@ of them verified to bite, with the baseline green either side.
   screens draw; `ui/slider.jsx` renders a thumb per value, which it did not.
   Draw it with `scripts/_floorProbe.jsx?v=quizsetup`, both themes and at 390 —
   four cells of words do not fit a phone and only the screenshot says so
+- `src/pages/Onboarding.jsx`, `src/components/onboarding/` +
+  `src/lib/onboardingFlow.js` + `onboardingFlow.test.mjs` — the signup wizard as
+  a deal: a split stage with the felt table beside the questions, Ace reacting
+  to each answer, cards flying from the pick to the table (`DealFlight`), a
+  build of lines the app genuinely computed, and a reveal that turns the hand
+  over. Every figure it prints — weeks left, the review ladder (run off the
+  real scheduler), scaling, the hand itself — comes out of `onboardingFlow.js`.
+  The actions bar sits on the consent banner's `--consent-h`; card stock is
+  white in both themes; the sign-in auth is the old step's, ported. Draw it at
+  1280, 1024 and 390 in both themes, and the retake's reveal with
+  `scripts/_floorProbe.jsx?v=table`
 - `src/components/legal/AgeAnswer.jsx` — the birthday asked ONCE: the one
   control the signup wizard and `AgeGate` both import, with `ageAnswerReady` /
   `ageAnswerPatch` so the two cannot disagree about what "answered" means. The
