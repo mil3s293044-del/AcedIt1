@@ -43,10 +43,23 @@
  *     replay;
  *   - a grant since revoked is not celebrated.
  *
+ * ─── A CODE IS A GRANT TOO ──────────────────────────────────────────────────
+ * The Year 10 codes (`premiumCodes.js`) switch Premium on with no card and no
+ * Stripe at all, and they leave `subscription_tier` exactly as it was — the
+ * premium lives in the derived `code_premium_until`. So `revealDue` asks the
+ * same question `isPremium` does, or a code student's reveal would be owed and
+ * never due. `redeemPremiumCode` owes it under `codeGrantId`, so a second code
+ * is a second reveal and the same code can never be celebrated twice.
+ *
  * Plain JS with no alias imports: `server.mjs` imports this file directly.
  */
 
+import { codePremiumActive } from "./premiumCodes.js";
+
 export const REVEAL_KEY = "premium_reveal";
+
+/** The grant id a redeemed code owes its reveal under. */
+export const codeGrantId = (code) => `code:${String(code || "").toUpperCase()}`;
 
 const lower = (s) => String(s || "").trim().toLowerCase();
 
@@ -89,6 +102,7 @@ export function revealDue(profile) {
     const r = extraOf(profile?.extra?.[REVEAL_KEY]);
     if (!r.pending) return null;
     if (r.seen === r.pending) return null;
-    if (profile?.subscription_tier !== "premium") return null;
+    // Premium by either road: a subscription, or a code still running.
+    if (profile?.subscription_tier !== "premium" && !codePremiumActive(profile)) return null;
     return String(r.pending);
 }

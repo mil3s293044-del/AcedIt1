@@ -1384,13 +1384,17 @@ views.premium = () => <PremiumReveal onContinue={() => {}} fallbackMs={10 ** 7} 
 const fakeRedeem = async ({ code }) => {
     await new Promise((r) => setTimeout(r, 700));
     if (code !== "YEAR10ACE") throw new Error("That code isn't valid. Check it and try again.");
-    return { success: true, premium_until: new Date(Date.now() + 21 * 864e5).toISOString(), days: 21 };
+    return { success: true, premium_until: new Date(Date.now() + 21 * 864e5).toISOString(), days: 21, reveal_id: "code:YEAR10ACE" };
 };
+// The probe has no profile to mark, and leaving must not navigate the probe
+// away: closing the reveal lands on the card underneath it, which is the
+// state worth judging after it.
+const fakeSeen = async () => {};
 views.redeem = () => (
     <div className="min-h-screen bg-background">
         <div className="max-w-5xl mx-auto px-4 lg:px-8 py-10 space-y-10">
-            <section className="space-y-3"><p className="stat-label">Closed</p><RedeemCode redeem={fakeRedeem} /></section>
-            <section className="space-y-3"><p className="stat-label">Open</p><RedeemCode redeem={fakeRedeem} defaultOpen /></section>
+            <section className="space-y-3"><p className="stat-label">Closed</p><RedeemCode redeem={fakeRedeem} markSeen={fakeSeen} onContinue={() => {}} /></section>
+            <section className="space-y-3"><p className="stat-label">Open</p><RedeemCode redeem={fakeRedeem} markSeen={fakeSeen} onContinue={() => {}} defaultOpen /></section>
         </div>
     </div>
 );

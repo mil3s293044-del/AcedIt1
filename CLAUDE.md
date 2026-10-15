@@ -7383,9 +7383,46 @@ response also finally returns `amount_total` and `currency`, which the success
 page has been reading for the purchase pixel the whole time — every conversion
 arrived as $0, full-price ones included.
 
-`premiumGrant.test.mjs` and `datePick.test.mjs` hold all of it: 27 injections,
+### A YEAR 10 CODE IS A GRANT TOO, and it got the lesser moment
+
+The Year 10 codes landed on main beside this, and they are almost certainly the
+"code" the request meant. A redemption ended on a static card — a tick and a
+sentence — while a paid checkout got Ace dealing the ace: the student handed
+Premium by their school was celebrated less than the one who paid. And the
+marker could not have helped, because **a code leaves `subscription_tier`
+exactly as it was** — the premium lives in `code_premium_until` — so a reveal
+keyed on the tier would have been owed and never due.
+
+- `revealDue` asks the question `isPremium` asks: a subscription OR a code
+  still running. An expired code is not celebrated, the cancelled-subscription
+  rule.
+- `redeemPremiumCode` owes the reveal under `codeGrantId(code)`, upper-cased,
+  so one code is one reveal however it was typed and a second code is a second
+  one. Best-effort: the redemption has already landed, and a missing animation
+  is no reason to tell a student it failed.
+- `RedeemCode` plays it over the page, PORTALLED (a fixed overlay inside a
+  transformed ancestor is not the viewport), with the code's END DATE under the
+  headline — a subscription has none and a code always does, and the card it
+  replaced printed it. The card stays underneath, so closing the reveal lands
+  on the answer rather than on the form. It marks the grant seen on arrival and
+  **leaving waits for that write**, or the full load to the dashboard beats it
+  and Layout plays the reveal a second time.
+
+**THE FALLBACK HAD NEVER FIRED IN LAYOUT.** `PremiumReveal` keyed its
+twenty-second timer on `onContinue`, and every caller passes an inline arrow —
+so the timer restarted on every render, and Layout re-renders far more often
+than every twenty seconds. The handler rides in a ref now. Harmless on the
+success page, which rarely re-renders; on a reveal Layout plays, "an abandoned
+tab still lands somewhere" was simply untrue.
+
+Draw it with `scripts/_floorProbe.jsx?v=redeem` and submit `YEAR10ACE` — the
+probe injects `markSeen` and `onContinue` so nothing is written and nothing
+navigates.
+
+`premiumGrant.test.mjs` and `datePick.test.mjs` hold all of it: 36 injections,
 every one biting once the three that could not reach their branch were moved to
-the layer that decides. Draw the pickers with `scripts/_floorProbe.jsx?v=dates`
+the layer that decides, and the one that only checked the overlay was imported
+was made to check it is switched on by the redemption. Draw the pickers with `scripts/_floorProbe.jsx?v=dates`
 (the real `AgeAnswer`, the SAC grid with two SACs tracked, the session chips
 with a day already carrying sessions), in both themes and at 390.
 

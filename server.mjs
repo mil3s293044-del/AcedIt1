@@ -68,7 +68,7 @@ import { estimateCostMicros, isUnpricedModel, formatMicros } from "./src/lib/aiC
 // Which model a student's work runs on. The tier lives on their profile, so it
 // is resolved here rather than trusted from the request body.
 import { modelFor } from "./src/lib/aiModels.js";
-import { checkoutVerdict, withRevealPending } from "./src/lib/premiumGrant.js";
+import { checkoutVerdict, withRevealPending, codeGrantId } from "./src/lib/premiumGrant.js";
 import { priceOf, stackOf, spendableFor, WEEKLY_CHIPS, chipsSpent } from "./src/lib/chips.js";
 // Premium from a code (the Year 10 program) — the rules, shared with the client.
 import { codePremiumActive, normaliseCode, cleanName, nameProblem, redeemVerdict } from "./src/lib/premiumCodes.js";
@@ -12522,11 +12522,31 @@ app.post("/local-ai/fn/redeemPremiumCode", async (req, res) => {
     if (insErr) throw insErr;
 
     console.log(`[redeemPremiumCode] ${code} → ${user.email} (${name}) until ${verdict.premiumUntil.toISOString()}`);
+
+    // THE CODE OWES THE REVEAL, like any other grant (premiumGrant.js). The
+    // screen that redeemed it plays it straight away and marks it shown; the
+    // marker is what lets Layout play it on the next screen if that screen
+    // never got the answer. Best-effort: the redemption has already landed,
+    // and a missing animation is no reason to tell a student it failed.
+    const revealId = codeGrantId(code);
+    try {
+      const { data: rows } = await supabaseAdmin
+        .from("user_profiles").select("id, extra").eq("created_by", user.email).limit(1);
+      if (rows?.[0]) {
+        const { error: revErr } = await supabaseAdmin.from("user_profiles")
+          .update({ extra: withRevealPending(rows[0].extra, revealId) }).eq("id", rows[0].id);
+        if (revErr) console.warn("[redeemPremiumCode] reveal marker not written:", revErr.message);
+      }
+    } catch (e) {
+      console.warn("[redeemPremiumCode] reveal marker not written:", e?.message || e);
+    }
+
     return res.json({
       success: true,
       premium_until: verdict.premiumUntil.toISOString(),
       days: verdict.days,
       label: codeRow.label || "",
+      reveal_id: revealId,
     });
   } catch (err) {
     console.error("[redeemPremiumCode] error:", err?.code, err?.message || err);

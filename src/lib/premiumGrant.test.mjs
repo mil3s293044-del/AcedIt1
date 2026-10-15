@@ -19,7 +19,7 @@
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import {
-    checkoutVerdict, withRevealPending, withRevealSeen, revealDue, REVEAL_KEY,
+    checkoutVerdict, withRevealPending, withRevealSeen, revealDue, REVEAL_KEY, codeGrantId,
 } from "@/lib/premiumGrant";
 
 let passed = 0;
@@ -111,6 +111,31 @@ check("a grant since revoked is not celebrated", () => {
     assert.equal(revealDue({ subscription_tier: "free", extra }), null);
 });
 
+/* ─── A Year 10 code ──────────────────────────────────────────────────────── */
+
+// A code switches Premium on through `code_premium_until` and leaves
+// `subscription_tier` exactly as it was — so a reveal keyed on the tier alone
+// is owed and never due.
+const coded = (extra, until = new Date(Date.now() + 21 * 864e5).toISOString()) =>
+    ({ subscription_tier: "free", code_premium_until: until, extra });
+
+check("A CODE IS PREMIUM TOO — its reveal is due with the tier still free", () => {
+    const extra = withRevealPending({}, codeGrantId("year10ace"));
+    assert.equal(revealDue(coded(extra)), "code:YEAR10ACE", "a redeemed code's reveal never comes due");
+});
+
+check("an expired code is not celebrated, any more than a cancelled subscription", () => {
+    const extra = withRevealPending({}, codeGrantId("YEAR10ACE"));
+    assert.equal(revealDue(coded(extra, "2020-01-01T00:00:00Z")), null);
+});
+
+check("one code is one reveal, whatever case it was typed in", () => {
+    let extra = withRevealSeen(withRevealPending({}, codeGrantId("year10ace")), codeGrantId("YEAR10ACE"));
+    assert.equal(revealDue(coded(extra)), null, "the same code read as two grants");
+    extra = withRevealPending(extra, codeGrantId("SECOND1"));
+    assert.equal(revealDue(coded(extra)), "code:SECOND1", "a second code was not celebrated");
+});
+
 /* ─── The wiring ──────────────────────────────────────────────────────────── */
 
 const server = strip(read("server.mjs"));
@@ -146,6 +171,38 @@ check("Layout plays an owed reveal — once, after the age gate, never on the su
     assert.match(src, /pageKey === "PaymentSuccess"/, "it would play twice on the success page");
     assert.match(src, /BAND\.UNKNOWN/, "it would play over the age gate");
     assert.match(src, /<PremiumReveal\b/);
+});
+
+check("redeeming a code owes the reveal and says which grant it is", () => {
+    const r = block("redeemPremiumCode");
+    assert.match(r, /withRevealPending\([^)]*revealId\)/, "a redeemed code owes no reveal");
+    assert.match(r, /const revealId = codeGrantId\(code\)/);
+    assert.match(r, /reveal_id:\s*revealId/, "the code screen is not told which grant to reveal");
+});
+
+check("THE CODE SCREEN PLAYS THE REVEAL, and marks it shown with the grant it was handed", () => {
+    // It ended on a static tick card while a paid checkout got Ace dealing
+    // the ace — the student handed Premium by their school got less.
+    const src = strip(read("src/components/subscription/RedeemCode.jsx"));
+    assert.match(src, /<PremiumReveal\b/, "a redeemed code is told in a sentence and nothing plays");
+    assert.match(src, /markSeen\(result\?\.reveal_id\)/, "never marked shown, so Layout plays it again next screen");
+    assert.match(src, /withRevealSeen\(rows\[0\]\.extra, revealId\)/);
+    assert.match(src, /createPortal\(/, "a fixed overlay inside a transformed ancestor is not the viewport");
+    // Drawn on the answer, not merely imported: the redemption has to switch
+    // it on and the overlay has to be gated on that and nothing else.
+    assert.match(src, /markSeen\(result\?\.reveal_id\);\s*setRevealing\(true\)/, "a redemption never switches the reveal on");
+    assert.match(src, /\{revealing && typeof document !== "undefined" && createPortal\(/, "the overlay is gated on something other than the redemption");
+    // Leaving waits for the mark, or the full load beats the write.
+    assert.match(src, /await marking\.current[\s\S]{0,120}onContinue\(\)/);
+});
+
+check("the reveal's fallback survives a re-render", () => {
+    // Keyed on an inline onContinue, the twenty-second timer restarted on
+    // every render of Layout and never fired.
+    const src = strip(read("src/components/subscription/PremiumReveal.jsx"));
+    const deps = /setTimeout\([^;]*fallbackMs\);[\s\S]*?\}, \[([^\]]*)\]\);/.exec(src);
+    assert.ok(deps, "the fallback timer is gone");
+    assert.doesNotMatch(deps[1], /onContinue/, "the fallback restarts every time the caller re-renders");
 });
 
 check("the reveal claims the Ace stage, ranked as a celebration", () => {

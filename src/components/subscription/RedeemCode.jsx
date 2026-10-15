@@ -1,4 +1,5 @@
-import React, { useState } from "react";
+import React, { useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { Ticket, Check, X } from "lucide-react";
 import { base44 } from "@/api/base44Client";
@@ -10,6 +11,8 @@ import { fmtDate } from "@/lib/safeDate";
 import { createPageUrl } from "@/utils";
 import { normaliseCode, cleanName, nameProblem, NAME_MAX, CODE_MAX } from "@/lib/premiumCodes";
 import AceShuffle from "@/components/ace/AceShuffle";
+import PremiumReveal from "@/components/subscription/PremiumReveal";
+import { withRevealSeen } from "@/lib/premiumGrant";
 
 /**
  * "Have a code?" on /Subscription — a name and a code, and Premium switches on.
@@ -22,7 +25,38 @@ import AceShuffle from "@/components/ace/AceShuffle";
  *
  * `redeem` is injectable so `scripts/_floorProbe.jsx?v=redeem` can draw every
  * state — the real call goes through base44, which a probe cannot intercept.
+ * `markSeen` is injectable for the same reason.
+ *
+ * ─── A CODE IS A GRANT, SO IT GETS THE REVEAL ───────────────────────────────
+ * This used to end on a static card — a tick and a sentence — while a paid
+ * checkout got Ace dealing the ace. Same moment, same student, and the one who
+ * was handed Premium by their school got the lesser version of it. The reveal
+ * plays here now, over the page, with the code's END DATE under the headline
+ * (a subscription has none; a code always does). The card stays underneath,
+ * so closing the reveal lands on the same answer rather than on a form.
+ *
+ * The server owes the reveal under the code's grant id (`premiumGrant.js`), so
+ * this screen marks it SHOWN on arrival — the rule `SettlementReveal` keeps —
+ * or Layout would play it a second time on the very next screen.
  */
+async function markSeenViaApi(revealId) {
+    if (!revealId) return;
+    try {
+        const user = await base44.auth.me();
+        // Read AFTER the redemption: a non-read function drops the read
+        // cache, so `extra` here is the one the server just wrote.
+        const rows = await base44.entities.UserProfile.filter({ created_by: user.email });
+        if (rows?.[0]) {
+            await base44.entities.UserProfile.update(rows[0].id, { extra: withRevealSeen(rows[0].extra, revealId) });
+        }
+    } catch {
+        // Played either way; at worst Layout plays it once more next screen.
+    }
+}
+
+/** Off to the dashboard, as a full load — the nav, the gates and every cached
+ *  profile read pick up Premium at once. */
+const toDashboard = () => window.location.assign(createPageUrl("Dashboard"));
 async function redeemViaApi({ name, code }) {
     try {
         return takeFn(await base44.functions.invoke("redeemPremiumCode", { name, code }));
@@ -39,13 +73,15 @@ async function redeemViaApi({ name, code }) {
     }
 }
 
-export default function RedeemCode({ redeem = redeemViaApi, defaultOpen = false, onRedeemed }) {
+export default function RedeemCode({ redeem = redeemViaApi, markSeen = markSeenViaApi, defaultOpen = false, onRedeemed, onContinue = toDashboard }) {
     const [open, setOpen] = useState(defaultOpen);
     const [name, setName] = useState("");
     const [code, setCode] = useState("");
     const [busy, setBusy] = useState(false);
     const [error, setError] = useState(null);
     const [done, setDone] = useState(null);
+    const [revealing, setRevealing] = useState(false);
+    const marking = useRef(null);
 
     const submit = async (e) => {
         e.preventDefault();
@@ -58,6 +94,8 @@ export default function RedeemCode({ redeem = redeemViaApi, defaultOpen = false,
         try {
             const result = await redeem({ name: cleanName(name), code: normaliseCode(code) });
             setDone(result);
+            marking.current = markSeen(result?.reveal_id);
+            setRevealing(true);
             onRedeemed?.(result);
         } catch (err) {
             setError(err?.message || "That didn't work. Try again.");
@@ -66,8 +104,28 @@ export default function RedeemCode({ redeem = redeemViaApi, defaultOpen = false,
         }
     };
 
+    // Leaving waits for the seen-mark, or the full load it triggers can beat
+    // the write and the dashboard plays the reveal again.
+    const leave = async () => {
+        try { await marking.current; } catch { /* best-effort */ }
+        setRevealing(false);
+        onContinue();
+    };
+
     if (done) {
         return (
+            <>
+            {revealing && typeof document !== "undefined" && createPortal(
+                /* PORTALLED: `position: fixed` resolves against a transformed
+                   ancestor, and framer-motion leaves one on every animated
+                   section of this page. */
+                <div className="fixed inset-0 z-[80] overflow-y-auto" role="dialog" aria-modal="true"
+                    aria-label="You are on premium" data-premium-reveal>
+                    <PremiumReveal onContinue={leave}
+                        note={done.premium_until ? `Premium runs until ${fmtDate(done.premium_until, "EEEE d MMMM")}.` : null} />
+                </div>,
+                document.body,
+            )}
             <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}
                 className="card-soft p-5 sm:p-6 border-2 border-primary/30 bg-primary/5">
                 <div className="flex items-start gap-4">
@@ -79,15 +137,14 @@ export default function RedeemCode({ redeem = redeemViaApi, defaultOpen = false,
                         <p className="text-sm text-muted-foreground mt-1">
                             Every AI tool is unlocked until {fmtDate(done.premium_until, "EEEE d MMMM")}. Make it count.
                         </p>
-                        {/* A full load, so the nav, the gates and every cached
-                            profile read pick up Premium at once. */}
-                        <Button onClick={() => window.location.assign(createPageUrl("Dashboard"))}
+                        <Button onClick={leave}
                             className="mt-4 btn-3d rounded-xl font-display font-extrabold">
                             Start studying
                         </Button>
                     </div>
                 </div>
             </motion.div>
+            </>
         );
     }
 
