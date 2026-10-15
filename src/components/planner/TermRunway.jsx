@@ -34,6 +34,21 @@
  * Ace is CONTENT here, as he was on the old hero: he stands at the end of the
  * countdown and does not talk or follow the student around, so he claims no
  * stage — the rule `aceStage.test.mjs` draws between illustration and host.
+ *
+ * ─── IT OPENS THE PAGE, AND THE PAGE'S HEADLINE IS THE TRACK'S ─────────────
+ * The planner used to open on a headline row — an eyebrow, a two-line sentence
+ * about the term, and today's intention beside it — with this underneath. The
+ * row was taller on one side than the other, so its eyebrow floated halfway
+ * down, and its sentence was the second reading of the term on one screen: the
+ * countdown's own line already says how the NEXT one is going. So the runway
+ * is the first thing on the page, and `lead` is the heading of the TRACK — the
+ * part of this card that is about the term — rather than a block of its own
+ * above the card. `aside` is the page's help, at the end of that row.
+ *
+ * The header and the track pad identically, because they are one card: at
+ * different gutters the countdown and the track heading started 4px apart,
+ * which is the size of misalignment that reads as a mistake rather than a
+ * choice.
  */
 import React from "react";
 import { Link } from "react-router-dom";
@@ -45,12 +60,9 @@ import { sacMood } from "@/lib/aceVoice";
 import { fmtDate } from "@/lib/safeDate";
 import { createPageUrl } from "@/utils";
 import { shortSubject } from "@/lib/subjectShort";
+import { LANE_H, STALK_FOOT, hasPrepLine, lanesHeight } from "@/lib/termRunway";
 
 const EASE = [0.16, 1, 0.3, 1];
-// A pin card is four lines, about 76px; a lane shorter than that stacks the
-// card above onto the one below and hides its countdown.
-const LANE_H = 84;
-
 const daysWord = (d) => (d <= 0 ? "Today" : d === 1 ? "Tomorrow" : `${d} days`);
 const shortDate = (iso) => fmtDate(iso, "d MMM");
 
@@ -148,7 +160,7 @@ function Header({ next, runway }) {
 
 function EmptyHeader({ onTrack }) {
     return (
-        <div className="relative px-5 sm:px-7 pt-6 pb-5 bg-secondary/60 flex items-center gap-4">
+        <div className="relative px-5 sm:px-7 pt-6 pb-6 bg-secondary/60 flex items-center gap-4">
             <AceBody className="w-16 sm:w-20 flex-shrink-0" pose="point" title="Ace" />
             <div className="min-w-0">
                 <h2 className="font-display font-extrabold text-foreground text-xl">What&apos;s your next SAC?</h2>
@@ -172,7 +184,7 @@ function Stalk({ s, i, reduce }) {
     return (
         <motion.span aria-hidden="true"
             className={`absolute bottom-0 w-px ${s.needsPrep ? "bg-xp" : "bg-foreground/25"}`}
-            style={{ left: `${s.x * 100}%`, height: s.lane * LANE_H + 14, originY: 1 }}
+            style={{ left: `${s.x * 100}%`, height: s.lane * LANE_H + STALK_FOOT, originY: 1 }}
             initial={reduce ? false : { scaleY: 0 }} animate={{ scaleY: 1 }}
             transition={{ duration: 0.4, delay: reduce ? 0 : 0.35 + i * 0.08, ease: EASE }} />
     );
@@ -180,7 +192,7 @@ function Stalk({ s, i, reduce }) {
 
 function Pin({ s, i, rail, onOpen, reduce }) {
     const next = i === 0;
-    const bottom = s.lane * LANE_H + 14;
+    const bottom = s.lane * LANE_H + STALK_FOOT;
     return (
             <motion.button type="button" onClick={() => onOpen?.(s.sac)}
                 aria-label={`${s.sac.subject_name} ${s.sac.title}, ${daysWord(s.daysOut)}. ${s.planned} prep ${s.planned === 1 ? "session" : "sessions"} planned. Show that week.`}
@@ -207,7 +219,7 @@ function Pin({ s, i, rail, onOpen, reduce }) {
                         <span className="mt-1 flex items-center gap-1 text-[10px] font-bold text-xp">
                             <AlertTriangle className="w-3 h-3" /> No prep planned
                         </span>
-                    ) : s.planned > 0 ? (
+                    ) : hasPrepLine(s) ? (
                         <span className="mt-1 flex items-center gap-1 text-[10px] font-bold text-muted-foreground tabular-nums">
                             <Check className="w-3 h-3 text-primary" /> {s.done}/{s.planned} prep done
                         </span>
@@ -217,33 +229,34 @@ function Pin({ s, i, rail, onOpen, reduce }) {
     );
 }
 
-export default function TermRunway({ runway, railClassFor = () => "bg-chart-3", onOpen, onTrack }) {
+export default function TermRunway({ runway, railClassFor = () => "bg-chart-3", onOpen, onTrack, lead = null, aside = null }) {
     const reduce = useReducedMotion();
     const next = runway?.next || null;
 
     if (!runway) return null;
     // The next SAC can sit past the eighth week, so "is there a header" and
     // "are there pins" are separate questions.
-    const lanesH = runway.sacs.length ? runway.lanes * LANE_H + 20 : 24;
+    const lanesH = lanesHeight(runway.sacs);
 
     return (
         <section data-term-runway className="relative overflow-hidden rounded-3xl border border-border bg-surface shadow-soft">
             {next ? <Header next={next} runway={runway} /> : <EmptyHeader onTrack={onTrack} />}
 
-            <div className="px-4 sm:px-6 pt-4 pb-5">
-                <div className="flex items-baseline justify-between gap-3 mb-1">
-                    <h2 className="stat-label">The next eight weeks</h2>
-                    {/* A key to marks that are not on the track is a key to nothing. */}
-                    {runway.ticks.length > 0 && (
-                    <span className="hidden sm:flex items-center gap-3 text-[10px] font-semibold text-muted-foreground">
-                        <span className="inline-flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-foreground/70" /> prep done</span>
-                        <span className="inline-flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-foreground/25" /> planned</span>
-                        <span className="inline-flex items-center gap-1"><span className="w-2 h-2 rounded-full border border-foreground/40" /> missed</span>
-                    </span>
-                    )}
+            <div className="px-5 sm:px-7 pt-5 pb-6">
+                <div className="flex items-start justify-between gap-4 mb-3">
+                    <div className="min-w-0">
+                        <p className="stat-label">The next eight weeks</p>
+                        {lead && (
+                            <h1 className="mt-1 max-w-3xl font-display font-extrabold tracking-tight text-foreground
+                                text-xl sm:text-2xl leading-snug text-balance">
+                                {lead}
+                            </h1>
+                        )}
+                    </div>
+                    {aside && <div className="flex-shrink-0">{aside}</div>}
                 </div>
 
-                <div className="overflow-x-auto overscroll-x-contain -mx-4 sm:mx-0 px-4 sm:px-0 pb-1">
+                <div className="overflow-x-auto overscroll-x-contain -mx-5 sm:mx-0 px-5 sm:px-0 pb-1">
                     <div className="relative min-w-[680px]">
                         {/* Pins, in lanes above the track. */}
                         <div className="relative" style={{ height: lanesH }}>
@@ -321,12 +334,29 @@ export default function TermRunway({ runway, railClassFor = () => "bg-chart-3", 
                     </div>
                 </div>
 
-                {runway.later.length > 0 && (
-                    <p className="mt-3 text-xs text-muted-foreground">
-                        {runway.later.length} more after {shortDate(runway.to)}:{" "}
-                        {runway.later.slice(0, 3).map((s) => `${s.sac.subject_name} ${shortDate(s.due)}`).join(" · ")}
-                        {runway.later.length > 3 ? " …" : ""}
-                    </p>
+                {/* The key sits UNDER the chart it explains, beside what is
+                    past the chart's end — a caption row rather than a second
+                    header competing with the heading above. A key to marks
+                    that are not on the track is a key to nothing. */}
+                {(runway.later.length > 0 || runway.ticks.length > 0) && (
+                    <div className="mt-3 flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+                        <p className="text-xs text-muted-foreground min-w-0">
+                            {runway.later.length > 0 && (
+                                <>
+                                    {runway.later.length} more after {shortDate(runway.to)}:{" "}
+                                    {runway.later.slice(0, 3).map((s) => `${s.sac.subject_name} ${shortDate(s.due)}`).join(" · ")}
+                                    {runway.later.length > 3 ? " …" : ""}
+                                </>
+                            )}
+                        </p>
+                        {runway.ticks.length > 0 && (
+                            <span className="hidden sm:flex items-center gap-3 text-[10px] font-semibold text-muted-foreground">
+                                <span className="inline-flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-foreground/70" /> prep done</span>
+                                <span className="inline-flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-foreground/25" /> planned</span>
+                                <span className="inline-flex items-center gap-1"><span className="w-2 h-2 rounded-full border border-foreground/40" /> missed</span>
+                            </span>
+                        )}
+                    </div>
                 )}
             </div>
         </section>

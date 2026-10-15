@@ -305,6 +305,30 @@ function timeForSlot(siblings, index, movingDuration) {
     return null; // empty day, or neighbours with no times of their own
 }
 
+/**
+ * Every section on the planner opens on this, so they all START the same way:
+ * one title size, one gap under it, the actions at the end of the row. It is
+ * as tall as the buttons it may carry (`min-h-9`), so a section with none —
+ * Marks so far — sits on the same rhythm as one with two. Four hand-written
+ * headers had drifted to three bottom margins and two heights.
+ */
+function SectionHead({ icon: Icon, tone, title, count = null, actions = null, actionsClassName = "", children = null }) {
+    return (
+        <div className="flex items-center justify-between gap-3 flex-wrap mb-4 min-h-9">
+            <div className="flex items-center gap-2 min-w-0">
+                <h2 className="font-display font-extrabold text-foreground text-lg lg:text-xl flex items-center gap-2">
+                    <Icon className={`w-5 h-5 ${tone}`} /> {title}
+                    {count != null && (
+                        <span className="text-sm font-bold text-muted-foreground tabular-nums">{count}</span>
+                    )}
+                </h2>
+                {children}
+            </div>
+            {actions && <div className={`flex flex-wrap gap-2 ${actionsClassName}`}>{actions}</div>}
+        </div>
+    );
+}
+
 export default function Planner() {
     const { toast } = useToast();
     const navigate = useNavigate();
@@ -533,7 +557,6 @@ export default function Planner() {
         }
         return m;
     }, [sacMarks, plans, editingPlan]);
-    const wide = useMedia("(min-width: 1024px)");
     // Below `sm` the week is a strip and an agenda rather than the drag board.
     // A breakpoint that decides what is MOUNTED, so it is read rather than
     // CSS-hidden: both at once is two sets of controls for every session.
@@ -1103,61 +1126,68 @@ export default function Planner() {
     }
 
     // ── Today's intention ───────────────────────────────────────────────────
+    // A BAND at the top of the week, not a card beside the headline. Beside
+    // the headline it was taller than the column it sat next to, so that
+    // column's eyebrow floated halfway down a ragged row; and it is about
+    // TODAY, which is a day on the board under it — the phone already put it
+    // there. One place now, at every width.
     const intentionCard = (
-        <div className="rounded-3xl bg-chart-4/5 border border-chart-4/15 shadow-soft p-5 sm:p-6 flex flex-col h-full">
-            <div className="flex items-center justify-between mb-2">
-                <p className="stat-label text-chart-4/80">Today's intention</p>
-                {todayIntention && !editingIntention && (
-                    <button onClick={() => { setIntentionDraft(todayIntention); setEditingIntention(true); }} aria-label="Change intention"
-                        className="text-muted-foreground/60 hover:text-foreground transition-colors">
-                        <Edit2 className="w-4 h-4" />
-                    </button>
-                )}
-                {editingIntention && (
-                    <button onClick={() => { setEditingIntention(false); setIntentionDraft(""); }} aria-label="Cancel"
-                        className="text-muted-foreground/60 hover:text-foreground transition-colors">
-                        <X className="w-4 h-4" />
-                    </button>
-                )}
-            </div>
-
+        <div className="rounded-2xl bg-chart-4/5 border border-chart-4/15 px-4 sm:px-5 py-3" data-planner-intention>
             {todayIntention && !editingIntention ? (
-                <div className="flex-1 flex flex-col">
-                    {/* A set intention should look decided. It was the same
-                        weight as the picker it replaced, so the card read the
-                        same whether you had committed to something or not. */}
-                    <span aria-hidden className="font-display font-black text-chart-4/25
-                        text-5xl leading-[0.6] select-none">&ldquo;</span>
-                    <p className="font-display font-extrabold text-chart-4 leading-snug
-                        text-2xl lg:text-[1.7rem] mt-1">
-                        {todayIntention}
+                <div className="flex items-start sm:items-center gap-3">
+                <div className="flex-1 min-w-0 flex flex-wrap items-center gap-x-4 gap-y-1">
+                    <p className="stat-label text-chart-4/80 flex-shrink-0">Today's intention</p>
+                    {/* A set intention should look decided — display type,
+                        in quotes — or the band reads the same whether you
+                        have committed to something or not. */}
+                    {/* flex-auto, not flex-1: the quote keeps its own width
+                        and the line after it is what wraps. At basis 0 the
+                        quote gave way first and broke mid-phrase. */}
+                    <p className="font-display font-extrabold text-chart-4 text-lg leading-snug min-w-0 flex-auto">
+                        &ldquo;{todayIntention}&rdquo;
                     </p>
-                    <p className="text-xs text-muted-foreground mt-auto pt-3 flex items-center gap-1.5">
+                    <p className="text-xs text-muted-foreground flex items-center gap-1.5">
                         <Check className="w-3.5 h-3.5 text-primary flex-shrink-0" />
-                        Set for today. {intentsKept > 0
+                        {intentsKept > 0
                             ? `Kept ${intentsKept} of the last 7 \u2014 it counts toward planning.`
                             : "Follow it with a session and it counts toward planning."}
                     </p>
                 </div>
+                {/* Outside the wrapping run, so on a phone it stays at the
+                    end of the label's row rather than dropping to a line of
+                    its own under everything else. */}
+                <button onClick={() => { setIntentionDraft(todayIntention); setEditingIntention(true); }} aria-label="Change intention"
+                    className="flex-shrink-0 mt-0.5 sm:mt-0 text-muted-foreground/60 hover:text-foreground transition-colors">
+                    <Edit2 className="w-4 h-4" />
+                </button>
+                </div>
             ) : (
                 <div className="space-y-2">
-                    <p className="text-xs text-muted-foreground mb-1">Pick one — or write your own:</p>
-                    <div className="flex flex-wrap gap-1.5">
+                    <div className="flex items-center justify-between gap-3">
+                        <p className="stat-label text-chart-4/80">Today's intention</p>
+                        {editingIntention && (
+                            <button onClick={() => { setEditingIntention(false); setIntentionDraft(""); }} aria-label="Cancel"
+                                className="text-muted-foreground/60 hover:text-foreground transition-colors">
+                                <X className="w-4 h-4" />
+                            </button>
+                        )}
+                    </div>
+                    <div className="flex flex-wrap items-center gap-1.5">
                         {intentionsFor(nextSacDays, nextSac?.subject_name).map(p => (
                             <button key={p} onClick={() => saveIntention(p)} disabled={savingIntention}
                                 className="px-2.5 py-1.5 rounded-xl text-xs font-bold border-2 border-chart-4/25 bg-surface text-chart-4 hover:bg-chart-4/10 transition-colors text-left">
                                 {p}
                             </button>
                         ))}
-                    </div>
-                    <div className="flex gap-1.5 pt-1">
-                        <Input value={intentionDraft} onChange={e => setIntentionDraft(e.target.value)}
-                            onKeyDown={e => { if (e.key === "Enter") saveIntention(intentionDraft); }}
-                            placeholder="Write your own…" maxLength={80} className="h-9 text-sm" />
-                        <Button size="sm" onClick={() => saveIntention(intentionDraft)}
-                            disabled={savingIntention || !intentionDraft.trim()} className="h-9 gap-1 flex-shrink-0">
-                            {savingIntention ? <AceShuffle size="sm" /> : <Check className="w-3.5 h-3.5" />} Set
-                        </Button>
+                        <div className="flex gap-1.5 w-full sm:w-auto sm:flex-1 sm:min-w-[16rem]">
+                            <Input value={intentionDraft} onChange={e => setIntentionDraft(e.target.value)}
+                                onKeyDown={e => { if (e.key === "Enter") saveIntention(intentionDraft); }}
+                                placeholder="Or write your own…" maxLength={80} className="h-9 text-sm" />
+                            <Button size="sm" onClick={() => saveIntention(intentionDraft)}
+                                disabled={savingIntention || !intentionDraft.trim()} className="h-9 gap-1 flex-shrink-0">
+                                {savingIntention ? <AceShuffle size="sm" /> : <Check className="w-3.5 h-3.5" />} Set
+                            </Button>
+                        </div>
                     </div>
                 </div>
             )}
@@ -1166,40 +1196,33 @@ export default function Planner() {
 
     return (
         <div className="min-h-screen bg-background">
-            <div className="max-w-[1400px] mx-auto px-4 lg:px-8 py-6 lg:py-10 space-y-6 lg:space-y-8">
+            {/* ── ONE RHYTHM ───────────────────────────────────────────────
+                The page pads by the same unit it separates sections by, and
+                every section opens on the same header (`SectionHead`) — so the
+                space between any two blocks on this page is one of two numbers
+                rather than whatever each block happened to bring. */}
+            <div className="max-w-[1400px] mx-auto px-4 lg:px-8 py-6 lg:py-8 space-y-6 lg:space-y-8">
 
-                {/* ── COACH STRIP ─────────────────────────────────────── */}
+                {/* ── THE TERM, FIRST ─────────────────────────────────────
+                    The page opens on the runway. Its headline is the TRACK's
+                    heading inside it, and the page's help sits at the end of
+                    that row — the eyebrow row that used to carry both said
+                    "Planner" under a top bar that already does, and a tracked
+                    count the Upcoming list prints. */}
                 <motion.section initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.35 }}
-                    className="grid grid-cols-1 lg:grid-cols-3 gap-5 items-end">
-                    <div className="lg:col-span-2">
-                        <div className="flex items-center justify-between mb-3">
-                            <div className="flex items-center gap-2 text-xs">
-                                <span className="font-bold text-muted-foreground uppercase tracking-wider">Planner</span>
-                                {upcoming.length > 0 && (
-                                    <>
-                                        <span className="text-muted-foreground/40">·</span>
-                                        <span className="inline-flex items-center gap-1 font-extrabold text-chart-3">
-                                            <Flag className="w-3.5 h-3.5" /> {upcoming.length} tracked
-                                        </span>
-                                    </>
-                                )}
-                            </div>
-                            <HelpButton page="Planner" />
-                        </div>
-                        <h1 className="font-display text-2xl sm:text-3xl lg:text-4xl font-extrabold tracking-tight text-foreground leading-[1.1] text-balance">
-                            {coachLine}
-                        </h1>
-                    </div>
-                    {wide && intentionCard}
+                    data-planner-block="runway">
+                    <TermRunway runway={runway} railClassFor={subjectRailClass}
+                        lead={coachLine} aside={<HelpButton page="Planner" />}
+                        onOpen={openSacWeek} onTrack={() => setAddSacOpen(true)} />
                 </motion.section>
 
                 {/* ── Strategy check-in ───────────────────────────────── */}
-                {/* Sits above everything because it's the thing to deal with
-                    first: a plan that no longer matches the week is worse than
-                    no plan, and it only appears when there's both something to
+                {/* Straight under the term it is about, and above the week:
+                    a plan that no longer matches the week is worse than no
+                    plan, and it only appears when there's both something to
                     report and something still changeable. */}
                 {checkIns.length > 0 && (
-                    <div className="space-y-3">
+                    <div className="space-y-3" data-planner-block="checkins">
                         {/* One conversation at a time. Three open at once
                             would put three Aces in a column, which is the
                             repeated-graphic problem again. */}
@@ -1214,59 +1237,50 @@ export default function Planner() {
                     </div>
                 )}
 
-                {/* ── THE TERM ────────────────────────────────────────── */}
-                <motion.section initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.05 }}>
-                    <TermRunway runway={runway} railClassFor={subjectRailClass}
-                        onOpen={openSacWeek} onTrack={() => setAddSacOpen(true)} />
-                </motion.section>
-
-                {/* Today's intention is about TODAY, so on a phone it sits
-                    with the day rather than between the headline and the
-                    term. One card, placed by width rather than drawn twice. */}
-                {!wide && intentionCard}
-
                 {/* ── WEEK BOARD ──────────────────────────────────────── */}
-                <motion.section ref={boardRef} initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.15 }}
-                    className="scroll-mt-6">
-                    <div className="flex items-center justify-between mb-3 gap-3 flex-wrap">
-                        <div className="flex items-center gap-2">
-                            <h2 className="font-display font-extrabold text-foreground text-lg lg:text-xl flex items-center gap-2">
-                                <CalendarDays className="w-5 h-5 text-primary" /> {weekLabel}
-                            </h2>
-                            <div className="flex items-center gap-1">
-                                <button onClick={() => setWeekOffset(o => Math.max(-1, o - 1))} disabled={weekOffset <= -1}
-                                    aria-label="Previous week"
-                                    className="w-8 h-8 rounded-xl border-2 border-border flex items-center justify-center text-muted-foreground hover:border-primary/40 hover:text-primary disabled:opacity-30 transition-all">
-                                    <ChevronLeft className="w-4 h-4" />
-                                </button>
-                                <button onClick={() => setWeekOffset(o => Math.min(MAX_WEEKS_AHEAD, o + 1))} disabled={weekOffset >= MAX_WEEKS_AHEAD}
-                                    aria-label="Next week"
-                                    className="w-8 h-8 rounded-xl border-2 border-border flex items-center justify-center text-muted-foreground hover:border-primary/40 hover:text-primary disabled:opacity-30 transition-all">
-                                    <ChevronRight className="w-4 h-4" />
-                                </button>
-                                {weekOffset !== 0 && (
-                                    <button onClick={() => setWeekOffset(0)}
-                                        className="ml-1 px-2.5 py-1.5 rounded-xl text-xs font-bold bg-primary/10 text-primary hover:bg-primary/20 transition-colors">
-                                        Today
-                                    </button>
-                                )}
-                            </div>
-                        </div>
-                        {/* Two different questions, so two buttons. Strategise
-                            works backwards from ONE logged assessment; most weeks
-                            of the year there isn't one, and this fills that gap by
-                            reading what the student has actually logged. */}
-                        <div className="flex flex-wrap gap-2">
+                <motion.section ref={boardRef} initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }}
+                    className="scroll-mt-6" data-planner-block="week">
+                    {/* Two buttons that cannot share a phone's row take a row
+                        EACH, full width, rather than wrapping to two ragged
+                        lengths under the title. */}
+                    <SectionHead icon={CalendarDays} tone="text-primary" title={weekLabel}
+                        actionsClassName="w-full sm:w-auto"
+                        actions={<>
+                            {/* Two different questions, so two buttons. Strategise
+                                works backwards from ONE logged assessment; most
+                                weeks of the year there isn't one, and this fills
+                                that gap by reading what the student has logged. */}
                             <Button onClick={() => setWeekPlanOpen(true)} size="sm" variant="outline"
-                                className="gap-1.5 rounded-xl border-2">
+                                className="gap-1.5 rounded-xl border-2 flex-1 sm:flex-none">
                                 <CalendarDays className="w-3.5 h-3.5" /> Plan this week for me
                             </Button>
                             <Button onClick={() => navigate(createPageUrl("Strategise"))} size="sm"
-                                className="gap-1.5 bg-chart-4 hover:bg-chart-4/90 text-white btn-3d">
+                                className="gap-1.5 bg-chart-4 hover:bg-chart-4/90 text-white btn-3d flex-1 sm:flex-none">
                                 <Sparkles className="w-3.5 h-3.5" /> Strategise a SAC
                             </Button>
+                        </>}>
+                        <div className="flex items-center gap-1">
+                            <button onClick={() => setWeekOffset(o => Math.max(-1, o - 1))} disabled={weekOffset <= -1}
+                                aria-label="Previous week"
+                                className="w-8 h-8 rounded-xl border-2 border-border flex items-center justify-center text-muted-foreground hover:border-primary/40 hover:text-primary disabled:opacity-30 transition-all">
+                                <ChevronLeft className="w-4 h-4" />
+                            </button>
+                            <button onClick={() => setWeekOffset(o => Math.min(MAX_WEEKS_AHEAD, o + 1))} disabled={weekOffset >= MAX_WEEKS_AHEAD}
+                                aria-label="Next week"
+                                className="w-8 h-8 rounded-xl border-2 border-border flex items-center justify-center text-muted-foreground hover:border-primary/40 hover:text-primary disabled:opacity-30 transition-all">
+                                <ChevronRight className="w-4 h-4" />
+                            </button>
+                            {weekOffset !== 0 && (
+                                <button onClick={() => setWeekOffset(0)}
+                                    className="ml-1 px-2.5 py-1.5 rounded-xl text-xs font-bold bg-primary/10 text-primary hover:bg-primary/20 transition-colors">
+                                    Today
+                                </button>
+                            )}
                         </div>
-                    </div>
+                    </SectionHead>
+
+                    {/* Today's intention opens the week it is a day of. */}
+                    <div className="mb-3">{intentionCard}</div>
 
                     {/* Planned vs done scoreboard */}
                     {plannedThisWeek > 0 && (
@@ -1521,21 +1535,16 @@ export default function Planner() {
                     what is coming and "Marks so far" is what already happened;
                     they were one block with the past tucked under the future,
                     which is two questions sharing a heading. */}
-                <motion.section initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }}>
-                    <div className="flex items-center justify-between gap-3 mb-3 flex-wrap">
-                        <h2 className="font-display font-extrabold text-foreground text-lg lg:text-xl flex items-center gap-2">
-                            <Flag className="w-5 h-5 text-chart-3" /> Upcoming
-                            {upcoming.length > 0 && (
-                                <span className="text-sm font-bold text-muted-foreground tabular-nums">
-                                    {upcoming.length}
-                                </span>
-                            )}
-                        </h2>
-                        <Button onClick={() => setAddSacOpen(true)} size="sm" variant="outline"
-                            className="gap-1.5 rounded-xl border-2">
-                            <Plus className="w-3.5 h-3.5" /> Track a SAC
-                        </Button>
-                    </div>
+                <motion.section initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.15 }}
+                    data-planner-block="upcoming">
+                    <SectionHead icon={Flag} tone="text-chart-3" title="Upcoming"
+                        count={upcoming.length > 0 ? upcoming.length : null}
+                        actions={
+                            <Button onClick={() => setAddSacOpen(true)} size="sm" variant="outline"
+                                className="gap-1.5 rounded-xl border-2">
+                                <Plus className="w-3.5 h-3.5" /> Track a SAC
+                            </Button>
+                        } />
 
                     {upcoming.length > 0 ? (
                         <div className="space-y-2">
@@ -1576,10 +1585,9 @@ export default function Planner() {
                     this is a glance at how the term is going and not a
                     transcript — Analytics is where a full record belongs. */}
                 {marks.length > 0 && (
-                    <motion.section initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.25 }}>
-                        <h2 className="font-display font-extrabold text-foreground text-lg lg:text-xl mb-3 flex items-center gap-2">
-                            <Scale className="w-5 h-5 text-chart-4" /> Marks so far
-                        </h2>
+                    <motion.section initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }}
+                        data-planner-block="marks">
+                        <SectionHead icon={Scale} tone="text-chart-4" title="Marks so far" />
                         <div className="card-soft divide-y divide-border">
                             {marks.map(a => {
                                 const pct = markPercent(a.score, a.out_of);

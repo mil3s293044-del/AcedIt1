@@ -7269,6 +7269,60 @@ TODAY so the track is always populated: a flagged SAC, a covered one, a missed
 session, one past the eighth week, and the empty state behind a toggle. Both
 themes, and at 390, where the track scrolls rather than squashes.
 
+### The horizon opens the page, and one rhythm runs down it
+
+**"The horizon should be put to the top, and the page feels unevenly spaced —
+it looks good, just make it all proportional."** Measured on the real page
+rather than eyeballed, and every complaint was a number:
+
+- **THE HEADLINE ROW WAS RAGGED.** The coach line sat beside today's intention
+  with `items-end`, and the intention card was taller, so the "PLANNER"
+  eyebrow and the help button floated about 115px below the card's top edge.
+- **ONE TERM, READ TWICE.** The headline said "none inside a fortnight, which
+  is the cheapest time to space the prep out" directly above a countdown whose
+  own line said "Plenty of time. Which is exactly when it's easiest to get
+  ahead." The eyebrow said "Planner" under a top bar that already does, and
+  "1 tracked" above an Upcoming list that prints the count.
+- **THE RUNWAY'S TWO HALVES PADDED DIFFERENTLY** — `px-7` on the countdown,
+  `px-6` on the track — so the first words of one card started 4px apart.
+- **FOUR HAND-WRITTEN SECTION HEADERS** in three bottom margins and two heights.
+
+So the runway is the FIRST thing on the page, and `runwayLead` is the heading
+of its TRACK (`lead`), because that is the part of the card about the term.
+The page's help sits at the end of that row (`aside`). Today's intention is a
+BAND at the top of "This week", because it is about a day on that board, and
+that is where the phone already put it, so it has one place at every width.
+`SectionHead` is the one header and is as tall as the buttons it may carry, so
+Marks so far sits on the same rhythm as a section with two. The page pads by
+the unit it separates by, so every gap measures 32px on a laptop and 24px on a
+phone, from the top bar to the last section.
+
+**THE LANES ARE AS TALL AS THE CARDS THEY HOLD.** `lanesHeight` (in
+`termRunway.js`, so the test runs it) reserves a four-line card only where a
+pin carries its prep line; reserving one on every lane left a hole under the
+new heading above a row of three-line pins.
+
+**THE TOUR'S HEADING CHECK FOLLOWS ONE LEVEL.** `AceTour` anchors on
+`main h1` in the DOM, and the planner's h1 is still in `main`. It is inside the
+runway now. `aceTour.test.mjs` read the PAGE FILE alone and reported the planner
+as headless, which is exactly the false positive that gets a good guard deleted.
+It follows the page's own imports to the components it RENDERS, and a fixture
+proves an import that is never drawn does not count.
+
+On a phone the two week buttons take a row EACH at full width rather than
+wrapping to two ragged lengths, and the intention's pencil sits outside the
+wrapping run so it cannot drop onto a line of its own.
+
+`scripts/_floorProbe.jsx?v=runway` cannot draw the page's rhythm because the
+page is auth-gated. What drew it was the REAL `/Goals` against fixture rows,
+with Supabase intercepted at the NETWORK layer (Playwright `route` on
+`/auth/v1` and `/rest/v1`, a seeded `sb-<ref>-auth-token`, and the dual-run
+flag forced on). The `base44` Proxy defeats every in-page patch, as the reach
+section records, but it cannot defeat a route below the page. Seed
+`acedit.consent.v1`, `acedit_ace_buddy_v1` and `acedit_ace_firstrun_v1` or the
+banner, the plan prompt and the first-run card sit on top of the layout being
+judged.
+
 ## A date is three taps, and a code is a payment
 
 **"Make the calendar selector in the onboarding far more aesthetic, on brand

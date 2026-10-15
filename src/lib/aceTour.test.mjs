@@ -138,14 +138,47 @@ check("every stop has copy, and it stays in the app's voice", () => {
     }
 });
 
+/**
+ * Does this page put an <h1> in `main`? Either it writes one, or it MOUNTS a
+ * component that does — the planner's heading is the runway's track heading,
+ * because the runway opens the page. One level is followed, from the page's
+ * own `@/components/...` imports to the ones it actually renders; reading the
+ * page file alone reported the planner as headless the day its heading moved
+ * into the component that draws the term, which is the false positive that
+ * gets a good guard deleted.
+ */
+function headingSource(file) {
+    const src = fs.readFileSync(file, "utf8");
+    if (src.includes("<h1")) return file;
+    for (const m of src.matchAll(/^import (\w+) from "@\/(components\/[^"]+)";$/gm)) {
+        const [, name, rel] = m;
+        if (!new RegExp(`<${name}\\b`).test(src)) continue;
+        const target = [`src/${rel}.jsx`, `src/${rel}.js`].find((f) => fs.existsSync(f));
+        if (target && fs.readFileSync(target, "utf8").includes("<h1")) return target;
+    }
+    return null;
+}
+
 check("the tour points at a heading every one of its pages has", () => {
     // The tour deliberately anchors on `main h1` so no page needs an attribute
     // added for its benefit — but that only works while every page has one.
     for (const s of STOPS) {
         const file = `src/pages/${s.page}.jsx`;
         assert.ok(fs.existsSync(file), `${s.id}: ${file} does not exist`);
-        assert.ok(fs.readFileSync(file, "utf8").includes("<h1"),
-            `${s.id}: ${file} has no <h1> — Ace would have nothing to walk to`);
+        assert.ok(headingSource(file),
+            `${s.id}: ${file} has no <h1>, and mounts nothing that draws one — Ace would have nothing to walk to`);
+    }
+});
+
+check("following a mounted component is not a way round the heading check", () => {
+    // The follow must need BOTH halves: imported and rendered. An import that
+    // is never drawn puts nothing in `main`.
+    const tmp = "src/pages/__headless_probe.jsx";
+    fs.writeFileSync(tmp, 'import TermRunway from "@/components/planner/TermRunway";\nexport default function X() { return <div />; }\n');
+    try {
+        assert.equal(headingSource(tmp), null, "an imported-but-unrendered component counted as a heading");
+    } finally {
+        fs.unlinkSync(tmp);
     }
 });
 
