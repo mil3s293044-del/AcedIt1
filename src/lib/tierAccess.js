@@ -1,4 +1,5 @@
 import { canAfford, stackOf, stackWarning, priceOf, WEEKLY_CHIPS } from './chips.js';
+import { codePremiumActive } from './premiumCodes.js';
 
 // ════════════════════════════════════════════════════════════════════════════
 // Tier access — single source of truth for what each subscription tier can do.
@@ -137,6 +138,8 @@ export function isPremium(profile) {
   if (profile.subscription_active === true) return true;
   // Trial: if trial_ends_at is in the future, treat as premium.
   if (profile.trial_ends_at && new Date(profile.trial_ends_at) > new Date()) return true;
+  // A premium code (the Year 10 program) — see premiumCodes.js.
+  if (codePremiumActive(profile)) return true;
   return false;
 }
 

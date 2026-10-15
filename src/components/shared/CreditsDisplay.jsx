@@ -8,6 +8,7 @@ import { base44 } from "@/api/base44Client";
 import { differenceInDays, differenceInHours, differenceInMinutes } from "date-fns";
 import { fmtDate } from "@/lib/safeDate";
 import AceShuffle from "@/components/ace/AceShuffle";
+import { isPremium as hasPremium } from "@/lib/tierAccess";
 
 export default function CreditsDisplay() {
     const location = useLocation();
@@ -89,7 +90,7 @@ export default function CreditsDisplay() {
         );
     }
 
-    const isPremium = userProfile?.subscription_tier === 'premium';
+    const isPremium = hasPremium(userProfile);
     const credits = userProfile?.ai_credits || 0;
     const resetDate = userProfile?.credits_reset_date;
 

@@ -12,6 +12,7 @@ import { format, parse } from "date-fns";
 import { useToast } from "@/components/ui/use-toast";
 import { base44 } from "@/api/base44Client";
 import AceShuffle from "@/components/ace/AceShuffle";
+import { isPremium as hasPremium } from "@/lib/tierAccess";
 
 const activityConfig = {
     lecture_review: { bg: "bg-blue-500/10", text: "text-blue-700", border: "border-blue-200/50", dot: "bg-blue-500", label: "Lecture Review" },
@@ -33,7 +34,7 @@ export default function DayCalendar({ user, userProfile }) {
     const [isLoading, setIsLoading] = useState(true);
     const { toast } = useToast();
     
-    const canAccessPlanner = userProfile?.subscription_tier === 'premium';
+    const canAccessPlanner = hasPremium(userProfile);
 
     const [newEvent, setNewEvent] = useState({
         title: "",

@@ -1,3 +1,5 @@
+import { codePremiumActive } from "@/lib/premiumCodes";
+
 // CRITICAL: All subscription checks MUST use database subscription_tier field
 // Never rely on frontend state alone - always verify against UserProfile entity
 
@@ -55,7 +57,8 @@ export function isPremium(userProfile) {
     if (!userProfile) return false;
     const tier = getUserTier(userProfile);
     const role = getUserRole(userProfile);
-    return tier === SUBSCRIPTION_TIERS.PREMIUM || role === USER_ROLES.PREMIUM_USER;
+    return tier === SUBSCRIPTION_TIERS.PREMIUM || role === USER_ROLES.PREMIUM_USER
+        || codePremiumActive(userProfile);
 }
 
 // Check if user has access to a specific feature

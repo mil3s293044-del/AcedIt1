@@ -42,6 +42,7 @@ import { Flame, Zap, Crown } from "lucide-react";
 import { createPageUrl } from "@/utils";
 import UsageMeter from "@/components/shared/UsageMeter";
 import ThemeToggle from "@/components/layout/ThemeToggle";
+import { isPremium as hasPremium } from "@/lib/tierAccess";
 
 // Page slug → display title. Anything missing falls back to a humanized slug.
 const PAGE_TITLES = {
@@ -95,7 +96,7 @@ export default function TopNav({ profile: userProfile = null }) {
     const title = deriveTitle(location.pathname);
     const streak = userProfile?.streak_days || 0;
     const xp = userProfile?.total_xp || 0;
-    const isPremium = userProfile?.subscription_tier === "premium" || userProfile?.subscription_active === true;
+    const isPremium = hasPremium(userProfile);
 
     // ONE CONTROL, SO ONE LABEL. A screen reader met two adjacent links to the
     // same page reading "8 day streak" and "20,722 total XP"; merged, the pill

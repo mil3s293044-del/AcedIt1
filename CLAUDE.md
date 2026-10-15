@@ -7091,6 +7091,27 @@ Draw every screen at 1280, 1024 and 390, in both themes — the dark theme is th
 only place the card-stock fault shows, and 1024 is the narrowest the split
 fires at. `scripts/_floorProbe.jsx?v=table` for the retake's reveal.
 
+## Premium codes (the Year 10 program)
+
+A student taps "Have a code?" on /Subscription, types their name and a code,
+and gets Premium for the code's `days` (21 for `YEAR10ACE`) with no card.
+`src/lib/premiumCodes.js` holds the rules and is imported by both sides;
+`redeemPremiumCode` in `server.mjs` is the only writer of redemptions.
+
+**`user_profiles.code_premium_until` is DERIVED, never written by the app.** A
+trigger in migration 0041 keeps it equal to the latest unrevoked row in
+`premium_code_redemptions`, so the Supabase table editor is the admin panel:
+set `revoked_at` to block somebody (it ends at once, and a revoked account can
+never redeem ANY code again), flip `premium_codes.active` to stop a code.
+A second trigger keeps a student's own JWT from writing the column, because
+RLS lets students update their own profile row.
+
+**It is not the trial.** `trial_ends_at` stays unwritten (pricing.test pins
+that). Every "is this person Premium" check goes through `isPremium` /
+`tierIsPremium`, and `premiumCodes.test.mjs` refuses a screen deciding off
+`subscription_tier` alone — five of them did, and would have left a code
+student looking free in the nav, the planner and the companion.
+
 ## Voice / UX guardrails (from prior decisions)
 
 - **Tone**: chill motivational coach. Never cocky.

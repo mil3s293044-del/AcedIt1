@@ -9,6 +9,8 @@ import { useNavigate } from "react-router-dom";
 import { createPageUrl } from "@/utils";
 import { fmtDate } from "@/lib/safeDate";
 import AceShuffle from "@/components/ace/AceShuffle";
+import RedeemCode from "@/components/subscription/RedeemCode";
+import { codePremiumUntil } from "@/lib/premiumCodes";
 
 const pricingPlans = [
     {
@@ -85,6 +87,7 @@ export default function Subscription() {
     const [userProfile, setUserProfile] = useState(null);
     const [isLoading, setIsLoading] = useState(true);
     const [isProcessing, setIsProcessing] = useState(false);
+    const [justRedeemed, setJustRedeemed] = useState(false);
     const { toast } = useToast();
     const navigate = useNavigate();
 
@@ -124,6 +127,16 @@ export default function Subscription() {
     const currentTier = userProfile?.subscription_tier || "free";
     const isPremium = currentTier === "premium";
     const expiresAt = userProfile?.subscription_expires_at;
+    // Premium from a code (Year 10 program) is NOT a subscription: there is
+    // nothing to manage in Stripe, and it ends on its own. `isPremium` above
+    // stays "paying", and this is the other way to have it.
+    const codeUntil = isPremium ? null : codePremiumUntil(userProfile);
+    const hasAccess = isPremium || !!codeUntil;
+
+    const handleRedeemed = (result) => {
+        setJustRedeemed(true);
+        setUserProfile((p) => (p ? { ...p, code_premium_until: result?.premium_until } : p));
+    };
 
     if (isLoading) {
         return (
@@ -141,14 +154,39 @@ export default function Subscription() {
                 <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.35 }}>
                     <p className="text-sm text-muted-foreground font-medium mb-1">Membership</p>
                     <h1 className="font-display text-3xl lg:text-4xl font-extrabold tracking-tight text-foreground">
-                        {isPremium ? "Your Premium plan" : "Unlock your full study potential"}
+                        {isPremium ? "Your Premium plan" : codeUntil && !justRedeemed ? "You've got Premium" : "Unlock your full study potential"}
                     </h1>
                     <p className="text-muted-foreground mt-2 text-sm lg:text-base max-w-2xl">
                         {isPremium
                             ? "Manage your subscription and keep every AI tool at your fingertips."
-                            : "Go Premium for daily AI quizzes, every study tool, and analytics that actually move your marks."}
+                            : codeUntil && !justRedeemed
+                                ? `Your code unlocked every AI tool until ${fmtDate(codeUntil, "EEEE d MMMM")}. Upgrade any time to keep it going after that.`
+                                : "Go Premium for daily AI quizzes, every study tool, and analytics that actually move your marks."}
                     </p>
                 </motion.div>
+
+                {/* Have a code? — for students in a school program */}
+                {!isPremium && (!codeUntil || justRedeemed) && (
+                    <RedeemCode onRedeemed={handleRedeemed} />
+                )}
+
+                {/* Premium from a code */}
+                {codeUntil && !justRedeemed && (
+                    <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }}
+                        className="card-soft p-6 border-2 border-primary/30 bg-primary/5">
+                        <div className="flex items-center gap-4">
+                            <div className="w-14 h-14 rounded-2xl bg-primary/15 flex items-center justify-center flex-shrink-0">
+                                <Crown className="w-7 h-7 text-primary" />
+                            </div>
+                            <div>
+                                <h3 className="font-display font-extrabold text-foreground text-lg">Premium, from your code</h3>
+                                <p className="text-sm text-muted-foreground">
+                                    Active until {fmtDate(codeUntil, "EEEE d MMMM")}. Nothing to cancel — it ends on its own.
+                                </p>
+                            </div>
+                        </div>
+                    </motion.div>
+                )}
 
                 {/* Premium status */}
                 {isPremium && (
@@ -178,7 +216,7 @@ export default function Subscription() {
                 <div className="grid md:grid-cols-2 gap-5">
                     {pricingPlans.map((plan, index) => {
                         const Icon = plan.icon;
-                        const isCurrentPlan = currentTier === plan.tier;
+                        const isCurrentPlan = codeUntil ? false : currentTier === plan.tier;
                         const isPrem = plan.tier === "premium";
                         return (
                             <motion.div
@@ -232,7 +270,8 @@ export default function Subscription() {
 
                                 {isPrem && !isPremium && (
                                     <Button onClick={() => navigate(createPageUrl("Checkout"))} size="lg" className="w-full btn-3d rounded-xl font-display font-extrabold">
-                                        <Crown className="w-4 h-4 mr-2" /> Upgrade to Premium
+                                        <Crown className="w-4 h-4 mr-2" />
+                                        {codeUntil ? `Keep Premium after ${fmtDate(codeUntil, "d MMM")}` : "Upgrade to Premium"}
                                     </Button>
                                 )}
                                 {isCurrentPlan && (
@@ -246,7 +285,7 @@ export default function Subscription() {
                 </div>
 
                 {/* Social proof */}
-                {!isPremium && (
+                {!hasAccess && (
                     <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} className="card-soft p-6 lg:p-8 text-center">
                         <h3 className="font-display font-extrabold text-foreground text-xl mb-6">Why students go Premium</h3>
                         <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
@@ -313,7 +352,7 @@ export default function Subscription() {
                 </div>
 
                 {/* CTA footer */}
-                {!isPremium && (
+                {!hasAccess && (
                     <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }}
                         className="rounded-3xl bg-primary text-primary-foreground p-8 text-center">
                         <h3 className="font-display font-extrabold text-2xl mb-2">Ready to ace it?</h3>
