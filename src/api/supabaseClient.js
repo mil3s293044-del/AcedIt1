@@ -486,6 +486,8 @@ const PORTED_FUNCTIONS = {
   stripeCheckout:           '/local-ai/fn/stripeCheckout',
   stripePortal:             '/local-ai/fn/stripePortal',
   verifySubscription:       '/local-ai/fn/verifySubscription',
+  // Premium from a code (Year 10 program) — no Stripe:
+  redeemPremiumCode:        '/local-ai/fn/redeemPremiumCode',
   // stripe-webhook is NOT here — it's called by Stripe, not the frontend.
   // stripeCheckout:   '/local-ai/fn/stripeCheckout',  // 3b-4c
   // ...

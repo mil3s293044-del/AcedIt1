@@ -11,6 +11,7 @@ import ReactDOM from "react-dom/client";
 import { PaperFields, EmphasisFields } from "@/components/quizzes/QuizSetupFields";
 import { paperShape, MINUTES_PER_MARK, QUESTION_KINDS } from "@/lib/quizSetup";
 import PremiumReveal from "@/components/subscription/PremiumReveal";
+import RedeemCode from "@/components/subscription/RedeemCode";
 import "@/index.css";
 import Table from "@/components/onboarding/Table";
 import { FlightProvider } from "@/components/onboarding/DealFlight";
@@ -1374,6 +1375,25 @@ views.quizsetup = () => <QuizSetupProbe />;
  * four unlock rows are four different screens. Both themes — it replaced three
  * literal light gradients, which is the whole first half of the fix. */
 views.premium = () => <PremiumReveal onContinue={() => {}} fallbackMs={10 ** 7} />;
+
+/* ── ?v=redeem — "Have a code?" on /Subscription ────────────────────────────
+ *
+ * /Subscription needs a login, so the box is drawn here in its three states:
+ * the closed line, the open form, and the form after a refusal. Type "YEAR10ACE"
+ * into the middle one to see the success card; anything else is refused. */
+const fakeRedeem = async ({ code }) => {
+    await new Promise((r) => setTimeout(r, 700));
+    if (code !== "YEAR10ACE") throw new Error("That code isn't valid. Check it and try again.");
+    return { success: true, premium_until: new Date(Date.now() + 21 * 864e5).toISOString(), days: 21 };
+};
+views.redeem = () => (
+    <div className="min-h-screen bg-background">
+        <div className="max-w-5xl mx-auto px-4 lg:px-8 py-10 space-y-10">
+            <section className="space-y-3"><p className="stat-label">Closed</p><RedeemCode redeem={fakeRedeem} /></section>
+            <section className="space-y-3"><p className="stat-label">Open</p><RedeemCode redeem={fakeRedeem} defaultOpen /></section>
+        </div>
+    </div>
+);
 
 /* ── ?v=ranked — the five ATAR components, each with a door ─────────────────
  *

@@ -22,6 +22,7 @@ import {
 import { createPageUrl } from "@/utils";
 import { Link } from "react-router-dom";
 import AceShuffle from "@/components/ace/AceShuffle";
+import { isPremium as hasPremium } from "@/lib/tierAccess";
 
 const features = [
     {
@@ -107,7 +108,7 @@ export default function Premium() {
         );
     }
 
-    const isPremium = userProfile?.subscription_tier === 'premium';
+    const isPremium = hasPremium(userProfile);
 
     if (isPremium) {
         return (

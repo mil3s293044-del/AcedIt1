@@ -745,6 +745,7 @@
   "ai_model_preference",
   "atar_components",
   "atar_updated_at",
+  "code_premium_until",
   "created_by",
   "created_date",
   "cred_balance",

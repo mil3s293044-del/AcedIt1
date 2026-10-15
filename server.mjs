@@ -70,6 +70,8 @@ import { estimateCostMicros, isUnpricedModel, formatMicros } from "./src/lib/aiC
 import { modelFor } from "./src/lib/aiModels.js";
 import { checkoutVerdict, withRevealPending } from "./src/lib/premiumGrant.js";
 import { priceOf, stackOf, spendableFor, WEEKLY_CHIPS, chipsSpent } from "./src/lib/chips.js";
+// Premium from a code (the Year 10 program) — the rules, shared with the client.
+import { codePremiumActive, normaliseCode, cleanName, nameProblem, redeemVerdict } from "./src/lib/premiumCodes.js";
 // A textbook is stored whole and read a CHAPTER at a time — the caps, the
 // range maths and the chip price all live in one module because the number
 // under the range picker has to be the number that gets charged.
@@ -1008,6 +1010,7 @@ function tierIsPremium(profile) {
   if (profile.subscription_tier === "premium") return true;
   if (profile.subscription_active === true) return true;
   if (profile.trial_ends_at && new Date(profile.trial_ends_at) > new Date()) return true;
+  if (codePremiumActive(profile)) return true;
   return false;
 }
 
@@ -12433,6 +12436,101 @@ app.post("/local-ai/fn/stripeCheckout", async (req, res) => {
   } catch (err) {
     console.error("[stripeCheckout] error:", err?.message || err);
     return res.status(500).json({ error: err?.message || "Checkout failed" });
+  }
+});
+
+// ─── redeemPremiumCode ─────────────────────────────────────────────────────
+// A name and a code in, Premium for the code's `days` out. No Stripe. The rules
+// are `redeemVerdict` in src/lib/premiumCodes.js; this only fetches what they
+// need and writes the redemption. `user_profiles.code_premium_until` is then
+// set by the trigger in migration 0041, never here, so the table editor and
+// this endpoint cannot disagree about who has Premium.
+//
+// Refusals answer 200 with `{ error }` — the shape the client prints (fnResult).
+// Attempts are rate limited per account, because a code is short enough to
+// guess and this is the one endpoint that hands out Premium for free.
+const REDEEM_WINDOW_MS = 15 * 60 * 1000;
+const REDEEM_MAX_TRIES = 8;
+const redeemTries = new Map();
+
+function redeemThrottled(email) {
+  const now = Date.now();
+  const recent = (redeemTries.get(email) || []).filter((t) => now - t < REDEEM_WINDOW_MS);
+  recent.push(now);
+  redeemTries.set(email, recent);
+  return recent.length > REDEEM_MAX_TRIES;
+}
+
+// A missing table means migration 0041 has not been run yet.
+const isMissingTable = (err) => err && (err.code === "42P01" || err.code === "PGRST205");
+
+app.post("/local-ai/fn/redeemPremiumCode", async (req, res) => {
+  const user = await authenticateRequest(req);
+  if (!user?.email) return res.json({ error: "Sign in first, then enter your code." });
+  if (!supabaseAdmin) return res.json({ error: "Codes aren't available right now. Try again soon." });
+
+  if (redeemThrottled(user.email.toLowerCase())) {
+    return res.json({ error: "Too many tries. Wait 15 minutes and try again." });
+  }
+
+  const code = normaliseCode(req.body?.code);
+  const name = cleanName(req.body?.name);
+  const badName = nameProblem(name);
+  if (badName) return res.json({ error: badName });
+  if (!code) return res.json({ error: "Enter the code you were given." });
+
+  try {
+    const { data: codeRow, error: codeErr } = await supabaseAdmin
+      .from("premium_codes")
+      .select("code, label, days, max_redemptions, active, expires_at")
+      .eq("code", code)
+      .maybeSingle();
+    if (isMissingTable(codeErr)) {
+      console.error("[redeemPremiumCode] premium_codes missing — run migration 0041");
+      return res.json({ error: "Codes aren't switched on yet. Try again soon." });
+    }
+    if (codeErr) throw codeErr;
+
+    const { data: mine, error: mineErr } = await supabaseAdmin
+      .from("premium_code_redemptions")
+      .select("code, premium_until, revoked_at")
+      .eq("user_email", user.email);
+    if (mineErr) throw mineErr;
+
+    let used = 0;
+    if (codeRow?.max_redemptions != null) {
+      const { count, error: countErr } = await supabaseAdmin
+        .from("premium_code_redemptions")
+        .select("id", { count: "exact", head: true })
+        .eq("code", code);
+      if (countErr) throw countErr;
+      used = count || 0;
+    }
+
+    const verdict = redeemVerdict({ codeRow, mine: mine || [], used });
+    if (!verdict.ok) return res.json({ error: verdict.reason });
+
+    const { error: insErr } = await supabaseAdmin
+      .from("premium_code_redemptions")
+      .insert({
+        code,
+        user_email: user.email,
+        full_name: name,
+        premium_until: verdict.premiumUntil.toISOString(),
+      });
+    if (insErr?.code === "23505") return res.json({ error: "You've already used this code." });
+    if (insErr) throw insErr;
+
+    console.log(`[redeemPremiumCode] ${code} → ${user.email} (${name}) until ${verdict.premiumUntil.toISOString()}`);
+    return res.json({
+      success: true,
+      premium_until: verdict.premiumUntil.toISOString(),
+      days: verdict.days,
+      label: codeRow.label || "",
+    });
+  } catch (err) {
+    console.error("[redeemPremiumCode] error:", err?.code, err?.message || err);
+    return res.json({ error: "Couldn't check that code just now. Try again in a minute." });
   }
 });
 
