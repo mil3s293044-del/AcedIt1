@@ -64,7 +64,13 @@ export default function useAceYield() {
  * holding him", which is the actual question.
  * ──────────────────────────────────────────────────────────────────────── */
 const BUSY = "ace:busy";
-const holders = new Set();
+// COUNTED, per owner. A set let two mounts claiming the same id release each
+// other: the Progress page's verdict Ace is drawn by whichever tab is open, so
+// a tab switch unmounts one claim while another holds the same id, and with a
+// set the first release cleared the stage for both — and the buddy walked back
+// on over a page that was still drawing him.
+const holders = new Map();
+const owners = () => [...holders.keys()];
 
 /**
  * ONE ACE ON SCREEN, AND THIS LIST IS WHICH ONE.
@@ -90,7 +96,11 @@ const holders = new Set();
 // "onboarding" is the signup wizard, where he hosts every screen. It renders
 // outside Layout, so nothing else can be drawing him there — it is ranked
 // rather than left off so that stays true if that ever changes.
-export const ACE_ORDER = ["reacts", "onboarding", "first-win", "tour", "buddy", "intro", "roam", "launcher"];
+// "report" is the Progress page, where he reads each tab's verdict beside its
+// headline. Below the run and the tour, which belong to a student's first
+// minutes, and above the buddy and the launcher, which are what is there when
+// nothing is happening — on a page that IS saying something, they stand down.
+export const ACE_ORDER = ["reacts", "onboarding", "first-win", "tour", "report", "buddy", "intro", "roam", "launcher"];
 
 /** An id nobody registered loses to everything, rather than winning by accident. */
 const rank = (id) => {
@@ -99,18 +109,20 @@ const rank = (id) => {
 };
 
 function announce() {
-    window.dispatchEvent(new CustomEvent(BUSY, { detail: { holders: [...holders] } }));
+    window.dispatchEvent(new CustomEvent(BUSY, { detail: { holders: owners() } }));
 }
 
 /** Claim him under an owner id. Returns a release function. */
 export function claimAce(owner = "ace") {
-    holders.add(owner);
+    holders.set(owner, (holders.get(owner) || 0) + 1);
     announce();
     let released = false;
     return () => {
         if (released) return;
         released = true;
-        holders.delete(owner);
+        const left = (holders.get(owner) || 1) - 1;
+        if (left > 0) holders.set(owner, left);
+        else holders.delete(owner);
         announce();
     };
 }
@@ -121,11 +133,11 @@ export function claimAce(owner = "ace") {
  * for something quieter than itself. Pass the same owner id you claim with.
  */
 export function useAceClaimed(self) {
-    const [list, setList] = useState(() => [...holders]);
+    const [list, setList] = useState(owners);
     useEffect(() => {
         const on = (e) => setList(e.detail?.holders || []);
         window.addEventListener(BUSY, on);
-        setList([...holders]);
+        setList(owners());
         return () => window.removeEventListener(BUSY, on);
     }, []);
     const mine = rank(self);

@@ -412,6 +412,16 @@ function minutesIn(events, from, to) {
     return { total: Math.round(total), days };
 }
 
+/**
+ * Countable minutes per day over [from, to], as a Map of "YYYY-MM-DD" to
+ * minutes — the same caps `hoursReport` applies, for a chart that needs a
+ * window of its own (the Hours tab's four-week calendar) rather than the
+ * report's period.
+ */
+export function countableMinutesByDay(events = [], from, to) {
+    return minutesIn(events, from, to).days;
+}
+
 export function hoursReport(events = [], techniques = [], range) {
     const now = minutesIn(events, range.from, range.to);
     const before = range.comparable ? minutesIn(events, range.prevFrom, range.prevTo) : null;

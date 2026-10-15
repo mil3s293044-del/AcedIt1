@@ -20,6 +20,9 @@ import MarketCard from "@/components/market/MarketCard";
 import SettlementReveal from "@/components/market/SettlementReveal";
 import Room from "@/components/market/Room";
 import MarkEntry from "@/components/planner/MarkEntry";
+import TermRunway from "@/components/planner/TermRunway";
+import PhoneWeek from "@/components/planner/PhoneWeek";
+import { termRunway, runwayLead } from "@/lib/termRunway";
 import DeckStack from "@/components/cards/DeckStack";
 import SourcePanel from "@/components/quizzes/SourcePanel";
 import { isReady, auditPiles } from "@/lib/due";
@@ -82,6 +85,8 @@ import ProgressTabs from "@/components/progress/ProgressTabs";
 import Panel from "@/components/progress/Panel";
 import { CardsTab, QuizzesTab, MistakesTab, HoursTab } from "@/components/progress/FeatureTabs";
 import { periodRange, cardsReport, quizzesReport, mistakesReport, hoursReport, workFor } from "@/lib/progressReport";
+import { strengthStack, reviewForecast, sitPlot, fixFunnel, heatCalendar } from "@/lib/progressCharts";
+import AceVerdict from "@/components/progress/AceVerdict";
 import SubjectSplit from "@/components/analytics/SubjectSplit";
 import { studyQueue, queueLead, clearedThisWeek } from "@/lib/studyQueue";
 import StandingRail from "@/components/ranked/StandingRail";
@@ -1143,6 +1148,85 @@ views.planner = () => {
     );
 };
 
+/* ── ?v=runway — the planner's term runway, its headline, and the phone week ─
+ *
+ * The planner is auth-gated and loads six tables, so this draws the three
+ * things that changed against fixture rows dated off TODAY: five SACs across
+ * the eight weeks (one flagged with no prep, one with prep done, one with a
+ * session that came and went, one past the edge of the track), the headline
+ * `runwayLead` writes about them, and the phone strip and agenda. Toggle the
+ * empty state to see the runway with nothing tracked.
+ */
+const rwDay = (n) => { const d = new Date(); d.setHours(0, 0, 0, 0); d.setDate(d.getDate() + n); return dayKeyOf(d); };
+const dayKeyOf = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+const RW_SACS = [
+    { id: "s1", subject_name: "Chemistry", title: "Unit 3 AOS1 SAC", assessment_type: "sac", due_date: rwDay(6) },
+    { id: "s2", subject_name: "Legal Studies", title: "Folio task 2", assessment_type: "sac", due_date: rwDay(9) },
+    { id: "s3", subject_name: "Mathematical Methods", title: "Application task", assessment_type: "test", due_date: rwDay(19) },
+    { id: "s4", subject_name: "English", title: "Text response", assessment_type: "sac", due_date: rwDay(33) },
+    { id: "s5", subject_name: "Physics", title: "Practical report", assessment_type: "sac", due_date: rwDay(36) },
+    { id: "s6", subject_name: "Biology", title: "Unit 4 SAC", assessment_type: "sac", due_date: rwDay(70) },
+];
+const RW_PLANS = [
+    { id: "p1", subject_name: "Chemistry", title: "Flashcards: redox", date: rwDay(-3), is_completed: true, start_time: "16:30" },
+    { id: "p2", subject_name: "Chemistry", title: "Practice exam: equilibrium", date: rwDay(-1), is_completed: false, start_time: "17:00" },
+    { id: "p3", subject_name: "Chemistry", title: "Active recall: titrations", date: rwDay(0), is_completed: true, start_time: "16:00", extra: { duration_minutes: 40 } },
+    { id: "p4", subject_name: "Chemistry", title: "Quiz: stoichiometry", date: rwDay(2), is_completed: false, start_time: "18:00" },
+    { id: "p5", subject_name: "Mathematical Methods", title: "Practice exam: calculus", date: rwDay(0), is_completed: false, start_time: "19:30", extra: { duration_minutes: 60 } },
+    { id: "p6", subject_name: "Mathematical Methods", title: "Flashcards: derivatives", date: rwDay(12), is_completed: false },
+    { id: "p7", subject_name: "English", title: "Blurting: key quotes", date: rwDay(0), is_completed: false },
+    { id: "p8", subject_name: null, title: "Pomodoro: catch-up", date: rwDay(1), is_completed: false, start_time: "16:00" },
+];
+const RW_RAIL = ["bg-chart-3", "bg-chart-4", "bg-primary", "bg-xp", "bg-streak"];
+const rwRail = (name) => RW_RAIL[[...String(name || "")].reduce((h, c) => (h * 31 + c.charCodeAt(0)) >>> 0, 7) % RW_RAIL.length];
+
+views.runway = () => {
+    const [empty, setEmpty] = React.useState(false);
+    const [plans, setPlans] = React.useState(RW_PLANS);
+    const today = rwDay(0);
+    const runway = termRunway({ today, assessments: empty ? [] : RW_SACS, plans: empty ? [] : plans });
+    const monday = (() => { const d = new Date(); d.setHours(0, 0, 0, 0); d.setDate(d.getDate() - ((d.getDay() + 6) % 7)); return d; })();
+    const week = Array.from({ length: 7 }, (_, i) => {
+        const d = new Date(monday); d.setDate(d.getDate() + i);
+        const key = dayKeyOf(d);
+        return {
+            key, dayName: d.toLocaleDateString("en-AU", { weekday: "short" }), dayNum: String(d.getDate()),
+            isToday: key === today, isPast: key < today,
+            plans: (empty ? [] : plans).filter((p) => p.date === key),
+            sacs: (empty ? [] : RW_SACS).filter((a) => a.due_date === key),
+        };
+    });
+    const [sel, setSel] = React.useState(today);
+    const idx = week.findIndex((d) => d.key === sel);
+    return (
+        <MemoryRouter>
+        <div className="min-h-screen bg-background p-4 sm:p-6">
+            <div className="max-w-[1400px] mx-auto space-y-6">
+                <button onClick={() => setEmpty((e) => !e)}
+                    className="px-3 py-1.5 rounded-xl text-sm font-bold border-2 border-border text-muted-foreground">
+                    {empty ? "Show tracked" : "Show empty"}
+                </button>
+                <h1 className="font-display text-2xl sm:text-3xl lg:text-4xl font-extrabold tracking-tight text-foreground leading-[1.1] text-balance max-w-4xl">
+                    {runwayLead(runway)}
+                </h1>
+                <TermRunway runway={runway} railClassFor={rwRail} onOpen={() => {}} onTrack={() => {}} />
+                <div className="max-w-md">
+                    <PhoneWeek days={week} selected={sel} onSelect={setSel}
+                        onStep={(d) => setSel(week[Math.max(0, Math.min(6, idx + d))].key)}
+                        canStep={(d) => idx + d >= 0 && idx + d <= 6}
+                        describe={(p) => ({ Icon: null, title: p.title.split(": ").pop(), time: p.start_time || null,
+                            dur: p.extra?.duration_minutes || null, rail: p.is_completed ? "bg-primary" : rwRail(p.subject_name || p.title),
+                            subject: p.subject_name, repeat: false })}
+                        actualByDate={new Map([[today, 40]])}
+                        onToggle={(p) => setPlans((all) => all.map((x) => (x.id === p.id ? { ...x, is_completed: !x.is_completed } : x)))}
+                        onOpen={() => {}} onAdd={() => {}} />
+                </div>
+            </div>
+        </div>
+        </MemoryRouter>
+    );
+};
+
 /* ── ?v=setup — the REAL setup screens, on an account with no history ───────
  *
  * `?v=study` draws the card against fixture picks; this mounts the actual
@@ -1538,9 +1622,12 @@ views.queue = () => {
             <div className="min-h-screen bg-background p-4 sm:p-6 lg:p-8">
                 <div className="max-w-5xl mx-auto space-y-5 [&_>*:nth-child(-n+3)]:relative">
                     <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider">Progress</span>
-                    <h1 className="font-display text-2xl sm:text-3xl font-extrabold tracking-tight text-foreground leading-[1.15]">
-                        {lead ? lead.line : "You're all caught up."}
-                    </h1>
+                    {/* Ace beside the lead, as /Review draws it on Today. */}
+                    <AceVerdict tone={lead ? "lead" : "good"} headline={(
+                        <h1 className="font-display text-2xl sm:text-3xl font-extrabold tracking-tight text-foreground leading-[1.15] text-balance">
+                            {lead ? lead.line : "You're all caught up."}
+                        </h1>
+                    )} />
                     <ClearedStrip cleared={cleared} />
                     <p className="stat-label">
                         A row ticking off — drawn here beside the live list, which the app never
@@ -1698,7 +1785,10 @@ views.report = () => {
         // nobody has — the lesson the Quizzes shelf learned twice. This is a
         // quiet Monday, a heavy Tuesday, a rest and a recovery.
         last_reviewed_date: i < 14 ? D([0, 1, 1, 1, 3, 3][i % 6]) : D(prev + (i % 3)),
-        next_review_date: D(-(i % 6)),
+        // A third due now and the rest SCHEDULED across the coming week, so
+        // the forecast has a week to draw. All of them due today drew six
+        // empty columns after a full one, which is no shape anybody has.
+        next_review_date: i % 3 === 0 ? D(i % 2) : QDAY(1 + (i % 6)),
     }));
 
     // `fixState` keys on the REVIEW COUNTS and `interval_days`, never on
@@ -1768,6 +1858,11 @@ views.report = () => {
         { day: D(0), subject: "Methods", minutes: 55 }, { day: D(1), subject: "Chemistry", minutes: 40 },
         { day: D(2), subject: "Methods", minutes: 70 }, { day: D(3), subject: "Legal", minutes: 25 },
         { day: D(prev), subject: "Methods", minutes: 30 }, { day: D(prev + 1), subject: "Chemistry", minutes: 35 },
+        // FOUR WEEKS OF EVENINGS for the calendar, with the shape a real term
+        // has: a heavy Sunday, a dead Friday, one big cram day, gaps.
+        ...[12, 13, 15, 16, 18, 19, 20, 22, 23, 25, 26, 27].map((n, i) => ({
+            day: D(n), subject: ["Methods", "Chemistry", "Legal"][i % 3], minutes: [25, 45, 90, 140, 15, 60][i % 6],
+        })),
     ];
     const techniques = [
         { id: "t1", technique_name: "Pomodoro", session_duration: 50, date: D(0), subject: "Methods" },
@@ -1797,6 +1892,12 @@ views.report = () => {
             assessment_date: QDAY(-5), assessment_type: "SAC" }],
         events, piles: auditPiles(cards, today), isReady: ready, today,
     });
+    const charts = {
+        cards: { strength: strengthStack(reports.cards.bands), forecast: reviewForecast(cards, today) },
+        quizzes: sitPlot(attempts, quizzes, range, today),
+        mistakes: fixFunnel(reports.mistakes.states),
+        hours: heatCalendar(events, today),
+    };
 
     // THE REAL BAR, not a copy of its class list. /Review is auth-gated, so this
     // is the only place the bar can be measured at 360 — and a stand-in would
@@ -1824,7 +1925,7 @@ views.report = () => {
                 </div>
                 <div className="max-w-5xl mx-auto p-4 sm:p-6 lg:p-8 space-y-5">
                     <CardsTab report={reports.cards} range={range} cards={cards} techniques={techniques}
-                        work={workFor(queue, "cards")}
+                        work={workFor(queue, "cards")} chart={charts.cards}
                         pile={<Panel title={`Where your ${cards.length} cards stand`}
                             note="The honest split. Most queues are mostly material nobody has opened yet, which is not a backlog.">
                             <div className="grid grid-cols-3 gap-4">
@@ -1841,15 +1942,15 @@ views.report = () => {
                         </Panel>} />
 
                     <div className="pt-6"><Bar live="quizzes" /></div>
-                    <QuizzesTab report={reports.quizzes} range={range} work={workFor(queue, "quizzes")} />
+                    <QuizzesTab report={reports.quizzes} range={range} work={workFor(queue, "quizzes")} chart={charts.quizzes} />
 
                     <div className="pt-6"><Bar live="mistakes" /></div>
-                    <MistakesTab report={reports.mistakes} range={range} work={workFor(queue, "mistakes")} />
+                    <MistakesTab report={reports.mistakes} range={range} work={workFor(queue, "mistakes")} chart={charts.mistakes} />
 
                     <div className="pt-6"><Bar live="hours" /></div>
                     <HoursTab report={reports.hours} range={range} events={events} quizzes={quizzes}
                         attempts={attempts} cards={cards} techniques={techniques}
-                        today={today} />
+                        today={today} chart={charts.hours} />
 
                     {/* THE EMPTY CASE, which a loaded account cannot show and which
                         is the honest first week: every tab is still offered and

@@ -96,6 +96,8 @@ import PeriodSwitch from "@/components/progress/PeriodSwitch";
 import SubjectSwitch from "@/components/progress/SubjectSwitch";
 import ProgressTabs from "@/components/progress/ProgressTabs";
 import { CardsTab, QuizzesTab, MistakesTab, HoursTab } from "@/components/progress/FeatureTabs";
+import AceVerdict from "@/components/progress/AceVerdict";
+import { strengthStack, reviewForecast, sitPlot, fixFunnel, heatCalendar } from "@/lib/progressCharts";
 import {
     PERIODS, periodRange, cardsReport, quizzesReport, mistakesReport, hoursReport, workFor,
     subjectsIn, sliceBySubject, ALL_SUBJECTS,
@@ -354,6 +356,23 @@ export default function Review() {
             hours: hoursReport(slice.events, slice.techniques, range),
         };
     }, [slice, range, today]);
+
+    /**
+     * ─── EACH TAB'S ONE CHART, OFF THE SAME SLICE ───────────────────────────
+     * Computed here rather than inside the tabs so a chart can never be drawn
+     * from different rows than the figure above it: the subject filter narrows
+     * the inputs once, and the reports, the work rows and the charts all read
+     * the narrowed set.
+     */
+    const charts = useMemo(() => {
+        if (!slice || !reports) return null;
+        return {
+            cards: { strength: strengthStack(reports.cards.bands), forecast: reviewForecast(slice.cards, today) },
+            quizzes: sitPlot(slice.attempts, slice.quizzes, range, today),
+            mistakes: fixFunnel(reports.mistakes.states),
+            hours: heatCalendar(slice.events, today),
+        };
+    }, [slice, reports, range, today]);
 
     /** This week's done pile, off the same rows the queue is built from. */
     const cleared = useMemo(() => (data ? clearedThisWeek({
@@ -627,10 +646,20 @@ export default function Review() {
                             have 6 things outstanding" is a number; "your
                             Chemistry SAC is on Friday and you have not
                             started" is a reason to do something. */}
-                        <motion.h1 initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}
-                            className="font-display text-2xl sm:text-3xl font-extrabold tracking-tight text-foreground leading-[1.15]">
-                            {lead ? lead.line : "You're all caught up."}
-                        </motion.h1>
+                        {/* Ace beside the lead, pointing at it. The heading IS
+                            his line — it is the one sentence this tab has to
+                            say — so he gets no bubble of his own here. Drawn
+                            only while Today is the live tab: the panel stays
+                            mounted behind the others, and a hidden Ace would
+                            still be holding the stage. */}
+                        {tab === "today" && (
+                            <AceVerdict tone={lead ? "lead" : "good"} headline={(
+                                <motion.h1 initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}
+                                    className="font-display text-2xl sm:text-3xl font-extrabold tracking-tight text-foreground leading-[1.15] text-balance">
+                                    {lead ? lead.line : "You're all caught up."}
+                                </motion.h1>
+                            )} />
+                        )}
 
                         {/* THE DONE PILE, directly under the lead. It is the
                             counterweight to everything below it: the list of
@@ -735,23 +764,32 @@ export default function Review() {
                     rows already in memory — but the panels under them are not:
                     four charts mounted off screen is four `ResizeObserver`s and
                     four recharts trees paid for on a tab nobody opened. */}
-                {tab === "cards" && (
-                    <CardsTab report={reports?.cards} range={range} cards={cards}
-                        techniques={data?.techniques || []}
-                        work={workFor(tabQueue, "cards")} pile={pileSummary} audit={auditSection} />
-                )}
-                {tab === "quizzes" && (
-                    <QuizzesTab report={reports?.quizzes} range={range}
-                        work={workFor(tabQueue, "quizzes")} />
-                )}
-                {tab === "mistakes" && (
-                    <MistakesTab report={reports?.mistakes} range={range}
-                        work={workFor(tabQueue, "mistakes")} />
-                )}
-                {tab === "hours" && (
-                    <HoursTab report={reports?.hours} range={range} events={events}
-                        quizzes={data?.quizzes || []} attempts={data?.attempts || []}
-                        cards={cards} techniques={data?.techniques || []} today={today} />
+                {/* Each tab ARRIVES rather than snapping in: keyed on the tab,
+                    the period and the subject, so a change in any of the three
+                    re-reveals what it changed — and nothing else moves. */}
+                {tab !== "today" && (
+                    <motion.div key={`${tab}:${period}:${subject}`}
+                        initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}
+                        transition={{ duration: 0.28, ease: [0.2, 0.8, 0.2, 1] }}>
+                        {tab === "cards" && (
+                            <CardsTab report={reports?.cards} range={range} cards={cards}
+                                techniques={data?.techniques || []} chart={charts?.cards}
+                                work={workFor(tabQueue, "cards")} pile={pileSummary} audit={auditSection} />
+                        )}
+                        {tab === "quizzes" && (
+                            <QuizzesTab report={reports?.quizzes} range={range} chart={charts?.quizzes}
+                                work={workFor(tabQueue, "quizzes")} />
+                        )}
+                        {tab === "mistakes" && (
+                            <MistakesTab report={reports?.mistakes} range={range} chart={charts?.mistakes}
+                                work={workFor(tabQueue, "mistakes")} />
+                        )}
+                        {tab === "hours" && (
+                            <HoursTab report={reports?.hours} range={range} events={events} chart={charts?.hours}
+                                quizzes={data?.quizzes || []} attempts={data?.attempts || []}
+                                cards={cards} techniques={data?.techniques || []} today={today} />
+                        )}
+                    </motion.div>
                 )}
             </div>
         </div>

@@ -13,7 +13,7 @@
  * the card belongs to the app rather than to a gradient generator.
  *
  * `urgency` (0 → 1) is the one number the UI animates against: it scales the
- * runway, the pulse and how tightly Ace holds himself. One source, so nothing
+ * fan, the pulse and how tightly Ace holds himself. One source, so nothing
  * gets out of step with anything else.
  *
  * Static Tailwind class strings throughout — JIT cannot see a template literal.
@@ -66,24 +66,11 @@ export function sacBand(days) {
     return BANDS.find((b) => d <= b.within) || BANDS[BANDS.length - 1];
 }
 
-/**
- * The runway itself: one marker per day left, capped.
- *
- * `lit` are the days you still have. Beyond the cap the strip is drawn full
- * with an overflow flag, because "twenty-three pips" is not a readable
- * quantity and the honest message that far out is simply "plenty".
+/*
+ * `runway(days)` — fourteen day-pips under the countdown — is gone with
+ * SacHero. TermRunway draws the same distance on the term itself, where the
+ * SACs after this one and the prep before it can sit beside it.
  */
-export function runway(days) {
-    const d = Number.isFinite(days) ? Math.max(0, Math.round(days)) : null;
-    if (d == null) return { lit: 0, total: RUNWAY_MAX, overflow: true, today: false };
-    if (d === 0) return { lit: 0, total: RUNWAY_MAX, overflow: false, today: true };
-    return {
-        lit: Math.min(d, RUNWAY_MAX),
-        total: RUNWAY_MAX,
-        overflow: d > RUNWAY_MAX,
-        today: false,
-    };
-}
 
 /**
  * How many cards are left in the fan behind the number.

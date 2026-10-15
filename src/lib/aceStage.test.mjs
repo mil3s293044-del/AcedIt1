@@ -19,6 +19,7 @@
  */
 import assert from "node:assert/strict";
 import fs from "node:fs";
+import { claimAce } from "@/components/ace/useAceYield";
 
 /* COMMENTS ARE STRIPPED BEFORE EVERY SCAN. A file that EXPLAINS why it has
    no exit would otherwise be reported as having one, and the obvious way to
@@ -76,6 +77,40 @@ check("the run leads the tour, and both lead the buddy", () => {
     assert.equal(holder(["buddy", "first-win"]), "first-win");
 });
 
+check("the Progress verdict sits under the first minutes and over the ambient Ace", () => {
+    // He reads a computed sentence on a page that is SAYING something, so the
+    // buddy and the launcher stand down; a tour stop or the first run is a
+    // student's first minutes and outranks him.
+    assert.equal(holder(["report", "buddy"]), "report");
+    assert.equal(holder(["report", "launcher"]), "report");
+    assert.equal(holder(["report", "tour"]), "tour");
+    assert.equal(holder(["report", "first-win"]), "first-win");
+});
+
+check("THE BUDDY ASKS BY NAME, so a higher claim actually stands it down", () => {
+    // It used to hide only for its own hard-coded reasons, so ACE_ORDER ranked
+    // it under the report and nothing made it act on that ranking: two Aces.
+    const src = fs.readFileSync("src/components/ace/AceBuddy.jsx", "utf8");
+    assert.ok(/useAceClaimed\(\s*["']buddy["']\s*\)/.test(src), "AceBuddy never asks whether it is outranked");
+});
+
+check("A CLAIM IS COUNTED: two mounts of one id, one release, still held", () => {
+    // A set let two holders of one id release each other — a Progress tab
+    // switch unmounts one verdict while the next mounts, and the stage went
+    // empty under a page still drawing him.
+    globalThis.window = globalThis.window || new EventTarget();
+    let last = [];
+    window.addEventListener("ace:busy", (e) => { last = e.detail?.holders || []; });
+    const a = claimAce("report");
+    const b = claimAce("report");
+    a();
+    assert.ok(last.includes("report"), "one release cleared a claim another mount still holds");
+    a();
+    assert.ok(last.includes("report"), "releasing the same handle twice counted twice");
+    b();
+    assert.ok(!last.includes("report"), "the last release did not clear the stage");
+});
+
 check("an unranked id loses rather than winning by accident", () => {
     assert.equal(holder(["launcher", "something-new"]), "launcher");
 });
@@ -91,6 +126,7 @@ check("EVERY SURFACE THAT DRAWS A BODY CLAIMS ONE", () => {
         "src/components/ace/AceReacts.jsx": "reacts",
         "src/components/ace/AceRoam.jsx": "roam",
         "src/components/onboarding/AceHost.jsx": "onboarding",
+        "src/components/progress/AceVerdict.jsx": "report",
     };
     for (const [file, id] of Object.entries(drawers)) {
         const src = fs.readFileSync(file, "utf8");

@@ -30,9 +30,11 @@ import { deckCards } from "@/lib/mistakeBank";
 import { recIdOf, stratIdOf, durationOf, noteTextOf, buildNotes } from "@/lib/planTags";
 import { strategiesNeedingCheckIn } from "@/lib/strategyState";
 import StrategyCheckIn from "@/components/planner/StrategyCheckIn";
-import AceBody from "@/components/ace/AceBody";
-import { sacMood } from "@/lib/aceVoice";
-import SacHero from "@/components/planner/SacHero";
+import TermRunway from "@/components/planner/TermRunway";
+import PhoneWeek from "@/components/planner/PhoneWeek";
+import { termRunway, runwayLead } from "@/lib/termRunway";
+import { useMedia } from "@/hooks/useMedia";
+import { dayStep } from "@/lib/dayStep";
 import WeekPlanDialog from "@/components/planner/WeekPlanDialog";
 import { fmtDate } from "@/lib/safeDate";
 import { takeFn } from "@/lib/fnResult";
@@ -333,6 +335,9 @@ export default function Planner() {
     const [planDay, setPlanDay] = useState(null);
     const [editingPlan, setEditingPlan] = useState(null);
     const [openDay, setOpenDay] = useState(null);       // yyyy-mm-dd of the expanded day
+    // The day the phone agenda is showing. Falls back to today, then Monday,
+    // whenever the week moves out from under it — see `agendaKey`.
+    const [selectedDay, setSelectedDay] = useState(() => format(new Date(), "yyyy-MM-dd"));
     const [returnToDay, setReturnToDay] = useState(null); // day view to restore after the form closes
     const [openSession, setOpenSession] = useState(null); // the session whose detail card is open
     const [planType, setPlanType] = useState("");
@@ -432,7 +437,7 @@ export default function Planner() {
             })));
             toast({
                 title: `${sessions.length} sessions on your week`,
-                description: "Move anything that clashes — it's your week, not the app's.",
+                description: "Shift anything that clashes — it's your week, not the app's.",
             });
             setWeekPlanOpen(false);
             if (user?.email) loadData(user.email);
@@ -496,8 +501,20 @@ export default function Planner() {
 
     const nextSac = upcoming[0] || null;
     const nextSacDays = nextSac ? differenceInDays(parseISO(nextSac.due_date), parseISO(todayStr)) : null;
-    // His read on the number, not just the number.
-    const sacFeel = sacMood(nextSacDays);
+
+    // ── The term, as one track ───────────────────────────────────────────────
+    // Every tracked SAC in the next eight weeks with the prep planned before
+    // it. Counted off the rows already loaded — the plans window reaches past
+    // the eighth week precisely so a run-up is never cut off at the edge.
+    const runway = useMemo(
+        () => termRunway({ today: todayStr, assessments, plans }),
+        [todayStr, assessments, plans]);
+    const wide = useMedia("(min-width: 1024px)");
+    // Below `sm` the week is a strip and an agenda rather than the drag board.
+    // A breakpoint that decides what is MOUNTED, so it is read rather than
+    // CSS-hidden: both at once is two sets of controls for every session.
+    const phone = !useMedia("(min-width: 640px)");
+    const boardRef = useRef(null);
     // Which check-in is mid-conversation. One at a time.
     const [openCheckIn, setOpenCheckIn] = useState(null);
 
@@ -523,6 +540,34 @@ export default function Planner() {
     const plannedThisWeek = week.reduce((n, d) => n + d.plans.length, 0);
     const doneThisWeek = week.reduce((n, d) => n + d.plans.filter(p => p.is_completed).length, 0);
     const weekPct = plannedThisWeek > 0 ? Math.round((doneThisWeek / plannedThisWeek) * 100) : 0;
+
+    // ── The phone agenda's day ───────────────────────────────────────────────
+    // Derived, not synced by an effect: when the chevrons move the week, the
+    // chosen day is simply not in it any more and today (or Monday) stands in.
+    const agendaKey = week.some(d => d.key === selectedDay)
+        ? selectedDay
+        : (week.find(d => d.isToday) || week[0]).key;
+    const agendaIndex = week.findIndex(d => d.key === agendaKey);
+    // A swipe is a day, and crossing Sunday moves the week — inside the same
+    // bounds the board's own chevrons keep.
+    const canStepDay = useCallback(
+        (delta) => dayStep(agendaIndex, delta, weekOffset, { max: MAX_WEEKS_AHEAD }) !== null,
+        [agendaIndex, weekOffset]);
+    const stepDay = useCallback((delta) => {
+        const step = dayStep(agendaIndex, delta, weekOffset, { max: MAX_WEEKS_AHEAD });
+        if (!step) return;
+        if (step.weekDelta) setWeekOffset(o => o + step.weekDelta);
+        setSelectedDay(format(addDays(parseISO(agendaKey), delta), "yyyy-MM-dd"));
+    }, [agendaIndex, agendaKey, weekOffset]);
+    const describePlan = useCallback((p) => ({
+        Icon: typeOf(p.title)?.icon || null,
+        title: chipTitle(p.title, 56),
+        time: prettyTime(p.start_time),
+        dur: durationOf(p),
+        rail: p.is_completed ? "bg-primary" : subjectRailClass(p.subject_name || p.title),
+        subject: p.subject_name || null,
+        repeat: !!recIdOf(p),
+    }), []);
 
     // ─── Load balance ────────────────────────────────────────────────────────
     // The board will happily let you put six hours on Tuesday and nothing all
@@ -588,13 +633,21 @@ export default function Planner() {
     const dismissCheckIn = useCallback(
         (id) => setDismissedCheckIns(prev => new Set(prev).add(id)), []);
 
-    const coachLine = !nextSac
-        ? "No SACs tracked yet — add the next one and the whole app plans around it."
-        : nextSacDays === 0
-            ? `${nextSac.subject_name} ${nextSac.title} is today. You've prepared — go show it.`
-            : nextSacDays <= 3
-                ? `${nextSac.subject_name} in ${daysLabel(nextSacDays).toLowerCase()} — every session now counts double.`
-                : `${daysLabel(nextSacDays)} until ${nextSac.subject_name} ${nextSac.title}. Plenty of runway — let's use it.`;
+    // The headline reads the TERM. It used to restate the countdown, which the
+    // runway's header now prints at display size directly underneath it.
+    const coachLine = runwayLead(runway);
+
+    // A pin on the runway opens its week on the board, where planning it
+    // happens. Rounded rather than floored: a week between two Mondays is a
+    // day short across a daylight-saving change.
+    const openSacWeek = useCallback((sac) => {
+        const thisMonday = startOfWeek(new Date(), { weekStartsOn: 1 });
+        const due = startOfWeek(parseISO(sac.due_date), { weekStartsOn: 1 });
+        const w = Math.round(differenceInDays(due, thisMonday) / 7);
+        setWeekOffset(Math.max(-1, Math.min(MAX_WEEKS_AHEAD, w)));
+        setSelectedDay(sac.due_date);
+        requestAnimationFrame(() => boardRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }));
+    }, []);
 
     // ─── SAC actions ───────────────────────────────────────────────────────────
     const addSac = async (subject = sacSubject, title = sacTitle, type = sacType, date = sacDate) => {
@@ -810,7 +863,7 @@ export default function Planner() {
             // actually changed, or the toast reads as a bug.
             const sameDay = before.date === toDate;
             toast({
-                title: sameDay ? "Reordered" : `Moved to ${fmtDate(toDate, "EEE d MMM")}`,
+                title: sameDay ? "Reordered" : `Now on ${fmtDate(toDate, "EEE d MMM")}`,
                 description: newTime ? `Now starts ${prettyTime(newTime)}.` : undefined,
                 action: <ToastAction altText="Undo the move" onClick={revert}>Undo</ToastAction>,
             });
@@ -1025,29 +1078,95 @@ export default function Planner() {
         );
     }
 
+    // ── Today's intention ───────────────────────────────────────────────────
+    const intentionCard = (
+        <div className="rounded-3xl bg-chart-4/5 border border-chart-4/15 shadow-soft p-5 sm:p-6 flex flex-col h-full">
+            <div className="flex items-center justify-between mb-2">
+                <p className="stat-label text-chart-4/80">Today's intention</p>
+                {todayIntention && !editingIntention && (
+                    <button onClick={() => { setIntentionDraft(todayIntention); setEditingIntention(true); }} aria-label="Change intention"
+                        className="text-muted-foreground/60 hover:text-foreground transition-colors">
+                        <Edit2 className="w-4 h-4" />
+                    </button>
+                )}
+                {editingIntention && (
+                    <button onClick={() => { setEditingIntention(false); setIntentionDraft(""); }} aria-label="Cancel"
+                        className="text-muted-foreground/60 hover:text-foreground transition-colors">
+                        <X className="w-4 h-4" />
+                    </button>
+                )}
+            </div>
+
+            {todayIntention && !editingIntention ? (
+                <div className="flex-1 flex flex-col">
+                    {/* A set intention should look decided. It was the same
+                        weight as the picker it replaced, so the card read the
+                        same whether you had committed to something or not. */}
+                    <span aria-hidden className="font-display font-black text-chart-4/25
+                        text-5xl leading-[0.6] select-none">&ldquo;</span>
+                    <p className="font-display font-extrabold text-chart-4 leading-snug
+                        text-2xl lg:text-[1.7rem] mt-1">
+                        {todayIntention}
+                    </p>
+                    <p className="text-xs text-muted-foreground mt-auto pt-3 flex items-center gap-1.5">
+                        <Check className="w-3.5 h-3.5 text-primary flex-shrink-0" />
+                        Set for today. {intentsKept > 0
+                            ? `Kept ${intentsKept} of the last 7 \u2014 it counts toward planning.`
+                            : "Follow it with a session and it counts toward planning."}
+                    </p>
+                </div>
+            ) : (
+                <div className="space-y-2">
+                    <p className="text-xs text-muted-foreground mb-1">Pick one — or write your own:</p>
+                    <div className="flex flex-wrap gap-1.5">
+                        {intentionsFor(nextSacDays, nextSac?.subject_name).map(p => (
+                            <button key={p} onClick={() => saveIntention(p)} disabled={savingIntention}
+                                className="px-2.5 py-1.5 rounded-xl text-xs font-bold border-2 border-chart-4/25 bg-surface text-chart-4 hover:bg-chart-4/10 transition-colors text-left">
+                                {p}
+                            </button>
+                        ))}
+                    </div>
+                    <div className="flex gap-1.5 pt-1">
+                        <Input value={intentionDraft} onChange={e => setIntentionDraft(e.target.value)}
+                            onKeyDown={e => { if (e.key === "Enter") saveIntention(intentionDraft); }}
+                            placeholder="Write your own…" maxLength={80} className="h-9 text-sm" />
+                        <Button size="sm" onClick={() => saveIntention(intentionDraft)}
+                            disabled={savingIntention || !intentionDraft.trim()} className="h-9 gap-1 flex-shrink-0">
+                            {savingIntention ? <AceShuffle size="sm" /> : <Check className="w-3.5 h-3.5" />} Set
+                        </Button>
+                    </div>
+                </div>
+            )}
+        </div>
+    );
+
     return (
         <div className="min-h-screen bg-background">
             <div className="max-w-[1400px] mx-auto px-4 lg:px-8 py-6 lg:py-10 space-y-6 lg:space-y-8">
 
                 {/* ── COACH STRIP ─────────────────────────────────────── */}
-                <motion.section initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.35 }}>
-                    <div className="flex items-center justify-between mb-3">
-                        <div className="flex items-center gap-2 text-xs">
-                            <span className="font-bold text-muted-foreground uppercase tracking-wider">Planner</span>
-                            {upcoming.length > 0 && (
-                                <>
-                                    <span className="text-muted-foreground/40">·</span>
-                                    <span className="inline-flex items-center gap-1 font-extrabold text-chart-3">
-                                        <Flag className="w-3.5 h-3.5" /> {upcoming.length} tracked
-                                    </span>
-                                </>
-                            )}
+                <motion.section initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.35 }}
+                    className="grid grid-cols-1 lg:grid-cols-3 gap-5 items-end">
+                    <div className="lg:col-span-2">
+                        <div className="flex items-center justify-between mb-3">
+                            <div className="flex items-center gap-2 text-xs">
+                                <span className="font-bold text-muted-foreground uppercase tracking-wider">Planner</span>
+                                {upcoming.length > 0 && (
+                                    <>
+                                        <span className="text-muted-foreground/40">·</span>
+                                        <span className="inline-flex items-center gap-1 font-extrabold text-chart-3">
+                                            <Flag className="w-3.5 h-3.5" /> {upcoming.length} tracked
+                                        </span>
+                                    </>
+                                )}
+                            </div>
+                            <HelpButton page="Planner" />
                         </div>
-                        <HelpButton page="Planner" />
+                        <h1 className="font-display text-2xl sm:text-3xl lg:text-4xl font-extrabold tracking-tight text-foreground leading-[1.1] text-balance">
+                            {coachLine}
+                        </h1>
                     </div>
-                    <h1 className="font-display text-2xl sm:text-3xl lg:text-4xl font-extrabold tracking-tight text-foreground leading-[1.1]">
-                        {coachLine}
-                    </h1>
+                    {wide && intentionCard}
                 </motion.section>
 
                 {/* ── Strategy check-in ───────────────────────────────── */}
@@ -1071,102 +1190,20 @@ export default function Planner() {
                     </div>
                 )}
 
-                {/* ── HERO: countdown banner + target ─────────────────── */}
-                <motion.section initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.05 }}
-                    className="grid grid-cols-1 lg:grid-cols-3 gap-5">
-                    <div className="lg:col-span-2">
-                        {nextSac ? (
-                            <SacHero
-                                sac={nextSac}
-                                days={nextSacDays}
-                                daysLabel={daysLabel(nextSacDays)}
-                                dateLabel={fmtDate(nextSac.due_date, "EEEE d MMMM")}
-                                feel={sacFeel}
-                            />
-                        ) : (
-                            <div className="rounded-3xl bg-surface border border-dashed border-border p-6 lg:p-8 text-center h-full flex flex-col items-center justify-center shadow-soft">
-                                <AceBody className="w-24 mb-1" pose="point" title="Ace" />
-                                <h2 className="font-display font-extrabold text-foreground text-lg mb-1">What&apos;s your next SAC?</h2>
-                                <p className="text-muted-foreground text-sm max-w-sm">
-                                    Track it and Study, Revision Mode and your Dashboard all start counting down with you.
-                                </p>
-                                {/* THE ASK CARRIES THE ACTION. It used to read
-                                    "add it below", pointing at a form further
-                                    down the page — and then the form moved, so
-                                    the sentence was directing a student at a
-                                    section that no longer holds one. A panel
-                                    making an ask opens the thing that answers
-                                    it. */}
-                                <Button onClick={() => setAddSacOpen(true)} className="mt-4 gap-1.5">
-                                    <Plus className="w-4 h-4" /> Track a SAC
-                                </Button>
-                            </div>
-                        )}
-                    </div>
-
-                    {/* Daily intention card */}
-                    <div className="rounded-3xl bg-chart-4/5 border border-chart-4/15 shadow-soft p-6 flex flex-col">
-                        <div className="flex items-center justify-between mb-2">
-                            <p className="stat-label text-chart-4/80">Today's intention</p>
-                            {todayIntention && !editingIntention && (
-                                <button onClick={() => { setIntentionDraft(todayIntention); setEditingIntention(true); }} aria-label="Change intention"
-                                    className="text-muted-foreground/60 hover:text-foreground transition-colors">
-                                    <Edit2 className="w-4 h-4" />
-                                </button>
-                            )}
-                            {editingIntention && (
-                                <button onClick={() => { setEditingIntention(false); setIntentionDraft(""); }} aria-label="Cancel"
-                                    className="text-muted-foreground/60 hover:text-foreground transition-colors">
-                                    <X className="w-4 h-4" />
-                                </button>
-                            )}
-                        </div>
-
-                        {todayIntention && !editingIntention ? (
-                            <div className="flex-1 flex flex-col">
-                                {/* A set intention should look decided. It was the same
-                                    weight as the picker it replaced, so the card read the
-                                    same whether you had committed to something or not. */}
-                                <span aria-hidden className="font-display font-black text-chart-4/25
-                                    text-5xl leading-[0.6] select-none">&ldquo;</span>
-                                <p className="font-display font-extrabold text-chart-4 leading-snug
-                                    text-2xl lg:text-[1.7rem] mt-1">
-                                    {todayIntention}
-                                </p>
-                                <p className="text-xs text-muted-foreground mt-auto pt-3 flex items-center gap-1.5">
-                                    <Check className="w-3.5 h-3.5 text-primary flex-shrink-0" />
-                                    Set for today. {intentsKept > 0
-                                        ? `Kept ${intentsKept} of the last 7 \u2014 it counts toward planning.`
-                                        : "Follow it with a session and it counts toward planning."}
-                                </p>
-                            </div>
-                        ) : (
-                            <div className="space-y-2">
-                                <p className="text-xs text-muted-foreground mb-1">Pick one — or write your own:</p>
-                                <div className="flex flex-wrap gap-1.5">
-                                    {intentionsFor(nextSacDays, nextSac?.subject_name).map(p => (
-                                        <button key={p} onClick={() => saveIntention(p)} disabled={savingIntention}
-                                            className="px-2.5 py-1.5 rounded-xl text-xs font-bold border-2 border-chart-4/25 bg-surface text-chart-4 hover:bg-chart-4/10 transition-colors text-left">
-                                            {p}
-                                        </button>
-                                    ))}
-                                </div>
-                                <div className="flex gap-1.5 pt-1">
-                                    <Input value={intentionDraft} onChange={e => setIntentionDraft(e.target.value)}
-                                        onKeyDown={e => { if (e.key === "Enter") saveIntention(intentionDraft); }}
-                                        placeholder="Write your own…" maxLength={80} className="h-9 text-sm" />
-                                    <Button size="sm" onClick={() => saveIntention(intentionDraft)}
-                                        disabled={savingIntention || !intentionDraft.trim()} className="h-9 gap-1 flex-shrink-0">
-                                        {savingIntention ? <AceShuffle size="sm" /> : <Check className="w-3.5 h-3.5" />} Set
-                                    </Button>
-                                </div>
-                            </div>
-                        )}
-                    </div>
+                {/* ── THE TERM ────────────────────────────────────────── */}
+                <motion.section initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.05 }}>
+                    <TermRunway runway={runway} railClassFor={subjectRailClass}
+                        onOpen={openSacWeek} onTrack={() => setAddSacOpen(true)} />
                 </motion.section>
 
+                {/* Today's intention is about TODAY, so on a phone it sits
+                    with the day rather than between the headline and the
+                    term. One card, placed by width rather than drawn twice. */}
+                {!wide && intentionCard}
+
                 {/* ── WEEK BOARD ──────────────────────────────────────── */}
-                <motion.section initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.15 }}>
+                <motion.section ref={boardRef} initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.15 }}
+                    className="scroll-mt-6">
                     <div className="flex items-center justify-between mb-3 gap-3 flex-wrap">
                         <div className="flex items-center gap-2">
                             <h2 className="font-display font-extrabold text-foreground text-lg lg:text-xl flex items-center gap-2">
@@ -1233,7 +1270,7 @@ export default function Planner() {
                             <div className="flex gap-2 flex-shrink-0">
                                 <Button size="sm" onClick={rescueMissed} disabled={rescuing} className="gap-1.5">
                                     {rescuing ? <AceShuffle size="sm" /> : <CalendarDays className="w-3.5 h-3.5" />}
-                                    Move them forward
+                                    Bring them forward
                                 </Button>
                                 <Button size="sm" variant="ghost" onClick={() => deletePlans(missed)} disabled={rescuing}
                                     className="rounded-xl text-muted-foreground">
@@ -1255,16 +1292,30 @@ export default function Planner() {
                         </div>
                     )}
 
+                    {phone ? (
+                        <PhoneWeek days={week} selected={agendaKey} onSelect={setSelectedDay}
+                            onStep={stepDay} canStep={canStepDay} describe={describePlan}
+                            actualByDate={actualByDate} onToggle={togglePlanDone}
+                            onOpen={setOpenSession} onAdd={openAddPlan} />
+                    ) : (
                     <DragDropContext onDragEnd={onDragEnd}>
-                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-7 gap-3">
-                            {week.map(day => (
-                                <Droppable droppableId={day.key} key={day.key}>
+                        <div className="grid grid-cols-2 lg:grid-cols-7 gap-3">
+                            {week.map((day, col) => (
+                                // Dealt in, a column at a time. Opacity and y only,
+                                // and framer writes `transform: none` once y lands at
+                                // 0 — a transform left on an ancestor would become the
+                                // containing block for the dragged chip's fixed
+                                // position and throw it across the screen.
+                                <motion.div key={day.key} className="flex flex-col"
+                                    initial={{ opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }}
+                                    transition={{ delay: 0.12 + col * 0.04, duration: 0.35, ease: [0.16, 1, 0.3, 1] }}>
+                                <Droppable droppableId={day.key}>
                                     {(dropProvided, dropSnapshot) => (
                                         // The tall min-height is for the seven-column grid, where every
                                         // day needs a drop zone big enough to aim at. Stacked on a phone
                                         // it just made the board 2,400px of mostly-empty boxes.
                                         <div ref={dropProvided.innerRef} {...dropProvided.droppableProps}
-                                            className={`relative rounded-2xl border-2 p-3 min-h-[96px] sm:min-h-[300px] flex flex-col gap-2 transition-all ${
+                                            className={`relative flex-1 rounded-2xl border-2 p-3 min-h-[300px] flex flex-col gap-2 transition-all ${
                                                 dropSnapshot.isDraggingOver ? "bg-chart-3/10 border-chart-3 border-dashed scale-[1.01]"
                                                     : day.isToday ? "bg-primary/[0.06] border-primary/50 shadow-soft"
                                                     : day.isPast ? "bg-secondary/20 border-border/50"
@@ -1370,7 +1421,14 @@ export default function Planner() {
                                                                     className={`w-4 h-4 mt-2.5 ml-2 rounded border flex-shrink-0 flex items-center justify-center transition-colors ${
                                                                         p.is_completed ? "bg-primary border-primary text-white" : "border-border hover:border-primary"
                                                                     }`}>
-                                                                    {p.is_completed && <Check className="w-3 h-3" />}
+                                                                    <AnimatePresence initial={false}>
+                                                                        {p.is_completed && (
+                                                                            <motion.span key="tick" initial={{ scale: 0, rotate: -30 }} animate={{ scale: 1, rotate: 0 }}
+                                                                                exit={{ scale: 0, opacity: 0 }} transition={{ type: "spring", stiffness: 520, damping: 18 }}>
+                                                                                <Check className="w-3 h-3" />
+                                                                            </motion.span>
+                                                                        )}
+                                                                    </AnimatePresence>
                                                                 </button>
 
                                                                 <button onClick={() => setOpenSession(p)} aria-label={`Open ${p.title}`}
@@ -1411,15 +1469,19 @@ export default function Planner() {
                                         </div>
                                     )}
                                 </Droppable>
+                                </motion.div>
                             ))}
                         </div>
                     </DragDropContext>
+                    )}
 
-                    <p className="text-xs text-muted-foreground mt-3 flex items-start gap-1.5">
-                        <ArrowRight className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" />
-                        Tap a session for its details, or a date to open the whole day. Drag one to another day to move
-                        it — dropping it under another session starts it when that one finishes, on top puts it first.
-                    </p>
+                    {!phone && (
+                        <p className="text-xs text-muted-foreground mt-3 flex items-start gap-1.5">
+                            <ArrowRight className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" />
+                            Tap a session for its details, or a date to open the whole day. Drag one to another day to
+                            reschedule it — dropping it under another session starts it when that one finishes, on top puts it first.
+                        </p>
+                    )}
                 </motion.section>
 
                 {/* ── TRACKED AND MARKED ──────────────────────────────── */}

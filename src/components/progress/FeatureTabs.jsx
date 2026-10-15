@@ -36,6 +36,7 @@ import MoreDetail from "@/components/progress/MoreDetail";
 import BarList from "@/components/progress/BarList";
 import Panel from "@/components/progress/Panel";
 import { verdictFor, hhmm } from "@/lib/progressReport";
+import { DeckChart, SitChart, FunnelChart, HeatChart } from "@/components/progress/Signature";
 import { toolQuery } from "@/lib/toolBrief";
 import MemoryPanel from "@/components/analytics/MemoryPanel";
 import AttentionPanel from "@/components/analytics/AttentionPanel";
@@ -83,12 +84,23 @@ function Nothing({ line, to, cta }) {
  */
 const SPLIT = "grid gap-4 lg:grid-cols-2 items-start";
 
+/**
+ * A chart beside the panel that reads it, or the chart alone at full width.
+ * A two-column grid with nothing in the second column is a hole beside the
+ * thing that was supposed to lead.
+ */
+function Pair({ children }) {
+    const kids = React.Children.toArray(children).filter(Boolean);
+    if (kids.length < 2) return <>{kids}</>;
+    return <div className={SPLIT}>{kids}</div>;
+}
+
 const studyTab = (id) => `${createPageUrl("Study")}?tab=${id}`;
 const subjectHub = (subject) => `${createPageUrl("SubjectHub")}?subject=${encodeURIComponent(subject)}`;
 
 // ─── CARDS ──────────────────────────────────────────────────────────────────
 
-export function CardsTab({ report, range, cards, techniques, work = [], pile = null, audit = null }) {
+export function CardsTab({ report, range, cards, techniques, work = [], pile = null, audit = null, chart = null }) {
     if (!report?.total) {
         return <Nothing line="Nothing here until you have some flashcards. Once you do, this is where their recall, the pile and what is slipping are reported."
             to={studyTab("spaced_repetition")} cta="Make some cards" />;
@@ -106,34 +118,20 @@ export function CardsTab({ report, range, cards, techniques, work = [], pile = n
         <div className="space-y-4">
             <FeatureWork items={work} />
             <ReportStrip
-                value={report.reviewed.toLocaleString()} label={`cards reviewed ${range.blurb}`}
+                value={report.reviewed.toLocaleString()} count={report.reviewed} label={`cards reviewed ${range.blurb}`}
                 delta={report.delta} series={report.series}
                 note={range.comparable ? null : "All-time has no period before it to compare against."}
                 verdict={verdictFor(report, range)} stats={stats}
                 action={work.length ? null : <Door to={studyTab("spaced_repetition")}>Review now</Door>}
             />
 
-            {/* TWO CUTS OF ONE DECK, SIDE BY SIDE. How strong the cards are,
-                against how many are asking — complementary, so the strength
-                bands stop being four rows drawn a thousand pixels wide. */}
-            <div className={SPLIT}>
-                {/* These rows are deliberately NOT doors: there is no review
-                    session filtered to one band, and sending somebody to the
-                    whole deck under a row reading "7 cards" is the half-wired
-                    shape this app keeps meeting. The reasoning is a comment
-                    rather than copy — a student does not need to be told what
-                    a panel decided not to do. */}
-                <Panel title="How strong your deck is"
-                    note="Every card placed by its own recall record — the four bands are where the work is, which an average cannot say.">
-                    <BarList rows={report.bands.map((b) => ({
-                        key: b.id, label: b.label, value: b.n,
-                        display: `${b.n} ${b.n === 1 ? "card" : "cards"}`,
-                        tone: b.id === "strong" ? "bg-primary" : b.id === "fair" ? "bg-chart-3"
-                            : b.id === "weak" ? "bg-xp" : "bg-muted-foreground/40",
-                    }))} />
-                </Panel>
-                {pile}
-            </div>
+            {/* THE DECK AS ONE BAND, AND THE WEEK AHEAD. The strength bands
+                used to be four bars a student had to add up to see the deck;
+                as one band they ARE the deck. The bands are deliberately not
+                doors — there is no review session filtered to one band — and
+                the reasoning stays a comment rather than copy. */}
+            <DeckChart strength={chart?.strength} forecast={chart?.forecast} />
+            {pile}
 
             <WeakTopicsPanel flashcards={cards} />
 
@@ -147,7 +145,7 @@ export function CardsTab({ report, range, cards, techniques, work = [], pile = n
 
 // ─── QUIZZES ────────────────────────────────────────────────────────────────
 
-export function QuizzesTab({ report, range, work = [] }) {
+export function QuizzesTab({ report, range, work = [], chart = null }) {
     if (!report?.sits) {
         return <Nothing line={`No sits ${range.blurb}. This reports your average against the period before it, which subjects are carrying it, and the command terms costing you marks.`}
             to={createPageUrl("Quizzes")} cta="Sit a quiz" />;
@@ -164,10 +162,13 @@ export function QuizzesTab({ report, range, work = [] }) {
     return (
         <div className="space-y-4">
             <FeatureWork items={work} />
+            {/* NO SPARKLINE BESIDE THIS FIGURE. It plotted the daily average,
+                and the chart under the strip plots every sit that average is
+                made of — two drawings of one quantity on one screen is the
+                duplication this page keeps deleting. */}
             <ReportStrip
-                value={report.avg} suffix="%" label={`average ${range.blurb}`}
+                value={report.avg} count={report.avg} suffix="%" label={`average ${range.blurb}`}
                 delta={report.delta} deltaSuffix=" pts"
-                series={report.series} percent tone="chart-3"
                 note={!range.comparable
                     ? "All-time has no period before it to compare against."
                     : report.need > 0
@@ -176,6 +177,7 @@ export function QuizzesTab({ report, range, work = [] }) {
                 verdict={verdictFor(report, range)} stats={stats}
                 action={work.length ? null : <Door to={createPageUrl("Quizzes")}>Sit another</Door>}
             />
+            <SitChart plot={chart} />
 
             <div className={SPLIT}>
                 {report.subjects.length > 0 && (
@@ -218,13 +220,12 @@ export function QuizzesTab({ report, range, work = [] }) {
 
 // ─── MISTAKES ───────────────────────────────────────────────────────────────
 
-export function MistakesTab({ report, range, work = [] }) {
+export function MistakesTab({ report, range, work = [], chart = null }) {
     if (!report?.total) {
         return <Nothing line="Nothing banked yet. Every mark a quiz takes off you can be saved from the marking panel, and this reports how many of them you have actually fixed."
             to={createPageUrl("Quizzes")} cta="Sit a quiz" />;
     }
 
-    const pct = report.total ? Math.round((report.fixed / report.total) * 100) : 0;
     const stats = [
         { label: "ready to drill", value: report.ready, hint: "due or never opened" },
         { label: `drilled ${range.blurb}`, value: report.drilled },
@@ -250,17 +251,13 @@ export function MistakesTab({ report, range, work = [] }) {
                 action={work.length ? null : <Door to={createPageUrl("MistakeBank")}>Drill them</Door>}
             />
 
-            <div className={SPLIT}>
-                <Panel title="Where each one is"
-                    note="Fixed means the ladder is cleared AND a later sit earned that criterion back. Rehearsal on its own is drilled, not fixed.">
-                    <BarList rows={report.states.map((s) => ({
-                        key: s.state, label: STATE_LABEL[s.state] || s.state, value: s.n,
-                        display: `${s.n}`,
-                        tone: STATE_TONE[s.state] || "bg-muted-foreground/40",
-                    }))} />
-                    <p className="mt-3 px-2 text-xs text-muted-foreground">{pct}% of what you have banked is fixed.</p>
-                </Panel>
-
+            {/* THE LADDER AS A FUNNEL. It was five bars of exclusive states,
+                which said how many sat in each and never where the pile
+                STALLS — the one thing a student can act on. Each stage is the
+                count that reached at least that far, so it can only narrow. */}
+            <Pair>
+                <FunnelChart funnel={chart}
+                    slipping={report.states.find((st) => st.state === "slipping")?.n || 0} />
                 {report.repeats.length > 0 && (
                     <Panel title="Dropped more than once"
                         note="One criterion costing you repeatedly is ONE thing to fix, not four — which is the whole reason this is called out separately.">
@@ -270,21 +267,10 @@ export function MistakesTab({ report, range, work = [] }) {
                         }))} />
                     </Panel>
                 )}
-            </div>
+            </Pair>
         </div>
     );
 }
-
-const WEEKDAY = ["S", "M", "T", "W", "T", "F", "S"];
-
-const STATE_LABEL = {
-    fixed: "Fixed", drilled: "Rehearsed, not re-sat", working: "Working on it",
-    new: "Not started", slipping: "Slipping back",
-};
-const STATE_TONE = {
-    fixed: "bg-primary", drilled: "bg-chart-3", working: "bg-xp",
-    new: "bg-muted-foreground/40", slipping: "bg-streak",
-};
 
 /** Study's own technique ids, so a technique row opens THAT technique. */
 const TECHNIQUE_ID = {
@@ -298,7 +284,7 @@ const TECHNIQUE_ID = {
 
 // ─── HOURS ──────────────────────────────────────────────────────────────────
 
-export function HoursTab({ report, range, events, quizzes, attempts, cards, techniques, today }) {
+export function HoursTab({ report, range, events, quizzes, attempts, cards, techniques, today, chart = null }) {
     if (!report?.minutes) {
         return <Nothing line={`Nothing logged ${range.blurb}. Both study tables feed this — every technique on the Study page and every quiz you sit.`}
             to={createPageUrl("Study")} cta="Start a session" />;
@@ -311,8 +297,6 @@ export function HoursTab({ report, range, events, quizzes, attempts, cards, tech
             ? { label: "the period before", value: hhmm(report.prevMinutes) || "0m" } : null,
     ].filter(Boolean);
 
-    const peak = report.bars.length ? Math.max(...report.bars.map((b) => b.minutes), 1) : 1;
-
     return (
         <div className="space-y-4">
             {/* NO ACTION ROWS HERE, and that is honest rather than a gap. There
@@ -321,10 +305,12 @@ export function HoursTab({ report, range, events, quizzes, attempts, cards, tech
                 `TAB_KINDS.hours` is deliberately empty. Inventing a row to make
                 the four tabs symmetrical is the padding every builder in
                 `studyQueue.js` already refuses. */}
+            {/* No sparkline: the calendar under the strip is the same days,
+                drawn properly. */}
             <ReportStrip
-                value={hhmm(report.minutes) || "0m"} label={`studied ${range.blurb}`}
+                value={hhmm(report.minutes) || "0m"} count={report.minutes} format={(n) => hhmm(n) || "0m"}
+                label={`studied ${range.blurb}`}
                 delta={report.delta} deltaDisplay={hhmm(Math.abs(report.delta?.value || 0)) || "0m"}
-                series={report.series}
                 note={!range.comparable
                     ? "All-time has no period before it to compare against."
                     : "One more day logged and this compares you against the period before."}
@@ -332,38 +318,13 @@ export function HoursTab({ report, range, events, quizzes, attempts, cards, tech
                 action={<Door to={createPageUrl("Study")}>Start a session</Door>}
             />
 
-            <div className={SPLIT}>
-                {/* EVERY MINUTE HERE IS A COUNTABLE ONE. `countableByDay` is the
-                    same cap the league and the ATAR's effort component apply, so
-                    this page cannot read higher than every board in the app. */}
-                {report.bars.length > 1 && (
-                    <Panel title="Day by day" note="Capped the way every ranked board caps them, so this figure is the one the league counts.">
-                        <div className="flex items-end gap-1 h-24">
-                            {report.bars.map((b) => (
-                                <div key={b.day} className="flex-1 min-w-0 flex flex-col justify-end h-full"
-                                    title={`${b.day} · ${hhmm(b.minutes) || "nothing"}`}>
-                                    <div className={`rounded-sm ${b.minutes ? "bg-primary" : "bg-muted"}`}
-                                        style={{ height: `${b.minutes ? Math.max(6, (b.minutes / peak) * 100) : 4}%` }} />
-                                </div>
-                            ))}
-                        </div>
-                        {/* A BAR WITH NO DAY UNDER IT IS A BLOCK. Four of them across a
-                            panel reads as decoration rather than as a week — but
-                            twenty-eight initials do not fit, so the labels appear only
-                            while they can be read. */}
-                        {report.bars.length <= 10 && (
-                            <div className="flex gap-1 mt-1.5">
-                                {report.bars.map((b) => (
-                                    <span key={b.day} className="flex-1 min-w-0 text-center text-[10px]
-                                        text-muted-foreground tabular-nums">
-                                        {WEEKDAY[new Date(`${b.day}T00:00:00`).getDay()]}
-                                    </span>
-                                ))}
-                            </div>
-                        )}
-                    </Panel>
-                )}
-
+            {/* FOUR WEEKS, SHADED. The day-by-day bars drew the same days as
+                blocks with no week in them; a Monday-anchored calendar shows
+                which evenings carry the work, which is what a student can move.
+                It is always the last four weeks — the period switch narrows the
+                figure above it, and a calendar of three days is not one. */}
+            <Pair>
+                <HeatChart heat={chart} />
                 {report.techniques.length > 0 && (
                     <Panel title="Which techniques" note="Where the time actually went. Every row opens that technique on the Study page.">
                         <BarList rows={report.techniques.map((t) => ({
@@ -374,7 +335,7 @@ export function HoursTab({ report, range, events, quizzes, attempts, cards, tech
                         }))} />
                     </Panel>
                 )}
-            </div>
+            </Pair>
 
             <SubjectSplit events={events} quizzes={quizzes} attempts={attempts} cards={cards} today={today} />
 

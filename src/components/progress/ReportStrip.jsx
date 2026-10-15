@@ -48,12 +48,8 @@ import React from "react";
 import { motion } from "framer-motion";
 import { ArrowDownRight, ArrowUpRight, Minus } from "lucide-react";
 import Spark from "@/components/progress/Spark";
-
-const TONE = {
-    good: "text-primary",
-    watch: "text-streak",
-    flat: "text-muted-foreground",
-};
+import CountUp from "@/components/progress/CountUp";
+import AceVerdict from "@/components/progress/AceVerdict";
 
 /** The movement chip, or nothing. */
 export function Delta({ delta, suffix = "", display, invert = false }) {
@@ -76,8 +72,16 @@ export function Delta({ delta, suffix = "", display, invert = false }) {
 
 export default function ReportStrip({
     value, suffix = "", label, delta, deltaSuffix = "", deltaDisplay, note, verdict, stats = [], action,
-    series = null, percent = false, tone = "primary",
+    series = null, percent = false, tone = "primary", count = null, format,
 }) {
+    // THE FIGURE ARRIVES BY COUNTING when it is a number, and the value that
+    // settles is the caller's own formatting of it, so "2h 45m" is never a
+    // figure a rounding step produced. A composite like "3/9" passes no count
+    // and is printed as it is.
+    const figure = Number.isFinite(Number(count)) && count !== null
+        ? <CountUp value={Number(count)} format={format} />
+        : value;
+    const said = verdict?.line || note || null;
     return (
         <motion.section initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }}
             className="pb-1">
@@ -88,24 +92,22 @@ export default function ReportStrip({
                         figure OF are one sentence, so they are set as one line
                         rather than as a number with a caption under it. */}
                     <div className="flex items-baseline flex-wrap gap-x-2.5 gap-y-1">
-                        <p className="font-display font-extrabold text-foreground text-3xl sm:text-4xl
-                            leading-none tabular-nums">
-                            {value}<span className="text-xl sm:text-2xl">{suffix}</span>
+                        <p className="font-display font-extrabold text-foreground text-4xl sm:text-5xl
+                            leading-none tabular-nums tracking-tight">
+                            {figure}<span className="text-2xl sm:text-3xl">{suffix}</span>
                         </p>
                         <Delta delta={delta} suffix={deltaSuffix} display={deltaDisplay} />
                         <p className="stat-label">{label}</p>
                     </div>
 
-                    {/* THE SENTENCE, and it is allowed to be absent. Padding it
-                        to always say something is how a page teaches a student
-                        that its words are decoration. */}
-                    {verdict?.line && (
-                        <p className={`mt-2 text-sm leading-snug font-semibold ${TONE[verdict.tone] || TONE.flat}`}>
-                            {verdict.line}
-                        </p>
-                    )}
-                    {!verdict?.line && note && (
-                        <p className="mt-2 text-sm text-muted-foreground leading-snug">{note}</p>
+                    {/* THE SENTENCE, IN ACE'S VOICE, and it is allowed to be
+                        absent. Padding it to always say something is how a page
+                        teaches a student that its words are decoration — and
+                        with nothing to say he is not drawn at all. */}
+                    {said && (
+                        <div className="mt-3.5">
+                            <AceVerdict line={said} tone={verdict?.line ? verdict.tone : "note"} />
+                        </div>
                     )}
 
                     {/* The supporting figures, as a RUN rather than a grid.
