@@ -22,6 +22,7 @@ import fs from "node:fs";
 import {
     termRunway, runwayLead, isPrepFor, daysFrom,
     RUNWAY_WEEKS, PREP_WINDOW_DAYS, MAX_LANES, SOON_DAYS,
+    lanesHeight, LANE_H, STALK_FOOT, CARD_H, hasPrepLine,
 } from "@/lib/termRunway";
 import { SOON_DAYS as QUEUE_SOON } from "@/lib/studyQueue";
 import { dayStep } from "@/lib/dayStep";
@@ -262,14 +263,78 @@ check("the swipe stops at the board's own bounds", () => {
     assert.equal(dayStep(NaN, 1, 0), null);
 });
 
+/* ─── The lanes ───────────────────────────────────────────────────────────── */
+
+check("THE LANES ARE AS TALL AS THE CARDS THEY HOLD — no hole under the heading", () => {
+    // Reserving a four-line card on every lane left ~20px of air between the
+    // track's heading and a row of three-line pins, on the first card of the
+    // page. And never SHORTER than a card: a lane that clips its pin hides the
+    // countdown on it.
+    const short = { lane: 0, needsPrep: false, planned: 0 };
+    const full = { lane: 0, needsPrep: false, planned: 2 };
+    const flagged = { lane: 0, needsPrep: true, planned: 0 };
+    assert.ok(lanesHeight([short]) < lanesHeight([full]), "a row of three-line cards reserved a four-line one");
+    assert.equal(lanesHeight([flagged]), lanesHeight([full]), "a flagged card is four lines too");
+    assert.equal(lanesHeight([]), 24);
+    for (const set of [[short], [full], [short, { ...full, lane: 1 }], [{ ...short, lane: 2 }, full]]) {
+        const h = lanesHeight(set);
+        for (const s of set) {
+            const top = s.lane * LANE_H + STALK_FOOT + (hasPrepLine(s) ? CARD_H.full : CARD_H.short);
+            assert.ok(top <= h, `a lane-${s.lane} card reaches ${top}px in a ${h}px lane`);
+            assert.ok(h - top <= 8 || set.some((o) => o.lane > s.lane), `${h - top}px of slack above the top card`);
+        }
+    }
+});
+
 /* ─── The page ────────────────────────────────────────────────────────────── */
 
 check("the planner's headline is the term's read, and the old countdown hero is gone", () => {
     const goals = strip(read("src/pages/Goals.jsx"));
     assert.match(goals, /const coachLine = runwayLead\(runway\)/, "the headline is not the runway's read");
     assert.match(goals, /<TermRunway\b/, "the runway is not mounted");
+    assert.match(goals, /<TermRunway\b[^>]*\blead=\{coachLine\}/, "the headline is not the track's heading");
     assert.doesNotMatch(goals, /SacHero/, "the old hero is still referenced");
     assert.ok(!fs.existsSync("src/components/planner/SacHero.jsx"), "SacHero.jsx is still on disk");
+});
+
+check("THE HORIZON OPENS THE PAGE, and the headline is not drawn a second time above it", () => {
+    // "The horizon should be put to the top." The runway is the first thing
+    // in the page body, and the coach line lives inside it — a second copy
+    // as its own block above would be the ragged headline row back again.
+    const goals = strip(read("src/pages/Goals.jsx"));
+    const body = goals.slice(goals.indexOf("<div className=\"min-h-screen bg-background\">", goals.indexOf("const intentionCard")));
+    const first = body.search(/<(TermRunway|StrategyCheckIn|SectionHead|h1)\b/);
+    assert.ok(first > -1, "nothing found in the page body — re-point this check");
+    assert.match(body.slice(first), /^<TermRunway\b/, "something renders above the horizon");
+    assert.doesNotMatch(body, /<h1\b/, "the page draws its own headline beside the runway's");
+    // Every reference, not just the bare `{intentionCard}` — a second copy
+    // gated on a width is written `{phone && intentionCard}`, which is
+    // exactly the shape this replaced.
+    assert.equal((body.match(/\bintentionCard\b/g) || []).length, 1,
+        "today's intention is placed in more than one spot (or none)");
+    assert.doesNotMatch(goals, /\bwide && intentionCard|!wide && intentionCard/, "the intention is placed by width again");
+});
+
+check("every section opens on ONE header, so they all start the same way", () => {
+    // Four hand-written headers had drifted to three bottom margins and two
+    // heights. The one shape is SectionHead; a bare section heading in the
+    // page body is the drift coming back.
+    const goals = strip(read("src/pages/Goals.jsx"));
+    const at = goals.indexOf("function SectionHead(");
+    assert.ok(at > -1, "SectionHead is gone — re-point this check");
+    const end = goals.indexOf("\n}\n", at);
+    const outside = goals.slice(0, at) + goals.slice(end);
+    assert.doesNotMatch(outside, /<h2\b/, "a section heading is hand-written outside SectionHead");
+    assert.ok((goals.match(/<SectionHead\b/g) || []).length >= 3, "the sections stopped using SectionHead");
+});
+
+check("the runway's two halves sit on one left edge", () => {
+    // The countdown padded px-7 and the track px-6, so their first words
+    // started 4px apart on one card.
+    const src = strip(read("src/components/planner/TermRunway.jsx"));
+    const gutters = [...src.matchAll(/\bpx-(\d+) sm:px-(\d+) pt-\d/g)].map((m) => `${m[1]}/${m[2]}`);
+    assert.ok(gutters.length >= 3, `found ${gutters.length} panels — re-point this check`);
+    assert.equal(new Set(gutters).size, 1, `the runway's panels pad differently: ${gutters.join(", ")}`);
 });
 
 check("EXACTLY ONE week view is mounted: the agenda on a phone, the drag board otherwise", () => {

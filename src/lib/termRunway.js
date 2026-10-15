@@ -46,6 +46,28 @@ export const PREP_WINDOW_DAYS = 21;
 export const PIN_GAP = 0.12;
 export const MAX_LANES = 3;
 
+/* ── The lanes' geometry ──────────────────────────────────────────────────
+ * A pin card is three lines, or four when it carries its prep line; a lane
+ * shorter than the tall one stacks the card above onto the one below and hides
+ * its countdown. The lanes are as tall as the cards they actually HOLD:
+ * reserving a four-line card on every lane left a hole between the track's
+ * heading and a row of three-line ones, which is the slack that made the
+ * planner's top card read as unevenly spaced. Here rather than in the
+ * component because it is a decision, and a decision in a `.jsx` cannot be
+ * run by the test. */
+export const LANE_H = 84;
+export const STALK_FOOT = 14;
+export const CARD_H = { short: 56, full: 76 };
+
+/** Does this pin's card carry the fourth line — a flag, or its prep count? */
+export const hasPrepLine = (s) => !!(s && (s.needsPrep || s.planned > 0));
+
+export function lanesHeight(sacs = []) {
+    if (!sacs.length) return 24;
+    return Math.max(...sacs.map((s) =>
+        (s.lane || 0) * LANE_H + STALK_FOOT + (hasPrepLine(s) ? CARD_H.full : CARD_H.short))) + 4;
+}
+
 export { SOON_DAYS };
 
 const DAY_RE = /^\d{4}-\d{2}-\d{2}$/;

@@ -1209,10 +1209,9 @@ views.runway = () => {
                     className="px-3 py-1.5 rounded-xl text-sm font-bold border-2 border-border text-muted-foreground">
                     {empty ? "Show tracked" : "Show empty"}
                 </button>
-                <h1 className="font-display text-2xl sm:text-3xl lg:text-4xl font-extrabold tracking-tight text-foreground leading-[1.1] text-balance max-w-4xl">
-                    {runwayLead(runway)}
-                </h1>
-                <TermRunway runway={runway} railClassFor={rwRail} onOpen={() => {}} onTrack={() => {}} />
+                {/* The lead is the TRACK's heading now, as on the page. */}
+                <TermRunway runway={runway} railClassFor={rwRail} lead={runwayLead(runway)}
+                    onOpen={() => {}} onTrack={() => {}} />
                 <div className="max-w-md">
                     <PhoneWeek days={week} selected={sel} onSelect={setSel}
                         onStep={(d) => setSel(week[Math.max(0, Math.min(6, idx + d))].key)}
