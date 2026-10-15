@@ -1,1074 +1,633 @@
+/**
+ * Friends — the people you study with, on one page.
+ *
+ * ─── FIVE TABS AND FOUR ANNOUNCEMENTS OF THE SAME REQUEST ───────────────────
+ * It was a coach line, a "crew" hero with a giant friend count, an inbox panel,
+ * a "Today on Friends" featured panel and then five tabs — Friends, Ladder,
+ * Requests, Shared, Sent. A single pending request was announced in the
+ * headline, the inbox panel, the featured panel AND the tab badge, while the
+ * friends themselves were rows saying nothing about the friend at all (a
+ * `streak_days: 0` placeholder that was never filled). Remove sat behind a
+ * hover, so on a phone it did not exist. And Ladder was a second leaderboard
+ * beside Ranked's own Friends board.
+ *
+ * Now it reads top to bottom as the questions get asked:
+ *
+ *   1. What is waiting on me — requests and shares, only when there are any,
+ *      each with its action on the row.
+ *   2. My people — a row per friend with their streak and rank, and the two
+ *      things you can do with a friend (share, remove) visible.
+ *   3. How to add someone — your code and link, and a box for theirs.
+ *
+ * ─── THE WRITES ARE THE SERVER'S ────────────────────────────────────────────
+ * Every friendship and share goes through `friendsApi` (see src/lib/friends.js
+ * for why: the browser could accept its own request). Nothing here holds
+ * another student's email; a friend is a name and a friendship id.
+ *
+ * `?add=ACE-XXXXX` is the friend link. Opening it looks the code up and asks
+ * "add <name>?" — it never sends anything on arrival, because a link can be
+ * forwarded and a request should be something the student chose to send.
+ */
 import React, { useState, useEffect, useMemo, useCallback } from "react";
-import { motion } from "framer-motion";
+import { Link, useLocation, useNavigate } from "react-router-dom";
+import { motion, AnimatePresence } from "framer-motion";
+import {
+    UserPlus, Check, X, Copy, Share2, Flame, FileText, Layers, Sparkles, MoreHorizontal, Trophy, Send, ArrowRight,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Checkbox } from "@/components/ui/checkbox";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import {
-    Users, UserPlus, UserMinus, Inbox, Check, X, Mail,
-    Sparkles, Send, FileText, Brain, Share2, Gift,
-    Search, ArrowRight,
-    Heart, Trophy
-} from "lucide-react";
+    DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import {
+    AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription,
+    AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { base44 } from "@/api/base44Client";
-import { outgoingDeck, importedDeck, importDeckId } from "@/lib/sharedDeck";
+import {
+    getFriends, lookupFriendCode, requestFriend, respondFriend, cancelFriend, removeFriend, shareWithFriends,
+} from "@/api/friendsApi";
+import { importedDeck, importDeckId } from "@/lib/sharedDeck";
+import { saveResult } from "@/lib/saveResult";
+import { deckCards } from "@/lib/mistakeBank";
+import { SHARE_NOTES, shownNote, friendLink, normaliseFriendCode } from "@/lib/friends";
+import { takePendingFriend } from "@/lib/pendingFriend";
+import { XP_RANKS } from "@/lib/xpRanks";
+import { createPageUrl } from "@/utils";
 import { useToast } from "@/components/ui/use-toast";
 import HelpButton from "@/components/shared/HelpButton";
-import FriendsLeaderboard from "@/components/friends/FriendsLeaderboard";
 import AceBody from "@/components/ace/AceBody";
-import { deckCards } from "@/lib/mistakeBank";
 import AceShuffle from "@/components/ace/AceShuffle";
 
-// ── Coach voice (chill + motivational, social) ────────────────────────────
-function getCoachLine({ name, hour, friendCount, pendingCount, sharedCount }) {
-    const period = hour < 12 ? "Morning" : hour < 17 ? "Afternoon" : hour < 21 ? "Evening" : "Late night";
-    if (friendCount === 0 && pendingCount === 0) {
-        return `${period}, ${name}. Studying alone? Add a friend — leaderboards get fun fast.`;
-    }
-    if (pendingCount > 0) {
-        return `${period}, ${name}. ${pendingCount} friend request${pendingCount === 1 ? '' : 's'} waiting on you.`;
-    }
-    if (sharedCount > 0) {
-        return `${period}, ${name}. ${sharedCount} new shared item${sharedCount === 1 ? '' : 's'} from your friends.`;
-    }
-    if (friendCount >= 10) {
-        return `${period}, ${name}. Solid crew of ${friendCount}. You're not studying alone.`;
-    }
-    if (friendCount > 0) {
-        return `${period}, ${name}. ${friendCount} friend${friendCount === 1 ? '' : 's'} along for the ride.`;
-    }
-    return `${period}, ${name}. Let's grow your study crew.`;
+// Static class strings — the JIT cannot see an assembled class name.
+const AVATAR_INK = ["bg-chart-3", "bg-chart-4", "bg-primary", "bg-xp", "bg-streak"];
+
+function Avatar({ name, size = "md" }) {
+    const initials = String(name || "?").split(/\s+/).map((w) => w[0]).join("").slice(0, 2).toUpperCase();
+    const ink = AVATAR_INK[(String(name || "").charCodeAt(0) || 0) % AVATAR_INK.length];
+    const sz = size === "sm" ? "w-9 h-9 text-sm" : "w-11 h-11 text-base";
+    return (
+        <span className={`${sz} rounded-2xl ${ink} text-white flex items-center justify-center font-display font-extrabold flex-shrink-0`} aria-hidden>
+            {initials}
+        </span>
+    );
 }
 
-// ── Avatar ─────────────────────────────────────────────────────────
-// Static class strings for Tailwind JIT — do NOT interpolate.
-const Avatar = ({ name, size = "md" }) => {
-    const initials = (name || "?").split(" ").map(w => w[0]).join("").slice(0, 2).toUpperCase();
-    const colors = ['bg-chart-3', 'bg-chart-4', 'bg-primary', 'bg-xp', 'bg-streak'];
-    const color = colors[(name || "").charCodeAt(0) % colors.length];
-    const sz = size === "sm" ? "w-9 h-9 text-sm" : "w-12 h-12 text-base";
+/** A section heading with a rule to the end of the row. */
+function Band({ title, count = null, aside = null, children }) {
     return (
-        <div className={`${sz} rounded-2xl ${color} text-white flex items-center justify-center font-bold flex-shrink-0 shadow-soft`}>
-            {initials}
-        </div>
+        <section className="space-y-3">
+            <div className="flex items-center gap-3 min-h-9">
+                <h2 className="font-display font-extrabold text-foreground text-lg lg:text-xl whitespace-nowrap">
+                    {title}{count != null && <span className="text-muted-foreground font-bold"> · {count}</span>}
+                </h2>
+                <span className="flex-1 h-px bg-border" aria-hidden />
+                {aside}
+            </div>
+            {children}
+        </section>
     );
-};
+}
 
-// ── Skeleton ────────────────────────────────────────────────────────
-const Skeleton = ({ className }) => (
-    <div className={`animate-pulse bg-secondary/50 rounded-xl ${className}`} />
-);
+const count = (n, word) => `${n} ${word}${n === 1 ? "" : "s"}`;
+const SHARE_ENTITY = { quiz: "SharedQuiz", deck: "SharedFlashcard", result: "SharedAIResult" };
+const SHARE_WORD = { quiz: "a quiz", deck: "a deck", result: "a saved AI result" };
 
-const FriendSkeleton = () => (
-    <div className="flex items-center gap-3 p-4 rounded-2xl border border-border bg-surface">
-        <Skeleton className="w-12 h-12 rounded-2xl" />
-        <div className="flex-1 space-y-2">
-            <Skeleton className="h-4 w-32" />
-            <Skeleton className="h-3 w-20" />
-        </div>
-        <Skeleton className="h-8 w-24 rounded-xl" />
-    </div>
-);
+const rankName = (tier) => XP_RANKS[Math.max(0, Math.min(XP_RANKS.length - 1, (tier || 1) - 1))]?.name || null;
 
-const FEATURED_THEME = {
-    primary:   { bg: "bg-primary/10",   border: "border-primary/25",   iconBg: "bg-primary/15",   iconText: "text-primary"   },
-    streak:    { bg: "bg-streak/10",    border: "border-streak/25",    iconBg: "bg-streak/15",    iconText: "text-streak"    },
-    xp:        { bg: "bg-xp/10",        border: "border-xp/25",        iconBg: "bg-xp/15",        iconText: "text-xp"        },
-    "chart-3": { bg: "bg-chart-3/10",   border: "border-chart-3/25",   iconBg: "bg-chart-3/15",   iconText: "text-chart-3"   },
-    "chart-4": { bg: "bg-chart-4/10",   border: "border-chart-4/25",   iconBg: "bg-chart-4/15",   iconText: "text-chart-4"   },
-};
+/**
+ * The headline says ONE thing — the first that is true of: somebody waiting on
+ * you, something shared with you, nobody added yet, and otherwise the friend
+ * with the longest streak, which is a fact about a person rather than a pep
+ * talk. Said once, so nothing below it has to say it again.
+ */
+function headline({ incoming, shared, friends }) {
+    if (incoming.length === 1) return `${incoming[0].name} wants to be friends`;
+    if (incoming.length > 1) return `${incoming.length} people want to be friends`;
+    if (shared.length === 1) return `${shared[0].from} sent you ${SHARE_WORD[shared[0].kind]}`;
+    if (shared.length > 1) return `${shared.length} things shared with you`;
+    if (!friends.length) return "Study with people you know";
+    const top = [...friends].sort((a, b) => b.streak_days - a.streak_days)[0];
+    if (top?.streak_days >= 2) return `${top.name} is on a ${top.streak_days}-day streak`;
+    return `${friends.length} friend${friends.length === 1 ? "" : "s"}`;
+}
 
 export default function Friends() {
-    const [user, setUser] = useState(null);
-    const [userProfile, setUserProfile] = useState(null);
-    const [friends, setFriends] = useState([]);
-    const [pendingRequests, setPendingRequests] = useState([]);
-    const [sentRequests, setSentRequests] = useState([]);
-    const [sharedQuizzes, setSharedQuizzes] = useState([]);
-    const [sharedFlashcards, setSharedFlashcards] = useState([]);
-    const [isLoading, setIsLoading] = useState(true);
-    const [activeTab, setActiveTab] = useState("friends");
-
-    // Add friend
-    const [showAddFriend, setShowAddFriend] = useState(false);
-    const [friendEmail, setFriendEmail] = useState("");
-    const [isAddingFriend, setIsAddingFriend] = useState(false);
-
-    // Share
-    const [sharingToFriend, setSharingToFriend] = useState(null);
-    const [myQuizzes, setMyQuizzes] = useState([]);
-    const [myFlashcardDecks, setMyFlashcardDecks] = useState([]);
-    const [selectedQuizzes, setSelectedQuizzes] = useState([]);
-    const [selectedDecks, setSelectedDecks] = useState([]);
-    const [quizSearch, setQuizSearch] = useState("");
-    const [deckSearch, setDeckSearch] = useState("");
-    const [shareMessage, setShareMessage] = useState("");
-    const [isSharing, setIsSharing] = useState(false);
-
     const { toast } = useToast();
+    const location = useLocation();
+    const navigate = useNavigate();
 
-    const loadData = useCallback(async (currentUser) => {
+    const [me, setMe] = useState(null);
+    const [data, setData] = useState({ code: null, friends: [], incoming: [], outgoing: [] });
+    const [shares, setShares] = useState({ quizzes: [], decks: [], results: [] });
+    const [loading, setLoading] = useState(true);
+    const [working, setWorking] = useState(null);      // id of the row mid-action
+
+    const [addInput, setAddInput] = useState("");
+    const [linkInvite, setLinkInvite] = useState(null); // { code, state, name, id }
+    const [removing, setRemoving] = useState(null);
+    const [sharingTo, setSharingTo] = useState(null);
+
+    const load = useCallback(async () => {
         try {
-            // Load friendships & shared items in parallel — NO full user/profile list fetches
-            const [
-                friendshipsAsRequester,
-                friendshipsAsRecipient,
-                profileData,
-                sharedQuizzesData,
-                sharedFlashcardsData,
-                quizzesData,
-                flashcardsData,
-            ] = await Promise.all([
-                base44.entities.Friendship.filter({ requester_email: currentUser.email }).catch(() => []),
-                base44.entities.Friendship.filter({ recipient_email: currentUser.email }).catch(() => []),
-                base44.entities.UserProfile.filter({ created_by: currentUser.email }).catch(() => []),
-                base44.entities.SharedQuiz.filter({ shared_with_email: currentUser.email, status: 'pending' }).catch(() => []),
-                base44.entities.SharedFlashcard.filter({ shared_with_email: currentUser.email, status: 'pending' }).catch(() => []),
-                base44.entities.Quiz.filter({ created_by: currentUser.email }).catch(() => []),
-                base44.entities.Flashcard.filter({ created_by: currentUser.email, is_active: true }).then(deckCards).catch(() => []),
+            const user = await base44.auth.me();
+            setMe(user);
+            const fail = () => [];
+            const [friendsRes, quizzes, decks, results] = await Promise.all([
+                getFriends().catch(() => null),
+                base44.entities.SharedQuiz.filter({ shared_with_email: user.email, status: "pending" }).catch(fail),
+                base44.entities.SharedFlashcard.filter({ shared_with_email: user.email, status: "pending" }).catch(fail),
+                // Received AI results were written and then shown NOWHERE — a
+                // share that arrived into a void. They are on this page now.
+                base44.entities.SharedAIResult.filter({ shared_with_email: user.email, status: "pending" }).catch(fail),
             ]);
-
-            setUserProfile(profileData[0] || {});
-            setSharedQuizzes(sharedQuizzesData || []);
-            setSharedFlashcards(sharedFlashcardsData || []);
-            setMyQuizzes(quizzesData || []);
-
-            // Group flashcards into decks
-            const deckMap = {};
-            (flashcardsData || []).forEach(card => {
-                const key = `${card.subject_name || 'Other'}_${card.topic || 'General'}`;
-                if (!deckMap[key]) {
-                    deckMap[key] = {
-                        id: card.deck_id || key,
-                        subject_name: card.subject_name || 'Other',
-                        topic: card.topic || 'General',
-                        unit: card.unit || 'General',
-                        cards: []
-                    };
-                }
-                deckMap[key].cards.push(card);
-            });
-            setMyFlashcardDecks(Object.values(deckMap));
-
-            // Build friends list from friendship records directly (no extra User.list call)
-            const allFriendships = [...(friendshipsAsRequester || []), ...(friendshipsAsRecipient || [])];
-            const accepted = allFriendships.filter(f => f.status === 'accepted');
-            const pending = allFriendships.filter(f => f.recipient_email === currentUser.email && f.status === 'pending');
-            const sent = allFriendships.filter(f => f.requester_email === currentUser.email && f.status === 'pending');
-
-            const friendsData = accepted.map(f => {
-                const iAm = f.requester_email === currentUser.email ? 'requester' : 'recipient';
-                return {
-                    id: f.id,
-                    email: iAm === 'requester' ? f.recipient_email : f.requester_email,
-                    full_name: iAm === 'requester' ? (f.recipient_name || f.recipient_email) : (f.requester_name || f.requester_email),
-                    username: iAm === 'requester' ? (f.recipient_username || '') : (f.requester_username || ''),
-                    streak_days: 0,
-                    total_study_time: 0,
-                };
-            });
-
-            setFriends(friendsData);
-            setPendingRequests(pending);
-            setSentRequests(sent);
+            if (friendsRes) setData({ code: friendsRes.code, friends: friendsRes.friends || [], incoming: friendsRes.incoming || [], outgoing: friendsRes.outgoing || [] });
+            setShares({ quizzes: quizzes || [], decks: decks || [], results: results || [] });
         } catch (err) {
             console.error("Friends load error:", err);
         } finally {
-            setIsLoading(false);
+            setLoading(false);
         }
     }, []);
 
+    useEffect(() => { load(); }, [load]);
+
+    // ─── The friend link ─────────────────────────────────────────────────
+    const addParam = useMemo(() => new URLSearchParams(location.search).get("add"), [location.search]);
     useEffect(() => {
-        const init = async () => {
-            const currentUser = await base44.auth.me();
-            setUser(currentUser);
-            await loadData(currentUser);
-        };
-        init();
-    }, [loadData]);
+        if (!addParam) return;
+        // The link is being answered HERE, so a copy kept across a sign-in
+        // must not bring the student back to it a second time.
+        takePendingFriend();
+        let cancelled = false;
+        const code = normaliseFriendCode(addParam);
+        if (!code) { setLinkInvite({ code: addParam, state: "bad" }); return; }
+        lookupFriendCode(code)
+            .then((r) => { if (!cancelled) setLinkInvite({ code, state: r?.state, name: r?.name, id: r?.id }); })
+            .catch((e) => { if (!cancelled) setLinkInvite({ code, state: "error", error: e.message }); });
+        return () => { cancelled = true; };
+    }, [addParam]);
+    const closeInvite = () => {
+        setLinkInvite(null);
+        navigate(createPageUrl("Friends"), { replace: true });
+    };
 
-    const handleAddFriend = async () => {
-        const identifier = friendEmail.trim().toLowerCase();
-        if (!identifier) return;
-        if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(identifier)) {
-            toast({ title: "Enter a valid email address", variant: "destructive" });
-            return;
-        }
-        if (identifier === user.email.toLowerCase()) {
-            toast({ title: "You can't add yourself", variant: "destructive" });
-            return;
-        }
-        setIsAddingFriend(true);
+    // ─── Actions ─────────────────────────────────────────────────────────
+    const run = async (id, fn, okTitle) => {
+        setWorking(id);
         try {
-            const [existA, existB] = await Promise.all([
-                base44.entities.Friendship.filter({ requester_email: user.email, recipient_email: identifier }),
-                base44.entities.Friendship.filter({ requester_email: identifier, recipient_email: user.email }),
-            ]);
-            const existing = [...(existA || []), ...(existB || [])][0];
-            if (existing) {
-                toast({ title: existing.status === 'accepted' ? "Already friends!" : "Request already pending" });
-                setIsAddingFriend(false);
-                return;
-            }
-            let targetProfile = null;
-            try { targetProfile = (await base44.entities.UserProfile.filter({ created_by: identifier }))[0]; } catch { /* no profile yet */ }
-            await base44.entities.Friendship.create({
-                requester_email: user.email,
-                requester_name: user.full_name,
-                requester_username: userProfile?.username || "",
-                recipient_email: identifier,
-                recipient_name: targetProfile?.username || identifier.split('@')[0],
-                recipient_username: targetProfile?.username || "",
-                status: 'pending'
-            });
-            toast({ title: "Friend request sent!" });
-            setFriendEmail("");
-            setShowAddFriend(false);
-            await loadData(user);
-        } catch {
-            toast({ title: "Could not send request", variant: "destructive" });
+            const out = await fn();
+            if (okTitle) toast({ title: typeof okTitle === "function" ? okTitle(out) : okTitle });
+            await load();
+            return out;
+        } catch (e) {
+            toast({ title: e.message || "That didn't go through.", variant: "destructive" });
+            return null;
         } finally {
-            setIsAddingFriend(false);
+            setWorking(null);
         }
     };
 
-    const handleAcceptRequest = async (req) => {
-        await base44.entities.Friendship.update(req.id, { status: 'accepted' });
-        toast({ title: `Now friends with ${req.requester_name}!` });
-        await loadData(user);
-    };
+    const sentTitle = (out) => out?.state === "accepted" ? `You're friends with ${out?.name || "them"} now`
+        : out?.state === "friends" ? "You're already friends"
+            : out?.name ? `Request sent to ${out.name}` : "Request sent";
 
-    const handleDeclineRequest = async (req) => {
-        await base44.entities.Friendship.update(req.id, { status: 'declined' });
-        await loadData(user);
-    };
-
-    const handleCancelRequest = async (req) => {
-        await base44.entities.Friendship.delete(req.id);
-        toast({ title: "Request cancelled" });
-        await loadData(user);
-    };
-
-    const handleRemoveFriend = async (friendEmail) => {
-        if (!confirm("Remove this friend?")) return;
-        const [a, b] = await Promise.all([
-            base44.entities.Friendship.filter({ requester_email: user.email, recipient_email: friendEmail }),
-            base44.entities.Friendship.filter({ requester_email: friendEmail, recipient_email: user.email }),
-        ]);
-        const f = [...(a || []), ...(b || [])][0];
-        if (f) {
-            await base44.entities.Friendship.delete(f.id);
-            toast({ title: "Friend removed" });
-            await loadData(user);
-        }
-    };
-
-    const handleShare = async () => {
-        if (!selectedQuizzes.length && !selectedDecks.length) {
-            toast({ title: "Select something to share", variant: "destructive" });
+    const addFromInput = async (e) => {
+        e?.preventDefault();
+        const raw = addInput.trim();
+        if (!raw) return;
+        const code = normaliseFriendCode(raw);
+        const by = code ? { code } : raw.includes("@") ? { email: raw.toLowerCase() } : null;
+        if (!by) {
+            toast({ title: "That isn't a code or an email", description: "Codes look like ACE-7KQ2X.", variant: "destructive" });
             return;
         }
-        setIsSharing(true);
-        try {
-            const promises = [
-                ...selectedQuizzes.map(id => {
-                    const quiz = myQuizzes.find(q => q.id === id);
-                    if (!quiz) return null;
-                    return base44.entities.SharedQuiz.create({
-                        quiz_id: quiz.id, quiz_title: quiz.title,
-                        shared_by_email: user.email, shared_by_name: user.full_name,
-                        shared_with_email: sharingToFriend.email, shared_with_name: sharingToFriend.full_name,
-                        quiz_data: { title: quiz.title, subject: quiz.subject, questions: quiz.questions, difficulty: quiz.difficulty, category: quiz.category },
-                        message: shareMessage, status: "pending"
-                    });
-                }),
-                ...selectedDecks.map(id => {
-                    const deck = myFlashcardDecks.find(d => d.id === id);
-                    if (!deck) return null;
-                    return base44.entities.SharedFlashcard.create({
-                        deck_id: deck.id, deck_name: `${deck.subject_name} - ${deck.topic}`,
-                        shared_by_email: user.email, shared_by_name: user.full_name,
-                        shared_with_email: sharingToFriend.email, shared_with_name: sharingToFriend.full_name,
-                        flashcard_data: outgoingDeck(deck),
-                        message: shareMessage, status: "pending"
-                    });
-                }),
-            ].filter(Boolean);
-            await Promise.all(promises);
-            const total = selectedQuizzes.length + selectedDecks.length;
-            toast({ title: `Shared ${total} item${total > 1 ? 's' : ''} with ${sharingToFriend.full_name}!` });
-            setSharingToFriend(null);
-            setSelectedQuizzes([]); setSelectedDecks([]); setShareMessage("");
-        } catch {
-            toast({ title: "Share failed", variant: "destructive" });
-        } finally {
-            setIsSharing(false);
-        }
+        const out = await run("add", () => requestFriend(by), sentTitle);
+        if (out) setAddInput("");
     };
 
-    const handleAcceptQuiz = async (sq) => {
-        await base44.entities.Quiz.create({ title: sq.quiz_data.title, subject: sq.quiz_data.subject, questions: sq.quiz_data.questions, difficulty: sq.quiz_data.difficulty, category: sq.quiz_data.category });
+    const link = data.code ? friendLink(data.code, window.location.origin) : null;
+    const copyLink = async () => {
+        if (!link) return;
+        try {
+            await navigator.clipboard.writeText(link);
+            toast({ title: "Link copied", description: "Send it to a friend. Opening it lets them send you a request." });
+        } catch {
+            toast({ title: "Couldn't copy", description: link });
+        }
+    };
+    const shareLink = async () => {
+        if (!link) return;
+        if (navigator.share) {
+            try { await navigator.share({ title: "Add me on AcedIt", text: `My AcedIt code is ${data.code}`, url: link }); return; }
+            catch { /* dismissed — fall through to copying */ }
+        }
+        copyLink();
+    };
 
-        // A friend can share a quiz for a subject you don't study. Without a
-        // matching UserSubject the quiz lands in your library with no subject
-        // filter chip to reach it, so provision one on the way in.
-        if (sq.quiz_data.subject) {
-            const existing = await base44.entities.UserSubject.filter({
-                created_by: user.email,
-                subject_name: sq.quiz_data.subject
-            });
+    const acceptQuiz = (sq) => run(sq.id, async () => {
+        const q = sq.quiz_data || {};
+        await base44.entities.Quiz.create({ title: q.title, subject: q.subject, questions: q.questions, difficulty: q.difficulty, category: q.category });
+        // A shared quiz in a subject you do not study would land with no
+        // filter chip to reach it, so the subject is provisioned on the way in.
+        if (q.subject) {
+            const existing = await base44.entities.UserSubject.filter({ created_by: me.email, subject_name: q.subject });
             if (!existing.length) {
-                await base44.entities.UserSubject.create({
-                    subject_name: sq.quiz_data.subject,
-                    subject_code: sq.quiz_data.subject.substring(0, 6).toUpperCase(),
-                    color: "#6B7280",
-                    is_active: true
-                });
+                await base44.entities.UserSubject.create({ subject_name: q.subject, subject_code: q.subject.substring(0, 6).toUpperCase(), color: "#6B7280", is_active: true });
             }
         }
+        await base44.entities.SharedQuiz.update(sq.id, { status: "accepted" });
+    }, `"${sq.quiz_title}" is in your quizzes`);
 
-        await base44.entities.SharedQuiz.update(sq.id, { status: 'accepted' });
-        toast({ title: `"${sq.quiz_title}" added to your quizzes!` });
-        await loadData(user);
-    };
-
-    const handleAcceptFlashcards = async (sf) => {
-        // `importedDeck`, never a spread of `flashcard_data`. The blob is
-        // another student's row: spread, it carried `subject_code` — which
-        // flashcards has no column for, so the insert 400'd and accepting a
-        // shared deck failed every time — and would carry their SM-2 state
-        // and `retired_at` with it. See src/lib/sharedDeck.js.
-        const newDeckId = importDeckId();
-        const rows = importedDeck(sf.flashcard_data, newDeckId);
-        if (!rows.length) {
-            toast({ title: "That deck came through empty", variant: "destructive" });
-            return;
-        }
+    const acceptDeck = (sf) => run(sf.id, async () => {
+        // `importedDeck`, never a spread — see src/lib/sharedDeck.js.
+        const rows = importedDeck(sf.flashcard_data, importDeckId());
+        if (!rows.length) throw new Error("That deck came through empty");
         await base44.entities.Flashcard.bulkCreate(rows);
-        await base44.entities.SharedFlashcard.update(sf.id, { status: 'accepted' });
-        toast({ title: `${rows.length} flashcards imported!` });
-        await loadData(user);
-    };
+        await base44.entities.SharedFlashcard.update(sf.id, { status: "accepted" });
+        return rows.length;
+    }, (n) => `${n} cards added to your shelf`);
 
-    const filteredQuizzes = useMemo(() => myQuizzes.filter(q =>
-        q.title.toLowerCase().includes(quizSearch.toLowerCase()) ||
-        (q.subject || '').toLowerCase().includes(quizSearch.toLowerCase())
-    ), [myQuizzes, quizSearch]);
+    const acceptResult = (sr) => run(sr.id, async () => {
+        const saved = await saveResult("create", {
+            tool_type: sr.tool_type, title: sr.title, content: sr.content,
+            topic: sr.extra?.topic || null, subject_name: sr.extra?.subject_name || null,
+        });
+        if (!saved?.ok) throw new Error("Couldn't save that to your AI history");
+        await base44.entities.SharedAIResult.update(sr.id, { status: "accepted" });
+    }, `"${sr.title}" is in your AI history`);
 
-    const filteredDecks = useMemo(() => myFlashcardDecks.filter(d =>
-        d.topic.toLowerCase().includes(deckSearch.toLowerCase()) ||
-        d.subject_name.toLowerCase().includes(deckSearch.toLowerCase())
-    ), [myFlashcardDecks, deckSearch]);
+    const decline = (entity, row) => run(row.id, () => base44.entities[entity].update(row.id, { status: "declined" }));
 
-    const totalShared = sharedQuizzes.length + sharedFlashcards.length;
+    // ─── What is waiting, as one list ────────────────────────────────────
+    // Data only; the handlers are attached where the rows are drawn, so the
+    // memo depends on the rows and nothing else.
+    const shared = useMemo(() => [
+        ...shares.quizzes.map((r) => ({ kind: "quiz", row: r, id: r.id, title: r.quiz_title, from: r.shared_by_name, size: count(r.quiz_data?.questions?.length || 0, "question") })),
+        ...shares.decks.map((r) => ({ kind: "deck", row: r, id: r.id, title: r.deck_name, from: r.shared_by_name, size: count(Array.isArray(r.flashcard_data) ? r.flashcard_data.length : 0, "card") })),
+        ...shares.results.map((r) => ({ kind: "result", row: r, id: r.id, title: r.title, from: r.shared_by_name, size: "Saved AI result" })),
+    ], [shares]);
+    const acceptShare = (s) => (s.kind === "quiz" ? acceptQuiz(s.row) : s.kind === "deck" ? acceptDeck(s.row) : acceptResult(s.row));
+    const declineShare = (s) => decline(SHARE_ENTITY[s.kind], s.row);
 
-    // ── Derived stats for hero / coach / featured ─────────────────────
-    const friendCount = friends.length;
-    const pendingCount = pendingRequests.length;
-    const sentCount = sentRequests.length;
-    const sharedQuizCount = sharedQuizzes.length;
-    const sharedFlashcardCount = sharedFlashcards.length;
-    const inboxCount = pendingCount + totalShared;
+    const waiting = data.incoming.length + shared.length;
+    const title = headline({ incoming: data.incoming, shared, friends: data.friends });
 
-    const firstName = userProfile?.username || user?.full_name?.split(' ')[0] || 'friend';
-    const hour = new Date().getHours();
-    const coachLine = useMemo(() => getCoachLine({
-        name: firstName,
-        hour,
-        friendCount,
-        pendingCount,
-        sharedCount: totalShared,
-    }), [firstName, hour, friendCount, pendingCount, totalShared]);
+    if (loading) {
+        return (
+            <div className="min-h-screen bg-background flex items-center justify-center">
+                <AceShuffle size="lg" />
+            </div>
+        );
+    }
 
-    // Featured panel — state-aware
-    const featured = useMemo(() => {
-        if (isLoading) return null;
-        if (pendingCount > 0) {
-            const req = pendingRequests[0];
-            return {
-                kind: 'request',
-                label: pendingCount === 1 ? "Friend request" : `${pendingCount} friend requests`,
-                title: pendingCount === 1
-                    ? `${req.requester_name} sent you a friend request`
-                    : `${req.requester_name} and ${pendingCount - 1} other${pendingCount - 1 === 1 ? '' : 's'} want to connect`,
-                sub: "Accept to start sharing quizzes and flashcards.",
-                accent: "primary",
-                icon: UserPlus,
-                req,
-            };
-        }
-        if (totalShared > 0) {
-            const kindLabel = sharedQuizCount > 0 && sharedFlashcardCount > 0
-                ? "quizzes & flashcards"
-                : sharedQuizCount > 0 ? `quiz${sharedQuizCount === 1 ? '' : 'zes'}` : `flashcard deck${sharedFlashcardCount === 1 ? '' : 's'}`;
-            return {
-                kind: 'shared',
-                label: "Shared with you",
-                title: `${totalShared} ${kindLabel} waiting in your inbox`,
-                sub: "Friends sent you study material — import what you want.",
-                accent: "xp",
-                icon: Gift,
-            };
-        }
-        if (friendCount === 0) {
-            return {
-                kind: 'empty',
-                label: "Studying solo?",
-                title: "Get on the leaderboard with your friends",
-                sub: "Add a friend by email and start sharing quizzes.",
-                accent: "chart-3",
-                icon: Users,
-            };
-        }
-        // Has friends, no pending action — preview crew
-        return {
-            kind: 'crew',
-            label: "Your crew",
-            title: friendCount === 1 ? `You and 1 friend studying together` : `${friendCount} friends studying alongside you`,
-            sub: "Share a quiz or flashcard deck — give someone a boost.",
-            accent: "chart-4",
-            icon: Heart,
-        };
-    }, [isLoading, pendingCount, pendingRequests, totalShared, sharedQuizCount, sharedFlashcardCount, friendCount]);
+    const SHARE_ICON = { quiz: FileText, deck: Layers, result: Sparkles };
 
     return (
         <div className="min-h-screen bg-background">
-            <div className="max-w-6xl mx-auto px-4 lg:px-8 py-6 lg:py-10 space-y-6 lg:space-y-8">
-
-                {/* ── COACH STRIP ─────────────────────────────────────── */}
-                <motion.section initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.35 }}>
-                    <div className="flex items-center justify-between mb-3">
-                        <div className="flex items-center gap-2 text-xs">
-                            <span className="font-bold text-muted-foreground uppercase tracking-wider">Social</span>
-                            {friendCount > 0 && (
-                                <>
-                                    <span className="text-muted-foreground/40">·</span>
-                                    <span className="inline-flex items-center gap-1 font-extrabold text-chart-3">
-                                        <Users className="w-3.5 h-3.5" /> {friendCount} friend{friendCount === 1 ? '' : 's'}
-                                    </span>
-                                </>
-                            )}
-                            {pendingCount > 0 && (
-                                <>
-                                    <span className="text-muted-foreground/40">·</span>
-                                    <span className="inline-flex items-center gap-1 font-extrabold text-streak">
-                                        <Inbox className="w-3.5 h-3.5" /> {pendingCount} request{pendingCount === 1 ? '' : 's'}
-                                    </span>
-                                </>
-                            )}
-                            {totalShared > 0 && (
-                                <>
-                                    <span className="text-muted-foreground/40">·</span>
-                                    <span className="inline-flex items-center gap-1 font-extrabold text-xp">
-                                        <Sparkles className="w-3.5 h-3.5" /> {totalShared} shared
-                                    </span>
-                                </>
-                            )}
-                        </div>
-                        <HelpButton page="Friends" />
+            <div className="max-w-4xl mx-auto px-4 lg:px-8 py-6 lg:py-8 space-y-6 lg:space-y-8">
+                <header className="flex items-start justify-between gap-4" data-friends-block="head">
+                    <div className="min-w-0">
+                        <p className="stat-label text-chart-3 mb-1.5">Friends</p>
+                        <h1 className="font-display text-2xl sm:text-3xl lg:text-4xl font-extrabold tracking-tight text-foreground leading-[1.1] text-balance">
+                            {title}
+                        </h1>
                     </div>
-                    <h1 className="font-display text-2xl sm:text-3xl lg:text-4xl font-extrabold tracking-tight text-foreground leading-[1.1]">
-                        {coachLine}
-                    </h1>
-                </motion.section>
+                    <HelpButton page="Friends" />
+                </header>
 
-                {/* ── HERO ROW: Crew (3/5) + Inbox (2/5) ──────────────── */}
-                <motion.section
-                    initial={{ opacity: 0, y: 12 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: 0.05, duration: 0.4 }}
-                    className="grid grid-cols-1 md:grid-cols-5 gap-5 lg:gap-6"
-                >
-                    {/* Your crew */}
-                    <div className="md:col-span-3">
-                        {friendCount > 0 ? (
-                            <div className="relative overflow-hidden rounded-3xl bg-chart-3/10 border-2 border-chart-3/25 p-6 lg:p-8 h-full">
-                                <Users className="absolute -top-6 -right-6 w-32 h-32 text-chart-3/10 pointer-events-none" />
-                                <div className="relative">
-                                    <div className="flex items-start justify-between mb-2">
-                                        <p className="stat-label text-chart-3/80">Your crew</p>
-                                        <Button
-                                            size="sm"
-                                            onClick={() => setShowAddFriend(true)}
-                                            className="bg-chart-3 hover:bg-chart-3/90 text-white rounded-xl gap-1.5 -mr-1 -mt-1"
-                                        >
-                                            <UserPlus className="w-3.5 h-3.5" /> Add friend
-                                        </Button>
-                                    </div>
-                                    <div className="flex items-baseline gap-3 mb-4">
-                                        <span
-                                            className="font-display font-extrabold text-chart-3 leading-none"
-                                            style={{ fontSize: 'clamp(3.5rem, 10vw, 6rem)' }}
-                                        >
-                                            {friendCount}
-                                        </span>
-                                        <span className="font-display font-extrabold text-chart-3/50 text-2xl lg:text-3xl">
-                                            {friendCount === 1 ? 'friend' : 'friends'}
-                                        </span>
-                                    </div>
-                                    {/* Avatar pile */}
-                                    <div className="flex items-center gap-2 mb-3">
-                                        <div className="flex -space-x-2">
-                                            {friends.slice(0, 5).map((f) => (
-                                                <div key={f.email} className="ring-2 ring-chart-3/10 rounded-2xl">
-                                                    <Avatar name={f.full_name} size="sm" />
-                                                </div>
-                                            ))}
-                                        </div>
-                                        {friendCount > 5 && (
-                                            <span className="text-sm font-bold text-muted-foreground ml-1">
-                                                +{friendCount - 5} more
-                                            </span>
-                                        )}
-                                    </div>
-                                    <p className="text-foreground text-sm lg:text-base max-w-md font-medium leading-snug">
-                                        {friendCount >= 10
-                                            ? "Solid crew. Your study circle is locked in."
-                                            : friendCount >= 3
-                                                ? "Nice group. Keep growing the crew."
-                                                : "Off to a good start — add a few more to fill out the leaderboard."}
-                                    </p>
-                                </div>
-                            </div>
-                        ) : (
-                            <div className="rounded-3xl bg-secondary/40 border-2 border-dashed border-border p-6 lg:p-8 text-center h-full flex flex-col items-center justify-center">
-                                <AceBody className="w-28 mb-1" pose="wave" title="Ace" />
-                                <h2 className="font-display font-extrabold text-foreground text-xl lg:text-2xl mb-2">
-                                    Build your study crew
-                                </h2>
-                                <p className="text-muted-foreground text-sm max-w-sm mx-auto mb-5">
-                                    Add a friend by email — share quizzes, share flashcards, climb the leaderboard together.
+                {/* ── A friend link someone sent you ─────────────────────── */}
+                <AnimatePresence>
+                    {linkInvite && (
+                        <motion.div initial={{ opacity: 0, y: -6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
+                            data-friends-block="invite"
+                            className="card-soft on-table p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center gap-4 border-2 border-chart-3/40">
+                            {linkInvite.name && <Avatar name={linkInvite.name} />}
+                            <div className="flex-1 min-w-0">
+                                <p className="font-display font-extrabold text-foreground">
+                                    {linkInvite.state === "available" ? `Add ${linkInvite.name} as a friend?`
+                                        : linkInvite.state === "friends" ? `You're already friends with ${linkInvite.name}`
+                                            : linkInvite.state === "pending_out" ? `Your request to ${linkInvite.name} is waiting on them`
+                                                : linkInvite.state === "pending_in" ? `${linkInvite.name} already asked to be friends`
+                                                    : linkInvite.state === "self" ? "That's your own link"
+                                                        : linkInvite.state === "not_found" ? "No one has that code"
+                                                            : linkInvite.state === "bad" ? "That link isn't quite right"
+                                                                : linkInvite.error || "Checking the link…"}
                                 </p>
-                                <Button onClick={() => setShowAddFriend(true)} className="bg-chart-3 hover:bg-chart-3/90 text-white">
-                                    <UserPlus className="w-4 h-4" /> Add your first friend
+                                <p className="text-sm text-muted-foreground mt-0.5">
+                                    {linkInvite.state === "available" ? "They'll see your request here and can accept it."
+                                        : linkInvite.state === "not_found" || linkInvite.state === "bad" ? "Check the code with the person who sent it."
+                                            : `Code ${linkInvite.code}`}
+                                </p>
+                            </div>
+                            <div className="flex gap-2 flex-shrink-0">
+                                {linkInvite.state === "available" && (
+                                    <Button disabled={working === "invite"} className="gap-1.5 flex-1 sm:flex-none"
+                                        onClick={async () => { const out = await run("invite", () => requestFriend({ code: linkInvite.code }), sentTitle); if (out) closeInvite(); }}>
+                                        {working === "invite" ? <AceShuffle size="sm" /> : <UserPlus className="w-4 h-4" />} Send request
+                                    </Button>
+                                )}
+                                {linkInvite.state === "pending_in" && linkInvite.id && (
+                                    <Button disabled={working === "invite"} className="gap-1.5 flex-1 sm:flex-none"
+                                        onClick={async () => { const out = await run("invite", () => respondFriend(linkInvite.id, true), `You're friends with ${linkInvite.name} now`); if (out) closeInvite(); }}>
+                                        <Check className="w-4 h-4" /> Accept
+                                    </Button>
+                                )}
+                                <Button variant="outline" onClick={closeInvite}>
+                                    {linkInvite.state === "available" || linkInvite.state === "pending_in" ? "Not now" : "Close"}
                                 </Button>
                             </div>
-                        )}
-                    </div>
+                        </motion.div>
+                    )}
+                </AnimatePresence>
 
-                    {/* Inbox */}
-                    <div className="md:col-span-2">
-                        <div className="rounded-3xl bg-primary/10 border-2 border-primary/25 p-6 h-full flex flex-col">
-                            <div className="flex items-center gap-2 mb-2">
-                                <Inbox className="w-4 h-4 text-primary" />
-                                <p className="stat-label text-primary/80">Inbox</p>
-                            </div>
-                            <p className="font-display font-extrabold text-foreground leading-none" style={{ fontSize: 'clamp(2.25rem, 5.5vw, 3rem)' }}>
-                                {isLoading ? '—' : inboxCount}
-                            </p>
-                            <p className="text-xs text-muted-foreground mt-2 leading-snug">
-                                {inboxCount === 0
-                                    ? "All caught up — nothing waiting."
-                                    : pendingCount > 0 && totalShared > 0
-                                        ? "Requests and shared items waiting."
-                                        : pendingCount > 0
-                                            ? "Friend requests waiting on you."
-                                            : "Friends sent you study material."}
-                            </p>
-                            <div className="space-y-2.5 mt-4 pt-4 border-t-2 border-primary/15">
-                                <div className="flex items-baseline justify-between">
-                                    <p className="text-xs font-bold text-muted-foreground inline-flex items-center gap-1.5">
-                                        <UserPlus className="w-3 h-3" /> Friend requests
-                                    </p>
-                                    <p className={`text-xs font-bold ${pendingCount > 0 ? 'text-streak' : 'text-foreground'}`}>{pendingCount}</p>
-                                </div>
-                                <div className="flex items-baseline justify-between">
-                                    <p className="text-xs font-bold text-muted-foreground inline-flex items-center gap-1.5">
-                                        <FileText className="w-3 h-3" /> Shared quizzes
-                                    </p>
-                                    <p className={`text-xs font-bold ${sharedQuizCount > 0 ? 'text-xp' : 'text-foreground'}`}>{sharedQuizCount}</p>
-                                </div>
-                                <div className="flex items-baseline justify-between">
-                                    <p className="text-xs font-bold text-muted-foreground inline-flex items-center gap-1.5">
-                                        <Brain className="w-3 h-3" /> Shared decks
-                                    </p>
-                                    <p className={`text-xs font-bold ${sharedFlashcardCount > 0 ? 'text-xp' : 'text-foreground'}`}>{sharedFlashcardCount}</p>
-                                </div>
-                                {sentCount > 0 && (
-                                    <div className="flex items-baseline justify-between">
-                                        <p className="text-xs font-bold text-muted-foreground inline-flex items-center gap-1.5">
-                                            <Send className="w-3 h-3" /> Sent (pending)
-                                        </p>
-                                        <p className="text-xs font-bold text-chart-3">{sentCount}</p>
+                {/* ── Waiting on you ─────────────────────────────────────── */}
+                {waiting > 0 && (
+                    <Band title="Waiting on you" count={waiting}>
+                        <div className="space-y-2" data-friends-block="waiting">
+                            {data.incoming.map((r) => (
+                                <div key={r.id} className="card-soft on-table px-4 py-3 flex items-center gap-3">
+                                    <Avatar name={r.name} />
+                                    <div className="flex-1 min-w-0">
+                                        <p className="font-bold text-foreground truncate">{r.name}</p>
+                                        <p className="text-xs text-muted-foreground">Wants to be friends</p>
                                     </div>
-                                )}
-                            </div>
-                            {inboxCount > 0 && (
-                                <Button
-                                    size="sm"
-                                    variant="outline"
-                                    className="mt-4 w-full"
-                                    onClick={() => setActiveTab(pendingCount > 0 ? 'requests' : 'shared')}
-                                >
-                                    Open inbox <ArrowRight className="w-3.5 h-3.5" />
-                                </Button>
-                            )}
-                        </div>
-                    </div>
-                </motion.section>
-
-                {/* ── FEATURED PANEL ──────────────────────────────────── */}
-                {featured && (
-                    <motion.section
-                        initial={{ opacity: 0, y: 12 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        transition={{ delay: 0.1 }}
-                    >
-                        <div className={`rounded-2xl ${FEATURED_THEME[featured.accent].bg} border-2 ${FEATURED_THEME[featured.accent].border} p-5 lg:p-6`}>
-                            <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
-                                {featured.kind === 'request' && featured.req ? (
-                                    <Avatar name={featured.req.requester_name} />
-                                ) : (
-                                    <div className={`w-12 h-12 rounded-xl ${FEATURED_THEME[featured.accent].iconBg} flex items-center justify-center flex-shrink-0`}>
-                                        <featured.icon className={`w-6 h-6 ${FEATURED_THEME[featured.accent].iconText}`} />
+                                    <Button size="sm" disabled={working === r.id} className="gap-1"
+                                        onClick={() => run(r.id, () => respondFriend(r.id, true), `You're friends with ${r.name} now`)}>
+                                        {working === r.id ? <AceShuffle size="sm" /> : <Check className="w-4 h-4" />} Accept
+                                    </Button>
+                                    <Button size="sm" variant="ghost" disabled={working === r.id} aria-label={`Decline ${r.name}`}
+                                        onClick={() => run(r.id, () => respondFriend(r.id, false))}>
+                                        <X className="w-4 h-4" />
+                                    </Button>
+                                </div>
+                            ))}
+                            {shared.map((s) => {
+                                const Icon = SHARE_ICON[s.kind];
+                                const note = shownNote(s.row.message);
+                                return (
+                                    <div key={`${s.kind}:${s.id}`} className="card-soft on-table px-4 py-3 flex items-center gap-3">
+                                        <span className="w-11 h-11 rounded-2xl bg-chart-4/10 text-chart-4 flex items-center justify-center flex-shrink-0">
+                                            <Icon className="w-5 h-5" />
+                                        </span>
+                                        <div className="flex-1 min-w-0">
+                                            {/* Two lines, not one: beside two buttons on a phone a
+                                                single truncated line was "Redox — 12…". */}
+                                            <p className="font-bold text-foreground leading-snug line-clamp-2 break-words">{s.title}</p>
+                                            <p className="text-xs text-muted-foreground mt-0.5">
+                                                From {s.from} · {s.size}{note ? <span className="text-foreground"> · “{note}”</span> : null}
+                                            </p>
+                                        </div>
+                                        <Button size="sm" disabled={working === s.id} className="gap-1" onClick={() => acceptShare(s)}>
+                                            {working === s.id ? <AceShuffle size="sm" /> : <Check className="w-4 h-4" />} Add
+                                        </Button>
+                                        <Button size="sm" variant="ghost" disabled={working === s.id} aria-label="Dismiss" onClick={() => declineShare(s)}>
+                                            <X className="w-4 h-4" />
+                                        </Button>
                                     </div>
-                                )}
-                                <div className="flex-1 min-w-0">
-                                    <p className="stat-label mb-1">Today on Friends · {featured.label}</p>
-                                    <h2 className="font-display font-extrabold text-foreground text-base lg:text-lg leading-snug">
-                                        {featured.title}
-                                    </h2>
-                                    <p className="text-muted-foreground text-sm mt-0.5">{featured.sub}</p>
-                                </div>
-                                <div className="flex gap-2 w-full sm:w-auto flex-shrink-0">
-                                    {featured.kind === 'request' && featured.req ? (
-                                        <>
-                                            <Button
-                                                onClick={() => handleAcceptRequest(featured.req)}
-                                                className="flex-1 sm:flex-initial bg-primary hover:bg-primary/90 text-white"
-                                            >
-                                                <Check className="w-4 h-4" /> Accept
-                                            </Button>
-                                            <Button
-                                                variant="outline"
-                                                onClick={() => handleDeclineRequest(featured.req)}
-                                                className="flex-1 sm:flex-initial"
-                                            >
-                                                Ignore
-                                            </Button>
-                                        </>
-                                    ) : featured.kind === 'shared' ? (
-                                        <Button
-                                            onClick={() => setActiveTab('shared')}
-                                            className="w-full sm:w-auto"
-                                        >
-                                            Open inbox <ArrowRight className="w-4 h-4" />
-                                        </Button>
-                                    ) : featured.kind === 'empty' ? (
-                                        <Button
-                                            onClick={() => setShowAddFriend(true)}
-                                            className="w-full sm:w-auto bg-chart-3 hover:bg-chart-3/90 text-white"
-                                        >
-                                            <UserPlus className="w-4 h-4" /> Add friends
-                                        </Button>
-                                    ) : (
-                                        <Button
-                                            onClick={() => setActiveTab('friends')}
-                                            variant="outline"
-                                            className="w-full sm:w-auto"
-                                        >
-                                            See your crew <ArrowRight className="w-4 h-4" />
-                                        </Button>
-                                    )}
-                                </div>
-                            </div>
+                                );
+                            })}
                         </div>
-                    </motion.section>
+                    </Band>
                 )}
 
-                {/* ── Main Tabs ──────────────────────────────────────── */}
-                <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.15 }}>
-                    <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-5">
-                        <TabsList className="grid w-full grid-cols-5 h-auto p-1.5 rounded-2xl bg-surface border-2 border-border shadow-soft">
-                            {[
-                                { value: "friends", label: "Friends", icon: Users },
-                                { value: "ladder", label: "Ladder", icon: Trophy },
-                                { value: "requests", label: "Requests", icon: Inbox, count: pendingRequests.length },
-                                { value: "shared", label: "Shared", icon: Sparkles, count: totalShared },
-                                { value: "sent", label: "Sent", icon: Send },
-                            ].map(tab => (
-                                <TabsTrigger key={tab.value} value={tab.value}
-                                    className="flex items-center justify-center gap-1.5 py-2.5 px-2 rounded-xl text-xs lg:text-sm font-bold text-muted-foreground data-[state=active]:bg-foreground data-[state=active]:text-background data-[state=active]:shadow-soft transition-all relative">
-                                    <tab.icon className="w-3.5 h-3.5" />
-                                    <span className="hidden sm:inline">{tab.label}</span>
-                                    {tab.count > 0 && (
-                                        <span className="bg-streak text-white text-xs rounded-full w-4 h-4 flex items-center justify-center font-bold">
-                                            {tab.count}
-                                        </span>
-                                    )}
-                                </TabsTrigger>
+                {/* ── Your friends ───────────────────────────────────────── */}
+                <Band title="Your friends" count={data.friends.length || null}
+                    aside={data.friends.length > 0 && (
+                        <Link to={`${createPageUrl("Ranked")}?tab=board&scope=friends`}
+                            className="inline-flex items-center gap-1 text-xs font-bold text-muted-foreground hover:text-foreground whitespace-nowrap">
+                            <Trophy className="w-3.5 h-3.5" /> Where you stand <ArrowRight className="w-3 h-3" />
+                        </Link>
+                    )}>
+                    {data.friends.length === 0 ? (
+                        <div className="flex items-center gap-4 py-2" data-friends-block="empty">
+                            <AceBody className="w-16 flex-shrink-0" pose="wave" title="Ace" />
+                            <p className="text-sm text-muted-foreground max-w-md">
+                                Nobody yet. Send your link below to someone in your class — when they open it they can send you a
+                                request, and once you're friends you can share decks and quizzes and see each other on Ranked.
+                            </p>
+                        </div>
+                    ) : (
+                        <div className="divide-y divide-border border-y border-border" data-friends-block="friends">
+                            {data.friends.map((f) => (
+                                <div key={f.id} className="flex items-center gap-3 py-3">
+                                    <Avatar name={f.name} />
+                                    <div className="flex-1 min-w-0">
+                                        <p className="font-bold text-foreground truncate">
+                                            {f.name}
+                                            {f.username && f.username !== f.name && <span className="text-muted-foreground font-medium"> @{f.username}</span>}
+                                        </p>
+                                        <p className="text-xs text-muted-foreground flex items-center gap-2 min-w-0">
+                                            {f.streak_days > 0 && (
+                                                <span className="inline-flex items-center gap-0.5 font-bold text-streak whitespace-nowrap">
+                                                    <Flame className="w-3.5 h-3.5" /> {f.streak_days}d
+                                                </span>
+                                            )}
+                                            <span className="truncate">{rankName(f.rank_tier)}</span>
+                                        </p>
+                                    </div>
+                                    <Button size="sm" variant="outline" className="gap-1.5" onClick={() => setSharingTo(f)}>
+                                        <Share2 className="w-4 h-4" /><span className="hidden sm:inline">Share</span>
+                                    </Button>
+                                    <DropdownMenu>
+                                        <DropdownMenuTrigger asChild>
+                                            <Button size="icon" variant="ghost" aria-label={`More for ${f.name}`} className="w-9 h-9">
+                                                <MoreHorizontal className="w-4 h-4" />
+                                            </Button>
+                                        </DropdownMenuTrigger>
+                                        <DropdownMenuContent align="end">
+                                            <DropdownMenuItem className="text-streak focus:text-streak" onSelect={() => setRemoving(f)}>
+                                                Remove {f.name}
+                                            </DropdownMenuItem>
+                                        </DropdownMenuContent>
+                                    </DropdownMenu>
+                                </div>
                             ))}
-                        </TabsList>
+                        </div>
+                    )}
+                    {data.outgoing.length > 0 && (
+                        <div className="pt-1 space-y-1.5" data-friends-block="sent">
+                            <p className="text-xs font-bold text-muted-foreground">Waiting on them</p>
+                            <div className="flex flex-wrap gap-2">
+                                {data.outgoing.map((r) => (
+                                    <span key={r.id} className="inline-flex items-center gap-1.5 rounded-full bg-secondary pl-3 pr-1 py-1 text-xs font-bold text-foreground">
+                                        <Send className="w-3 h-3 text-muted-foreground" /> {r.name}
+                                        <button type="button" disabled={working === r.id} aria-label={`Cancel request to ${r.name}`}
+                                            onClick={() => run(r.id, () => cancelFriend(r.id), "Request cancelled")}
+                                            className="w-5 h-5 rounded-full hover:bg-background flex items-center justify-center text-muted-foreground hover:text-foreground">
+                                            <X className="w-3 h-3" />
+                                        </button>
+                                    </span>
+                                ))}
+                            </div>
+                        </div>
+                    )}
+                </Band>
 
-                        {/* Friends Tab */}
-                        <TabsContent value="friends" className="mt-4">
-                            {isLoading ? (
-                                <div className="space-y-3">
-                                    {[1, 2, 3].map(i => <FriendSkeleton key={i} />)}
-                                </div>
-                            ) : friends.length === 0 ? (
-                                <div className="text-center py-16">
-                                    <div className="w-16 h-16 bg-chart-3/10 rounded-3xl flex items-center justify-center mx-auto mb-4">
-                                        <Users className="w-8 h-8 text-chart-3" />
-                                    </div>
-                                    <h3 className="font-bold text-foreground text-lg mb-1">No friends yet</h3>
-                                    <p className="text-muted-foreground text-sm mb-4">Add friends to study together and share resources</p>
-                                    <Button onClick={() => setShowAddFriend(true)}
-                                        className="bg-chart-3 hover:bg-chart-3/90 text-white rounded-2xl gap-2">
-                                        <UserPlus className="w-4 h-4" /> Add First Friend
-                                    </Button>
-                                </div>
-                            ) : (
-                                <div className="space-y-3">
-                                    {friends.map((friend, i) => (
-                                        <motion.div key={friend.email}
-                                            initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.04 }}
-                                            className="card-soft flex items-center gap-4 p-4 hover:border-chart-3/40 transition-all group">
-                                            <Avatar name={friend.full_name} />
-                                            <div className="flex-1 min-w-0">
-                                                <p className="font-bold text-foreground truncate">{friend.full_name}</p>
-                                                <p className="text-sm text-muted-foreground/60">{friend.username ? `@${friend.username}` : friend.email}</p>
-                                            </div>
-                                            <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                                                <Button size="sm" variant="outline"
-                                                    onClick={() => { setSharingToFriend(friend); setSelectedQuizzes([]); setSelectedDecks([]); setShareMessage(""); }}
-                                                    className="rounded-xl border-chart-4/30 text-chart-4 hover:bg-chart-4/10 gap-1.5 text-xs">
-                                                    <Gift className="w-3.5 h-3.5" /> Share
-                                                </Button>
-                                                <Button size="icon" variant="ghost" aria-label="Remove friend"
-                                                    onClick={() => handleRemoveFriend(friend.email)}
-                                                    className="rounded-xl text-muted-foreground/60 hover:text-streak hover:bg-streak/10 w-8 h-8">
-                                                    <UserMinus className="w-3.5 h-3.5" />
-                                                </Button>
-                                            </div>
-                                            {/* Mobile share button */}
-                                            <Button size="sm" variant="outline"
-                                                onClick={() => { setSharingToFriend(friend); setSelectedQuizzes([]); setSelectedDecks([]); setShareMessage(""); }}
-                                                className="sm:hidden rounded-xl border-chart-4/30 text-chart-4 hover:bg-chart-4/10 gap-1.5 text-xs">
-                                                <Gift className="w-3.5 h-3.5" />
-                                            </Button>
-                                        </motion.div>
-                                    ))}
-                                </div>
-                            )}
-                        </TabsContent>
-
-                        {/* Ladder Tab — season-XP ranking of you + friends */}
-                        <TabsContent value="ladder" className="mt-4">
-                            {isLoading ? (
-                                <div className="space-y-3">
-                                    {[1, 2, 3].map(i => <FriendSkeleton key={i} />)}
-                                </div>
-                            ) : friends.length === 0 ? (
-                                <div className="text-center py-16">
-                                    <div className="w-16 h-16 bg-xp/10 rounded-3xl flex items-center justify-center mx-auto mb-4">
-                                        <Trophy className="w-8 h-8 text-xp" />
-                                    </div>
-                                    <h3 className="font-bold text-foreground text-lg mb-1">The ladder needs rivals</h3>
-                                    <p className="text-muted-foreground text-sm mb-4">Add a friend and see who tops the season.</p>
-                                    <Button onClick={() => setShowAddFriend(true)}
-                                        className="bg-xp hover:bg-xp/90 text-white rounded-2xl gap-2">
-                                        <UserPlus className="w-4 h-4" /> Add a Friend
-                                    </Button>
-                                </div>
-                            ) : (
-                                <FriendsLeaderboard
-                                    friends={friends}
-                                    currentUserEmail={user?.email}
-                                    currentUserName={userProfile?.display_name || user?.full_name || user?.email}
-                                />
-                            )}
-                        </TabsContent>
-
-                        {/* Requests Tab */}
-                        <TabsContent value="requests" className="mt-4">
-                            {isLoading ? (
-                                <div className="space-y-3">{[1, 2].map(i => <FriendSkeleton key={i} />)}</div>
-                            ) : pendingRequests.length === 0 ? (
-                                <div className="text-center py-12">
-                                    <div className="w-14 h-14 bg-streak/10 rounded-3xl flex items-center justify-center mx-auto mb-3">
-                                        <Inbox className="w-7 h-7 text-streak" />
-                                    </div>
-                                    <p className="font-semibold text-muted-foreground">All caught up!</p>
-                                    <p className="text-sm text-muted-foreground/60">No pending friend requests</p>
-                                </div>
-                            ) : (
-                                <div className="space-y-3">
-                                    {pendingRequests.map((req, i) => (
-                                        <motion.div key={req.id}
-                                            initial={{ opacity: 0, x: -8 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: i * 0.04 }}
-                                            className="flex items-center gap-4 p-4 bg-streak/10 rounded-2xl border border-border">
-                                            <Avatar name={req.requester_name} />
-                                            <div className="flex-1 min-w-0">
-                                                <p className="font-bold text-foreground truncate">{req.requester_name}</p>
-                                                <p className="text-sm text-muted-foreground/60">{req.requester_username ? `@${req.requester_username}` : req.requester_email}</p>
-                                            </div>
-                                            <div className="flex gap-2">
-                                                <Button size="sm" onClick={() => handleAcceptRequest(req)}
-                                                    className="bg-primary hover:bg-primary/90 text-white rounded-xl gap-1.5 text-xs">
-                                                    <Check className="w-3.5 h-3.5" /> Accept
-                                                </Button>
-                                                <Button size="sm" variant="ghost" onClick={() => handleDeclineRequest(req)}
-                                                    className="text-muted-foreground/60 hover:text-streak rounded-xl">
-                                                    <X className="w-3.5 h-3.5" />
-                                                </Button>
-                                            </div>
-                                        </motion.div>
-                                    ))}
-                                </div>
-                            )}
-                        </TabsContent>
-
-                        {/* Shared Tab */}
-                        <TabsContent value="shared" className="mt-4">
-                            {isLoading ? (
-                                <div className="space-y-3">{[1, 2].map(i => <FriendSkeleton key={i} />)}</div>
-                            ) : totalShared === 0 ? (
-                                <div className="text-center py-12">
-                                    <div className="w-14 h-14 bg-chart-4/10 rounded-3xl flex items-center justify-center mx-auto mb-3">
-                                        <Sparkles className="w-7 h-7 text-chart-4" />
-                                    </div>
-                                    <p className="font-semibold text-muted-foreground">Nothing shared yet</p>
-                                    <p className="text-sm text-muted-foreground/60">When friends share quizzes or flashcards, they'll appear here</p>
-                                </div>
-                            ) : (
-                                <div className="space-y-3">
-                                    {sharedQuizzes.map((sq, i) => (
-                                        <motion.div key={sq.id}
-                                            initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.04 }}
-                                            className="card-soft p-4 hover:border-chart-4/40 transition-all">
-                                            <div className="flex items-start gap-3">
-                                                <div className="w-10 h-10 bg-chart-4/10 rounded-xl flex items-center justify-center flex-shrink-0">
-                                                    <FileText className="w-5 h-5 text-chart-4" />
-                                                </div>
-                                                <div className="flex-1 min-w-0">
-                                                    <p className="font-bold text-foreground truncate">{sq.quiz_title}</p>
-                                                    <div className="flex items-center gap-2 mt-1">
-                                                        <span className="pill bg-chart-4/15 text-chart-4">From {sq.shared_by_name}</span>
-                                                        <span className="text-xs text-muted-foreground/60">{sq.quiz_data?.questions?.length || 0} questions</span>
-                                                    </div>
-                                                    {sq.message && <p className="text-xs text-muted-foreground mt-1.5 italic">"{sq.message}"</p>}
-                                                </div>
-                                                <div className="flex gap-2 flex-shrink-0">
-                                                    <Button size="sm" onClick={() => handleAcceptQuiz(sq)}
-                                                        className="bg-primary hover:bg-primary/90 text-white rounded-xl gap-1 text-xs">
-                                                        <Check className="w-3 h-3" /> Import
-                                                    </Button>
-                                                    <Button size="sm" variant="ghost" onClick={async () => {
-                                                        await base44.entities.SharedQuiz.update(sq.id, { status: 'declined' });
-                                                        await loadData(user);
-                                                    }} className="text-muted-foreground/60 hover:text-streak rounded-xl">
-                                                        <X className="w-3.5 h-3.5" />
-                                                    </Button>
-                                                </div>
-                                            </div>
-                                        </motion.div>
-                                    ))}
-                                    {sharedFlashcards.map((sf, i) => (
-                                        <motion.div key={sf.id}
-                                            initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: (sharedQuizzes.length + i) * 0.04 }}
-                                            className="card-soft p-4 hover:border-chart-4/40 transition-all">
-                                            <div className="flex items-start gap-3">
-                                                <div className="w-10 h-10 bg-chart-4/10 rounded-xl flex items-center justify-center flex-shrink-0">
-                                                    <Brain className="w-5 h-5 text-chart-4" />
-                                                </div>
-                                                <div className="flex-1 min-w-0">
-                                                    <p className="font-bold text-foreground truncate">{sf.deck_name}</p>
-                                                    <div className="flex items-center gap-2 mt-1">
-                                                        <span className="pill bg-chart-4/15 text-chart-4">From {sf.shared_by_name}</span>
-                                                        <span className="text-xs text-muted-foreground/60">{sf.flashcard_data?.length || 0} cards</span>
-                                                    </div>
-                                                    {sf.message && <p className="text-xs text-muted-foreground mt-1.5 italic">"{sf.message}"</p>}
-                                                </div>
-                                                <div className="flex gap-2 flex-shrink-0">
-                                                    <Button size="sm" onClick={() => handleAcceptFlashcards(sf)}
-                                                        className="bg-primary hover:bg-primary/90 text-white rounded-xl gap-1 text-xs">
-                                                        <Check className="w-3 h-3" /> Import
-                                                    </Button>
-                                                    <Button size="sm" variant="ghost" onClick={async () => {
-                                                        await base44.entities.SharedFlashcard.update(sf.id, { status: 'declined' });
-                                                        await loadData(user);
-                                                    }} className="text-muted-foreground/60 hover:text-streak rounded-xl">
-                                                        <X className="w-3.5 h-3.5" />
-                                                    </Button>
-                                                </div>
-                                            </div>
-                                        </motion.div>
-                                    ))}
-                                </div>
-                            )}
-                        </TabsContent>
-
-                        {/* Sent Tab */}
-                        <TabsContent value="sent" className="mt-4">
-                            {isLoading ? (
-                                <div className="space-y-3">{[1].map(i => <FriendSkeleton key={i} />)}</div>
-                            ) : sentRequests.length === 0 ? (
-                                <div className="text-center py-12">
-                                    <div className="w-14 h-14 bg-chart-3/10 rounded-3xl flex items-center justify-center mx-auto mb-3">
-                                        <Send className="w-7 h-7 text-chart-3" />
-                                    </div>
-                                    <p className="font-semibold text-muted-foreground">No sent requests</p>
-                                    <p className="text-sm text-muted-foreground/60">Add a friend to get started</p>
-                                </div>
-                            ) : (
-                                <div className="space-y-3">
-                                    {sentRequests.map((req, i) => (
-                                        <motion.div key={req.id}
-                                            initial={{ opacity: 0, x: 8 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: i * 0.04 }}
-                                            className="flex items-center gap-4 p-4 bg-chart-3/10 rounded-2xl border border-border">
-                                            <Avatar name={req.recipient_name} />
-                                            <div className="flex-1 min-w-0">
-                                                <p className="font-bold text-foreground truncate">{req.recipient_name}</p>
-                                                <p className="text-sm text-muted-foreground/60">{req.recipient_email}</p>
-                                            </div>
-                                            <span className="pill bg-chart-3/15 text-chart-3">Pending</span>
-                                            <Button size="sm" variant="ghost" onClick={() => handleCancelRequest(req)}
-                                                className="text-muted-foreground hover:text-streak rounded-xl text-xs">
-                                                Cancel
-                                            </Button>
-                                        </motion.div>
-                                    ))}
-                                </div>
-                            )}
-                        </TabsContent>
-                    </Tabs>
-                </motion.div>
+                {/* ── Adding someone ─────────────────────────────────────── */}
+                <Band title="Add a friend">
+                    <div className="grid md:grid-cols-2 gap-3" data-friends-block="add">
+                        <div className="card-soft on-table p-4 sm:p-5">
+                            <p className="text-xs font-bold text-muted-foreground">Your code</p>
+                            <p className="font-display font-black text-3xl tracking-wider text-foreground mt-1 tabular-nums select-all">
+                                {data.code || "—"}
+                            </p>
+                            <p className="text-xs text-muted-foreground mt-1">Only people you give it to can find you.</p>
+                            <div className="flex gap-2 mt-3">
+                                <Button size="sm" onClick={shareLink} disabled={!link} className="gap-1.5 flex-1 sm:flex-none">
+                                    <Share2 className="w-4 h-4" /> Send my link
+                                </Button>
+                                <Button size="sm" variant="outline" onClick={copyLink} disabled={!link} className="gap-1.5">
+                                    <Copy className="w-4 h-4" /> Copy
+                                </Button>
+                            </div>
+                        </div>
+                        <form onSubmit={addFromInput} className="card-soft on-table p-4 sm:p-5 flex flex-col">
+                            <label htmlFor="friend-add" className="text-xs font-bold text-muted-foreground">Their code, link or email</label>
+                            <Input id="friend-add" value={addInput} onChange={(e) => setAddInput(e.target.value)}
+                                placeholder="Paste a link, or e.g. ACE-4FH9P" autoComplete="off" spellCheck={false}
+                                className="mt-2 font-semibold tracking-wide" />
+                            <Button type="submit" size="sm" disabled={!addInput.trim() || working === "add"} className="gap-1.5 mt-3 self-start">
+                                {working === "add" ? <AceShuffle size="sm" /> : <UserPlus className="w-4 h-4" />} Send request
+                            </Button>
+                        </form>
+                    </div>
+                </Band>
             </div>
 
-            {/* ── Add Friend Dialog ── */}
-            <Dialog open={showAddFriend} onOpenChange={setShowAddFriend}>
-                <DialogContent className="sm:max-w-sm rounded-3xl">
-                    <DialogHeader>
-                        <DialogTitle className="flex items-center gap-2 text-lg">
-                            <div className="w-8 h-8 bg-chart-3/10 rounded-xl flex items-center justify-center">
-                                <UserPlus className="w-4 h-4 text-chart-3" />
-                            </div>
-                            Add a Friend
-                        </DialogTitle>
-                    </DialogHeader>
-                    <p className="text-sm text-muted-foreground">Enter their email to send a friend request.</p>
-                    <div className="relative">
-                        <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground/60" />
-                        <Input
-                            placeholder="friend@example.com"
-                            value={friendEmail}
-                            onChange={e => setFriendEmail(e.target.value)}
-                            onKeyDown={e => e.key === 'Enter' && handleAddFriend()}
-                            className="pl-10 rounded-xl border-border focus:border-chart-3"
-                            type="email"
-                            autoFocus
-                        />
-                    </div>
-                    <div className="flex gap-2 pt-1">
-                        <Button variant="outline" onClick={() => setShowAddFriend(false)} className="flex-1 rounded-xl">Cancel</Button>
-                        <Button onClick={handleAddFriend} disabled={isAddingFriend || !friendEmail.trim()}
-                            className="flex-1 bg-chart-3 hover:bg-chart-3/90 text-white rounded-xl gap-2">
-                            {isAddingFriend ? <AceShuffle size="sm" /> : <Send className="w-4 h-4" />}
-                            Send Request
-                        </Button>
-                    </div>
-                </DialogContent>
-            </Dialog>
+            <ShareDialog friend={sharingTo} me={me} onClose={() => setSharingTo(null)} />
 
-            {/* ── Share Dialog ── */}
-            <Dialog open={!!sharingToFriend} onOpenChange={() => { setSharingToFriend(null); setSelectedQuizzes([]); setSelectedDecks([]); setShareMessage(""); setQuizSearch(""); setDeckSearch(""); }}>
-                <DialogContent className="max-w-lg max-h-[90vh] flex flex-col rounded-3xl">
-                    <DialogHeader className="flex-shrink-0 pb-2 border-b border-border">
-                        <DialogTitle className="flex items-center gap-2">
-                            <div className="w-8 h-8 bg-chart-4/10 rounded-xl flex items-center justify-center">
-                                <Gift className="w-4 h-4 text-chart-4" />
-                            </div>
-                            Share with {sharingToFriend?.full_name}
-                        </DialogTitle>
-                    </DialogHeader>
-
-                    <Tabs defaultValue="quizzes" className="flex-1 flex flex-col min-h-0 mt-3">
-                        <TabsList className="bg-secondary rounded-xl p-0.5 h-9 flex-shrink-0">
-                            <TabsTrigger value="quizzes" className="rounded-lg text-xs data-[state=active]:bg-surface data-[state=active]:shadow-soft flex-1 gap-1.5">
-                                <FileText className="w-3.5 h-3.5" /> Quizzes
-                                {selectedQuizzes.length > 0 && <span className="bg-chart-4 text-white rounded-full w-4 h-4 flex items-center justify-center text-xs font-bold">{selectedQuizzes.length}</span>}
-                            </TabsTrigger>
-                            <TabsTrigger value="flashcards" className="rounded-lg text-xs data-[state=active]:bg-surface data-[state=active]:shadow-soft flex-1 gap-1.5">
-                                <Brain className="w-3.5 h-3.5" /> Flashcard Decks
-                                {selectedDecks.length > 0 && <span className="bg-chart-4 text-white rounded-full w-4 h-4 flex items-center justify-center text-xs font-bold">{selectedDecks.length}</span>}
-                            </TabsTrigger>
-                        </TabsList>
-
-                        <TabsContent value="quizzes" className="flex-1 flex flex-col min-h-0 mt-3 space-y-2">
-                            <div className="relative flex-shrink-0">
-                                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground/60" />
-                                <Input placeholder="Search quizzes..." value={quizSearch} onChange={e => setQuizSearch(e.target.value)}
-                                    className="pl-9 h-8 text-sm rounded-xl border-border" />
-                            </div>
-                            <ScrollArea className="flex-1 h-52">
-                                <div className="space-y-1.5 pr-2">
-                                    {filteredQuizzes.length === 0 ? (
-                                        <div className="text-center py-8 text-muted-foreground/60 text-sm">
-                                            {quizSearch ? "No matching quizzes" : "No quizzes to share yet"}
-                                        </div>
-                                    ) : filteredQuizzes.map(quiz => (
-                                        <label key={quiz.id} className={`flex items-center gap-3 p-3 rounded-xl cursor-pointer transition-all border ${selectedQuizzes.includes(quiz.id) ? 'bg-chart-4/10 border-chart-4/30' : 'bg-secondary/50 border-transparent hover:bg-secondary'}`}>
-                                            <Checkbox checked={selectedQuizzes.includes(quiz.id)}
-                                                onCheckedChange={c => setSelectedQuizzes(prev => c ? [...prev, quiz.id] : prev.filter(id => id !== quiz.id))} />
-                                            <div className="flex-1 min-w-0">
-                                                <p className="font-medium text-sm text-foreground truncate">{quiz.title}</p>
-                                                <p className="text-xs text-muted-foreground/60">{quiz.subject} · {quiz.questions?.length || 0} questions</p>
-                                            </div>
-                                        </label>
-                                    ))}
-                                </div>
-                            </ScrollArea>
-                        </TabsContent>
-
-                        <TabsContent value="flashcards" className="flex-1 flex flex-col min-h-0 mt-3 space-y-2">
-                            <div className="relative flex-shrink-0">
-                                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground/60" />
-                                <Input placeholder="Search decks..." value={deckSearch} onChange={e => setDeckSearch(e.target.value)}
-                                    className="pl-9 h-8 text-sm rounded-xl border-border" />
-                            </div>
-                            <ScrollArea className="flex-1 h-52">
-                                <div className="space-y-1.5 pr-2">
-                                    {filteredDecks.length === 0 ? (
-                                        <div className="text-center py-8 text-muted-foreground/60 text-sm">
-                                            {deckSearch ? "No matching decks" : "No flashcard decks to share yet"}
-                                        </div>
-                                    ) : filteredDecks.map(deck => (
-                                        <label key={deck.id} className={`flex items-center gap-3 p-3 rounded-xl cursor-pointer transition-all border ${selectedDecks.includes(deck.id) ? 'bg-chart-4/10 border-chart-4/30' : 'bg-secondary/50 border-transparent hover:bg-secondary'}`}>
-                                            <Checkbox checked={selectedDecks.includes(deck.id)}
-                                                onCheckedChange={c => setSelectedDecks(prev => c ? [...prev, deck.id] : prev.filter(id => id !== deck.id))} />
-                                            <div className="flex-1 min-w-0">
-                                                <p className="font-medium text-sm text-foreground truncate">{deck.subject_name} — {deck.topic}</p>
-                                                <p className="text-xs text-muted-foreground/60">{deck.unit} · {deck.cards.length} cards</p>
-                                            </div>
-                                        </label>
-                                    ))}
-                                </div>
-                            </ScrollArea>
-                        </TabsContent>
-                    </Tabs>
-
-                    <div className="flex-shrink-0 space-y-3 pt-3 border-t border-border mt-3">
-                        <textarea
-                            value={shareMessage}
-                            onChange={e => setShareMessage(e.target.value)}
-                            placeholder="Add a message (optional)..."
-                            rows={2}
-                            className="w-full text-sm rounded-xl border border-border bg-surface p-3 resize-none focus:outline-none focus:border-chart-4"
-                        />
-                        <div className="flex gap-2">
-                            <Button variant="outline" onClick={() => setSharingToFriend(null)} className="flex-1 rounded-xl text-sm">Cancel</Button>
-                            <Button onClick={handleShare} disabled={isSharing || (selectedQuizzes.length === 0 && selectedDecks.length === 0)}
-                                className="flex-1 bg-chart-4 hover:bg-chart-4/90 text-white rounded-xl text-sm gap-2">
-                                {isSharing ? <AceShuffle size="sm" /> : <Share2 className="w-4 h-4" />}
-                                Share {selectedQuizzes.length + selectedDecks.length > 0 ? `(${selectedQuizzes.length + selectedDecks.length})` : ''}
-                            </Button>
-                        </div>
-                    </div>
-                </DialogContent>
-            </Dialog>
+            <AlertDialog open={!!removing} onOpenChange={(o) => { if (!o) setRemoving(null); }}>
+                <AlertDialogContent>
+                    <AlertDialogHeader>
+                        <AlertDialogTitle>Remove {removing?.name}?</AlertDialogTitle>
+                        <AlertDialogDescription>
+                            You'll stop seeing each other on the Friends board and can't share with each other. Either of you can
+                            send a new request later.
+                        </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                        <AlertDialogCancel>Keep</AlertDialogCancel>
+                        <AlertDialogAction onClick={() => { const f = removing; setRemoving(null); run(f.id, () => removeFriend(f.id), `${f.name} removed`); }}>
+                            Remove
+                        </AlertDialogAction>
+                    </AlertDialogFooter>
+                </AlertDialogContent>
+            </AlertDialog>
         </div>
+    );
+}
+
+/**
+ * Pick what to send one friend, and a note from the fixed list. The quizzes
+ * and decks are read when the dialog opens rather than with the page — most
+ * visits to Friends share nothing.
+ */
+function ShareDialog({ friend, me, onClose }) {
+    const { toast } = useToast();
+    const [kind, setKind] = useState("deck");
+    const [quizzes, setQuizzes] = useState(null);
+    const [decks, setDecks] = useState(null);
+    const [picked, setPicked] = useState(null);
+    const [note, setNote] = useState(null);
+    const [sending, setSending] = useState(false);
+    const [search, setSearch] = useState("");
+
+    useEffect(() => {
+        if (!friend || !me?.email) return;
+        setPicked(null); setNote(null); setSearch("");
+        let cancelled = false;
+        Promise.all([
+            base44.entities.Quiz.filter({ created_by: me.email }).catch(() => []),
+            base44.entities.Flashcard.filter({ created_by: me.email, is_active: true }).then(deckCards).catch(() => []),
+        ]).then(([qs, cards]) => {
+            if (cancelled) return;
+            setQuizzes((qs || []).map((q) => ({ id: q.id, title: q.title, sub: `${q.subject || "No subject"} · ${count(q.questions?.length || 0, "question")}` })));
+            const map = new Map();
+            for (const c of cards || []) {
+                const subject = c.subject_name || "Other";
+                const topic = c.topic || "General";
+                const k = `${subject}|${topic}`;
+                if (!map.has(k)) map.set(k, { id: k, subject_name: subject, topic, deck_id: c.deck_id || null, n: 0 });
+                map.get(k).n += 1;
+            }
+            setDecks([...map.values()].map((d) => ({ ...d, title: `${d.subject_name} — ${d.topic}`, sub: count(d.n, "card") })));
+        });
+        return () => { cancelled = true; };
+    }, [friend, me]);
+
+    const list = (kind === "deck" ? decks : quizzes) || [];
+    const shown = list.filter((x) => !search || x.title.toLowerCase().includes(search.toLowerCase()));
+    const item = list.find((x) => x.id === picked);
+
+    const send = async () => {
+        if (!item || !friend) return;
+        setSending(true);
+        try {
+            await shareWithFriends(kind === "deck"
+                ? { kind, friendship_ids: [friend.id], subject_name: item.subject_name, topic: item.topic, deck_id: item.deck_id, note }
+                : { kind, friendship_ids: [friend.id], quiz_id: item.id, note });
+            toast({ title: `Sent to ${friend.name}` });
+            onClose();
+        } catch (e) {
+            toast({ title: e.message || "Couldn't share that", variant: "destructive" });
+        } finally {
+            setSending(false);
+        }
+    };
+
+    return (
+        <Dialog open={!!friend} onOpenChange={(o) => { if (!o) onClose(); }}>
+            <DialogContent className="max-w-lg max-h-[90vh] flex flex-col rounded-3xl">
+                <DialogHeader>
+                    <DialogTitle>Share with {friend?.name}</DialogTitle>
+                </DialogHeader>
+                <div className="flex gap-1.5">
+                    {[["deck", "A deck"], ["quiz", "A quiz"]].map(([k, label]) => (
+                        <button key={k} type="button" onClick={() => { setKind(k); setPicked(null); }} aria-pressed={kind === k}
+                            className={`flex-1 rounded-xl border-2 py-2 text-sm font-bold transition-colors ${
+                                kind === k ? "border-chart-4 bg-chart-4/10 text-chart-4" : "border-border text-muted-foreground hover:text-foreground"}`}>
+                            {label}
+                        </button>
+                    ))}
+                </div>
+                <Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder={kind === "deck" ? "Find a deck" : "Find a quiz"} className="h-9" />
+                <div className="flex-1 min-h-0 overflow-y-auto max-h-64 -mx-1 px-1 space-y-1">
+                    {(kind === "deck" ? decks : quizzes) === null ? (
+                        <div className="py-8 flex justify-center"><AceShuffle size="md" /></div>
+                    ) : shown.length === 0 ? (
+                        <p className="py-8 text-center text-sm text-muted-foreground">
+                            {search ? "Nothing matches that." : kind === "deck" ? "You don't have a deck to share yet." : "You don't have a quiz to share yet."}
+                        </p>
+                    ) : shown.map((x) => (
+                        <button key={x.id} type="button" onClick={() => setPicked(x.id)} aria-pressed={picked === x.id}
+                            className={`w-full text-left rounded-xl border-2 px-3 py-2 transition-colors ${
+                                picked === x.id ? "border-chart-4 bg-chart-4/[0.06]" : "border-transparent hover:bg-secondary"}`}>
+                            <span className="block text-sm font-bold text-foreground truncate">{x.title}</span>
+                            <span className="block text-xs text-muted-foreground">{x.sub}</span>
+                        </button>
+                    ))}
+                </div>
+                <div className="space-y-2 pt-1 border-t border-border">
+                    <p className="text-xs font-bold text-muted-foreground pt-2">Add a note (optional)</p>
+                    <div className="flex flex-wrap gap-1.5">
+                        {SHARE_NOTES.map((n) => (
+                            <button key={n.id} type="button" onClick={() => setNote(note === n.id ? null : n.id)} aria-pressed={note === n.id}
+                                className={`rounded-full border-2 px-3 py-1 text-xs font-bold transition-colors ${
+                                    note === n.id ? "border-chart-4 bg-chart-4/10 text-chart-4" : "border-border text-muted-foreground hover:text-foreground"}`}>
+                                {n.text}
+                            </button>
+                        ))}
+                    </div>
+                </div>
+                <div className="flex gap-2 pt-1">
+                    <Button variant="outline" onClick={onClose} className="flex-1">Cancel</Button>
+                    <Button onClick={send} disabled={!item || sending} className="flex-1 gap-1.5">
+                        {sending ? <AceShuffle size="sm" /> : <Send className="w-4 h-4" />} Send
+                    </Button>
+                </div>
+            </DialogContent>
+        </Dialog>
     );
 }

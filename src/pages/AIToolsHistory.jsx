@@ -7,6 +7,7 @@ import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { base44 } from '@/api/base44Client';
+import { getFriends, shareWithFriends } from '@/api/friendsApi';
 import { deleteResult } from '@/lib/saveResult';
 import { useToast } from '@/components/ui/use-toast';
 import {
@@ -55,7 +56,6 @@ const toolNames = {
 
 export default function AIToolsHistory() {
     const [savedResults, setSavedResults] = useState([]);
-    const [user, setUser] = useState(null);
     const [searchTerm, setSearchTerm] = useState('');
     const [filterType, setFilterType] = useState('all');
     const [filterSubject, setFilterSubject] = useState('all');
@@ -75,29 +75,18 @@ export default function AIToolsHistory() {
         setIsLoading(true);
         try {
             const currentUser = await base44.auth.me();
-            setUser(currentUser);
 
-            // `$or` is a Base44 / Mongo-ism with no equivalent here: the shim
-            // turns every key into an `eq`, so it asked PostgREST for a column
-            // called "or" and 400'd — nobody using this page could see a single
-            // friend to share with. Two filters, merged, the way Friends.jsx
-            // has always done it.
-            const [results, subjects, sent, received] = await Promise.all([
+            // Friends come off the server by friendship id. Reading the
+            // friendship rows here printed whatever name the sender's browser
+            // had written, and the share below wrote straight into
+            // `shared_ai_results` to any address at all — which the browser
+            // may no longer do (migration 0042).
+            const [results, subjects, friendsRes] = await Promise.all([
                 base44.entities.AISavedResult.filter({ created_by: currentUser.email }, '-created_date'),
                 base44.entities.UserSubject.filter({ created_by: currentUser.email, is_active: true }),
-                base44.entities.Friendship.filter({ requester_email: currentUser.email, status: 'accepted' }).catch(() => []),
-                base44.entities.Friendship.filter({ recipient_email: currentUser.email, status: 'accepted' }).catch(() => []),
+                getFriends().catch(() => null),
             ]);
-            const friendships = [...(sent || []), ...(received || [])];
-
-            const friendsList = friendships.map(f => {
-                const isSender = f.requester_email === currentUser.email;
-                return {
-                    email: isSender ? f.recipient_email : f.requester_email,
-                    name: isSender ? f.recipient_name : f.requester_name,
-                    username: isSender ? f.recipient_username : f.requester_username
-                };
-            });
+            const friendsList = friendsRes?.friends || [];
 
             setSavedResults(results || []);
             setUserSubjects(subjects || []);
@@ -121,40 +110,21 @@ export default function AIToolsHistory() {
         }
     };
 
-    const handleShareResult = async (friendEmail, friendName) => {
+    const handleShareResult = async (friendshipId, friendName) => {
         if (!sharingResult) return;
-        
         try {
-            // THE COLUMN NAMES ARE THE ONES ITS TWO SIBLINGS USE. This wrote
-            // sender_*/recipient_*/result_id/topic/subject_name, and
-            // `shared_ai_results` has none of them — it names the two sides
-            // `shared_by_*` and `shared_with_*` exactly as `shared_quizzes`
-            // and `shared_flashcards` do. PostgREST rejected every insert, so
-            // "share with a friend" on this page has never once worked.
-            await base44.entities.SharedAIResult.create({
-                shared_by_email: user.email,
-                shared_by_name: user.full_name,
-                shared_with_email: friendEmail,
-                shared_with_name: friendName,
-                ai_result_id: sharingResult.id,
-                tool_type: sharingResult.tool_type,
-                title: sharingResult.title || sharingResult.topic,
-                content: sharingResult.content,
-                // No column for either, and they are worth keeping — `extra` is
-                // the jsonb every table here carries for exactly this.
-                extra: {
-                    topic: sharingResult.topic || null,
-                    subject_name: sharingResult.subject_name || null,
-                },
-                status: 'pending'
-            });
-            
+            // The server reads the result off this student's own rows and
+            // checks the recipient is a friend; the columns are `shared_by_*`
+            // and `shared_with_*` like its two siblings', which this page once
+            // got wrong and never knew, because nothing ever showed a
+            // received result. The Friends page does now.
+            await shareWithFriends({ kind: "result", result_id: sharingResult.id, friendship_ids: [friendshipId] });
             toast({ title: 'Shared!', description: `Sent to ${friendName}` });
             setShowShareDialog(false);
             setSharingResult(null);
         } catch (error) {
             console.error("Error sharing:", error);
-            toast({ title: 'Share failed', variant: 'destructive' });
+            toast({ title: 'Share failed', description: error.message, variant: 'destructive' });
         }
     };
 
@@ -427,15 +397,17 @@ export default function AIToolsHistory() {
                             <div className="space-y-2 max-h-96 overflow-y-auto">
                                 {friends.map((friend) => (
                                     <Button
-                                        key={friend.email}
+                                        key={friend.id}
                                         variant="outline"
                                         className="w-full justify-start hover:bg-blue-50"
-                                        onClick={() => handleShareResult(friend.email, friend.name)}
+                                        onClick={() => handleShareResult(friend.id, friend.name)}
                                     >
                                         <Users className="w-4 h-4 mr-2" />
                                         <div className="text-left flex-1">
                                             <div className="font-semibold">{friend.name}</div>
-                                            <div className="text-xs text-muted-foreground">@{friend.username}</div>
+                                            {friend.username && friend.username !== friend.name && (
+                                                <div className="text-xs text-muted-foreground">@{friend.username}</div>
+                                            )}
                                         </div>
                                     </Button>
                                 ))}

@@ -72,6 +72,8 @@ import { checkoutVerdict, withRevealPending, codeGrantId } from "./src/lib/premi
 import { priceOf, stackOf, spendableFor, WEEKLY_CHIPS, chipsSpent } from "./src/lib/chips.js";
 // Premium from a code (the Year 10 program) — the rules, shared with the client.
 import { codePremiumActive, normaliseCode, cleanName, nameProblem, redeemVerdict } from "./src/lib/premiumCodes.js";
+import { makeFriendCode, normaliseFriendCode, REQUESTS_PER_DAY, PENDING_MAX, LOOKUPS_PER_HOUR, noteText, SHARE_TABLES, DECK_SHARE_MAX, splitFriendships, friendName } from "./src/lib/friends.js";
+import { outgoingCard } from "./src/lib/sharedDeck.js";
 // A textbook is stored whole and read a CHAPTER at a time — the caps, the
 // range maths and the chip price all live in one module because the number
 // under the range picker has to be the number that gets charged.
@@ -11578,6 +11580,379 @@ app.post("/local-ai/fn/sendPrank", async (req, res) => {
   } catch (e) {
     console.error("[sendPrank]", e);
     return res.status(500).json({ error: "Couldn't send that." });
+  }
+});
+
+// ─── Friends ─────────────────────────────────────────────────────────────────
+//
+// EVERY FRIENDSHIP WRITE IS HERE. The browser used to write `friendships`
+// directly, under a policy that let either party update a row — so the
+// student who SENT a request could mark it accepted, and anybody could make
+// themselves anybody's friend. Pranks are bounded by "friends only, mutual and
+// accepted", the friend-count achievements pay XP, and the names on a request
+// were whatever the sender typed. So the rows are written with the service
+// role, the names come off the profiles, and migration 0042 takes the
+// browser's write policies away. See src/lib/friends.js.
+//
+// Nothing here returns another student's EMAIL. A friend added by code may
+// never have been told it, and the page needs only a name and a friendship id
+// to show a friend and to share with them.
+
+/** Per-process rate limiting, honest about being per-process — the same
+ *  posture `sendSignupEmail`'s limiter takes. */
+const friendLimiter = new Map();
+function friendLimitHit(key, max, windowMs) {
+  const now = Date.now();
+  const hits = (friendLimiter.get(key) || []).filter((t) => now - t < windowMs);
+  if (hits.length >= max) { friendLimiter.set(key, hits); return true; }
+  hits.push(now);
+  friendLimiter.set(key, hits);
+  return false;
+}
+
+const FRIENDSHIP_COLS = "id, requester_email, recipient_email, status, created_date, updated_date";
+
+async function friendshipRowsFor(me) {
+  const [{ data: a }, { data: b }] = await Promise.all([
+    supabaseAdmin.from("friendships").select(FRIENDSHIP_COLS).eq("requester_email", me),
+    supabaseAdmin.from("friendships").select(FRIENDSHIP_COLS).eq("recipient_email", me),
+  ]);
+  return [...(a || []), ...(b || [])];
+}
+
+async function friendshipBetween(me, them) {
+  const { data } = await supabaseAdmin.from("friendships")
+    .select(FRIENDSHIP_COLS)
+    .or(`and(requester_email.eq.${me},recipient_email.eq.${them}),` +
+        `and(requester_email.eq.${them},recipient_email.eq.${me})`)
+    .limit(2);
+  return data || [];
+}
+
+async function profilesByEmail(emails = []) {
+  const list = [...new Set(emails.filter(Boolean))];
+  if (!list.length) return new Map();
+  const { data } = await supabaseAdmin.from("user_profiles")
+    .select("created_by, username, full_name").in("created_by", list);
+  return new Map((data || []).map((p) => [String(p.created_by).toLowerCase(), p]));
+}
+
+/** The owner of a code, or null. */
+async function ownerOfCode(code) {
+  const { data } = await supabaseAdmin.from("user_profiles")
+    .select("id, created_by, username, full_name")
+    .eq("extra->>friend_code", code).limit(1).maybeSingle();
+  return data || null;
+}
+
+/** A student's code, minted on first ask. Unique by lookup before write. */
+async function ensureFriendCode(profile) {
+  const have = normaliseFriendCode(profile?.extra?.friend_code);
+  if (have) return have;
+  if (!profile?.id) return null;
+  for (let i = 0; i < 6; i += 1) {
+    const code = makeFriendCode();
+    if (await ownerOfCode(code)) continue;
+    const { error } = await supabaseAdmin.from("user_profiles")
+      .update({ extra: { ...(profile.extra || {}), friend_code: code } }).eq("id", profile.id);
+    if (error) { console.warn("[friends] code write failed:", error.message); return null; }
+    return code;
+  }
+  return null;
+}
+
+app.post("/local-ai/fn/getFriends", async (req, res) => {
+  const user = await authenticateRequest(req);
+  if (!user) return res.status(401).json({ error: "Not signed in." });
+  if (!supabaseAdmin) return res.json({ success: true, code: null, friends: [], incoming: [], outgoing: [] });
+  try {
+    const me = user.email;
+    const profile = await loadUserProfile(me);
+    const [code, rows] = await Promise.all([ensureFriendCode(profile), friendshipRowsFor(me)]);
+    const split = splitFriendships(me, rows);
+    const everyone = [...split.friends, ...split.incoming, ...split.outgoing].map((f) => f.email);
+    const friendEmails = split.friends.map((f) => f.email);
+    const [profiles, boards] = await Promise.all([
+      profilesByEmail(everyone),
+      friendEmails.length
+        ? supabaseAdmin.from("leaderboards").select("user_email, streak_days, total_xp").in("user_email", friendEmails)
+        : Promise.resolve({ data: [] }),
+    ]);
+    const board = new Map((boards?.data || []).map((b) => [String(b.user_email).toLowerCase(), b]));
+    const named = (f) => ({ name: friendName(profiles.get(f.email), f.email), username: profiles.get(f.email)?.username || null });
+    return res.json({
+      success: true,
+      code,
+      friends: split.friends.map((f) => {
+        const b = board.get(f.email) || {};
+        const xp = Math.max(0, Number(b.total_xp) || 0);
+        return { id: f.id, ...named(f), since: f.since, streak_days: Math.max(0, Number(b.streak_days) || 0), total_xp: xp, rank_tier: rankTierFromXP(xp) };
+      }).sort((x, y) => x.name.localeCompare(y.name)),
+      incoming: split.incoming.map((f) => ({ id: f.id, ...named(f), at: f.at })),
+      // An email invite to somebody with no account yet is named by the part
+      // of the address the sender typed — they know it, nobody else sees it.
+      outgoing: split.outgoing.map((f) => ({ id: f.id, ...named(f), at: f.at })),
+      limits: { per_day: REQUESTS_PER_DAY, pending_max: PENDING_MAX },
+    });
+  } catch (e) {
+    console.error("[getFriends]", e);
+    return res.status(500).json({ error: "Couldn't load your friends." });
+  }
+});
+
+/** Who a code belongs to, and where the two of you already stand. */
+app.post("/local-ai/fn/lookupFriendCode", async (req, res) => {
+  const user = await authenticateRequest(req);
+  if (!user) return res.status(401).json({ error: "Not signed in." });
+  if (!supabaseAdmin) return res.status(503).json({ error: "Unavailable." });
+  try {
+    const code = normaliseFriendCode(req.body?.code);
+    if (!code) return res.status(400).json({ error: "That isn't a friend code. They look like ACE-7KQ2X." });
+    if (friendLimitHit(`lookup:${user.email}`, LOOKUPS_PER_HOUR, 3600_000)) {
+      return res.status(429).json({ error: "That's a lot of codes in an hour. Try again later." });
+    }
+    const owner = await ownerOfCode(code);
+    if (!owner) return res.json({ success: true, code, state: "not_found" });
+    const them = String(owner.created_by).toLowerCase();
+    if (them === String(user.email).toLowerCase()) return res.json({ success: true, code, state: "self" });
+    const rows = await friendshipBetween(user.email, owner.created_by);
+    const accepted = rows.find((r) => r.status === "accepted");
+    const pending = rows.find((r) => r.status === "pending");
+    const state = accepted ? "friends"
+      : pending ? (String(pending.requester_email).toLowerCase() === them ? "pending_in" : "pending_out")
+        : "available";
+    return res.json({ success: true, code, state, name: friendName(owner, owner.created_by), id: pending?.id || accepted?.id || null });
+  } catch (e) {
+    console.error("[lookupFriendCode]", e);
+    return res.status(500).json({ error: "Couldn't check that code." });
+  }
+});
+
+/**
+ * Send a request, by code or by email. Answers identically for an email with
+ * an account and one without — anything else would turn this into a way of
+ * finding out who uses AcedIt.
+ */
+app.post("/local-ai/fn/requestFriend", async (req, res) => {
+  const user = await authenticateRequest(req);
+  if (!user) return res.status(401).json({ error: "Not signed in." });
+  if (!supabaseAdmin) return res.status(503).json({ error: "Unavailable." });
+  try {
+    const me = user.email;
+    const meLower = String(me).toLowerCase();
+    let them = null;
+    let target = null;
+    if (req.body?.code) {
+      const code = normaliseFriendCode(req.body.code);
+      if (!code) return res.status(400).json({ error: "That isn't a friend code. They look like ACE-7KQ2X." });
+      if (friendLimitHit(`lookup:${me}`, LOOKUPS_PER_HOUR, 3600_000)) {
+        return res.status(429).json({ error: "That's a lot of codes in an hour. Try again later." });
+      }
+      target = await ownerOfCode(code);
+      if (!target) return res.status(404).json({ error: "No one has that code. Check it with your friend." });
+      them = target.created_by;
+    } else {
+      const email = String(req.body?.email || "").trim().toLowerCase();
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return res.status(400).json({ error: "Enter a valid email address." });
+      them = email;
+      target = (await profilesByEmail([email])).get(email) || null;
+    }
+    if (String(them).toLowerCase() === meLower) return res.status(400).json({ error: "That's you." });
+
+    const rows = await friendshipBetween(me, them);
+    if (rows.some((r) => r.status === "accepted")) return res.json({ success: true, state: "friends" });
+    const theirs = rows.find((r) => String(r.requester_email).toLowerCase() === String(them).toLowerCase());
+    const mine = rows.find((r) => String(r.requester_email).toLowerCase() === meLower);
+    // They already asked you: adding them back IS saying yes.
+    if (theirs?.status === "pending") {
+      await supabaseAdmin.from("friendships").update({ status: "accepted" }).eq("id", theirs.id);
+      return res.json({ success: true, state: "accepted", name: req.body?.code ? friendName(target, them) : undefined });
+    }
+    // A request of yours that is waiting, or that they declined, stays as it
+    // is. Re-sending a declined request is how a no becomes a pile-on.
+    if (mine) return res.json({ success: true, state: "sent" });
+    // You declined them once and now want to add them: their old row goes.
+    if (theirs) await supabaseAdmin.from("friendships").delete().eq("id", theirs.id);
+
+    const since = new Date(Date.now() - 86400_000).toISOString();
+    const [{ count: today }, { count: waiting }] = await Promise.all([
+      supabaseAdmin.from("friendships").select("id", { count: "exact", head: true })
+        .eq("requester_email", me).gte("created_date", since),
+      supabaseAdmin.from("friendships").select("id", { count: "exact", head: true })
+        .eq("requester_email", me).eq("status", "pending"),
+    ]);
+    if ((today ?? 0) >= REQUESTS_PER_DAY) {
+      return res.status(429).json({ error: `That's ${REQUESTS_PER_DAY} requests today. Try again tomorrow.` });
+    }
+    if ((waiting ?? 0) >= PENDING_MAX) {
+      return res.status(400).json({ error: `${PENDING_MAX} of your requests are still waiting. Cancel a few first.` });
+    }
+    const myProfile = await loadUserProfile(me);
+    const { error } = await supabaseAdmin.from("friendships").insert({
+      created_by: me,
+      requester_email: me,
+      requester_name: friendName(myProfile, me),
+      requester_username: myProfile?.username || "",
+      recipient_email: them,
+      recipient_name: friendName(target, them),
+      recipient_username: target?.username || "",
+      status: "pending",
+    });
+    if (error && error.code !== "23505") {
+      console.error("[requestFriend] insert failed:", error.message);
+      return res.status(500).json({ error: "Couldn't send that request." });
+    }
+    return res.json({ success: true, state: "sent", name: req.body?.code ? friendName(target, them) : undefined });
+  } catch (e) {
+    console.error("[requestFriend]", e);
+    return res.status(500).json({ error: "Couldn't send that request." });
+  }
+});
+
+/** Accept or decline a request sent TO you. Only the recipient may. */
+app.post("/local-ai/fn/respondFriend", async (req, res) => {
+  const user = await authenticateRequest(req);
+  if (!user) return res.status(401).json({ error: "Not signed in." });
+  if (!supabaseAdmin) return res.status(503).json({ error: "Unavailable." });
+  try {
+    const { id, accept } = req.body || {};
+    const { data: row } = await supabaseAdmin.from("friendships").select(FRIENDSHIP_COLS).eq("id", id).maybeSingle();
+    if (!row || String(row.recipient_email).toLowerCase() !== String(user.email).toLowerCase() || row.status !== "pending") {
+      return res.status(404).json({ error: "That request isn't waiting on you any more." });
+    }
+    await supabaseAdmin.from("friendships").update({ status: accept ? "accepted" : "declined" }).eq("id", row.id);
+    return res.json({ success: true, state: accept ? "accepted" : "declined" });
+  } catch (e) {
+    console.error("[respondFriend]", e);
+    return res.status(500).json({ error: "Couldn't answer that request." });
+  }
+});
+
+/** Take back a request you sent that nobody has answered. */
+app.post("/local-ai/fn/cancelFriend", async (req, res) => {
+  const user = await authenticateRequest(req);
+  if (!user) return res.status(401).json({ error: "Not signed in." });
+  if (!supabaseAdmin) return res.status(503).json({ error: "Unavailable." });
+  try {
+    const { data: row } = await supabaseAdmin.from("friendships").select(FRIENDSHIP_COLS).eq("id", req.body?.id).maybeSingle();
+    if (!row || String(row.requester_email).toLowerCase() !== String(user.email).toLowerCase() || row.status !== "pending") {
+      return res.status(404).json({ error: "That request isn't waiting any more." });
+    }
+    await supabaseAdmin.from("friendships").delete().eq("id", row.id);
+    return res.json({ success: true });
+  } catch (e) {
+    console.error("[cancelFriend]", e);
+    return res.status(500).json({ error: "Couldn't cancel that request." });
+  }
+});
+
+/**
+ * End a friendship. EITHER side may — it used to be the requester only, so a
+ * student who had accepted somebody could not remove them, and the button
+ * silently did nothing.
+ */
+app.post("/local-ai/fn/removeFriend", async (req, res) => {
+  const user = await authenticateRequest(req);
+  if (!user) return res.status(401).json({ error: "Not signed in." });
+  if (!supabaseAdmin) return res.status(503).json({ error: "Unavailable." });
+  try {
+    const me = String(user.email).toLowerCase();
+    const { data: row } = await supabaseAdmin.from("friendships").select(FRIENDSHIP_COLS).eq("id", req.body?.id).maybeSingle();
+    const party = row && [row.requester_email, row.recipient_email].some((e) => String(e).toLowerCase() === me);
+    if (!party || row.status !== "accepted") return res.status(404).json({ error: "You're not friends any more." });
+    await supabaseAdmin.from("friendships").delete().eq("id", row.id);
+    return res.json({ success: true });
+  } catch (e) {
+    console.error("[removeFriend]", e);
+    return res.status(500).json({ error: "Couldn't remove that friend." });
+  }
+});
+
+/**
+ * Share a quiz, a deck or a saved AI result with friends. FRIENDS ONLY — the
+ * browser could insert a share addressed to any email at all — and the
+ * content is read off the SENDER'S OWN ROWS here rather than taken from the
+ * request, so a share carries what the student actually owns, in the shape
+ * `sharedDeck.js` says may leave. The message is a note id or nothing.
+ */
+app.post("/local-ai/fn/shareWithFriends", async (req, res) => {
+  const user = await authenticateRequest(req);
+  if (!user) return res.status(401).json({ error: "Not signed in." });
+  if (!supabaseAdmin) return res.status(503).json({ error: "Unavailable." });
+  try {
+    const me = user.email;
+    const meLower = String(me).toLowerCase();
+    const { kind, note } = req.body || {};
+    const table = SHARE_TABLES[kind];
+    if (!table) return res.status(400).json({ error: "That can't be shared." });
+    const ids = (Array.isArray(req.body?.friendship_ids) ? req.body.friendship_ids : []).slice(0, 30);
+    if (!ids.length) return res.status(400).json({ error: "Pick a friend to share with." });
+
+    const { data: rows } = await supabaseAdmin.from("friendships").select(FRIENDSHIP_COLS).in("id", ids);
+    const others = [...new Set((rows || [])
+      .filter((r) => r.status === "accepted"
+        && [r.requester_email, r.recipient_email].some((e) => String(e).toLowerCase() === meLower))
+      .map((r) => (String(r.requester_email).toLowerCase() === meLower ? r.recipient_email : r.requester_email)))];
+    if (!others.length) return res.status(400).json({ error: "You can only share with friends." });
+
+    let body;
+    if (kind === "quiz") {
+      const { data: quiz } = await supabaseAdmin.from("quizzes")
+        .select("id, title, subject, questions, difficulty, category").eq("id", req.body?.quiz_id).eq("created_by", me).maybeSingle();
+      if (!quiz) return res.status(404).json({ error: "That quiz isn't yours to share." });
+      body = {
+        quiz_id: quiz.id, quiz_title: quiz.title,
+        quiz_data: { title: quiz.title, subject: quiz.subject, questions: quiz.questions, difficulty: quiz.difficulty, category: quiz.category },
+      };
+    } else if (kind === "deck") {
+      const subject = String(req.body?.subject_name || "").trim();
+      const topic = String(req.body?.topic || "").trim();
+      if (!topic) return res.status(400).json({ error: "Pick a deck to share." });
+      let q = supabaseAdmin.from("flashcards").select("subject_name, unit, topic, question, answer")
+        .eq("created_by", me).eq("is_active", true).eq("topic", topic).limit(DECK_SHARE_MAX);
+      q = subject && subject !== "Other" ? q.eq("subject_name", subject) : q.is("subject_name", null);
+      const { data: cards } = await q;
+      // The mistake bank is a flashcards row and is NOT a flashcard — it never
+      // leaves as one (`deckCards`' rule, restated here because the server
+      // cannot import a module that resolves `@/`).
+      const flashcard_data = (cards || []).filter((c) => c.topic !== "Mistake bank")
+        .map((c) => outgoingCard(c)).filter((c) => c.question && c.answer);
+      if (!flashcard_data.length) return res.status(404).json({ error: "That deck has no cards to share." });
+      body = {
+        deck_id: String(req.body?.deck_id || "").slice(0, 120) || null,
+        deck_name: `${subject || "Other"} - ${topic}`.slice(0, 160),
+        flashcard_data,
+      };
+    } else {
+      const { data: result } = await supabaseAdmin.from("ai_saved_results")
+        .select("id, tool_type, title, topic, subject_name, content").eq("id", req.body?.result_id).eq("created_by", me).maybeSingle();
+      if (!result) return res.status(404).json({ error: "That result isn't yours to share." });
+      body = {
+        ai_result_id: result.id, tool_type: result.tool_type, title: result.title || result.topic || "Saved result",
+        content: result.content, extra: { topic: result.topic || null, subject_name: result.subject_name || null },
+      };
+    }
+
+    const [myProfile, profiles] = await Promise.all([loadUserProfile(me), profilesByEmail(others)]);
+    const message = noteText(note);
+    const { error } = await supabaseAdmin.from(table).insert(others.map((them) => ({
+      created_by: me,
+      shared_by_email: me,
+      shared_by_name: friendName(myProfile, me),
+      shared_with_email: them,
+      shared_with_name: friendName(profiles.get(String(them).toLowerCase()), them),
+      message,
+      status: "pending",
+      ...body,
+    })));
+    if (error) {
+      console.error("[shareWithFriends] insert failed:", error.message);
+      return res.status(500).json({ error: "Couldn't share that." });
+    }
+    return res.json({ success: true, sent: others.length });
+  } catch (e) {
+    console.error("[shareWithFriends]", e);
+    return res.status(500).json({ error: "Couldn't share that." });
   }
 });
 
