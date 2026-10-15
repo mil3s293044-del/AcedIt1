@@ -23,8 +23,15 @@
  * one screen being given two names.
  */
 import React from "react";
+import { motion, useReducedMotion } from "framer-motion";
 
+/**
+ * THE SELECTION SLIDES. One pill that travels to the tab pressed, rather than
+ * five cells that each light or go dark: the move says "the same report,
+ * another feature", where a cut says "another page".
+ */
 export default function ProgressTabs({ tabs = [], value, onChange }) {
+    const reduce = useReducedMotion();
     return (
         <div role="tablist" aria-label="Progress"
             className="grid grid-cols-5 gap-1 p-1.5 rounded-2xl bg-surface border-2 border-border shadow-soft">
@@ -33,10 +40,17 @@ export default function ProgressTabs({ tabs = [], value, onChange }) {
                 return (
                     <button key={id} type="button" role="tab" aria-selected={on}
                         onClick={() => onChange(id)}
-                        className={`flex items-center justify-center gap-1.5 py-2.5 px-0.5 sm:px-4 rounded-xl
-                            text-xs sm:text-sm font-bold whitespace-nowrap transition-all
-                            ${on ? "bg-foreground text-background" : "text-muted-foreground hover:text-foreground"}`}>
-                        {Icon && <Icon className="hidden sm:block w-4 h-4" aria-hidden="true" />} {label}
+                        className={`relative flex items-center justify-center gap-1.5 py-2.5 px-0.5 sm:px-4 rounded-xl
+                            text-xs sm:text-sm font-bold whitespace-nowrap transition-colors
+                            ${on ? "text-background" : "text-muted-foreground hover:text-foreground"}`}>
+                        {on && (
+                            <motion.span layoutId="progress-tab" aria-hidden="true"
+                                className="absolute inset-0 rounded-xl bg-foreground"
+                                transition={reduce ? { duration: 0 } : { type: "spring", stiffness: 480, damping: 38 }} />
+                        )}
+                        <span className="relative flex items-center gap-1.5">
+                            {Icon && <Icon className="hidden sm:block w-4 h-4" aria-hidden="true" />} {label}
+                        </span>
                     </button>
                 );
             })}

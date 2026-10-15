@@ -7091,6 +7091,341 @@ Draw every screen at 1280, 1024 and 390, in both themes — the dark theme is th
 only place the card-stock fault shows, and 1024 is the narrowest the split
 fires at. `scripts/_floorProbe.jsx?v=table` for the retake's reveal.
 
+## Progress and the planner: a drawing per feature, and the term on one track
+
+**"Make the progress page and the planner just as good."** The onboarding
+rework had made one screen feel designed end to end; these two still read as
+the same object repeated down a page. Both changes are the same move: give each
+thing the shape its own data asks for, and say only what was counted.
+
+### Every Progress tab was one shape four times
+
+A figure, a sentence, then rows of horizontal bars — on Cards, Quizzes, Mistakes
+and Hours alike. Each was true, and four tabs drawn identically read as one tab
+four times. Each now OPENS on the drawing its data asks for
+(`src/lib/progressCharts.js`, drawn by `Signature.jsx`):
+
+- **Cards** — the deck as ONE band (`strengthStack`), which answers "what is
+  my deck made of" without making anybody add four bars up, and the next seven
+  days of reviews (`reviewForecast`). A category with three cards in it is
+  floored at `MIN_SHARE` rather than vanishing, and the floor is taken back off
+  the widest segment so the band still adds up to exactly the track.
+- **Quizzes** — every sit, where it happened (`sitPlot`), with a trend only
+  once there are `TREND_MIN` sits on BOTH halves. Below that it says how many
+  more sits unlock one, the Quizzes hero's own rule.
+- **Mistakes** — banked → started → drilled → fixed as a funnel (`fixFunnel`).
+  Each stage counts everything that reached AT LEAST that far, so it can only
+  narrow; a card that slipped back was started and has not been drilled.
+- **Hours** — four Monday-anchored weeks shaded at fixed steps (`heatCalendar`).
+  The steps are printed in the legend rather than rescaled to the month,
+  because a scale that rescales draws a quiet month exactly like a busy one. A
+  day that has not happened is FUTURE, never an empty day off, and the minutes
+  come through `countableMinutesByDay`, so a cell can never read hotter than
+  the league counts it.
+
+The sparkline came off Quizzes and Hours, where the chart now plots the same
+quantity larger. Cards keeps its line: reviews per day is not what the band or
+the forecast draws.
+
+**A CHART THAT IS WRONG RENDERS PERFECTLY**, which is why the derivations are
+pure and in a `.js`. `progressCharts.test.mjs` found one on its first run: the
+forecast filtered on `cardState === "scheduled"`, so every SNOOZED card fell
+off it entirely, and "remind me Friday" drew Friday as empty. It counts snoozed
+cards on their snooze day now, through `dueFrom`, which the comment above it
+had claimed all along.
+
+Two rendering lessons, both from screenshots:
+
+- **`pathLength` on a `non-scaling-stroke` inside a stretched viewBox draws
+  stray dashes.** The dash arithmetic runs in user space and the stroke is
+  drawn in screen space, so the two disagree. The trend line is REVEALED by an
+  animated `clipPath` rectangle instead, and the average is an animated dashed
+  div.
+- **`colorFor` hashes, and hashes collide.** Methods and Chemistry both came
+  out amber on one chart. The sit chart reassigns a colliding subject to the
+  next unused hue for that chart, so two dots that look alike are always the
+  same subject.
+
+### The figure counts, and Ace reads the sentence
+
+`CountUp` is a REVEAL and the opposite call from `LiveNumber`, which refuses to
+animate on arrival — correctly, for a price that would announce a move nobody
+made. Here the student has just asked "how did my week go" by opening a tab,
+and the figure counting to its value is the answer arriving. The last frame is
+always the exact value through the caller's own formatter.
+
+**`AceVerdict` SAYS WHAT THE PAGE COMPUTED AND NOTHING ELSE.** The line is
+`verdictFor`'s, or the strip's note on why there is no comparison yet; a tab
+whose verdict says nothing has no Ace at all. A mascot adding his own
+commentary to a report is a second answer to a question already answered — and
+the one answer nobody can check, the reason the AI coach was deleted from this
+page. His pose follows the movement (a cheer when up, thinking it over when
+down) and is never disappointment: "Down 6 points" already lands, and a let-down
+face beside it turns a fact into a verdict on the student. The bubble is FLAT,
+because on this page a bordered, elevated box is something you press.
+
+**He claims the stage as `"report"`**, ranked under the first run and the tour
+and above the buddy and the launcher. Two things had to change for that to be
+true rather than written down:
+
+- **Claims are COUNTED.** The registry was a Set, so two mounts of one id
+  released each other: switching tabs unmounts one verdict while the next
+  mounts, the first release cleared the stage for both, and the buddy walked
+  back on over a page that was still drawing him.
+- **`AceBuddy` never asked.** It hid only for its own hard-coded reasons, so
+  `ACE_ORDER` ranked it under the report and nothing made it act on that. It
+  asks by name now, the way the launcher does.
+
+`aceStage.test.mjs` holds the ranking, the buddy's ask, the verdict's claim and
+the counted release.
+
+### The planner counted down to one date and could not see the second
+
+The hero was a countdown to the NEXT assessment, and good at it — a gradient
+that warms as the day closes, a fan that thins, Ace's hold tightening. Nothing
+else: a Methods test three weeks out was a row in a list further down, and
+whether any prep had been planned before it was on no screen at all. So the
+question a student most needs answered in a term — *is anything coming up that
+I have done nothing about?* — had nowhere to be answered.
+
+`TermRunway` keeps the countdown as its header and stands it on the term:
+eight Monday-anchored weeks, every tracked SAC pinned on its date, and the
+sessions planned for its subject drawn as ticks in the run-up (filled when
+done, faint when still to come, hollow when the day passed and nothing
+happened). Tapping a pin moves the week board to that week, because the runway
+shows the term and the board is where you act on it. `SacHero` and the
+fourteen day-pips (`runway()` in `sacRunway.js`) are deleted; `sacBand` and
+`fanCards` live on in the header.
+
+**"NO PREP PLANNED" IS ONLY SAID WHEN IT IS TRUE AND WORTH SAYING**
+(`termRunway.js`, `termRunway.test.mjs`):
+
+- **Inside `SOON_DAYS`**, the queue's own fortnight, imported. Seven weeks out
+  with nothing planned is a normal state of affairs, and flagging it teaches a
+  student to ignore the flag.
+- **Never on SAC day.** There is no session left to plan before it, and a flag
+  nobody can act on is a verdict rather than a prompt.
+- **A session with no subject is nobody's prep.** Crediting it to the nearest
+  SAC would tell a student a SAC was covered by a session planned for
+  something else. Matched on the subject field, then the subject's name in the
+  title, which is how a hand-typed "Chemistry: redox" carries it.
+- **A session is claimed once.** A run-up stops at the previous SAC in the same
+  subject, or every session before the first Chemistry SAC would count again
+  for the second.
+- **A run-up of sessions that came and went undone is still unplanned.**
+
+**THE HEADLINE READS THE TERM, NOT THE COUNTDOWN.** It used to say "6 days
+until Chemistry", directly above a header now printing "6 days" at display
+size. `runwayLead` names an unplanned SAC first, then offers reassurance only
+when it is true ("All 2 SACs inside the next fortnight have prep planned"),
+then the long view. With nothing tracked it names the page and leaves the ASK
+to the runway's empty header, which carries the button — two asks on one
+screen is the paper-cut this page has had before. The test asserts the
+headline never contains the countdown's number.
+
+What the screenshots caught, each fixed: a 64px lane under a 76px card stacked
+pins on top of each other's countdowns; a stalk from a higher lane drew THROUGH
+the card below it (stalks are a first pass now, cards a second); the Today
+marker sat on the prep ticks (it is a hairline behind them, with its label in
+the week row in place of "This week"); and white on the brand green is about
+2:1 and worse in the dark, so the header carries a literal black scrim under
+its words.
+
+`shortSubject` moved out of `onboardingFlow.js` into `subjectShort.js` so a pin
+can say "Methods" without pulling the onboarding model and the catalogue into
+the planner's chunk. `onboardingFlow` re-exports it, so the hand is untouched.
+
+### On a phone the week is a strip and a day
+
+Below `sm` the drag board fell to one column: seven stacked boxes, Thursday a
+long scroll down, and moving a chip to Friday meant holding it through that
+scroll. `PhoneWeek` is the shape every calendar app on a phone already uses —
+seven day pills (a dot per session, filled when done, a diamond on a SAC day)
+and the chosen day as an agenda, with a 40px check at the thumb's end of each
+row. Rescheduling is the session's own Edit, one tap away.
+
+- **EXACTLY ONE WEEK VIEW IS MOUNTED**, read from the breakpoint (`useMedia`)
+  rather than CSS-hidden — both at once is two sets of controls for every
+  session and a live drag board under a phone.
+- **A swipe is a day, and crossing Sunday moves the week**, inside the bounds
+  the board's own chevrons keep. `dayStep` is that rule as a pure function, so
+  the phone cannot reach a week the desktop cannot.
+- **A drag that ends on a row is still a drag.** The release would otherwise
+  fire the row's click and tick a session off on the way past, so every tap in
+  the agenda goes through a guard; the test scans for one that does not.
+- **The board's columns deal in with `y`, and that is safe only because framer
+  writes `transform: none` once it lands at 0.** A transform left on an
+  ancestor becomes the containing block for the dragged chip's fixed position
+  and throws it across the screen — the trap MarkModule and AceRoam each
+  record.
+
+Today's intention sits beside the headline on a wide screen and with the day on
+a phone — one card, placed by width rather than drawn twice. "Move them
+forward" on the slipped-sessions strip was a banned word on a live screen; it
+reads "Bring them forward".
+
+Draw it with `scripts/_floorProbe.jsx?v=runway`, whose fixtures are dated off
+TODAY so the track is always populated: a flagged SAC, a covered one, a missed
+session, one past the eighth week, and the empty state behind a toggle. Both
+themes, and at 390, where the track scrolls rather than squashes.
+
+## A date is three taps, and a code is a payment
+
+**"Make the calendar selector in the onboarding far more aesthetic, on brand
+and easier to use — this is the first impression — and apply it to all other
+date pickers. And if a user uses a code, make sure the animation plays once
+they are approved for premium."**
+
+### The browser's date input opened on this month
+
+The birthday on the wizard's second screen was `<input type="date">`. On a
+desktop that opens on the CURRENT month, so a sixteen-year-old paged back about
+two hundred times or typed into a box in an order its placeholder did not
+show; on Android it is a month grid with a tiny year menu. It was the one
+control in the funnel the app had not designed, at the moment a first
+impression is still forming. The planner's SAC date and session day were the
+same bare box inside dialogs that were otherwise the app's own.
+
+**TWO PICKERS, BECAUSE THEY ARE TWO QUESTIONS** (`src/lib/datePick.js` is the
+arithmetic for both, pure and tested):
+
+- **`BirthdayPicker`** — three slots, Day · Month · Year in the order an
+  Australian writes them, each showing its answer at display size, and a grid
+  under whichever is open. Picking moves to the next empty slot, so a student
+  who just taps is done in three; a filled slot reopens with one tap. **The
+  year is the slow one**, so its first page is twelve to twenty-one years back —
+  every VCE student, plus the twelve-year-old who has to be able to enter a real
+  birthday in order to be refused — and older years are a page away, not a
+  scroll through a century. One ring SLIDES between the slots (`layoutId`), the
+  Progress tab-pill idiom. It lives inside `AgeAnswer`, so the wizard and
+  `AgeGate` changed together and still share one control.
+- **`DatePicker`** — for a day near today. `quick` puts the next few days up
+  front as chips (the session picker, because a session is nearly always this
+  week); the month grid sits behind "Another day" when `collapsible`, and opens
+  on its own when the chosen day is not one of the chips. The SAC picker is the
+  grid alone, because a SAC is weeks away.
+
+**WHAT IS ALREADY ON A DAY IS DOTTED ON IT.** A student could track a Chemistry
+SAC on the same day as a Methods one and only find out from the runway after
+saving. The SACs already tracked (and, for a session, how many are already
+planned) are marks on the grid and the chips, and picking one of those days
+says what is there — a clash shows before it is made.
+
+Rules the model holds, each verified by putting the bug back:
+
+- **A DAY IS LOCAL.** `AgeAnswer` capped its input with
+  `new Date().toISOString().slice(0, 10)` — UTC, so before 10 or 11am in
+  Melbourne "today" was yesterday. `isoOf` is `studyLog`'s `dayKey`. The test
+  sets `TZ=Australia/Melbourne` itself: in a UTC container the UTC and local
+  strings are identical, so the injection passed silently until it did.
+- **A MISSING PART IS NULL, NEVER ZERO**, and **`pageFor(null)` OPENED THE YEAR
+  GRID ON 1920** — `Number(null)` is 0, which IS an integer, so "no year yet" was
+  paged for year 0 and clamped to the earliest. Only the screenshot said so.
+  `Number(null) === 0` is now in its eleventh module.
+- **31 FEBRUARY IS SAID, NOT SWALLOWED.** A day and a month picked separately
+  can disagree; the day slot goes red, the sentence names the month's real
+  count, and the day grid reopens. `dateOf` refuses any date that does not
+  survive a round trip, because `new Date(2009, 1, 31)` quietly becomes 3 March.
+- **The picker reports "" until day, month and year make a real date**, so the
+  age band downstream is only ever judged on a complete answer.
+- **MONDAY FIRST**, like `studyLog.weekStart` and every board above it.
+- **No `type="date"` survives anywhere in `src`** — the scan is the property the
+  request asked for. Time inputs are not dates and are untouched.
+
+**A SCROLLING ROW STILL HANDS ITS CONTENT WIDTH UP.** The chip row is
+`overflow-x-auto`, and at 390 it still widened the grid around it to all seven
+chips — a horizontal scrollbar on the page, and the planner's `DialogContent`
+is a grid too. `w-0 min-w-full` gives it no intrinsic width and fills the
+container. And the way to the month grid is on the label row, not the end of
+that row, where it sat past the edge of a strip nobody knows scrolls.
+
+### A promotion code was told its payment failed
+
+`stripeCheckout` sets `allow_promotion_codes`. A code covering the price
+completes the checkout as `payment_status: "no_payment_required"`, and
+`verifySubscription` accepted exactly one status, `"paid"`. So a student who
+had just been given premium read **"That payment did not go through"**, the
+reveal never played — and a moment later the webhook, which never looked at the
+payment status at all, upgraded them in the background with nothing on screen
+saying so.
+
+**`checkoutVerdict` (`src/lib/premiumGrant.js`) is the one rule**, and it is
+about the SUBSCRIPTION rather than the money: paid, or no payment required with
+an `active` subscription. **A `trialing` one is deliberately NOT accepted** —
+whether a trial is offered is the open decision `pricing.js` records, and this
+does not make it.
+
+**AND VERIFICATION NEVER CHECKED THE SESSION WAS THE CALLER'S.** It took a
+session id from the request and upgraded whoever sent it; the id rides in the
+success URL, so anybody handed another student's could have upgraded off their
+payment. The session carries the email it was created for, and a mismatch
+grants nothing. Found while fixing the code path, and closed because it was
+the same function — the wider security sweep is still the one planned before
+the trial.
+
+**THE REVEAL FOLLOWS THE GRANT, NOT THE PAGE.** It lived on /PaymentSuccess and
+nowhere else, so premium arriving any other way — the webhook first, a tab
+closed at Stripe, a success page that errored — was celebrated nowhere. Both
+grant paths now write `extra.premium_reveal.pending` with the subscription they
+granted; whichever screen shows the reveal first marks it `seen`, on arrival.
+Layout plays an owed one once, over any page, lazily loaded:
+
+- **nobody premium before this is ambushed** — they carry no marker;
+- **a re-run of a grant never replays it** — the same `pending` is written again
+  and `seen` is never touched;
+- **never on /PaymentSuccess**, which plays its own and marks it there, and
+  **never over the age gate**, which is asked first;
+- **a grant since revoked is not celebrated.**
+
+The reveal now claims the Ace stage as `"premium"`, second only to `reacts`,
+since Layout can play it over a page where the walker is standing. The verify
+response also finally returns `amount_total` and `currency`, which the success
+page has been reading for the purchase pixel the whole time — every conversion
+arrived as $0, full-price ones included.
+
+### A YEAR 10 CODE IS A GRANT TOO, and it got the lesser moment
+
+The Year 10 codes landed on main beside this, and they are almost certainly the
+"code" the request meant. A redemption ended on a static card — a tick and a
+sentence — while a paid checkout got Ace dealing the ace: the student handed
+Premium by their school was celebrated less than the one who paid. And the
+marker could not have helped, because **a code leaves `subscription_tier`
+exactly as it was** — the premium lives in `code_premium_until` — so a reveal
+keyed on the tier would have been owed and never due.
+
+- `revealDue` asks the question `isPremium` asks: a subscription OR a code
+  still running. An expired code is not celebrated, the cancelled-subscription
+  rule.
+- `redeemPremiumCode` owes the reveal under `codeGrantId(code)`, upper-cased,
+  so one code is one reveal however it was typed and a second code is a second
+  one. Best-effort: the redemption has already landed, and a missing animation
+  is no reason to tell a student it failed.
+- `RedeemCode` plays it over the page, PORTALLED (a fixed overlay inside a
+  transformed ancestor is not the viewport), with the code's END DATE under the
+  headline — a subscription has none and a code always does, and the card it
+  replaced printed it. The card stays underneath, so closing the reveal lands
+  on the answer rather than on the form. It marks the grant seen on arrival and
+  **leaving waits for that write**, or the full load to the dashboard beats it
+  and Layout plays the reveal a second time.
+
+**THE FALLBACK HAD NEVER FIRED IN LAYOUT.** `PremiumReveal` keyed its
+twenty-second timer on `onContinue`, and every caller passes an inline arrow —
+so the timer restarted on every render, and Layout re-renders far more often
+than every twenty seconds. The handler rides in a ref now. Harmless on the
+success page, which rarely re-renders; on a reveal Layout plays, "an abandoned
+tab still lands somewhere" was simply untrue.
+
+Draw it with `scripts/_floorProbe.jsx?v=redeem` and submit `YEAR10ACE` — the
+probe injects `markSeen` and `onContinue` so nothing is written and nothing
+navigates.
+
+`premiumGrant.test.mjs` and `datePick.test.mjs` hold all of it: 36 injections,
+every one biting once the three that could not reach their branch were moved to
+the layer that decides, and the one that only checked the overlay was imported
+was made to check it is switched on by the redemption. Draw the pickers with `scripts/_floorProbe.jsx?v=dates`
+(the real `AgeAnswer`, the SAC grid with two SACs tracked, the session chips
+with a day already carrying sessions), in both themes and at 390.
+
 ## Premium codes (the Year 10 program)
 
 A student taps "Have a code?" on /Subscription, types their name and a code,
@@ -7488,6 +7823,28 @@ student looking free in the nav, the planner and the companion.
   with each cleared kind carrying the queue's own tier so the two cannot be
   inked apart. A to-do list with no done pile gets shorter the better somebody
   does, which made a good week look like a shorter list of failings
+- `src/lib/datePick.js` + `datePick.test.mjs`,
+  `src/components/shared/BirthdayPicker.jsx`, `DatePicker.jsx` — every date a
+  student picks: the birthday as three taps (inside `AgeAnswer`, so the wizard
+  and the gate share it) and a day near today as chips plus a Monday-first
+  grid with what is already on each day marked. No `type="date"` survives in
+  `src`; the test scans for one. Draw them with `scripts/_floorProbe.jsx?v=dates`
+- `src/lib/premiumGrant.js` + `premiumGrant.test.mjs` — when a checkout grants
+  premium (a $0 promotion code included, a trial deliberately not), that the
+  session is the caller's, and the reveal owed on the profile until a screen
+  shows it. Imported by `server.mjs`; Layout plays an owed reveal once
+- `src/lib/progressCharts.js` + `progressCharts.test.mjs`,
+  `src/components/progress/Signature.jsx`, `AceVerdict.jsx`, `CountUp.jsx` — the
+  drawing each Progress tab opens on (deck band + seven-day forecast, every sit
+  with an earned trend, the fix funnel, four weeks of evenings), the figure that
+  counts to its value, and Ace reading the verdict the page already computed.
+  He claims `"report"`, and claims are COUNTED
+- `src/lib/termRunway.js` + `termRunway.test.mjs`,
+  `src/components/planner/TermRunway.jsx`, `PhoneWeek.jsx`, `src/lib/dayStep.js`,
+  `src/hooks/useMedia.js` — the planner's term on one track, when "no prep
+  planned" may be said, the headline that reads the term rather than the
+  countdown, and the phone's strip-and-agenda week with its swipe bounds. Draw
+  it with `scripts/_floorProbe.jsx?v=runway`
 - `src/lib/progressReport.js` + `progressReport.test.mjs`,
   `src/components/progress/` (`ProgressTabs`, `PeriodSwitch`, `SubjectSwitch`,
   `ReportStrip`, `Spark`, `FeatureWork`, `MoreDetail`, `FeatureTabs`,

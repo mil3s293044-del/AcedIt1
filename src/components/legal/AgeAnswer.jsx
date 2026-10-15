@@ -33,7 +33,7 @@
  * once.
  */
 import React, { useEffect, useMemo } from "react";
-import { Input } from "@/components/ui/input";
+import BirthdayPicker from "@/components/shared/BirthdayPicker";
 import { ageBand, BAND, MIN_AGE, needsGuardian } from "@/lib/compliance";
 
 /** Whether a date and a guardian tick together make an acceptable answer. */
@@ -71,16 +71,16 @@ export default function AgeAnswer({ dob, guardian, onChange, idPrefix = "acedit"
 
     return (
         <div>
-            <label htmlFor={`${idPrefix}-dob`} className="block text-xs font-bold text-foreground mb-1.5">
+            <p id={`${idPrefix}-dob-label`} className="block text-xs font-bold text-foreground mb-1.5">
                 Date of birth
-            </label>
-            <Input
-                id={`${idPrefix}-dob`}
-                type="date"
-                value={dob}
-                max={new Date().toISOString().slice(0, 10)}
-                onChange={(e) => onChange({ dob: e.target.value, guardian: false })}
-            />
+            </p>
+            {/* NOT THE BROWSER'S DATE INPUT. It opened on this month and had to
+                be paged back two hundred times on the second screen a new
+                student ever sees; `BirthdayPicker` is three taps. It reports
+                "" until day, month and year make a real date, so the band
+                below is only ever judged on a complete answer. */}
+            <BirthdayPicker idPrefix={`${idPrefix}-dob`} value={dob}
+                onChange={(next) => onChange({ dob: next, guardian: false })} />
 
             {tooYoung && (
                 <div className="rounded-xl bg-secondary p-3.5 mt-4">

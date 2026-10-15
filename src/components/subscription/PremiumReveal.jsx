@@ -39,13 +39,14 @@
  * app has to re-initialise against a profile that became premium ten seconds
  * ago.
  */
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { motion, useReducedMotion } from "framer-motion";
 import { Check } from "lucide-react";
 import PlayingCard, { CardBack } from "@/components/cards/PlayingCard";
 import AceBody from "@/components/ace/AceBody";
 import { Confetti } from "@/components/shared/Confetti";
 import { Button } from "@/components/ui/button";
+import { claimAce } from "@/components/ace/useAceYield";
 
 /** Every row names a surface the student can go and open. */
 const UNLOCKED = [
@@ -57,9 +58,13 @@ const UNLOCKED = [
 
 const TURN_MS = 0.42;
 
-export default function PremiumReveal({ onContinue, fallbackMs = 20000 }) {
+export default function PremiumReveal({ onContinue, fallbackMs = 20000, note = null }) {
     const reduce = useReducedMotion();
     const [turned, setTurned] = useState(reduce);
+
+    // He is drawn here, and since Layout can play this over any page, he
+    // claims the stage — the walker and the launcher stand down for it.
+    useEffect(() => claimAce("premium"), []);
 
     useEffect(() => {
         if (reduce) return undefined;
@@ -68,11 +73,16 @@ export default function PremiumReveal({ onContinue, fallbackMs = 20000 }) {
     }, [reduce]);
 
     // A TAB LEFT OPEN STILL LANDS SOMEWHERE, but long after the reveal has
-    // finished rather than through the middle of it.
+    // finished rather than through the middle of it. The handler rides in a
+    // ref: every caller passes an inline arrow, and Layout re-renders far more
+    // often than every twenty seconds, so keyed on it the timer restarted on
+    // each render and the fallback never fired at all.
+    const leave = useRef(onContinue);
+    leave.current = onContinue;
     useEffect(() => {
-        const t = setTimeout(() => onContinue?.(), fallbackMs);
+        const t = setTimeout(() => leave.current?.(), fallbackMs);
         return () => clearTimeout(t);
-    }, [onContinue, fallbackMs]);
+    }, [fallbackMs]);
 
     const at = (s) => (reduce ? 0 : s);
 
@@ -182,6 +192,18 @@ export default function PremiumReveal({ onContinue, fallbackMs = 20000 }) {
                 >
                     Dealt you the ace.
                 </motion.h1>
+                {/* What only the caller knows — a code's premium has an END
+                    date, which a subscription does not, and the static card
+                    this replaced on the code screen printed it. */}
+                {note && (
+                    <motion.p
+                        initial={reduce ? false : { opacity: 0 }} animate={{ opacity: 1 }}
+                        transition={{ delay: at(1.5) }}
+                        className="text-sm text-muted-foreground -mt-4 mb-6"
+                    >
+                        {note}
+                    </motion.p>
+                )}
 
                 {/* ── WHAT ACTUALLY UNLOCKED, in sequence ─────────────────── */}
                 <ul className="text-left space-y-2.5">

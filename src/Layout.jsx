@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from "react";
+import React, { useState, useEffect, useRef, useCallback, Suspense } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useToast } from "@/components/ui/use-toast";
 import { createPageUrl } from "@/utils";
@@ -19,6 +19,10 @@ import { CosmeticsProvider } from "@/lib/CosmeticsContext";
 import { PrankStageProvider } from "@/lib/PrankStage";
 import PrankOverlay, { prankBodyClass } from "@/components/pranks/PrankOverlay";
 import PrankWatcher from "@/components/pranks/PrankWatcher";
+import { revealDue, withRevealSeen } from "@/lib/premiumGrant";
+// Lazy: an upgrade reveal plays once per account, so it stays out of the chunk
+// every student parses before their first screen.
+const PremiumReveal = React.lazy(() => import("@/components/subscription/PremiumReveal"));
 import UpdatePrompt from "@/components/shared/UpdatePrompt";
 import AchievementUnlock from "@/components/ranked/AchievementUnlock";
 import { useAchievementWatch } from "@/lib/useAchievementWatch";
@@ -208,6 +212,19 @@ export default function Layout({ children }) {
     const timerRef = useRef(null);
     const [userProfile, setUserProfile] = useState(null);
 
+    /* ── The upgrade reveal, wherever the upgrade landed ─────────────────
+       It lived on /PaymentSuccess alone, so premium that arrived any other
+       way — the webhook first, a promotion code the success page refused, a
+       tab closed at Stripe — was celebrated nowhere. Whatever grants premium
+       now leaves the reveal owed on the profile (premiumGrant.js), and it
+       plays here once, on the next screen. Marked shown ON ARRIVAL, the rule
+       SettlementReveal keeps: a student who closes the tab has still had it.
+       Held while the age gate is up — that question comes first — and never
+       on the success page, which plays its own. */
+    const owedReveal = revealDue(userProfile);
+    const revealMarked = useRef(null);
+    const [revealing, setRevealing] = useState(false);
+
     /* ── Pranks, if any have arrived ─────────────────────────────────────
        THIS USED TO BE A ONE-SHOT FETCH and a prank did not arrive until the
        recipient reloaded the tab — Layout does not unmount between
@@ -306,6 +323,16 @@ export default function Layout({ children }) {
         };
         loadUserProfile();
     }, []);
+
+    useEffect(() => {
+        if (!owedReveal || revealMarked.current === owedReveal) return;
+        if (pageKey === "PaymentSuccess" || bandOfProfile(userProfile) === BAND.UNKNOWN) return;
+        revealMarked.current = owedReveal;
+        setRevealing(true);
+        base44.entities.UserProfile.update(userProfile.id, { extra: withRevealSeen(userProfile.extra, owedReveal) })
+            .then((row) => { if (row) setUserProfile(row); })
+            .catch(() => { /* shown either way; at worst it plays once more */ });
+    }, [owedReveal, pageKey, userProfile]);
 
     useEffect(() => {
         const handleTimerStateChange = (event) => {
@@ -617,6 +644,15 @@ export default function Layout({ children }) {
                 not a body, so it claims nothing in ACE_ORDER and cannot become
                 a second Ace on the screen. */}
             <UpdatePrompt />
+
+            {revealing && (
+                <Suspense fallback={null}>
+                    <div className="fixed inset-0 z-[80] overflow-y-auto" role="dialog" aria-modal="true"
+                        aria-label="You are on premium" data-premium-reveal>
+                        <PremiumReveal onContinue={() => setRevealing(false)} />
+                    </div>
+                </Suspense>
+            )}
 
             <AceCompanion userProfile={userProfile} />
             {/* One mount for the whole app rather than a call on each of the

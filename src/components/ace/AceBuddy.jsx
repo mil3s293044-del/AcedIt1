@@ -24,7 +24,7 @@ import React, { useState, useEffect, useCallback, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { X, ArrowRight, MoonStar, BellOff } from "lucide-react";
 import AceWalker, { AceBubble } from "@/components/ace/AceWalker";
-import useAceYield, { claimAce } from "@/components/ace/useAceYield";
+import useAceYield, { claimAce, useAceClaimed } from "@/components/ace/useAceYield";
 import { PAGES } from "@/lib/aceKnowledge";
 import {
     shouldAskPlan, setPlan, skipPlan, currentPlan, shouldSpeak, markSpoke,
@@ -132,10 +132,14 @@ export default function AceBuddy({ page, userProfile, suppressed = false, onPlan
 
     // While the buddy is drawing him, the launcher stands down — otherwise
     // there are two of him in the same corner.
-    const showing = Boolean(mode) && !yielding && !suppressed;
+    // And it stands down for anything ACE_ORDER ranks above it — it only ever
+    // consulted Layout's two flags, so a page drawing its own Ace (Progress,
+    // reading a verdict) had the buddy walk on beside him.
+    const outranked = useAceClaimed("buddy");
+    const showing = Boolean(mode) && !yielding && !suppressed && !outranked;
     useEffect(() => (showing ? claimAce("buddy") : undefined), [showing]);
 
-    if (suppressed) return null;
+    if (suppressed || outranked) return null;
 
     return (
         <AnimatePresence mode="wait">

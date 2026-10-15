@@ -7,7 +7,7 @@
  * read the same five distances.
  */
 import assert from "node:assert/strict";
-import { sacBand, runway, fanCards, RUNWAY_MAX } from "@/lib/sacRunway";
+import { sacBand, fanCards } from "@/lib/sacRunway";
 import { SAC_MOOD } from "@/lib/aceVoice";
 
 let passed = 0;
@@ -45,25 +45,6 @@ check("the design changes on more than one day of the countdown", () => {
     // out drew the same card.
     const seen = new Set([21, 14, 10, 7, 5, 3, 2, 1, 0].map((d) => sacBand(d).grad));
     assert.ok(seen.size >= 4, `expected several distinct looks, got ${seen.size}`);
-});
-
-check("the runway shortens by one marker a day", () => {
-    assert.equal(runway(9).lit, 9);
-    assert.equal(runway(8).lit, 8);
-    assert.equal(runway(1).lit, 1);
-});
-
-check("past the cap it reads as 'plenty' rather than counting pips", () => {
-    const r = runway(40);
-    assert.equal(r.lit, RUNWAY_MAX);
-    assert.equal(r.overflow, true);
-});
-
-check("the day itself is its own state, not zero pips by accident", () => {
-    const r = runway(0);
-    assert.equal(r.today, true);
-    assert.equal(r.lit, 0);
-    assert.equal(runway(null).today, false, "no date is not today");
 });
 
 check("the fan thins as the date closes", () => {
